@@ -123,15 +123,8 @@ func (v variations) String() string {
 // insufficient we can bump it up.
 const numNodesPerWorker = 20
 
-// setup sets up the parameters that can be manually set up without having the
-// cluster spec. finishSetup below sets up the remainder after the cluster is
-// defined.
-func newMetamorphic(p perturbation, rng *rand.Rand) variations {
-	v := variations{perturbation: p}
-	v.workload = kvWorkload{}
-	v.fillDuration = 10 * time.Minute
-	v.validationDuration = 5 * time.Minute
-	v.ratioOfMax = 0.5
+// randomize will randomize the test parameters for a metamorphic run.
+func (v variations) randomize(rng *rand.Rand) variations {
 	v.splits = splitOptions[rng.Intn(len(splitOptions))]
 	v.maxBlockBytes = maxBlockBytes[rng.Intn(len(maxBlockBytes))]
 	v.perturbationDuration = durationOptions[rng.Intn(len(durationOptions))]
@@ -145,27 +138,14 @@ func newMetamorphic(p perturbation, rng *rand.Rand) variations {
 	// as they have limitations on configurations that can run.
 	v.cloud = registry.OnlyGCE
 	v.mem = memOptions[rng.Intn(len(memOptions))]
-	// We use a slightly higher min latency of 50ms to avoid collecting too many
-	// profiles in some tests.
-	v.profileOptions = []roachtestutil.ProfileOptionFunc{
-		roachtestutil.ProfDbName("target"),
-		roachtestutil.ProfMinimumLatency(50 * time.Millisecond),
-		roachtestutil.ProfMinNumExpectedStmts(1000),
-		roachtestutil.ProfProbabilityToInclude(0.001),
-		roachtestutil.ProfMultipleFromP99(10),
-	}
 	return v
 }
 
-// setupFull sets up the full test with a fixed set of parameters.
-func setupFull(p perturbation) variations {
+// setup sets up the full test with a fixed set of parameters.
+func setup(p perturbation, acceptableChange float64) variations {
 	v := variations{}
 	v.workload = kvWorkload{}
 	v.leaseType = registry.EpochLeases
-	// TODO(baptist): Inject this in a better way.
-	if reflect.TypeOf(p) == reflect.TypeOf(&partition{}) {
-		v.leaseType = registry.ExpirationLeases
-	}
 	v.maxBlockBytes = 4096
 	v.splits = 10000
 	v.numNodes = 12
@@ -186,75 +166,27 @@ func setupFull(p perturbation) variations {
 		roachtestutil.ProfProbabilityToInclude(0.001),
 		roachtestutil.ProfMultipleFromP99(10),
 	}
+	v.acceptableChange = acceptableChange
 	return v
 }
 
-// setupDev sets up the test for local development.
-func setupDev(p perturbation) variations {
-	v := variations{}
-	v.workload = kvWorkload{}
-	v.leaseType = registry.EpochLeases
-	// TODO(baptist): Inject this in a better way.
-	if reflect.TypeOf(p) == reflect.TypeOf(&partition{}) {
-		v.leaseType = registry.ExpirationLeases
-	}
-	v.maxBlockBytes = 1024
-	v.splits = 1
-	v.numNodes = 4
-	v.numWorkloadNodes = 1
-	v.vcpu = 4
-	v.disks = 1
-	v.fillDuration = 20 * time.Second
-	v.validationDuration = 10 * time.Second
-	v.perturbationDuration = 30 * time.Second
-	v.ratioOfMax = 0.5
-	v.cloud = registry.AllClouds
-	v.mem = spec.Standard
-	v.perturbation = p
-
-	// We more aggressively collect profiles in dev tests since they run for
-	// short durations.
-	v.profileOptions = []roachtestutil.ProfileOptionFunc{
-		roachtestutil.ProfDbName("target"),
-		roachtestutil.ProfMinimumLatency(20 * time.Millisecond),
-		roachtestutil.ProfMinNumExpectedStmts(100),
-		roachtestutil.ProfProbabilityToInclude(0.01),
-		roachtestutil.ProfMultipleFromP99(10),
-	}
-	return v
+func register(r registry.Registry, p perturbation) {
+	addMetamorphic(r, p)
+	addFull(r, p)
+	addDev(r, p)
 }
 
 func registerLatencyTests(r registry.Registry) {
 	// NB: If these tests fail because they are flaky, increase the numbers
 	// until they pass. Additionally add the seed (from the log) that caused
 	// them to fail as a comment in the test.
-	addMetamorphic(r, restart{}, math.Inf(1))
-	addMetamorphic(r, partition{}, math.Inf(1))
-	addMetamorphic(r, addNode{}, 5.0)
-	addMetamorphic(r, decommission{}, 5.0)
-	addMetamorphic(r, backfill{}, 40.0)
-	addMetamorphic(r, &slowDisk{}, math.Inf(1))
-	addMetamorphic(r, elasticWorkload{}, 20.0)
-
-	// NB: If these tests fail, it likely signals a regression. Investigate the
-	// history of the test on roachperf to see what changed.
-	addFull(r, restart{cleanRestart: true}, math.Inf(1))
-	addFull(r, partition{partitionSite: true}, math.Inf(1))
-	addFull(r, addNode{}, 5.0)
-	addFull(r, decommission{drain: true}, 5.0)
-	addFull(r, backfill{}, 40.0)
-	addFull(r, &slowDisk{slowLiveness: true, walFailover: true}, math.Inf(1))
-	addFull(r, elasticWorkload{}, 20.0)
-
-	// NB: These tests will never fail and are not enabled, but they are useful
-	// for development.
-	addDev(r, restart{cleanRestart: true})
-	addDev(r, partition{partitionSite: true})
-	addDev(r, addNode{})
-	addDev(r, decommission{drain: true})
-	addDev(r, backfill{})
-	addDev(r, &slowDisk{slowLiveness: true, walFailover: true})
-	addDev(r, elasticWorkload{})
+	register(r, restart{})
+	register(r, partition{})
+	register(r, addNode{})
+	register(r, decommission{})
+	register(r, backfill{})
+	register(r, &slowDisk{})
+	register(r, elasticWorkload{})
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
@@ -277,11 +209,10 @@ func (v variations) perturbationName() string {
 	return t.Name()
 }
 
-func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float64) {
+func addMetamorphic(r registry.Registry, p perturbation) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
-	v.acceptableChange = acceptableChange
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
@@ -294,9 +225,8 @@ func addMetamorphic(r registry.Registry, p perturbation, acceptableChange float6
 	})
 }
 
-func addFull(r registry.Registry, p perturbation, acceptableChange float64) {
-	v := setupFull(p)
-	v.acceptableChange = acceptableChange
+func addFull(r registry.Registry, p perturbation) {
+	v := p.setup()
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
@@ -310,9 +240,30 @@ func addFull(r registry.Registry, p perturbation, acceptableChange float64) {
 }
 
 func addDev(r registry.Registry, p perturbation) {
-	v := setupDev(p)
+	v := p.setup()
 	// Dev tests never fail on latency increases.
 	v.acceptableChange = math.Inf(1)
+	// Make the tests faster for development.
+	v.splits = 1
+	v.numNodes = 5
+	v.numWorkloadNodes = 1
+	v.vcpu = 4
+	v.disks = 1
+	v.fillDuration = 20 * time.Second
+	v.validationDuration = 10 * time.Second
+	v.perturbationDuration = 30 * time.Second
+	// We want to collect some profiles during the dev test, so make it more
+	// aggressive at collecting profiles.
+	v.profileOptions = []roachtestutil.ProfileOptionFunc{
+		roachtestutil.ProfDbName("target"),
+		roachtestutil.ProfMinimumLatency(20 * time.Millisecond),
+		roachtestutil.ProfMinNumExpectedStmts(100),
+		roachtestutil.ProfProbabilityToInclude(0.01),
+		roachtestutil.ProfMultipleFromP99(10),
+	}
+
+	// Allow the test to run on dev machines.
+	v.cloud = registry.AllClouds
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
@@ -325,6 +276,9 @@ func addDev(r registry.Registry, p perturbation) {
 }
 
 type perturbation interface {
+	// setup is called to create the standard variations for the perturbation.
+	setup() variations
+
 	// setupMetamorphic is called at the start of the test to randomize the perturbation.
 	setupMetamorphic(rng *rand.Rand) variations
 
@@ -353,13 +307,17 @@ type elasticWorkload struct{}
 
 var _ perturbation = elasticWorkload{}
 
+func (e elasticWorkload) setup() variations {
+	return setup(e, 5.0)
+}
+
 func (e elasticWorkload) setupMetamorphic(rng *rand.Rand) variations {
-	v := newMetamorphic(e, rng)
+	v := e.setup()
 	// NB: Running an elastic workload can sometimes increase the latency of
 	// almost all regular requests. To prevent this, we set the min latency to
 	// 100ms instead of the default.
 	v.profileOptions = append(v.profileOptions, roachtestutil.ProfMinimumLatency(100*time.Millisecond))
-	return v
+	return v.randomize(rng)
 }
 
 func (e elasticWorkload) startTargetNode(ctx context.Context, t test.Test, v variations) {
@@ -400,14 +358,18 @@ type backfill struct{}
 
 var _ perturbation = backfill{}
 
+func (b backfill) setup() variations {
+	return setup(b, 40.0)
+}
+
 func (b backfill) setupMetamorphic(rng *rand.Rand) variations {
-	v := newMetamorphic(b, rng)
+	v := b.setup()
 	// TODO(#133114): The backfill test can cause OOM with low memory
 	// configurations.
 	if v.mem == spec.Low {
 		v.mem = spec.Standard
 	}
-	return v
+	return v.randomize(rng)
 }
 
 // startTargetNode starts the target node and creates the backfill table.
@@ -476,10 +438,18 @@ type slowDisk struct {
 // later (in startTargetNode) instead of here.
 var _ perturbation = &slowDisk{}
 
+func (s *slowDisk) setup() variations {
+	s.slowLiveness = true
+	s.walFailover = true
+	return setup(s, math.Inf(1))
+}
+
 func (s *slowDisk) setupMetamorphic(rng *rand.Rand) variations {
+	v := s.setup()
 	s.slowLiveness = rng.Intn(2) == 0
 	s.walFailover = rng.Intn(2) == 0
-	return newMetamorphic(s, rng)
+	v.perturbation = s
+	return v.randomize(rng)
 }
 
 // startTargetNode implements perturbation.
@@ -529,9 +499,16 @@ type restart struct {
 
 var _ perturbation = restart{}
 
+func (r restart) setup() variations {
+	r.cleanRestart = true
+	return setup(r, math.Inf(1))
+}
+
 func (r restart) setupMetamorphic(rng *rand.Rand) variations {
+	v := r.setup()
 	r.cleanRestart = rng.Intn(2) == 0
-	return newMetamorphic(r, rng)
+	v.perturbation = r
+	return v.randomize(rng)
 }
 
 func (r restart) startTargetNode(ctx context.Context, t test.Test, v variations) {
@@ -583,9 +560,18 @@ type partition struct {
 
 var _ perturbation = partition{}
 
+func (p partition) setup() variations {
+	p.partitionSite = true
+	v := setup(p, math.Inf(1))
+	v.leaseType = registry.ExpirationLeases
+	return v
+}
+
 func (p partition) setupMetamorphic(rng *rand.Rand) variations {
+	v := p.setup()
 	p.partitionSite = rng.Intn(2) == 0
-	return newMetamorphic(p, rng)
+	v.perturbation = p
+	return v.randomize(rng)
 }
 
 func (p partition) startTargetNode(ctx context.Context, t test.Test, v variations) {
@@ -624,8 +610,13 @@ type addNode struct{}
 
 var _ perturbation = addNode{}
 
+func (a addNode) setup() variations {
+	return setup(a, 5.0)
+}
+
 func (a addNode) setupMetamorphic(rng *rand.Rand) variations {
-	v := newMetamorphic(a, rng)
+	v := a.setup()
+	v = v.randomize(rng)
 	//TODO(#133606): With high vcpu and large writes, the test can fail due to
 	//the disk becoming saturated leading to 1-2s of fsync stall.
 	if v.vcpu >= 16 && v.maxBlockBytes == 4096 {
@@ -664,9 +655,16 @@ type decommission struct {
 
 var _ perturbation = decommission{}
 
+func (d decommission) setup() variations {
+	d.drain = true
+	return setup(d, 5.0)
+}
+
 func (d decommission) setupMetamorphic(rng *rand.Rand) variations {
+	v := d.setup()
 	d.drain = rng.Intn(2) == 0
-	v := newMetamorphic(d, rng)
+	v = v.randomize(rng)
+	v.perturbation = d
 	//TODO(#133606): With high vcpu and large writes, the test can fail due to
 	//the disk becoming saturated leading to 1-2s of fsync stall.
 	if v.vcpu >= 16 && v.maxBlockBytes == 4096 {
