@@ -160,10 +160,14 @@ func (s *Store) SplitQueuePurgatoryLength() int {
 	return s.splitQueue.PurgatoryLength()
 }
 
-// LeaseQueuePurgatoryLength returns the number of replicas in lease queue
-// purgatory.
-func (s *Store) LeaseQueuePurgatoryLength() int {
-	return s.leaseQueue.PurgatoryLength()
+// LeaseQueuePurgatory returns a map of RangeIDs representing the purgatory.
+func (s *Store) LeaseQueuePurgatory() map[roachpb.RangeID]struct{} {
+	defer s.leaseQueue.baseQueue.lockProcessing()()
+	m := make(map[roachpb.RangeID]struct{}, len(s.leaseQueue.baseQueue.mu.purgatory))
+	for k := range s.leaseQueue.baseQueue.mu.purgatory {
+		m[k] = struct{}{}
+	}
+	return m
 }
 
 // SetRaftLogQueueActive enables or disables the raft log queue.
