@@ -556,7 +556,7 @@ func (rd *replicationDriver) setupC2C(
 	srcTenantName := "src-tenant"
 	destTenantName := "destination-tenant"
 
-	startOpts := option.StartSharedVirtualClusterOpts(srcTenantName, option.StorageCluster(srcCluster))
+	startOpts := option.StartSharedVirtualClusterOpts(srcTenantName, option.StorageCluster(srcCluster), option.NoBackupSchedule)
 	c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, srcClusterSetting)
 
 	pgURL, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
