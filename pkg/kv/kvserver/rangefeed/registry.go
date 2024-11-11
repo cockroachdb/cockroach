@@ -352,16 +352,6 @@ func (reg *registry) PublishToOverlapping(
 	})
 }
 
-// Unregister removes a registration from the registry. It is assumed that the
-// registration has already been disconnected, this is intended only to clean
-// up the registry.
-func (reg *registry) Unregister(ctx context.Context, r registration) {
-	reg.metrics.RangeFeedRegistrations.Dec(1)
-	if err := reg.tree.Delete(r, false /* fast */); err != nil {
-		log.Fatalf(ctx, "%v", err)
-	}
-}
-
 // DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.
 // This is different from normal disconnect as registrations won't be able to
 // perform Unregister when processor's work loop is already terminated.
@@ -372,21 +362,15 @@ func (reg *registry) Unregister(ctx context.Context, r registration) {
 func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Error) {
 	reg.metrics.RangeFeedRegistrations.Dec(int64(reg.tree.Len()))
 	reg.forOverlappingRegs(ctx, all, func(r registration) (bool, *kvpb.Error) {
-		r.drainAllocations(ctx)
 		return true /* disconned */, pErr
 	})
-}
-
-// Disconnect disconnects all registrations that overlap the specified span with
-// a nil error.
-func (reg *registry) Disconnect(ctx context.Context, span roachpb.Span) {
-	reg.DisconnectWithErr(ctx, span, nil /* pErr */)
 }
 
 // DisconnectWithErr disconnects all registrations that overlap the specified
 // span with the provided error.
 func (reg *registry) DisconnectWithErr(ctx context.Context, span roachpb.Span, pErr *kvpb.Error) {
 	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
+		reg.metrics.RangeFeedRegistrations.Dec(1)
 		return true /* disconned */, pErr
 	})
 }
@@ -446,9 +430,7 @@ func (reg *registry) unregisterMarkedRegistrations(ctx context.Context) {
 		return false
 	})
 	reg.remove(ctx, toDelete)
-	for _, i := range toDelete {
-		i.(registration).drainAllocations(ctx)
-	}
+	reg.metrics.RangeFeedRegistrations.Dec(int64(len(toDelete)))
 }
 
 // waitForCaughtUp waits for all registrations overlapping the given span to
