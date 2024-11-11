@@ -66,7 +66,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Admission IO Tokens Exhausted Duration Per Second"
-      sources={nodeSources}
+      sources={storeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
       tooltip={`Relative time the node had exhausted IO tokens for all IO-bound work per second of wall time, measured in microseconds/second. Increased IO token exhausted duration indicates IO resource exhaustion.`}
@@ -76,22 +76,22 @@ export default function (props: GraphDashboardProps) {
           <>
             <Metric
               key={nid}
-              name="cr.node.admission.granter.io_tokens_exhausted_duration.kv"
+              name="cr.store.admission.granter.io_tokens_exhausted_duration.kv"
               title={
                 "Regular (Foreground) " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
               }
-              sources={[nid]}
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
               nonNegativeRate
             />
             <Metric
               key={nid}
-              name="cr.node.admission.granter.elastic_io_tokens_exhausted_duration.kv"
+              name="cr.store.admission.granter.elastic_io_tokens_exhausted_duration.kv"
               title={
                 "Elastic (Background) " +
                 nodeDisplayName(nodeDisplayNameByID, nid)
               }
-              sources={[nid]}
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
               nonNegativeRate
             />
           </>
@@ -178,7 +178,7 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Admission Queueing Delay p99 – Store"
-      sources={nodeSources}
+      sources={storeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
       tooltip={`The 99th percentile latency of requests waiting in the Admission Control store queue.`}
@@ -188,16 +188,16 @@ export default function (props: GraphDashboardProps) {
           <>
             <Metric
               key={nid}
-              name="cr.node.admission.wait_durations.kv-stores-p99"
+              name="cr.store.admission.wait_durations.kv-stores-p99"
               title={"KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
               downsampleMax
             />
             <Metric
               key={nid}
-              name="cr.node.admission.wait_durations.elastic-stores-p99"
+              name="cr.store.admission.wait_durations.elastic-stores-p99"
               title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
+              sources={storeIDsForNode(storeIDsByNodeID, nid)}
               downsampleMax
             />
           </>
