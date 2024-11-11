@@ -29,6 +29,7 @@ type immediateState struct {
 	sequencesToInit            []sequenceToInit
 	temporarySchemasToRegister map[descpb.ID]*temporarySchemaToRegister
 	modifiedZoneConfigs        []zoneConfigToUpsert
+	modifiedSubzoneConfigs     []subzoneConfigToUpsert
 	zoneConfigsToDelete        []zoneConfigToDelete
 }
 
@@ -50,17 +51,23 @@ type sequenceToInit struct {
 }
 
 // zoneConfigToUpsert is a struct that holds the information needed to update a
-// zone config or subzone configs. If zc is subzone config, then we treat this
-// as a subzone write and update the subzone configs (along with their subzone
-// spans for the table). Otherwise, we write the whole zone config as an update.
+// zone config. This does not include subzone configs -- which are handled in
+// subzoneConfigToUpsert.
 type zoneConfigToUpsert struct {
-	id              descpb.ID
-	zc              *zonepb.ZoneConfig
-	isSubzoneConfig bool
+	id descpb.ID
+	zc *zonepb.ZoneConfig
 }
 
 type zoneConfigToDelete struct {
 	id descpb.ID
+}
+
+// subzoneConfigToUpsert is a struct that holds the information needed to update
+// a subzone config.
+type subzoneConfigToUpsert struct {
+	tableID      descpb.ID
+	subzone      zonepb.Subzone
+	subzoneSpans []zonepb.SubzoneSpan
 }
 
 var _ scmutationexec.ImmediateMutationStateUpdater = (*immediateState)(nil)
@@ -150,14 +157,13 @@ func (s *immediateState) UpdateZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig) {
 }
 
 func (s *immediateState) UpdateSubzoneConfig(
-	tableid descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
+	tableID descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
 ) {
-	zc := &zonepb.ZoneConfig{Subzones: []zonepb.Subzone{subzone}, SubzoneSpans: subzoneSpans}
-	s.modifiedZoneConfigs = append(s.modifiedZoneConfigs,
-		zoneConfigToUpsert{
-			id:              tableid,
-			zc:              zc,
-			isSubzoneConfig: true,
+	s.modifiedSubzoneConfigs = append(s.modifiedSubzoneConfigs,
+		subzoneConfigToUpsert{
+			tableID:      tableID,
+			subzone:      subzone,
+			subzoneSpans: subzoneSpans,
 		})
 }
 
@@ -235,21 +241,40 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 	}
 
 	for _, zcToUpdate := range s.modifiedZoneConfigs {
-		if zcToUpdate.isSubzoneConfig {
-			if err := c.UpdateSubzoneConfig(ctx, zcToUpdate.id, zcToUpdate.zc.Subzones,
-				zcToUpdate.zc.SubzoneSpans); err != nil {
-				return err
-			}
-		} else {
+		if err = c.UpdateZoneConfig(ctx, zcToUpdate.id, zcToUpdate.zc); err != nil {
+			return err
+		}
+	}
 
-			if err := c.UpdateZoneConfig(ctx, zcToUpdate.id, zcToUpdate.zc); err != nil {
+	// Gather all subzone config updates for each unique descriptor ID and use a
+	// zone config accumulator that will be the final config we write.
+	subzoneUpdates := make(map[descpb.ID][]subzoneConfigToUpsert, len(s.modifiedSubzoneConfigs))
+	for _, szcToUpdate := range s.modifiedSubzoneConfigs {
+		if ls, ok := subzoneUpdates[szcToUpdate.tableID]; ok {
+			subzoneUpdates[szcToUpdate.tableID] = append(ls, szcToUpdate)
+		} else {
+			subzoneUpdates[szcToUpdate.tableID] = []subzoneConfigToUpsert{szcToUpdate}
+		}
+	}
+
+	for id, updates := range subzoneUpdates {
+		zcToWrite, err := c.GetZoneConfig(ctx, id)
+		if err != nil {
+			return err
+		}
+		for _, update := range updates {
+			zcToWrite, err = c.UpdateSubzoneConfig(ctx, zcToWrite, update.subzone, update.subzoneSpans)
+			if err != nil {
 				return err
 			}
+		}
+		if err = c.WriteZoneConfigToBatch(ctx, id, zcToWrite); err != nil {
+			return err
 		}
 	}
 
 	for _, zcToDelete := range s.zoneConfigsToDelete {
-		if err := c.DeleteZoneConfig(ctx, zcToDelete.id); err != nil {
+		if err = c.DeleteZoneConfig(ctx, zcToDelete.id); err != nil {
 			return err
 		}
 	}
