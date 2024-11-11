@@ -750,6 +750,11 @@ func (t *Test) Run() {
 
 	t.logger.Printf("mixed-version test:\n%s", plan.PrettyPrint())
 
+	// Mark the deployment mode and versions, so they show up in the github issue. This makes
+	// it easier to group failures together without having to dig into the test logs.
+	t.rt.AddParam("MVT_deploymentMode", string(plan.deploymentMode))
+	t.rt.AddParam("MVT_versions", formatVersions(plan.Versions()))
+
 	if err := t.run(plan); err != nil {
 		t.rt.Fatal(err)
 	}

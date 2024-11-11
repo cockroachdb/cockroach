@@ -1573,17 +1573,19 @@ func (plan *TestPlan) PrettyPrint() string {
 	return plan.prettyPrintInternal(false /* debug */)
 }
 
+func formatVersions(versions []*clusterupgrade.Version) string {
+	formattedVersions := make([]string, 0, len(versions))
+	for _, v := range versions {
+		formattedVersions = append(formattedVersions, v.String())
+	}
+	return strings.Join(formattedVersions, " → ")
+}
+
 func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 	var out strings.Builder
 	allSteps := plan.Steps()
 	for i, step := range allSteps {
 		plan.prettyPrintStep(&out, step, treeBranchString(i, len(allSteps)), debug)
-	}
-
-	versions := plan.Versions()
-	formattedVersions := make([]string, 0, len(versions))
-	for _, v := range versions {
-		formattedVersions = append(formattedVersions, v.String())
 	}
 
 	var lines []string
@@ -1593,7 +1595,7 @@ func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 	}
 
 	addLine("Seed", plan.seed)
-	addLine("Upgrades", strings.Join(formattedVersions, " → "))
+	addLine("Upgrades", formatVersions(plan.Versions()))
 	addLine("Deployment mode", plan.deploymentMode)
 
 	if len(plan.enabledMutators) > 0 {
