@@ -1231,7 +1231,7 @@ func (r *raft) tickHeartbeat() {
 // function instead; in there, we can add safety checks to ensure we're not
 // overwriting the leader.
 func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
-	if r.leadEpoch == 0 && lead == r.id {
+	if !r.supportingFortifiedLeader(true /* maybeDefortify */) && lead == r.id {
 		// A non-zero lead epoch indicates that the leader fortified its term.
 		// Fortification promises should hold true even if the leader steps down, so
 		// as the leader, we remember that we were the leader even after we step
