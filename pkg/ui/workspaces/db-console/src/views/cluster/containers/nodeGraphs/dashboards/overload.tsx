@@ -9,11 +9,8 @@ import React from "react";
 import LineGraph from "src/views/cluster/components/linegraph";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
 
-import {
-  GraphDashboardProps,
-  nodeDisplayName,
-  storeIDsForNode,
-} from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
+import { storeMetrics } from "./storeUtils";
 
 export default function (props: GraphDashboardProps) {
   const {
@@ -66,36 +63,32 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Admission IO Tokens Exhausted Duration Per Second"
-      sources={nodeSources}
+      sources={storeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
       tooltip={`Relative time the node had exhausted IO tokens for all IO-bound work per second of wall time, measured in microseconds/second. Increased IO token exhausted duration indicates IO resource exhaustion.`}
     >
       <Axis label="Duration (micros/sec)">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.admission.granter.io_tokens_exhausted_duration.kv"
-              title={
-                "Regular (Foreground) " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
-              sources={[nid]}
-              nonNegativeRate
-            />
-            <Metric
-              key={nid}
-              name="cr.node.admission.granter.elastic_io_tokens_exhausted_duration.kv"
-              title={
-                "Elastic (Background) " +
-                nodeDisplayName(nodeDisplayNameByID, nid)
-              }
-              sources={[nid]}
-              nonNegativeRate
-            />
-          </>
-        ))}
+        {storeMetrics(
+          {
+            name: "cr.store.admission.granter.io_tokens_exhausted_duration.kv",
+            nonNegativeRate: true,
+            aggregateMax: true,
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+          "regular (foreground)",
+        )}
+        {storeMetrics(
+          {
+            name: "cr.store.admission.granter.elastic_io_tokens_exhausted_duration.kv",
+            nonNegativeRate: true,
+            aggregateMax: true,
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+          "elastic (background)",
+        )}
       </Axis>
     </LineGraph>,
 
@@ -107,16 +100,14 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="Score">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.store.admission.io.overload"
-              title={nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={storeIDsForNode(storeIDsByNodeID, nid)}
-            />
-          </>
-        ))}
+        {storeMetrics(
+          {
+            name: "cr.store.admission.io.overload",
+            aggregateMax: true,
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
       </Axis>
     </LineGraph>,
 
@@ -178,30 +169,30 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Admission Queueing Delay p99 – Store"
-      sources={nodeSources}
+      sources={storeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
       tooltip={`The 99th percentile latency of requests waiting in the Admission Control store queue.`}
     >
       <Axis units={AxisUnits.Duration} label="Write Delay Duration">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.admission.wait_durations.kv-stores-p99"
-              title={"KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-            <Metric
-              key={nid}
-              name="cr.node.admission.wait_durations.elastic-stores-p99"
-              title={"Elastic " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-              downsampleMax
-            />
-          </>
-        ))}
+        {storeMetrics(
+          {
+            name: "cr.store.admission.wait_durations.kv-stores-p99",
+            aggregateMax: true,
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+          "KV",
+        )}
+        {storeMetrics(
+          {
+            name: "cr.store.admission.wait_durations.elastic-stores-p99",
+            aggregateMax: true,
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+          "elastic",
+        )}
       </Axis>
     </LineGraph>,
 
@@ -420,16 +411,14 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="Count">
-        {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.store.storage.l0-sublevels"
-              title={nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={storeIDsForNode(storeIDsByNodeID, nid)}
-            />
-          </>
-        ))}
+        {storeMetrics(
+          {
+            name: "cr.store.storage.l0-sublevels",
+            aggregateMax: true,
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
       </Axis>
     </LineGraph>,
   ];
