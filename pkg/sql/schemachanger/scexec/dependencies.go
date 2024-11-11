@@ -77,14 +77,14 @@ type Catalog interface {
 	// UpdateZoneConfig upserts a zone config for a descriptor ID.
 	UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig) error
 
-	// UpdateSubzoneConfig upserts a subzone config into the zone config for a
-	// descriptor.
+	// UpdateSubzoneConfig upserts a subzone config into the given zone config
+	// for a descriptor ID.
 	UpdateSubzoneConfig(
 		ctx context.Context,
-		tableID descpb.ID,
-		subzones []zonepb.Subzone,
+		parentZone catalog.ZoneConfig,
+		subzone zonepb.Subzone,
 		subzoneSpans []zonepb.SubzoneSpan,
-	) error
+	) (catalog.ZoneConfig, error)
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error

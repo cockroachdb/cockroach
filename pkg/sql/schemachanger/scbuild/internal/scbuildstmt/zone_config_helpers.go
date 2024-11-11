@@ -52,8 +52,19 @@ type zoneConfigAuthorizer interface {
 }
 
 type zoneConfigObjBuilder interface {
-	// getZoneConfigElem retrieves the scpb.Element for the zone config object.
-	getZoneConfigElem(b BuildCtx) scpb.Element
+	// getZoneConfigElemForAdd retrieves (scpb.Element, []scpb.Element) needed for
+	// adding the zone config object. The slice of multiple elements to be
+	// modified becomes more relevant for subzone configs -- as configuring the
+	// zone on indexes and partitions can shift the subzone spans for other
+	// elements around.
+	getZoneConfigElemForAdd(b BuildCtx) (scpb.Element, []scpb.Element)
+
+	// getZoneConfigElemForDrop retrieves (scpb.Element, []scpb.Element) needed
+	// for dropping the zone config object. The slice of multiple elements
+	// to be modified becomes more relevant for subzone configs -- as configuring
+	// the zone on indexes and partitions can shift the subzone spans for other
+	// elements around.
+	getZoneConfigElemForDrop(b BuildCtx) (scpb.Element, []scpb.Element)
 
 	// getTargetID returns the target ID of the zone config object. This is either
 	// a database or a table ID.
@@ -71,9 +82,6 @@ type zoneConfigObjBuilder interface {
 	// setZoneConfigToWrite fills our object with the zone config/subzone config
 	// we will be writing to KV.
 	setZoneConfigToWrite(zone *zonepb.ZoneConfig)
-
-	// incrementSeqNum increments the seqNum by 1.
-	incrementSeqNum()
 
 	// isNoOp returns true if the zone config object is a no-op. This is defined
 	// by our object having no zone config yet.
@@ -1211,4 +1219,84 @@ func isCorrespondingTemporaryIndex(
 			return idx == e.TemporaryIndexID && e.TemporaryIndexID == otherIdx+1
 		}).MustGetZeroOrOneElement()
 	return maybeCorresponding != nil
+}
+
+// getSubzoneSpansWithIdx groups each subzone span by their subzoneIndexs
+// for a lookup of which subzone spans a particular subzone is referred to by.
+func getSubzoneSpansWithIdx(
+	numSubzones int, newSubzoneSpans []zonepb.SubzoneSpan,
+) map[int32][]zonepb.SubzoneSpan {
+	// We initialize our map to the number of subzones to ensure it contains every
+	// subzoneIndex, even if there are no associated subzoneSpans.
+	idxToSpans := make(map[int32][]zonepb.SubzoneSpan, numSubzones)
+	for i := range numSubzones {
+		idxToSpans[int32(i)] = []zonepb.SubzoneSpan{}
+	}
+	for _, s := range newSubzoneSpans {
+		idxToSpans[s.SubzoneIndex] = append(idxToSpans[s.SubzoneIndex], s)
+	}
+	return idxToSpans
+}
+
+// constructSideEffectIndexElem constructs a side effect scpb.IndexZoneConfig
+// for the given subzone. A "side effect scpb.IndexZoneConfig" is only created
+// for existing subzone configs -- with the intent of updating its associated
+// subzone configs due to some other zone config change.
+func constructSideEffectIndexElem(
+	b BuildCtx, zco zoneConfigObject, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
+) *scpb.IndexZoneConfig {
+	// Get the most recent seqNum so we can properly update the side
+	// effects.
+	sameIndex := func(e *scpb.IndexZoneConfig) bool {
+		return uint32(e.IndexID) == subzone.IndexID
+	}
+	mostRecentElem := findMostRecentZoneConfig(zco,
+		func(id catid.DescID) *scpb.ElementCollection[*scpb.IndexZoneConfig] {
+			return b.QueryByID(id).FilterIndexZoneConfig()
+		}, sameIndex)
+	if mostRecentElem == nil {
+		panic(errors.AssertionFailedf("subzone for index %d, table %d has no existing subzone config",
+			subzone.IndexID, zco.getTargetID()))
+	}
+	elem := &scpb.IndexZoneConfig{
+		TableID:      zco.getTargetID(),
+		IndexID:      catid.IndexID(subzone.IndexID),
+		Subzone:      subzone,
+		SubzoneSpans: subzoneSpans,
+		SeqNum:       mostRecentElem.SeqNum + 1,
+	}
+	return elem
+}
+
+// constructSideEffectPartitionElem constructs a side effect
+// scpb.PartitionZoneConfig for the given subzone. A
+// "side effect scpb.IndexZoneConfig" is only created for existing subzone
+// configs -- with the intent of updating its associated subzone configs due to
+// some other zone config change.
+func constructSideEffectPartitionElem(
+	b BuildCtx, zco zoneConfigObject, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
+) *scpb.PartitionZoneConfig {
+	// Get the most recent seqNum so we can properly update the side
+	// effects.
+	samePartition := func(e *scpb.PartitionZoneConfig) bool {
+		return e.PartitionName == subzone.PartitionName && uint32(e.IndexID) == subzone.IndexID
+	}
+	mostRecentElem := findMostRecentZoneConfig(zco,
+		func(id catid.DescID) *scpb.ElementCollection[*scpb.PartitionZoneConfig] {
+			return b.QueryByID(id).FilterPartitionZoneConfig()
+		}, samePartition)
+	if mostRecentElem == nil {
+		panic(errors.AssertionFailedf("subzone side effect for partition %s of index "+
+			"%d, table %d has no existing subzone config",
+			subzone.PartitionName, subzone.IndexID, zco.getTargetID()))
+	}
+	elem := &scpb.PartitionZoneConfig{
+		TableID:       zco.getTargetID(),
+		IndexID:       catid.IndexID(subzone.IndexID),
+		PartitionName: subzone.PartitionName,
+		Subzone:       subzone,
+		SubzoneSpans:  subzoneSpans,
+		SeqNum:        mostRecentElem.SeqNum + 1,
+	}
+	return elem
 }

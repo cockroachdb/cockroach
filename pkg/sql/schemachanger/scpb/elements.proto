@@ -786,8 +786,6 @@ message IndexZoneConfig {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   cockroach.config.zonepb.Subzone subzone = 3 [(gogoproto.nullable) = false];
-  // `subzone_spans` is used solely for zone config writes. These spans are
-  // recreated for the table zone config during each configuration change.
   repeated cockroach.config.zonepb.SubzoneSpan subzone_spans = 4 [(gogoproto.nullable) = false];
   // `seq_num` is used to differentiate different subzone config elements tied
   // to the same index. E.g. If we attempt to update an index subzone config,
@@ -801,8 +799,6 @@ message PartitionZoneConfig {
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   string partition_name = 3;
   cockroach.config.zonepb.Subzone subzone = 4 [(gogoproto.nullable) = false];
-  // `subzone_spans` is used solely for zone config writes. These spans are
-  // recreated for the table zone config during each configuration change.
   repeated cockroach.config.zonepb.SubzoneSpan subzone_spans = 5 [(gogoproto.nullable) = false];
   // `seq_num` is used to differentiate different subzone config elements tied
   // to the same partition. E.g. If we attempt to update a partition's subzone
