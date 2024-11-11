@@ -620,6 +620,9 @@ func ShowCreateSequence(
 	if opts.CacheSize > 1 {
 		f.Printf(" CACHE %d", opts.CacheSize)
 	}
+	if opts.NodeCacheSize > 1 {
+		f.Printf(" NODE CACHE %d", opts.NodeCacheSize)
+	}
 	return f.CloseAndGetString(), nil
 }
 

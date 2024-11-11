@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -69,12 +70,9 @@ func alterTableAddColumn(
 			}
 		}
 	}
+	var colSerialDefaultExpression *scpb.Expression
 	if d.IsSerial {
-		if b.SessionData().SerialNormalizationMode != sessiondatapb.SerialUsesRowID {
-			panic(scerrors.NotImplementedErrorf(d, "contains serial data type in unsupported mode"))
-		}
-		d = alterTableAddColumnSerial(b, d, tn)
-
+		d, colSerialDefaultExpression = alterTableAddColumnSerial(b, d, tn)
 	}
 	if d.GeneratedIdentity.IsGeneratedAsIdentity {
 		panic(scerrors.NotImplementedErrorf(d, "contains generated identity type"))
@@ -218,11 +216,23 @@ func alterTableAddColumn(
 		}
 	}
 	if desc.HasDefault() {
-		expression := b.WrapExpression(tbl.TableID, cdd.DefaultExpr)
+		if colSerialDefaultExpression == nil {
+			colSerialDefaultExpression = b.WrapExpression(tbl.TableID, cdd.DefaultExpr)
+		} else {
+			// Otherwise, a serial column is being created. The sequence was created
+			// above, but the owner could not be assigned, since the column does not
+			// exist. So manually create the element here, since the CREATE SEQUENCE
+			// code path cannot resolve the column.
+			b.Add(&scpb.SequenceOwner{
+				SequenceID: colSerialDefaultExpression.UsesSequenceIDs[0],
+				TableID:    tbl.TableID,
+				ColumnID:   cdd.ID,
+			})
+		}
 		spec.def = &scpb.ColumnDefaultExpression{
 			TableID:    tbl.TableID,
 			ColumnID:   spec.col.ColumnID,
-			Expression: *expression,
+			Expression: *colSerialDefaultExpression,
 		}
 		b.IncrementSchemaChangeAddColumnQualificationCounter("default_expr")
 	}
@@ -264,7 +274,7 @@ func alterTableAddColumn(
 
 func alterTableAddColumnSerial(
 	b BuildCtx, d *tree.ColumnTableDef, tn *tree.TableName,
-) *tree.ColumnTableDef {
+) (newDef *tree.ColumnTableDef, colDefaultExpression *scpb.Expression) {
 	if err := catalog.AssertValidSerialColumnDef(d, tn); err != nil {
 		panic(err)
 	}
@@ -277,26 +287,83 @@ func alterTableAddColumnSerial(
 	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(
 		defType.Name(), b.SessionData().SerialNormalizationMode.String()))
 
-	if defType.Width() < types.Int.Width() {
-		b.EvalCtx().ClientNoticeSender.BufferClientNotice(
-			b,
-			errors.WithHintf(
-				pgnotice.Newf(
-					"upgrading the column %s to %s to utilize the session serial_normalization setting",
-					d.Name.String(),
-					types.Int.SQLString(),
+	serialNormalizationMode := b.SessionData().SerialNormalizationMode
+	switch serialNormalizationMode {
+	// The type will be upgraded when the columns are setup or before a
+	// sequence is created.
+	case sessiondatapb.SerialUsesRowID, sessiondatapb.SerialUsesUnorderedRowID, sessiondatapb.SerialUsesVirtualSequences:
+		if defType.Width() < types.Int.Width() {
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+				b,
+				errors.WithHintf(
+					pgnotice.Newf(
+						"upgrading the column %s to %s to utilize the session serial_normalization setting",
+						d.Name.String(),
+						types.Int.SQLString(),
+					),
+					"change the serial_normalization to sql_sequence or sql_sequence_cached if you wish "+
+						"to use a smaller sized serial column at the cost of performance. See %s",
+					docs.URL("serial.html"),
 				),
-				"change the serial_normalization to sql_sequence or sql_sequence_cached if you wish "+
-					"to use a smaller sized serial column at the cost of performance. See %s",
-				docs.URL("serial.html"),
-			),
-		)
+			)
+		}
 	}
-
 	// Serial is an alias for a real column definition. False indicates a remapped alias.
 	d.IsSerial = false
 
-	return catalog.UseRowID(*d)
+	if serialNormalizationMode == sessiondatapb.SerialUsesRowID {
+		return catalog.UseRowID(*d), nil
+	} else if serialNormalizationMode == sessiondatapb.SerialUsesUnorderedRowID {
+		return catalog.UseUnorderedRowID(*d), nil
+	}
+
+	// Start with a fixed sequence number and find the first one
+	// that is free.
+	nameBase := tree.Name(tn.Table() + "_" + string(d.Name) + "_seq")
+	seqName := tree.NewTableNameWithSchema(
+		tn.CatalogName,
+		tn.SchemaName,
+		nameBase)
+
+	for idx := 0; ; idx++ {
+		ers := b.ResolveRelation(seqName.ToUnresolvedObjectName(),
+			ResolveParams{
+				IsExistenceOptional: true,
+				RequiredPrivilege:   privilege.USAGE,
+				WithOffline:         true, // We search sequence with provided name, including offline ones.
+				ResolveTypes:        true, // Check for collisions with type names.
+			})
+		if ers.IsEmpty() {
+			break
+		}
+		seqName.ObjectName = tree.Name(fmt.Sprintf("%s%d", nameBase, idx))
+	}
+
+	seqOptions, err := catalog.SequenceOptionsFromNormalizationMode(serialNormalizationMode, b.ClusterSettings(), d, defType)
+	if err != nil {
+		panic(err)
+	}
+
+	// Create the sequence and fetch the element after. The full descriptor
+	// will be created after the build phase, so we cannot fully resolve it.
+	sequenceElem := doCreateSequence(b, &tree.CreateSequence{
+		Name:    *seqName,
+		Options: seqOptions,
+	})
+	// Set up the expression and manually add the reference, since WrapExpression
+	// cannot resolve this sequence yet.
+	newDef = catalog.UseSequence(*d, seqName)
+	// Rewrite the sequence name.
+	expr, err := seqexpr.ReplaceSequenceNamesWithIDs(newDef.DefaultExpr.Expr, map[string]descpb.ID{
+		seqName.String(): sequenceElem.SequenceID,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return newDef, &scpb.Expression{
+		Expr:            catpb.Expression(tree.Serialize(expr)),
+		UsesSequenceIDs: []catid.DescID{sequenceElem.SequenceID},
+	}
 }
 
 func columnNamesToIDs(b BuildCtx, tbl *scpb.Table) map[string]descpb.ColumnID {
