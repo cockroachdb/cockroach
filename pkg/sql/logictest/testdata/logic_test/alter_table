@@ -3994,10 +3994,7 @@ subtest unimplemented_for_non_rowid_in_DSC
 statement ok
 SET serial_normalization = sql_sequence
 
-statement ok
-SET use_declarative_schema_changer = unsafe_always
-
-statement error pq: \*tree.ColumnTableDef not implemented in the new schema changer: contains serial data type in unsupported mode
+statement error .*nextval\(\): unimplemented: cannot evaluate scalar expressions containing sequence operations in this context.*
 alter table roach add column serial_id2 SERIAL
 
 subtest end
@@ -4159,5 +4156,86 @@ insert into t1_135692 values (null);
 
 statement ok
 ROLLBACK;
+
+subtest end
+
+
+subtest serial_columns
+
+statement ok
+create table t1_serial_columns(n int);
+
+statement ok
+SET serial_normalization = sql_sequence;
+
+# add multiple serial columns
+statement ok
+alter table t1_serial_columns add column i serial, add column j serial, add column k serial;
+
+# test other serialization modes
+skipif config local-read-committed
+skipif config local-repeatable-read
+statement ok
+SET serial_normalization = sql_sequence_cached;
+alter table t1_serial_columns add column i_cache serial;
+
+skipif config local-read-committed
+skipif config local-repeatable-read
+statement ok
+SET serial_normalization = virtual_sequence;
+alter table t1_serial_columns add column i_virtual serial;
+
+skipif config local-read-committed
+skipif config local-repeatable-read
+statement ok
+SET serial_normalization = sql_sequence_cached_node;
+alter table t1_serial_columns add column i_node_cache serial;
+
+skipif config local-read-committed
+skipif config local-repeatable-read
+statement ok
+SET serial_normalization = unordered_rowid;
+alter table t1_serial_columns add column i_unordered_rowid serial;
+
+statement ok
+SET serial_normalization = sql_sequence;
+
+skipif config local-read-committed
+skipif config local-repeatable-read
+statement ok
+BEGIN;
+CREATE SEQUENCE t1_serial_columns_z_seq;
+alter table t1_serial_columns add column z serial;
+alter table t1_serial_columns add column l serial;
+COMMIT;
+
+skipif config local-read-committed
+skipif config local-repeatable-read
+query T
+SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name like 't1_serial_columns%' ORDER BY descriptor_name;
+----
+CREATE TABLE public.t1_serial_columns (
+  n INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  i INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_seq'::REGCLASS),
+  j INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_j_seq'::REGCLASS),
+  k INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_k_seq'::REGCLASS),
+  i_cache INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_cache_seq'::REGCLASS),
+  i_virtual INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_virtual_seq'::REGCLASS),
+  i_node_cache INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_i_node_cache_seq'::REGCLASS),
+  i_unordered_rowid INT8 NOT NULL DEFAULT unordered_unique_rowid(),
+  z INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_z_seq1'::REGCLASS),
+  l INT8 NOT NULL DEFAULT nextval('public.t1_serial_columns_l_seq'::REGCLASS),
+  CONSTRAINT t1_serial_columns_pkey PRIMARY KEY (rowid ASC)
+)
+CREATE SEQUENCE public.t1_serial_columns_i_cache_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 CACHE 256
+CREATE SEQUENCE public.t1_serial_columns_i_node_cache_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 PER NODE CACHE 256
+CREATE SEQUENCE public.t1_serial_columns_i_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+CREATE SEQUENCE public.t1_serial_columns_i_virtual_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 VIRTUAL
+CREATE SEQUENCE public.t1_serial_columns_j_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+CREATE SEQUENCE public.t1_serial_columns_k_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+CREATE SEQUENCE public.t1_serial_columns_l_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+CREATE SEQUENCE public.t1_serial_columns_z_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+CREATE SEQUENCE public.t1_serial_columns_z_seq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
 subtest end
