@@ -360,7 +360,6 @@ func (reg *registry) PublishToOverlapping(
 // TODO: this should be revisited as part of
 // https://github.com/cockroachdb/cockroach/issues/110634
 func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Error) {
-	reg.metrics.RangeFeedRegistrations.Dec(int64(reg.tree.Len()))
 	reg.forOverlappingRegs(ctx, all, func(r registration) (bool, *kvpb.Error) {
 		return true /* disconned */, pErr
 	})
@@ -370,7 +369,6 @@ func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Err
 // span with the provided error.
 func (reg *registry) DisconnectWithErr(ctx context.Context, span roachpb.Span, pErr *kvpb.Error) {
 	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
-		reg.metrics.RangeFeedRegistrations.Dec(1)
 		return true /* disconned */, pErr
 	})
 }
@@ -404,6 +402,10 @@ func (reg *registry) forOverlappingRegs(
 }
 
 func (reg *registry) remove(ctx context.Context, toDelete []interval.Interface) {
+	// We only ever call remote on values we know exist in the
+	// registry, so we can assume we can decrement this by the
+	// lenght of the input.
+	reg.metrics.RangeFeedRegistrations.Dec(int64(len(toDelete)))
 	if len(toDelete) == reg.tree.Len() {
 		reg.tree.Clear()
 	} else if len(toDelete) == 1 {
@@ -430,7 +432,6 @@ func (reg *registry) unregisterMarkedRegistrations(ctx context.Context) {
 		return false
 	})
 	reg.remove(ctx, toDelete)
-	reg.metrics.RangeFeedRegistrations.Dec(int64(len(toDelete)))
 }
 
 // waitForCaughtUp waits for all registrations overlapping the given span to
