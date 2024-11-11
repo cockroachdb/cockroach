@@ -319,7 +319,6 @@ func (p *ScheduledProcessor) Register(
 	withFiltering bool,
 	withOmitRemote bool,
 	stream Stream,
-	disconnectFn func(),
 ) (bool, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -335,11 +334,7 @@ func (p *ScheduledProcessor) Register(
 		r = newBufferedRegistration(
 			streamCtx,
 			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-			func(ctx context.Context, r registration) {
-				p.unregisterClientAsync(r)
-			},
-		)
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, p.unregisterClientAsync)
 	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {

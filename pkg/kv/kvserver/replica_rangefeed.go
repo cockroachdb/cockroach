@@ -448,7 +448,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	if p != nil {
 		reg, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			stream, func() { r.maybeDisconnectEmptyRangefeed(p) })
+			stream)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -530,7 +530,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
 	reg, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff,
-		withFiltering, withOmitRemote, stream, func() { r.maybeDisconnectEmptyRangefeed(p) })
+		withFiltering, withOmitRemote, stream)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():

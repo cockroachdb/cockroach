@@ -196,7 +196,6 @@ type Processor interface {
 		withFiltering bool,
 		withOmitRemote bool,
 		stream Stream,
-		disconnectFn func(),
 	) (bool, *Filter)
 	// DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 	// the given span with the given error.

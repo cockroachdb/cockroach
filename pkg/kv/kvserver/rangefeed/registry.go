@@ -55,9 +55,6 @@ type registration interface {
 	Range() interval.Range
 	// ID returns the id field of the registration as a uintptr.
 	ID() uintptr
-	// getUnreg returns the unregisterFn call back of the registration. It should
-	// be called when being unregistered from processor.
-	getUnreg() func()
 
 	// shouldUnregister returns true if this registration should
 	// be unregistered.
@@ -75,10 +72,11 @@ type baseRegistration struct {
 	withDiff       bool
 	withFiltering  bool
 	withOmitRemote bool
-	// TODO(ssd): This unreg can be removed when the LegacyProcess
-	// is removed.
-	unreg   func()
-	cleanup func(context.Context, registration)
+	// removeRegFromProcessor is called to remove the registration from its
+	// processor. This is provided by the creator of the registration and called
+	// during disconnect(). Since it is called during disconnect it must be
+	// non-blocking.
+	removeRegFromProcessor func(registration)
 
 	catchUpTimestamp hlc.Timestamp // exclusive
 	id               int64         // internal
@@ -122,10 +120,6 @@ func (r *baseRegistration) getWithFiltering() bool {
 
 func (r *baseRegistration) getWithOmitRemote() bool {
 	return r.withOmitRemote
-}
-
-func (r *baseRegistration) getUnreg() func() {
-	return r.unreg
 }
 
 func (r *baseRegistration) shouldUnregister() bool {

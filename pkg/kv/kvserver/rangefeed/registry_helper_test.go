@@ -267,8 +267,7 @@ func newTestRegistration(
 		false, /* blockWhenFull */
 		NewMetrics(),
 		s,
-		func() {},
-		func(context.Context, registration) {},
+		func(registration) {},
 	)
 	return &testRegistration{
 		bufferedRegistration: r,
