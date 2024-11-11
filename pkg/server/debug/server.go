@@ -192,7 +192,11 @@ func analyzeLSM(dir string, writer io.Writer) error {
 		return err
 	}
 
-	t := pebbletool.New(pebbletool.Comparers(storage.EngineComparer))
+	t := pebbletool.New(
+		pebbletool.Comparers(storage.EngineComparer),
+		pebbletool.KeySchema(storage.DefaultKeySchema),
+		pebbletool.KeySchemas(storage.KeySchemas...),
+	)
 
 	// TODO(yevgeniy): Consider exposing LSM tool directly.
 	var lsm *cobra.Command
