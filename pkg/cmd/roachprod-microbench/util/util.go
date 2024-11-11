@@ -22,6 +22,7 @@ import (
 
 // TimeFormat defines a constant format for time-related strings, using underscores instead of colons in the time portion.
 const TimeFormat = "2006-01-02T15_04_05"
+const PackageSeparator = "→"
 
 var (
 	// invalidCharRegex matches
