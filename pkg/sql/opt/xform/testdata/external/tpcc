@@ -16,6 +16,21 @@ import file=tpcc_stats_w100
 # environments.
 # --------------------------------------------------
 opt format=hide-qual
+SELECT w_tax FROM warehouse WHERE w_id = 10
+----
+project
+ ├── columns: w_tax:8
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(8)
+ └── scan warehouse
+      ├── columns: w_id:1!null w_tax:8
+      ├── constraint: /1: [/10 - /10]
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      └── fd: ()-->(1,8)
+
+opt format=hide-qual
 UPDATE district
 SET d_next_o_id = d_next_o_id + 1
 WHERE d_w_id = 10 AND d_id = 5
@@ -55,21 +70,6 @@ project
            │    └── fd: ()-->(14-24)
            └── projections
                 └── d_next_o_id:24 + 1 [as=d_next_o_id_new:27, outer=(24), immutable]
-
-opt format=hide-qual
-SELECT w_tax FROM warehouse WHERE w_id = 10
-----
-project
- ├── columns: w_tax:8
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(8)
- └── scan warehouse
-      ├── columns: w_id:1!null w_tax:8
-      ├── constraint: /1: [/10 - /10]
-      ├── cardinality: [0 - 1]
-      ├── key: ()
-      └── fd: ()-->(1,8)
 
 opt format=hide-qual
 SELECT c_discount, c_last, c_credit

@@ -69,8 +69,8 @@ type newOrder struct {
 	mcp    *workload.MultiConnPool
 	sr     workload.SQLRunner
 
-	updateDistrict     workload.StmtHandle
 	selectWarehouseTax workload.StmtHandle
+	updateDistrict     workload.StmtHandle
 	selectCustomerInfo workload.StmtHandle
 	insertOrder        workload.StmtHandle
 	insertNewOrder     workload.StmtHandle
@@ -86,17 +86,17 @@ func createNewOrder(
 		mcp:    mcp,
 	}
 
+	// Select the warehouse tax rate.
+	n.selectWarehouseTax = n.sr.Define(`
+		SELECT w_tax FROM warehouse WHERE w_id = $1`,
+	)
+
 	// Select the district tax rate and next available order number, bumping it.
 	n.updateDistrict = n.sr.Define(`
 		UPDATE district
 		SET d_next_o_id = d_next_o_id + 1
 		WHERE d_w_id = $1 AND d_id = $2
 		RETURNING d_tax, d_next_o_id`,
-	)
-
-	// Select the warehouse tax rate.
-	n.selectWarehouseTax = n.sr.Define(`
-		SELECT w_tax FROM warehouse WHERE w_id = $1`,
 	)
 
 	// Select the customer's discount, last name and credit.
@@ -208,6 +208,13 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, time.Duration
 	onTxnStartDuration, err := n.config.executeTx(
 		ctx, n.mcp.Get(),
 		func(tx pgx.Tx) error {
+			// Select the warehouse tax rate.
+			if err := n.selectWarehouseTax.QueryRowTx(
+				ctx, tx, wID,
+			).Scan(&d.wTax); err != nil {
+				return errors.Wrap(err, "select warehouse failed")
+			}
+
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int
 			if err := n.updateDistrict.QueryRowTx(
@@ -216,13 +223,6 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, time.Duration
 				return errors.Wrap(err, "update district failed")
 			}
 			d.oID = dNextOID - 1
-
-			// Select the warehouse tax rate.
-			if err := n.selectWarehouseTax.QueryRowTx(
-				ctx, tx, wID,
-			).Scan(&d.wTax); err != nil {
-				return errors.Wrap(err, "select warehouse failed")
-			}
 
 			// Select the customer's discount, last name and credit.
 			if err := n.selectCustomerInfo.QueryRowTx(
