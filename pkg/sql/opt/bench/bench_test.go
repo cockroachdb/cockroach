@@ -240,6 +240,19 @@ var schemas = []string{
 	)
 	`,
 	`
+	CREATE TABLE json_comp
+	(
+		k INT PRIMARY KEY,
+		i INT,
+		j1 JSON,
+		j2 JSON,
+		j3 JSON,
+		j4 INT AS ((j1->'foo'->'bar'->'int')::INT) STORED,
+		j5 INT AS ((j1->'foo'->'bar'->'int2')::INT) STORED,
+		j6 STRING AS ((j2->'str')::STRING) STORED
+	)
+	`,
+	`
 		CREATE TABLE single_col_histogram (k TEXT PRIMARY KEY);
 	`,
 	`
@@ -507,6 +520,12 @@ var queries = [...]benchQuery{
 		name:    "json-insert",
 		query:   `INSERT INTO json_table(k, i, j) VALUES (1, 10, '{"a": "foo", "b": "bar", "c": [2, 3, "baz", true, false, null]}')`,
 		args:    []interface{}{},
+		cleanup: "TRUNCATE TABLE json_table",
+	},
+	{
+		name:    "json-comp-insert",
+		query:   `INSERT INTO json_comp(k, i, j1, j2, j3) VALUES ($1, $2, $3, $4, $5)`,
+		args:    []interface{}{1, 10, `'{"foo": {"bar": {"int": 12345, "int2": 1}}, "baz": false}'`, `'{"str": "hello world"}'`, `'{"c": [2, 3, "baz", true, false, null]}'`},
 		cleanup: "TRUNCATE TABLE json_table",
 	},
 	{
