@@ -9430,13 +9430,13 @@ func TestParallelIOMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Add delay so queuing occurs, which results in the below metrics being
+	// nonzero.
+	defer testingEnableQueuingDelay()()
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
-
-		// Add delay so queuing occurs, which results in the below metrics being
-		// nonzero.
-		defer testingEnableQueuingDelay()()
 
 		db := sqlutils.MakeSQLRunner(s.DB)
 		db.Exec(t, `SET CLUSTER SETTING changefeed.new_pubsub_sink_enabled = true`)
