@@ -100,6 +100,7 @@ go_test(
         "//pkg/cmd/roachtest/roachtestflags",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
+        "//pkg/cmd/roachtest/tests",
         "//pkg/internal/team",
         "//pkg/roachprod",
         "//pkg/roachprod/cloud",
