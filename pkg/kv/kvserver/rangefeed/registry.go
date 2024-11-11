@@ -340,15 +340,11 @@ func (reg *registry) PublishToOverlapping(
 // Unregister removes a registration from the registry. It is assumed that the
 // registration has already been disconnected, this is intended only to clean
 // up the registry.
-// We also drain all pending events for the sake of memory accounting. To do
-// that we rely on a fact that caller is not going to post any more events
-// concurrently or after this function is called.
 func (reg *registry) Unregister(ctx context.Context, r registration) {
 	reg.metrics.RangeFeedRegistrations.Dec(1)
 	if err := reg.tree.Delete(r, false /* fast */); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-	r.drainAllocations(ctx)
 }
 
 // DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.

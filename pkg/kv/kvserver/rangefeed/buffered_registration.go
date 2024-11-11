@@ -254,6 +254,8 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 }
 
 func (br *bufferedRegistration) runOutputLoop(ctx context.Context, _forStacks roachpb.RangeID) {
+	defer br.drainAllocations(ctx)
+
 	br.mu.Lock()
 	if br.mu.disconnected {
 		// The registration has already been disconnected.
