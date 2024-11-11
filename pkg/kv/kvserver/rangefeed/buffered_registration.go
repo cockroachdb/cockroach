@@ -117,9 +117,10 @@ func (br *bufferedRegistration) publish(
 
 	br.mu.Lock()
 	defer br.mu.Unlock()
-	if br.mu.overflowed {
+	if br.mu.overflowed || br.mu.disconnected {
 		return
 	}
+
 	alloc.Use(ctx)
 	select {
 	case br.buf <- e:
