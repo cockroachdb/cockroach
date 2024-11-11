@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/redact"
 )
 
 // This file serves as a bridge to the license code in the CCL packages.
@@ -23,6 +24,11 @@ var RegisterCallbackOnLicenseChange = func(context.Context, *cluster.Settings, *
 // LicType is the type to define the license type, as needed by the license
 // enforcer.
 type LicType int
+
+var _ redact.SafeValue = LicType(0)
+
+// SafeValue implements the redact.SafeValue interface.
+func (i LicType) SafeValue() {}
 
 //go:generate stringer -type=LicType -linecomment
 const (
