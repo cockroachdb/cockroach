@@ -336,7 +336,6 @@ func (reg *registry) Unregister(ctx context.Context, r registration) {
 	if err := reg.tree.Delete(r, false /* fast */); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-	r.drainAllocations(ctx)
 }
 
 // DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.
