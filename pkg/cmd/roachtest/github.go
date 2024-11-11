@@ -41,10 +41,6 @@ func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) 
 	}
 }
 
-func roachtestPrefix(p string) string {
-	return "ROACHTEST_" + p
-}
-
 // generateHelpCommand creates a HelpCommand for createPostRequest
 func generateHelpCommand(
 	testName string, clusterName string, cloud spec.Cloud, start time.Time, end time.Time,
@@ -181,6 +177,7 @@ func (g *githubIssues) createPostRequest(
 	sideEyeTimeoutSnapshotURL string,
 	runtimeAssertionsBuild bool,
 	coverageBuild bool,
+	params map[string]string,
 ) (issues.PostRequest, error) {
 	var mention []string
 	var projColID int
@@ -267,31 +264,7 @@ func (g *githubIssues) createPostRequest(
 
 	artifacts := fmt.Sprintf("/%s", testName)
 
-	clusterParams := map[string]string{
-		roachtestPrefix("cloud"):                  roachtestflags.Cloud.String(),
-		roachtestPrefix("cpu"):                    fmt.Sprintf("%d", spec.Cluster.CPUs),
-		roachtestPrefix("ssd"):                    fmt.Sprintf("%d", spec.Cluster.SSDs),
-		roachtestPrefix("runtimeAssertionsBuild"): fmt.Sprintf("%t", runtimeAssertionsBuild),
-		roachtestPrefix("coverageBuild"):          fmt.Sprintf("%t", coverageBuild),
-	}
-	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
-	if spec.Cluster.Arch != "" {
-		clusterParams[roachtestPrefix("arch")] = string(spec.Cluster.Arch)
-	}
-	// These params can be probabilistically set, so we pass them here to
-	// show what their actual values are in the posted issue.
-	if g.vmCreateOpts != nil {
-		clusterParams[roachtestPrefix("fs")] = g.vmCreateOpts.SSDOpts.FileSystem
-		clusterParams[roachtestPrefix("localSSD")] = fmt.Sprintf("%v", g.vmCreateOpts.SSDOpts.UseLocalSSD)
-	}
-
 	if g.cluster != nil {
-		clusterParams[roachtestPrefix("encrypted")] = fmt.Sprintf("%v", g.cluster.encAtRest)
-		if spec.Cluster.Arch == "" {
-			// N.B. when Arch is specified, it cannot differ from cluster's arch.
-			// Hence, we only emit when arch was unspecified.
-			clusterParams[roachtestPrefix("arch")] = string(g.cluster.arch)
-		}
 		issueClusterName = g.cluster.name
 	}
 
@@ -332,13 +305,17 @@ func (g *githubIssues) createPostRequest(
 		Artifacts:               artifacts,
 		SideEyeSnapshotMsg:      sideEyeMsg,
 		SideEyeSnapshotURL:      sideEyeTimeoutSnapshotURL,
-		ExtraParams:             clusterParams,
+		ExtraParams:             params,
 		HelpCommand:             generateHelpCommand(testName, issueClusterName, roachtestflags.Cloud, start, end),
 	}, nil
 }
 
 func (g *githubIssues) MaybePost(
-	t *testImpl, l *logger.Logger, message string, sideEyeTimeoutSnapshotURL string,
+	t *testImpl,
+	l *logger.Logger,
+	message string,
+	sideEyeTimeoutSnapshotURL string,
+	params map[string]string,
 ) (*issues.TestFailureIssue, error) {
 	skipReason := g.shouldPost(t)
 	if skipReason != "" {
@@ -349,7 +326,8 @@ func (g *githubIssues) MaybePost(
 	postRequest, err := g.createPostRequest(
 		t.Name(), t.start, t.end, t.spec, t.failures(),
 		message, sideEyeTimeoutSnapshotURL,
-		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled)
+		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params,
+	)
 
 	if err != nil {
 		return nil, err

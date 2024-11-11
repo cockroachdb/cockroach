@@ -76,6 +76,7 @@ type Test interface {
 	L() *logger.Logger
 	Progress(float64)
 	Status(args ...interface{})
+	AddParam(string, string)
 	WorkerStatus(args ...interface{})
 	WorkerProgress(float64)
 	IsDebug() bool
