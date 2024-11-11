@@ -88,10 +88,13 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		if zco.isNoOp() {
 			return
 		}
-		dropZoneConfigElem(b, zco, eventDetails)
+		toDrop, sideEffects := zco.getZoneConfigElemForDrop(b)
+		dropZoneConfigElem(b, toDrop, eventDetails)
+		addZoneConfigElem(b, sideEffects, oldZone, eventDetails)
 	} else {
-		zco.incrementSeqNum()
-		addZoneConfigElem(b, zco, oldZone, eventDetails)
+		toAdd, sideEffects := zco.getZoneConfigElemForAdd(b)
+		sideEffects = append([]scpb.Element{toAdd}, sideEffects...)
+		addZoneConfigElem(b, sideEffects, oldZone, eventDetails)
 	}
 }
 
@@ -193,25 +196,21 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 }
 
 func dropZoneConfigElem(
-	b BuildCtx, zco zoneConfigObject, eventDetails eventpb.CommonZoneConfigDetails,
+	b BuildCtx, elem scpb.Element, eventDetails eventpb.CommonZoneConfigDetails,
 ) {
-	elems := zco.getZoneConfigElem(b)
 	info := &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
-	for _, e := range elems {
-		b.Drop(e)
-		b.LogEventForExistingPayload(e, info)
-	}
+	b.Drop(elem)
+	b.LogEventForExistingPayload(elem, info)
 }
 
 func addZoneConfigElem(
 	b BuildCtx,
-	zco zoneConfigObject,
+	elems []scpb.Element,
 	oldZone *zonepb.ZoneConfig,
 	eventDetails eventpb.CommonZoneConfigDetails,
 ) {
 	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
 		ResolvedOldConfig: oldZone.String()}
-	elems := zco.getZoneConfigElem(b)
 	for _, e := range elems {
 		b.Add(e)
 		b.LogEventForExistingPayload(e, info)
