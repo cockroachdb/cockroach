@@ -268,12 +268,38 @@ func (s *Server) serve(ctx context.Context, ln net.Listener, requireProxyProtoco
 
 		err = s.Stopper.RunAsyncTask(ctx, "proxy-con-serve", func(ctx context.Context) {
 			defer func() { _ = conn.Close() }()
+
 			s.metrics.CurConnCount.Inc(1)
 			defer s.metrics.CurConnCount.Dec(1)
-			remoteAddr := conn.RemoteAddr()
-			ctxWithTag := logtags.AddTag(ctx, "client", log.SafeOperational(remoteAddr))
-			if err := s.handler.handle(ctxWithTag, conn, requireProxyProtocol); err != nil {
-				log.Infof(ctxWithTag, "connection error: %v", err)
+
+			ctx = logtags.AddTag(ctx, "client", log.SafeOperational(conn.RemoteAddr()))
+
+			// Use a map to collect request-specific information at higher
+			// layers of the stack. This helps ensure that all relevant
+			// information is captured, providing better context for the error
+			// logs.
+			//
+			// We could improve this by creating a custom context.Context object
+			// to track all data related to the request (including migration
+			// history). For now, this approach is adequate.
+			reqTags := make(map[string]interface{})
+			ctx = contextWithRequestTags(ctx, reqTags)
+
+			err := s.handler.handle(ctx, conn, requireProxyProtocol)
+			if err != nil && !errors.Is(err, context.Canceled) {
+				for key, value := range reqTags {
+					ctx = logtags.AddTag(ctx, key, value)
+				}
+				// log.Infof automatically prints hints (one per line) that are
+				// associated with the input error object. This causes
+				// unnecessary log spam, especially when proxy hints are meant
+				// for the user. We will intentionally create a new error object
+				// without the hints just for logging purposes.
+				//
+				// TODO(jaylim-crl): Ensure that handle does not return user
+				// facing errors (i.e. one that contains hints).
+				errWithoutHints := errors.Newf("%s", err.Error()) // nolint:errwrap
+				log.Infof(ctx, "connection closed: %v", errWithoutHints)
 			}
 		})
 		if err != nil {
@@ -321,4 +347,24 @@ func (s *Server) AwaitNoConnections(ctx context.Context) <-chan struct{} {
 	})
 
 	return c
+}
+
+// requestTagsContextKey is the type of a context.Value key used to carry the
+// request tags map in a context.Context object.
+type requestTagsContextKey struct{}
+
+// contextWithRequestTags returns a context annotated with the provided request
+// tags map. Use requestTagsFromContext(ctx) to retrieve it back.
+func contextWithRequestTags(ctx context.Context, reqTags map[string]interface{}) context.Context {
+	return context.WithValue(ctx, requestTagsContextKey{}, reqTags)
+}
+
+// requestTagsFromContext retrieves the request tags map stored in the context
+// via contextWithRequestTags.
+func requestTagsFromContext(ctx context.Context) map[string]interface{} {
+	r := ctx.Value(requestTagsContextKey{})
+	if r == nil {
+		return nil
+	}
+	return r.(map[string]interface{})
 }

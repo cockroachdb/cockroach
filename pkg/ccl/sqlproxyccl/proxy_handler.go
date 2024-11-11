@@ -174,13 +174,10 @@ type proxyHandler struct {
 	cancelInfoMap *cancelInfoMap
 }
 
-const throttledErrorHint string = `Connection throttling is triggered by repeated authentication failure. Make
-sure the username and password are correct.
-`
+const throttledErrorHint string = `Connection throttling is triggered by repeated authentication failure. Make sure the username and password are correct.`
 
 var authThrottledError = errors.WithHint(
-	withCode(errors.New(
-		"too many failed authentication attempts"), codeProxyRefusedConnection),
+	withCode(errors.New("too many failed authentication attempts"), codeProxyRefusedConnection),
 	throttledErrorHint)
 
 // newProxyHandler will create a new proxy handler with configuration based on
@@ -372,25 +369,15 @@ func (handler *proxyHandler) handle(
 
 	// NOTE: Errors returned from this function are user-facing errors so we
 	// should be careful with the details that we want to expose.
+	//
+	// TODO(jaylim-crl): Update this such that we return both the internal and
+	// user-facing errors from clusterNameAndTenantFromParams. Only the internal
+	// error should be returned to the caller.
 	backendStartupMsg, clusterName, tenID, err := clusterNameAndTenantFromParams(ctx, fe, handler.metrics)
 	if err != nil {
 		clientErr := withCode(err, codeParamsRoutingFailed)
-		log.Errorf(ctx, "unable to extract cluster name and tenant id: %s", err.Error())
 		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
-		return clientErr
-	}
-
-	ctx = logtags.AddTag(ctx, "cluster", clusterName)
-	ctx = logtags.AddTag(ctx, "tenant", tenID)
-
-	// Use an empty string as the default port as we only care about the
-	// correctly parsing the IP address here.
-	ipAddr, _, err := addr.SplitHostPort(fe.Conn.RemoteAddr().String(), "")
-	if err != nil {
-		clientErr := withCode(errors.New("unexpected connection address"), codeParamsRoutingFailed)
-		log.Errorf(ctx, "could not parse address: %v", err.Error())
-		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
-		return clientErr
+		return errors.Wrap(err, "extracting cluster identifier")
 	}
 
 	// Validate the incoming connection and ensure that the cluster name
@@ -400,6 +387,26 @@ func (handler *proxyHandler) handle(
 		// We do not need to log here as validateConnection already logs.
 		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
 		return err
+	}
+
+	// Only add logtags after validating the connection. If the connection isn't
+	// validated, clusterName may not match the tenant ID, and this could cause
+	// confusion when analyzing logs.
+	ctx = logtags.AddTag(ctx, "cluster", clusterName)
+	ctx = logtags.AddTag(ctx, "tenant", tenID)
+
+	// Add request tags so that callers can provide a better context for errors.
+	reqTags := requestTagsFromContext(ctx)
+	reqTags["cluster"] = clusterName
+	reqTags["tenant"] = tenID
+
+	// Use an empty string as the default port as we only care about the
+	// correctly parsing the IP address here.
+	ipAddr, _, err := addr.SplitHostPort(fe.Conn.RemoteAddr().String(), "")
+	if err != nil {
+		clientErr := withCode(errors.New("unexpected connection address"), codeParamsRoutingFailed)
+		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
+		return errors.Wrap(err, "parsing remote address")
 	}
 
 	errConnection := make(chan error, 1)
@@ -426,20 +433,27 @@ func (handler *proxyHandler) handle(
 		// with a deleting tenant. This case is rare, and we'll just return a
 		// "connection refused" error. The next time they connect, they will
 		// get a "not found" error.
-		log.Errorf(ctx, "connection blocked by access control list: %v", err)
-		err = withCode(errors.New("connection refused"), codeProxyRefusedConnection)
-		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
-		return err
+		//
+		// TODO(jaylim-crl): We can enrich this error with the proper reason on
+		// why they were refused (e.g. IP allowlist, or private endpoints).
+		clientErr := withCode(errors.New("connection refused"), codeProxyRefusedConnection)
+		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
+		return errors.Wrap(err, "connection blocked by access control list")
 	}
 	defer removeListener()
 
 	throttleTags := throttler.ConnectionTags{IP: ipAddr, TenantID: tenID.String()}
-	throttleTime, err := handler.throttleService.LoginCheck(throttleTags)
+	throttleTime, err := handler.throttleService.LoginCheck(ctx, throttleTags)
 	if err != nil {
-		log.Errorf(ctx, "throttler refused connection: %v", err.Error())
-		err = authThrottledError
-		updateMetricsAndSendErrToClient(err, fe.Conn, handler.metrics)
-		return err
+		clientErr := authThrottledError
+		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
+		// The throttle service is used to rate limit invalid login attempts
+		// from IP addresses, and it is commonly prone to generating excessive
+		// traffic in practice. Due to that, we'll return a nil here to prevent
+		// callers from logging this request. However, LoginCheck itself
+		// periodically logs an error when such requests are rate limited, so
+		// we won't miss any signals by doing this.
+		return nil //nolint:returnerrcheck
 	}
 
 	connector := &connector{
@@ -471,6 +485,8 @@ func (handler *proxyHandler) handle(
 			if err := handler.throttleService.ReportAttempt(
 				ctx, throttleTags, throttleTime, status,
 			); err != nil {
+				// We have to log here because errors returned by this closure
+				// will be sent to the client.
 				log.Errorf(ctx, "throttler refused connection after authentication: %v", err.Error())
 				return authThrottledError
 			}
@@ -478,7 +494,6 @@ func (handler *proxyHandler) handle(
 		},
 	)
 	if err != nil {
-		log.Errorf(ctx, "could not connect to cluster: %v", err.Error())
 		if sentToClient {
 			handler.metrics.updateForError(err)
 		} else {
@@ -490,16 +505,20 @@ func (handler *proxyHandler) handle(
 
 	// Update the cancel info.
 	handler.cancelInfoMap.addCancelInfo(connector.CancelInfo.proxySecretID(), connector.CancelInfo)
+	defer func() {
+		handler.cancelInfoMap.deleteCancelInfo(connector.CancelInfo.proxySecretID())
+	}()
 
 	// Record the connection success and how long it took.
 	handler.metrics.ConnectionLatency.RecordValue(timeutil.Since(connReceivedTime).Nanoseconds())
 	handler.metrics.SuccessfulConnCount.Inc(1)
 
-	log.Infof(ctx, "new connection")
+	// TOOD(jaylim-crl): Consider replacing this with a metric that measures
+	// connection lifetime. We might also be able to fetch these by analyzing
+	// the session logs.
 	connBegin := timeutil.Now()
 	defer func() {
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
-		handler.cancelInfoMap.deleteCancelInfo(connector.CancelInfo.proxySecretID())
 	}()
 
 	// Wrap the client connection with an error annotater. WARNING: The TLS
