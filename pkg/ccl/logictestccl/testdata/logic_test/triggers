@@ -2717,6 +2717,42 @@ DROP FUNCTION g;
 DROP FUNCTION h;
 DROP FUNCTION filter;
 
+# Regression test for #134745: fire DELETE triggers for cascading deletes.
+subtest delete_cascade_triggers
+
+statement ok
+CREATE TABLE parent (k INT PRIMARY KEY);
+CREATE TABLE child (v INT NOT NULL REFERENCES parent(k) ON DELETE CASCADE);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', TG_OP;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1), (2), (2);
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+DELETE FROM parent WHERE k = 2;
+----
+NOTICE: DELETE
+NOTICE: DELETE
+
+statement ok
+DROP TRIGGER foo ON child;
+
+statement ok
+DROP FUNCTION g;
+DROP TABLE child;
+DROP TABLE parent;
+
 # ==============================================================================
 # Test order of execution.
 # ==============================================================================
