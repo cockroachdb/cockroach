@@ -1403,7 +1403,10 @@ ElementState:
           numReplicas: 2
       indexId: 1
       partitionName: us-east1
-    subzoneSpans: []
+    subzoneSpans:
+    - endKey: null
+      key: iRJAAAE=
+      subzoneIndex: 0
     tableId: 108
   Status: PUBLIC
 - PartitionZoneConfig:
@@ -1437,7 +1440,10 @@ ElementState:
           numReplicas: 2
       indexId: 1
       partitionName: us-east2
-    subzoneSpans: []
+    subzoneSpans:
+    - endKey: null
+      key: iRKAAAE=
+      subzoneIndex: 1
     tableId: 108
   Status: PUBLIC
 - PartitionZoneConfig:
@@ -1471,7 +1477,10 @@ ElementState:
           numReplicas: 2
       indexId: 1
       partitionName: us-east3
-    subzoneSpans: []
+    subzoneSpans:
+    - endKey: null
+      key: iRLAAAE=
+      subzoneIndex: 2
     tableId: 108
   Status: PUBLIC
 - PrimaryIndex:

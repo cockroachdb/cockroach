@@ -260,11 +260,12 @@ func (mr *MockCatalogMockRecorder) UpdateComment(arg0, arg1, arg2 interface{}) *
 }
 
 // UpdateSubzoneConfig mocks base method.
-func (m *MockCatalog) UpdateSubzoneConfig(arg0 context.Context, arg1 catid.DescID, arg2 []zonepb.Subzone, arg3 []zonepb.SubzoneSpan) error {
+func (m *MockCatalog) UpdateSubzoneConfig(arg0 context.Context, arg1 catalog.ZoneConfig, arg2 zonepb.Subzone, arg3 []zonepb.SubzoneSpan) (catalog.ZoneConfig, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateSubzoneConfig", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(catalog.ZoneConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateSubzoneConfig indicates an expected call of UpdateSubzoneConfig.
