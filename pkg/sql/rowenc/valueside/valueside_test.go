@@ -38,7 +38,11 @@ func TestEncodeDecode(t *testing.T) {
 	var scratch []byte
 	properties.Property("roundtrip", prop.ForAll(
 		func(d tree.Datum) string {
-			b, err := valueside.EncodeWithScratch(nil, 0, d, scratch)
+			var (
+				b   []byte
+				err error
+			)
+			b, scratch, err = valueside.EncodeWithScratch(nil, 0, d, scratch[:0])
 			if err != nil {
 				return "error: " + err.Error()
 			}
