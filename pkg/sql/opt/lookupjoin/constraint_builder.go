@@ -313,7 +313,10 @@ func (b *ConstraintBuilder) Build(
 		// If a single constant value was found, project it in the input
 		// and use it as an equality column.
 		if ok && len(foundVals) == 1 {
-			idxColType := b.md.ColumnMeta(idxCol).Type
+			// NOTE: Strip type modifiers to prevent the execution engine from
+			// applying a value-altering cast, like string truncation. See
+			// #134697.
+			idxColType := b.md.ColumnMeta(idxCol).Type.WithoutTypeModifiers()
 			constColID := b.md.AddColumn(
 				fmt.Sprintf("lookup_join_const_col_@%d", idxCol),
 				idxColType,

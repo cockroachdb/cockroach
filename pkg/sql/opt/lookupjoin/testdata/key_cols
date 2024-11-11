@@ -218,3 +218,6 @@ key cols:
   y = b
 input projections:
   lookup_join_const_col_@6 = 1
+
+# TODO: Add a test here for #134697. We'll need to show the type of the
+# projected column in order for the test to show the correct behavior.

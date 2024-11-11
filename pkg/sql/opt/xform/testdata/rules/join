@@ -3651,6 +3651,8 @@ inner-join (lookup abcde)
  │         └── c:8 = 10 [outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
  └── filters (true)
 
+# TODO: Add a test here for #134697.
+
 # Multiple constant columns projected and used by lookup joiner.
 opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small INNER JOIN abcde ON a=m AND b=10 AND c=10
