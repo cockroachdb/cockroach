@@ -221,7 +221,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 				stream := sm.NewStream(sID, rID)
 				registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-					stream, func() {})
+					stream)
 				require.True(t, registered)
 				go p.StopWithErr(disconnectErr)
 				require.Equal(t, 0, testRangefeedCounter.get())
@@ -235,7 +235,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			defer stopper.Stop(ctx)
 			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 				false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-				stream, func() {})
+				stream)
 			require.True(t, registered)
 			sm.AddStream(sID, d)
 			require.Equal(t, 1, p.Len())
@@ -250,7 +250,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			defer stopper.Stop(ctx)
 			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 				false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-				stream, func() {})
+				stream)
 			require.True(t, registered)
 			sm.AddStream(sID, d)
 			require.Equal(t, 1, testRangefeedCounter.get())
