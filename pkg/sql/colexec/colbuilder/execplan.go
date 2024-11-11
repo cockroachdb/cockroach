@@ -1765,21 +1765,24 @@ func NewColOperator(
 		// we're keeping track of the required projection.
 		projection := make([]uint32, len(args.Spec.ResultTypes))
 		for i := range args.Spec.ResultTypes {
-			expected, actual := args.Spec.ResultTypes[i], r.ColumnTypes[i]
-			if !actual.Identical(expected) {
-				castedIdx := len(r.ColumnTypes)
-				r.Root, err = colexecbase.GetCastOperator(
-					getStreamingAllocator(ctx, args, flowCtx), r.Root, i, castedIdx,
-					actual, expected, flowCtx.EvalCtx,
-				)
-				if err != nil {
-					return r, errors.NewAssertionErrorWithWrappedErrf(err, "unexpectedly couldn't plan a cast although IsCastSupported returned true")
-				}
-				projection[i] = uint32(castedIdx)
-				r.ColumnTypes = append(r.ColumnTypes, expected)
-			} else {
-				projection[i] = uint32(i)
-			}
+			// TODO: This cast causes correctness bugs in some cases. Ideally,
+			// the optimizer should be responsible for adding any necessary
+			// casts.
+			// expected, actual := args.Spec.ResultTypes[i], r.ColumnTypes[i]
+			// if !actual.Identical(expected) {
+			// 	castedIdx := len(r.ColumnTypes)
+			// 	r.Root, err = colexecbase.GetCastOperator(
+			// 		getStreamingAllocator(ctx, args, flowCtx), r.Root, i, castedIdx,
+			// 		actual, expected, flowCtx.EvalCtx,
+			// 	)
+			// 	if err != nil {
+			// 		return r, errors.NewAssertionErrorWithWrappedErrf(err, "unexpectedly couldn't plan a cast although IsCastSupported returned true")
+			// 	}
+			// 	projection[i] = uint32(castedIdx)
+			// 	r.ColumnTypes = append(r.ColumnTypes, expected)
+			// } else {
+			projection[i] = uint32(i)
+			// }
 		}
 		r.Root, r.ColumnTypes = addProjection(r.Root, r.ColumnTypes, projection)
 	}

@@ -1627,3 +1627,36 @@ INNER HASH JOIN t_124732 ON v.i = t_124732.i;
 1  1.000  1.000
 
 subtest end
+
+# Regression test for #134697. Colbuilder should not plan a cast that causes
+# incorrect results.
+statement ok
+CREATE TABLE ab (
+  a INT,
+  b VARCHAR(2),
+  PRIMARY KEY (a, b)
+);
+
+statement ok
+CREATE TABLE c (
+  c INT PRIMARY KEY
+);
+
+statement ok
+INSERT INTO ab VALUES (1, 'wx'), (2, 'yz');
+
+statement ok
+INSERT INTO c VALUES (1), (2);
+
+query IIT
+SELECT * FROM c
+JOIN ab ON ab.a = c.c AND b = 'wxa';
+----
+
+# This should return zero rows, like the non-hinted query above, because no
+# rows match the b='wxa' filter.
+query IIT
+SELECT * FROM c
+INNER LOOKUP JOIN ab
+ON ab.a = c.c AND b = 'wxa';
+----
