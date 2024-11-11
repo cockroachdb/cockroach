@@ -173,9 +173,10 @@ func TestCreatePostRequest(t *testing.T) {
 				}
 				message := b.String()
 
+				params := github.getParameters(ti, testCase.runtimeAssertionsBuild, testCase.coverageBuild)
 				req, err := github.createPostRequest(
 					testName, ti.start, ti.end, testSpec, testCase.failures,
-					message, "https://app.side-eye.io/snapshots/1", testCase.runtimeAssertionsBuild, testCase.coverageBuild,
+					message, "https://app.side-eye.io/snapshots/1", testCase.runtimeAssertionsBuild, testCase.coverageBuild, params,
 				)
 				if testCase.loadTeamsFailed {
 					// Assert that if TEAMS.yaml cannot be loaded then function errors.
@@ -230,6 +231,8 @@ func TestCreatePostRequest(t *testing.T) {
 				testCase.failures = append(testCase.failures, createFailure(refError))
 			case "add-label":
 				ti.spec.ExtraLabels = append(ti.spec.ExtraLabels, d.CmdArgs[0].Vals...)
+			case "add-param":
+				ti.AddParam(d.CmdArgs[0].Vals[0], d.CmdArgs[1].Vals[0])
 			case "set-cluster-create-failed":
 				// We won't have either if cluster create fails.
 				vmOpts = nil

@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -181,6 +182,7 @@ func (g *githubIssues) createPostRequest(
 	sideEyeTimeoutSnapshotURL string,
 	runtimeAssertionsBuild bool,
 	coverageBuild bool,
+	params map[string]string,
 ) (issues.PostRequest, error) {
 	var mention []string
 	var projColID int
@@ -267,31 +269,7 @@ func (g *githubIssues) createPostRequest(
 
 	artifacts := fmt.Sprintf("/%s", testName)
 
-	clusterParams := map[string]string{
-		roachtestPrefix("cloud"):                  roachtestflags.Cloud.String(),
-		roachtestPrefix("cpu"):                    fmt.Sprintf("%d", spec.Cluster.CPUs),
-		roachtestPrefix("ssd"):                    fmt.Sprintf("%d", spec.Cluster.SSDs),
-		roachtestPrefix("runtimeAssertionsBuild"): fmt.Sprintf("%t", runtimeAssertionsBuild),
-		roachtestPrefix("coverageBuild"):          fmt.Sprintf("%t", coverageBuild),
-	}
-	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
-	if spec.Cluster.Arch != "" {
-		clusterParams[roachtestPrefix("arch")] = string(spec.Cluster.Arch)
-	}
-	// These params can be probabilistically set, so we pass them here to
-	// show what their actual values are in the posted issue.
-	if g.vmCreateOpts != nil {
-		clusterParams[roachtestPrefix("fs")] = g.vmCreateOpts.SSDOpts.FileSystem
-		clusterParams[roachtestPrefix("localSSD")] = fmt.Sprintf("%v", g.vmCreateOpts.SSDOpts.UseLocalSSD)
-	}
-
 	if g.cluster != nil {
-		clusterParams[roachtestPrefix("encrypted")] = fmt.Sprintf("%v", g.cluster.encAtRest)
-		if spec.Cluster.Arch == "" {
-			// N.B. when Arch is specified, it cannot differ from cluster's arch.
-			// Hence, we only emit when arch was unspecified.
-			clusterParams[roachtestPrefix("arch")] = string(g.cluster.arch)
-		}
 		issueClusterName = g.cluster.name
 	}
 
@@ -332,7 +310,7 @@ func (g *githubIssues) createPostRequest(
 		Artifacts:               artifacts,
 		SideEyeSnapshotMsg:      sideEyeMsg,
 		SideEyeSnapshotURL:      sideEyeTimeoutSnapshotURL,
-		ExtraParams:             clusterParams,
+		ExtraParams:             params,
 		HelpCommand:             generateHelpCommand(testName, issueClusterName, roachtestflags.Cloud, start, end),
 	}, nil
 }
@@ -340,16 +318,34 @@ func (g *githubIssues) createPostRequest(
 func (g *githubIssues) MaybePost(
 	t *testImpl, l *logger.Logger, message string, sideEyeTimeoutSnapshotURL string,
 ) (*issues.TestFailureIssue, error) {
+	params := g.getParameters(t, roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled)
 	skipReason := g.shouldPost(t)
 	if skipReason != "" {
 		l.Printf("skipping GitHub issue posting (%s)", skipReason)
+
+		// If we're skipping issue posting, we still want to log the parameters
+		// as we've seen cases where it's hard to extract the information (i.e.
+		// encryption at rest) without them.
+		if jsonBytes, err := json.MarshalIndent(params, "", " "); err == nil {
+			// Attempt to log the parameters to their own file, but log to stdout
+			// anyway if child logger creation fails. Knowing the test parameters
+			// is worth the noise.
+			paramLogger, err := l.ChildLogger("params", logger.QuietStdout, logger.QuietStderr)
+			if err == nil {
+				paramLogger.Printf("Roachtest Parameters:\n%s", jsonBytes)
+			} else {
+				l.Printf("Roachtest Parameters:\n%s", jsonBytes)
+			}
+		}
+
 		return nil, nil
 	}
 
 	postRequest, err := g.createPostRequest(
 		t.Name(), t.start, t.end, t.spec, t.failures(),
 		message, sideEyeTimeoutSnapshotURL,
-		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled)
+		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params,
+	)
 
 	if err != nil {
 		return nil, err
@@ -363,4 +359,43 @@ func (g *githubIssues) MaybePost(
 		postRequest,
 		opts,
 	)
+}
+
+func (g *githubIssues) getParameters(
+	t *testImpl, runtimeAssertionsBuild, coverageBuild bool,
+) map[string]string {
+	spec := t.spec
+	clusterParams := map[string]string{
+		roachtestPrefix("cloud"):                  roachtestflags.Cloud.String(),
+		roachtestPrefix("cpu"):                    fmt.Sprintf("%d", spec.Cluster.CPUs),
+		roachtestPrefix("ssd"):                    fmt.Sprintf("%d", spec.Cluster.SSDs),
+		roachtestPrefix("runtimeAssertionsBuild"): fmt.Sprintf("%t", runtimeAssertionsBuild),
+		roachtestPrefix("coverageBuild"):          fmt.Sprintf("%t", coverageBuild),
+	}
+	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
+	if spec.Cluster.Arch != "" {
+		clusterParams[roachtestPrefix("arch")] = string(spec.Cluster.Arch)
+	}
+	// These params can be probabilistically set, so we pass them here to
+	// show what their actual values are in the posted issue.
+	if g.vmCreateOpts != nil {
+		clusterParams[roachtestPrefix("fs")] = g.vmCreateOpts.SSDOpts.FileSystem
+		clusterParams[roachtestPrefix("localSSD")] = fmt.Sprintf("%v", g.vmCreateOpts.SSDOpts.UseLocalSSD)
+	}
+
+	if g.cluster != nil {
+		clusterParams[roachtestPrefix("encrypted")] = fmt.Sprintf("%v", g.cluster.encAtRest)
+		if spec.Cluster.Arch == "" {
+			// N.B. when Arch is specified, it cannot differ from cluster's arch.
+			// Hence, we only emit when arch was unspecified.
+			clusterParams[roachtestPrefix("arch")] = string(g.cluster.arch)
+		}
+	}
+
+	extraParams := t.getExtraParams()
+	for label, value := range extraParams {
+		clusterParams[roachtestPrefix(label)] = value
+	}
+
+	return clusterParams
 }
