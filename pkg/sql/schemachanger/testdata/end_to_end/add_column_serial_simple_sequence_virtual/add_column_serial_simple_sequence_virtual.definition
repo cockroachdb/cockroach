@@ -1,7 +1,7 @@
 setup
 CREATE DATABASE db;
 CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
-SET serial_normalization='sql_sequence';
+SET serial_normalization='virtual_sequence';
 ----
 
 # Inject rows in the post commit non-revertible. We do not support
