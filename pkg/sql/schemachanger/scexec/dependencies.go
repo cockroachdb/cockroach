@@ -75,7 +75,7 @@ type Catalog interface {
 	UpdateSubzoneConfig(
 		ctx context.Context,
 		tableID descpb.ID,
-		subzones []zonepb.Subzone,
+		subzone zonepb.Subzone,
 		subzoneSpans []zonepb.SubzoneSpan,
 	) error
 
