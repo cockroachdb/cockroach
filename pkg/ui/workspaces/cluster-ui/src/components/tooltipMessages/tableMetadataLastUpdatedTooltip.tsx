@@ -16,14 +16,7 @@ import styles from "./tableMetadataLastUpdatedTooltip.module.scss";
 const TABLE_METADATA_LAST_UPDATED_HELP =
   "Data was last refreshed automatically (per cluster setting) or manually.";
 
-const formatErrorMessage = (
-  errorMessage: string | null,
-  lastUpdatedTime: moment.Moment | null,
-) => {
-  if (!errorMessage) {
-    return null;
-  }
-
+const formatErrorMessage = (lastUpdatedTime: moment.Moment | null) => {
   return (
     <>
       Last refresh failed to retrieve data about this table. The data shown is
@@ -34,8 +27,6 @@ const formatErrorMessage = (
         fallback={"Never"}
       />
       .
-      <br />
-      Last refresh error: {errorMessage}
     </>
   );
 };
@@ -46,13 +37,13 @@ type Props = {
     formattedRelativeTime: React.ReactNode,
     icon?: JSX.Element,
   ) => React.ReactNode;
-  errorMessage?: string;
+  hasError?: boolean;
   loading?: boolean;
 };
 
 export const TableMetadataLastUpdatedTooltip = ({
   timestamp,
-  errorMessage,
+  hasError,
   children,
   loading,
 }: Props) => {
@@ -69,18 +60,19 @@ export const TableMetadataLastUpdatedTooltip = ({
     </span>
   );
 
-  const icon = errorMessage ? (
+  const icon = hasError ? (
     <Icon fill={"warning"} iconName={"Caution"} />
   ) : (
     <Icon fill="info" iconName={"InfoCircle"} />
   );
 
-  const formattedErr = formatErrorMessage(errorMessage, timestamp);
   return (
     <Tooltip
       title={
         <div>
-          {formattedErr ?? (
+          {hasError ? (
+            formatErrorMessage(timestamp)
+          ) : (
             <>
               {timestamp && (
                 <Timestamp
