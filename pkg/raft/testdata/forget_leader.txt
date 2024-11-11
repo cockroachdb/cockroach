@@ -48,6 +48,7 @@ withdraw-support 2 1
 # term. It's a noop if it's called again.
 forget-leader 2
 ----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 forgetting leader 1 at term 1
 
 raft-state
@@ -84,6 +85,7 @@ withdraw-support 4 1
 
 forget-leader 4
 ----
+DEBUG 4 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 4 forgetting leader 1 at term 1
 
 raft-state
@@ -181,6 +183,7 @@ withdraw-support 4 1
 # ForgetLeader is a noop on candidates.
 campaign 3
 ----
+DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 3 is starting a new election at term 1
 INFO 3 became candidate at term 2
 INFO 3 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2

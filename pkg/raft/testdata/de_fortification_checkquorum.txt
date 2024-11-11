@@ -239,6 +239,7 @@ DEBUG 1 setting election elapsed to start from 3 ticks after store liveness supp
 
 campaign 3
 ----
+DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 3 is starting a new election at term 2
 INFO 3 became pre-candidate at term 2
 INFO 3 [logterm: 2, index: 12] sent MsgPreVote request to 1 at term 2

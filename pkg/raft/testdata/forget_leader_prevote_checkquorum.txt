@@ -33,6 +33,7 @@ withdraw-support 3 1
 # If 3 attempts to campaign, 2 rejects it because it has a leader.
 campaign 3
 ----
+DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 3 is starting a new election at term 1
 INFO 3 became pre-candidate at term 1
 INFO 3 [logterm: 1, index: 11] sent MsgPreVote request to 1 at term 1
@@ -118,6 +119,7 @@ withdraw-support 2 1
 # despite 2 having heard from the leader recently.
 forget-leader 2
 ----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 forgetting leader 1 at term 1
 
 raft-state
@@ -128,6 +130,7 @@ raft-state
 
 campaign 3
 ----
+DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 3 is starting a new election at term 1
 INFO 3 became pre-candidate at term 1
 INFO 3 [logterm: 1, index: 11] sent MsgPreVote request to 1 at term 1
@@ -223,6 +226,7 @@ withdraw-support 2 3
 
 forget-leader 2
 ----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 forgetting leader 3 at term 2
 
 # 1 is now behind on its log. It tries to campaign, but fails.
@@ -241,6 +245,7 @@ withdraw-support 1 3
 # At this point we can't campaign because we are not supported by a quorum.
 campaign 1
 ----
+DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 DEBUG 1 cannot campaign since it's not supported by a quorum in store liveness
 
 grant-support 3 1
