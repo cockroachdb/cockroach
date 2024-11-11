@@ -7,8 +7,6 @@ package license
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -231,7 +230,7 @@ func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) err
 		end := e.metadataAccessor.GetClusterInitGracePeriodTS()
 		if end != 0 {
 			e.clusterInitGracePeriodEndTS.Store(end)
-			log.Infof(ctx, "fetched cluster init grace period end time from system tenant: %s", e.GetClusterInitGracePeriodEndTS().String())
+			log.Infof(ctx, "fetched cluster init grace period end time from system tenant: %s", e.GetClusterInitGracePeriodEndTS())
 		} else {
 			// No timestamp was received, likely due to a mixed-version workload.
 			// We'll use an estimate of 7 days from this node's startup time instead
@@ -239,7 +238,7 @@ func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) err
 			// An update should be sent once the KV starts up on the new version.
 			gracePeriodLength := e.getGracePeriodDuration(7 * 24 * time.Hour)
 			e.clusterInitGracePeriodEndTS.Store(e.getStartTime().Add(gracePeriodLength).Unix())
-			log.Infof(ctx, "estimated cluster init grace period end time as: %s", e.GetClusterInitGracePeriodEndTS().String())
+			log.Infof(ctx, "estimated cluster init grace period end time as: %s", e.GetClusterInitGracePeriodEndTS())
 			e.continueToPollMetadataAccessor.Store(true)
 		}
 		return nil
@@ -291,12 +290,12 @@ func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) err
 			}
 			gracePeriodLength = e.getGracePeriodDuration(gracePeriodLength) // Allow the value to be shortened by env var
 			end := e.getStartTime().Add(gracePeriodLength)
-			log.Infof(ctx, "generated new cluster init grace period end time: %s", end.UTC().String())
+			log.Infof(ctx, "generated new cluster init grace period end time: %s", end.UTC())
 			e.clusterInitGracePeriodEndTS.Store(end.Unix())
 			return txn.KV().Put(ctx, keys.ClusterInitGracePeriodTimestamp, e.clusterInitGracePeriodEndTS.Load())
 		}
 		e.clusterInitGracePeriodEndTS.Store(val.ValueInt())
-		log.Infof(ctx, "fetched existing cluster init grace period end time: %s", e.GetClusterInitGracePeriodEndTS().String())
+		log.Infof(ctx, "fetched existing cluster init grace period end time: %s", e.GetClusterInitGracePeriodEndTS())
 		return nil
 	})
 }
@@ -485,18 +484,18 @@ func (e *Enforcer) RefreshForLicenseChange(
 		e.licenseRequiresTelemetry.Store(false)
 	}
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("enforcer license updated: type is %s, ", licType.String()))
+	var sb redact.StringBuilder
+	sb.Printf("enforcer license updated: type is %s, ", licType)
 	gpEnd, _ := e.GetGracePeriodEndTS()
 	if !gpEnd.IsZero() {
-		sb.WriteString(fmt.Sprintf("grace period ends at %q, ", gpEnd))
+		sb.Printf("grace period ends at %q, ", gpEnd)
 	}
 	expiry := timeutil.Unix(e.licenseExpiryTS.Load(), 0)
 	if !expiry.IsZero() {
-		sb.WriteString(fmt.Sprintf("expiration at %q, ", expiry))
+		sb.Printf("expiration at %q, ", expiry)
 	}
-	sb.WriteString(fmt.Sprintf("telemetry required: %t", e.licenseRequiresTelemetry.Load()))
-	log.Infof(ctx, "%s", sb.String())
+	sb.Printf("telemetry required: %t", e.licenseRequiresTelemetry.Load())
+	log.Infof(ctx, "%s", sb.RedactableString())
 }
 
 // UpdateTrialLicenseExpiry returns the expiration timestamp of any trial license
@@ -730,7 +729,7 @@ func (e *Enforcer) pollMetadataAccessor(ctx context.Context) {
 			e.storeNewGracePeriodEndDate(e.GetClusterInitGracePeriodEndTS(), 0)
 			e.continueToPollMetadataAccessor.Store(false)
 			log.Infof(ctx, "late retrieval of cluster initialization grace period end time from system tenant: %s",
-				e.GetClusterInitGracePeriodEndTS().String())
+				e.GetClusterInitGracePeriodEndTS())
 		}
 	}
 }
