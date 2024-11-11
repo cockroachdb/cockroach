@@ -546,7 +546,13 @@ func (p *pebbleMVCCScanner) init(
 	// because the local uncertainty limit cannot be applied to values with
 	// future-time timestamps with earlier local timestamps. We are only able
 	// to skip uncertainty checks if p.ts >= global_uncertainty_limit.
-	p.checkUncertainty = p.ts.Less(p.uncertainty.GlobalLimit)
+	//
+	// We disable checkUncertainty when the scanner is configured with failOnMoreRecent.
+	// This avoids cases in which a scan would have failed with a WriteTooOldError
+	// but instead gets an unexpected ReadWithinUncertaintyIntervalError
+	// See:
+	// https://github.com/cockroachdb/cockroach/issues/119681
+	p.checkUncertainty = p.ts.Less(p.uncertainty.GlobalLimit) && !p.failOnMoreRecent
 }
 
 // get seeks to the start key exactly once and adds one KV to the result set.
