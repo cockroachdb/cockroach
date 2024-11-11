@@ -101,13 +101,6 @@ func TestGranterBasic(t *testing.T) {
 
 		case "init-store-grant-coordinator":
 			clearRequesterAndCoord()
-			metrics := makeGrantCoordinatorMetrics()
-			regularWorkQueueMetrics := makeWorkQueueMetrics("regular", registry)
-			elasticWorkQUeueMetrics := makeWorkQueueMetrics("elastic", registry)
-			snapshotQueueMetrics := makeSnapshotQueueMetrics(registry)
-			workQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
-				regularWorkQueueMetrics, elasticWorkQUeueMetrics,
-			}
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
@@ -138,17 +131,8 @@ func TestGranterBasic(t *testing.T) {
 					requesters[numWorkKinds] = req.requesters[admissionpb.ElasticWorkClass]
 					return req
 				},
-				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
-				kvIOTokensAvailable:         metrics.KVIOTokensAvailable,
-				kvIOTokensTaken:             metrics.KVIOTokensTaken,
-				kvIOTokensReturned:          metrics.KVIOTokensReturned,
-				kvIOTokensBypassed:          metrics.KVIOTokensBypassed,
-				l0CompactedBytes:            metrics.L0CompactedBytes,
-				l0TokensProduced:            metrics.L0TokensProduced,
-				workQueueMetrics:            workQueueMetrics,
-				snapshotQueueMetrics:        snapshotQueueMetrics,
-				disableTickerForTesting:     true,
-				knobs:                       &TestingKnobs{},
+				disableTickerForTesting: true,
+				knobs:                   &TestingKnobs{},
 			}
 			var metricsProvider testMetricsProvider
 			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})

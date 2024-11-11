@@ -732,7 +732,8 @@ type StoreMetrics struct {
 	*pebble.Metrics
 	WriteStallCount int64
 	// Optional.
-	DiskStats DiskStats
+	DiskStats       DiskStats
+	MetricsRegistry *metric.Registry
 }
 
 // DiskStats provide low-level stats about the disk resources used for a
