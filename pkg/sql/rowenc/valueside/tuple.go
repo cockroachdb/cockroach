@@ -14,13 +14,11 @@ import (
 // encodeTuple produces the value encoding for a tuple.
 func encodeTuple(t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte) ([]byte, error) {
 	appendTo = encoding.EncodeValueTag(appendTo, colID, encoding.Tuple)
-	return encodeUntaggedTuple(t, appendTo, colID, scratch)
+	return encodeUntaggedTuple(t, appendTo, scratch)
 }
 
 // encodeUntaggedTuple produces the value encoding for a tuple without a value tag.
-func encodeUntaggedTuple(
-	t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte,
-) ([]byte, error) {
+func encodeUntaggedTuple(t *tree.DTuple, appendTo []byte, scratch []byte) ([]byte, error) {
 	appendTo = encoding.EncodeNonsortingUvarint(appendTo, uint64(len(t.D)))
 
 	var err error
