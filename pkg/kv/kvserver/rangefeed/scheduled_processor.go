@@ -66,7 +66,10 @@ type ScheduledProcessor struct {
 	stopper       *stop.Stopper
 	txnPushActive bool
 
-	overflowedUnregRequests atomic.Bool
+	// pendingUnregistrations indicates that the registry may have registrations
+	// that can be unregistered. This is handled outside of the requestQueue to
+	// avoid blocking clients who only need to signal unregistration.
+	pendingUnregistrations atomic.Bool
 }
 
 // NewScheduledProcessor creates a new scheduler based rangefeed Processor.
@@ -160,9 +163,13 @@ func (p *ScheduledProcessor) processRequests(ctx context.Context) {
 		case e := <-p.requestQueue:
 			e(ctx)
 		default:
-			if p.overflowedUnregRequests.Swap(false) {
-				log.Warningf(ctx, "request queue overflowed, scanning all registrations")
+			if p.pendingUnregistrations.Swap(false) {
 				p.reg.unregisterMarkedRegistrations(ctx)
+				// If we have no more registrations, we can stop this
+				// processor.
+				if p.reg.Len() == 0 {
+					p.stopInternal(ctx, nil)
+				}
 			}
 			return
 		}
@@ -373,26 +380,6 @@ func (p *ScheduledProcessor) Register(
 		return true, filter
 	}
 	return false, nil
-}
-
-func (p *ScheduledProcessor) unregisterClientInternal(ctx context.Context, r registration) {
-	p.reg.Unregister(ctx, r)
-	// Assert that we never process requests after stoppedC is closed. This is
-	// necessary to coordinate catchup iter ownership and avoid double-closing.
-	// Note that request/stop processing is always sequential, see process().
-	if buildutil.CrdbTestBuild {
-		select {
-		case <-p.stoppedC:
-			log.Fatalf(ctx, "processing request on stopped processor")
-		default:
-		}
-	}
-
-	// If we have no more registrations, we can stop this
-	// processor.
-	if p.reg.Len() == 0 {
-		p.stopInternal(ctx, nil)
-	}
 }
 
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
@@ -653,31 +640,22 @@ func (p *ScheduledProcessor) enqueueRequest(req request) {
 	}
 }
 
-// unregisterClientAsync enqueues an unregister request without
-// blocking. If the request queue is filled, the overflow bool is set
-// which will trigger a scan of all registrations on the next
-// process() call.
+// unregisterClientAsync instructs the processor to scan the registration for
+// clients to unregister on the next request. This doesn't send and actual
+// request to the request queue to ensure that it is non-blocking.
 //
-// We are OK with these being processed out of order since these
-// requests originate from a registration cleanup, so the registration
-// in question is no longer processing event.
+// We are OK with these being processed out of order since these requests
+// originate from a registration cleanup, so the registration in question is no
+// longer processing event.
 func (p *ScheduledProcessor) unregisterClientAsync(r registration) {
 	select {
 	case <-p.stoppedC:
 		return
 	default:
 	}
-	req := func(ctx context.Context) {
-		p.unregisterClientInternal(ctx, r)
-	}
-	select {
-	case p.requestQueue <- req:
-		p.scheduler.Enqueue(RequestQueued)
-	default:
-		r.setShouldUnregister(true)
-		p.overflowedUnregRequests.Store(true)
-		p.scheduler.Enqueue(RequestQueued)
-	}
+	r.setShouldUnregister(true)
+	p.pendingUnregistrations.Store(true)
+	p.scheduler.Enqueue(RequestQueued)
 }
 
 func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {

@@ -340,20 +340,6 @@ func (reg *registry) PublishToOverlapping(
 	})
 }
 
-// Unregister removes a registration from the registry. It is assumed that the
-// registration has already been disconnected, this is intended only to clean
-// up the registry.
-// We also drain all pending events for the sake of memory accounting. To do
-// that we rely on a fact that caller is not going to post any more events
-// concurrently or after this function is called.
-func (reg *registry) Unregister(ctx context.Context, r registration) {
-	reg.metrics.RangeFeedRegistrations.Dec(1)
-	if err := reg.tree.Delete(r, false /* fast */); err != nil {
-		log.Fatalf(ctx, "%v", err)
-	}
-	r.drainAllocations(ctx)
-}
-
 // DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.
 // This is different from normal disconnect as registrations won't be able to
 // perform Unregister when processor's work loop is already terminated.
@@ -369,16 +355,11 @@ func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Err
 	})
 }
 
-// Disconnect disconnects all registrations that overlap the specified span with
-// a nil error.
-func (reg *registry) Disconnect(ctx context.Context, span roachpb.Span) {
-	reg.DisconnectWithErr(ctx, span, nil /* pErr */)
-}
-
 // DisconnectWithErr disconnects all registrations that overlap the specified
 // span with the provided error.
 func (reg *registry) DisconnectWithErr(ctx context.Context, span roachpb.Span, pErr *kvpb.Error) {
 	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
+		reg.metrics.RangeFeedRegistrations.Dec(1)
 		return true /* disconned */, pErr
 	})
 }
@@ -438,6 +419,7 @@ func (reg *registry) unregisterMarkedRegistrations(ctx context.Context) {
 		return false
 	})
 	reg.remove(ctx, toDelete)
+	reg.metrics.RangeFeedRegistrations.Dec(int64(len(toDelete)))
 	for _, i := range toDelete {
 		i.(registration).drainAllocations(ctx)
 	}

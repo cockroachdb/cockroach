@@ -195,7 +195,6 @@ func TestRegistryBasic(t *testing.T) {
 	reg := makeRegistry(NewMetrics())
 	require.Equal(t, 0, reg.Len())
 	reg.PublishToOverlapping(ctx, spAB, ev1, logicalOpMetadata{}, nil /* alloc */)
-	reg.Disconnect(ctx, spAB)
 	reg.DisconnectWithErr(ctx, spAB, err1)
 
 	rAB := newTestRegistration(spAB, hlc.Timestamp{}, nil, false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
@@ -284,7 +283,7 @@ func TestRegistryBasic(t *testing.T) {
 	require.Equal(t, []*kvpb.RangeFeedEvent{noPrev(ev4), noPrev(ev1)}, rAB.GetAndClearEvents())
 
 	// Disconnect from rAB without error.
-	reg.Disconnect(ctx, spAB)
+	reg.DisconnectWithErr(ctx, spAB, nil)
 	require.Nil(t, rAC.WaitForError(t))
 	require.Nil(t, rAB.WaitForError(t))
 	require.Equal(t, 1, reg.Len())
@@ -312,9 +311,13 @@ func TestRegistryBasic(t *testing.T) {
 	require.False(t, f.NeedPrevVal(roachpb.Span{Key: keyC}))
 	require.False(t, f.NeedPrevVal(roachpb.Span{Key: keyX}))
 
-	// Unregister the rBC registration.
-	reg.Unregister(ctx, rBC.bufferedRegistration)
+	// Unregister the rBC registration as if it was being unregistered via the
+	// processor.
+	rBC.setShouldUnregister(true)
+	reg.unregisterMarkedRegistrations(ctx)
 	require.Equal(t, 0, reg.Len())
+	require.Equal(t, 0, int(reg.metrics.RangeFeedRegistrations.Value()),
+		"RangefeedRegistrations metric not zero after all registrations have been removed")
 }
 
 func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
