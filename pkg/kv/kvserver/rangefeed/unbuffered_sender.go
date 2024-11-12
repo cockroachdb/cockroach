@@ -7,7 +7,6 @@ package rangefeed
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -87,24 +86,6 @@ type ServerStreamSender interface {
 // responsibility of sending mux error to UnbufferedSender.run (in a separate
 // goroutine). There should only be one UnbufferedSender per Node.MuxRangefeed.
 type UnbufferedSender struct {
-	// taskCancel is a function to cancel UnbufferedSender.run spawned in the
-	// background. It is called by UnbufferedSender.Stop. It is expected to be
-	// called after UnbufferedSender.Start.
-	taskCancel context.CancelFunc
-
-	// wg is used to coordinate async tasks spawned by UnbufferedSender.
-	// Currently, there is only one task spawned by UnbufferedSender.Start
-	// (UnbufferedSender.run).
-	wg sync.WaitGroup
-
-	// errCh is used to signal errors from UnbufferedSender.run back to the
-	// caller. If non-empty, the UnbufferedSender.run is finished and error should
-	// be handled. Note that it is possible for UnbufferedSender.run to be
-	// finished without sending an error to errCh. Other goroutines are expected
-	// to receive the same shutdown signal in this case and handle error
-	// appropriately.
-	errCh chan error
-
 	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
 	// thread safety.
 	sender ServerStreamSender
@@ -113,12 +94,6 @@ type UnbufferedSender struct {
 	// of muxErrors. Additional signals are dropped if the channel is already full
 	// so that it's non-blocking.
 	notifyMuxError chan struct{}
-
-	// streamID -> context cancellation
-	streams syncutil.Map[int64, context.CancelFunc]
-
-	// metrics is used to record rangefeed metrics for the node.
-	metrics RangefeedMetricsRecorder
 
 	mu struct {
 		syncutil.Mutex
@@ -129,52 +104,35 @@ type UnbufferedSender struct {
 	}
 }
 
-func NewUnbufferedSender(
-	sender ServerStreamSender, metrics RangefeedMetricsRecorder,
-) *UnbufferedSender {
+func NewUnbufferedSender(sender ServerStreamSender) *UnbufferedSender {
 	return &UnbufferedSender{
 		notifyMuxError: make(chan struct{}, 1),
 		sender:         sender,
-		metrics:        metrics,
 	}
 }
 
-// SendBufferedError 1. Sends a mux rangefeed completion error to the
-// client without blocking. It does so by delegating the responsibility of
-// sending mux error to UnbufferedSender.run 2. Disconnects the stream with
-// ev.StreamID. Safe to call repeatedly for the same stream, but subsequent
-// errors are ignored.
+// sendBuffered sends MuxRangeFeedEvent to client gRPC without blocking. It does
+// so by delegating the responsibility of sending events to
+// UnbufferedSender.run.
 //
-// The error event is not sent immediately. It is deferred to
-// UnbufferedSender.run (async). If a node level shutdown occurs (such as
-// underlying grpc stream is broken), UnbufferedSender.run would return early,
-// and the error may not be sent successfully. In that case, Node.MuxRangefeed
-// would return, allowing clients to know rangefeed completions.
-//
-// Note that this function can be called by the processor worker while holding
-// raftMu, so it is important that this function doesn't block on IO. Caller
-// needs to make sure this is called only with non-nil error events. Important
-// to be thread-safe.
-func (ubs *UnbufferedSender) SendBufferedError(ev *kvpb.MuxRangeFeedEvent) {
-	if ev.Error == nil {
-		log.Fatalf(context.Background(), "unexpected: SendWithoutBlocking called with non-error event")
-	}
-
-	if cancel, ok := ubs.streams.LoadAndDelete(ev.StreamID); ok {
-		// Fine to skip nil checking here since that would be a programming error.
-		(*cancel)()
-		ubs.metrics.UpdateMetricsOnRangefeedDisconnect()
-		ubs.appendMuxError(ev)
-	}
+// Note that ev may not be sent successfully if UnbufferedSender.run stops
+// early. In that case, Node.MuxRangefeed would return, allowing clients to know
+// rangefeeds termination. Safe to call with nil alloc.
+func (ubs *UnbufferedSender) sendBuffered(
+	ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
+) error {
+	ubs.appendMuxError(ev)
+	alloc.Release(context.Background())
+	return nil
 }
 
-// SendUnbuffered blocks until the event is sent to the underlying grpc stream.
+// sendUnbuffered blocks until the event is sent to the underlying grpc stream.
 // It should be only called for non-error events. If this function returns an
 // error, caller must ensure that no further events are sent from
 // rangefeed.Stream to avoid potential event loss. (NB: While subsequent Send
 // should also return an error if one is encountered, let's play safe.)
 // Important to be thread-safe.
-func (ubs *UnbufferedSender) SendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
+func (ubs *UnbufferedSender) sendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
 	if event.Error != nil {
 		log.Fatalf(context.Background(), "unexpected: SendUnbuffered called with error event")
 	}
@@ -186,15 +144,17 @@ func (ubs *UnbufferedSender) SendUnbuffered(event *kvpb.MuxRangeFeedEvent) error
 // stopper is quiesced. UnbufferedSender will stop forward rangefeed completion
 // errors after run completes, but a node level shutdown from Node.MuxRangefeed
 // should happen soon.
-func (ubs *UnbufferedSender) run(ctx context.Context, stopper *stop.Stopper) error {
+func (ubs *UnbufferedSender) run(
+	ctx context.Context, stopper *stop.Stopper, onError func(streamID int64),
+) error {
 	for {
 		select {
 		case <-ubs.notifyMuxError:
 			toSend := ubs.detachMuxErrors()
 			for _, clientErr := range toSend {
+				onError(clientErr.StreamID)
 				if err := ubs.sender.Send(clientErr); err != nil {
-					log.Errorf(ctx,
-						"failed to send rangefeed completion error back to client due to broken stream: %v", err)
+					log.Infof(ctx, "failed to send rangefeed error to client: %v", err)
 					return err
 				}
 			}
@@ -233,72 +193,4 @@ func (ubs *UnbufferedSender) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	return toSend
 }
 
-// Start launches UnbufferedSender.run in the background if no error is
-// returned. UnbufferedSender.run continues running until it errors or
-// UnbufferedSender.Stop is called. The caller is responsible for calling
-// UnbufferedSender.Stop and handle any cleanups for any active streams. Note
-// that it is not valid to call Start multiple times or restart after Stop.
-// Example usage:
-//
-//	if err := UnbufferedSender.Start(ctx, stopper); err != nil {
-//	 return err
-//	}
-//
-// defer UnbufferedSender.Stop()
-func (ubs *UnbufferedSender) Start(ctx context.Context, stopper *stop.Stopper) error {
-	if ubs.errCh != nil {
-		log.Fatalf(ctx, "UnbufferedSender.Start called multiple times")
-	}
-	ubs.errCh = make(chan error, 1)
-	ctx, ubs.taskCancel = context.WithCancel(ctx)
-	ubs.wg.Add(1)
-	if err := stopper.RunAsyncTask(ctx, "unbuffered sender", func(ctx context.Context) {
-		defer ubs.wg.Done()
-		if err := ubs.run(ctx, stopper); err != nil {
-			ubs.errCh <- err
-		}
-	}); err != nil {
-		ubs.taskCancel()
-		ubs.wg.Done()
-		return err
-	}
-	return nil
-}
-
-// Error returns a channel that can be used to receive errors from
-// UnbufferedSender.run. Only non-nil errors are sent on this channel. If
-// non-empty, UnbufferedSender.run is finished, and the caller is responsible
-// for handling the error.
-func (ubs *UnbufferedSender) Error() chan error {
-	if ubs.errCh == nil {
-		log.Fatalf(context.Background(), "UnbufferedSender.Error called before UnbufferedSender.Start")
-	}
-	return ubs.errCh
-}
-
-// Stop cancels the UnbufferedSender.run task and waits for it to complete. It
-// does nothing if UnbufferedSender.run is already finished. It is expected to
-// be called after UnbufferedSender.Start. Note that the caller is responsible
-// for handling any cleanups for any active streams or mux errors that are not
-// sent back successfully.
-func (ubs *UnbufferedSender) Stop() {
-	ubs.taskCancel()
-	ubs.wg.Wait()
-
-	// It is okay to not clean up mux errors here since node level shutdown is
-	// happening. It is also okay to not disconnect all active streams (context
-	// cancellation, decrement metrics here since SendBufferedError will be called
-	// again by rangefeed.Stream after that. No errors will be sent but metrics
-	// cleanup will still happen during SendBufferedError.
-}
-
-// AddStream registers a rangefeed.Stream with UnbufferedSender. It remains
-// active until SendBufferedError is called with the same streamID.
-// Caller must ensure no duplicate stream IDs are added without disconnecting
-// the old one first.
-func (ubs *UnbufferedSender) AddStream(streamID int64, cancel context.CancelFunc) {
-	if _, loaded := ubs.streams.LoadOrStore(streamID, &cancel); loaded {
-		log.Fatalf(context.Background(), "stream %d already exists", streamID)
-	}
-	ubs.metrics.UpdateMetricsOnRangefeedConnect()
-}
+func (ubs *UnbufferedSender) cleanup(context.Context) {}
