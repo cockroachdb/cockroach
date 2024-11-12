@@ -67,7 +67,14 @@ type Catalog interface {
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
 
-	// UpdateZoneConfig upserts a zone config for a descriptor.
+	// WriteZoneConfigToBatch adds the new zoneconfig to uncommitted layer and
+	// writes to the kv batch.
+	WriteZoneConfigToBatch(ctx context.Context, id descpb.ID, zc catalog.ZoneConfig) error
+
+	// GetZoneConfig gets the zone config for a descriptor ID.
+	GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.ZoneConfig, error)
+
+	// UpdateZoneConfig upserts a zone config for a descriptor ID.
 	UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig) error
 
 	// UpdateSubzoneConfig upserts a subzone config into the zone config for a
