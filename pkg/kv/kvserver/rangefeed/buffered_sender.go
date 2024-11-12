@@ -12,34 +12,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
-//	┌─────────────────────────────────────────┐                                      MuxRangefeedEvent
-//	│            Node.MuxRangeFeed            │◄──────────────────────────────────────────────────┐
-//	└─────────────────┬───▲───────────────────┘                  ▲                                │
-//	 Sender.AddStream │   │LockedMuxStream.Send                  │                                │
-//			 ┌────────────▼───┴──────────┐                           │                                │
-//			 │ Buffered/Unbuffered Sender├───────────┐               │                                │
-//			 └────────────┬──────────────┘           │               │                                │
-//			 	   				  │                          │               │                                │
-//			 	   ┌────────▼─────────┐                │               │                                │
-//			 	   │ Stores.Rangefeed │                │               │                                │
-//			 	   └────────┬─────────┘                │               │                                │
-//			 	   				  │                          │               │                                │
-//			 	    ┌───────▼─────────┐         BufferedSender      BufferedSender                      │
-//			 	    │ Store.Rangefeed │ SendUnbuffered/SendBuffered SendBufferedError ─────► BufferedSender.run
-//			 	    └───────┬─────────┘ (catch-up scan)(live raft)     ▲
-//			 	   				  │                        ▲                 │
-//			 	   ┌────────▼──────────┐             │                 │
-//			 	   │ Replica.Rangefeed │             │                 │
-//			 	   └────────┬──────────┘             │                 │
-//			 	   				  │                        │                 │
-//			 	    ┌───────▼──────┐                 │                 │
-//			 	    │ Registration │                 │                 │
-//			 	    └──────┬───────┘                 │                 │
-//			 	    			 │      								   │					  		 │
-//			 	    			 │                         │                 │
-//			 	    			 └─────────────────────────┘─────────────────┘
-//			 	    		BufferedPerRangeEventSink.Send    BufferedPerRangeEventSink.Disconnect
+//            ┌─────────────────┐
+//            │Node.MuxRangefeed│
+//            └──────┬───┬──────┘
+//  Sender.AddStream │   │LockedMuxStream.Send ───────────────────┐────────────────────────────────┐
+//        ┌──────────┴─▼─┴────────────┐                           │                                │
+//        │ Buffered/Unbuffered Sender├───────────┐               │                                │
+//        └────────────┬──────────────┘           │               │                                │
+//                     │                          │               │                                │
+//            ┌────────▼─────────┐                │               │                                │
+//            │ Stores.Rangefeed │                │               │                                │
+//            └────────┬─────────┘                │               │                                │
+//                     │                          │               │                                │
+//             ┌───────▼─────────┐         BufferedSender      BufferedSender                      │
+//             │ Store.Rangefeed │ SendUnbuffered/SendBuffered SendBufferedError ─────► BufferedSender.run
+//             └───────┬─────────┘ (catch-up scan)(live raft)     ▲
+//                     │                          ▲               │
+//            ┌────────▼──────────┐               │               │
+//            │ Replica.Rangefeed │               │               │
+//            └────────┬──────────┘               │               │
+//                     │                          │               │
+//             ┌───────▼──────┐                   │               │
+//             │ Registration │                   │               │
+//             └──────┬───────┘                   │               │
+//                    │                           │               │
+//                    │                           │               │
+//                    └───────────────────────────┘───────────────┘
+//               BufferedPerRangeEventSink.Send    BufferedPerRangeEventSink.SendError
 //
+
 // BufferedSender is embedded in every rangefeed.BufferedPerRangeEventSink,
 // serving as a helper which buffers events before forwarding events to the
 // underlying gRPC stream.

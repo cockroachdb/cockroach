@@ -1645,9 +1645,9 @@ func (c *channelSink) Error() error {
 	}
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
+// SendError implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
-func (c *channelSink) Disconnect(err *kvpb.Error) {
+func (c *channelSink) SendError(err *kvpb.Error) {
 	c.done <- err
 }
 
