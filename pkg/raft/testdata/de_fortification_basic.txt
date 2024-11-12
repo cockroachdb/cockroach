@@ -79,12 +79,12 @@ stabilize
   ]
 > 2 receiving messages
   1->2 MsgVote Term:1 Log:1/2
-  INFO 2 [term: 0] received a MsgVote message with higher term from 1 [term: 1]
+  INFO 2 [term: 0] received a MsgVote message with higher term from 1 [term: 1], advancing term
   INFO 2 became follower at term 1
   INFO 2 [logterm: 1, index: 2, vote: 0] cast MsgVote for 1 [logterm: 1, index: 2] at term 1
 > 3 receiving messages
   1->3 MsgVote Term:1 Log:1/2
-  INFO 3 [term: 0] received a MsgVote message with higher term from 1 [term: 1]
+  INFO 3 [term: 0] received a MsgVote message with higher term from 1 [term: 1], advancing term
   INFO 3 became follower at term 1
   INFO 3 [logterm: 1, index: 2, vote: 0] cast MsgVote for 1 [logterm: 1, index: 2] at term 1
 > 1 processing append thread
@@ -405,12 +405,12 @@ stabilize
   ]
 > 1 receiving messages
   2->1 MsgVote Term:2 Log:1/3
-  INFO 1 [term: 1] received a MsgVote message with higher term from 2 [term: 2]
+  INFO 1 [term: 1] received a MsgVote message with higher term from 2 [term: 2], advancing term
   INFO 1 became follower at term 2
   INFO 1 [logterm: 1, index: 3, vote: 0] cast MsgVote for 2 [logterm: 1, index: 3] at term 2
 > 3 receiving messages
   2->3 MsgVote Term:2 Log:1/3
-  INFO 3 [term: 1] received a MsgVote message with higher term from 2 [term: 2]
+  INFO 3 [term: 1] received a MsgVote message with higher term from 2 [term: 2], advancing term
   INFO 3 became follower at term 2
   INFO 3 [logterm: 1, index: 3, vote: 0] cast MsgVote for 2 [logterm: 1, index: 3] at term 2
 > 2 processing append thread
@@ -754,7 +754,7 @@ stabilize
   ]
 > 1 receiving messages
   3->1 MsgVote Term:4 Log:2/4
-  INFO 1 [term: 2] received a MsgVote message with higher term from 3 [term: 4]
+  INFO 1 [term: 2] received a MsgVote message with higher term from 3 [term: 4], advancing term
   INFO 1 became follower at term 4
   INFO 1 [logterm: 2, index: 4, vote: 0] cast MsgVote for 3 [logterm: 2, index: 4] at term 4
 > 2 receiving messages
@@ -807,7 +807,7 @@ stabilize
   3->1 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
 > 2 receiving messages
   3->2 MsgFortifyLeader Term:4 Log:0/0
-  INFO 2 [term: 2] received a MsgFortifyLeader message with higher term from 3 [term: 4]
+  INFO 2 [term: 2] received a MsgFortifyLeader message with higher term from 3 [term: 4], new leader indicated, advancing term
   DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 2 became follower at term 4
   3->2 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
@@ -1026,12 +1026,12 @@ stabilize
 > 1 receiving messages
   2->1 MsgVote Term:5 Log:4/5
   DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
-  INFO 1 [term: 4] received a MsgVote message with higher term from 2 [term: 5]
+  INFO 1 [term: 4] received a MsgVote message with higher term from 2 [term: 5], advancing term
   INFO 1 became follower at term 5
   INFO 1 [logterm: 4, index: 5, vote: 0] cast MsgVote for 2 [logterm: 4, index: 5] at term 5
 > 3 receiving messages
   2->3 MsgVote Term:5 Log:4/5
-  INFO 3 [term: 4] received a MsgVote message with higher term from 2 [term: 5]
+  INFO 3 [term: 4] received a MsgVote message with higher term from 2 [term: 5], advancing term
   INFO 3 became follower at term 5
   INFO 3 [logterm: 4, index: 5, vote: 0] cast MsgVote for 2 [logterm: 4, index: 5] at term 5
 > 2 processing append thread
@@ -1317,7 +1317,7 @@ stabilize
 > 2 receiving messages
   1->2 MsgVote Term:6 Log:5/6
   DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
-  INFO 2 [term: 5] received a MsgVote message with higher term from 1 [term: 6]
+  INFO 2 [term: 5] received a MsgVote message with higher term from 1 [term: 6], advancing term
   INFO 2 became follower at term 6
   INFO 2 [logterm: 5, index: 6, vote: 0] cast MsgVote for 1 [logterm: 5, index: 6] at term 6
 > 3 receiving messages
@@ -1369,7 +1369,7 @@ stabilize
   1->2 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
 > 3 receiving messages
   1->3 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
-  INFO 3 [term: 5] received a MsgApp message with higher term from 1 [term: 6]
+  INFO 3 [term: 5] received a MsgApp message with higher term from 1 [term: 6], new leader indicated, advancing term
   DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 3 became follower at term 6
 > 1 processing append thread

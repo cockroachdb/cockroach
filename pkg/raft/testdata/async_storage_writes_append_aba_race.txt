@@ -112,15 +112,15 @@ Messages:
 deliver-msgs 4 5 6
 ----
 3->4 MsgVote Term:2 Log:1/11
-INFO 4 [term: 1] received a MsgVote message with higher term from 3 [term: 2]
+INFO 4 [term: 1] received a MsgVote message with higher term from 3 [term: 2], advancing term
 INFO 4 became follower at term 2
 INFO 4 [logterm: 1, index: 11, vote: 0] cast MsgVote for 3 [logterm: 1, index: 11] at term 2
 3->5 MsgVote Term:2 Log:1/11
-INFO 5 [term: 1] received a MsgVote message with higher term from 3 [term: 2]
+INFO 5 [term: 1] received a MsgVote message with higher term from 3 [term: 2], advancing term
 INFO 5 became follower at term 2
 INFO 5 [logterm: 1, index: 11, vote: 0] cast MsgVote for 3 [logterm: 1, index: 11] at term 2
 3->6 MsgVote Term:2 Log:1/11
-INFO 6 [term: 1] received a MsgVote message with higher term from 3 [term: 2]
+INFO 6 [term: 1] received a MsgVote message with higher term from 3 [term: 2], advancing term
 INFO 6 became follower at term 2
 INFO 6 [logterm: 1, index: 11, vote: 0] cast MsgVote for 3 [logterm: 1, index: 11] at term 2
 
@@ -221,7 +221,7 @@ Messages:
 deliver-msgs 1 drop=(2,4,5,6,7)
 ----
 3->1 MsgVote Term:2 Log:1/11
-INFO 1 [term: 1] received a MsgVote message with higher term from 3 [term: 2]
+INFO 1 [term: 1] received a MsgVote message with higher term from 3 [term: 2], advancing term
 INFO 1 became follower at term 2
 INFO 1 [logterm: 1, index: 12, vote: 0] rejected MsgVote from 3 [logterm: 1, index: 11] at term 2
 3->1 MsgFortifyLeader Term:2 Log:0/0
@@ -287,15 +287,15 @@ Messages:
 deliver-msgs 5 6 7
 ----
 4->5 MsgVote Term:3 Log:1/11
-INFO 5 [term: 2] received a MsgVote message with higher term from 4 [term: 3]
+INFO 5 [term: 2] received a MsgVote message with higher term from 4 [term: 3], advancing term
 INFO 5 became follower at term 3
 INFO 5 [logterm: 1, index: 11, vote: 0] cast MsgVote for 4 [logterm: 1, index: 11] at term 3
 4->6 MsgVote Term:3 Log:1/11
-INFO 6 [term: 2] received a MsgVote message with higher term from 4 [term: 3]
+INFO 6 [term: 2] received a MsgVote message with higher term from 4 [term: 3], advancing term
 INFO 6 became follower at term 3
 INFO 6 [logterm: 1, index: 11, vote: 0] cast MsgVote for 4 [logterm: 1, index: 11] at term 3
 4->7 MsgVote Term:3 Log:1/11
-INFO 7 [term: 1] received a MsgVote message with higher term from 4 [term: 3]
+INFO 7 [term: 1] received a MsgVote message with higher term from 4 [term: 3], advancing term
 INFO 7 became follower at term 3
 INFO 7 [logterm: 1, index: 11, vote: 0] cast MsgVote for 4 [logterm: 1, index: 11] at term 3
 
@@ -427,7 +427,7 @@ Messages:
 deliver-msgs 1
 ----
 4->1 MsgFortifyLeader Term:3 Log:0/0
-INFO 1 [term: 2] received a MsgFortifyLeader message with higher term from 4 [term: 3]
+INFO 1 [term: 2] received a MsgFortifyLeader message with higher term from 4 [term: 3], new leader indicated, advancing term
 INFO 1 became follower at term 3
 4->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 INFO found conflict at index 12 [existing term: 2, conflicting term: 3]

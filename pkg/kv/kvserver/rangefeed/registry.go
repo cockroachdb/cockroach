@@ -24,9 +24,9 @@ type registration interface {
 	// registration implementation to decide how to handle the event and how to
 	// prevent missing events.
 	publish(ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
-	// disconnect disconnects the registration with the provided error. Safe to
+	// Disconnect disconnects the registration with the provided error. Safe to
 	// run multiple times, but subsequent errors would be discarded.
-	disconnect(pErr *kvpb.Error)
+	Disconnect(pErr *kvpb.Error)
 	// runOutputLoop runs the output loop for the registration. The output loop is
 	// meant to be run in a separate goroutine.
 	runOutputLoop(ctx context.Context, forStacks roachpb.RangeID)
@@ -380,7 +380,7 @@ func (reg *registry) forOverlappingRegs(
 		r := i.(registration)
 		dis, pErr := fn(r)
 		if dis {
-			r.disconnect(pErr)
+			r.Disconnect(pErr)
 			toDelete = append(toDelete, i)
 		}
 		return false

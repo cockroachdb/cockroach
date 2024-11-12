@@ -351,18 +351,25 @@ func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 				cc = &ccc
 			}
 			if cc != nil {
-				// Force it step down.
+				// Force it to step down.
 				rawNode.Step(pb.Message{Type: pb.MsgHeartbeatResp, From: 1, Term: rawNode.raft.Term + 1})
+				require.Equal(t, pb.StateFollower, rawNode.raft.state)
+				if storeLivenessEnabled {
+					// And also wait for defortification.
+					for range rawNode.raft.heartbeatTimeout {
+						rawNode.Tick()
+					}
+				}
 				cs = rawNode.ApplyConfChange(cc)
 			}
 		}
 		rawNode.Advance(rd)
 		// Once we are the leader, propose a command and a ConfChange.
-		if !proposed && rd.HardState.Lead == rawNode.raft.id {
+		if !proposed && rawNode.raft.state == pb.StateLeader {
 			require.NoError(t, rawNode.Propose([]byte("somedata")))
 			ccdata, err = testCc.Marshal()
 			require.NoError(t, err)
-			rawNode.ProposeConfChange(testCc)
+			require.NoError(t, rawNode.ProposeConfChange(testCc))
 			proposed = true
 		}
 	}

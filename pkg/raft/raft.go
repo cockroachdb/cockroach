@@ -1029,8 +1029,8 @@ func (r *raft) reset(term uint64) {
 		//
 		// [*] this case, and other cases where a state transition implies
 		// de-fortification.
-		assertTrue(!r.supportingFortifiedLeader() || r.lead == r.id,
-			"should not be changing terms when supporting a fortified leader; leader exempted")
+		assertTrue(!r.supportingFortifiedLeader(),
+			"should not be changing terms when supporting a fortified leader")
 		r.setTerm(term)
 	}
 
@@ -1500,73 +1500,66 @@ func (r *raft) Step(m pb.Message) error {
 	case m.Term == 0:
 		// local message
 	case m.Term > r.Term:
-		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
-			force := bytes.Equal(m.Context, []byte(campaignTransfer))
-			inHeartbeatLease := r.checkQuorum && r.lead != None && r.leadEpoch == 0 &&
-				r.electionElapsed < r.electionTimeout
-			inFortifyLease := r.supportingFortifiedLeader() &&
-				// NB: If the peer that's campaigning has an entry in its log with a
-				// higher term than what we're aware of, then this conclusively proves
-				// that a new leader was elected at a higher term. We never heard from
-				// this new leader (otherwise we'd have bumped r.Term in response).
-				// However, any fortification we're providing to a leader that has been
-				// since dethroned is pointless.
-				m.LogTerm <= r.Term
-
-			if !force && (inHeartbeatLease || inFortifyLease) {
-				// If a server receives a Request{,Pre}Vote message but is still
-				// supporting a fortified leader, it does not update its term or grant
-				// its vote. Similarly, if a server receives a Request{,Pre}Vote message
-				// within the minimum election timeout of hearing from the current
-				// leader it does not update its term or grant its vote.
-				//
-				// Log why we're ignoring the Request{,Pre}Vote.
-				var leaseMsg redact.RedactableString
-				if inHeartbeatLease {
-					leaseMsg = redact.Sprintf("recently received communication from leader (remaining ticks: %d)", r.electionTimeout-r.electionElapsed)
-				} else {
-					leaseMsg = redact.Sprintf("supporting fortified leader %d at epoch %d", r.lead, r.leadEpoch)
-				}
-
-				last := r.raftLog.lastEntryID()
-				// TODO(pav-kv): it should be ok to simply print the %+v of the lastEntryID.
-				r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: %s",
-					r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, leaseMsg)
-				return nil // don't update term/grant vote; early return
-			}
-			// If we're willing to vote in this election at a higher term, then make
-			// sure we have withdrawn our support for the current leader, if we're
-			// still providing it support.
+		if IsMsgIndicatingLeader(m.Type) {
+			// We've just received a message that indicates that a new leader was
+			// elected at a higher term, but the message may not be from the leader
+			// itself. Either way, the old leader is no longer fortified, so it's safe
+			// to de-fortify at this point.
+			r.logMsgHigherTerm(m, "new leader indicated, advancing term")
 			r.deFortify(m.From, m.Term)
-		}
+			var lead pb.PeerID
+			if IsMsgFromLeader(m.Type) {
+				lead = m.From
+			}
+			r.becomeFollower(m.Term, lead)
+		} else {
+			// We've just received a message that does not indicate that a new leader
+			// was elected at a higher term. All it means is that some other peer may
+			// be operating at this term.
 
-		switch {
-		case m.Type == pb.MsgPreVote:
-			// Never change our term in response to a PreVote
-		case m.Type == pb.MsgPreVoteResp && !m.Reject:
-			// We send pre-vote requests with a term in our future. If the
-			// pre-vote is granted, we will increment our term when we get a
-			// quorum. If it is not, the term comes from the node that
-			// rejected our vote so we should become a follower at the new
-			// term.
-		default:
-			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
-				r.id, r.Term, m.Type, m.From, m.Term)
-			if IsMsgIndicatingLeader(m.Type) {
-				// We've just received a message that indicates that a new leader
-				// was elected at a higher term, but the message may not be from the
-				// leader itself. Either way, the old leader is no longer fortified,
-				// so it's safe to de-fortify at this point.
-				r.deFortify(m.From, m.Term)
-				var lead pb.PeerID
-				if IsMsgFromLeader(m.Type) {
-					lead = m.From
+			// If a server receives a message (with any type) but is still supporting
+			// a fortified leader ("in a leader lease"), it does not update its term,
+			// grant a vote, or process the message in any other way.
+			if r.inLeaderLease(m) {
+				// However, since we're in a leader lease and have received a message at
+				// a higher term, we may need to take action to recover a stranded peer
+				// by catching the quorum's term up to the peer's.
+				//
+				// For legacy reasons, we don't consider a MsgVote at a higher term to
+				// be a reason to advance the term to recover a stranded peer. Instead,
+				// we wait for the leader's heartbeat message to be rejected by the
+				// stranded peer, which will cause the leader to step down.
+				//
+				// TODO(nvanbenschoten): remove this special case. If we see a MsgVote
+				// from a peer at a higher term while we are in a leader lease, we should
+				// still step down.
+				strandedPeer := senderHasMsgTerm(m) && m.Type != pb.MsgVote
+				if strandedPeer {
+					// If we are supporting a fortified leader, we can't just jump to the
+					// larger term. Instead, we need to wait for the leader to learn about
+					// the stranded peer, step down, and defortify. The only thing to do
+					// here is check whether we are that leader, in which case we should
+					// step down to kick off this process of catching up to the term of the
+					// stranded peer.
+					if r.state == pb.StateLeader {
+						r.logMsgHigherTerm(m, "stepping down as leader to recover stranded peer")
+						r.becomeFollower(r.Term, r.id)
+					} else {
+						r.logMsgHigherTerm(m, "ignoring and still supporting fortified leader")
+					}
 				}
-				r.becomeFollower(m.Term, lead)
-			} else {
-				// We've just received a message that does not indicate that a new
-				// leader was elected at a higher term. All it means is that some
-				// other peer has this term.
+				return nil
+			}
+
+			// If we are willing process a message at a higher term, then make sure we
+			// record that we have withdrawn our support for the current leader, if we
+			// were still providing it with fortification support up to this point.
+			r.deFortify(m.From, m.Term)
+
+			// If the message indicates a higher term, we should update our term and
+			// step down to a follower.
+			if senderHasMsgTerm(m) {
+				r.logMsgHigherTerm(m, "advancing term")
 				r.becomeFollower(m.Term, None)
 			}
 		}
@@ -1724,6 +1717,60 @@ func (r *raft) Step(m pb.Message) error {
 		}
 	}
 	return nil
+}
+
+// inLeaderLease returns whether the message should be ignored because the
+// recipient is supporting a leader lease.
+func (r *raft) inLeaderLease(m pb.Message) bool {
+	force := bytes.Equal(m.Context, []byte(campaignTransfer))
+	if force {
+		// If the message is a transfer request, we ignore the leader lease.
+		return false
+	}
+
+	inHeartbeatLease := r.checkQuorum &&
+		// We know who the leader is...
+		r.lead != None &&
+		// And we're not fortifying the leader (else we'd be in a fortify lease, see
+		// below)...
+		r.leadEpoch == 0 &&
+		// And we've heard from the leader recently...
+		r.electionElapsed < r.electionTimeout &&
+		// And the message is a pre-vote or vote request. Unlike a fortify lease,
+		// a heartbeat lease only applies to these two message types.
+		(m.Type == pb.MsgPreVote || m.Type == pb.MsgVote)
+
+	inFortifyLease := r.supportingFortifiedLeader() &&
+		// NB: If the peer that's campaigning has an entry in its log with a
+		// higher term than what we're aware of, then this conclusively proves
+		// that a new leader was elected at a higher term. We never heard from
+		// this new leader (otherwise we'd have bumped r.Term in response).
+		// However, any fortification we're providing to a leader that has been
+		// since dethroned is pointless.
+		m.LogTerm <= r.Term
+
+	if !inHeartbeatLease && !inFortifyLease {
+		// We're not in either form of lease. We can safely process the message.
+		return false
+	}
+
+	// Log why we're ignoring the message.
+	var leaseMsg redact.RedactableString
+	if inHeartbeatLease {
+		leaseMsg = redact.Sprintf("recently received communication from leader (remaining ticks: %d)", r.electionTimeout-r.electionElapsed)
+	} else {
+		leaseMsg = redact.Sprintf("supporting fortified leader %d at epoch %d", r.lead, r.leadEpoch)
+	}
+	last := r.raftLog.lastEntryID()
+	// TODO(pav-kv): it should be ok to simply print the %+v of the lastEntryID.
+	r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: %s",
+		r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, leaseMsg)
+	return true
+}
+
+func (r *raft) logMsgHigherTerm(m pb.Message, suffix redact.SafeString) {
+	r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d], %s",
+		r.id, r.Term, m.Type, m.From, m.Term, suffix)
 }
 
 type stepFunc func(r *raft, m pb.Message) error

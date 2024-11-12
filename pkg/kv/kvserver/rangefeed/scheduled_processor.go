@@ -361,7 +361,7 @@ func (p *ScheduledProcessor) Register(
 			// If we can't schedule internally, processor is already stopped which
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
-			r.disconnect(kvpb.NewError(err))
+			r.Disconnect(kvpb.NewError(err))
 			p.reg.Unregister(ctx, r)
 		}
 		return f
