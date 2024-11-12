@@ -113,7 +113,6 @@ func ResolveDest(
 	user username.SQLUsername,
 	dest jobspb.BackupDetails_Destination,
 	endTime hlc.Timestamp,
-	incrementalFrom []string,
 	execCfg *sql.ExecutorConfig,
 ) (ResolvedDestination, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
@@ -141,21 +140,6 @@ func ResolveDest(
 	plannedBackupDefaultURI, urisByLocalityKV, err := GetURIsByLocalityKV(dest.To, chosenSuffix)
 	if err != nil {
 		return ResolvedDestination{}, err
-	}
-
-	// At this point, the plannedBackupDefaultURI is the full path for the backup. For BACKUP
-	// INTO, this path includes the chosenSuffix. Once this function returns, the
-	// plannedBackupDefaultURI will be the full path for this backup in planning.
-	if len(incrementalFrom) != 0 {
-		// Legacy backup with deprecated BACKUP TO-syntax.
-		prevBackupURIs := incrementalFrom
-		return ResolvedDestination{
-			CollectionURI:    collectionURI,
-			DefaultURI:       plannedBackupDefaultURI,
-			ChosenSubdir:     chosenSuffix,
-			URIsByLocalityKV: urisByLocalityKV,
-			PrevBackupURIs:   prevBackupURIs,
-		}, nil
 	}
 
 	defaultStore, err := makeCloudStorage(ctx, plannedBackupDefaultURI, user)
