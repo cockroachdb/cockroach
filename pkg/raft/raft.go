@@ -1263,6 +1263,13 @@ func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 	r.setLead(lead)
 	r.state = pb.StateFollower
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
+
+	// If we should broadcast a DeFortify message, we will do it in the next
+	// heartbeat timeout. However, starting the defortification process here
+	// should make things a bit faster.
+	if r.shouldBcastDeFortify() {
+		r.bcastDeFortify()
+	}
 }
 
 func (r *raft) becomeCandidate() {
