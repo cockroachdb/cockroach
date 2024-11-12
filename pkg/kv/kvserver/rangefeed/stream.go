@@ -21,6 +21,18 @@ type Stream interface {
 	SendError(err *kvpb.Error)
 }
 
+// BufferedStream is a Stream that can buffer events before sending them to the
+// underlying Stream. Note that the caller may still choose to bypass the buffer
+// and send to the underlying Stream directly by calling Send directly. Doing so
+// can cause event re-ordering. Caller is responsible for ensuring that events
+// are sent in order.
+type BufferedStream interface {
+	Stream
+	// SendBuffered buffers the event before sending it to the underlying Stream.
+	// It should not block if ev.Error != nil.
+	SendBuffered(*kvpb.RangeFeedEvent, *SharedBudgetAllocation) error
+}
+
 // PerRangeEventSink is an implementation of Stream which annotates each
 // response with rangeID and streamID. It is used by MuxRangeFeed.
 type PerRangeEventSink struct {
@@ -47,6 +59,8 @@ var _ Stream = (*PerRangeEventSink)(nil)
 // UnbufferedSender.SendUnbuffered is thread-safe.
 func (s *PerRangeEventSink) SendUnbufferedIsThreadSafe() {}
 
+// SendUnbuffered implements the Stream interface. It sends a RangeFeedEvent to
+// the underlying grpc stream directly.
 func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	response := &kvpb.MuxRangeFeedEvent{
 		RangeFeedEvent: *event,
@@ -56,10 +70,8 @@ func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	return s.wrapped.SendUnbuffered(response)
 }
 
-// SendError implements the Stream interface. It requests the UnbufferedSender
-// to detach the stream. The UnbufferedSender is then responsible for handling
-// the actual disconnection and additional cleanup. Note that Caller should not
-// rely on immediate disconnection as cleanup takes place async.
+// SendError implements the Stream interface. It sends an error to the stream.
+// It should not block.
 func (s *PerRangeEventSink) SendError(err *kvpb.Error) {
 	ev := &kvpb.MuxRangeFeedEvent{
 		RangeID:  s.rangeID,
@@ -85,4 +97,29 @@ func transformRangefeedErrToClientError(err *kvpb.Error) *kvpb.Error {
 			kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
 	}
 	return err
+}
+
+// BufferedPerRangeEventSink is an implementation of BufferedStream which is
+// similar to PerRangeEventSink but buffers events in BufferedSender before
+// forwarding events to the underlying grpc stream.
+type BufferedPerRangeEventSink struct {
+	*PerRangeEventSink
+}
+
+var _ kvpb.RangeFeedEventSink = (*BufferedPerRangeEventSink)(nil)
+var _ Stream = (*BufferedPerRangeEventSink)(nil)
+var _ BufferedStream = (*BufferedPerRangeEventSink)(nil)
+
+// SendBuffered buffers the event in BufferedSender and transfers the ownership
+// of SharedBudgetAllocation to BufferedSender. BufferedSender is responsible
+// for properly using and releasing it when an error occurs or when the event is
+// sent. The event is guaranteed to be sent unless BufferedSender terminates
+// before sending (such as due to broken grpc stream).
+//
+// If the function returns an error, it is safe to disconnect the stream and
+// assume that all future SendBuffered on this stream will return an error.
+func (s *BufferedPerRangeEventSink) SendBuffered(
+	event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
+) error {
+	panic("unimplemented: buffered sender for rangefeed #126560")
 }
