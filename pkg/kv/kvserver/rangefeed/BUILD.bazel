@@ -17,6 +17,7 @@ go_library(
         "scheduled_processor.go",
         "scheduler.go",
         "stream.go",
+        "stream_manager.go",
         "task.go",
         "test_helpers.go",
         "unbuffered_sender.go",
