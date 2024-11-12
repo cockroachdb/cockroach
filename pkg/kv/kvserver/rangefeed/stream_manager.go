@@ -90,8 +90,13 @@ func NewStreamManager(sender sender, metrics RangefeedMetricsRecorder) *StreamMa
 }
 
 func (sm *StreamManager) NewStream(streamID int64, rangeID roachpb.RangeID) (sink Stream) {
-	log.Fatalf(context.Background(), "unexpected sender type %T", sm)
-	return nil
+	switch sender := sm.sender.(type) {
+	case *UnbufferedSender:
+		return NewPerRangeEventSink(rangeID, streamID, sender)
+	default:
+		log.Fatalf(context.Background(), "unexpected sender type %T", sm)
+		return nil
+	}
 }
 
 // OnError is a callback that is called when a sender sends a rangefeed
