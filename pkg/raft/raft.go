@@ -2781,7 +2781,12 @@ func (r *raft) resetRandomizedElectionTimeout() {
 func (r *raft) transferLeader(to pb.PeerID) {
 	assertTrue(r.state == pb.StateLeader, "only the leader can transfer leadership")
 	r.send(pb.Message{To: to, Type: pb.MsgTimeoutNow})
-	r.becomeFollower(r.Term, r.lead)
+	// When a leader transfers leadership to another replica, it instructs the
+	// replica to campaign without performing the campaign checks. Therefore, it
+	// should be safe to defortify and forget the we were the leader at this term
+	// when stepping down.
+	r.deFortify(r.id, r.Term)
+	r.becomeFollower(r.Term, None)
 }
 
 func (r *raft) abortLeaderTransfer() {
