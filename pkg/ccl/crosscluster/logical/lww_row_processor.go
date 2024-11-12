@@ -588,6 +588,9 @@ func (lww *lwwQuerier) InsertRow(
 
 		sess := lww.ieOverrideOptimisticInsert
 		sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
+		if !useLowPriority.Get(&lww.settings.SV) {
+			sess.QualityOfService = nil
+		}
 		if _, err = ie.ExecParsed(ctx, replicatedOptimisticInsertOpName, kvTxn, sess, stmt, datums...); err != nil {
 			// If the optimistic insert failed with unique violation, we have to
 			// fall back to the pessimistic path. If we got a different error,
@@ -608,6 +611,9 @@ func (lww *lwwQuerier) InsertRow(
 		return batchStats{}, err
 	}
 	sess := lww.ieOverrideInsert
+	if !useLowPriority.Get(&lww.settings.SV) {
+		sess.QualityOfService = nil
+	}
 	sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
 	if _, err = ie.ExecParsed(ctx, replicatedInsertOpName, kvTxn, sess, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated insert failed (query: %s): %s", stmt.SQL, err.Error())
@@ -638,6 +644,9 @@ func (lww *lwwQuerier) DeleteRow(
 	}
 
 	sess := lww.ieOverrideDelete
+	if !useLowPriority.Get(&lww.settings.SV) {
+		sess.QualityOfService = nil
+	}
 	sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
 	if _, err := ie.ExecParsed(ctx, replicatedDeleteOpName, kvTxn, sess, stmt, datums...); err != nil {
 		log.Warningf(ctx, "replicated delete failed (query: %s): %s", stmt.SQL, err.Error())
