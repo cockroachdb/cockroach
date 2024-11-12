@@ -11,9 +11,12 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // testRangefeedCounter mocks rangefeed metrics for testing.
@@ -39,6 +42,15 @@ func (c *testRangefeedCounter) get() int {
 	return int(c.count.Load())
 }
 
+func (c *testRangefeedCounter) waitForRangefeedCount(t *testing.T, count int) {
+	testutils.SucceedsSoon(t, func() error {
+		if c.get() == count {
+			return nil
+		}
+		return errors.Newf("expected %d rangefeeds, found %d", count, c.get())
+	})
+}
+
 // testServerStream mocks grpc server stream for testing.
 type testServerStream struct {
 	syncutil.Mutex
@@ -47,6 +59,8 @@ type testServerStream struct {
 	// streamEvents is a map of streamID to a list of events sent to that stream.
 	streamEvents map[int64][]*kvpb.MuxRangeFeedEvent
 }
+
+var _ ServerStreamSender = &testServerStream{}
 
 func newTestServerStream() *testServerStream {
 	return &testServerStream{
@@ -58,6 +72,64 @@ func (s *testServerStream) totalEventsSent() int {
 	s.Lock()
 	defer s.Unlock()
 	return s.eventsSent
+}
+
+func (s *testServerStream) getEventsByStreamID(streamID int64) (res []*kvpb.RangeFeedEvent) {
+	s.Lock()
+	defer s.Unlock()
+	for _, ev := range s.streamEvents[streamID] {
+		res = append(res, &ev.RangeFeedEvent)
+	}
+	return res
+}
+
+func (s *testServerStream) totalEventsFilterBy(f func(e *kvpb.MuxRangeFeedEvent) bool) int {
+	s.Lock()
+	defer s.Unlock()
+	count := 0
+	for _, v := range s.streamEvents {
+		for _, streamEvent := range v {
+			if f(streamEvent) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func (s *testServerStream) waitForEvent(t *testing.T, ev *kvpb.MuxRangeFeedEvent) {
+	testutils.SucceedsSoon(t, func() error {
+		if s.hasEvent(ev) {
+			return nil
+		}
+		return errors.Newf("expected error %v not found in %s", *ev, s.String())
+	})
+}
+
+func (s *testServerStream) waitForEventCount(t *testing.T, count int) {
+	testutils.SucceedsSoon(t, func() error {
+		if s.totalEventsSent() == count {
+			return nil
+		}
+		return errors.Newf("expected %d events, found %d", count, s.totalEventsSent())
+	})
+}
+
+func (s *testServerStream) iterateEventsByStreamID(
+	f func(id int64, events []*kvpb.MuxRangeFeedEvent),
+) {
+	s.Lock()
+	defer s.Unlock()
+	for id, v := range s.streamEvents {
+		f(id, v)
+	}
+}
+
+func (s *testServerStream) reset() {
+	s.Lock()
+	defer s.Unlock()
+	s.eventsSent = 0
+	s.streamEvents = make(map[int64][]*kvpb.MuxRangeFeedEvent)
 }
 
 // hasEvent returns true if the event is found in the streamEvents map. Note
@@ -78,9 +150,31 @@ func (s *testServerStream) hasEvent(e *kvpb.MuxRangeFeedEvent) bool {
 
 // String returns a string representation of the events sent in the stream.
 func (s *testServerStream) String() string {
+	s.Lock()
+	defer s.Unlock()
 	var str strings.Builder
+	fmt.Fprintf(&str, "Total Streams Sent: %d\n", len(s.streamEvents))
 	for streamID, eventList := range s.streamEvents {
-		fmt.Fprintf(&str, "StreamID:%d, Len:%d\n", streamID, len(eventList))
+		fmt.Fprintf(&str, "\tStreamID:%d, Len:%d", streamID, len(eventList))
+		for _, ev := range eventList {
+			switch {
+			case ev.Val != nil:
+				fmt.Fprintf(&str, "\t\tvalue")
+			case ev.Checkpoint != nil:
+				fmt.Fprintf(&str, "\t\tcheckpoint")
+			case ev.SST != nil:
+				fmt.Fprintf(&str, "\t\tsst")
+			case ev.DeleteRange != nil:
+				fmt.Fprintf(&str, "\t\tdelete")
+			case ev.Metadata != nil:
+				fmt.Fprintf(&str, "\t\tmetadata")
+			case ev.Error != nil:
+				fmt.Fprintf(&str, "\t\terror")
+			default:
+				panic("unknown event type")
+			}
+		}
+		fmt.Fprintf(&str, "\n")
 	}
 	return str.String()
 }
@@ -105,4 +199,16 @@ func (s *testServerStream) BlockSend() (unblock func()) {
 	return func() {
 		once.Do(s.Unlock) //nolint:deferunlockcheck
 	}
+}
+
+type cancelCtxDisconnector struct {
+	cancel func()
+}
+
+func (c *cancelCtxDisconnector) Disconnect(_ *kvpb.Error) {
+	c.cancel()
+}
+
+func (c *cancelCtxDisconnector) IsDisconnected() bool {
+	return false
 }

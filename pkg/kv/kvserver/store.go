@@ -3242,21 +3242,21 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 // complete.
 func (s *Store) RangeFeed(
 	streamCtx context.Context, args *kvpb.RangeFeedRequest, stream rangefeed.Stream,
-) error {
+) (rangefeed.Disconnector, error) {
 	if filter := s.TestingKnobs().TestingRangefeedFilter; filter != nil {
 		if pErr := filter(args, stream); pErr != nil {
-			return pErr.GoError()
+			return nil, pErr.GoError()
 		}
 	}
 
 	if err := verifyKeys(args.Span.Key, args.Span.EndKey, true); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Get range and add command to the range for execution.
 	repl, err := s.GetReplica(args.RangeID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !repl.IsInitialized() {
 		// (*Store).Send has an optimization for uninitialized replicas to send back
@@ -3264,7 +3264,7 @@ func (s *Store) RangeFeed(
 		// be found. RangeFeeds can always be served from followers and so don't
 		// otherwise return NotLeaseHolderError. For simplicity we also don't return
 		// one here.
-		return kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID())
+		return nil, kvpb.NewRangeNotFoundError(args.RangeID, s.StoreID())
 	}
 
 	tenID, _ := repl.TenantID()
