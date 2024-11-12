@@ -1034,6 +1034,7 @@ func (r *raft) reset(term uint64) {
 		r.setTerm(term)
 	}
 
+	r.lead = None
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
 	r.resetRandomizedElectionTimeout()
@@ -1260,7 +1261,16 @@ func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 	r.step = stepFollower
 	r.reset(term)
 	r.tick = r.tickElection
-	r.setLead(lead)
+
+	// TODO(ibrahim): Once all places in the code forget the leader when stepping
+	// down to the same term, we can remove this special case and call resetLead()
+	// inside r.reset(term).
+	if lead == None {
+		r.resetLead()
+	} else {
+		r.setLead(lead)
+	}
+
 	r.state = pb.StateFollower
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
 
