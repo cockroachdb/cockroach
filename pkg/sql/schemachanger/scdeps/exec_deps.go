@@ -219,26 +219,6 @@ func (d *txnDeps) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 	return d.descsCollection.DeleteDescToBatch(ctx, d.kvTrace, id, d.getOrCreateBatch())
 }
 
-// GetZoneConfig implements the scexec.Catalog interface.
-func (d *txnDeps) GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.ZoneConfig, error) {
-	zc, err := d.descsCollection.GetZoneConfig(ctx, d.txn.KV(), id)
-	if err != nil {
-		return nil, err
-	}
-	return zc, nil
-}
-
-// WriteZoneConfigToBatch implements the scexec.Catalog interface.
-func (d *txnDeps) WriteZoneConfigToBatch(
-	ctx context.Context, id descpb.ID, zc catalog.ZoneConfig,
-) error {
-	err := d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id, zc)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // UpdateZoneConfig implements the scexec.Catalog interface.
 func (d *txnDeps) UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig) error {
 	var newZc catalog.ZoneConfig
