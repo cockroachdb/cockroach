@@ -562,7 +562,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang/glog/com_github_golang_glog-v1.1.0.zip": "668beb5dd923378b00fda4ba0d965000f3f259be5ba05ebd341a2949e8f20db6",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang/groupcache/com_github_golang_groupcache-v0.0.0-20210331224755-41bb18bfe9da.zip": "b27034e8fc013627543e1ad098cfc65329f2896df3da5cf3266cc9166f93f3a5",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang/mock/com_github_golang_mock-v1.6.0.zip": "fa25916b546f90da49418f436e3a61e4c5dae898cf3c82b0007b5a6fab74261b",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang/protobuf/com_github_golang_protobuf-v1.5.3.zip": "93bda6e88d4a0a493a98b481de67a10000a755d15f16a800b49a6b96d1bd6f81",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang/protobuf/com_github_golang_protobuf-v1.5.4.zip": "9a2f43d3eac8ceda506ebbeb4f229254b87235ce90346692a0e233614182190b",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang/snappy/com_github_golang_snappy-v0.0.5-0.20231225225746-43d5d4cd4e0e.zip": "a40a9145f6d7c1b2c356cf024f65e0f9cbf7efe2b89330ef4bb0763859b6fdc9",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golangci/lint-1/com_github_golangci_lint_1-v0.0.0-20181222135242-d2cdd8c08219.zip": "2806ffd1a35b26a29b4cea86eb5ae421636b317e33e261fc1c20f9cf8fec2db5",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gomodule/redigo/com_github_gomodule_redigo-v1.7.1-0.20190724094224-574c33c3df38.zip": "f665942b590c65e87284d681ea2784d0b9873c644756f4716a9972dc0d8e804e",
