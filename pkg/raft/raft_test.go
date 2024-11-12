@@ -3548,7 +3548,7 @@ func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 
 	require.Equal(t, uint64(1), lead.Term)
-	checkLeaderTransferState(t, lead, pb.StateFollower, 1)
+	checkLeaderTransferState(t, lead, pb.StateFollower, None)
 
 	// Eventually, the previous leader gives up on waiting and calls an election
 	// to reestablish leadership at the next term.
