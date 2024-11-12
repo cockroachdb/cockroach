@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"math/rand"
 	"net/url"
 	"strings"
 	"sync"
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -58,7 +58,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 
 	var queryLatency *time.Duration
 	sem := make(chan struct{}, 1)
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	tc := serverutils.StartCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,

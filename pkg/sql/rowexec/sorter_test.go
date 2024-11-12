@@ -8,7 +8,6 @@ package rowexec
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -27,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestSorter(t *testing.T) {
@@ -407,7 +406,7 @@ func BenchmarkSortAll(b *testing.B) {
 		DiskMonitor: diskMonitor,
 	}
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	spec := execinfrapb.SorterSpec{OutputOrdering: twoColOrdering}
 	post := execinfrapb.PostProcessSpec{}
 
@@ -451,7 +450,7 @@ func BenchmarkSortLimit(b *testing.B) {
 		DiskMonitor: diskMonitor,
 	}
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	spec := execinfrapb.SorterSpec{OutputOrdering: twoColOrdering}
 
 	const numRows = 1 << 16
@@ -500,7 +499,7 @@ func BenchmarkSortChunks(b *testing.B) {
 		DiskMonitor: diskMonitor,
 	}
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	spec := execinfrapb.SorterSpec{
 		OutputOrdering:   twoColOrdering,
 		OrderingMatchLen: 1,
