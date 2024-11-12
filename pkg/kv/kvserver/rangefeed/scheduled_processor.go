@@ -305,7 +305,7 @@ func (p *ScheduledProcessor) Register(
 	withOmitRemote bool,
 	stream Stream,
 	disconnectFn func(),
-) (bool, *Filter) {
+) (bool, Disconnector, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
@@ -318,8 +318,7 @@ func (p *ScheduledProcessor) Register(
 			"unimplemented: unbuffered registrations for rangefeed, see #126560")
 	} else {
 		r = newBufferedRegistration(
-			streamCtx,
-			span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
 		)
 	}
@@ -367,9 +366,9 @@ func (p *ScheduledProcessor) Register(
 		return f
 	})
 	if filter != nil {
-		return true, filter
+		return true, r, filter
 	}
-	return false, nil
+	return false, nil, nil
 }
 
 func (p *ScheduledProcessor) unregisterClient(r registration) bool {
