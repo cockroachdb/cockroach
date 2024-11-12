@@ -8,6 +8,7 @@ package logical
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"slices"
@@ -16,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationtestutils"
@@ -517,13 +519,26 @@ func TestLogicalStreamIngestionErrors(t *testing.T) {
 	dbA.Exec(t, createStmt)
 	dbB.Exec(t, createStmt)
 
-	createQ := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
-	if s.Codec().IsSystem() {
-		dbB.ExpectErr(t, "kv.rangefeed.enabled must be enabled on the source cluster for logical replication", createQ, urlA)
-		kvserver.RangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	}
+	t.Run("rangefeed disabled", func(t *testing.T) {
+		createQ := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab"
+		if s.Codec().IsSystem() {
+			dbB.ExpectErr(t, "kv.rangefeed.enabled must be enabled on the source cluster for logical replication", createQ, urlA)
+			kvserver.RangefeedEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+		}
 
-	dbB.Exec(t, createQ, urlA)
+		dbB.Exec(t, createQ, urlA)
+	})
+
+	t.Run("multi stmt creation", func(t *testing.T) {
+		db := dbB.DB.(*gosql.DB)
+		var jobID jobspb.JobID
+		err := crdb.ExecuteTx(ctx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+			return tx.QueryRow("CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", urlA).Scan(&jobID)
+		})
+		require.True(t, testutils.IsError(err,
+			"cannot CREATE LOGICAL REPLICATION STREAM in a multi-statement transaction"))
+	})
+
 }
 
 func TestLogicalStreamIngestionJobWithColumnFamilies(t *testing.T) {
