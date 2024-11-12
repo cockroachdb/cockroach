@@ -1805,14 +1805,12 @@ func stepLeader(r *raft, m pb.Message) error {
 		}
 		if !quorumActiveByHeartbeats && !quorumActiveByFortification {
 			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
-			// NB: Stepping down because of CheckQuorum is a special, in that we know
-			// the LeadSupportUntil is in the past. This means that the leader can
-			// safely call a new election or vote for a different peer without
-			// regressing LeadSupportUntil. We don't need to/want to give this any
-			// special treatment -- instead, we handle this like the general step down
-			// case by simply remembering the term/lead information from our stint as
-			// the leader.
-			r.becomeFollower(r.Term, r.id)
+			// NB: Stepping down because of CheckQuorum means that the
+			// LeadSupportUntil is in the past. This means that the leader can safely
+			// call a new election or vote for a different peer without regressing
+			// LeadSupportUntil. Therefore, it's safe to immediately step down and
+			// forget that we were the leader for this term.
+			r.becomeFollower(r.Term, None)
 		}
 		// Mark everyone (but ourselves) as inactive in preparation for the next
 		// CheckQuorum.
