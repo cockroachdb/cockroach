@@ -313,13 +313,10 @@ func (b *ConstraintBuilder) Build(
 		// If a single constant value was found, project it in the input
 		// and use it as an equality column.
 		if ok && len(foundVals) == 1 {
-			idxColType := b.md.ColumnMeta(idxCol).Type
-			constColID := b.md.AddColumn(
-				fmt.Sprintf("lookup_join_const_col_@%d", idxCol),
-				idxColType,
-			)
+			typ := foundVals[0].ResolvedType()
+			constColID := b.md.AddColumn(fmt.Sprintf("lookup_join_const_col_@%d", idxCol), typ)
 			inputProjections = append(inputProjections, b.f.ConstructProjectionsItem(
-				b.f.ConstructConstVal(foundVals[0], idxColType),
+				b.f.ConstructConstVal(foundVals[0], typ),
 				constColID,
 			))
 			allLookupFilters = append(allLookupFilters, b.allFilters[allIdx])

@@ -1627,3 +1627,86 @@ INNER HASH JOIN t_124732 ON v.i = t_124732.i;
 1  1.000  1.000
 
 subtest end
+
+# Regression test for #134697. Constant projections for lookup joins should be
+# correctly typed.
+statement ok
+CREATE TABLE t134697 (
+  a INT,
+  b BIT(2),
+  vb VARBIT(2),
+  c CHAR(2),
+  vc VARCHAR(2),
+  d DECIMAL(6, 2),
+  INDEX (b, a),
+  INDEX (vb, a),
+  INDEX (c, a),
+  INDEX (vc, a),
+  INDEX (d, a)
+)
+
+statement ok
+CREATE TABLE t134697_x (
+  x INT PRIMARY KEY
+)
+
+statement ok
+INSERT INTO t134697 VALUES (1, '11', '11', 'ab', 'ab', 1234.12)
+
+statement ok
+INSERT INTO t134697_x VALUES (1);
+
+query IT
+SELECT a, b FROM t134697_x
+JOIN t134697 ON a = x AND b = '111';
+----
+
+# This should return zero rows, like the non-hinted query above.
+query IT
+SELECT a, b FROM t134697_x
+INNER LOOKUP JOIN t134697 ON a = x AND b = '111';
+----
+
+query IT
+SELECT a, vb FROM t134697_x
+JOIN t134697 ON a = x AND vb = '111';
+----
+
+# This should return zero rows, like the non-hinted query above.
+query IT
+SELECT a, vb FROM t134697_x
+INNER LOOKUP JOIN t134697 ON a = x AND vb = '111';
+----
+
+query IT
+SELECT a, c FROM t134697_x
+JOIN t134697 ON a = x AND c = 'abc';
+----
+
+# This should return zero rows, like the non-hinted query above.
+query IT
+SELECT a, c FROM t134697_x
+INNER LOOKUP JOIN t134697 ON a = x AND c = 'abc';
+----
+
+query IT
+SELECT a, vc FROM t134697_x
+JOIN t134697 ON a = x AND vc = 'abc';
+----
+
+# This should return zero rows, like the non-hinted query above.
+query IT
+SELECT a, vc FROM t134697_x
+INNER LOOKUP JOIN t134697 ON a = x AND vc = 'abc';
+----
+
+query IT
+SELECT a, d FROM t134697_x
+JOIN t134697 ON a = x AND d = 1234.123412::DECIMAL(8, 4);
+----
+
+# This should return zero rows, like the non-hinted query above.
+query IT
+SELECT a, d FROM t134697_x
+INNER LOOKUP JOIN t134697 ON a = x AND d = 1234.1234::DECIMAL(8, 4);
+----
