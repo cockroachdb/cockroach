@@ -36,14 +36,6 @@ type Team struct {
 	TriageColumnID int `yaml:"triage_column_id"`
 	// SilenceMentions is true if @-mentions should be supressed for this team.
 	SilenceMentions bool `yaml:"silence_mentions"`
-	// Email is the email address for this team.
-	//
-	// Currently unused.
-	Email string `yaml:"email"`
-	// Slack is the slack channel for this team.
-	//
-	// Currently unused.
-	Slack string `yaml:"slack"`
 }
 
 // Name returns the main Alias of the team.
