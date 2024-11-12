@@ -483,7 +483,17 @@ func newRaft(c *Config) *raft {
 	if c.Applied > 0 {
 		raftlog.appliedTo(c.Applied, 0 /* size */)
 	}
-	r.becomeFollower(r.Term, r.lead)
+
+	if r.lead == r.id {
+		// If we were the leader, we must have waited out the leaderMaxSupported
+		// before reaching this point. Therefore, it should be safe to become a
+		// follower while forgetting that we were the leader.
+		r.becomeFollower(r.Term, None)
+	} else {
+		// If we weren't the leader, we should NOT forget who the leader is to avoid
+		// regressing the leaderMaxSupported.
+		r.becomeFollower(r.Term, r.lead)
+	}
 
 	var nodesStrs []string
 	for _, n := range r.trk.VoterNodes() {
