@@ -415,7 +415,7 @@ stabilize
   3->2 MsgApp Term:3 Log:2/12 Commit:13 Entries:[3/13 EntryNormal ""]
 > 2 receiving messages
   3->2 MsgFortifyLeader Term:3 Log:0/0
-  INFO 2 [term: 2] received a MsgFortifyLeader message with higher term from 3 [term: 3], advancing term
+  INFO 2 [term: 2] received a MsgFortifyLeader message with higher term from 3 [term: 3], new leader indicated, advancing term
   INFO 2 became follower at term 3
   3->2 MsgApp Term:3 Log:2/12 Commit:13 Entries:[3/13 EntryNormal ""]
 > 2 handling Ready
