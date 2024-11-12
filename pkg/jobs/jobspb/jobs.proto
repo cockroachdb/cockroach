@@ -398,7 +398,7 @@ message BackupDetails {
   SchedulePTSChainingRecord schedule_pts_chaining_record = 10 [(gogoproto.customname) = "SchedulePTSChainingRecord"];
 
   bool revision_history = 13;
-  repeated string incremental_from = 14;
+  reserved 14;
   bool full_cluster = 15;
 
   reserved 16;

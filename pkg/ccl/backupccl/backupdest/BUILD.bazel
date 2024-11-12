@@ -18,7 +18,6 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/security/username",
-        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/pgwire/pgcode",
@@ -64,7 +63,6 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
 )
