@@ -53,6 +53,11 @@ var (
 	// smaller than 100 characters. We don't perform an exact match here for
 	// more flexibility.
 	clusterNameRegex = regexp.MustCompile("^[a-z0-9][a-z0-9-]{4,98}[a-z0-9]$")
+
+	// highFreqErrorMarker is a marker that indicates that a particular error
+	// is of high-frequency and should be throttled accordingly. Use with
+	// errors.Mark and errors.Is.
+	highFreqErrorMarker = errors.New("high-frequency error")
 )
 
 const (
@@ -380,6 +385,19 @@ func (handler *proxyHandler) handle(
 		return errors.Wrap(err, "extracting cluster identifier")
 	}
 
+	// Add optional request tags so that callers can provide a better context
+	// for errors. This is best-effort only, and will be applied if the incoming
+	// context includes a requestTags object.
+	reqTags := requestTagsFromContext(ctx)
+
+	// Tenant ID is always valid in the request. We will defer the addition of
+	// cluster name into the logtags after validating the connection since there
+	// is a possibility where the cluster name won't match.
+	ctx = logtags.AddTag(ctx, "tenant", tenID.String())
+	if reqTags != nil {
+		reqTags["tenant"] = tenID.String()
+	}
+
 	// Validate the incoming connection and ensure that the cluster name
 	// matches the tenant's. This avoids malicious actors from attempting to
 	// connect to the cluster using just the tenant ID.
@@ -389,16 +407,13 @@ func (handler *proxyHandler) handle(
 		return err
 	}
 
-	// Only add logtags after validating the connection. If the connection isn't
+	// Add cluster name after validating the connection. If the connection isn't
 	// validated, clusterName may not match the tenant ID, and this could cause
 	// confusion when analyzing logs.
 	ctx = logtags.AddTag(ctx, "cluster", clusterName)
-	ctx = logtags.AddTag(ctx, "tenant", tenID)
-
-	// Add request tags so that callers can provide a better context for errors.
-	reqTags := requestTagsFromContext(ctx)
-	reqTags["cluster"] = clusterName
-	reqTags["tenant"] = tenID
+	if reqTags != nil {
+		reqTags["cluster"] = clusterName
+	}
 
 	// Use an empty string as the default port as we only care about the
 	// correctly parsing the IP address here.
@@ -418,8 +433,15 @@ func (handler *proxyHandler) handle(
 			EndpointID: endpointID,
 		},
 		func(err error) {
+			// Whenever a connection expires, it will be closed by the proxy
+			// once the ACL watcher fires. The client will observe that the
+			// connection has been closed abruptly. One UX enhancement that
+			// could be made here is to send an ErrorResponse on the next pgwire
+			// message boundary to the client so that users know why their
+			// connections were closed. Implementing this will require
+			// communicating with the forwarder (e.g. "sendErrorSafelyAndClose").
 			err = withCode(
-				errors.Wrap(err, "connection blocked by access control list"),
+				errors.Wrap(err, "connection no longer allowed by access control list"),
 				codeExpiredClientConnection,
 			)
 			select {
@@ -434,11 +456,20 @@ func (handler *proxyHandler) handle(
 		// "connection refused" error. The next time they connect, they will
 		// get a "not found" error.
 		//
-		// TODO(jaylim-crl): We can enrich this error with the proper reason on
-		// why they were refused (e.g. IP allowlist, or private endpoints).
+		// We will return a generic "connection refused" error in this case.
+		// From a security perspective, it's preferable not to disclose specific
+		// details -- similar to how we use "invalid username or password"
+		// rather than just "invalid password". This does come with its own
+		// drawbacks (e.g. users may not know why), but that's fine, since they
+		// should have all the necessary information needed to debug ths issue.
 		clientErr := withCode(errors.New("connection refused"), codeProxyRefusedConnection)
 		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
-		return errors.Wrap(err, "connection blocked by access control list")
+
+		// Users often misconfigure their allowed CIDR ranges or private
+		// endpoints, leading to excessive retry traffic. We will mark it as
+		// a high-frequency error so that callers that log errors could
+		// implement rate limiting accordingly.
+		return errors.Mark(errors.Wrap(err, "connection blocked by access control list"), highFreqErrorMarker)
 	}
 	defer removeListener()
 
@@ -447,13 +478,12 @@ func (handler *proxyHandler) handle(
 	if err != nil {
 		clientErr := authThrottledError
 		updateMetricsAndSendErrToClient(clientErr, fe.Conn, handler.metrics)
+
 		// The throttle service is used to rate limit invalid login attempts
 		// from IP addresses, and it is commonly prone to generating excessive
-		// traffic in practice. Due to that, we'll return a nil here to prevent
-		// callers from logging this request. However, LoginCheck itself
-		// periodically logs an error when such requests are rate limited, so
-		// we won't miss any signals by doing this.
-		return nil //nolint:returnerrcheck
+		// traffic in practice. Due to that, we'll mark it as a high-frequency
+		// error to rate-limit logs.
+		return errors.Mark(err, highFreqErrorMarker)
 	}
 
 	connector := &connector{
@@ -482,13 +512,9 @@ func (handler *proxyHandler) handle(
 
 	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, f, fe.Conn,
 		func(status throttler.AttemptStatus) error {
-			if err := handler.throttleService.ReportAttempt(
-				ctx, throttleTags, throttleTime, status,
-			); err != nil {
-				// We have to log here because errors returned by this closure
-				// will be sent to the client.
-				log.Errorf(ctx, "throttler refused connection after authentication: %v", err.Error())
-				return authThrottledError
+			err := handler.throttleService.ReportAttempt(ctx, throttleTags, throttleTime, status)
+			if err != nil {
+				return errors.Mark(err, highFreqErrorMarker)
 			}
 			return nil
 		},
@@ -579,6 +605,7 @@ func (handler *proxyHandler) validateConnection(
 	if err != nil && status.Code(err) != codes.NotFound {
 		return err
 	}
+
 	if err == nil {
 		if tenant.ClusterName == "" || tenant.ClusterName == clusterName {
 			return nil
@@ -590,10 +617,13 @@ func (handler *proxyHandler) validateConnection(
 			tenant.ClusterName,
 		)
 	}
-	return withCode(
-		errors.Newf("cluster %s-%d not found", clusterName, tenantID.ToUint64()),
-		codeParamsRoutingFailed,
-	)
+
+	// The codes.NotFound error is a common occurrence, as we have often
+	// observed situations where a user deletes their tenant, but their
+	// application continues running.
+	clientErr := errors.Newf("cluster %s-%d not found", clusterName, tenantID.ToUint64())
+	clientErr = errors.Mark(clientErr, highFreqErrorMarker)
+	return withCode(clientErr, codeParamsRoutingFailed)
 }
 
 // handleCancelRequest handles a pgwire query cancel request by either
