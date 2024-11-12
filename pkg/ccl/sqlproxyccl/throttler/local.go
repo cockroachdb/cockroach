@@ -15,7 +15,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var errRequestDenied = errors.New("request denied")
+var (
+	errRequestDeniedAtLogin   = errors.New("throttler refused connection due to too many failed authentication attempts")
+	errRequestDeniedAfterAuth = errors.New("throttler refused connection after authentication")
+)
 
 type timeNow func() time.Time
 
@@ -98,11 +101,7 @@ func (s *localService) LoginCheck(
 	now := s.clock()
 	throttle := s.lockedGetThrottle(connection)
 	if throttle != nil && throttle.isThrottled(now) {
-		if throttle.everyLog.ShouldLog() {
-			// ctx should include logtags about the connection.
-			log.Error(ctx, "throttler refused connection due to too many failed authentication attempts")
-		}
-		return now, errRequestDenied
+		return now, errRequestDeniedAtLogin
 	}
 	return now, nil
 }
@@ -120,7 +119,7 @@ func (s *localService) ReportAttempt(
 	}
 
 	if throttle.isThrottled(throttleTime) {
-		return errRequestDenied
+		return errRequestDeniedAfterAuth
 	}
 
 	switch {

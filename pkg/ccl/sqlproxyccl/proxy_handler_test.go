@@ -100,10 +100,12 @@ func TestProxyHandler_ValidateConnection(t *testing.T) {
 	t.Run("not found/no cluster name", func(t *testing.T) {
 		err := s.handler.validateConnection(ctx, invalidTenantID, "")
 		require.Regexp(t, "codeParamsRoutingFailed: cluster -99 not found", err.Error())
+		require.True(t, errors.Is(err, highFreqErrorMarker))
 	})
 	t.Run("not found", func(t *testing.T) {
 		err := s.handler.validateConnection(ctx, invalidTenantID, "foo-bar")
 		require.Regexp(t, "codeParamsRoutingFailed: cluster foo-bar-99 not found", err.Error())
+		require.True(t, errors.Is(err, highFreqErrorMarker))
 	})
 	t.Run("found/tenant without name", func(t *testing.T) {
 		err := s.handler.validateConnection(ctx, tenantWithoutNameID, "foo-bar")
@@ -116,10 +118,12 @@ func TestProxyHandler_ValidateConnection(t *testing.T) {
 	t.Run("found/connection without name", func(t *testing.T) {
 		err := s.handler.validateConnection(ctx, tenantID, "")
 		require.Regexp(t, "codeParamsRoutingFailed: cluster -10 not found", err.Error())
+		require.True(t, errors.Is(err, highFreqErrorMarker))
 	})
 	t.Run("found/tenant name mismatch", func(t *testing.T) {
 		err := s.handler.validateConnection(ctx, tenantID, "foo-bar")
 		require.Regexp(t, "codeParamsRoutingFailed: cluster foo-bar-10 not found", err.Error())
+		require.True(t, errors.Is(err, highFreqErrorMarker))
 	})
 
 	// Stop the directory server.
@@ -130,6 +134,7 @@ func TestProxyHandler_ValidateConnection(t *testing.T) {
 		// Use a new tenant ID here to force GetTenant.
 		err := s.handler.validateConnection(ctx, roachpb.MustMakeTenantID(100), "")
 		require.Regexp(t, "directory server has not been started", err.Error())
+		require.False(t, errors.Is(err, highFreqErrorMarker))
 	})
 }
 
