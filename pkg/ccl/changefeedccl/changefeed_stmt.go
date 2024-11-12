@@ -1572,13 +1572,11 @@ func makeCommonChangefeedEventDetails(
 		sinkType = parsedSink.Scheme
 	}
 
-	var initialScan string
 	initialScanType, initialScanSet := opts[changefeedbase.OptInitialScan]
 	_, initialScanOnlySet := opts[changefeedbase.OptInitialScanOnly]
 	_, noInitialScanSet := opts[changefeedbase.OptNoInitialScan]
-	if initialScanSet && initialScanType == `` {
-		initialScan = `yes`
-	} else if initialScanSet && initialScanType != `` {
+	initialScan := `yes`
+	if initialScanSet && initialScanType != `` {
 		initialScan = initialScanType
 	} else if initialScanOnlySet {
 		initialScan = `only`
