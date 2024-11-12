@@ -29,6 +29,10 @@ func VecModeCounter(mode string) telemetry.Counter {
 // cascade for a single query is exceeded.
 var CascadesLimitReached = telemetry.GetCounterOnce("sql.exec.cascade-limit-reached")
 
+// RecursionDepthLimitReached is to be incremented whenever the limit of nested
+// triggers and/or recursive UDFs for a single query is exceeded.
+var RecursionDepthLimitReached = telemetry.GetCounterOnce("sql.exec.recursion-depth-limit-reached")
+
 // HashAggregationDiskSpillingDisabled is to be incremented whenever the disk
 // spilling of the vectorized hash aggregator is disabled.
 var HashAggregationDiskSpillingDisabled = telemetry.GetCounterOnce("sql.exec.hash-agg-spilling-disabled")
