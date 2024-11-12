@@ -30,5 +30,5 @@ Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f3›(‹
 	RETURNS INT8
 	VOLATILE
 	LANGUAGE SQL
-	AS $$SELECT public.f2(‹a›) + public.f(‹a›);$$;
+	AS $$SELECT ‹public›.‹f2›(‹a›) + ‹public›.‹f›(‹a›);$$;
  └── execute 1 system table mutations transaction
