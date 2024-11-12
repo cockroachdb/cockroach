@@ -38,7 +38,7 @@ require (
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/uuid v1.6.0 // indirect
 	google.golang.org/api v0.114.0
-	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
+	google.golang.org/genproto v0.0.0-20230526161137-0005af68ea54
 	google.golang.org/grpc v1.68.0
 	google.golang.org/protobuf v1.35.1
 )
