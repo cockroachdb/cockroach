@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var ilikeConstantPatternErr = errors.New("ILIKE and NOT ILIKE aren't supported with a constant pattern")
+
 // GetLikeProjectionOperator returns a projection operator which projects the
 // result of the specified LIKE pattern, or NOT LIKE if the negate argument is
 // true. The implementation varies depending on the complexity of the pattern.
@@ -55,7 +57,7 @@ func GetLikeProjectionOperator(
 			// We don't have an equivalent projection operator that would
 			// convert the argument to capital letters, so for now we fall back
 			// to the default comparison operator.
-			return nil, errors.New("ILIKE and NOT ILIKE aren't supported with a constant pattern")
+			return nil, ilikeConstantPatternErr
 		}
 		if negate {
 			return &projNEBytesBytesConstOp{

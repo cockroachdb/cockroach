@@ -94,7 +94,7 @@ func newSum_SUMKIND_AGGKINDAggAlloc(
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
+	return nil, errors.AssertionFailedf("unsupported sum agg type %s", t.Name())
 }
 
 // {{range .Infos}}

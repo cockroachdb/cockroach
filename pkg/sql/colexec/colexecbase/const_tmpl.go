@@ -78,7 +78,7 @@ func NewConstOp(
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("unsupported const type %s", t.Name())
+	return nil, errors.AssertionFailedf("unsupported const type %s", t.Name())
 }
 
 // {{range .}}

@@ -93,7 +93,7 @@ func newAvg_AGGKINDAggAlloc(
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("unsupported avg agg type %s", t.Name())
+	return nil, errors.AssertionFailedf("unsupported avg agg type %s", t.Name())
 }
 
 // {{range .}}
