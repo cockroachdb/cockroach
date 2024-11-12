@@ -270,3 +270,45 @@ SELECT pg_has_role('ldap_user', 'ldap_user_parent_1', 'MEMBER')
 true
 
 subtest end
+
+subtest non_standard_sql_group_names
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+
+sql
+CREATE ROLE "ldap-user-parent-1";
+CREATE ROLE "ldap.user.parent.2";
+----
+ok
+
+ldap_mock set_groups=(ldap_user,cn=ldap-user-parent-1,cn=ldap.user.parent.2)
+----
+
+connect user=ldap_user password="ldap_pwd"
+----
+ok defaultdb
+
+query_row
+SELECT pg_has_role('ldap_user', 'ldap-user-parent-1', 'MEMBER')
+----
+true
+
+query_row
+SELECT pg_has_role('ldap_user', 'ldap.user.parent.2', 'MEMBER')
+----
+true
+
+subtest end

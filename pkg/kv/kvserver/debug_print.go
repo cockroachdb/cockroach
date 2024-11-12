@@ -136,12 +136,14 @@ func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 		sb.WriteString(SprintMVCCKey(kv.Key))
 	}
 
+	// TODO(pav-kv): some functions here do not check the key, so can accidentally
+	// succeed parsing values that have a different "type", and print them in a
+	// misleading way. Make all these functions key-aware.
 	decoders := append(DebugSprintMVCCKeyValueDecoders,
-		tryRaftLogEntry,
+		tryRangeIDKey,
 		tryRangeDescriptor,
 		tryMeta,
 		tryTxn,
-		tryRangeIDKey,
 		tryTimeSeries,
 		tryIntent,
 		func(kv storage.MVCCKeyValue) (string, error) {
@@ -197,6 +199,7 @@ func SprintIntent(value []byte) string {
 }
 
 func tryRangeDescriptor(kv storage.MVCCKeyValue) (string, error) {
+	// TODO(pav-kv): generalize this for other range-local keys.
 	if err := IsRangeDescriptorKey(kv.Key); err != nil {
 		return "", err
 	}
@@ -441,6 +444,9 @@ func tryRangeIDKey(kv storage.MVCCKeyValue) (string, error) {
 
 	case bytes.Equal(suffix, keys.LocalRaftHardStateSuffix):
 		msg = &raftpb.HardState{}
+
+	case bytes.Equal(suffix, keys.LocalRaftLogSuffix):
+		return tryRaftLogEntry(kv)
 
 	case bytes.Equal(suffix, keys.LocalRangeLastReplicaGCTimestampSuffix):
 		msg = &hlc.Timestamp{}
