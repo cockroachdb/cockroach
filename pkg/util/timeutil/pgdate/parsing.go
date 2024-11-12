@@ -73,13 +73,9 @@ var (
 	// resulted in '23:59:59.999999'.) This behavior may change in the future, see issue #129148
 	// for more details.
 	//
-	// Postgres uses math.MaxInt64 microseconds as the infinity value.
-	// See: https://github.com/postgres/postgres/blob/9380e5f129d2a160ecc2444f61bb7cb97fd51fbb/src/include/datatype/timestamp.h#L157
-	//
 	// Refer to the doc comments of the function "timeutil.Unix" for the process of
 	// deriving the arguments to construct a specific time.Time.
-	TimeInfinity    = timeutil.Unix(9224318102399 /* sec */, 999999000 /* nsec */)
-	TimeInfinitySec = float64(TimeInfinity.Unix())
+	TimeInfinity = timeutil.Unix(9224318102399 /* sec */, 999999000 /* nsec */)
 	// TimeNegativeInfinity represents the "lowest" possible time. Its value is
 	// "-4714-11-23 00:00:00 +0000 UTC", which is 24 hours before "MinSupportedTime"
 	// ("-4714-11-24 00:00:00 +0000 UTC").
@@ -92,13 +88,9 @@ var (
 	// resulted in '00:00:00'.) This behavior may change in the future, see issue #129148
 	// for more details.
 	//
-	// Postgres uses math.MinInt64 microseconds as the -infinity value.
-	// See: https://github.com/postgres/postgres/blob/9380e5f129d2a160ecc2444f61bb7cb97fd51fbb/src/include/datatype/timestamp.h#L156
-	//
 	// Refer to the doc comments of the function "timeutil.Unix" for the process of
 	// deriving the arguments to construct a specific time.Time.
-	TimeNegativeInfinity    = timeutil.Unix(-210898425600 /* sec */, 0 /* nsec */)
-	TimeNegativeInfinitySec = float64(TimeNegativeInfinity.Unix())
+	TimeNegativeInfinity = timeutil.Unix(-210898425600 /* sec */, 0 /* nsec */)
 )
 
 type ParseHelper struct {
