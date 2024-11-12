@@ -2208,8 +2208,8 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 			var streamSink rangefeed.Stream
 			if ubs, ok := sm.(*rangefeed.UnbufferedSender); ok {
 				streamSink = rangefeed.NewPerRangeEventSink(req.RangeID, req.StreamID, ubs)
-			} else if bs, ok := sm.(*rangefeed.BufferedSender); ok {
-				streamSink = rangefeed.NewBufferedPerRangeEventSink(req.RangeID, req.StreamID, bs)
+			} else if _, ok := sm.(*rangefeed.BufferedSender); ok {
+				log.Fatalf(streamCtx, "unimplemented: buffered sender for rangefeed #126560")
 			} else {
 				log.Fatalf(streamCtx, "unknown sender type %T", sm)
 			}
