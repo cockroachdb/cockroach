@@ -6,8 +6,11 @@
 package rangefeed
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Stream is an object capable of transmitting RangeFeedEvents from a server
@@ -38,11 +41,11 @@ type BufferedStream interface {
 type PerRangeEventSink struct {
 	rangeID  roachpb.RangeID
 	streamID int64
-	wrapped  *UnbufferedSender
+	wrapped  sender
 }
 
 func NewPerRangeEventSink(
-	rangeID roachpb.RangeID, streamID int64, wrapped *UnbufferedSender,
+	rangeID roachpb.RangeID, streamID int64, wrapped sender,
 ) *PerRangeEventSink {
 	return &PerRangeEventSink{
 		rangeID:  rangeID,
@@ -67,7 +70,7 @@ func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 		RangeID:        s.rangeID,
 		StreamID:       s.streamID,
 	}
-	return s.wrapped.SendUnbuffered(response)
+	return s.wrapped.sendUnbuffered(response)
 }
 
 // SendError implements the Stream interface. It sends an error to the stream.
@@ -80,7 +83,10 @@ func (s *PerRangeEventSink) SendError(err *kvpb.Error) {
 	ev.MustSetValue(&kvpb.RangeFeedError{
 		Error: *transformRangefeedErrToClientError(err),
 	})
-	s.wrapped.SendBufferedError(ev)
+	if err := s.wrapped.sendBuffered(ev, nil); err != nil {
+		log.Errorf(context.Background(),
+			"failed to send rangefeed error to client: %v", err)
+	}
 }
 
 // transformRangefeedErrToClientError converts a rangefeed error to a client
