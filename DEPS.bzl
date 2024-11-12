@@ -4485,6 +4485,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_grpc_ecosystem_grpc_gateway_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/grpc-ecosystem/grpc-gateway/v2",
+        sha256 = "a6e7d597f3cda8832f18fff94b344a613f88b264fe233267b57be6a5c7afcd70",
+        strip_prefix = "github.com/grpc-ecosystem/grpc-gateway/v2@v2.0.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/grpc-ecosystem/grpc-gateway/v2/com_github_grpc_ecosystem_grpc_gateway_v2-v2.0.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_gsterjov_go_libsecret",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/gsterjov/go-libsecret",
