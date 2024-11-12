@@ -1416,6 +1416,8 @@ func TestLint(t *testing.T) {
 			":!sql/types/types_jsonpb.go",
 			":!sql/schemachanger/scplan/scviz/maps.go",
 			":!workload/schemachange/tracing.go",
+			":!roachpb/internal_optimized_pb.go",
+			":!roachpb/internal_optimized_pb_test.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1463,6 +1465,8 @@ func TestLint(t *testing.T) {
 			":!rpc/codec_test.go",
 			":!storage/mvcc_value.go",
 			":!roachpb/data.go",
+			":!roachpb/internal_optimized_pb.go",
+			":!roachpb/internal_optimized_pb_test.go",
 			":!sql/types/types_jsonpb.go",
 		)
 		if err != nil {
@@ -1526,7 +1530,7 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("", func(t *testing.T) {
+	t.Run("TestProtoMessage", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
@@ -1557,6 +1561,7 @@ func TestLint(t *testing.T) {
 			":!util/protoutil/marshal.go",
 			":!util/protoutil/marshaler.go",
 			":!util/tracing/span.go",
+			":!pkg/roachpb/internal_optimized_pb.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -2085,6 +2090,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/cmd/mirror/go/mirror.go`),
 			// As above, the bazel build tag has an impact here.
 			stream.GrepNot(`pkg/testutils/docker/single_node_docker_test.go`),
+			// File based on .pb.go generated code.
+			stream.GrepNot(`pkg/roachpb/internal_optimized_pb.go`),
 		}
 		for analyzerName, config := range nogoConfig {
 			if !staticcheckCheckNameRe.MatchString(analyzerName) {
@@ -2702,6 +2709,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(nakedGoroutineExceptions + `:.*Illegal call to Group\.Go\(\)`),
 			// We purposefully dereference nil in this file to test panic handling
 			stream.GrepNot(`pkg/cmd/roachtest/roachtestutil/mixedversion/runner_test\.go:.*nil dereference`),
+			// File based on .pb.go generated code.
+			stream.GrepNot(`pkg/roachpb/internal_optimized_pb.go:`),
 		}
 
 		const vetTool = "roachvet"
