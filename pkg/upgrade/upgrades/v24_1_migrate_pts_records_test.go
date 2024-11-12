@@ -85,6 +85,7 @@ func TestMigrateOldStlePTSRecords(t *testing.T) {
 		)
 		allTargets = append(allTargets, []catid.DescID{
 			keys.DescriptorTableID,
+			keys.UsersTableID,
 			keys.ZonesTableID,
 			keys.RoleMembersTableID,
 			keys.CommentsTableID,
@@ -96,6 +97,7 @@ func TestMigrateOldStlePTSRecords(t *testing.T) {
 	require.NoError(t, err)
 	descIDsArr = append(descIDsArr,
 		keys.DescriptorTableID,
+		keys.UsersTableID,
 		keys.ZonesTableID,
 		keys.RoleMembersTableID,
 		keys.CommentsTableID)
@@ -150,5 +152,5 @@ func TestMigrateOldStlePTSRecords(t *testing.T) {
 		return a[len(a)-1] < b[len(b)-1]
 	})
 
-	require.Equal(t, allTargets, seenTargets)
+	require.ElementsMatch(t, allTargets, seenTargets)
 }
