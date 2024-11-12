@@ -63,7 +63,7 @@ func TestCIDRRanges(t *testing.T) {
 			},
 		}
 		err := p.CheckConnection(ctx, makeConn(""))
-		require.EqualError(t, err, "connection to '42' denied: cluster does not allow public connections from IP 127.0.0.1")
+		require.EqualError(t, err, "cluster does not allow public connections from IP 127.0.0.1")
 	})
 
 	t.Run("default behavior if no entries", func(t *testing.T) {
@@ -75,7 +75,7 @@ func TestCIDRRanges(t *testing.T) {
 			},
 		}
 		err := p.CheckConnection(ctx, makeConn(""))
-		require.EqualError(t, err, "connection to '42' denied: cluster does not allow public connections from IP 127.0.0.1")
+		require.EqualError(t, err, "cluster does not allow public connections from IP 127.0.0.1")
 	})
 
 	t.Run("good public connection", func(t *testing.T) {
