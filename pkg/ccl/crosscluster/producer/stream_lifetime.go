@@ -305,7 +305,7 @@ func buildReplicationStreamSpec(
 		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution, oracle, noLoc,
 	)
 
-	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, targetSpans)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, targetSpans, sql.PartitionSpansBoundDefault)
 	if err != nil {
 		return nil, err
 	}

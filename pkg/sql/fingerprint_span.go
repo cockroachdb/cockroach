@@ -118,7 +118,7 @@ func (p *planner) fingerprintSpanFanout(
 		return 0, nil, err
 	}
 
-	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, []roachpb.Span{span})
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, []roachpb.Span{span}, PartitionSpansBoundDefault)
 	if err != nil {
 		return 0, nil, err
 	}

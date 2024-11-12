@@ -937,6 +937,7 @@ func TestPartitionSpans(t *testing.T) {
 		partitionStates []string
 		partitionState  spanPartitionState
 	}{
+		// 0
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			gatewayNode: 1,
@@ -950,10 +951,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -962,13 +963,14 @@ func TestPartitionSpans(t *testing.T) {
 					2: 1,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 4,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 4,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
+		// 1
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			deadNodes:   []int{1}, // The health status of the gateway node shouldn't matter.
@@ -983,10 +985,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -995,13 +997,14 @@ func TestPartitionSpans(t *testing.T) {
 					2: 1,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 4,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 4,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
+		// 2
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			deadNodes:   []int{2},
@@ -1015,10 +1018,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {B-C}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
-				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 1, reason: gateway-target-unhealthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1026,14 +1029,15 @@ func TestPartitionSpans(t *testing.T) {
 					1: 3,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           3,
-					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 1,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY:           3,
+					SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY: 1,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
+		// 3
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			deadNodes:   []int{3},
@@ -1047,10 +1051,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {D1-X}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 1, reason: gateway-target-unhealthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1058,14 +1062,15 @@ func TestPartitionSpans(t *testing.T) {
 					1: 3,
 					2: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           3,
-					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 1,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY:           3,
+					SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY: 1,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
+		// 4
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			deadNodes:   []int{1},
@@ -1079,10 +1084,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 2, reason: gossip-gateway-target-unhealthy",
-				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: C{-1}, instance ID: 2, reason: gossip-gateway-target-unhealthy",
-				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 2, reason: gateway-target-unhealthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 2, reason: gateway-target-unhealthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1090,14 +1095,15 @@ func TestPartitionSpans(t *testing.T) {
 					2: 3,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           2,
-					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 2,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY:           2,
+					SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY: 2,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
+		// 5
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			deadNodes:   []int{1},
@@ -1111,10 +1117,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 3, reason: gossip-gateway-target-unhealthy",
-				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: C{-1}, instance ID: 3, reason: gossip-gateway-target-unhealthy",
-				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 3, reason: gateway-target-unhealthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 3, reason: gateway-target-unhealthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1122,15 +1128,15 @@ func TestPartitionSpans(t *testing.T) {
 					2: 1,
 					3: 3,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           2,
-					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 2,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY:           2,
+					SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY: 2,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
-		// Test point lookups in isolation.
+		// 6: Test point lookups in isolation.
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}},
 			gatewayNode: 1,
@@ -1143,9 +1149,9 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: A2, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: A1, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: B1, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: A2, instance ID: 1, reason: target-healthy",
+				"partition span: A1, instance ID: 1, reason: target-healthy",
+				"partition span: B1, instance ID: 2, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1153,14 +1159,14 @@ func TestPartitionSpans(t *testing.T) {
 					1: 2,
 					2: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 3,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 3,
 				},
 				totalPartitionSpans: 3,
 			},
 		},
 
-		// Test point lookups intertwined with span scans.
+		// 7: Test point lookups intertwined with span scans.
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 1}, {"C", 2}},
 			gatewayNode: 1,
@@ -1173,16 +1179,16 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: A1, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: A{1-2}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: A2, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {A2-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {B-C}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: C{-2}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: B1, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {A3-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: B{-3}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: B2, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A1, instance ID: 1, reason: target-healthy",
+				"partition span: A{1-2}, instance ID: 1, reason: target-healthy",
+				"partition span: A2, instance ID: 1, reason: target-healthy",
+				"partition span: {A2-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 1, reason: target-healthy",
+				"partition span: C{-2}, instance ID: 2, reason: target-healthy",
+				"partition span: B1, instance ID: 1, reason: target-healthy",
+				"partition span: {A3-B}, instance ID: 1, reason: target-healthy",
+				"partition span: B{-3}, instance ID: 1, reason: target-healthy",
+				"partition span: B2, instance ID: 1, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1190,14 +1196,14 @@ func TestPartitionSpans(t *testing.T) {
 					1: 9,
 					2: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 10,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 10,
 				},
 				totalPartitionSpans: 10,
 			},
 		},
 
-		// A single span touching multiple ranges but on the same node results
+		// 8: A single span touching multiple ranges but on the same node results
 		// in a single partitioned span.
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"A1", 1}, {"B", 2}},
@@ -1210,21 +1216,22 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: A{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
 				partitionSpans: map[base.SQLInstanceID]int{
 					1: 2,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 2,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 2,
 				},
 				totalPartitionSpans: 2,
 			},
 		},
-		// Test some locality-filtered planning too.
+
+		// 9: Test some locality-filtered planning too.
 		//
 		// Since this test is run on a system tenant but there is a locality filter,
 		// the spans are resolved in a mixed process mode. As a result, the
@@ -1253,7 +1260,7 @@ func TestPartitionSpans(t *testing.T) {
 					1: 2,
 					2: 2,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
 					SpanPartitionReason_TARGET_HEALTHY:                              3,
 					SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED: 1,
 				},
@@ -1263,6 +1270,8 @@ func TestPartitionSpans(t *testing.T) {
 				totalPartitionSpans: 4,
 			},
 		},
+
+		// 10
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			gatewayNode: 1,
@@ -1286,13 +1295,15 @@ func TestPartitionSpans(t *testing.T) {
 					2: 3,
 					4: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
 					SpanPartitionReason_TARGET_HEALTHY:         1,
 					SpanPartitionReason_CLOSEST_LOCALITY_MATCH: 3,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
+
+		// 11
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			gatewayNode: 7,
@@ -1316,7 +1327,7 @@ func TestPartitionSpans(t *testing.T) {
 					6: 2,
 					7: 2,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
 					SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH:                   2,
 					SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED: 2,
 				},
@@ -1326,6 +1337,8 @@ func TestPartitionSpans(t *testing.T) {
 				},
 			},
 		},
+
+		// 12
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			gatewayNode: 1,
@@ -1347,7 +1360,7 @@ func TestPartitionSpans(t *testing.T) {
 				partitionSpans: map[base.SQLInstanceID]int{
 					7: 4,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
 					SpanPartitionReason_LOCALITY_FILTERED_RANDOM: 4,
 				},
 				totalPartitionSpans: 4,
@@ -1471,7 +1484,7 @@ func TestPartitionSpans(t *testing.T) {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
 			}
 
-			partitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
+			partitions, err := dsp.PartitionSpans(ctx, planCtx, spans, PartitionSpansBoundDefault)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1523,7 +1536,6 @@ func TestPartitionSpans(t *testing.T) {
 			}
 
 			recording := getRecAndFinish()
-			t.Logf("recording is %s", recording)
 			for _, expectedMsg := range tc.partitionStates {
 				require.NotEqual(t, -1, tracing.FindMsgInRecording(recording, expectedMsg))
 			}
@@ -1784,9 +1796,10 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		ranges: ranges,
 	}
 
+	st := cluster.MakeTestingClusterSettings()
 	gw := gossip.MakeOptionalGossip(mockGossip)
 	dsp := DistSQLPlanner{
-		st:                   cluster.MakeTestingClusterSettings(),
+		st:                   st,
 		gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[gatewayNode-1].NodeID),
 		stopper:              stopper,
 		spanResolver:         tsp,
@@ -1805,11 +1818,13 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	}
 
 	ctx := context.Background()
+	// This test is specific to gossip-based planning.
+	useGossipPlanning.Override(ctx, &st.SV, true)
 	planCtx := dsp.NewPlanningCtx(
-		ctx, &extendedEvalContext{Context: eval.Context{Codec: keys.SystemSQLCodec}},
+		ctx, &extendedEvalContext{Context: eval.Context{Codec: keys.SystemSQLCodec, Settings: st}},
 		nil /* planner */, nil /* txn */, FullDistribution,
 	)
-	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span})
+	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span}, PartitionSpansBoundDefault)
 	if err != nil {
 		t.Fatal(err)
 	}
