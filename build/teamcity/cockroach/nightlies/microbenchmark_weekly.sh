@@ -9,6 +9,12 @@
 # This script runs microbenchmarks across a roachprod cluster. It will build microbenchmark binaries
 # for the given revisions if they do not already exist in the BENCH_BUCKET. It will then create a
 # roachprod cluster, stage the binaries on the cluster, and run the microbenchmarks.
+# Acceptable values for a revision:
+#   - A branch name (e.g. master, release-23.2)
+#   - A tag name (e.g. v21.1.0)
+#   - A full commit SHA (e.g. 0123456789abcdef0123456789abcdef01234567)
+#   - LATEST_PATCH_RELEASE, which will use the latest patch release tag (e.g. vX.Y.Z)
+#
 # Parameters (and suggested defaults):
 #   BENCH_REVISION: revision to build and run benchmarks against (default: master)
 #   BENCH_COMPARE_REVISION: revision to compare against (default: latest release branch)
@@ -60,25 +66,60 @@ cp $BAZEL_BIN/pkg/cmd/roachprod-microbench/roachprod-microbench_/roachprod-micro
 chmod a+w bin/roachprod bin/roachprod-microbench
 EOF
 
-# Check if a string is a valid SHA (otherwise it's a branch name).
+# Check if a string is a valid SHA (otherwise it's a branch or tag name).
 is_sha() {
   local sha="$1"
   [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
 }
+
+# Check if a string is a valid branch
+is_branch() {
+  local branch="$1"
+  git rev-parse --verify "refs/heads/$branch" >/dev/null 2>&1
+}
+
+# Check if a string is a valid tag
+is_tag() {
+  local tag="$1"
+  git rev-parse --verify "refs/tags/$tag" >/dev/null 2>&1
+}
+
+get_latest_patch_tag() {
+  local latest_tag
+  latest_tag=$(git tag -l 'v*' \
+    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+    | sort -t. -k1,1 -k2,2n -k3,3n \
+    | tail -n 1)
+  echo "$latest_tag"
+}
+
+git fetch origin --tags
 
 # Create arrays for the revisions and their corresponding SHAs.
 revisions=("${BENCH_REVISION}" "${BENCH_COMPARE_REVISION}")
 declare -a sha_arr
 declare -a name_arr
 for rev in "${revisions[@]}"; do
-  git fetch origin "$rev"
+  if [ "$rev" == "LATEST_PATCH_RELEASE" ]; then
+    rev=$(get_latest_patch_tag)
+  fi
   if is_sha "$rev"; then
     sha="$rev"
     name="${sha:0:8}"
   else
-    sha=$(git rev-parse origin/"$rev")
+    # Named revision (branch or tag)
+    if is_branch "$rev"; then
+      git fetch origin "$rev"
+      sha=$(git rev-parse origin/"$rev")
+    elif is_tag "$rev"; then
+      sha=$(git rev-parse "$rev")
+    else
+      echo "Invalid revision: $rev"
+      exit 1
+    fi
     name="$rev (${sha:0:8})"
   fi
+
   name_arr+=("$name")
   sha_arr+=("$sha")
 done
