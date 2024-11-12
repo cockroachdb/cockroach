@@ -900,7 +900,18 @@ func (r *testRunner) runWorker(
 				c.clusterSettings = map[string]string{}
 				c.virtualClusterSettings = map[string]string{}
 
-				switch testSpec.Leases {
+				leases := testSpec.Leases
+				if leases == registry.MetamorphicLeases {
+					// 50% change of using the default lease type, 50% change of choosing
+					// a random, specific lease type.
+					if prng.Intn(2) == 0 {
+						leases = registry.DefaultLeases
+					} else {
+						leases = registry.LeaseTypes[prng.Intn(len(registry.LeaseTypes))]
+					}
+					c.status(fmt.Sprintf("metamorphically using %s leases", leases))
+				}
+				switch leases {
 				case registry.DefaultLeases:
 				case registry.EpochLeases:
 					c.clusterSettings["kv.expiration_leases_only.enabled"] = "false"
@@ -911,12 +922,9 @@ func (r *testRunner) runWorker(
 					c.clusterSettings["kv.expiration_leases_only.enabled"] = "false"
 					c.clusterSettings["kv.raft.leader_fortification.fraction_enabled"] = "1.0"
 				case registry.MetamorphicLeases:
-					enabled := prng.Float64() < 0.5
-					c.status(fmt.Sprintf("metamorphically setting kv.expiration_leases_only.enabled = %t",
-						enabled))
-					c.clusterSettings["kv.expiration_leases_only.enabled"] = fmt.Sprintf("%t", enabled)
+					t.Fatalf("metamorphic leases handled above")
 				default:
-					t.Fatalf("unknown lease type %s", testSpec.Leases)
+					t.Fatalf("unknown lease type %s", leases)
 				}
 
 				c.goCoverDir = t.GoCoverArtifactsDir()

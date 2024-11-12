@@ -62,7 +62,6 @@ object ColumnName
 ColumnName :  TableID
 ColumnName :  ColumnID
 ColumnName :  Name
-ColumnName :  AbsentName
 
 object ColumnNotNull
 

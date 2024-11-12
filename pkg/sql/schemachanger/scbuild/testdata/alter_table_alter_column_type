@@ -107,5 +107,3 @@ ALTER TABLE t ALTER COLUMN c2 SET DATA TYPE BIGINT USING c2::BIGINT
   {columnId: 4, indexId: 4, kind: STORED, ordinalInKind: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 4, indexId: 5, kind: STORED, ordinalInKind: 1, tableId: 104}
-- [[ColumnName:{DescID: 104, Name: c2_shadow, ColumnID: 2}, TRANSIENT_ABSENT], ABSENT]
-  {absentName: c2, columnId: 2, name: c2_shadow, tableId: 104}
