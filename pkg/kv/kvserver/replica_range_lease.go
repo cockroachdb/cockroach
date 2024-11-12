@@ -1245,7 +1245,6 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	// Loop until the lease is held or the replica ascertains the actual lease
 	// holder. Returns also on context.Done() (timeout or cancellation).
 	for attempt := 1; ; attempt++ {
-		now = r.store.Clock().NowAsClockTimestamp()
 		llHandle, status, transfer, pErr := func() (*leaseRequestHandle, kvserverpb.LeaseStatus, bool, *kvpb.Error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
@@ -1259,6 +1258,7 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 				return r.mu.pendingLeaseRequest.JoinRequest(), kvserverpb.LeaseStatus{}, true /* transfer */, nil
 			}
 
+			now := r.store.Clock().NowAsClockTimestamp()
 			status := r.leaseStatusForRequestRLocked(ctx, now, reqTS)
 			switch status.State {
 			case kvserverpb.LeaseState_ERROR:
