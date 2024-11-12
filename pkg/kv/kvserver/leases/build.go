@@ -174,6 +174,9 @@ func (i BuildInput) validate() error {
 	if i.Now.IsEmpty() {
 		return errors.AssertionFailedf("no clock timestamp provided")
 	}
+	if i.Now.Less(i.MinLeaseProposedTS) {
+		return errors.AssertionFailedf("clock timestamp earlier than minimum lease proposed timestamp")
+	}
 	if i.RaftStatus == nil {
 		return errors.AssertionFailedf("no raft status provided")
 	}

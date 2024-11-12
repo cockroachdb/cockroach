@@ -46,6 +46,22 @@ func TestInputValidation(t *testing.T) {
 			expErr: "no lease target provided",
 		},
 		{
+			name: "no timestamp",
+			input: BuildInput{
+				NextLeaseHolder: repl2,
+			},
+			expErr: "no clock timestamp provided",
+		},
+		{
+			name: "invalid minimum lease proposed timestamp",
+			input: BuildInput{
+				NextLeaseHolder:    repl2,
+				Now:                cts20,
+				MinLeaseProposedTS: cts30,
+			},
+			expErr: "clock timestamp earlier than minimum lease proposed timestamp",
+		},
+		{
 			name: "remote transfer",
 			input: BuildInput{
 				LocalStoreID:    repl1.StoreID,
