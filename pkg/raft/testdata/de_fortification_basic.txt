@@ -1006,6 +1006,7 @@ bump-epoch 3
 
 campaign 2
 ----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 is starting a new election at term 4
 INFO 2 became candidate at term 5
 INFO 2 [logterm: 4, index: 5] sent MsgVote request to 1 at term 5

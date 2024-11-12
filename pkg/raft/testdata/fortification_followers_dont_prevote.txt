@@ -178,6 +178,7 @@ withdraw-support 2 1
 # supporting the fortified leader (1).
 campaign 2
 ----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 is starting a new election at term 1
 INFO 2 became pre-candidate at term 1
 INFO 2 [logterm: 1, index: 11] sent MsgPreVote request to 1 at term 1
@@ -389,6 +390,7 @@ withdraw-support 2 2
 
 campaign 2
 ----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 is starting a new election at term 2
 INFO 2 became pre-candidate at term 2
 INFO 2 [logterm: 2, index: 12] sent MsgPreVote request to 1 at term 2
@@ -421,6 +423,11 @@ raft-state
 2: StatePreCandidate (Voter) Term:2 Lead:0 LeadEpoch:0
 3: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1
 
+# Make sure that 2 doesn't attempt to campaign on the next two tick-heartbeat
+# calls.
+set-randomized-election-timeout 2 timeout=6
+----
+ok
 
 # Let's de-fortify {1,3}. First, sanity check that simply ticking doesn't send
 # out a de-fortification request, as leaderMaxSupported isn't in the past yet.

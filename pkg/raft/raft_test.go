@@ -2432,15 +2432,15 @@ func testDisruptiveFollowerPreVote(t *testing.T, storeLivenessEnabled bool) {
 	// check state
 	require.Equal(t, pb.StateLeader, n1.state)
 	require.Equal(t, pb.StateFollower, n2.state)
-	if storeLivenessEnabled {
-		// Since the peers no longer hold a valid inFortifyLease, 3 will receive
-		// rejection votes and become a follower again.
-		require.Equal(t, pb.StateFollower, n3.state)
-	} else {
-		// Peers will just ignore the MsgVoteRequest due to the inHeartbeatLease and
-		// 3 will remain a preCandidate.
-		require.Equal(t, pb.StatePreCandidate, n3.state)
-	}
+	// if store liveness is disabled, 1 and 2 will be in heartbeat lease and will
+	// ignore the MsgVoteRequest from 3. 3 will remain a preCandidate.
+	//
+	// if store liveness is enabled, 2 won't be in either heartbeat lease nor
+	// fortification lease. However, 1 will still be in heartbeat lease because
+	// it's still a leader, so it won't increase the electionElapsed when it
+	// calls defortify(). Therefore, 3 will remain a preCandidate since it will
+	// only receive 1 rejection from 2.
+	require.Equal(t, pb.StatePreCandidate, n3.state)
 
 	// check term
 	require.Equal(t, uint64(2), n1.Term)

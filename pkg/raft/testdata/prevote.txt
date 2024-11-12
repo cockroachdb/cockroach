@@ -82,6 +82,7 @@ withdraw-support 1 1
 
 campaign 3
 ----
+DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 3 is starting a new election at term 1
 INFO 3 became pre-candidate at term 1
 INFO 3 [logterm: 1, index: 11] sent MsgPreVote request to 1 at term 1

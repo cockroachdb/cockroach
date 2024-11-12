@@ -150,6 +150,7 @@ withdraw-support 2 1
 # supporting the fortified leader (1).
 campaign 2
 ----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 is starting a new election at term 1
 INFO 2 became candidate at term 2
 INFO 2 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
@@ -335,6 +336,7 @@ withdraw-support 2 2
 
 campaign 2
 ----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 is starting a new election at term 3
 INFO 2 became candidate at term 4
 INFO 2 [logterm: 3, index: 12] sent MsgVote request to 1 at term 4
