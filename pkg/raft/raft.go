@@ -486,7 +486,26 @@ func newRaft(c *Config) *raft {
 	if c.Applied > 0 {
 		raftlog.appliedTo(c.Applied, 0 /* size */)
 	}
-	r.becomeFollower(r.Term, r.lead)
+
+	if r.lead == r.id {
+		// If we were the leader, we must have waited out the leadMaxSupported. This
+		// is done in the kvserver layer before reaching this point. Therefore, it
+		// should be safe to defortify and become a follower while forgetting that
+		// we were the leader. If we don't forget that we were the leader, it will
+		// lead to situations where r.id == r.lead but r.state != StateLeader which
+		// might confuse the layers above raft.
+		r.deFortify(r.id, r.Term)
+		r.becomeFollower(r.Term, None)
+	} else {
+		// If we weren't the leader, we should NOT forget who the leader is to avoid
+		// regressing the leadMaxSupported. We can't just forget the leader because
+		// we might have been fortifying a leader before the restart and need to
+		// uphold our fortification promise after the restart as well. To do so, we
+		// need to remember the leader and the fortified epoch, otherwise we may
+		// vote for a different candidate or prematurely call an election, either of
+		// which could regress the LeadSupportUntil.
+		r.becomeFollower(r.Term, r.lead)
+	}
 
 	var nodesStrs []string
 	for _, n := range r.trk.VoterNodes() {
