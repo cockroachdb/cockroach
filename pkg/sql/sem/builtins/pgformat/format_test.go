@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
@@ -67,10 +67,10 @@ func TestFormat(t *testing.T) {
 		}
 	}
 
-	seed := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	createTable := func(t *testing.T, tdb *sqlutils.SQLRunner, typ *types.T) (tableNamer func(string) string) {
 		columnSpec := fmt.Sprintf("c %s", typ.SQLString())
-		tableName := fmt.Sprintf("%s_table_%d", strings.Replace(typ.String(), "\"", "", -1), seed.Int())
+		tableName := fmt.Sprintf("%s_table_%d", strings.Replace(typ.String(), "\"", "", -1), rng.Int())
 		tableName = strings.Replace(tableName, `[]`, `_array`, -1)
 
 		// Create the table.
@@ -96,7 +96,7 @@ func TestFormat(t *testing.T) {
 					d = tree.DNull
 				} else {
 					const nullOk = false
-					d = randgen.RandDatum(seed, col.GetType(), nullOk)
+					d = randgen.RandDatum(rng, col.GetType(), nullOk)
 				}
 				row = append(row, tree.AsStringWithFlags(d, tree.FmtParsable))
 			}
