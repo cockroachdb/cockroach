@@ -26,30 +26,21 @@ type namedRangeZoneConfigObj struct {
 
 var _ zoneConfigObject = &namedRangeZoneConfigObj{}
 
+func (rzo *namedRangeZoneConfigObj) incrementSeqNum() {
+	rzo.seqNum += 1
+}
+
 func (rzo *namedRangeZoneConfigObj) isNoOp() bool {
 	return rzo.zoneConfig == nil
 }
 
-func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForAdd(
-	_ BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	elem := &scpb.NamedRangeZoneConfig{
-		RangeID:    rzo.rangeID,
-		ZoneConfig: rzo.zoneConfig,
-		SeqNum:     rzo.seqNum + 1,
-	}
-	return elem, nil
-}
-
-func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForDrop(
-	_ BuildCtx,
-) (scpb.Element, []scpb.Element) {
+func (rzo *namedRangeZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
 	elem := &scpb.NamedRangeZoneConfig{
 		RangeID:    rzo.rangeID,
 		ZoneConfig: rzo.zoneConfig,
 		SeqNum:     rzo.seqNum,
 	}
-	return elem, nil
+	return elem
 }
 
 func (rzo *namedRangeZoneConfigObj) checkPrivilegeForSetZoneConfig(

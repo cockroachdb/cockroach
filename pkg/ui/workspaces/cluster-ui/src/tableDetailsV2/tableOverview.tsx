@@ -51,7 +51,7 @@ export const TableOverview: React.FC<TableOverviewProps> = ({
         <Row justify={"end"}>
           <Col>
             <TableMetadataLastUpdatedTooltip
-              errorMessage={metadata.lastUpdateError}
+              hasError={!!metadata.lastUpdateError}
               timestamp={metadata.lastUpdated}
             >
               {(durationText, icon) => (
