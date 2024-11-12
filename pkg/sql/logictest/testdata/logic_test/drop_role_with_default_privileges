@@ -159,3 +159,27 @@ ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA public REVOKE ALL ON SEQUENCES 
 
 statement ok
 DROP ROLE testuser4;
+
+subtest fix_for_regression_bug_134538
+
+statement ok
+CREATE USER not_admin WITH PASSWORD '123';
+GRANT SYSTEM CREATEROLE TO not_admin;
+SET ROLE not_admin;
+
+statement error pq: role/user "a_user_that_does_not_exist" does not exist
+DROP USER a_user_that_does_not_exist;
+
+statement ok
+DROP USER IF EXISTS a_user_that_does_not_exist;
+
+statement ok
+SET ROLE admin;
+
+statement error pq: role/user "a_user_that_does_not_exist" does not exist
+DROP USER a_user_that_does_not_exist;
+
+statement ok
+DROP USER IF EXISTS a_user_that_does_not_exist;
+
+subtest end
