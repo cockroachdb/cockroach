@@ -111,7 +111,6 @@ func makeBackup(s *Smither) (tree.Statement, bool) {
 	}
 
 	return &tree.Backup{
-		Nested:  true,
 		Targets: &targets,
 		To:      tree.StringOrPlaceholderOptList{tree.NewStrVal(name)},
 		AsOf:    makeAsOf(s),

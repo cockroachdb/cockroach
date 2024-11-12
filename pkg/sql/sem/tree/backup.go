@@ -55,24 +55,17 @@ type Backup struct {
 	// the docs).
 	To StringOrPlaceholderOptList
 
-	// IncrementalFrom is only set for the old 'BACKUP .... TO ...' syntax.
-	IncrementalFrom Exprs
-
 	AsOf    AsOfClause
 	Options BackupOptions
-
-	// Nested is set to true when the user creates a backup with
-	//`BACKUP ... INTO... ` syntax.
-	Nested bool
 
 	// AppendToLatest is set to true if the user creates a backup with
 	//`BACKUP...INTO LATEST...`
 	AppendToLatest bool
 
 	// Subdir may be set by the parser when the SQL query is of the form `BACKUP
-	// INTO 'subdir' IN...`. Alternatively, if Nested is true but a subdir was not
-	// explicitly specified by the user, then this will be set during BACKUP
-	// planning once the destination has been resolved.
+	// INTO 'subdir' IN...`. Alternatively, if a subdir was not explicitly specified
+	// by the user, then this will be set during BACKUP planning once the destination
+	// has been resolved.
 	Subdir Expr
 }
 
@@ -85,30 +78,17 @@ func (node *Backup) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Targets)
 		ctx.WriteString(" ")
 	}
-	if node.Nested {
-		ctx.WriteString("INTO ")
-		if node.Subdir != nil {
-			ctx.FormatNode(node.Subdir)
-			ctx.WriteString(" IN ")
-		} else if node.AppendToLatest {
-			ctx.WriteString("LATEST IN ")
-		}
-	} else {
-		ctx.WriteString("TO ")
+	ctx.WriteString("INTO ")
+	if node.Subdir != nil {
+		ctx.FormatNode(node.Subdir)
+		ctx.WriteString(" IN ")
+	} else if node.AppendToLatest {
+		ctx.WriteString("LATEST IN ")
 	}
 	ctx.FormatURIs(node.To)
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.AsOf)
-	}
-	if node.IncrementalFrom != nil {
-		ctx.WriteString(" INCREMENTAL FROM ")
-		for i, from := range node.IncrementalFrom {
-			if i > 0 {
-				ctx.WriteString(", ")
-			}
-			ctx.FormatURI(from)
-		}
 	}
 
 	if !node.Options.IsDefault() {

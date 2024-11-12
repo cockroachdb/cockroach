@@ -104,7 +104,6 @@ func resolveOptionsForBackupJobDescription(
 func GetRedactedBackupNode(
 	backup *tree.Backup,
 	to []string,
-	incrementalFrom []string,
 	kmsURIs []string,
 	resolvedSubdir string,
 	incrementalStorage []string,
@@ -113,7 +112,6 @@ func GetRedactedBackupNode(
 	b := &tree.Backup{
 		AsOf:           backup.AsOf,
 		Targets:        backup.Targets,
-		Nested:         backup.Nested,
 		AppendToLatest: backup.AppendToLatest,
 	}
 
@@ -125,17 +123,12 @@ func GetRedactedBackupNode(
 	// LATEST, where we are appending an incremental BACKUP.
 	// - For `BACKUP INTO x` this would be the sub-directory we have selected to
 	// write the BACKUP to.
-	if b.Nested && hasBeenPlanned {
+	if hasBeenPlanned {
 		b.Subdir = tree.NewDString(resolvedSubdir)
 	}
 
 	var err error
 	b.To, err = sanitizeURIList(to)
-	if err != nil {
-		return nil, err
-	}
-
-	b.IncrementalFrom, err = sanitizeURIList(incrementalFrom)
 	if err != nil {
 		return nil, err
 	}
@@ -166,12 +159,11 @@ func backupJobDescription(
 	p sql.PlanHookState,
 	backup *tree.Backup,
 	to []string,
-	incrementalFrom []string,
 	kmsURIs []string,
 	resolvedSubdir string,
 	incrementalStorage []string,
 ) (string, error) {
-	b, err := GetRedactedBackupNode(backup, to, incrementalFrom, kmsURIs,
+	b, err := GetRedactedBackupNode(backup, to, kmsURIs,
 		resolvedSubdir, incrementalStorage, true /* hasBeenPlanned */)
 	if err != nil {
 		return "", err
@@ -406,7 +398,6 @@ func backupTypeCheck(
 		},
 		exprutil.StringArrays{
 			tree.Exprs(backupStmt.To),
-			backupStmt.IncrementalFrom,
 			tree.Exprs(backupStmt.Options.IncrementalStorage),
 			tree.Exprs(backupStmt.Options.EncryptionKMSURI),
 		},
@@ -439,16 +430,6 @@ func backupPlanHook(
 
 	detached := backupStmt.Options.Detached == tree.DBoolTrue
 
-	// Deprecation notice for `BACKUP TO` syntax. Remove this once the syntax is
-	// deleted in 22.2.
-	if !backupStmt.Nested {
-		p.BufferClientNotice(ctx,
-			pgnotice.Newf("The `BACKUP TO` syntax will be removed in a future release, please"+
-				" switch over to using `BACKUP INTO` to create a backup collection: %s. "+
-				"Backups created using the `BACKUP TO` syntax may not be restoreable in the next major version release.",
-				"https://www.cockroachlabs.com/docs/stable/backup.html#considerations"))
-	}
-
 	exprEval := p.ExprEvaluator("BACKUP")
 
 	var err error
@@ -461,10 +442,6 @@ func backupPlanHook(
 	}
 
 	to, err := exprEval.StringArray(ctx, tree.Exprs(backupStmt.To))
-	if err != nil {
-		return nil, nil, nil, false, err
-	}
-	incrementalFrom, err := exprEval.StringArray(ctx, backupStmt.IncrementalFrom)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -565,9 +542,6 @@ func backupPlanHook(
 			}
 		}
 
-		if !backupStmt.Nested && len(incrementalStorage) > 0 {
-			return errors.New("incremental_location option not supported with `BACKUP TO` syntax")
-		}
 		if len(incrementalStorage) > 0 && (len(incrementalStorage) != len(to)) {
 			return errors.New("the incremental_location option must contain the same number of locality" +
 				" aware URIs as the full backup destination")
@@ -662,7 +636,6 @@ func backupPlanHook(
 			EndTime:                         endTime,
 			RevisionHistory:                 revisionHistory,
 			IncludeAllSecondaryTenants:      includeAllSecondaryTenants,
-			IncrementalFrom:                 incrementalFrom,
 			FullCluster:                     backupStmt.Coverage() == tree.AllDescriptors,
 			ResolvedCompleteDbs:             completeDBs,
 			EncryptionOptions:               &encryptionParams,
@@ -695,17 +668,14 @@ func backupPlanHook(
 			}
 		}
 
-		if backupStmt.Nested {
-			if backupStmt.AppendToLatest {
-				initialDetails.Destination.Subdir = backupbase.LatestFileName
-				initialDetails.Destination.Exists = true
-
-			} else if subdir != "" {
-				initialDetails.Destination.Subdir = "/" + strings.TrimPrefix(subdir, "/")
-				initialDetails.Destination.Exists = true
-			} else {
-				initialDetails.Destination.Subdir = endTime.GoTime().Format(backupbase.DateBasedIntoFolderName)
-			}
+		if backupStmt.AppendToLatest {
+			initialDetails.Destination.Subdir = backupbase.LatestFileName
+			initialDetails.Destination.Exists = true
+		} else if subdir != "" {
+			initialDetails.Destination.Subdir = "/" + strings.TrimPrefix(subdir, "/")
+			initialDetails.Destination.Exists = true
+		} else {
+			initialDetails.Destination.Subdir = endTime.GoTime().Format(backupbase.DateBasedIntoFolderName)
 		}
 
 		if backupStmt.Targets != nil && backupStmt.Targets.TenantID.IsSet() {
@@ -721,12 +691,12 @@ func backupPlanHook(
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 
-		if err := logAndSanitizeBackupDestinations(ctx, append(to, incrementalFrom...)...); err != nil {
+		if err := logAndSanitizeBackupDestinations(ctx, to...); err != nil {
 			return errors.Wrap(err, "logging backup destinations")
 		}
 
 		description, err := backupJobDescription(p,
-			backupStmt.Backup, to, incrementalFrom,
+			backupStmt.Backup, to,
 			encryptionParams.RawKmsUris,
 			initialDetails.Destination.Subdir,
 			initialDetails.Destination.IncrementalStorage,
