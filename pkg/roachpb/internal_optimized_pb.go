@@ -5,11 +5,18 @@
 
 package roachpb
 
+// This file contains routines based on the generated code for
+// InternalTimeSeriesData in internal.pb.go.
+//
+// The commit history shows how it was generated from the generated
+// code in internal.pb.go.
+
 import (
 	encoding_binary "encoding/binary"
 	"fmt"
 	"io"
 	"math"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/crlib/crencoding"
@@ -401,9 +408,7 @@ func (m *InternalTimeSeriesData) UnmarshalReusingSlices(dAtA []byte) error {
 					}
 				}
 				elementCount = count
-				if elementCount != 0 && len(m.Offset) == 0 {
-					m.Offset = make([]int32, 0, elementCount)
-				}
+				m.Offset = slices.Grow(m.Offset, elementCount)
 				for iNdEx < postIndex {
 					var v int32
 					for shift := uint(0); ; shift += 7 {
@@ -463,9 +468,7 @@ func (m *InternalTimeSeriesData) UnmarshalReusingSlices(dAtA []byte) error {
 				}
 				var elementCount int
 				elementCount = packedLen / 8
-				if elementCount != 0 && len(m.Last) == 0 {
-					m.Last = make([]float64, 0, elementCount)
-				}
+				m.Last = slices.Grow(m.Last, elementCount)
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
@@ -531,9 +534,7 @@ func (m *InternalTimeSeriesData) UnmarshalReusingSlices(dAtA []byte) error {
 					}
 				}
 				elementCount = count
-				if elementCount != 0 && len(m.Count) == 0 {
-					m.Count = make([]uint32, 0, elementCount)
-				}
+				m.Count = slices.Grow(m.Count, elementCount)
 				for iNdEx < postIndex {
 					var v uint32
 					for shift := uint(0); ; shift += 7 {
@@ -593,9 +594,7 @@ func (m *InternalTimeSeriesData) UnmarshalReusingSlices(dAtA []byte) error {
 				}
 				var elementCount int
 				elementCount = packedLen / 8
-				if elementCount != 0 && len(m.Sum) == 0 {
-					m.Sum = make([]float64, 0, elementCount)
-				}
+				m.Sum = slices.Grow(m.Sum, elementCount)
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
@@ -647,9 +646,7 @@ func (m *InternalTimeSeriesData) UnmarshalReusingSlices(dAtA []byte) error {
 				}
 				var elementCount int
 				elementCount = packedLen / 8
-				if elementCount != 0 && len(m.Max) == 0 {
-					m.Max = make([]float64, 0, elementCount)
-				}
+				m.Max = slices.Grow(m.Max, elementCount)
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
@@ -701,9 +698,7 @@ func (m *InternalTimeSeriesData) UnmarshalReusingSlices(dAtA []byte) error {
 				}
 				var elementCount int
 				elementCount = packedLen / 8
-				if elementCount != 0 && len(m.Min) == 0 {
-					m.Min = make([]float64, 0, elementCount)
-				}
+				m.Min = slices.Grow(m.Min, elementCount)
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
@@ -755,9 +750,7 @@ func (m *InternalTimeSeriesData) UnmarshalReusingSlices(dAtA []byte) error {
 				}
 				var elementCount int
 				elementCount = packedLen / 8
-				if elementCount != 0 && len(m.First) == 0 {
-					m.First = make([]float64, 0, elementCount)
-				}
+				m.First = slices.Grow(m.First, elementCount)
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
@@ -809,9 +802,7 @@ func (m *InternalTimeSeriesData) UnmarshalReusingSlices(dAtA []byte) error {
 				}
 				var elementCount int
 				elementCount = packedLen / 8
-				if elementCount != 0 && len(m.Variance) == 0 {
-					m.Variance = make([]float64, 0, elementCount)
-				}
+				m.Variance = slices.Grow(m.Variance, elementCount)
 				for iNdEx < postIndex {
 					var v uint64
 					if (iNdEx + 8) > l {
