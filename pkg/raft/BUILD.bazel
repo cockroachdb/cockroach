@@ -61,6 +61,7 @@ go_test(
         "//pkg/raft/tracker",
         "//pkg/settings/cluster",
         "//pkg/testutils",
+        "//pkg/util/hlc",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

@@ -1029,8 +1029,8 @@ func (r *raft) reset(term uint64) {
 		//
 		// [*] this case, and other cases where a state transition implies
 		// de-fortification.
-		assertTrue(!r.supportingFortifiedLeader() || r.lead == r.id,
-			"should not be changing terms when supporting a fortified leader; leader exempted")
+		assertTrue(!r.supportingFortifiedLeader(),
+			"should not be changing terms when supporting a fortified leader")
 		r.setTerm(term)
 	}
 
@@ -1542,33 +1542,49 @@ func (r *raft) Step(m pb.Message) error {
 
 		switch {
 		case m.Type == pb.MsgPreVote:
-			// Never change our term in response to a PreVote
+			// Never change our term in response to a PreVote.
 		case m.Type == pb.MsgPreVoteResp && !m.Reject:
 			// We send pre-vote requests with a term in our future. If the
 			// pre-vote is granted, we will increment our term when we get a
 			// quorum. If it is not, the term comes from the node that
 			// rejected our vote so we should become a follower at the new
 			// term.
-		default:
-			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d], advancing term",
-				r.id, r.Term, m.Type, m.From, m.Term)
-			if IsMsgIndicatingLeader(m.Type) {
-				// We've just received a message that indicates that a new leader
-				// was elected at a higher term, but the message may not be from the
-				// leader itself. Either way, the old leader is no longer fortified,
-				// so it's safe to de-fortify at this point.
-				r.deFortify(m.From, m.Term)
-				var lead pb.PeerID
-				if IsMsgFromLeader(m.Type) {
-					lead = m.From
-				}
-				r.becomeFollower(m.Term, lead)
-			} else {
-				// We've just received a message that does not indicate that a new
-				// leader was elected at a higher term. All it means is that some
-				// other peer has this term.
-				r.becomeFollower(m.Term, None)
+		case IsMsgIndicatingLeader(m.Type):
+			// We've just received a message that indicates that a new leader
+			// was elected at a higher term, but the message may not be from the
+			// leader itself. Either way, the old leader is no longer fortified,
+			// so it's safe to de-fortify at this point.
+			r.deFortify(m.From, m.Term)
+			var lead pb.PeerID
+			if IsMsgFromLeader(m.Type) {
+				lead = m.From
 			}
+			r.logMsgHigherTerm(m, "new leader indicated, advancing term")
+			r.becomeFollower(m.Term, lead)
+		default:
+			// We've just received a message that does not indicate that a new
+			// leader was elected at a higher term. All it means is that some
+			// other peer has this term.
+			if r.supportingFortifiedLeader() {
+				// If we are supporting a fortified leader, we can't just jump to the
+				// larger term. Instead, we need to wait for the leader to learn about
+				// the stranded peer, step down, and defortify. The only thing to do
+				// here is check whether we are that leader, in which case we should
+				// step down to kick off this process of catching up to the term of the
+				// stranded peer.
+				if r.state == pb.StateLeader {
+					r.logMsgHigherTerm(m, "stepping down as leader to recover stranded peer")
+					r.becomeFollower(r.Term, r.id)
+				} else {
+					r.logMsgHigherTerm(m, "ignoring and still supporting fortified leader")
+				}
+				return nil
+			}
+
+			// If we're not supporting a fortified leader, we can just jump to the
+			// term communicated by the peer.
+			r.logMsgHigherTerm(m, "advancing term")
+			r.becomeFollower(m.Term, None)
 		}
 
 	case m.Term < r.Term:
@@ -1724,6 +1740,11 @@ func (r *raft) Step(m pb.Message) error {
 		}
 	}
 	return nil
+}
+
+func (r *raft) logMsgHigherTerm(m pb.Message, suffix redact.SafeString) {
+	r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d], %s",
+		r.id, r.Term, m.Type, m.From, m.Term, suffix)
 }
 
 type stepFunc func(r *raft, m pb.Message) error
