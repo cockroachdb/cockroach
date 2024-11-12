@@ -13,9 +13,11 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -284,6 +286,76 @@ func (v variations) finish() variations {
 	}
 	// Enable raft tracing. Remove this once raft tracing is the default.
 	v.clusterSettings["kv.raft.max_concurrent_traces"] = "10"
+
+	// Finally apply any environment overrides.
+	if overrides, found := os.LookupEnv("PERTURBATION_OVERRIDE"); found {
+		v = applyEnvOverrides(v, overrides)
+	}
+	return v
+}
+
+// applyEnvOverrides applies environment variables to the variations.
+func applyEnvOverrides(v variations, overrides string) variations {
+	for _, override := range strings.Split(overrides, ",") {
+		parts := strings.Split(override, "=")
+		key := parts[0]
+		val := parts[1]
+		var err error
+		switch key {
+		case "fillDuration":
+			v.fillDuration, err = time.ParseDuration(val)
+		case "maxBlockBytes":
+			v.maxBlockBytes, err = strconv.Atoi(val)
+		case "perturbationDuration":
+			v.perturbationDuration, err = time.ParseDuration(val)
+		case "validationDuration":
+			v.validationDuration, err = time.ParseDuration(val)
+		case "ratioOfMax":
+			v.ratioOfMax, err = strconv.ParseFloat(val, 64)
+		case "splits":
+			v.splits, err = strconv.Atoi(val)
+		case "numNodes":
+			v.numNodes, err = strconv.Atoi(val)
+		case "numWorkloadNodes":
+			v.numWorkloadNodes, err = strconv.Atoi(val)
+		case "vcpu":
+			v.vcpu, err = strconv.Atoi(val)
+		case "disks":
+			v.disks, err = strconv.Atoi(val)
+		case "mem":
+			v.mem = spec.ParseMemCPU(val)
+			if v.mem == -1 {
+				err = errors.Errorf("unknown memory setting: %s", val)
+			}
+		case "leaseType":
+			for _, l := range leases {
+				if l.String() == val {
+					v.leaseType = l
+					break
+				}
+			}
+		case "cloud":
+			for _, c := range cloudSets {
+				if c.String() == val {
+					v.cloud = c
+					break
+				}
+			}
+		case "acMode":
+			for _, a := range admissionControlOptions {
+				if a.String() == val {
+					v.acMode = a
+					break
+				}
+			}
+		default:
+			panic(fmt.Sprintf("unknown override: %s", override))
+		}
+
+		if err != nil {
+			panic(fmt.Sprintf("problem parsing override: %s", err))
+		}
+	}
 	return v
 }
 
