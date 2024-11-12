@@ -224,15 +224,18 @@ func (k Key) Less(b Key) bool {
 }
 
 // Clamp fixes the key to something within the range a < k < b.
-func (k Key) Clamp(a, b Key) Key {
+func (k Key) Clamp(min, max Key) (Key, error) {
+	if max.Less(min) {
+		return nil, errors.Newf("cannot clamp when min '%s' is larger than max '%s'", min, max)
+	}
 	result := k
-	if k.Less(a) {
-		result = a
+	if k.Less(min) {
+		result = min
 	}
-	if b.Less(k) {
-		result = b
+	if max.Less(k) {
+		result = max
 	}
-	return result
+	return result, nil
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
@@ -2383,11 +2386,19 @@ func (s Span) ZeroLength() bool {
 }
 
 // Clamp clamps span s's keys within the span defined in bounds.
-func (s Span) Clamp(bounds Span) Span {
-	return Span{
-		s.Key.Clamp(bounds.Key, bounds.EndKey),
-		s.EndKey.Clamp(bounds.Key, bounds.EndKey),
+func (s Span) Clamp(bounds Span) (Span, error) {
+	start, err := s.Key.Clamp(bounds.Key, bounds.EndKey)
+	if err != nil {
+		return Span{}, err
 	}
+	end, err := s.EndKey.Clamp(bounds.Key, bounds.EndKey)
+	if err != nil {
+		return Span{}, err
+	}
+	return Span{
+		Key:    start,
+		EndKey: end,
+	}, nil
 }
 
 // Overlaps returns true WLOG for span A and B iff:

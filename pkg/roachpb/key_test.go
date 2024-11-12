@@ -11,7 +11,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/stretchr/testify/require"
 )
 
 func TestKeyClampTenants(t *testing.T) {
@@ -33,7 +35,8 @@ func TestKeyClampTenants(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.k.Clamp(tt.a, tt.b)
+			result, err := tt.k.Clamp(tt.a, tt.b)
+			require.NoError(t, err)
 			if !result.Equal(tt.expected) {
 				t.Errorf("Clamp(%v, %v, %v) = %v; want %v", tt.k, tt.a, tt.b, result, tt.expected)
 			}
@@ -58,7 +61,8 @@ func TestKeyClampTables(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.k.Clamp(tt.a, tt.b)
+			result, err := tt.k.Clamp(tt.a, tt.b)
+			require.NoError(t, err)
 			if !result.Equal(tt.expected) {
 				t.Errorf("Clamp(%v, %v, %v) = %v; want %v", tt.k, tt.a, tt.b, result, tt.expected)
 			}
@@ -99,10 +103,25 @@ func TestKeyClampTenantTablespace(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.k.Clamp(tt.a, tt.b)
+			result, err := tt.k.Clamp(tt.a, tt.b)
+			require.NoError(t, err)
 			if !result.Equal(tt.expected) {
 				t.Errorf("Clamp(%v, %v, %v) = %v; want %v", tt.k, tt.a, tt.b, result, tt.expected)
 			}
 		})
 	}
+}
+
+func TestKeyClampError(t *testing.T) {
+	// verify that max < min throws error
+	a, b := roachpb.Key([]byte{'a'}), roachpb.Key([]byte{'b'})
+	expected := `cannot clamp when min '"b"' is larger than max '"a"'`
+	_, err := a.Clamp(b, a)
+	if !testutils.IsError(err, expected) {
+		t.Fatalf("expected error to be '%s', got '%s'", expected, err)
+	}
+
+	// verify that max = min throws no error
+	_, err = a.Clamp(a, a)
+	require.NoError(t, err)
 }

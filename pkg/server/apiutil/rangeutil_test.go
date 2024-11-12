@@ -117,8 +117,9 @@ func TestRangesToTableSpans(t *testing.T) {
 		},
 	}
 
-	result := apiutil.RangesToTableSpans(codec, ranges)
+	result, err := apiutil.RangesToTableSpans(codec, ranges)
 
+	require.NoError(t, err)
 	require.Equal(t, len(result), len(expected))
 
 	for i, span := range expected {
