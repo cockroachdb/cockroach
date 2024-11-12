@@ -1452,6 +1452,7 @@ func (m mockBatchHandler) GetLastRow() cdcevent.Row            { return cdcevent
 func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
 func (m mockBatchHandler) Close(context.Context)               {}
 func (m mockBatchHandler) ReportMutations(_ *stats.Refresher)  {}
+func (m mockBatchHandler) ReleaseLeases(_ context.Context)     {}
 
 type mockDLQ int
 
