@@ -1260,7 +1260,11 @@ func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 	r.step = stepFollower
 	r.reset(term)
 	r.tick = r.tickElection
-	r.setLead(lead)
+	if lead == None {
+		r.resetLead()
+	} else {
+		r.setLead(lead)
+	}
 	r.state = pb.StateFollower
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
 
