@@ -624,12 +624,20 @@ type JobNotFoundError struct {
 	sessionID sqlliveness.SessionID
 }
 
+var _ errors.SafeFormatter = &JobNotFoundError{}
+
+func (e *JobNotFoundError) SafeFormatError(p errors.Printer) (next error) {
+	if e.sessionID != "" {
+		p.Printf("job with ID %d does not exist with claim session id %q", e.jobID, e.sessionID.String())
+	} else {
+		p.Printf("job with ID %d does not exist", e.jobID)
+	}
+	return nil
+}
+
 // Error makes JobNotFoundError an error.
 func (e *JobNotFoundError) Error() string {
-	if e.sessionID != "" {
-		return fmt.Sprintf("job with ID %d does not exist with claim session id %q", e.jobID, e.sessionID.String())
-	}
-	return fmt.Sprintf("job with ID %d does not exist", e.jobID)
+	return redact.Sprint(e).StripMarkers()
 }
 
 // HasJobNotFoundError returns true if the error contains a JobNotFoundError.
