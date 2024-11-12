@@ -26,7 +26,6 @@ func init() {
 				}),
 			),
 		),
-		toTransientAbsentLikePublic(),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
@@ -35,10 +34,6 @@ func init() {
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,
 						Name:     tabledesc.ColumnNamePlaceholder(this.ColumnID),
-					}
-					// If a name was provided for the transition to absent, override the placeholder.
-					if this.AbsentName != "" {
-						op.Name = this.AbsentName
 					}
 					return op
 				}),

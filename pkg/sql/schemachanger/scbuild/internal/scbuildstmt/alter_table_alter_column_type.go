@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -302,8 +301,10 @@ func handleGeneralColumnConversion(
 
 	oldColComment, newColComment := getColumnCommentForColumnReplacement(b, tbl.TableID, col.ColumnID, newColID)
 
-	// First set the target status of the old column to drop. We will replace this
-	// column with a new column. This column stays visible until the second backfill.
+	// First, set the target status of the old column to drop. This column will be
+	// replaced by a new one but remains visible until the new column is ready to be
+	// made public. A dependency rule ensures that the old and new columns are swapped
+	// within the same stage.
 	b.Drop(col)
 	b.Drop(colName)
 	b.Drop(oldColType)
@@ -337,7 +338,7 @@ func handleGeneralColumnConversion(
 	// Add the spec for the new column. It will be identical to the column it is replacing,
 	// except the type will differ, and it will have a transient computed expression.
 	// This expression will reference the original column to facilitate the backfill.
-	// This column becomes visible after the first backfill.
+	// This column becomes visible in the same stage the old column becomes invisible.
 	spec := addColumnSpec{
 		tbl: tbl,
 		col: &scpb.Column{
@@ -370,24 +371,6 @@ func handleGeneralColumnConversion(
 		fam: nil,
 	}
 	addColumn(b, spec, t)
-
-	// The above operation will cause a backfill to occur twice. Once with both columns,
-	// then another time with the old column removed. Since both columns will exist at
-	// the same time for a short period of time, we need to rename the old column so that
-	// we can access either one. We add this name as a transient so that it is cleaned up
-	// prior to the old column being totally removed.
-	nameExists := func(name string) bool {
-		return getColumnIDFromColumnName(b, tbl.TableID, tree.Name(name), false /* required */) != 0
-	}
-	oldColumnRename := tabledesc.GenerateUniqueName(fmt.Sprintf("%s_shadow", colName.Name), nameExists)
-	b.AddTransient(&scpb.ColumnName{
-		TableID:  tbl.TableID,
-		ColumnID: col.ColumnID,
-		Name:     oldColumnRename,
-		// If we don't complete the operation, the column won't be dropped, so we
-		// need to remember the original name to preserve it.
-		AbsentName: colName.Name,
-	})
 }
 
 func updateColumnType(b BuildCtx, oldColType, newColType *scpb.ColumnType) {

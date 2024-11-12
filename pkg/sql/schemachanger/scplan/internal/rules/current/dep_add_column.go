@@ -27,6 +27,25 @@ func init() {
 				to.TypeFilter(rulesVersionKey, isColumnDependent),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
+				IsNotAlterColumnTypeOp("table-id", "col-id"),
+			}
+		},
+	)
+
+	// This rule is similar to the one above but omits the column name. This is specific
+	// to ALTER COLUMN ... TYPE, which replaces a column with the same name. The column
+	// name is assigned during the swap, as it replaces the old column.
+	registerDepRule(
+		"column existence precedes column dependents during an alter column type",
+		scgraph.Precedence,
+		"column", "dependent",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.Column)(nil)),
+				to.TypeFilter(rulesVersionKey, isColumnDependentExceptColumnName),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
+				rel.And(IsAlterColumnTypeOp("table-id", "col-id")...),
 			}
 		},
 	)
@@ -49,18 +68,57 @@ func init() {
 // Special cases of the above.
 func init() {
 	registerDepRule(
-		"column name and type set right after column existence",
+		"column type set right after column existence",
+		scgraph.SameStagePrecedence,
+		"column", "column-type",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.Column)(nil)),
+				to.Type((*scpb.ColumnType)(nil)),
+				StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+			}
+		},
+	)
+
+	// There are two distinct rules for transitioning the column name to public,
+	// depending on whether an ALTER COLUMN TYPE operation is in progress.
+	// This rule applies when an ALTER COLUMN TYPE is *not* occurring and is
+	// identical to the prior rule for ColumnType, except that it applies to ColumnName.
+	registerDepRule(
+		"column name set right after column existence, except for alter column type",
 		scgraph.SameStagePrecedence,
 		"column", "column-name-or-type",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
-				to.Type(
-					(*scpb.ColumnName)(nil),
-					(*scpb.ColumnType)(nil),
-				),
+				to.Type((*scpb.ColumnName)(nil)),
 				StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
+				IsNotAlterColumnTypeOp("table-id", "col-id"),
+			}
+		},
+	)
+
+	// This rule is similar to the previous one but applies during an ALTER COLUMN TYPE operation.
+	// In this scenario, we are replacing one column with another, both of which share the same name.
+	// To prevent any period where a column with that name is not public, we ensure that the column
+	// names are swapped in the same stage.
+	registerDepRule(
+		"during alter column type, column names for old and new columns are swapped in the same stage",
+		scgraph.SameStagePrecedence,
+		"old-column-name", "new-column-name",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.ColumnName)(nil)),
+				to.Type((*scpb.ColumnName)(nil)),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_ABSENT),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+				JoinOnDescID(from, to, "table-id"),
+				to.El.AttrEqVar(screl.ColumnID, "new-col-id"),
+				rel.And(IsAlterColumnTypeOp("table-id", "new-col-id")...),
 			}
 		},
 	)

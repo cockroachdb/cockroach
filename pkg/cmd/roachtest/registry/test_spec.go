@@ -244,9 +244,13 @@ const (
 	LeaderLeases
 	// MetamorphicLeases randomly chooses epoch or expiration
 	// leases (across the entire cluster).
-	// TODO(nvanbenschoten): add leader leases to this mix.
 	MetamorphicLeases
 )
+
+// LeaseTypes contains all lease types.
+//
+// The list does not contain aliases like "default" and "metamorphic".
+var LeaseTypes = []LeaseType{EpochLeases, ExpirationLeases, LeaderLeases}
 
 // CloudSet represents a set of clouds.
 //

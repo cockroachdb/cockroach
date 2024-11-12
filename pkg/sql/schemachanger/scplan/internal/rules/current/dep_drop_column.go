@@ -202,13 +202,16 @@ func init() {
 	// storing all public columns within the table (as the column being dropped is still considered public
 	// before it moves to WRITE_ONLY but the new primary index does not contain it since the schema changer
 	// knows it is transitioning to a target status of ABSENT).
+	//
+	// This rule applies only when the operation is not ALTER COLUMN TYPE. A variant of this rule follows,
+	// allowing added and dropped columns to be swapped in the same stage during ALTER COLUMN TYPE.
 	registerDepRule(
 		"New primary index should go public only after columns being dropped move to WRITE_ONLY",
 		scgraph.Precedence,
 		"column", "new-primary-index",
 		func(from, to NodeVars) rel.Clauses {
 			ic := MkNodeVars("index-column")
-			relationID, columnID, indexID := rel.Var("table-id"), rel.Var("column-id"), rel.Var("index-id")
+			relationID, columnID, indexID := rel.Var("table-id"), rel.Var("old-column-id"), rel.Var("index-id")
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil)),
@@ -218,6 +221,30 @@ func init() {
 				from.CurrentStatus(scpb.Status_WRITE_ONLY),
 				to.TargetStatus(scpb.ToPublic),
 				to.CurrentStatus(scpb.Status_PUBLIC),
+				IsNotDroppedColumnPartOfAlterColumnTypeOp("table-id", "old-column-id"),
+			}
+		},
+	)
+
+	// This rule is similar to the previous one but applies specifically to ALTER COLUMN ... TYPE operations.
+	// It uses SameStagePrecedence to enable the swapping of dropped and added columns within the same stage.
+	registerDepRule(
+		"New primary index for alter column type should go public in the same stage as dropped column",
+		scgraph.SameStagePrecedence,
+		"column", "new-primary-index",
+		func(from, to NodeVars) rel.Clauses {
+			ic := MkNodeVars("index-column")
+			relationID, columnID, indexID := rel.Var("table-id"), rel.Var("old-column-id"), rel.Var("index-id")
+			return rel.Clauses{
+				from.Type((*scpb.Column)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil)),
+				ColumnInSourcePrimaryIndex(ic, to, relationID, columnID, indexID),
+				JoinOnColumnID(ic, from, relationID, columnID),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_WRITE_ONLY),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+				rel.And(IsDroppedColumnPartOfAlterColumnTypeOp("table-id", "old-column-id")...),
 			}
 		},
 	)

@@ -10,7 +10,7 @@ INSERT INTO t VALUES (100+$stageKey, default);
 
 # One row is expected to be inserted after each stage.
 stage-query phase=PostCommitPhase stage=:
-SELECT count(*)=$successfulStageCount FROM t WHERE i >= 100;
+SELECT count(*)=$successfulStageCount FROM t WHERE i >= 100 AND j = '99';
 ----
 true
 

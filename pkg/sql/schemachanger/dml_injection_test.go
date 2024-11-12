@@ -186,6 +186,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"ALTER TABLE tbl ADD COLUMN new_col BIGINT NOT NULL DEFAULT 100",
 			},
 			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE TEXT",
+			query:        "SELECT new_col FROM tbl LIMIT 1",
 		},
 		{
 			desc:         "add column default udf",
