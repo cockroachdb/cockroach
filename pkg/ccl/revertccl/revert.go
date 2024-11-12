@@ -60,7 +60,7 @@ func RevertSpansFanout(
 		return err
 	}
 
-	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, spans, sql.PartitionSpansBoundDefault)
 	if err != nil {
 		return err
 	}

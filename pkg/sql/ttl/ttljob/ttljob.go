@@ -166,7 +166,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 		if err != nil {
 			return err
 		}
-		spanPartitions, err := distSQLPlanner.PartitionSpans(ctx, planCtx, []roachpb.Span{entirePKSpan})
+		spanPartitions, err := distSQLPlanner.PartitionSpans(ctx, planCtx, []roachpb.Span{entirePKSpan}, sql.PartitionSpansBoundDefault)
 		if err != nil {
 			return err
 		}

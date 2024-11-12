@@ -76,7 +76,7 @@ func initIndexBackfillMergerSpec(
 func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
 	ctx context.Context, planCtx *PlanningCtx, spec execinfrapb.BackfillerSpec, spans []roachpb.Span,
 ) (*PhysicalPlan, error) {
-	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, spans, PartitionSpansBoundDefault)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
 		return idx
 	}
 
-	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, indexSpans)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, indexSpans, PartitionSpansBoundDefault)
 	if err != nil {
 		return nil, err
 	}
