@@ -634,6 +634,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`disable_vec_union_eager_cancellation`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_vec_union_eager_cancellation`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("disable_vec_union_eager_cancellation", s)
+			if err != nil {
+				return err
+			}
+			m.SetDisableVecUnionEagerCancellation(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableVecUnionEagerCancellation), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`enable_zigzag_join`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_zigzag_join`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
