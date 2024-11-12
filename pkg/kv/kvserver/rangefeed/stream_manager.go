@@ -91,6 +91,10 @@ func NewStreamManager(sender sender, metrics RangefeedMetricsRecorder) *StreamMa
 
 func (sm *StreamManager) NewStream(streamID int64, rangeID roachpb.RangeID) (sink Stream) {
 	switch sender := sm.sender.(type) {
+	case *BufferedSender:
+		return &BufferedPerRangeEventSink{
+			PerRangeEventSink: NewPerRangeEventSink(rangeID, streamID, sender),
+		}
 	case *UnbufferedSender:
 		return NewPerRangeEventSink(rangeID, streamID, sender)
 	default:
