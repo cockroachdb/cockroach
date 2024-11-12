@@ -520,6 +520,9 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	// Remove this entry from role_members.
 	sqlDB.Exec(t, "REVOKE admin FROM test")
 
+	// Change the user's password to update the users table.
+	sqlDB.Exec(t, `ALTER USER test WITH PASSWORD 'testpass'`)
+
 	time.Sleep(2 * time.Second)
 	// If you want to GC all system tables:
 	//
@@ -533,6 +536,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	gcTestTableRange("system", "zones")
 	gcTestTableRange("system", "comments")
 	gcTestTableRange("system", "role_members")
+	gcTestTableRange("system", "users")
 
 	// We can still fetch table descriptors and role members because of protected timestamp record.
 	asOf := ts
@@ -542,6 +546,20 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	rms, err := fetchRoleMembers(ctx, &execCfg, asOf)
 	require.NoError(t, err)
 	require.Contains(t, rms, []string{"admin", "test"})
+
+	// The user password is still null.
+	ups, err := fetchUsersAndPasswords(ctx, &execCfg, asOf)
+	require.NoError(t, err)
+	found := false
+	for _, up := range ups {
+		if up.username == "test" {
+			require.Equal(t, tree.DNull, up.password)
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
+
 }
 
 // TestChangefeedUpdateProtectedTimestamp tests that changefeeds using the
@@ -710,4 +728,43 @@ func fetchRoleMembers(
 		return nil, err
 	}
 	return roleMembers, nil
+}
+
+type userPass struct {
+	username string
+	password tree.Datum
+}
+
+func fetchUsersAndPasswords(
+	ctx context.Context, execCfg *sql.ExecutorConfig, ts hlc.Timestamp,
+) ([]userPass, error) {
+	var users []userPass
+	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
+			return err
+		}
+		it, err := txn.QueryIteratorEx(ctx, "test-get-users", txn.KV(),
+			sessiondata.NoSessionDataOverride,
+			`SELECT username, "hashedPassword" FROM system.users`,
+		)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = it.Close() }()
+
+		var ok bool
+		for ok, err = it.Next(ctx); ok && err == nil; ok, err = it.Next(ctx) {
+			username := string(tree.MustBeDString(it.Cur()[0]))
+			users = append(users, userPass{username: username, password: it.Cur()[1]})
+		}
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
 }
