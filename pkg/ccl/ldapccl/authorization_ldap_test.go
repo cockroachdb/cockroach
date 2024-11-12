@@ -242,3 +242,68 @@ func TestLDAPRolesAreGranted(t *testing.T) {
 	_, err = fooDB.Conn(ctx)
 	require.ErrorContains(t, err, "LDAP authorization: error assigning roles to user foo: EnsureUserOnlyBelongsToRoles-grant: role/user \"nonexistent_role\" does not exist")
 }
+
+func TestSQLNonStandardLDAPRolesAreGranted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
+	mockLDAP, newMockLDAPUtil := LDAPMocks()
+	defer testutils.TestingHook(
+		&NewLDAPUtil,
+		newMockLDAPUtil)()
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	hbaEntryBase := "host all all all ldap "
+	hbaConfLDAPDefaultOpts := map[string]string{
+		"ldapserver":          "localhost",
+		"ldapport":            "636",
+		"ldapbasedn":          "dc=localhost",
+		"ldapbinddn":          "cn=readonly,dc=localhost",
+		"ldapbindpasswd":      "readonly_pwd",
+		"ldapsearchattribute": "uid",
+		"ldapsearchfilter":    "(memberOf=cn=users,ou=groups,dc=localhost)",
+		"ldapgrouplistfilter": "(objectCategory=cn=Group,cn=Schema,cn=Configuration,DC=example,DC=com)",
+	}
+	hbaEntry := constructHBAEntry(t, hbaEntryBase, hbaConfLDAPDefaultOpts, nil)
+	_, err := db.Exec("SET CLUSTER SETTING server.auth_log.sql_connections.enabled = true")
+	require.NoError(t, err)
+	_, err = db.Exec("SET CLUSTER SETTING server.auth_log.sql_sessions.enabled = true")
+	require.NoError(t, err)
+	_, err = db.Exec("SET CLUSTER SETTING server.host_based_authentication.configuration = $1", hbaEntry.String())
+	require.NoError(t, err)
+
+	_, err = db.Exec("CREATE USER foo")
+	require.NoError(t, err)
+	_, err = db.Exec("CREATE ROLE \"foo-parent-1\"")
+	require.NoError(t, err)
+	_, err = db.Exec("CREATE ROLE \"foo.parent.2\"")
+	require.NoError(t, err)
+
+	var hasRole bool
+	err = db.QueryRow("SELECT pg_has_role('foo', 'foo-parent-1', 'MEMBER')").Scan(&hasRole)
+	require.NoError(t, err)
+	require.False(t, hasRole)
+	err = db.QueryRow("SELECT pg_has_role('foo', 'foo.parent.2', 'MEMBER')").Scan(&hasRole)
+	require.NoError(t, err)
+	require.False(t, hasRole)
+
+	connURL, cleanup := s.PGUrl(t)
+	defer cleanup()
+	connURL.User = url.UserPassword("foo", "readonly_pwd")
+
+	fooDB, err := gosql.Open("postgres", connURL.String())
+	require.NoError(t, err)
+	defer fooDB.Close()
+
+	// Add one parent role, connect, and check the parent roles.
+	mockLDAP.SetGroups(mockLDAP.GetLdapDN("foo"), []string{"cn=foo-parent-1", "cn=foo.parent.2"})
+	_, err = fooDB.Conn(ctx)
+	require.NoError(t, err)
+	err = db.QueryRow("SELECT pg_has_role('foo', 'foo-parent-1', 'MEMBER')").Scan(&hasRole)
+	require.NoError(t, err)
+	require.True(t, hasRole)
+	err = db.QueryRow("SELECT pg_has_role('foo', 'foo.parent.2', 'MEMBER')").Scan(&hasRole)
+	require.NoError(t, err)
+	require.True(t, hasRole)
+}

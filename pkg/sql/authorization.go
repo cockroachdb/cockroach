@@ -761,7 +761,7 @@ func EnsureUserOnlyBelongsToRoles(
 				if i > 0 {
 					grantStmt.WriteString(", ")
 				}
-				grantStmt.WriteString(role.Normalized())
+				grantStmt.WriteString(fmt.Sprintf("%q", role.Normalized()))
 			}
 			grantStmt.WriteString(" TO ")
 			grantStmt.WriteString(user.Normalized())
