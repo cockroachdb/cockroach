@@ -113,7 +113,6 @@ func ResolveDest(
 	user username.SQLUsername,
 	dest jobspb.BackupDetails_Destination,
 	endTime hlc.Timestamp,
-	incrementalFrom []string,
 	execCfg *sql.ExecutorConfig,
 ) (ResolvedDestination, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
@@ -125,37 +124,19 @@ func ResolveDest(
 
 	var collectionURI string
 	chosenSuffix := dest.Subdir
-	if chosenSuffix != "" {
-		// The legacy backup syntax, BACKUP TO, leaves the dest.Subdir and collection parameters empty.
-		collectionURI = defaultURI
+	collectionURI = defaultURI
 
-		if chosenSuffix == backupbase.LatestFileName {
-			latest, err := ReadLatestFile(ctx, defaultURI, makeCloudStorage, user)
-			if err != nil {
-				return ResolvedDestination{}, err
-			}
-			chosenSuffix = latest
+	if chosenSuffix == backupbase.LatestFileName {
+		latest, err := ReadLatestFile(ctx, defaultURI, makeCloudStorage, user)
+		if err != nil {
+			return ResolvedDestination{}, err
 		}
+		chosenSuffix = latest
 	}
 
 	plannedBackupDefaultURI, urisByLocalityKV, err := GetURIsByLocalityKV(dest.To, chosenSuffix)
 	if err != nil {
 		return ResolvedDestination{}, err
-	}
-
-	// At this point, the plannedBackupDefaultURI is the full path for the backup. For BACKUP
-	// INTO, this path includes the chosenSuffix. Once this function returns, the
-	// plannedBackupDefaultURI will be the full path for this backup in planning.
-	if len(incrementalFrom) != 0 {
-		// Legacy backup with deprecated BACKUP TO-syntax.
-		prevBackupURIs := incrementalFrom
-		return ResolvedDestination{
-			CollectionURI:    collectionURI,
-			DefaultURI:       plannedBackupDefaultURI,
-			ChosenSubdir:     chosenSuffix,
-			URIsByLocalityKV: urisByLocalityKV,
-			PrevBackupURIs:   prevBackupURIs,
-		}, nil
 	}
 
 	defaultStore, err := makeCloudStorage(ctx, plannedBackupDefaultURI, user)
@@ -167,7 +148,7 @@ func ResolveDest(
 	if err != nil {
 		return ResolvedDestination{}, err
 	}
-	if exists && !dest.Exists && chosenSuffix != "" {
+	if exists && !dest.Exists {
 		// We disallow a user from writing a full backup to a path in a collection containing an
 		// existing backup iff we're 99.9% confident this backup was planned on a 22.1 node.
 		return ResolvedDestination{},
@@ -188,13 +169,9 @@ func ResolveDest(
 			// TODO (msbutler): throw error in 22.2
 			if !featureFullBackupUserSubdir.Get(execCfg.SV()) {
 				return ResolvedDestination{},
-					errors.Errorf("A full backup cannot be written to %q, a user defined subdirectory. "+
+					errors.Errorf("No full backup exists in %q to append an incremental backup to. "+
 						"To take a full backup, remove the subdirectory from the backup command "+
-						"(i.e. run 'BACKUP ... INTO <collectionURI>'). "+
-						"Or, to take a full backup at a specific subdirectory, "+
-						"enable the deprecated syntax by switching the %q cluster setting to true; "+
-						"however, note this deprecated syntax will not be available in a future release.",
-						chosenSuffix, featureFullBackupUserSubdir.Name())
+						"(i.e. run 'BACKUP ... INTO <collectionURI>'). ", chosenSuffix)
 			}
 		}
 		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.

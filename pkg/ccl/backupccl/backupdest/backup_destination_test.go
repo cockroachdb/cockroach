@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -93,168 +92,6 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 			localities = []string{"dc=EN", "dc=FR"}
 		}
 		t.Run(fmt.Sprintf("locality-aware-%t", localityAware), func(t *testing.T) {
-
-			// When testing explicit backup locations, we'll be testing the name
-			// resolution on backup directory structures created when running a
-			// sequence of backups like:
-			// - BACKUP TO full
-			// - BACKUP TO inc1 INCREMENTAL FROM full
-			// - BACKUP TO inc1 INCREMENTAL FROM full, inc1
-			//
-			// We write backup manifests as we test as if we were actually running the
-			// backup.
-			t.Run("explicit", func(t *testing.T) {
-				fullLoc := fmt.Sprintf("nodelocal://1/%s?AUTH=implicit", t.Name())
-				inc1Loc := fmt.Sprintf("nodelocal://1/%s/inc1?AUTH=implicit", t.Name())
-				inc2Loc := fmt.Sprintf("nodelocal://1/%s/inc2?AUTH=implicit", t.Name())
-
-				testExplicitBackup := func(t *testing.T, to []string, incrementalFrom []string) {
-					// Time doesn't matter for these since we don't create any date-based
-					// subdirectory. Let's just use now.
-					endTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-
-					expectedPrevBackups := make([]string, len(incrementalFrom))
-					for i, incrementalLoc := range incrementalFrom {
-						expectedPrevBackups[i] = localizeURI(t, incrementalLoc, localities)[0]
-					}
-					defaultDest, localitiesDest, err := backupdest.GetURIsByLocalityKV(to, "")
-					require.NoError(t, err)
-
-					backupDest, err := backupdest.ResolveDest(
-						ctx, username.RootUserName(),
-						jobspb.BackupDetails_Destination{To: to},
-						endTime,
-						incrementalFrom,
-						&execCfg,
-					)
-					require.NoError(t, err)
-
-					// Not an INTO backup, so no collection of suffix info.
-					require.Equal(t, "", backupDest.CollectionURI)
-					require.Equal(t, "", backupDest.ChosenSubdir)
-
-					require.Equal(t, defaultDest, backupDest.DefaultURI)
-					require.Equal(t, localitiesDest, backupDest.URIsByLocalityKV)
-					require.Equal(t, incrementalFrom, backupDest.PrevBackupURIs)
-				}
-
-				// The first initial full backup: BACKUP TO full.
-				{
-					incrementalFrom := []string(nil)
-					to := localizeURI(t, fullLoc, localities)
-					testExplicitBackup(t, to, incrementalFrom)
-
-					// Write the manifest files as if this backup succeeded.
-					writeManifest(t, fullLoc)
-				}
-
-				// An incremental on top if it: BACKUP TO inc1 INCREMENTAL FROM full.
-				{
-					incrementalFrom := []string{fullLoc}
-					to := localizeURI(t, inc1Loc, localities)
-					testExplicitBackup(t, to, incrementalFrom)
-
-					// Write the manifest files as if this backup succeeded.
-					writeManifest(t, inc1Loc)
-				}
-
-				// Another incremental on top of the incremental: BACKUP TO inc2
-				// INCREMENTAL FROM full, inc1.
-				{
-					incrementalFrom := []string{fullLoc, inc1Loc}
-					to := localizeURI(t, inc2Loc, localities)
-					testExplicitBackup(t, to, incrementalFrom)
-
-					writeManifest(t, inc2Loc)
-				}
-			})
-
-			// When testing auto-append backup locations, we'll be testing the name
-			// resolution on backup directory structures created when running a sequence
-			// of backups like:
-			// - BACKUP TO full
-			// - BACKUP TO full
-			// - BACKUP TO full
-			t.Run("auto-append", func(t *testing.T) {
-				baseDir := fmt.Sprintf("nodelocal://1/%s?AUTH=implicit", t.Name())
-				fullTime := time.Date(2020, 12, 25, 6, 0, 0, 0, time.UTC)
-				inc1Time := fullTime.Add(time.Minute * 30)
-				inc2Time := inc1Time.Add(time.Minute * 30)
-				prevBackups := []string(nil)
-
-				testAutoAppendBackup := func(t *testing.T, to []string, backupTime time.Time,
-					expectedDefault string, expectedLocalities map[string]string, expectedPrevBackups []string,
-				) {
-					endTime := hlc.Timestamp{WallTime: backupTime.UnixNano()}
-
-					backupDest, err := backupdest.ResolveDest(
-						ctx, username.RootUserName(),
-						jobspb.BackupDetails_Destination{To: to},
-						endTime,
-						nil, /* incrementalFrom */
-						&execCfg,
-					)
-					require.NoError(t, err)
-
-					// Not a backup collection.
-					require.Equal(t, "", backupDest.CollectionURI)
-					require.Equal(t, "", backupDest.ChosenSubdir)
-					require.Equal(t, expectedDefault, backupDest.DefaultURI)
-					require.Equal(t, expectedLocalities, backupDest.URIsByLocalityKV)
-					require.Equal(t, expectedPrevBackups, backupDest.PrevBackupURIs)
-				}
-
-				// Initial full backup: BACKUP TO baseDir.
-				{
-					to := localizeURI(t, baseDir, localities)
-					// The full backup should go into the baseDir.
-					expectedDefault := baseDir
-					expectedLocalities := make(map[string]string)
-					for _, locality := range localities {
-						expectedLocalities[locality] = fmt.Sprintf("nodelocal://1/%s/%s?AUTH=implicit", t.Name(), locality)
-					}
-
-					testAutoAppendBackup(t, to, fullTime, expectedDefault, expectedLocalities, prevBackups)
-
-					prevBackups = append(prevBackups, expectedDefault)
-					writeManifest(t, expectedDefault)
-				}
-
-				// Incremental: BACKUP TO baseDir.
-				{
-					to := localizeURI(t, baseDir, localities)
-					// The full backup should go into the baseDir.
-					expectedDefault := fmt.Sprintf("nodelocal://1/%s/incrementals/20201225/063000.00?AUTH=implicit", t.Name())
-					expectedLocalities := make(map[string]string)
-					for _, locality := range localities {
-						expectedLocalities[locality] = fmt.Sprintf("nodelocal://1/%s/%s/incrementals/20201225/063000.00?AUTH=implicit", t.Name(), locality)
-					}
-
-					testAutoAppendBackup(t, to, inc1Time, expectedDefault, expectedLocalities, prevBackups)
-
-					prevBackups = append(prevBackups, expectedDefault)
-					writeManifest(t, expectedDefault)
-				}
-
-				// Another incremental: BACKUP TO baseDir.
-				{
-					to := localizeURI(t, baseDir, localities)
-					// We expect another incremental to go into the appropriate time
-					// formatted sub-directory.
-					expectedDefault := fmt.Sprintf(
-						"nodelocal://1/%s/incrementals/20201225/070000.00?AUTH=implicit", t.Name())
-					expectedLocalities := make(map[string]string)
-					for _, locality := range localities {
-						expectedLocalities[locality] = fmt.Sprintf(
-							"nodelocal://1/%s/%s/incrementals/20201225/070000.00?AUTH=implicit",
-							t.Name(), locality)
-					}
-
-					testAutoAppendBackup(t, to, inc2Time, expectedDefault, expectedLocalities, prevBackups)
-					writeManifest(t, expectedDefault)
-				}
-			})
-
 			// When testing auto-append backup locations, we'll be testing the name
 			// resolution on backup directory structures created when running a sequence
 			// of backups like:
@@ -313,7 +150,6 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					appendToLatest bool, subdir string, incrementalTo []string) {
 
 					endTime := hlc.Timestamp{WallTime: backupTime.UnixNano()}
-					incrementalFrom := []string(nil)
 
 					if appendToLatest {
 						subdir = backupbase.LatestFileName
@@ -338,7 +174,6 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 						jobspb.BackupDetails_Destination{To: collectionTo, Subdir: subdir,
 							IncrementalStorage: incrementalTo, Exists: fullBackupExists},
 						endTime,
-						incrementalFrom,
 						&execCfg,
 					)
 					require.NoError(t, err)
