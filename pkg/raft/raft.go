@@ -2713,9 +2713,11 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 		// interruption). This might still drop some proposals but it's better than
 		// nothing.
 		//
-		// NB: Similar to the CheckQuorum step down case, we must remember our
-		// prior stint as leader, lest we regress the QSE.
-		r.becomeFollower(r.Term, r.lead)
+		// A learner can't campaign or participate in elections, and in order for a
+		// learner to get promoted to a voter, it needs a new leader to get elected
+		// and propose that change. Therefore, it should be safe at this point to
+		// forget that we were the leader at this term and step down.
+		r.becomeFollower(r.Term, None)
 		return cs
 	}
 
