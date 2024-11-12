@@ -218,3 +218,49 @@ key cols:
   y = b
 input projections:
   lookup_join_const_col_@6 = 1 [type=INT8]
+
+# The projected constant should not have type modifiers of the indexed column.
+lookup-constraints left=(a int) right=(x int, y CHAR(2)) index=(x, y)
+x = a AND y = 'foo'
+----
+key cols:
+  x = a
+  y = lookup_join_const_col_@6
+input projections:
+  lookup_join_const_col_@6 = 'foo' [type=STRING]
+
+lookup-constraints left=(a int) right=(x int, y VARCHAR(2)) index=(x, y)
+x = a AND y = 'foo'
+----
+key cols:
+  x = a
+  y = lookup_join_const_col_@6
+input projections:
+  lookup_join_const_col_@6 = 'foo' [type=STRING]
+
+lookup-constraints left=(a int) right=(x int, y BIT(2)) index=(x, y)
+x = a AND y = '111'
+----
+key cols:
+  x = a
+  y = lookup_join_const_col_@6
+input projections:
+  lookup_join_const_col_@6 = B'111' [type=VARBIT]
+
+lookup-constraints left=(a int) right=(x int, y VARBIT(2)) index=(x, y)
+x = a AND y = '111'
+----
+key cols:
+  x = a
+  y = lookup_join_const_col_@6
+input projections:
+  lookup_join_const_col_@6 = B'111' [type=VARBIT]
+
+lookup-constraints left=(a int) right=(x int, y DECIMAL(6,2)) index=(x, y)
+x = a AND y = 1234.1234::DECIMAL(8, 4)
+----
+key cols:
+  x = a
+  y = lookup_join_const_col_@6
+input projections:
+  lookup_join_const_col_@6 = 1234.1234 [type=DECIMAL]
