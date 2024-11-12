@@ -162,11 +162,14 @@ func TestLookupConstraints(t *testing.T) {
 					b.WriteString("input projections:\n")
 					for i := range lookupConstraint.InputProjections {
 						col := lookupConstraint.InputProjections[i].Col
+						colMeta := md.ColumnMeta(col)
 						b.WriteString("  ")
-						b.WriteString(md.ColumnMeta(col).Alias)
+						b.WriteString(colMeta.Alias)
 						b.WriteString(" = ")
 						b.WriteString(formatScalar(lookupConstraint.InputProjections[i].Element, &f, &semaCtx, &evalCtx))
-						b.WriteString("\n")
+						b.WriteString(" [type=")
+						b.WriteString(colMeta.Type.SQLString())
+						b.WriteString("]\n")
 					}
 				}
 				if len(lookupConstraint.LookupExpr) > 0 {
