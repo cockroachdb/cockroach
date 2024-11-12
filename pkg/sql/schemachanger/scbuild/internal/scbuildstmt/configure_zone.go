@@ -82,26 +82,16 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		Options: optionsStr,
 	}
 
-	// In both the cases below, we generate the element for our AST and add/drop
-	// it. For index/partitions, this change includes changing the subzone's
-	// corresponding subzoneSpans -- which could necessitate any existing subzone
-	// to regenerate the keys for their subzoneSpans (see:
-	// `alter_partition_configure_zone_subpartitions.definition` for an example).
-	// Those changes are represented by affectedSubzoneConfigsToUpdate.
 	if n.Discard {
 		// If we are discarding the zone config and a zone config did not previously
 		// exist for us to discard, then no-op.
 		if zco.isNoOp() {
 			return
 		}
-		toDrop, affectedSubzoneConfigsToUpdate := zco.getZoneConfigElemForDrop(b)
-		dropZoneConfigElem(b, toDrop, eventDetails)
-		addZoneConfigElem(b, affectedSubzoneConfigsToUpdate, oldZone, eventDetails)
+		dropZoneConfigElem(b, zco, eventDetails)
 	} else {
-		toAdd, affectedSubzoneConfigsToUpdate := zco.getZoneConfigElemForAdd(b)
-		affectedSubzoneConfigsToUpdate = append([]scpb.Element{toAdd},
-			affectedSubzoneConfigsToUpdate...)
-		addZoneConfigElem(b, affectedSubzoneConfigsToUpdate, oldZone, eventDetails)
+		zco.incrementSeqNum()
+		addZoneConfigElem(b, zco, oldZone, eventDetails)
 	}
 }
 
@@ -203,21 +193,25 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 }
 
 func dropZoneConfigElem(
-	b BuildCtx, elem scpb.Element, eventDetails eventpb.CommonZoneConfigDetails,
+	b BuildCtx, zco zoneConfigObject, eventDetails eventpb.CommonZoneConfigDetails,
 ) {
+	elems := zco.getZoneConfigElem(b)
 	info := &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
-	b.Drop(elem)
-	b.LogEventForExistingPayload(elem, info)
+	for _, e := range elems {
+		b.Drop(e)
+		b.LogEventForExistingPayload(e, info)
+	}
 }
 
 func addZoneConfigElem(
 	b BuildCtx,
-	elems []scpb.Element,
+	zco zoneConfigObject,
 	oldZone *zonepb.ZoneConfig,
 	eventDetails eventpb.CommonZoneConfigDetails,
 ) {
 	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
 		ResolvedOldConfig: oldZone.String()}
+	elems := zco.getZoneConfigElem(b)
 	for _, e := range elems {
 		b.Add(e)
 		b.LogEventForExistingPayload(e, info)
