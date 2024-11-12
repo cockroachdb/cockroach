@@ -60,7 +60,7 @@ stabilize
   1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChange v2]
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:1 Log:0/0
-  INFO 2 [term: 0] received a MsgFortifyLeader message with higher term from 1 [term: 1]
+  INFO 2 [term: 0] received a MsgFortifyLeader message with higher term from 1 [term: 1], new leader indicated, advancing term
   INFO 2 became follower at term 1
   1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChange v2]
   DEBUG 2 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1

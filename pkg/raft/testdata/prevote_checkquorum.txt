@@ -128,7 +128,7 @@ stabilize
   INFO 1 [logterm: 1, index: 11, vote: 1] ignored MsgVote from 3 [logterm: 1, index: 11] at term 1: supporting fortified leader 1 at epoch 1
 > 2 receiving messages
   3->2 MsgVote Term:2 Log:1/11
-  INFO 2 [term: 1] received a MsgVote message with higher term from 3 [term: 2]
+  INFO 2 [term: 1] received a MsgVote message with higher term from 3 [term: 2], advancing term
   INFO 2 became follower at term 2
   INFO 2 [logterm: 1, index: 11, vote: 0] cast MsgVote for 3 [logterm: 1, index: 11] at term 2
 > 2 handling Ready
@@ -155,7 +155,7 @@ stabilize
   3->2 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 > 1 receiving messages
   3->1 MsgFortifyLeader Term:2 Log:0/0
-  INFO 1 [term: 1] received a MsgFortifyLeader message with higher term from 3 [term: 2]
+  INFO 1 [term: 1] received a MsgFortifyLeader message with higher term from 3 [term: 2], new leader indicated, advancing term
   INFO 1 became follower at term 2
   3->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 > 2 receiving messages
@@ -326,7 +326,7 @@ stabilize
   INFO 2 has received 1 MsgVoteResp votes and 0 vote rejections
 > 1 receiving messages
   2->1 MsgVote Term:3 Log:2/12
-  INFO 1 [term: 2] received a MsgVote message with higher term from 2 [term: 3]
+  INFO 1 [term: 2] received a MsgVote message with higher term from 2 [term: 3], advancing term
   INFO 1 became follower at term 3
   INFO 1 [logterm: 2, index: 12, vote: 0] cast MsgVote for 2 [logterm: 2, index: 12] at term 3
 > 3 receiving messages
@@ -359,7 +359,7 @@ stabilize
   2->1 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
 > 3 receiving messages
   2->3 MsgFortifyLeader Term:3 Log:0/0
-  INFO 3 [term: 2] received a MsgFortifyLeader message with higher term from 2 [term: 3]
+  INFO 3 [term: 2] received a MsgFortifyLeader message with higher term from 2 [term: 3], new leader indicated, advancing term
   INFO 3 became follower at term 3
   2->3 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
 > 1 handling Ready

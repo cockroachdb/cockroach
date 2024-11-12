@@ -101,6 +101,26 @@ func IsLocalMsgTarget(id pb.PeerID) bool {
 	return id == LocalAppendThread || id == LocalApplyThread
 }
 
+// senderHasMsgTerm returns true if the message type is one that should have
+// the sender's term.
+func senderHasMsgTerm(m pb.Message) bool {
+	switch {
+	case m.Type == pb.MsgPreVote:
+		// We send pre-vote requests with a term in our future.
+		return false
+	case m.Type == pb.MsgPreVoteResp && !m.Reject:
+		// We send pre-vote requests with a term in our future. If the
+		// pre-vote is granted, we will increment our term when we get a
+		// quorum. If it is not, the term comes from the node that
+		// rejected our vote so we should become a follower at the new
+		// term.
+		return false
+	default:
+		// All other messages are sent with the sender's term.
+		return true
+	}
+}
+
 // voteResponseType maps vote and prevote message types to their corresponding responses.
 func voteRespMsgType(msgt pb.MessageType) pb.MessageType {
 	switch msgt {
