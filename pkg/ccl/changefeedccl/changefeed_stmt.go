@@ -653,7 +653,8 @@ func createChangefeedJobRecord(
 		// changefeed, thus ensuring that no job is created for this changefeed as
 		// desired.
 		sinklessRecord := &jobs.Record{
-			Details: details,
+			Description: jobDescription,
+			Details:     details,
 		}
 		return sinklessRecord, nil
 	}
