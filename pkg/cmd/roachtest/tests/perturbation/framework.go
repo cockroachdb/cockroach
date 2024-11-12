@@ -90,6 +90,7 @@ type variations struct {
 	workload             workloadType
 	acceptableChange     float64
 	cloud                registry.CloudSet
+	acMode               admissionControlMode
 	profileOptions       []roachtestutil.ProfileOptionFunc
 	specOptions          []spec.Option
 	clusterSettings      map[string]string
@@ -105,6 +106,7 @@ var numVCPUs = []int{4, 8, 16, 32}
 var numDisks = []int{1, 2}
 var memOptions = []spec.MemPerCPU{spec.Low, spec.Standard, spec.High}
 var cloudSets = []registry.CloudSet{registry.OnlyAWS, registry.OnlyGCE, registry.OnlyAzure}
+var admissionControlOptions = []admissionControlMode{disabled, elasticOnlyNoRepl, elasticOnlyBoth, fullNormalElasticRepl}
 
 var leases = []registry.LeaseType{
 	registry.EpochLeases,
@@ -112,13 +114,82 @@ var leases = []registry.LeaseType{
 	registry.ExpirationLeases,
 }
 
+type admissionControlMode int
+
+const (
+	// defaultOption uses the releases default settings for admission control.
+	defaultOption = admissionControlMode(iota)
+	// disabled fully disables admission control.
+	disabled
+	// elasticOnlyNoRepl applies normal admission control to elastic traffic, no
+	// replication admission control.
+	elasticOnlyNoRepl
+	// elasticOnlyBoth applies normal admission control to elastic traffic, and
+	// elastic replication admission control.
+	elasticOnlyBoth
+	// fullNormalElasticRepl applies normal admission control to elastic
+	// traffic, and elastic replication admission control.
+	fullNormalElasticRepl
+	// fullBoth applies admission control to all elastic and normal traffic.
+	fullBoth
+)
+
+func (a admissionControlMode) String() string {
+	switch a {
+	case disabled:
+		return "none"
+	case elasticOnlyNoRepl:
+		return "elasticOnlyNoRepl"
+	case elasticOnlyBoth:
+		return "elasticOnlyBoth"
+	case fullNormalElasticRepl:
+		return "fullNormalElasticRepl"
+	case fullBoth:
+		return "fullBoth"
+	case defaultOption:
+		return "defaultOption"
+	default:
+		return "unknown"
+	}
+}
+
+func (a admissionControlMode) getSettings() map[string]string {
+	switch a {
+	case disabled:
+		return map[string]string{
+			"admission.kv.enabled":             "false",
+			"kvadmission.flow_control.enabled": "false",
+		}
+	case elasticOnlyNoRepl:
+		return map[string]string{
+			"admission.kv.bulk_only.enabled":   "true",
+			"kvadmission.flow_control.enabled": "false",
+		}
+	case elasticOnlyBoth:
+		return map[string]string{
+			"admission.kv.bulk_only.enabled": "true",
+			"kvadmission.flow_control.mode":  "apply_to_elastic",
+		}
+	case fullNormalElasticRepl:
+		return map[string]string{
+			"kvadmission.flow_control.mode": "apply_to_elastic",
+		}
+	case fullBoth:
+		return map[string]string{
+			"kvadmission.flow_control.mode": "apply_to_all",
+		}
+	default:
+		return map[string]string{}
+	}
+}
+
 func (v variations) String() string {
 	return fmt.Sprintf("seed: %d, fillDuration: %s, maxBlockBytes: %d, perturbationDuration: %s, "+
 		"validationDuration: %s, ratioOfMax: %f, splits: %d, numNodes: %d, numWorkloadNodes: %d, "+
-		"vcpu: %d, disks: %d, memory: %s, leaseType: %s, cloud: %v, perturbation: %+v",
+		"vcpu: %d, disks: %d, memory: %s, leaseType: %s, cloud: %v, acMode: %s, perturbation: %+v",
 		v.seed, v.fillDuration, v.maxBlockBytes,
 		v.perturbationDuration, v.validationDuration, v.ratioOfMax, v.splits, v.numNodes, v.numWorkloadNodes,
-		v.vcpu, v.disks, v.mem, v.leaseType, v.cloud, v.perturbation)
+		v.vcpu, v.disks, v.mem, v.leaseType, v.cloud, v.acMode, v.perturbation)
 }
 
 // Normally a single worker can handle 20-40 nodes. If we find this is
@@ -140,6 +211,7 @@ func (v variations) randomize(rng *rand.Rand) variations {
 	// as they have limitations on configurations that can run.
 	v.cloud = registry.OnlyGCE
 	v.mem = memOptions[rng.Intn(len(memOptions))]
+	v.acMode = admissionControlOptions[rng.Intn(len(admissionControlOptions))]
 	return v
 }
 
@@ -170,8 +242,6 @@ func setup(p perturbation, acceptableChange float64) variations {
 	}
 	v.acceptableChange = acceptableChange
 	v.clusterSettings = make(map[string]string)
-	// Enable raft tracing. Remove this once raft tracing is the default.
-	v.clusterSettings["kv.raft.max_concurrent_traces"] = "10"
 	return v
 }
 
@@ -207,10 +277,21 @@ func (v variations) perturbationName() string {
 	return t.Name()
 }
 
+// finish completes initialization of the variations.
+func (v variations) finish() variations {
+	for k, val := range v.acMode.getSettings() {
+		v.clusterSettings[k] = val
+	}
+	// Enable raft tracing. Remove this once raft tracing is the default.
+	v.clusterSettings["kv.raft.max_concurrent_traces"] = "10"
+	return v
+}
+
 func addMetamorphic(r registry.Registry, p perturbation) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
+	v = v.finish()
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
@@ -225,6 +306,7 @@ func addMetamorphic(r registry.Registry, p perturbation) {
 
 func addFull(r registry.Registry, p perturbation) {
 	v := p.setup()
+	v = v.finish()
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
@@ -262,6 +344,7 @@ func addDev(r registry.Registry, p perturbation) {
 
 	// Allow the test to run on dev machines.
 	v.cloud = registry.AllClouds
+	v = v.finish()
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
