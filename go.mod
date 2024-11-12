@@ -28,7 +28,6 @@ require (
 // upgrade to something else), and reviewed by a broader community of
 // reviewers.
 require (
-	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
 	github.com/golang/mock v1.6.0
