@@ -103,8 +103,22 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		if name.IsReserved() {
 			return pgerror.Newf(pgcode.ReservedName, "role name %q is reserved", name.Normalized())
 		}
+
 		// Non-admin users cannot drop admins.
 		if !hasAdmin {
+			if n.ifExists {
+				// If `IF EXISTS` was specified, then a non-existing role should be
+				// skipped without causing any error.
+				roleExists, err := RoleExists(params.ctx, params.p.InternalSQLTxn(), name)
+				if err != nil {
+					return err
+				}
+				if !roleExists {
+					// If the role does not exist, we can skip the check for targetIsAdmin.
+					continue
+				}
+			}
+
 			targetIsAdmin, err := params.p.UserHasAdminRole(params.ctx, name)
 			if err != nil {
 				return err
@@ -113,6 +127,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				return pgerror.New(pgcode.InsufficientPrivilege, "must be superuser to drop superusers")
 			}
 		}
+
 	}
 
 	privilegeObjectFormatter := tree.NewFmtCtx(tree.FmtSimple)
