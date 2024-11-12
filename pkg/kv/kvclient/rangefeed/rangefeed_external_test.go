@@ -1451,7 +1451,8 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 	}
 	eventC := make(chan *kvpb.RangeFeedEvent)
 	sink := newChannelSink(ctx, eventC)
-	require.NoError(t, s3.RangeFeed(sink.ctx, &req, sink)) // check if we've errored yet
+	_, rErr := s3.RangeFeed(sink.ctx, &req, sink)
+	require.NoError(t, rErr) // check if we've errored yet
 	require.NoError(t, sink.Error())
 	t.Logf("started rangefeed on %s", repl3)
 
