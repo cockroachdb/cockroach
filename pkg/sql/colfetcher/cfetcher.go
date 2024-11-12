@@ -381,7 +381,7 @@ func (cf *cFetcher) Init(
 	allocator *colmem.Allocator, nextKVer storage.NextKVer, tableArgs *cFetcherTableArgs,
 ) error {
 	if tableArgs.spec.Version != fetchpb.IndexFetchSpecVersionInitial {
-		return errors.Newf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
+		return errors.AssertionFailedf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
 	}
 	table := newCTableInfo()
 	nCols := tableArgs.ColIdxMap.Len()
@@ -716,7 +716,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		}
 		switch cf.machine.state[0] {
 		case stateInvalid:
-			return nil, errors.New("invalid fetcher state")
+			return nil, errors.AssertionFailedf("invalid fetcher state")
 		case stateInitFetch:
 			cf.machine.firstKeyOfRow = nil
 			cf.cpuStopWatch.Start()
@@ -1145,7 +1145,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if defaultColumnID == 0 {
 				return scrub.WrapError(
 					scrub.IndexKeyDecodingError,
-					errors.Errorf("single entry value with no default column id"),
+					errors.AssertionFailedf("single entry value with no default column id"),
 				)
 			}
 			prettyKey, prettyValue, err = cf.processValueSingle(ctx, table, defaultColumnID, prettyKey)
@@ -1365,7 +1365,7 @@ func (cf *cFetcher) fillNulls() error {
 			for i := range table.spec.KeyFullColumns() {
 				indexColNames = append(indexColNames, table.spec.KeyAndSuffixColumns[i].Name)
 			}
-			return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
+			return scrub.WrapError(scrub.UnexpectedNullValueError, errors.AssertionFailedf(
 				"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 				table.spec.TableName, table.spec.FetchedColumns[i].Name, table.spec.IndexName,
 				strings.Join(indexColNames, ","), indexColValues.String()))

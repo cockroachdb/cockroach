@@ -225,11 +225,11 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		// key as a DBytes. The Datum should never be DNull since nulls aren't
 		// stored in inverted indexes.
 		if row[ifr.invertedColIdx].Datum == nil {
-			ifr.MoveToDraining(errors.New("no datum found"))
+			ifr.MoveToDraining(errors.AssertionFailedf("no datum found"))
 			return ifrStateUnknown, ifr.DrainHelper()
 		}
 		if row[ifr.invertedColIdx].Datum.ResolvedType().Family() != types.EncodedKeyFamily {
-			ifr.MoveToDraining(errors.New("inverted column should have type encodedkey"))
+			ifr.MoveToDraining(errors.AssertionFailedf("inverted column should have type encodedkey"))
 			return ifrStateUnknown, ifr.DrainHelper()
 		}
 		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DEncodedKey))

@@ -1748,7 +1748,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
 	a := colexecjoin.NewMergeJoinOp(
-		testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
+		ctx, testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 		colexecop.NewTestingSemaphore(mjFDLimit), descpb.FullOuterJoin,
 		leftSource, rightSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1820,7 +1820,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 				leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 				rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 				a := colexecjoin.NewMergeJoinOp(
-					testAllocator, execinfra.DefaultMemoryLimit,
+					ctx, testAllocator, execinfra.DefaultMemoryLimit,
 					queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 					leftSource, rightSource, typs, typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1897,7 +1897,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 					a := colexecjoin.NewMergeJoinOp(
-						testAllocator, execinfra.DefaultMemoryLimit,
+						ctx, testAllocator, execinfra.DefaultMemoryLimit,
 						queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2022,7 +2022,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, rCols, nTuples)
 
 					a := colexecjoin.NewMergeJoinOp(
-						testAllocator, execinfra.DefaultMemoryLimit,
+						ctx, testAllocator, execinfra.DefaultMemoryLimit,
 						queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},

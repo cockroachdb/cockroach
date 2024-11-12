@@ -84,7 +84,7 @@ func newAnyNotNull_AGGKINDAggAlloc(
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("unsupported any not null agg type %s", t.Name())
+	return nil, errors.AssertionFailedf("unsupported any not null agg type %s", t.Name())
 }
 
 // {{range .}}

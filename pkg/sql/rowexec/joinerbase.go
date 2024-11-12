@@ -57,7 +57,7 @@ func (jb *joinerBase) init(
 
 	if jb.joinType.IsSetOpJoin() {
 		if !onExpr.Empty() {
-			return nil, errors.Errorf("expected empty onExpr, got %v", onExpr)
+			return nil, errors.AssertionFailedf("expected empty onExpr, got %v", onExpr)
 		}
 	}
 

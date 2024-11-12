@@ -495,7 +495,7 @@ func NewColIndexJoin(
 ) (*ColIndexJoin, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
-		return nil, errors.Errorf("attempting to create a ColIndexJoin with uninitialized NodeID")
+		return nil, errors.AssertionFailedf("attempting to create a ColIndexJoin with uninitialized NodeID")
 	}
 	if !spec.LookupExpr.Empty() {
 		return nil, errors.AssertionFailedf("non-empty lookup expressions are not supported for index joins")

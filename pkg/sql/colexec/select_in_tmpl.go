@@ -109,7 +109,7 @@ func GetInProjectionOperator(
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("unhandled type: %s", t.Name())
+	return nil, errors.AssertionFailedf("unhandled type: %s", t.Name())
 }
 
 func GetInOperator(
@@ -138,7 +138,7 @@ func GetInOperator(
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("unhandled type: %s", t.Name())
+	return nil, errors.AssertionFailedf("unhandled type: %s", t.Name())
 }
 
 // {{range .}}

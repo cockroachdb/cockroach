@@ -139,7 +139,7 @@ func EncDatumFromEncoded(enc catenumpb.DatumEncoding, encoded []byte) EncDatum {
 // slice for the rest of the buffer.
 func EncDatumFromBuffer(enc catenumpb.DatumEncoding, buf []byte) (EncDatum, []byte, error) {
 	if len(buf) == 0 {
-		return EncDatum{}, nil, errors.New("empty encoded value")
+		return EncDatum{}, nil, errors.AssertionFailedf("empty encoded value")
 	}
 	switch enc {
 	case catenumpb.DatumEncoding_ASCENDING_KEY, catenumpb.DatumEncoding_DESCENDING_KEY:
