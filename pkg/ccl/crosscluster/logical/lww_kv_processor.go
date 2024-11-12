@@ -188,6 +188,16 @@ func (p *kvRowProcessor) ReportMutations(refresher *stats.Refresher) {
 	}
 }
 
+// ReleaseLeases releases all held leases.
+func (p *kvRowProcessor) ReleaseLeases(ctx context.Context) {
+	for _, w := range p.writers {
+		if w.leased != nil {
+			w.leased.Release(ctx)
+			w.leased = nil
+		}
+	}
+}
+
 // maxRefreshCount is the maximum number of times we will retry a KV batch that has failed with a
 // ConditionFailedError with HadNewerOriginTimetamp=true.
 const maxRefreshCount = 10
@@ -319,9 +329,7 @@ func (p *kvRowProcessor) SetSyntheticFailurePercent(rate uint32) {
 }
 
 func (p *kvRowProcessor) Close(ctx context.Context) {
-	for _, w := range p.writers {
-		w.leased.Release(ctx)
-	}
+	p.ReleaseLeases(ctx)
 }
 
 func (p *kvRowProcessor) getWriter(
@@ -329,12 +337,15 @@ func (p *kvRowProcessor) getWriter(
 ) (*kvTableWriter, error) {
 	w, ok := p.writers[id]
 	if ok {
-		// If the lease is still valid, just use the writer.
-		if w.leased.Expiration(ctx).After(ts) {
-			return w, nil
+		if w.leased != nil {
+			// If the lease is still valid, just use the writer.
+			if w.leased.Expiration(ctx).After(ts) {
+				return w, nil
+			}
+			// The lease is invalid; we'll be getting a new one so release this one.
+			w.leased.Release(ctx)
+			w.leased = nil
 		}
-		// The lease is invalid; we'll be getting a new one so release this one.
-		w.leased.Release(ctx)
 	}
 
 	l, err := p.cfg.LeaseManager.(*lease.Manager).Acquire(ctx, ts, id)
@@ -344,7 +355,7 @@ func (p *kvRowProcessor) getWriter(
 
 	// If the new lease just so happened to be the same version, we can just swap
 	// the lease in the existing writer.
-	if ok && l.Underlying().GetVersion() == w.leased.Underlying().GetVersion() {
+	if ok && l.Underlying().GetVersion() == w.v {
 		w.leased = l
 		return w, nil
 	}
@@ -365,6 +376,7 @@ func (p *kvRowProcessor) getWriter(
 // it populates should commit no later than the expiration of said lease.
 type kvTableWriter struct {
 	leased           lease.LeasedDescriptor
+	v                descpb.DescriptorVersion
 	newVals, oldVals []tree.Datum
 	ru               row.Updater
 	ri               row.Inserter
@@ -406,6 +418,7 @@ func newKVTableWriter(
 
 	return &kvTableWriter{
 		leased:  leased,
+		v:       leased.Underlying().GetVersion(),
 		oldVals: make([]tree.Datum, len(readCols)),
 		newVals: make([]tree.Datum, len(writeCols)),
 		ri:      ri,
