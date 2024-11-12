@@ -1261,11 +1261,18 @@ func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 		r.lead = None
 		lead = None
 	}
-	r.step = stepFollower
-	r.reset(term)
-	r.tick = r.tickElection
-	r.setLead(lead)
 	r.state = pb.StateFollower
+	r.step = stepFollower
+	r.tick = r.tickElection
+
+	// Start de-fortifying eagerly so we don't have to wait out a full heartbeat
+	// timeout before sending the first de-fortification message.
+	if r.shouldBcastDeFortify() {
+		r.bcastDeFortify()
+	}
+
+	r.reset(term)
+	r.setLead(lead)
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
 }
 
