@@ -1950,7 +1950,7 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 		return 0, err
 	}
 
-	if dsp.useGossipPlanning(ctx, planCtx) && planCtx.localityFilter.Empty() {
+	if dsp.useGossipPlanning(ctx, planCtx) {
 		sqlInstanceID, _ := dsp.deprecatedHealthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID)
 		return sqlInstanceID, nil
 	}
@@ -1963,9 +1963,21 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	return sqlInstanceID, nil
 }
 
+// TODO(yuzefovich): retire this setting altogether in 25.3 release.
+var useGossipPlanning = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.distsql_planning.use_gossip.enabled",
+	"if enabled, the DistSQL physical planner falls back to gossip-based planning",
+	false,
+)
+
 func (dsp *DistSQLPlanner) useGossipPlanning(_ context.Context, planCtx *PlanningCtx) bool {
-	// TODO(dt): enable this by default, e.g. // && !dsp.distSQLSrv.Settings.Version.IsActive(ctx, clusterversion.V23_1)
-	return dsp.codec.ForSystemTenant() && planCtx.localityFilter.Empty()
+	var gossipPlanningEnabled bool
+	// Some of the planCtx fields can be left unset in tests.
+	if planCtx.ExtendedEvalCtx != nil && planCtx.ExtendedEvalCtx.Settings != nil {
+		gossipPlanningEnabled = useGossipPlanning.Get(&planCtx.ExtendedEvalCtx.Settings.SV)
+	}
+	return dsp.codec.ForSystemTenant() && planCtx.localityFilter.Empty() && gossipPlanningEnabled
 }
 
 // convertOrdering maps the columns in props.ordering to the output columns of a
