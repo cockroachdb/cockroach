@@ -225,6 +225,10 @@ func (f *fetchNode) nextInternal(ctx context.Context) (bool, error) {
 			if f.cursor.curRow > f.offset {
 				return false, errBackwardScan
 			}
+			if f.offset == 0 {
+				// ABSOLUTE 0 is positioned before the first row.
+				return false, nil
+			}
 			for f.cursor.curRow < f.offset {
 				more, err := f.cursor.Next(ctx)
 				if !more || err != nil {
