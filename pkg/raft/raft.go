@@ -1039,6 +1039,7 @@ func (r *raft) reset(term uint64) {
 		r.setTerm(term)
 	}
 
+	r.lead = None
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
 	r.resetRandomizedElectionTimeout()
