@@ -429,14 +429,13 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			panic(err)
 		}
 		if zoneConfig != nil {
-			zc := zoneConfig.ZoneConfigProto()
 			w.ev(scpb.Status_PUBLIC,
 				&scpb.TableZoneConfig{
 					TableID:    tbl.GetID(),
-					ZoneConfig: zc,
+					ZoneConfig: zoneConfig.ZoneConfigProto(),
 					SeqNum:     0,
 				})
-			for i, subZoneCfg := range zc.Subzones {
+			for _, subZoneCfg := range zoneConfig.ZoneConfigProto().Subzones {
 				if len(subZoneCfg.PartitionName) > 0 {
 					w.ev(scpb.Status_PUBLIC,
 						&scpb.PartitionZoneConfig{
@@ -444,17 +443,15 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 							IndexID:       catid.IndexID(subZoneCfg.IndexID),
 							PartitionName: subZoneCfg.PartitionName,
 							Subzone:       subZoneCfg,
-							SubzoneSpans:  zc.FilterSubzoneSpansByIdx(int32(i)),
 							SeqNum:        0,
 						})
 				} else {
 					w.ev(scpb.Status_PUBLIC,
 						&scpb.IndexZoneConfig{
-							TableID:      tbl.GetID(),
-							IndexID:      catid.IndexID(subZoneCfg.IndexID),
-							Subzone:      subZoneCfg,
-							SubzoneSpans: zc.FilterSubzoneSpansByIdx(int32(i)),
-							SeqNum:       0,
+							TableID: tbl.GetID(),
+							IndexID: catid.IndexID(subZoneCfg.IndexID),
+							Subzone: subZoneCfg,
+							SeqNum:  0,
 						})
 				}
 			}

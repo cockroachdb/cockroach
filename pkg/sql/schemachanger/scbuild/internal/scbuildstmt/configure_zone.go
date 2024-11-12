@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -76,33 +77,35 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		resolvePhysicalTableName(b, n)
 	}
 
-	// Log event for auditing
-	eventDetails := eventpb.CommonZoneConfigDetails{
-		Target:  tree.AsString(&n.ZoneSpecifier),
-		Options: optionsStr,
-	}
-
-	// In both the cases below, we generate the element for our AST and add/drop
-	// it. For index/partitions, this change includes changing the subzone's
-	// corresponding subzoneSpans -- which could necessitate any existing subzone
-	// to regenerate the keys for their subzoneSpans (see:
-	// `alter_partition_configure_zone_subpartitions.definition` for an example).
-	// Those changes are represented by affectedSubzoneConfigsToUpdate.
+	var elem scpb.Element
 	if n.Discard {
 		// If we are discarding the zone config and a zone config did not previously
 		// exist for us to discard, then no-op.
 		if zco.isNoOp() {
 			return
 		}
-		toDrop, affectedSubzoneConfigsToUpdate := zco.getZoneConfigElemForDrop(b)
-		dropZoneConfigElem(b, toDrop, eventDetails)
-		addZoneConfigElem(b, affectedSubzoneConfigsToUpdate, oldZone, eventDetails)
+		elem = zco.getZoneConfigElem(b)
+		b.Drop(elem)
 	} else {
-		toAdd, affectedSubzoneConfigsToUpdate := zco.getZoneConfigElemForAdd(b)
-		affectedSubzoneConfigsToUpdate = append([]scpb.Element{toAdd},
-			affectedSubzoneConfigsToUpdate...)
-		addZoneConfigElem(b, affectedSubzoneConfigsToUpdate, oldZone, eventDetails)
+		zco.incrementSeqNum()
+		elem = zco.getZoneConfigElem(b)
+		b.Add(elem)
 	}
+
+	// Log event for auditing
+	eventDetails := eventpb.CommonZoneConfigDetails{
+		Target:  tree.AsString(&n.ZoneSpecifier),
+		Options: optionsStr,
+	}
+
+	var info logpb.EventPayload
+	if n.Discard {
+		info = &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
+	} else {
+		info = &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
+			ResolvedOldConfig: oldZone.String()}
+	}
+	b.LogEventForExistingPayload(elem, info)
 }
 
 func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject, error) {
@@ -200,26 +203,4 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	}
 
 	return nil, errors.AssertionFailedf("unexpected zone config object")
-}
-
-func dropZoneConfigElem(
-	b BuildCtx, elem scpb.Element, eventDetails eventpb.CommonZoneConfigDetails,
-) {
-	info := &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
-	b.Drop(elem)
-	b.LogEventForExistingPayload(elem, info)
-}
-
-func addZoneConfigElem(
-	b BuildCtx,
-	elems []scpb.Element,
-	oldZone *zonepb.ZoneConfig,
-	eventDetails eventpb.CommonZoneConfigDetails,
-) {
-	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
-		ResolvedOldConfig: oldZone.String()}
-	for _, e := range elems {
-		b.Add(e)
-		b.LogEventForExistingPayload(e, info)
-	}
 }

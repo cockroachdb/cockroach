@@ -83,9 +83,7 @@ type ImmediateMutationStateUpdater interface {
 
 	// UpdateSubzoneConfig upserts a subzone config.
 	UpdateSubzoneConfig(
-		tableid descpb.ID,
-		subzone zonepb.Subzone,
-		subzoneSpans []zonepb.SubzoneSpan,
+		tableid descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
 	)
 
 	// DeleteZoneConfig deletes the zone config for the given ID.
