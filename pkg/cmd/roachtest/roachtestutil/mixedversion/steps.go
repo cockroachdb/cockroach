@@ -99,7 +99,7 @@ func (s startSharedProcessVirtualClusterStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
 	l.Printf("starting shared process virtual cluster %s", s.name)
-	startOpts := option.StartSharedVirtualClusterOpts(s.name, option.WithInitTarget(s.initTarget))
+	startOpts := option.StartSharedVirtualClusterOpts(s.name, startStopOpts(option.WithInitTarget(s.initTarget))...)
 
 	if err := h.runner.cluster.StartServiceForVirtualClusterE(
 		ctx, l, startOpts, install.MakeClusterSettings(s.settings...),
@@ -502,13 +502,21 @@ func quoteVersionForPresentation(v string) string {
 }
 
 // startOpts returns the start options used when starting (or
-// restarting) cockroach processes in mixedversion tests.  We disable
+// restarting) cockroach processes in mixedversion tests. We disable
 // regular backups as some tests check for running jobs and the
 // scheduled backup may make things non-deterministic. In the future,
 // we should change the default and add an API for tests to opt-out of
 // the default scheduled backup if necessary.
 func startOpts(opts ...option.StartStopOption) option.StartOpts {
 	return option.NewStartOpts(
-		append([]option.StartStopOption{option.NoBackupSchedule}, opts...)...,
+		startStopOpts(opts...)...,
 	)
+}
+
+// startStopOpts does the same as `startOpts` but returns StartStopOptions
+// instead. This is required when starting virtual clusters.
+func startStopOpts(opts ...option.StartStopOption) []option.StartStopOption {
+	return append([]option.StartStopOption{
+		option.NoBackupSchedule,
+	}, opts...)
 }
