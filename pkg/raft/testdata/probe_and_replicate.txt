@@ -468,6 +468,12 @@ stabilize 2 3 4 5 6 7
   State:StateFollower
   HardState Term:8 Commit:18 Lead:0 LeadEpoch:0
   Messages:
+  5->1 MsgDeFortifyLeader Term:7 Log:0/0
+  5->2 MsgDeFortifyLeader Term:7 Log:0/0
+  5->3 MsgDeFortifyLeader Term:7 Log:0/0
+  5->4 MsgDeFortifyLeader Term:7 Log:0/0
+  5->6 MsgDeFortifyLeader Term:7 Log:0/0
+  5->7 MsgDeFortifyLeader Term:7 Log:0/0
   5->1 MsgVoteResp Term:8 Log:0/0 Rejected (Hint: 0)
 > 6 handling Ready
   Ready MustSync=true:
@@ -478,7 +484,39 @@ stabilize 2 3 4 5 6 7
   Ready MustSync=true:
   HardState Term:8 Vote:1 Commit:13 Lead:0 LeadEpoch:0
   Messages:
+  7->1 MsgDeFortifyLeader Term:3 Log:0/0
+  7->2 MsgDeFortifyLeader Term:3 Log:0/0
+  7->3 MsgDeFortifyLeader Term:3 Log:0/0
+  7->4 MsgDeFortifyLeader Term:3 Log:0/0
+  7->5 MsgDeFortifyLeader Term:3 Log:0/0
+  7->6 MsgDeFortifyLeader Term:3 Log:0/0
   7->1 MsgVoteResp Term:8 Log:0/0
+> 2 receiving messages
+  5->2 MsgDeFortifyLeader Term:7 Log:0/0
+  INFO 2 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 5 [term: 7]
+  7->2 MsgDeFortifyLeader Term:3 Log:0/0
+  INFO 2 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 7 [term: 3]
+> 3 receiving messages
+  5->3 MsgDeFortifyLeader Term:7 Log:0/0
+  INFO 3 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 5 [term: 7]
+  7->3 MsgDeFortifyLeader Term:3 Log:0/0
+  INFO 3 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 7 [term: 3]
+> 4 receiving messages
+  5->4 MsgDeFortifyLeader Term:7 Log:0/0
+  INFO 4 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 5 [term: 7]
+  7->4 MsgDeFortifyLeader Term:3 Log:0/0
+  INFO 4 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 7 [term: 3]
+> 5 receiving messages
+  7->5 MsgDeFortifyLeader Term:3 Log:0/0
+  INFO 5 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 7 [term: 3]
+> 6 receiving messages
+  5->6 MsgDeFortifyLeader Term:7 Log:0/0
+  INFO 6 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 5 [term: 7]
+  7->6 MsgDeFortifyLeader Term:3 Log:0/0
+  INFO 6 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 7 [term: 3]
+> 7 receiving messages
+  5->7 MsgDeFortifyLeader Term:7 Log:0/0
+  INFO 7 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 5 [term: 7]
 
 stabilize 1
 ----
@@ -492,6 +530,8 @@ stabilize 1
   4->1 MsgVoteResp Term:8 Log:0/0 Rejected (Hint: 0)
   INFO 1 received MsgVoteResp rejection from 4 at term 8
   INFO 1 has received 3 MsgVoteResp votes and 1 vote rejections
+  5->1 MsgDeFortifyLeader Term:7 Log:0/0
+  INFO 1 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 5 [term: 7]
   5->1 MsgVoteResp Term:8 Log:0/0 Rejected (Hint: 0)
   INFO 1 received MsgVoteResp rejection from 5 at term 8
   INFO 1 has received 3 MsgVoteResp votes and 2 vote rejections
@@ -499,6 +539,8 @@ stabilize 1
   INFO 1 received MsgVoteResp from 6 at term 8
   INFO 1 has received 4 MsgVoteResp votes and 2 vote rejections
   INFO 1 became leader at term 8
+  7->1 MsgDeFortifyLeader Term:3 Log:0/0
+  INFO 1 [term: 8] ignored a MsgDeFortifyLeader message with lower term from 7 [term: 3]
   7->1 MsgVoteResp Term:8 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:
