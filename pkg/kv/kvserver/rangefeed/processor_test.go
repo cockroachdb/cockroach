@@ -303,7 +303,7 @@ func TestProcessorBasic(t *testing.T) {
 		r1Stream.Cancel()
 		require.NotNil(t, r1Stream.WaitForError(t))
 
-		// Disconnect the registration via Disconnect should work.
+		// Disconnect the registration via SendError should work.
 		r3Stream := newTestStream()
 		r30K, _ := p.Register(
 			r3Stream.ctx,
@@ -317,7 +317,7 @@ func TestProcessorBasic(t *testing.T) {
 			func() {},
 		)
 		require.True(t, r30K)
-		r3Stream.Disconnect(kvpb.NewError(fmt.Errorf("disconnection error")))
+		r3Stream.SendError(kvpb.NewError(fmt.Errorf("disconnection error")))
 		require.NotNil(t, r3Stream.WaitForError(t))
 
 		// Stop the processor with an error.
@@ -1393,9 +1393,9 @@ func (c *consumer) WaitBlock() {
 	<-c.blocked
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
+// SendError implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
-func (c *consumer) Disconnect(error *kvpb.Error) {
+func (c *consumer) SendError(error *kvpb.Error) {
 	c.done <- error
 }
 

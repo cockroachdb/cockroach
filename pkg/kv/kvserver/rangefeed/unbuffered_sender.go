@@ -33,23 +33,23 @@ type ServerStreamSender interface {
 
 //			                            ┌───────────────────────────┐
 //			                            │ DistSender.RangefeedSpans │  rangefeedMuxer
-//			                            └───────────────────────────┘
+//			                            └────────────▲──────────────┘
 //			                                         │ divideAllSpansOnRangeBoundaries
 //		            ┌───────────────────────────┬───────────────────────────┐
-//		            ▼                           ▼                           ▼
+//		            │                           │                           │
 //		  ┌────────────────────┐     ┌────────────────────┐      ┌────────────────────┐
 //		  │   rangefeedMuxer   │     │   rangefeedMuxer   │      │   rangefeedMuxer   │   (client: rangefeedMuxer.
 //		  │startSingleRangefeed│     │startSingleRangefeed│      │startSingleRangefeed│   restartActiveRangeFeed)
-//		  └─────────┬──────────┘     └──────────┬─────────┘      └──────────┬─────────┘                  ▲
-//		            ▼                           ▼                           ▼                            │
+//		  └─────────▲──────────┘     └──────────▲─────────┘      └──────────▲─────────┘                  ▲
+//		            │                           │                           │                            │
 //		       new streamID               new streamID                 new streamID                      │
 //		    ┌────────────────┐         ┌────────────────┐           ┌────────────────┐                   │
 //		    │RangefeedRequest│         │RangefeedRequest│           │RangefeedRequest│                   │
 //		    └────────────────┘         └────────────────┘           └────────────────┘                   │
 //		      rangefeedMuxer             rangefeedMuxer               rangefeedMuxer                     │
 //		  establishMuxConnection     establishMuxConnection       establishMuxConnection                 │
+//		            ▲                           ▲                            ▲                           │
 //		            │                           │                            │                           │
-//		            ▼                           ▼                            ▼                           │
 //		          rangefeedMuxer.startNodeMuxRangefeed           rangefeedMuxer.startNodeMuxRangefeed    │
 //		          rangefeedMuxer.receiveEventsFromNode           rangefeedMuxer.receiveEventsFromNode    │
 //		       ┌─────────────────────────────────────────┐    ┌─────────────────────────────────────────┐│
@@ -62,28 +62,19 @@ type ServerStreamSender interface {
 //			    Sender.AddStream │   │LockedMuxStream.Send                │                                │
 //			        ┌────────────▼───┴──────────┐                         │                                │
 //			        │ Buffered/Unbuffered Sender├───────────┐             │                                │
-//			        └────────────┬──────────────┘           │             │                                │
+//			        └────────────▲──────────────┘           │             │                                │
 //			                     │                          │             │                                │
-//			            ┌────────▼─────────┐                │             │                                │
-//			            │ Stores.Rangefeed │                │             │                                │
-//			            └────────┬─────────┘                │             │                                │
-//			                     │                          │             │                                │
-//			             ┌───────▼─────────┐         UnbufferedSender  UnbufferedSender                    │
-//			             │ Store.Rangefeed │         SendUnbuffered    SendBufferedError ─────► UnbufferedSender.run
-//					         └───────┬─────────┘               ▲               ▲                               ▲
+//			            ┌────────┴──────────┐        UnbufferedSender  UnbufferedSender                    │
+//			            │ Replica.Rangefeed │        sendUnbuffered    sendBuffered ─────► UnbufferedSender.run
+//					        └────────▲──────────┘              ▲               ▲                               ▲
 //			 		                 │                         │               │                               │
-//			 		        ┌────────▼──────────┐              │               │                               │
-//			 		        │ Replica.Rangefeed │              │               │                               │
-//			 		        └────────┬──────────┘              │               │                               │
-//			 		                 │                         │               │                               │
-//			              ┌──────▼───────┐                 │               │                               │
-//			              │ Registration │                 │               │                               │
-//			              └──────┬───────┘                 │               │                               │
-//		                       │      								   │							 │						           				 │
+//			 		          ┌──────┴───────┐                 │               │                               │
+//			 		          │ Registration │                 │               │                               │
+//			 		          └──────┬───────┘                 │               │                               │
 //			  	                 │                         │               │                               │
 //			         	 	         └─────────────────────────┘───────────────┘───────────────────────────────┘
-//			          			                  PerRangeEventSink.Send   PerRangeEventSink.Disconnect
-//
+//			          			                  PerRangeEventSink.Send   PerRangeEventSink.SendError
+
 // UnbufferedSender is embedded in every rangefeed.PerRangeEventSink, serving as
 // a helper to forward events to the underlying gRPC stream.
 // - For non-error events, SendUnbuffered is blocking until the event is sent.

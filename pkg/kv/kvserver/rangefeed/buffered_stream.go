@@ -80,12 +80,12 @@ func (s *BufferedPerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) e
 	return s.wrapped.SendUnbuffered(response, nil)
 }
 
-// Disconnect implements the Stream interface. BufferedSender is then
+// SendError implements the Stream interface. BufferedSender is then
 // responsible for canceling the context of the stream. The actual rangefeed
 // disconnection from processor happens late when the error event popped from
 // the queue and about to be sent to the grpc stream. So caller should not rely
 // on immediate disconnection as cleanup takes place async.
-func (s *BufferedPerRangeEventSink) Disconnect(err *kvpb.Error) {
+func (s *BufferedPerRangeEventSink) SendError(err *kvpb.Error) {
 	ev := &kvpb.MuxRangeFeedEvent{
 		StreamID: s.streamID,
 		RangeID:  s.rangeID,
