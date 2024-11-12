@@ -2221,6 +2221,332 @@ statement ok
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
+# Test cyclical triggers.
+# ==============================================================================
+
+statement ok
+CREATE TABLE t1 (a INT, b INT);
+CREATE TABLE t2 (a INT, b INT);
+
+# Test cyclical AFTER triggers.
+subtest cyclical_after_triggers
+
+statement ok
+SET recursion_depth_limit = 10;
+
+statement ok
+CREATE FUNCTION insert_t1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE ' ';
+    RAISE NOTICE '% trigger % with NEW: %', TG_WHEN, TG_NAME, NEW;
+    RAISE NOTICE 'max t1.a: %, max t2.a: %', (SELECT max(a) FROM t1), (SELECT max(a) FROM t2);
+    RAISE NOTICE 'inserting into t1: %', ROW((NEW).a + 1, (NEW).b);
+    INSERT INTO t1 VALUES ((NEW).a + 1, (NEW).b);
+    RETURN NEW;
+  END
+$$;
+CREATE FUNCTION insert_t2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE ' ';
+    RAISE NOTICE '% trigger % with NEW: %', TG_WHEN, TG_NAME, NEW;
+    RAISE NOTICE 'max t1.a: %, max t2.a: %', (SELECT max(a) FROM t1), (SELECT max(a) FROM t2);
+    RAISE NOTICE 'inserting into t2: %', ROW((NEW).a + 1, (NEW).b);
+    INSERT INTO t2 VALUES ((NEW).a + 1, (NEW).b);
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION insert_t2();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT ON t2 FOR EACH ROW EXECUTE FUNCTION insert_t1();
+
+# The triggers should fire until the limit is reached.
+statement error pgcode 09000 pq: trigger reached recursion depth limit: 10
+INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+# Add a WHEN clause to end the cycle after a few iterations.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW WHEN ((NEW).a < 5) EXECUTE FUNCTION insert_t2();
+
+query T noticetrace
+INSERT INTO t1 VALUES (1, 1);
+----
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (1,1)
+NOTICE: max t1.a: 1, max t2.a: <NULL>
+NOTICE: inserting into t2: (2,1)
+NOTICE:
+NOTICE: AFTER trigger bar with NEW: (2,1)
+NOTICE: max t1.a: 1, max t2.a: 2
+NOTICE: inserting into t1: (3,1)
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (3,1)
+NOTICE: max t1.a: 3, max t2.a: 2
+NOTICE: inserting into t2: (4,1)
+NOTICE:
+NOTICE: AFTER trigger bar with NEW: (4,1)
+NOTICE: max t1.a: 3, max t2.a: 4
+NOTICE: inserting into t1: (5,1)
+
+query II rowsort
+SELECT * FROM t1;
+----
+1  1
+3  1
+5  1
+
+query II rowsort
+SELECT * FROM t2;
+----
+2  1
+4  1
+
+statement ok
+DELETE FROM t1 WHERE True;
+DELETE FROM t2 WHERE True;
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+DROP TRIGGER bar ON t2;
+
+# Test cyclical BEFORE triggers.
+subtest cyclical_before_triggers
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION insert_t2();
+
+statement ok
+CREATE TRIGGER bar BEFORE INSERT ON t2 FOR EACH ROW EXECUTE FUNCTION insert_t1();
+
+# The triggers should fire until the limit is reached.
+statement error pgcode 09000 pq: trigger reached recursion depth limit: 10
+INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+# Add a WHEN clause to end the cycle after a few iterations.
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON t1 FOR EACH ROW WHEN ((NEW).a < 5) EXECUTE FUNCTION insert_t2();
+
+query T noticetrace
+INSERT INTO t1 VALUES (1, 1);
+----
+NOTICE:
+NOTICE: BEFORE trigger foo with NEW: (1,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t2: (2,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (2,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (3,1)
+NOTICE:
+NOTICE: BEFORE trigger foo with NEW: (3,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t2: (4,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (4,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (5,1)
+
+query II rowsort
+SELECT * FROM t1;
+----
+1  1
+3  1
+5  1
+
+query II rowsort
+SELECT * FROM t2;
+----
+2  1
+4  1
+
+statement ok
+DELETE FROM t1 WHERE True;
+DELETE FROM t2 WHERE True;
+
+# Test mutually cyclical BEFORE and AFTER triggers.
+subtest cyclical_before_after_triggers
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION insert_t2();
+
+# The triggers should fire until the limit is reached.
+statement error pgcode 09000 pq: trigger reached recursion depth limit: 10
+INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+# Add a WHEN clause to end the cycle after a few iterations.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW WHEN ((NEW).a < 5) EXECUTE FUNCTION insert_t2();
+
+query T noticetrace
+INSERT INTO t1 VALUES (1, 1);
+----
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (1,1)
+NOTICE: max t1.a: 1, max t2.a: <NULL>
+NOTICE: inserting into t2: (2,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (2,1)
+NOTICE: max t1.a: 1, max t2.a: <NULL>
+NOTICE: inserting into t1: (3,1)
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (3,1)
+NOTICE: max t1.a: 3, max t2.a: <NULL>
+NOTICE: inserting into t2: (4,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (4,1)
+NOTICE: max t1.a: 3, max t2.a: <NULL>
+NOTICE: inserting into t1: (5,1)
+
+query II rowsort
+SELECT * FROM t1;
+----
+1  1
+3  1
+5  1
+
+query II rowsort
+SELECT * FROM t2;
+----
+2  1
+4  1
+
+statement ok
+DELETE FROM t1 WHERE True;
+DELETE FROM t2 WHERE True;
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+DROP TRIGGER bar ON t2;
+
+# Test a single cyclical trigger.
+subtest cyclical_trigger_singleton
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION insert_t1();
+
+# The trigger should fire until the limit is reached.
+statement error pgcode 09000 pq: trigger reached recursion depth limit: 10
+INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+# Add a WHEN clause to end the cycle after a few iterations.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW WHEN ((NEW).a < 5) EXECUTE FUNCTION insert_t1();
+
+query T noticetrace
+INSERT INTO t1 VALUES (1, 1);
+----
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (1,1)
+NOTICE: max t1.a: 1, max t2.a: <NULL>
+NOTICE: inserting into t1: (2,1)
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (2,1)
+NOTICE: max t1.a: 2, max t2.a: <NULL>
+NOTICE: inserting into t1: (3,1)
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (3,1)
+NOTICE: max t1.a: 3, max t2.a: <NULL>
+NOTICE: inserting into t1: (4,1)
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (4,1)
+NOTICE: max t1.a: 4, max t2.a: <NULL>
+NOTICE: inserting into t1: (5,1)
+
+query II rowsort
+SELECT * FROM t1;
+----
+1  1
+2  1
+3  1
+4  1
+5  1
+
+statement ok
+DELETE FROM t1 WHERE True;
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+CREATE TRIGGER bar BEFORE INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION insert_t1();
+
+# The trigger should fire until the limit is reached.
+statement error pgcode 09000 pq: trigger reached recursion depth limit: 10
+INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+DROP TRIGGER bar ON t1;
+
+# Add a WHEN clause to end the cycle after a few iterations.
+statement ok
+CREATE TRIGGER bar BEFORE INSERT ON t1 FOR EACH ROW WHEN ((NEW).a < 5) EXECUTE FUNCTION insert_t1();
+
+query T noticetrace
+INSERT INTO t1 VALUES (1, 1);
+----
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (1,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (2,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (2,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (3,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (3,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (4,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (4,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (5,1)
+
+query II rowsort
+SELECT * FROM t1;
+----
+1  1
+2  1
+3  1
+4  1
+5  1
+
+statement ok
+DELETE FROM t1 WHERE True;
+
+statement ok
+DROP TRIGGER bar ON t1;
+
+statement ok
+DROP FUNCTION insert_t1;
+DROP FUNCTION insert_t2;
+DROP TABLE t1;
+DROP TABLE t2;
+
+statement ok
+RESET recursion_depth_limit;
+
+# ==============================================================================
 # Test row-level trigger interaction with FK cascades and checks.
 # ==============================================================================
 

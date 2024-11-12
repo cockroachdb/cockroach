@@ -707,6 +707,7 @@ func (b *Builder) buildExistsSubquery(
 				false, /* generator */
 				false, /* tailCall */
 				false, /* procedure */
+				false, /* triggerFunc */
 				false, /* blockStart */
 				nil,   /* blockState */
 				nil,   /* cursorDeclaration */
@@ -828,6 +829,7 @@ func (b *Builder) buildSubquery(
 			false, /* generator */
 			false, /* tailCall */
 			false, /* procedure */
+			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
@@ -888,6 +890,7 @@ func (b *Builder) buildSubquery(
 			false, /* generator */
 			false, /* tailCall */
 			false, /* procedure */
+			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
@@ -1000,6 +1003,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.SetReturning,
 		tailCall,
 		false, /* procedure */
+		udf.Def.TriggerFunc,
 		udf.Def.BlockStart,
 		blockState,
 		udf.Def.CursorDeclaration,
@@ -1056,6 +1060,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.SetReturning,
 			false, /* tailCall */
 			false, /* procedure */
+			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */

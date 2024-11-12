@@ -190,6 +190,11 @@ type Builder struct {
 	// DEFINER, the owner of the routine is checked. Otherwise, the check is
 	// against the user of the current session.
 	checkPrivilegeUser username.SQLUsername
+
+	// builtTriggerFuncs caches already-built trigger functions for a table. It is
+	// necessary to cache these functions since triggers can recursively reference
+	// one another.
+	builtTriggerFuncs map[cat.StableID][]cachedTriggerFunc
 }
 
 // New creates a new Builder structure initialized with the given
