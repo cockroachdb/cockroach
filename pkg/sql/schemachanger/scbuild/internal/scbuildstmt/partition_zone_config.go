@@ -38,9 +38,7 @@ func (pzo *partitionZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return pzo.tableZoneConfigObj.zoneConfig
 }
 
-func (pzo *partitionZoneConfigObj) getZoneConfigElemForAdd(
-	b BuildCtx,
-) (scpb.Element, []scpb.Element) {
+func (pzo *partitionZoneConfigObj) getZoneConfigElem(b BuildCtx) []scpb.Element {
 	subzones := []zonepb.Subzone{*pzo.partitionSubzone}
 
 	// Merge the new subzones with the old subzones so that we can generate
@@ -63,7 +61,6 @@ func (pzo *partitionZoneConfigObj) getZoneConfigElemForAdd(
 	// Update the partition that is represented by pzo, along with all other
 	// subzones.
 	idxToSpansMap := getSubzoneSpansWithIdx(len(subzones), ss)
-	var szCfg scpb.Element
 	var szCfgsToUpdate []scpb.Element
 	for i, sub := range subzones {
 		if spans, ok := idxToSpansMap[int32(i)]; ok {
@@ -74,35 +71,23 @@ func (pzo *partitionZoneConfigObj) getZoneConfigElemForAdd(
 					PartitionName: sub.PartitionName,
 					Subzone:       sub,
 					SubzoneSpans:  spans,
-					SeqNum:        pzo.seqNum + 1,
+					SeqNum:        pzo.seqNum,
 				}
-				if sub.PartitionName == pzo.partitionName && sub.IndexID == uint32(pzo.indexID) {
-					szCfg = elem
-				} else {
-					szCfgsToUpdate = append(szCfgsToUpdate, elem)
-				}
+				szCfgsToUpdate = append(szCfgsToUpdate, elem)
 			} else {
 				elem := &scpb.IndexZoneConfig{
 					TableID:      pzo.tableID,
 					IndexID:      catid.IndexID(sub.IndexID),
 					Subzone:      sub,
 					SubzoneSpans: spans,
-					SeqNum:       pzo.seqNum + 1,
+					SeqNum:       pzo.seqNum,
 				}
 				szCfgsToUpdate = append(szCfgsToUpdate, elem)
 			}
 		}
 	}
 
-	return szCfg, szCfgsToUpdate
-}
-
-func (pzo *partitionZoneConfigObj) getZoneConfigElemForDrop(
-	b BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	// TODO(annie): this will need to be revised in order to implement subzone
-	// discards. This is fine for now as we fallback before we can get here.
-	return pzo.getZoneConfigElemForAdd(b)
+	return szCfgsToUpdate
 }
 
 func (pzo *partitionZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {

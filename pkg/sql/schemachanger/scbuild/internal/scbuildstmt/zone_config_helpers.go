@@ -52,19 +52,11 @@ type zoneConfigAuthorizer interface {
 }
 
 type zoneConfigObjBuilder interface {
-	// getZoneConfigElemForAdd retrieves (scpb.Element, []scpb.Element) needed for
-	// adding the zone config object. The slice of multiple elements to be
-	// modified becomes more relevant for subzone configs -- as configuring the
-	// zone on indexes and partitions can shift the subzone spans for other
-	// elements around.
-	getZoneConfigElemForAdd(b BuildCtx) (scpb.Element, []scpb.Element)
-
-	// getZoneConfigElemForDrop retrieves (scpb.Element, []scpb.Element) needed
-	// for dropping the zone config object. The slice of multiple elements
-	// to be modified becomes more relevant for subzone configs -- as configuring
-	// the zone on indexes and partitions can shift the subzone spans for other
-	// elements around.
-	getZoneConfigElemForDrop(b BuildCtx) (scpb.Element, []scpb.Element)
+	// getZoneConfigElem retrieves []scpb.Elements needed for modification for the
+	// zone config object. Having multiple elements needing to be modified becomes
+	// more relevant for subzone configs -- as configuring the zone on indexes
+	// and partitions can shift the subzone spans for other elements around.
+	getZoneConfigElem(b BuildCtx) []scpb.Element
 
 	// getTargetID returns the target ID of the zone config object. This is either
 	// a database or a table ID.
@@ -82,6 +74,9 @@ type zoneConfigObjBuilder interface {
 	// setZoneConfigToWrite fills our object with the zone config/subzone config
 	// we will be writing to KV.
 	setZoneConfigToWrite(zone *zonepb.ZoneConfig)
+
+	// incrementSeqNum increments the seqNum by 1.
+	incrementSeqNum()
 
 	// isNoOp returns true if the zone config object is a no-op. This is defined
 	// by our object having no zone config yet.
