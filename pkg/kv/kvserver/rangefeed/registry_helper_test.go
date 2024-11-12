@@ -198,9 +198,9 @@ func (s *testStream) BlockSend() func() {
 	}
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
+// SendError implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
-func (s *testStream) Disconnect(err *kvpb.Error) {
+func (s *testStream) SendError(err *kvpb.Error) {
 	s.done <- err
 }
 
