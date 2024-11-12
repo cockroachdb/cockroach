@@ -743,10 +743,10 @@ func EnsureUserOnlyBelongsToRoles(
 				if i > 0 {
 					revokeStmt.WriteString(", ")
 				}
-				revokeStmt.WriteString(role.Normalized())
+				revokeStmt.WriteString(role.SQLIdentifier())
 			}
 			revokeStmt.WriteString(" FROM ")
-			revokeStmt.WriteString(user.Normalized())
+			revokeStmt.WriteString(user.SQLIdentifier())
 			if _, err := txn.Exec(
 				ctx, "EnsureUserOnlyBelongsToRoles-revoke", txn.KV(), revokeStmt.String(),
 			); err != nil {
@@ -761,10 +761,10 @@ func EnsureUserOnlyBelongsToRoles(
 				if i > 0 {
 					grantStmt.WriteString(", ")
 				}
-				grantStmt.WriteString(fmt.Sprintf("%q", role.Normalized()))
+				grantStmt.WriteString(role.SQLIdentifier())
 			}
 			grantStmt.WriteString(" TO ")
-			grantStmt.WriteString(user.Normalized())
+			grantStmt.WriteString(user.SQLIdentifier())
 			if _, err := txn.Exec(
 				ctx, "EnsureUserOnlyBelongsToRoles-grant", txn.KV(), grantStmt.String(),
 			); err != nil {
