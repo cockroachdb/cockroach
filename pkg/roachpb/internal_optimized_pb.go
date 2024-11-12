@@ -10,6 +10,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/crlib/crencoding"
 )
 
 // ResetRetainingSlices clears all fields in the InternalTimeSeriesData, but
@@ -184,11 +185,12 @@ func (marshaller *InternalTimeSeriesDataMarshaller) Size() int {
 	return marshaller.size
 }
 
-func MakeInternalTimeSeriesDataMarshaller(m *InternalTimeSeriesData) (n int) {
-	panic("unimplemented")
-	if m == nil {
-		return 0
-	}
+func MakeInternalTimeSeriesDataMarshaller(
+	m *InternalTimeSeriesData,
+) InternalTimeSeriesDataMarshaller {
+	// Calculate the size of the marshalled data. This code is based on
+	// InternalTimeSeriesData.Size().
+	n := 0
 	var l int
 	_ = l
 	n += 1 + sovInternal(uint64(m.StartTimestampNanos))
@@ -199,22 +201,24 @@ func MakeInternalTimeSeriesDataMarshaller(m *InternalTimeSeriesData) (n int) {
 			n += 1 + l + sovInternal(uint64(l))
 		}
 	}
+	offsetSize := 0
 	if len(m.Offset) > 0 {
-		l = 0
 		for _, e := range m.Offset {
-			l += sovInternal(uint64(e))
+			// Apparently int32s are encoded as uint64s instead of uint32s, which
+			// unnecessarily adds 5 extra bytes for each negative value :/
+			offsetSize += crencoding.UvarintLen64(uint64(e))
 		}
-		n += 1 + sovInternal(uint64(l)) + l
+		n += 1 + crencoding.UvarintLen32(uint32(offsetSize)) + offsetSize
 	}
 	if len(m.Last) > 0 {
-		n += 1 + sovInternal(uint64(len(m.Last)*8)) + len(m.Last)*8
+		n += 1 + crencoding.UvarintLen32(uint32(len(m.Last)*8)) + len(m.Last)*8
 	}
+	countSize := 0
 	if len(m.Count) > 0 {
-		l = 0
 		for _, e := range m.Count {
-			l += sovInternal(uint64(e))
+			countSize += crencoding.UvarintLen32(e)
 		}
-		n += 1 + sovInternal(uint64(l)) + l
+		n += 1 + crencoding.UvarintLen32(uint32(countSize)) + countSize
 	}
 	if len(m.Sum) > 0 {
 		n += 1 + sovInternal(uint64(len(m.Sum)*8)) + len(m.Sum)*8
@@ -231,7 +235,12 @@ func MakeInternalTimeSeriesDataMarshaller(m *InternalTimeSeriesData) (n int) {
 	if len(m.Variance) > 0 {
 		n += 1 + sovInternal(uint64(len(m.Variance)*8)) + len(m.Variance)*8
 	}
-	return n
+	return InternalTimeSeriesDataMarshaller{
+		data:       m,
+		size:       n,
+		offsetSize: offsetSize,
+		countSize:  countSize,
+	}
 }
 
 // UnmarshalReusingSlices is similar to Unmarshal but it makes an effort to
