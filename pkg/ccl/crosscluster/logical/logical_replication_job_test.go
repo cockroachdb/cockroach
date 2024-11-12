@@ -2273,4 +2273,18 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	dbA.Exec(t, "CANCEL JOB $1", jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+
+	// Add different default values to to the source and dest and verify the
+	// stream can be created.
+	dbA.Exec(t, "ALTER TABLE tab ADD COLUMN new_col_2 INT NOT NULL DEFAULT 10")
+	dbB.Exec(t, "ALTER TABLE tab ADD COLUMN new_col_2 INT NOT NULL DEFAULT 20")
+	dbA.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab",
+		dbBURL.String(),
+	).Scan(&jobAID)
+
+	// Kill replication job.
+	dbA.Exec(t, "CANCEL JOB $1", jobAID)
+	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 }
