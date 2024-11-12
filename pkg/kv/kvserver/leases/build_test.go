@@ -919,6 +919,30 @@ func TestBuild(t *testing.T) {
 				},
 			},
 			{
+				name: "switch epoch to expiration, previous expired",
+				st:   useExpirationSettings(),
+				input: func() BuildInput {
+					i := defaultInput
+					i.Now = cts30
+					i.PrevLeaseExpired = true
+					return i
+				}(),
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts30,
+						Expiration:            &ts50,
+						DeprecatedStartStasis: &ts50,
+						Sequence:              8, // sequence changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+					NodeLivenessManipulation: NodeLivenessManipulation{
+						Heartbeat: &defaultNodeLivenessRecord(repl1.NodeID).Liveness,
+					},
+				},
+			},
+			{
 				name:  "switch leader lease to expiration",
 				st:    useExpirationSettings(),
 				input: leaderInput,
@@ -952,6 +976,27 @@ func TestBuild(t *testing.T) {
 					},
 					PrevLeaseManipulation: PrevLeaseManipulation{
 						RevokeAndForwardNextExpiration: true,
+					},
+				},
+			},
+			{
+				name: "switch leader lease to expiration, prev expired",
+				st:   useExpirationSettings(),
+				input: func() BuildInput {
+					i := leaderInput
+					i.Now = cts30
+					i.PrevLeaseExpired = true
+					return i
+				}(),
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts30,
+						Expiration:            &ts50,
+						DeprecatedStartStasis: &ts50,
+						Sequence:              8, // sequence changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
 					},
 				},
 			},
