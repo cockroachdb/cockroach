@@ -148,6 +148,13 @@ func (br *bufferedRegistration) publish(
 	}
 }
 
+// IsDisconnected returns true if the registration has been disconnected.
+func (br *bufferedRegistration) IsDisconnected() bool {
+	br.mu.Lock()
+	defer br.mu.Unlock()
+	return br.mu.disconnected
+}
+
 // Disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
