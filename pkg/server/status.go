@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
+	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
@@ -57,8 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -2848,13 +2847,6 @@ func (s *systemStatusServer) HotRanges(
 	return response, nil
 }
 
-type tableMeta struct {
-	dbName     string
-	tableName  string
-	schemaName string
-	indexName  string
-}
-
 func (t *statusServer) HotRangesV2(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponseV2, error) {
@@ -2897,8 +2889,6 @@ func (s *systemStatusServer) HotRangesV2(
 		}
 	}
 
-	var tableMetaCache syncutil.Map[roachpb.RangeID, tableMeta]
-
 	response := &serverpb.HotRangesResponseV2{
 		ErrorsByNodeID: make(map[roachpb.NodeID]string),
 	}
@@ -2912,70 +2902,30 @@ func (s *systemStatusServer) HotRangesV2(
 		if local {
 			resp := s.localHotRanges(ctx, tenantID)
 			var ranges []*serverpb.HotRangesResponseV2_HotRange
+			var rangeIndexMappings map[roachpb.RangeID]apiutil.IndexNamesList
 			for _, store := range resp.Stores {
+				rangeDescriptors := []roachpb.RangeDescriptor{}
 				for _, r := range store.HotRanges {
-					var (
-						dbName, tableName, indexName, schemaName string
-						replicaNodeIDs                           []roachpb.NodeID
-					)
-					rangeID := r.Desc.RangeID
+					rangeDescriptors = append(rangeDescriptors, r.Desc)
+				}
+				if err = s.sqlServer.distSQLServer.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+					databases, err := txn.Descriptors().GetAllDatabaseDescriptorsMap(ctx, txn.KV())
+					if err != nil {
+						return err
+					}
+					rangeIndexMappings, err = apiutil.GetRangeIndexMapping(ctx, txn, s.sqlServer.execCfg.Codec, databases, rangeDescriptors)
+					return err
+				}); err != nil {
+					return nil, err
+				}
+				for _, r := range store.HotRanges {
+					var replicaNodeIDs []roachpb.NodeID
+
 					for _, repl := range r.Desc.Replicas().Descriptors() {
 						replicaNodeIDs = append(replicaNodeIDs, repl.NodeID)
 					}
-					if maybeIndexPrefix, tableID, ok := decodeTableID(s.sqlServer.execCfg.Codec, r.Desc.StartKey.AsRawKey()); !ok {
-						dbName = "system"
-						tableName = r.Desc.StartKey.String()
-					} else if meta, ok := tableMetaCache.Load(rangeID); ok {
-						dbName = meta.dbName
-						tableName = meta.tableName
-						schemaName = meta.schemaName
-						indexName = meta.indexName
-					} else {
-						if err = s.sqlServer.distSQLServer.DB.DescsTxn(
-							ctx, func(ctx context.Context, txn descs.Txn) error {
-								col := txn.Descriptors()
-								desc, err := col.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
-								if err != nil {
-									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d, %s", tableID, r.Desc)
-								}
-								tableName = desc.GetName()
 
-								if !maybeIndexPrefix.Equal(roachpb.KeyMin) {
-									if _, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey()); err != nil {
-										log.Warningf(ctx, "cannot decode index prefix for range descriptor: %s: %v", r.Desc, err)
-									} else {
-										if index := catalog.FindIndexByID(desc, descpb.IndexID(idxID)); index == nil {
-											log.Warningf(ctx, "cannot get index name for range descriptor: %s: index with ID %d not found", r.Desc, idxID)
-										} else {
-											indexName = index.GetName()
-										}
-									}
-								}
-
-								if dbDesc, err := col.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, desc.GetParentID()); err != nil {
-									log.Warningf(ctx, "cannot get database by descriptor ID: %s: %v", r.Desc, err)
-								} else {
-									dbName = dbDesc.GetName()
-								}
-
-								if schemaDesc, err := col.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID()); err != nil {
-									log.Warningf(ctx, "cannot get schema name for range descriptor: %s: %v", r.Desc, err)
-								} else {
-									schemaName = schemaDesc.GetName()
-								}
-								return nil
-							}); err != nil {
-							log.Warningf(ctx, "failed to get table info for %s: %v", r.Desc, err)
-							continue
-						}
-
-						tableMetaCache.Store(rangeID, &tableMeta{
-							dbName:     dbName,
-							tableName:  tableName,
-							schemaName: schemaName,
-							indexName:  indexName,
-						})
-					}
+					databases, tables, indexes := rangeIndexMappings[r.Desc.RangeID].ToOutput()
 
 					ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
 						RangeID:             r.Desc.RangeID,
@@ -2986,13 +2936,12 @@ func (s *systemStatusServer) HotRangesV2(
 						WriteBytesPerSecond: r.WriteBytesPerSecond,
 						ReadBytesPerSecond:  r.ReadBytesPerSecond,
 						CPUTimePerSecond:    r.CPUTimePerSecond,
-						TableName:           tableName,
-						SchemaName:          schemaName,
-						DatabaseName:        dbName,
-						IndexName:           indexName,
 						ReplicaNodeIds:      replicaNodeIDs,
 						LeaseholderNodeID:   r.LeaseholderNodeID,
 						StoreID:             store.StoreID,
+						Databases:           databases,
+						Tables:              tables,
+						Indexes:             indexes,
 					})
 				}
 			}
@@ -3035,23 +2984,6 @@ func (s *systemStatusServer) HotRangesV2(
 	}
 	response.NextPageToken = string(nextBytes)
 	return response, nil
-}
-
-func decodeTableID(codec keys.SQLCodec, key roachpb.Key) (roachpb.Key, uint32, bool) {
-	remaining, tableID, err := codec.DecodeTablePrefix(key)
-	if err != nil {
-		return nil, 0, false
-	}
-	// Validate that tableID doesn't belong to system or pseudo table.
-	if key.Equal(roachpb.KeyMin) ||
-		tableID <= keys.SystemDatabaseID ||
-		keys.IsPseudoTableID(tableID) ||
-		bytes.HasPrefix(key, keys.Meta1Prefix) ||
-		bytes.HasPrefix(key, keys.Meta2Prefix) ||
-		bytes.HasPrefix(key, keys.SystemPrefix) {
-		return nil, 0, false
-	}
-	return remaining, tableID, true
 }
 
 func (s *systemStatusServer) localHotRanges(

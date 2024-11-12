@@ -34,7 +34,7 @@ func (izo *indexZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return izo.tableZoneConfigObj.zoneConfig
 }
 
-func (izo *indexZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
+func (izo *indexZoneConfigObj) getZoneConfigElemForAdd(b BuildCtx) (scpb.Element, []scpb.Element) {
 	subzones := []zonepb.Subzone{*izo.indexSubzone}
 
 	// Merge the new subzones with the old subzones so that we can generate
@@ -44,20 +44,55 @@ func (izo *indexZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
 		parentZoneConfig.SetSubzone(*izo.indexSubzone)
 		subzones = parentZoneConfig.Subzones
 	}
-
 	ss, err := generateSubzoneSpans(b, izo.tableID, subzones)
 	if err != nil {
 		panic(err)
 	}
 
-	elem := &scpb.IndexZoneConfig{
-		TableID:      izo.tableID,
-		IndexID:      izo.indexID,
-		Subzone:      *izo.indexSubzone,
-		SubzoneSpans: ss,
-		SeqNum:       izo.seqNum,
+	// TODO(annie): This does a little more work than necessary -- we should be
+	// able to just update the affected subzone spans. This can be done by
+	// comparing the parent's subzone spans with `ss`.
+	//
+	// Update the index that is represented by izo, along with all other subzones.
+	idxToSpansMap := getSubzoneSpansWithIdx(len(subzones), ss)
+	var szCfg scpb.Element
+	var szCfgsToUpdate []scpb.Element
+	for i, sub := range subzones {
+		if spans, ok := idxToSpansMap[int32(i)]; ok {
+			if len(sub.PartitionName) > 0 {
+				elem := &scpb.PartitionZoneConfig{
+					TableID:       izo.tableID,
+					IndexID:       catid.IndexID(sub.IndexID),
+					PartitionName: sub.PartitionName,
+					Subzone:       sub,
+					SubzoneSpans:  spans,
+					SeqNum:        izo.seqNum + 1,
+				}
+				szCfgsToUpdate = append(szCfgsToUpdate, elem)
+			} else {
+				elem := &scpb.IndexZoneConfig{
+					TableID:      izo.tableID,
+					IndexID:      catid.IndexID(sub.IndexID),
+					Subzone:      sub,
+					SubzoneSpans: spans,
+					SeqNum:       izo.seqNum + 1,
+				}
+				if sub.IndexID == uint32(izo.indexID) {
+					szCfg = elem
+				} else {
+					szCfgsToUpdate = append(szCfgsToUpdate, elem)
+				}
+			}
+		}
 	}
-	return elem
+
+	return szCfg, szCfgsToUpdate
+}
+
+func (izo *indexZoneConfigObj) getZoneConfigElemForDrop(b BuildCtx) (scpb.Element, []scpb.Element) {
+	// TODO(annie): this will need to be revised in order to implement subzone
+	// discards.
+	return izo.getZoneConfigElemForAdd(b)
 }
 
 func (izo *indexZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {
