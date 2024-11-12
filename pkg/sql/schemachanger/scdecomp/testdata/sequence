@@ -186,37 +186,31 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 1
     name: id
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 2
     name: cexpr
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 4.294967292e+09
     name: crdb_internal_origin_timestamp
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 4.294967293e+09
     name: crdb_internal_origin_id
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 4.294967294e+09
     name: tableoid
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
     tableId: 105
@@ -591,37 +585,31 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 1
     name: id
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 2
     name: cexpr
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 4.294967292e+09
     name: crdb_internal_origin_timestamp
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 4.294967293e+09
     name: crdb_internal_origin_id
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 4.294967294e+09
     name: tableoid
     tableId: 105
   Status: PUBLIC
 - ColumnName:
-    absentName: ""
     columnId: 4.294967295e+09
     name: crdb_internal_mvcc_timestamp
     tableId: 105

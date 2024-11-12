@@ -213,6 +213,14 @@ func isColumnDependent(e scpb.Element) bool {
 	return isColumnTypeDependent(e)
 }
 
+func isColumnDependentExceptColumnName(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ColumnName:
+		return false
+	}
+	return isColumnDependent(e)
+}
+
 func isColumnNotNull(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ColumnNotNull:
@@ -336,4 +344,14 @@ func isOwner(e scpb.Element) bool {
 		return true
 	}
 	return false
+}
+
+// setColumnDependency is a helper that assigns types to two NodeVars.
+// 'from' represents the column, and 'to' is a type-dependent column
+// determined by the colDepFunc function.
+func setColumnDependency(from, to rules.NodeVars, colDepFunc func(scpb.Element) bool) rel.Clauses {
+	return rel.Clauses{
+		from.Type((*scpb.Column)(nil)),
+		to.TypeFilter(rulesVersionKey, colDepFunc),
+	}
 }
