@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -2137,7 +2138,7 @@ func testLeaderElectionWithCheckQuorum(t *testing.T, storeLivenessEnabled bool) 
 
 // TestFreeStuckCandidateWithCheckQuorum ensures that a candidate with a higher term
 // can disrupt the leader even if the leader still "officially" holds the lease, The
-// leader is expected to step down and adopt the candidate's term
+// leader is expected to step down and adopt the candidate's term.
 func TestFreeStuckCandidateWithCheckQuorum(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
 		func(t *testing.T, storeLivenessEnabled bool) {
@@ -2172,10 +2173,12 @@ func testFreeStuckCandidateWithCheckQuorum(t *testing.T, storeLivenessEnabled bo
 
 	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, a, b, c)
 
-	for i := int64(0); i < b.electionTimeout; i++ {
-		b.tick()
-	}
+	// Elect node 1 as leader.
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	assert.Equal(t, pb.StateLeader, a.state)
+	if storeLivenessEnabled {
+		assert.Equal(t, hlc.MaxTimestamp, getLeadSupportStatus(a).LeadSupportUntil)
+	}
 
 	nt.isolate(1)
 	if storeLivenessEnabled {
@@ -2193,7 +2196,7 @@ func testFreeStuckCandidateWithCheckQuorum(t *testing.T, storeLivenessEnabled bo
 	assert.Equal(t, pb.StateCandidate, c.state)
 	assert.Equal(t, b.Term+1, c.Term)
 
-	// Vote again for safety
+	// Vote again for safety.
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
 	assert.Equal(t, pb.StateFollower, b.state)
@@ -2206,19 +2209,52 @@ func testFreeStuckCandidateWithCheckQuorum(t *testing.T, storeLivenessEnabled bo
 		nt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
 	}
 
-	nt.send(pb.Message{From: 1, To: 3, Type: pb.MsgHeartbeat, Term: a.Term})
-
-	// Disrupt the leader so that the stuck peer is freed
-	assert.Equal(t, pb.StateFollower, a.state)
-	assert.Equal(t, a.Term, c.Term)
-
-	// Vote again, should become leader this time
+	// If the stuck candidate were to talk to the follower, it may be ignored,
+	// depending on whether the follower is fortified by the leader.
+	nt.send(pb.Message{From: 3, To: 2, Type: pb.MsgAppResp, Term: c.Term})
 	if storeLivenessEnabled {
-		// We need to withdraw from 1 to allow 3 to campaign and get elected.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
+		assert.Equal(t, c.Term-2, b.Term)
+	} else {
+		assert.Equal(t, c.Term, b.Term)
 	}
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
+	// Disrupt the leader so that the stuck peer is freed. The leader steps down
+	// immediately, but only changes its term if it was not fortified. If it was,
+	// it waits for defortification.
+	hbType := pb.MsgHeartbeat
+	if storeLivenessEnabled {
+		hbType = pb.MsgFortifyLeader
+	}
+	nt.send(pb.Message{From: 1, To: 3, Type: hbType, Term: a.Term})
+	assert.Equal(t, pb.StateFollower, a.state)
+	if storeLivenessEnabled {
+		// Node 1 still remembers that it was the leader.
+		assert.Equal(t, c.Term-2, a.Term)
+		assert.Equal(t, a.id, a.lead)
+
+		// The ex-leader still hasn't defortified, so the stranded peer still can't
+		// win an election.
+		nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+		assert.Equal(t, pb.StateCandidate, c.state)
+		assert.Equal(t, pb.StateFollower, a.state)
+		assert.Equal(t, c.Term-3, a.Term)
+		assert.Equal(t, a.id, a.lead)
+
+		// The ex-leader defortifies itself and its followers once its remaining
+		// support has expired.
+		require.False(t, a.shouldBcastDeFortify())
+		fabric.SetSupportExpired(1, true)
+		require.True(t, a.shouldBcastDeFortify())
+		for range a.heartbeatTimeout {
+			nt.tick(a)
+		}
+	} else {
+		assert.Equal(t, c.Term, a.Term)
+		assert.Equal(t, None, a.lead)
+	}
+
+	// Vote again, should become leader this time.
+	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 	assert.Equal(t, pb.StateLeader, c.state)
 }
 
@@ -4436,6 +4472,11 @@ func testPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T, storeLivenessEn
 	n2 := nt.peers[2].(*raft)
 	n3 := nt.peers[3].(*raft)
 
+	assert.Equal(t, pb.StateLeader, n1.state)
+	if storeLivenessEnabled {
+		assert.Equal(t, hlc.MaxTimestamp, getLeadSupportStatus(n1).LeadSupportUntil)
+	}
+
 	if storeLivenessEnabled {
 		// 1 needs to withdraw support for 3 before it can become a preCandidate.
 		nt.livenessFabric.WithdrawSupport(1, 3)
@@ -4447,19 +4488,66 @@ func testPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T, storeLivenessEn
 	assert.Equal(t, pb.StateFollower, n2.state)
 	assert.Equal(t, pb.StatePreCandidate, n3.state)
 
-	// Pre-Vote again for safety
+	// Pre-Vote again for safety.
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
 	assert.Equal(t, pb.StateLeader, n1.state)
 	assert.Equal(t, pb.StateFollower, n2.state)
 	assert.Equal(t, pb.StatePreCandidate, n3.state)
 
-	nt.send(pb.Message{From: 1, To: 3, Type: pb.MsgHeartbeat, Term: n1.Term})
+	// If the stuck candidate were to talk to the follower, it may be ignored,
+	// depending on whether the follower is fortified by the leader.
+	nt.send(pb.Message{From: 3, To: 2, Type: pb.MsgAppResp, Term: n3.Term})
+	if storeLivenessEnabled {
+		assert.Equal(t, n3.Term-2, n2.Term)
+	} else {
+		assert.Equal(t, n3.Term, n2.Term)
+	}
 
-	// Disrupt the leader so that the stuck peer is freed
+	// Disrupt the leader so that the stuck peer is freed. The leader steps down
+	// immediately, but only changes its term if it was not fortified. If it was,
+	// it waits for defortification.
+	hbType := pb.MsgHeartbeat
+	if storeLivenessEnabled {
+		hbType = pb.MsgFortifyLeader
+	}
+	nt.send(pb.Message{From: 1, To: 3, Type: hbType, Term: n1.Term})
 	assert.Equal(t, pb.StateFollower, n1.state)
-	assert.Equal(t, n1.Term, n3.Term)
+	if storeLivenessEnabled {
+		// Node 1 still remembers that it was the leader.
+		assert.Equal(t, n3.Term-2, n1.Term)
+		assert.Equal(t, n1.id, n1.lead)
 
+		// The ex-leader still hasn't defortified, so the stranded peer still can't
+		// win an election.
+		nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+		assert.Equal(t, pb.StatePreCandidate, n3.state)
+		assert.Equal(t, pb.StateFollower, n1.state)
+		assert.Equal(t, n3.Term-2, n1.Term)
+		assert.Equal(t, n1.id, n1.lead)
+
+		// The ex-leader defortifies itself and its followers once its remaining
+		// support has expired.
+		require.False(t, n1.shouldBcastDeFortify())
+		fabric.SetSupportExpired(1, true)
+		require.True(t, n1.shouldBcastDeFortify())
+		for range n1.heartbeatTimeout {
+			nt.tick(n1)
+		}
+
+		// The ex-leader calls an election, which it loses and through which it
+		// learns about the larger term.
+		fabric.SetSupportExpired(1, false)
+		nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+		assert.Equal(t, pb.StateFollower, n1.state)
+	}
+
+	assert.Equal(t, n1.Term, n3.Term)
+	assert.Equal(t, None, n1.lead)
+
+	// The ex-leader calls an election, which it wins.
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	assert.Equal(t, pb.StateLeader, n1.state)
 }
 
 func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool, storeLivenessEnabled bool) {

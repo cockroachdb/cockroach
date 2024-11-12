@@ -427,7 +427,7 @@ Messages:
 deliver-msgs 1
 ----
 4->1 MsgFortifyLeader Term:3 Log:0/0
-INFO 1 [term: 2] received a MsgFortifyLeader message with higher term from 4 [term: 3], advancing term
+INFO 1 [term: 2] received a MsgFortifyLeader message with higher term from 4 [term: 3], new leader indicated, advancing term
 INFO 1 became follower at term 3
 4->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 INFO found conflict at index 12 [existing term: 2, conflicting term: 3]
