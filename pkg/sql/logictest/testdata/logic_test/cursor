@@ -217,6 +217,10 @@ FETCH 0 foo
 ----
 
 query II
+FETCH ABSOLUTE 0 foo
+----
+
+query II
 FETCH FIRST foo
 ----
 1  2
