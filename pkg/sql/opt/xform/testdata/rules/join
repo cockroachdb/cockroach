@@ -87,6 +87,14 @@ CREATE TABLE shard (
 ----
 
 exec-ddl
+CREATE TABLE tchar (
+    a INT,
+    c VARCHAR(2),
+    PRIMARY KEY (a, c)
+)
+----
+
+exec-ddl
 CREATE TABLE large (m INT, n INT)
 ----
 
@@ -3649,6 +3657,31 @@ inner-join (lookup abcde)
  │    │    └── columns: m:1 n:2
  │    └── filters
  │         └── c:8 = 10 [outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
+ └── filters (true)
+
+# Constant value projections should have the type of the constant, not the
+# indexed column.
+opt expect=GenerateLookupJoinsWithFilter format=show-types
+SELECT * FROM (VALUES (1), (3)) v(i) INNER LOOKUP JOIN tchar ON a = i AND c = 'foo'
+----
+inner-join (lookup tchar)
+ ├── columns: i:1(int!null) a:2(int!null) c:3(varchar!null)
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1 6] = [2 3]
+ ├── lookup columns are key
+ ├── cardinality: [0 - 2]
+ ├── fd: ()-->(3), (1)==(2), (2)==(1)
+ ├── project
+ │    ├── columns: "lookup_join_const_col_@3":6(string!null) column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── fd: ()-->(6)
+ │    ├── values
+ │    │    ├── columns: column1:1(int!null)
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── (1,) [type=tuple{int}]
+ │    │    └── (3,) [type=tuple{int}]
+ │    └── projections
+ │         └── 'foo' [as="lookup_join_const_col_@3":6, type=string]
  └── filters (true)
 
 # Multiple constant columns projected and used by lookup joiner.
