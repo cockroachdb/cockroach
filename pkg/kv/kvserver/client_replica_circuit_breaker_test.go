@@ -472,9 +472,9 @@ func (s *dummyStream) SendUnbuffered(ev *kvpb.RangeFeedEvent) error {
 	}
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
+// SendError implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
-func (s *dummyStream) Disconnect(err *kvpb.Error) {
+func (s *dummyStream) SendError(err *kvpb.Error) {
 	s.done <- err
 }
 

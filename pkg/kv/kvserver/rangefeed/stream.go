@@ -14,11 +14,11 @@ import (
 // rangefeed to a client.
 type Stream interface {
 	kvpb.RangeFeedEventSink
-	// Disconnect disconnects the stream with the provided error. Note that this
-	// function can be called by the processor worker while holding raftMu, so it
-	// is important that this function doesn't block IO or try acquiring locks
-	// that could lead to deadlocks.
-	Disconnect(err *kvpb.Error)
+	// SendError sends an error to the stream. Since this function can be called by
+	// the processor worker while holding raftMu as part of
+	// registration.Disconnect(), it is important that this function doesn't block
+	// IO or try acquiring locks that could lead to deadlocks.
+	SendError(err *kvpb.Error)
 }
 
 // PerRangeEventSink is an implementation of Stream which annotates each
@@ -56,11 +56,11 @@ func (s *PerRangeEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	return s.wrapped.SendUnbuffered(response)
 }
 
-// Disconnect implements the Stream interface. It requests the UnbufferedSender
+// SendError implements the Stream interface. It requests the UnbufferedSender
 // to detach the stream. The UnbufferedSender is then responsible for handling
 // the actual disconnection and additional cleanup. Note that Caller should not
 // rely on immediate disconnection as cleanup takes place async.
-func (s *PerRangeEventSink) Disconnect(err *kvpb.Error) {
+func (s *PerRangeEventSink) SendError(err *kvpb.Error) {
 	ev := &kvpb.MuxRangeFeedEvent{
 		RangeID:  s.rangeID,
 		StreamID: s.streamID,
