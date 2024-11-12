@@ -187,6 +187,15 @@ func createLogicalReplicationStreamPlanHook(
 		if err := p.Txn().Commit(ctx); err != nil {
 			return err
 		}
+		// Release all descriptor leases here. We need to do this because we're
+		// about run schema changes below to lock the replicating tables. Note that
+		// we committed the underlying transaction above -- so we're not using any
+		// leases anymore, but we might be holding some.
+		//
+		// This is all a bit of a hack to deal with the fact that the usual
+		// machinery for releasing leases assumes that we do not close the planner
+		// txn during statement execution.
+		p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
 
 		streamAddress := crosscluster.StreamAddress(from)
 		streamURL, err := streamAddress.URL()
