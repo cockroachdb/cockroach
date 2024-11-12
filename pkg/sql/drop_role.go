@@ -107,13 +107,17 @@ func (n *DropRoleNode) startExec(params runParams) error {
 
 		// Non-admin users cannot drop admins.
 		if !hasAdmin {
-			roleExists, err := RoleExists(params.ctx, params.p.InternalSQLTxn(), name)
-			if err != nil {
-				return err
-			}
-			if !roleExists {
-				// If the role does not exist, we can skip the check for targetIsAdmin.
-				continue
+			if n.ifExists {
+				// If `IF EXISTS` was specified, then a non-existing role should be
+				// skipped without causing any error.
+				roleExists, err := RoleExists(params.ctx, params.p.InternalSQLTxn(), name)
+				if err != nil {
+					return err
+				}
+				if !roleExists {
+					// If the role does not exist, we can skip the check for targetIsAdmin.
+					continue
+				}
 			}
 
 			targetIsAdmin, err := params.p.UserHasAdminRole(params.ctx, name)
