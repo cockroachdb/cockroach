@@ -72,6 +72,7 @@ go_test(
         "main_test.go",
     ],
     data = glob(["testdata/**"]),
+    exec_properties = {"test.Pool": "large"},
     deps = [
         ":scbuild",
         "//pkg/base",
