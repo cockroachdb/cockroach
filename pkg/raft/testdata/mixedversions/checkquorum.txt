@@ -76,6 +76,7 @@ DEBUG 1 has not received messages from a quorum of peers in the last election ti
 DEBUG 1 does not have store liveness support from a quorum of peers
 WARN 1 stepped down to follower since quorum is not active
 INFO 1 became follower at term 1
+DEBUG 1 reset election elapsed to 0
 
 # We'll now send all of the heartbeats that were buffered during the ticks
 # above. Conceptually, "the network was slow".
@@ -128,6 +129,7 @@ stabilize
   2->1 MsgAppResp Term:2 Log:0/0
   INFO 1 [term: 1] received a MsgAppResp message with higher term from 2 [term: 2], advancing term
   INFO 1 became follower at term 2
+  DEBUG 1 reset election elapsed to 0
   2->1 MsgAppResp Term:2 Log:0/0
   2->1 MsgAppResp Term:2 Log:0/0
   2->1 MsgAppResp Term:2 Log:0/0
@@ -170,6 +172,7 @@ deliver-msgs 1
 2->1 MsgVote Term:3 Log:1/11
 INFO 1 [term: 2] received a MsgVote message with higher term from 2 [term: 3], advancing term
 INFO 1 became follower at term 3
+DEBUG 1 reset election elapsed to 0
 INFO 1 [logterm: 1, index: 11, vote: 0] cast MsgVote for 2 [logterm: 1, index: 11] at term 3
 
 deliver-msgs 3
@@ -204,6 +207,7 @@ stabilize
   2->3 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
   INFO 3 [term: 1] received a MsgApp message with higher term from 2 [term: 3], new leader indicated, advancing term
   INFO 3 became follower at term 3
+  DEBUG 3 reset election elapsed to 0
 > 1 handling Ready
   Ready MustSync=true:
   HardState Term:3 Vote:2 Commit:11 Lead:2 LeadEpoch:0

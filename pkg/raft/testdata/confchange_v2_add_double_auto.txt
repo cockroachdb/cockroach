@@ -7,6 +7,7 @@ add-nodes 1 voters=(1) index=2
 ----
 INFO 1 switched to configuration voters=(1)
 INFO 1 became follower at term 0
+DEBUG 1 reset election elapsed to 0
 INFO newRaft 1 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
 
 campaign 1
@@ -33,9 +34,11 @@ add-nodes 2
 ----
 INFO 2 switched to configuration voters=()
 INFO 2 became follower at term 0
+DEBUG 2 reset election elapsed to 0
 INFO newRaft 2 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
 INFO 3 switched to configuration voters=()
 INFO 3 became follower at term 0
+DEBUG 3 reset election elapsed to 0
 INFO newRaft 3 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
 
 # Process n1 once, so that it can append the entry.
@@ -86,6 +89,7 @@ stabilize 1 2
   1->2 MsgFortifyLeader Term:1 Log:0/0
   INFO 2 [term: 0] received a MsgFortifyLeader message with higher term from 1 [term: 1], new leader indicated, advancing term
   INFO 2 became follower at term 1
+  DEBUG 2 reset election elapsed to 0
   1->2 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChangeV2 v2 v3]
   DEBUG 2 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1
 > 2 handling Ready
@@ -180,6 +184,7 @@ stabilize 1 3
   1->3 MsgFortifyLeader Term:1 Log:0/0
   INFO 3 [term: 0] received a MsgFortifyLeader message with higher term from 1 [term: 1], new leader indicated, advancing term
   INFO 3 became follower at term 1
+  DEBUG 3 reset election elapsed to 0
   1->3 MsgApp Term:1 Log:1/3 Commit:4 Entries:[1/4 EntryConfChangeV2 v2 v3]
   DEBUG 3 [logterm: 0, index: 3] rejected MsgApp [logterm: 1, index: 3] from 1
   1->3 MsgFortifyLeader Term:1 Log:0/0
