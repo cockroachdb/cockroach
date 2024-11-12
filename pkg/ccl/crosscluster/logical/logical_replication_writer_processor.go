@@ -49,6 +49,13 @@ var logicalReplicationWriterResultType = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpans
 }
 
+var useLowPriority = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.low_admission_priority.enabled",
+	"determines whether the consumer sends KV work as low admission priority",
+	true,
+)
+
 var flushBatchSize = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.batch_size",
