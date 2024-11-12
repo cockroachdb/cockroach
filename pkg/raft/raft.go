@@ -1550,7 +1550,7 @@ func (r *raft) Step(m pb.Message) error {
 			// rejected our vote so we should become a follower at the new
 			// term.
 		default:
-			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
+			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d], advancing term",
 				r.id, r.Term, m.Type, m.From, m.Term)
 			if IsMsgIndicatingLeader(m.Type) {
 				// We've just received a message that indicates that a new leader
