@@ -101,5 +101,8 @@ cockroachdb/migrations:
   label: T-migrations
   triage_column_id: 18330909
 cockroachdb/release-eng:
+  aliases:
+    cockroachdb/release-eng-prs: other
+    cockroachdb/upgrade-prs: other
   label: T-release
   triage_column_id: 9149730
