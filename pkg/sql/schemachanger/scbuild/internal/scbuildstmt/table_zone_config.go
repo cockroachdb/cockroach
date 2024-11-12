@@ -32,13 +32,13 @@ func (tzo *tableZoneConfigObj) isNoOp() bool {
 	return tzo.zoneConfig == nil
 }
 
-func (tzo *tableZoneConfigObj) getZoneConfigElem(b BuildCtx) []scpb.Element {
+func (tzo *tableZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
 	elem := &scpb.TableZoneConfig{
 		TableID:    tzo.tableID,
 		ZoneConfig: tzo.zoneConfig,
 		SeqNum:     tzo.seqNum,
 	}
-	return []scpb.Element{elem}
+	return elem
 }
 
 func (tzo *tableZoneConfigObj) checkPrivilegeForSetZoneConfig(
