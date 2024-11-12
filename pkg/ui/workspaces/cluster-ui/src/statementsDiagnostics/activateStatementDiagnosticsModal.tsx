@@ -55,6 +55,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef<
   const [minExecLatencyUnit, setMinExecLatencyUnit] = useState("milliseconds");
   const [expiresAfter, setExpiresAfter] = useState(15);
   const [traceSampleRate, setTraceSampleRate] = useState(0.01);
+  const [redacted, setRedacted] = useState(false);
 
   const handleSelectChange = (value: string) => {
     setMinExecLatencyUnit(value);
@@ -95,6 +96,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef<
       ),
       expiresAfterSeconds: getExpiresAfter(expires, expiresAfter),
       samplingProbability: getTraceSampleRate(conditional, traceSampleRate),
+      redacted: redacted,
     });
     setVisible(false);
   }, [
@@ -108,6 +110,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef<
     traceSampleRate,
     filterPerPlanGist,
     selectedPlanGist,
+    redacted,
   ]);
 
   const onCancelHandler = useCallback(() => setVisible(false), []);
@@ -313,6 +316,10 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef<
               />
             </div>
           )}
+          <Divider type="horizontal" />
+          <Checkbox checked={redacted} onChange={() => setRedacted(!redacted)}>
+            <Text>Redact</Text>
+          </Checkbox>
         </Space>
       </ConfigProvider>
     </Modal>

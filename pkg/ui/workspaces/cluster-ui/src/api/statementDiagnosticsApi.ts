@@ -54,6 +54,7 @@ export type InsertStmtDiagnosticRequest = {
   minExecutionLatencySeconds?: number;
   expiresAfterSeconds?: number;
   planGist: string;
+  redacted: boolean;
 };
 
 export type InsertStmtDiagnosticResponse = {
@@ -73,6 +74,7 @@ export async function createStatementDiagnosticsReport(
       min_execution_latency: NumberToDuration(req.minExecutionLatencySeconds),
       expires_after: NumberToDuration(req.expiresAfterSeconds),
       plan_gist: req.planGist,
+      redacted: req.redacted,
     }),
   ).then(response => {
     return {
