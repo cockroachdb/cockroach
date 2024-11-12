@@ -1117,7 +1117,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/grpc/cmd/protoc-gen-go-grpc/org_golang_google_grpc_cmd_protoc_gen_go_grpc-v1.1.0.zip": "13877d86cbfa30bde4d62fef2bc58dd56377dcb502c16cf78197f6934193009a",
     "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/grpc/examples/org_golang_google_grpc_examples-v0.0.0-20210324172016-702608ffae4d.zip": "f5cad7b05a93557c91864a02890a35c6bc5c394897222978cff2b880a78f7a11",
     "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/grpc/org_golang_google_grpc-v1.56.3.zip": "7f9b83cd9dbe99783061160583dae09dd8f64187d890c51be52cc8e3bd0dcb56",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/protobuf/org_golang_google_protobuf-v1.29.1.zip": "08e7ac11587cc19448331b49e737c485911e472bad96bc5de3ae2021a0cb14d0",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/protobuf/org_golang_google_protobuf-v1.33.0.zip": "2cc1c98e12903009bd4bf0d5e938a421ca2f88ae87b0fc50004b2c7598b1fd24",
     "https://storage.googleapis.com/cockroach-godeps/gomod/gopkg.in/DataDog/dd-trace-go.v1/in_gopkg_datadog_dd_trace_go_v1-v1.17.0.zip": "2ebcc818df0b2d560a61037da4492ae7effbaed67de94339a1d3a72728d2cb09",
     "https://storage.googleapis.com/cockroach-godeps/gomod/gopkg.in/airbrake/gobrake.v2/in_gopkg_airbrake_gobrake_v2-v2.0.9.zip": "2db903664908e5a9afafefba94821b9579bbf271e2929c1f0b7b1fdd23f7bbcf",
     "https://storage.googleapis.com/cockroach-godeps/gomod/gopkg.in/alecthomas/kingpin.v2/in_gopkg_alecthomas_kingpin_v2-v2.2.6.zip": "638080591aefe7d2642f2575b627d534c692606f02ea54ba89f42db112ba8839",

@@ -11512,10 +11512,10 @@ def go_deps():
         name = "org_golang_google_protobuf",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/protobuf",
-        sha256 = "08e7ac11587cc19448331b49e737c485911e472bad96bc5de3ae2021a0cb14d0",
-        strip_prefix = "google.golang.org/protobuf@v1.29.1",
+        sha256 = "2cc1c98e12903009bd4bf0d5e938a421ca2f88ae87b0fc50004b2c7598b1fd24",
+        strip_prefix = "google.golang.org/protobuf@v1.33.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/protobuf/org_golang_google_protobuf-v1.29.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/protobuf/org_golang_google_protobuf-v1.33.0.zip",
         ],
     )
     go_repository(
