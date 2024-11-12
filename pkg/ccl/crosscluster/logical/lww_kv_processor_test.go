@@ -63,6 +63,7 @@ func TestKVWriterUpdateEncoding(t *testing.T) {
 			&execinfra.ServerConfig{
 				DB:           s.InternalDB().(descs.DB),
 				LeaseManager: s.LeaseManager(),
+				Settings:     s.ClusterSettings(),
 			}, &eval.Context{
 				Codec:    s.Codec(),
 				Settings: s.ClusterSettings(),
