@@ -184,10 +184,54 @@ func (marshaller *InternalTimeSeriesDataMarshaller) Size() int {
 	return marshaller.size
 }
 
-func MakeInternalTimeSeriesDataMarshaller(
-	m *InternalTimeSeriesData,
-) InternalTimeSeriesDataMarshaller {
+func MakeInternalTimeSeriesDataMarshaller(m *InternalTimeSeriesData) (n int) {
 	panic("unimplemented")
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	n += 1 + sovInternal(uint64(m.StartTimestampNanos))
+	n += 1 + sovInternal(uint64(m.SampleDurationNanos))
+	if len(m.Samples) > 0 {
+		for _, e := range m.Samples {
+			l = e.Size()
+			n += 1 + l + sovInternal(uint64(l))
+		}
+	}
+	if len(m.Offset) > 0 {
+		l = 0
+		for _, e := range m.Offset {
+			l += sovInternal(uint64(e))
+		}
+		n += 1 + sovInternal(uint64(l)) + l
+	}
+	if len(m.Last) > 0 {
+		n += 1 + sovInternal(uint64(len(m.Last)*8)) + len(m.Last)*8
+	}
+	if len(m.Count) > 0 {
+		l = 0
+		for _, e := range m.Count {
+			l += sovInternal(uint64(e))
+		}
+		n += 1 + sovInternal(uint64(l)) + l
+	}
+	if len(m.Sum) > 0 {
+		n += 1 + sovInternal(uint64(len(m.Sum)*8)) + len(m.Sum)*8
+	}
+	if len(m.Max) > 0 {
+		n += 1 + sovInternal(uint64(len(m.Max)*8)) + len(m.Max)*8
+	}
+	if len(m.Min) > 0 {
+		n += 1 + sovInternal(uint64(len(m.Min)*8)) + len(m.Min)*8
+	}
+	if len(m.First) > 0 {
+		n += 1 + sovInternal(uint64(len(m.First)*8)) + len(m.First)*8
+	}
+	if len(m.Variance) > 0 {
+		n += 1 + sovInternal(uint64(len(m.Variance)*8)) + len(m.Variance)*8
+	}
+	return n
 }
 
 // UnmarshalReusingSlices is similar to Unmarshal but it makes an effort to
