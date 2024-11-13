@@ -214,7 +214,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 			func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				progress := md.Progress
 				rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
-				rowLevelTTL.JobSpanCount = int64(jobSpanCount)
+				rowLevelTTL.JobTotalSpanCount = int64(jobSpanCount)
 				ju.UpdateProgress(progress)
 				return nil
 			},
