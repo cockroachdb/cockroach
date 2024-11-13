@@ -4991,10 +4991,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v JSON);
 
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
-	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	// Insert enough rows to exceed the chunk size.
 	for i := 0; i < maxValue+1; i++ {
-		jsonVal, err := json.Random(20, r)
+		jsonVal, err := json.Random(20, rng)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -5038,14 +5038,14 @@ CREATE TABLE t.test (a INT, b INT, c JSON, d JSON);
 		t.Fatal(err)
 	}
 
-	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	// Insert enough rows to exceed the chunk size.
 	for i := 0; i < maxValue+1; i++ {
-		jsonVal1, err := json.Random(20, r)
+		jsonVal1, err := json.Random(20, rng)
 		if err != nil {
 			t.Fatal(err)
 		}
-		jsonVal2, err := json.Random(20, r)
+		jsonVal2, err := json.Random(20, rng)
 		if err != nil {
 			t.Fatal(err)
 		}

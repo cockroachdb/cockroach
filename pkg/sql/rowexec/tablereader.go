@@ -80,7 +80,7 @@ func newTableReader(
 ) (*tableReader, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); ok && nodeID == 0 {
-		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
+		return nil, errors.AssertionFailedf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
 	if spec.LimitHint > 0 || spec.BatchBytesLimit > 0 {

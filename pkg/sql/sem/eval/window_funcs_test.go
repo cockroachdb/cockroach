@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 const minOffset = 0
@@ -266,11 +266,11 @@ func testEndFollowing(t *testing.T, evalCtx *Context, wfr *WindowFrameRun, offse
 
 func makeIntSortedPartition(count int) indexedRows {
 	partition := indexedRows{rows: make([]indexedRow, count)}
-	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	number := 0
 	for idx := 0; idx < count; idx++ {
-		if r.Float64() < probabilityOfNewNumber {
-			number += r.Intn(10)
+		if rng.Float64() < probabilityOfNewNumber {
+			number += rng.Intn(10)
 		}
 		partition.rows[idx] = indexedRow{idx: idx, row: tree.Datums{tree.NewDInt(tree.DInt(number))}}
 	}
@@ -279,11 +279,11 @@ func makeIntSortedPartition(count int) indexedRows {
 
 func makeFloatSortedPartition(count int) indexedRows {
 	partition := indexedRows{rows: make([]indexedRow, count)}
-	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	number := 0.0
 	for idx := 0; idx < count; idx++ {
-		if r.Float64() < probabilityOfNewNumber {
-			number += r.Float64() * 10
+		if rng.Float64() < probabilityOfNewNumber {
+			number += rng.Float64() * 10
 		}
 		partition.rows[idx] = indexedRow{idx: idx, row: tree.Datums{tree.NewDFloat(tree.DFloat(number))}}
 	}
@@ -292,12 +292,12 @@ func makeFloatSortedPartition(count int) indexedRows {
 
 func makeDecimalSortedPartition(t *testing.T, count int) indexedRows {
 	partition := indexedRows{rows: make([]indexedRow, count)}
-	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	number := &tree.DDecimal{}
 	for idx := 0; idx < count; idx++ {
 		tmp := apd.Decimal{}
-		if r.Float64() < probabilityOfNewNumber {
-			_, err := tmp.SetFloat64(r.Float64() * 10)
+		if rng.Float64() < probabilityOfNewNumber {
+			_, err := tmp.SetFloat64(rng.Float64() * 10)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

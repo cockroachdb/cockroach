@@ -88,7 +88,7 @@ func emitHelper(
 
 func checkNumIn(inputs []execinfra.RowSource, numIn int) error {
 	if len(inputs) != numIn {
-		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
+		return errors.AssertionFailedf("expected %d input(s), got %d", numIn, len(inputs))
 	}
 	return nil
 }
@@ -315,7 +315,7 @@ func NewProcessor(
 				return nil, err
 			}
 		} else if numInputs > 1 {
-			return nil, errors.Errorf("invalid localPlanNode core with multiple inputs %+v", core.LocalPlanNode)
+			return nil, errors.AssertionFailedf("invalid localPlanNode core with multiple inputs %+v", core.LocalPlanNode)
 		}
 		return processor, nil
 	}

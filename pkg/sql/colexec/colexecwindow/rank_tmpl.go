@@ -70,7 +70,7 @@ func NewRankOperator(
 		}
 		return &denseRankNoPartitionOp{rankInitFields: initFields}, nil
 	default:
-		return nil, errors.Errorf("unsupported rank type %s", windowFn)
+		return nil, errors.AssertionFailedf("unsupported rank type %s", windowFn)
 	}
 }
 

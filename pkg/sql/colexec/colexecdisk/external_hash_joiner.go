@@ -6,6 +6,8 @@
 package colexecdisk
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
@@ -56,6 +58,7 @@ import (
 // components of the external hash joiner which is responsible for making sure
 // that the components stay within the memory limit.
 func NewExternalHashJoiner(
+	ctx context.Context,
 	unlimitedAllocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
@@ -109,7 +112,7 @@ func NewExternalHashJoiner(
 			partitionedInputs[1], spec.Right.SourceTypes, rightOrdering, externalSorterMaxNumberPartitions,
 		)
 		return colexecjoin.NewMergeJoinOp(
-			unlimitedAllocator, memoryLimit, args.DiskQueueCfg, fdSemaphore, spec.JoinType,
+			ctx, unlimitedAllocator, memoryLimit, args.DiskQueueCfg, fdSemaphore, spec.JoinType,
 			leftPartitionSorter, rightPartitionSorter, spec.Left.SourceTypes,
 			spec.Right.SourceTypes, leftOrdering, rightOrdering, diskAcc, diskQueueMemAcc, flowCtx.EvalCtx,
 		)

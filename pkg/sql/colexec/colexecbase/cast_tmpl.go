@@ -19,7 +19,6 @@ package colexecbase
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math"
 
 	"github.com/cockroachdb/apd/v3"
@@ -39,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -101,7 +101,10 @@ func isIdentityCast(fromType, toType *types.T) bool {
 	return false
 }
 
+var errUnhandledCast = errors.New("unhandled cast")
+
 func GetCastOperator(
+	ctx context.Context,
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	colIdx int,
@@ -177,11 +180,11 @@ func GetCastOperator(
 			// {{end}}
 		}
 	}
-	return nil, errors.Errorf(
-		"unhandled cast %s -> %s",
-		fromType.SQLStringForError(),
-		toType.SQLStringForError(),
-	)
+	err := errUnhandledCast
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		err = errors.Newf("unhandled cast %s -> %s", fromType.SQLStringForError(), toType.SQLStringForError())
+	}
+	return nil, err
 }
 
 func IsCastSupported(fromType, toType *types.T) bool {
@@ -274,7 +277,7 @@ func (c *castOpNullAny) Next() coldata.Batch {
 			if vecNulls.NullAt(i) {
 				projNulls.SetNull(i)
 			} else {
-				colexecerror.InternalError(errors.Errorf("unexpected non-null at index %d", i))
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected non-null at index %d", i))
 			}
 		}
 	} else {
@@ -282,7 +285,7 @@ func (c *castOpNullAny) Next() coldata.Batch {
 			if vecNulls.NullAt(i) {
 				projNulls.SetNull(i)
 			} else {
-				colexecerror.InternalError(fmt.Errorf("unexpected non-null at index %d", i))
+				colexecerror.InternalError(errors.AssertionFailedf("unexpected non-null at index %d", i))
 			}
 		}
 	}

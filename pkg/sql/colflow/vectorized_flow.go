@@ -159,7 +159,7 @@ func (s *fdCountingSemaphore) Release(n int) int {
 // semaphore.Semaphore.Release method.
 func (s *fdCountingSemaphore) ReleaseToPool() {
 	if unreleased := atomic.LoadInt64(&s.count); unreleased != 0 {
-		colexecerror.InternalError(errors.Newf("unexpectedly %d count on the semaphore when releasing it to the pool", unreleased))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly %d count on the semaphore when releasing it to the pool", unreleased))
 	}
 	*s = fdCountingSemaphore{}
 	fdCountingSemaphorePool.Put(s)
@@ -432,7 +432,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	for i, input := range inputs {
 		sc, ok := input.Root.(childStatsCollector)
 		if !ok {
-			return errors.New("unexpectedly an input is not collecting stats")
+			return errors.AssertionFailedf("unexpectedly an input is not collecting stats")
 		}
 		inputStatsCollectors[i] = sc
 	}
@@ -787,7 +787,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 	factory coldata.ColumnFactory,
 ) error {
 	if output.Type != execinfrapb.OutputRouterSpec_BY_HASH {
-		return errors.Errorf("vectorized output router type %s unsupported", output.Type)
+		return errors.AssertionFailedf("vectorized output router type %s unsupported", output.Type)
 	}
 
 	// HashRouter memory monitor names are the concatenated output stream IDs.
@@ -830,7 +830,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 		stream := &output.Streams[i]
 		switch stream.Type {
 		case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
-			return errors.Errorf("unexpected sync response output when setting up router")
+			return errors.AssertionFailedf("unexpected sync response output when setting up router")
 		case execinfrapb.StreamEndpointSpec_REMOTE:
 			if _, err := s.setupRemoteOutputStream(
 				ctx, flowCtx, processorID, colexecargs.OpWithMetaInfo{
@@ -952,7 +952,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			inputStreamOps = append(inputStreamOps, opWithMetaInfo)
 		default:
-			return colexecargs.OpWithMetaInfo{}, errors.Errorf("unsupported input stream type %s", inputStream.Type)
+			return colexecargs.OpWithMetaInfo{}, errors.AssertionFailedf("unsupported input stream type %s", inputStream.Type)
 		}
 	}
 	opWithMetaInfo := inputStreamOps[0]
@@ -1053,7 +1053,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 	}
 
 	if len(output.Streams) != 1 {
-		return errors.Errorf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
+		return errors.AssertionFailedf("unsupported multi outputstream proc (%d streams)", len(output.Streams))
 	}
 	outputStream := &output.Streams[0]
 	switch outputStream.Type {
@@ -1117,7 +1117,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		}
 
 	default:
-		return errors.Errorf("unsupported output stream type %s", outputStream.Type)
+		return errors.AssertionFailedf("unsupported output stream type %s", outputStream.Type)
 	}
 	return nil
 }
@@ -1152,7 +1152,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 		for procIdxQueuePos := 0; procIdxQueuePos < len(processorSpecs); procIdxQueuePos++ {
 			pspec := &processorSpecs[s.procIdxQueue[procIdxQueuePos]]
 			if len(pspec.Output) > 1 {
-				err = errors.Errorf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
+				err = errors.AssertionFailedf("unsupported multi-output proc (%d outputs)", len(pspec.Output))
 				return
 			}
 
@@ -1192,7 +1192,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 				s.releasables = append(s.releasables, result)
 			}
 			if err != nil {
-				err = errors.Wrapf(err, "unable to vectorize execution plan")
+				if log.ExpensiveLogEnabled(ctx, 1) {
+					err = errors.Wrapf(err, "unable to vectorize execution plan")
+				}
 				return
 			}
 			s.closers = append(s.closers, result.ToClose...)
@@ -1227,7 +1229,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 					}
 					procIdx, ok := s.streamIDToSpecIdx[outputStream.StreamID]
 					if !ok {
-						err = errors.Errorf("couldn't find stream %d", outputStream.StreamID)
+						err = errors.AssertionFailedf("couldn't find stream %d", outputStream.StreamID)
 						return
 					}
 					outputSpec := &processorSpecs[procIdx]
@@ -1290,7 +1292,7 @@ func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.FlowSpe
 			case execinfrapb.OutputRouterSpec_PASS_THROUGH,
 				execinfrapb.OutputRouterSpec_BY_HASH:
 			default:
-				return errors.New("only pass-through and hash routers are supported")
+				return errors.AssertionFailedf("only pass-through and hash routers are supported")
 			}
 		}
 	}
