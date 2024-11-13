@@ -86,11 +86,13 @@ var RangeFeedUseScheduler = settings.RegisterBoolSetting(
 	settings.Retired,
 )
 
+var ErrBufferedSenderNotSupported = unimplemented.NewWithIssue(
+	126560, "buffered stream sender not supported for production use")
+
 // RangefeedUseBufferedSender controls whether rangefeed uses a node level
 // buffered sender to buffer events instead of buffering events separately in a
 // channel at a per client per registration level. It is currently left
 // unimplemented and disabled everywhere (#126560).
-var ErrBufferedSenderNotSupported = unimplemented.NewWithIssue(126560, "buffered stream sender not supported for production use")
 var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.rangefeed.buffered_stream_sender.enabled",
