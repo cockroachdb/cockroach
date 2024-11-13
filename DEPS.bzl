@@ -4488,10 +4488,10 @@ def go_deps():
         name = "com_github_grpc_ecosystem_grpc_gateway_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/grpc-ecosystem/grpc-gateway/v2",
-        sha256 = "a6e7d597f3cda8832f18fff94b344a613f88b264fe233267b57be6a5c7afcd70",
-        strip_prefix = "github.com/grpc-ecosystem/grpc-gateway/v2@v2.0.0",
+        sha256 = "0f7076d19c1cb2450e2d7d3e59367062a8ac942583317aa726e13ad948786d0a",
+        strip_prefix = "github.com/grpc-ecosystem/grpc-gateway/v2@v2.23.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/grpc-ecosystem/grpc-gateway/v2/com_github_grpc_ecosystem_grpc_gateway_v2-v2.0.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/grpc-ecosystem/grpc-gateway/v2/com_github_grpc_ecosystem_grpc_gateway_v2-v2.23.0.zip",
         ],
     )
     go_repository(
@@ -11472,10 +11472,10 @@ def go_deps():
         name = "org_golang_google_genproto_googleapis_api",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/genproto/googleapis/api",
-        sha256 = "7027cd84aeddaa671f408f03bc30373ff6cffad9599a477b79e932fac3a40cd8",
-        strip_prefix = "google.golang.org/genproto/googleapis/api@v0.0.0-20240903143218-8af14fe29dc1",
+        sha256 = "c1edd4bce5227854998e5e952566fc315e9905b8e1161287379841cca31ac04a",
+        strip_prefix = "google.golang.org/genproto/googleapis/api@v0.0.0-20241021214115-324edc3d5d38",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/genproto/googleapis/api/org_golang_google_genproto_googleapis_api-v0.0.0-20240903143218-8af14fe29dc1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/genproto/googleapis/api/org_golang_google_genproto_googleapis_api-v0.0.0-20241021214115-324edc3d5d38.zip",
         ],
     )
     go_repository(
@@ -11492,10 +11492,10 @@ def go_deps():
         name = "org_golang_google_genproto_googleapis_rpc",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/genproto/googleapis/rpc",
-        sha256 = "0a466f53eacec63d96282ed3dfb2aa5cd26a9b3aa89619262f3a58e7e20ae0ac",
-        strip_prefix = "google.golang.org/genproto/googleapis/rpc@v0.0.0-20240903143218-8af14fe29dc1",
+        sha256 = "1d4d98e6e7b6b14c371e3a9d11bfcbb6e141ffa3794d79ed21b29a9021fe40dc",
+        strip_prefix = "google.golang.org/genproto/googleapis/rpc@v0.0.0-20241021214115-324edc3d5d38",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/genproto/googleapis/rpc/org_golang_google_genproto_googleapis_rpc-v0.0.0-20240903143218-8af14fe29dc1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/genproto/googleapis/rpc/org_golang_google_genproto_googleapis_rpc-v0.0.0-20241021214115-324edc3d5d38.zip",
         ],
     )
     go_repository(
