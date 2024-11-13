@@ -7,10 +7,12 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import filter from "lodash/filter";
 import flatMap from "lodash/flatMap";
 import flow from "lodash/flow";
+import isNil from "lodash/isNil";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
 import uniq from "lodash/uniq";
 import values from "lodash/values";
+import moment from "moment-timezone";
 import React from "react";
 import ReactPaginate from "react-paginate";
 import { connect } from "react-redux";
@@ -20,6 +22,8 @@ import * as protos from "src/js/protos";
 import { refreshRaft } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
+import { FixLong } from "src/util/fixLong";
+import Print from "src/views/reports/containers/range/print";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 import RaftDebugResponse = cockroach.server.serverpb.RaftDebugResponse;
@@ -259,6 +263,25 @@ export class RangesMain extends React.Component<
             }
             return "N/A";
           };
+
+          const displayTimestamp = (
+            timestamp: protos.cockroach.util.hlc.ITimestamp,
+            now: moment.Moment,
+          ): string => {
+            if (isNil(timestamp) || isNil(timestamp.wall_time)) {
+              return "nil";
+            }
+
+            if (FixLong(timestamp.wall_time).isZero()) {
+              return "empty";
+            }
+
+            const humanized = Print.Timestamp(timestamp);
+            const delta = Print.TimestampDeltaFromNow(timestamp, now);
+            return humanized.concat(", ", delta);
+          };
+
+          const now = moment();
           const index = nodeIDIndex[node.node_id];
           const raftState = nodeRange.raft_state;
           const cell = (
@@ -268,7 +291,8 @@ export class RangesMain extends React.Component<
                   State: {raftState.state}&nbsp; ReplicaID=
                   {display(raftState.replica_id)}&nbsp; Term=
                   {display(raftState.hard_state.term)}&nbsp; Lead=
-                  {display(raftState.lead)}&nbsp;
+                  {display(raftState.lead)}&nbsp; LeadSupportUntil=
+                  {displayTimestamp(raftState.lead_support_until, now)}&nbsp;
                 </div>
               ) : (
                 ""
