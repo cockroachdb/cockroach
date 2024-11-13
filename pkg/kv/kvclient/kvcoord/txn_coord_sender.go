@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -495,7 +496,7 @@ func (tc *TxnCoordSender) Send(
 		return nil, tc.finalizeNonLockingTxnLocked(ctx, ba)
 	}
 
-	ctx, sp := tc.AnnotateCtxWithSpan(ctx, OpTxnCoordSender)
+	ctx, sp := tracing.ChildSpan(ctx, OpTxnCoordSender)
 	defer sp.Finish()
 
 	// Associate the txnID with the trace.
