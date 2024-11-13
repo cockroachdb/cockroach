@@ -6,7 +6,7 @@ subtest check_ssl_disabled_error
 # Check that an attempt to use SSL fails with "SSL not enabled".
 connect user=root sslmode=require
 ----
-ERROR: pq: SSL is not enabled on the server
+ERROR: failed to connect to `host=127.0.0.1 user=root database=`: tls error (server refused TLS connection)
 
 subtest end
 
