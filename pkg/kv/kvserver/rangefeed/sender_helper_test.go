@@ -132,6 +132,37 @@ func (s *testServerStream) BlockSend() (unblock func()) {
 	}
 }
 
+// reset clears the state of the testServerStream.
+func (s *testServerStream) reset() {
+	s.Lock()
+	defer s.Unlock()
+	s.eventsSent = 0
+	s.streamEvents = make(map[int64][]*kvpb.MuxRangeFeedEvent)
+}
+
+func (s *testServerStream) totalEventsFilterBy(f func(e *kvpb.MuxRangeFeedEvent) bool) int {
+	s.Lock()
+	defer s.Unlock()
+	count := 0
+	for _, v := range s.streamEvents {
+		for _, streamEvent := range v {
+			if f(streamEvent) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func (s *testServerStream) waitForEventCount(t *testing.T, count int) {
+	testutils.SucceedsSoon(t, func() error {
+		if s.totalEventsSent() == count {
+			return nil
+		}
+		return errors.Newf("expected %d events, found %d", count, s.totalEventsSent())
+	})
+}
+
 type cancelCtxDisconnector struct {
 	mu struct {
 		syncutil.Mutex
