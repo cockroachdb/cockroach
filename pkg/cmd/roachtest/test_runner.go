@@ -1666,7 +1666,7 @@ func (r *testRunner) collectArtifacts(
 		// Do this before collecting logs to make sure the file gets
 		// downloaded below.
 		if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
-			t.L().Printf("failed to fetch disk uage summary: %s", err)
+			t.L().Printf("failed to fetch disk usage summary: %s", err)
 		}
 		if err := c.FetchLogs(ctx, t.L()); err != nil {
 			t.L().Printf("failed to download logs: %s", err)
