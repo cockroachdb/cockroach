@@ -92,14 +92,13 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	)
 
 	var (
-		relationName      string
-		pkColIDs          catalog.TableColMap
-		pkColNames        []string
-		pkColTypes        []*types.T
-		pkColDirs         []catenumpb.IndexColumn_Direction
-		numFamilies       int
-		labelMetrics      bool
-		processorRowCount int64
+		relationName string
+		pkColIDs     catalog.TableColMap
+		pkColNames   []string
+		pkColTypes   []*types.T
+		pkColDirs    []catenumpb.IndexColumn_Direction
+		numFamilies  int
+		labelMetrics bool
 	)
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
@@ -156,6 +155,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	if processorSpanCount < processorConcurrency {
 		processorConcurrency = processorSpanCount
 	}
+	var processorRowCount atomic.Int64
 	err := func() error {
 		boundsChan := make(chan QueryBounds, processorConcurrency)
 		defer close(boundsChan)
@@ -195,7 +195,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 						deleteBuilder,
 					)
 					// add before returning err in case of partial success
-					atomic.AddInt64(&processorRowCount, spanRowCount)
+					processorRowCount.Add(spanRowCount)
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
@@ -249,12 +249,12 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
 			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
-			rowLevelTTL.JobRowCount += processorRowCount
+			rowLevelTTL.JobRowCount += processorRowCount.Load()
 			processorID := t.ProcessorID
 			rowLevelTTL.ProcessorProgresses = append(rowLevelTTL.ProcessorProgresses, jobspb.RowLevelTTLProcessorProgress{
 				ProcessorID:          processorID,
 				SQLInstanceID:        sqlInstanceID,
-				ProcessorRowCount:    processorRowCount,
+				ProcessorRowCount:    processorRowCount.Load(),
 				ProcessorSpanCount:   processorSpanCount,
 				ProcessorConcurrency: processorConcurrency,
 			})
