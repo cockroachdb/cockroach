@@ -3299,6 +3299,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseViolatingPreferencesCount int64
 		leaseLessPreferredCount        int64
 		raftLeaderNotLeaseHolderCount  int64
+		raftLeaderNotFortifiedCount    int64
 		raftLeaderInvalidLeaseCount    int64
 		quiescentCount                 int64
 		uninitializedCount             int64
@@ -3363,6 +3364,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 			if !metrics.LeaseValid {
 				raftLeaderInvalidLeaseCount++
+			}
+			if metrics.LeaderNotFortified {
+				raftLeaderNotFortifiedCount++
 			}
 			kvflowSendStats.Clear()
 			rep.SendStreamStats(&kvflowSendStats)
@@ -3454,6 +3458,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.RaftLeaderCount.Update(raftLeaderCount)
 	s.metrics.RaftLeaderNotLeaseHolderCount.Update(raftLeaderNotLeaseHolderCount)
 	s.metrics.RaftLeaderInvalidLeaseCount.Update(raftLeaderInvalidLeaseCount)
+	s.metrics.RaftLeaderNotFortifiedCount.Update(raftLeaderNotFortifiedCount)
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
