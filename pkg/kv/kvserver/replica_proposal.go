@@ -301,6 +301,8 @@ const (
 	allowLeaseJump = true
 )
 
+var leaseAcquisitionLoggerEvery = log.Every(5 * time.Second)
+
 // leasePostApplyLocked updates the Replica's internal state to reflect the
 // application of a new Range lease. The method is idempotent, so it can be
 // called repeatedly for the same lease safely. However, the method will panic
@@ -376,12 +378,31 @@ func (r *Replica) leasePostApplyLocked(
 	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID || prevLease.Sequence != newLease.Sequence
 
 	if iAmTheLeaseHolder {
-		// Log lease acquisitions loudly when verbose logging is enabled or when the
-		// new leaseholder is draining, in which case it should be shedding leases.
-		// Otherwise, log a trace event.
-		if log.V(1) || (leaseChangingHands && r.store.IsDraining()) {
+		if r.store.IsDraining() && leaseChangingHands {
+			// If the new leaseholder is on a draining node, in which case it should be
+			// shedding leases, indicate this in the log line.
+			log.Infof(ctx, "new range lease %s on draining node following %s", newLease, prevLease)
+		} else if log.V(1) {
+			// Log every lease acquisition if verbose logging is enabled.
 			log.Infof(ctx, "new range lease %s following %s", newLease, prevLease)
+		} else if ((newLease.Type() != roachpb.LeaseExpiration) ||
+			(newLease.Type() == roachpb.LeaseExpiration && leaseChangingHands)) &&
+			leaseAcquisitionLoggerEvery.ShouldLog() {
+			// We log lease applications once every 5 seconds
+			// (leaseAcquisitionLoggerEvery) to prevent logs from getting too spammy.
+			// Moreover, to make these logs useful, we don't log extensions for
+			// expiration based leases, as those are fairly frequent.
+			//
+			// TODO(arul): consider pulling this out into its own logging channel.
+			log.Infof(ctx, "new range lease %s following %s", newLease, prevLease)
+		} else if prevLease.Type() == roachpb.LeaseExpiration && newLease.Type() != roachpb.LeaseExpiration && !leaseChangingHands {
+			// Lease is being promoted. It likely won't be caught by the
+			// leaseAcquisitionLoggerEvery above, as we attempt to promote the moment
+			// the lease transfer is applied. Log it here. Note that we log every
+			// lease transfer anyway, so this shouldn't be too much more chatty.
+			log.Infof(ctx, "new range lease %s promoted from %s", newLease, prevLease)
 		} else {
+			// If none of the above is true, just log as a trace event.
 			log.Eventf(ctx, "new range lease %s following %s", newLease, prevLease)
 		}
 	}
