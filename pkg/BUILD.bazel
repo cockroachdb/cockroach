@@ -1230,6 +1230,7 @@ GO_TARGETS = [
     "//pkg/cmd/roachtest/spec:spec",
     "//pkg/cmd/roachtest/spec:spec_test",
     "//pkg/cmd/roachtest/test:test",
+    "//pkg/cmd/roachtest/tests/perturbation:perturbation",
     "//pkg/cmd/roachtest/tests:tests",
     "//pkg/cmd/roachtest/tests:tests_test",
     "//pkg/cmd/roachtest/testselector:testselector",

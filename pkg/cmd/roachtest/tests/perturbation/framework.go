@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package tests
+package perturbation
 
 import (
 	"bytes"
@@ -91,6 +91,8 @@ type variations struct {
 	acceptableChange     float64
 	cloud                registry.CloudSet
 	profileOptions       []roachtestutil.ProfileOptionFunc
+	specOptions          []spec.Option
+	clusterSettings      map[string]string
 }
 
 const NUM_REGIONS = 3
@@ -167,6 +169,9 @@ func setup(p perturbation, acceptableChange float64) variations {
 		roachtestutil.ProfMultipleFromP99(10),
 	}
 	v.acceptableChange = acceptableChange
+	v.clusterSettings = make(map[string]string)
+	// Enable raft tracing. Remove this once raft tracing is the default.
+	v.clusterSettings["kv.raft.max_concurrent_traces"] = "10"
 	return v
 }
 
@@ -176,7 +181,7 @@ func register(r registry.Registry, p perturbation) {
 	addDev(r, p)
 }
 
-func registerLatencyTests(r registry.Registry) {
+func RegisterTests(r registry.Registry) {
 	// NB: If these tests fail because they are flaky, increase the numbers
 	// until they pass. Additionally add the seed (from the log) that caused
 	// them to fail as a comment in the test.
@@ -190,14 +195,7 @@ func registerLatencyTests(r registry.Registry) {
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
-	opts := []spec.Option{spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem)}
-	// TODO(baptist): This is ugly to use reflection here. The better change
-	// would be to have the perturbation expose the options it wants to add to
-	// the cluster spec. If there is any additional instances where we need to
-	// differentiate the tests, convert to that.
-	if reflect.TypeOf(v.perturbation) == reflect.TypeOf(&slowDisk{}) {
-		opts = append(opts, spec.ReuseNone())
-	}
+	opts := append(v.specOptions, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem))
 	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, opts...)
 }
 
@@ -295,430 +293,6 @@ type perturbation interface {
 	// endPerturbation ends the system change. Not all perturbations do anything on stop.
 	// It returns the duration looking backwards to collect performance stats.
 	endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration
-}
-
-// elasticWorkload will start a workload with elastic priority. It uses the same
-// characteristics as the normal workload. However since the normal workload
-// runs at 50% CPU this adds another 2x the stable rate so it will be slowed
-// down by AC.
-// TODO(baptist): Run against the same database to hit transaction conflicts and
-// priority inversions.
-type elasticWorkload struct{}
-
-var _ perturbation = elasticWorkload{}
-
-func (e elasticWorkload) setup() variations {
-	return setup(e, 5.0)
-}
-
-func (e elasticWorkload) setupMetamorphic(rng *rand.Rand) variations {
-	v := e.setup()
-	// NB: Running an elastic workload can sometimes increase the latency of
-	// almost all regular requests. To prevent this, we set the min latency to
-	// 100ms instead of the default.
-	v.profileOptions = append(v.profileOptions, roachtestutil.ProfMinimumLatency(100*time.Millisecond))
-	return v.randomize(rng)
-}
-
-func (e elasticWorkload) startTargetNode(ctx context.Context, t test.Test, v variations) {
-	v.startNoBackup(ctx, t, v.targetNodes())
-	initCmd := fmt.Sprintf("./cockroach workload init kv --db elastic --splits %d {pgurl:1}", v.splits)
-	v.Run(ctx, option.WithNodes(v.Node(1)), initCmd)
-}
-
-func (e elasticWorkload) startPerturbation(
-	ctx context.Context, t test.Test, v variations,
-) time.Duration {
-	startTime := timeutil.Now()
-	runCmd := fmt.Sprintf(
-		"./cockroach workload run kv --db elastic --txn-qos=background --duration=%s --max-block-bytes=%d --min-block-bytes=%d --concurrency=500 {pgurl%s}",
-		v.perturbationDuration, v.maxBlockBytes, v.maxBlockBytes, v.stableNodes())
-	v.Run(ctx, option.WithNodes(v.workloadNodes()), runCmd)
-
-	// Wait a few seconds to allow the latency to resume after stopping the
-	// workload. This makes it easier to separate the perturbation from the
-	// validation phases.
-	waitDuration(ctx, 5*time.Second)
-	return timeutil.Since(startTime)
-}
-
-// endPerturbation implements perturbation.
-func (e elasticWorkload) endPerturbation(
-	ctx context.Context, t test.Test, v variations,
-) time.Duration {
-	waitDuration(ctx, v.validationDuration)
-	return v.validationDuration
-}
-
-// backfill will create a backfill table during the startup and an index on it
-// during the perturbation. The table and index are configured to always have
-// one replica on the target node, but no leases. This stresses replication
-// admission control.
-type backfill struct{}
-
-var _ perturbation = backfill{}
-
-func (b backfill) setup() variations {
-	return setup(b, 40.0)
-}
-
-func (b backfill) setupMetamorphic(rng *rand.Rand) variations {
-	v := b.setup()
-	// TODO(#133114): The backfill test can cause OOM with low memory
-	// configurations.
-	if v.mem == spec.Low {
-		v.mem = spec.Standard
-	}
-	return v.randomize(rng)
-}
-
-// startTargetNode starts the target node and creates the backfill table.
-func (b backfill) startTargetNode(ctx context.Context, t test.Test, v variations) {
-	v.startNoBackup(ctx, t, v.targetNodes())
-
-	// Create enough splits to start with one replica on each store.
-	numSplits := v.vcpu * v.disks
-	// TODO(baptist): Handle multiple target nodes.
-	target := v.targetNodes()[0]
-	initCmd := fmt.Sprintf("./cockroach workload init kv --db backfill --splits %d {pgurl:1}", numSplits)
-	v.Run(ctx, option.WithNodes(v.Node(1)), initCmd)
-	db := v.Conn(ctx, t.L(), 1)
-	defer db.Close()
-
-	cmd := fmt.Sprintf(`ALTER DATABASE backfill CONFIGURE ZONE USING constraints='{"+node%d":1}', lease_preferences='[[-node%d]]', num_replicas=3`, target, target)
-	_, err := db.ExecContext(ctx, cmd)
-	require.NoError(t, err)
-
-	// TODO(#130939): Allow the backfill to complete, without this it can hang indefinitely.
-	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING bulkio.index_backfill.batch_size = 5000")
-	require.NoError(t, err)
-
-	t.L().Printf("waiting for replicas to be in place")
-	v.waitForRebalanceToStop(ctx, t)
-
-	// Create and fill the backfill kv database before the test starts. We don't
-	// want the fill to impact the test throughput. We use a larger block size
-	// to create a lot of SSTables and ranges in a short amount of time.
-	runCmd := fmt.Sprintf(
-		"./cockroach workload run kv --db backfill --duration=%s --max-block-bytes=%d --min-block-bytes=%d --concurrency=100 {pgurl%s}",
-		v.perturbationDuration, 10_000, 10_000, v.stableNodes())
-	v.Run(ctx, option.WithNodes(v.workloadNodes()), runCmd)
-
-	t.L().Printf("waiting for io overload to end")
-	v.waitForIOOverloadToEnd(ctx, t)
-	v.waitForRebalanceToStop(ctx, t)
-}
-
-// startPerturbation creates the index for the table.
-func (b backfill) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	db := v.Conn(ctx, t.L(), 1)
-	defer db.Close()
-	startTime := timeutil.Now()
-	cmd := "CREATE INDEX backfill_index ON backfill.kv (k, v)"
-	_, err := db.ExecContext(ctx, cmd)
-	require.NoError(t, err)
-	return timeutil.Since(startTime)
-}
-
-// endPerturbation does nothing as the backfill database is already created.
-func (b backfill) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	waitDuration(ctx, v.validationDuration)
-	return v.validationDuration
-}
-
-type slowDisk struct {
-	// slowLiveness will place the liveness range on the slow node (may not be the slow disk).
-	slowLiveness bool
-	// walFailover will add add WAL failover to the slow node.
-	walFailover bool
-	staller     roachtestutil.DiskStaller
-}
-
-// NB: slowData is an unusual perturbation since the staller is initialized
-// later (in startTargetNode) instead of here.
-var _ perturbation = &slowDisk{}
-
-func (s *slowDisk) setup() variations {
-	s.slowLiveness = true
-	s.walFailover = true
-	return setup(s, math.Inf(1))
-}
-
-func (s *slowDisk) setupMetamorphic(rng *rand.Rand) variations {
-	v := s.setup()
-	s.slowLiveness = rng.Intn(2) == 0
-	s.walFailover = rng.Intn(2) == 0
-	v.perturbation = s
-	return v.randomize(rng)
-}
-
-// startTargetNode implements perturbation.
-func (s *slowDisk) startTargetNode(ctx context.Context, t test.Test, v variations) {
-	extraArgs := []string{}
-	if s.walFailover && v.disks > 1 {
-		extraArgs = append(extraArgs, "--wal-failover=among-stores")
-	}
-	v.startNoBackup(ctx, t, v.targetNodes(), extraArgs...)
-
-	if s.slowLiveness {
-		// TODO(baptist): Handle multiple target nodes.
-		target := v.targetNodes()[0]
-		db := v.Conn(ctx, t.L(), 1)
-		defer db.Close()
-		cmd := fmt.Sprintf(`ALTER RANGE liveness CONFIGURE ZONE USING CONSTRAINTS='{"+node%d":1}', lease_preferences='[[+node%d]]'`, target, target)
-		_, err := db.ExecContext(ctx, cmd)
-		require.NoError(t, err)
-	}
-
-	if v.IsLocal() {
-		s.staller = roachtestutil.NoopDiskStaller{}
-	} else {
-		s.staller = roachtestutil.MakeCgroupDiskStaller(t, v, false /* readsToo */, false /* logsToo */)
-	}
-}
-
-// startPerturbation implements perturbation.
-func (s *slowDisk) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	// TODO(baptist): Do this more dynamically?
-	s.staller.Slow(ctx, v.targetNodes(), 20_000_000)
-	waitDuration(ctx, v.validationDuration)
-	return v.validationDuration
-}
-
-// endPerturbation implements perturbation.
-func (s *slowDisk) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	s.staller.Unstall(ctx, v.targetNodes())
-	waitDuration(ctx, v.validationDuration)
-	return v.validationDuration
-}
-
-// restart will gracefully stop and then restart a node after a custom duration.
-type restart struct {
-	cleanRestart bool
-}
-
-var _ perturbation = restart{}
-
-func (r restart) setup() variations {
-	r.cleanRestart = true
-	return setup(r, math.Inf(1))
-}
-
-func (r restart) setupMetamorphic(rng *rand.Rand) variations {
-	v := r.setup()
-	r.cleanRestart = rng.Intn(2) == 0
-	v.perturbation = r
-	return v.randomize(rng)
-}
-
-func (r restart) startTargetNode(ctx context.Context, t test.Test, v variations) {
-	v.startNoBackup(ctx, t, v.targetNodes())
-}
-
-// startPerturbation stops the target node with a graceful shutdown.
-func (r restart) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	startTime := timeutil.Now()
-	gracefulOpts := option.DefaultStopOpts()
-	// SIGTERM for clean shutdown
-	if r.cleanRestart {
-		gracefulOpts.RoachprodOpts.Sig = 15
-	} else {
-		gracefulOpts.RoachprodOpts.Sig = 9
-	}
-	gracefulOpts.RoachprodOpts.Wait = true
-	v.Stop(ctx, t.L(), gracefulOpts, v.targetNodes())
-	waitDuration(ctx, v.perturbationDuration)
-	if r.cleanRestart {
-		return timeutil.Since(startTime)
-	}
-	// If it is not a clean restart, we ignore the first 10 seconds to allow for lease movement.
-	return timeutil.Since(startTime) + 10*time.Second
-}
-
-// endPerturbation restarts the node.
-func (r restart) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	startTime := timeutil.Now()
-	v.startNoBackup(ctx, t, v.targetNodes())
-	waitDuration(ctx, v.validationDuration)
-	return timeutil.Since(startTime)
-}
-
-// partition either the first node or all nodes in the first region.
-func (v variations) withPartitionedNodes(c cluster.Cluster, partitionSite bool) install.RunOptions {
-	numPartitionNodes := 1
-	if partitionSite {
-		numPartitionNodes = v.numNodes / NUM_REGIONS
-	}
-	return option.WithNodes(c.Range(1, numPartitionNodes))
-}
-
-// partition will partition the target node from either one other node or all
-// other nodes in a different AZ.
-type partition struct {
-	partitionSite bool
-}
-
-var _ perturbation = partition{}
-
-func (p partition) setup() variations {
-	p.partitionSite = true
-	v := setup(p, math.Inf(1))
-	v.leaseType = registry.ExpirationLeases
-	return v
-}
-
-func (p partition) setupMetamorphic(rng *rand.Rand) variations {
-	v := p.setup()
-	p.partitionSite = rng.Intn(2) == 0
-	v.perturbation = p
-	return v.randomize(rng)
-}
-
-func (p partition) startTargetNode(ctx context.Context, t test.Test, v variations) {
-	v.startNoBackup(ctx, t, v.targetNodes())
-}
-
-func (p partition) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	targetIPs, err := v.InternalIP(ctx, t.L(), v.targetNodes())
-	require.NoError(t, err)
-
-	if !v.IsLocal() {
-		v.Run(
-			ctx,
-			v.withPartitionedNodes(v, p.partitionSite),
-			fmt.Sprintf(
-				`sudo iptables -A INPUT -p tcp -s %s -j DROP`, targetIPs[0]))
-	}
-	waitDuration(ctx, v.perturbationDuration)
-	// During the first 10 seconds after the partition, we expect latency to drop,
-	// start measuring after 20 seconds.
-	return v.perturbationDuration - 20*time.Second
-}
-
-func (p partition) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	startTime := timeutil.Now()
-	if !v.IsLocal() {
-		v.Run(ctx, v.withPartitionedNodes(v, p.partitionSite), `sudo iptables -F`)
-	}
-	waitDuration(ctx, v.validationDuration)
-	return timeutil.Since(startTime)
-}
-
-// addNode will add a node during the start phase and wait for it to complete.
-// It doesn't do anything during the stop phase.
-type addNode struct{}
-
-var _ perturbation = addNode{}
-
-func (a addNode) setup() variations {
-	return setup(a, 5.0)
-}
-
-func (a addNode) setupMetamorphic(rng *rand.Rand) variations {
-	v := a.setup()
-	v = v.randomize(rng)
-	//TODO(#133606): With high vcpu and large writes, the test can fail due to
-	//the disk becoming saturated leading to 1-2s of fsync stall.
-	if v.vcpu >= 16 && v.maxBlockBytes == 4096 {
-		v.maxBlockBytes = 1024
-	}
-	return v
-}
-
-func (addNode) startTargetNode(ctx context.Context, t test.Test, v variations) {
-}
-
-func (a addNode) startPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	startTime := timeutil.Now()
-	v.startNoBackup(ctx, t, v.targetNodes())
-	// Wait out the time until the store is no longer suspect. The 31s is based
-	// on the 30s default server.time_after_store_suspect setting plus 1 sec for
-	// the store to propagate its gossip information.
-	waitDuration(ctx, 31*time.Second)
-	v.waitForRebalanceToStop(ctx, t)
-	return timeutil.Since(startTime)
-}
-
-// endPerturbation already waited for completion as part of start, so it doesn't
-// need to wait again here.
-func (addNode) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	waitDuration(ctx, v.validationDuration)
-	return v.validationDuration
-}
-
-// decommission will decommission the target node during the start phase. It
-// allows optionally calling drain first. Draining first is the best practice
-// recommendation, however it should not cause a latency impact either way.
-type decommission struct {
-	drain bool
-}
-
-var _ perturbation = decommission{}
-
-func (d decommission) setup() variations {
-	d.drain = true
-	return setup(d, 5.0)
-}
-
-func (d decommission) setupMetamorphic(rng *rand.Rand) variations {
-	v := d.setup()
-	d.drain = rng.Intn(2) == 0
-	v = v.randomize(rng)
-	v.perturbation = d
-	//TODO(#133606): With high vcpu and large writes, the test can fail due to
-	//the disk becoming saturated leading to 1-2s of fsync stall.
-	if v.vcpu >= 16 && v.maxBlockBytes == 4096 {
-		v.maxBlockBytes = 1024
-	}
-	return v
-}
-
-func (d decommission) startTargetNode(ctx context.Context, t test.Test, v variations) {
-	v.startNoBackup(ctx, t, v.targetNodes())
-}
-
-func (d decommission) startPerturbation(
-	ctx context.Context, t test.Test, v variations,
-) time.Duration {
-	startTime := timeutil.Now()
-	// TODO(baptist): If we want to support multiple decommissions in parallel,
-	// run drain and decommission in separate goroutine.
-	if d.drain {
-		t.L().Printf("draining target nodes")
-		for _, node := range v.targetNodes() {
-			drainCmd := fmt.Sprintf(
-				"./cockroach node drain --self --certs-dir=%s --port={pgport:%d}",
-				install.CockroachNodeCertsDir,
-				node,
-			)
-			v.Run(ctx, option.WithNodes(v.Node(node)), drainCmd)
-		}
-		// Wait for all the other nodes to see the drain over gossip.
-		time.Sleep(10 * time.Second)
-	}
-
-	t.L().Printf("decommissioning nodes")
-	for _, node := range v.targetNodes() {
-		decommissionCmd := fmt.Sprintf(
-			"./cockroach node decommission --self --certs-dir=%s --port={pgport:%d}",
-			install.CockroachNodeCertsDir,
-			node,
-		)
-		v.Run(ctx, option.WithNodes(v.Node(node)), decommissionCmd)
-	}
-
-	t.L().Printf("stopping decommissioned nodes")
-	v.Stop(ctx, t.L(), option.DefaultStopOpts(), v.targetNodes())
-	return timeutil.Since(startTime)
-}
-
-// endPerturbation already waited for completion as part of start, so it doesn't
-// need to wait again here.
-func (d decommission) endPerturbation(
-	ctx context.Context, t test.Test, v variations,
-) time.Duration {
-	waitDuration(ctx, v.validationDuration)
-	return v.validationDuration
 }
 
 func prettyPrint(title string, stats map[string]trackedStat) string {
@@ -835,36 +409,8 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 	// Start the stable nodes and let the perturbation start the target node(s).
 	v.startNoBackup(ctx, t, v.stableNodes())
+	v.applyClusterSettings(ctx, t)
 	v.perturbation.startTargetNode(ctx, t, v)
-
-	func() {
-		// TODO(baptist): Remove this block once #120073 is fixed.
-		db := c.Conn(ctx, t.L(), 1)
-		defer db.Close()
-		if _, err := db.ExecContext(ctx,
-			`SET CLUSTER SETTING kv.lease.reject_on_leader_unknown.enabled = true`); err != nil {
-			t.Fatal(err)
-		}
-		// Enable raft tracing. Remove this once raft tracing is the default.
-		if _, err := db.ExecContext(ctx,
-			`SET CLUSTER SETTING kv.raft.max_concurrent_traces = '10'`); err != nil {
-			t.Fatal(err)
-		}
-		// TODO(kvoli,andrewbaptist): Re-introduce a lower than default suspect
-		// duration once RACv2 pull mode (send queue) is enabled. e.g.,
-		//
-		//   `SET CLUSTER SETTING server.time_after_store_suspect = '10s'` (default 30s)
-		//   `SET CLUSTER SETTING kvadmission.flow_control.mode = 'apply_to_all'` (default apply_to_elastic)
-
-		// Avoid stores up-replicating away from the target node, reducing the
-		// backlog of work.
-		if _, err := db.ExecContext(
-			ctx,
-			fmt.Sprintf(
-				`SET CLUSTER SETTING server.time_until_store_dead = '%s'`, v.perturbationDuration+time.Minute)); err != nil {
-			t.Fatal(err)
-		}
-	}()
 
 	// Wait for rebalancing to finish before starting to fill. This minimizes
 	// the time to finish.
@@ -946,6 +492,16 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)...)
 	require.True(t, len(failures) == 0, strings.Join(failures, "\n"))
 	roachtestutil.ValidateTokensReturned(ctx, t, v, v.stableNodes())
+}
+
+func (v variations) applyClusterSettings(ctx context.Context, t test.Test) {
+	db := v.Conn(ctx, t.L(), 1)
+	defer db.Close()
+	for key, value := range v.clusterSettings {
+		if _, err := db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", key, value)); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // trackedStat is a collection of the relevant values from the histogram. The
@@ -1105,40 +661,6 @@ type workloadType interface {
 	operations() []string
 	initWorkload(ctx context.Context, v variations) error
 	runWorkload(ctx context.Context, v variations, duration time.Duration, maxRate int) (*workloadData, error)
-}
-
-type kvWorkload struct{}
-
-func (w kvWorkload) operations() []string {
-	return []string{"write", "read", "follower-read"}
-}
-
-func (w kvWorkload) initWorkload(ctx context.Context, v variations) error {
-	initCmd := fmt.Sprintf("./cockroach workload init kv --db target --splits %d {pgurl:1}", v.splits)
-	return v.RunE(ctx, option.WithNodes(v.Node(1)), initCmd)
-}
-
-// Don't run a workload against the node we're going to shut down.
-func (w kvWorkload) runWorkload(
-	ctx context.Context, v variations, duration time.Duration, maxRate int,
-) (*workloadData, error) {
-	runCmd := fmt.Sprintf(
-		"./cockroach workload run kv --db target --display-format=incremental-json --duration=%s --max-rate=%d --tolerate-errors --max-block-bytes=%d --read-percent=50 --follower-read-percent=50 --concurrency=500 {pgurl%s}",
-		duration, maxRate, v.maxBlockBytes, v.stableNodes())
-	allOutput, err := v.RunWithDetails(ctx, nil, option.WithNodes(v.workloadNodes()), runCmd)
-	if err != nil {
-		return nil, err
-	}
-	wd := workloadData{
-		score: v.calculateScore,
-		data:  make(map[string]map[time.Time]trackedStat),
-	}
-	for _, output := range allOutput {
-		stdout := output.Stdout
-		ticks := cli.ParseOutput(strings.NewReader(stdout))
-		wd.addTicks(ticks)
-	}
-	return &wd, nil
 }
 
 // waitDuration waits until either the duration has passed or the context is cancelled.
