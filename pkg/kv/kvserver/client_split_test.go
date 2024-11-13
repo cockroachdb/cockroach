@@ -2661,6 +2661,8 @@ func TestLeaderAfterSplit(t *testing.T) {
 }
 
 func BenchmarkStoreRangeSplit(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(b, base.TestServerArgs{})
 
@@ -2668,20 +2670,23 @@ func BenchmarkStoreRangeSplit(b *testing.B) {
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(b, err)
 
+	_, err = s.ScratchRange()
+	require.NoError(b, err)
+
 	// Perform initial split of ranges.
-	sArgs := adminSplitArgs(roachpb.Key("b"))
+	sArgs := adminSplitArgs(scratchKey("b"))
 	if _, err := kv.SendWrapped(ctx, store.TestSender(), sArgs); err != nil {
 		b.Fatal(err)
 	}
 
 	// Write some values left and right of the split key.
-	aDesc := store.LookupReplica([]byte("a")).Desc()
-	bDesc := store.LookupReplica([]byte("c")).Desc()
-	kvserver.WriteRandomDataToRange(b, store, aDesc.RangeID, []byte("aaa"))
-	kvserver.WriteRandomDataToRange(b, store, bDesc.RangeID, []byte("ccc"))
+	aDesc := store.LookupReplica([]byte(scratchKey("a"))).Desc()
+	bDesc := store.LookupReplica([]byte(scratchKey("c"))).Desc()
+	kvserver.WriteRandomDataToRange(b, store, aDesc.RangeID, scratchKey("aaa"))
+	kvserver.WriteRandomDataToRange(b, store, bDesc.RangeID, scratchKey("ccc"))
 
 	// Merge the b range back into the a range.
-	mArgs := adminMergeArgs(roachpb.KeyMin)
+	mArgs := adminMergeArgs(keys.ScratchRangeMin)
 	if _, err := kv.SendWrapped(ctx, store.TestSender(), mArgs); err != nil {
 		b.Fatal(err)
 	}
