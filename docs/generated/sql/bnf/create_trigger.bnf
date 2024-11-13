@@ -1,0 +1,2 @@
+create_trigger_stmt ::=
+	'CREATE'  'TRIGGER' trigger_create_name ( 'BEFORE' | 'AFTER'  ) ( ( ( 'INSERT' | 'DELETE' | 'UPDATE' | 'UPDATE'   ) ) ( ( 'OR' ( 'INSERT' | 'DELETE' | 'UPDATE' | 'UPDATE'   ) ) )* ) 'ON' table_name  ( 'FOR' ( 'EACH' |  ) ( 'ROW'  ) |  ) ( 'WHEN' a_expr |  ) 'EXECUTE' ( 'FUNCTION'  ) func_name '(' trigger_func_args ')'
