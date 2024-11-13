@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -222,22 +223,31 @@ func (v *beforeAfterValidator) NoteRow(
 			`expected primary key columns %s got datums %s`, v.primaryKeyCols, primaryKeyDatums)
 	}
 
-	type wrapper struct {
-		After  map[string]interface{} `json:"after"`
-		Before map[string]interface{} `json:"before"`
+	j, _ := json.ParseJSON(value)
+	afterJson, err := j.FetchValKey("after")
+	if err != nil {
+		return err
 	}
-	var rowJSON wrapper
-	if err := gojson.Unmarshal([]byte(value), &rowJSON); err != nil {
+	afterValueDatums, err := convertJSONToMap(afterJson)
+	if err != nil {
+		return err
+	}
+	beforeJson, err := j.FetchValKey("before")
+	if err != nil {
+		return err
+	}
+	beforeValueDatums, err := convertJSONToMap(beforeJson)
+	if err != nil {
 		return err
 	}
 
 	// Check that the "after" field agrees with the row in the table at the
 	// updated timestamp.
-	if err := v.checkRowAt("after", primaryKeyDatums, rowJSON.After, updated); err != nil {
+	if err := v.checkRowAt("after", primaryKeyDatums, afterValueDatums, updated); err != nil {
 		return err
 	}
 
-	if v.resolved[partition].IsEmpty() && rowJSON.Before == nil {
+	if v.resolved[partition].IsEmpty() && beforeValueDatums == nil {
 		// If the initial scan hasn't completed for this partition,
 		// we don't require the rows to contain a "before" field.
 		return nil
@@ -245,7 +255,7 @@ func (v *beforeAfterValidator) NoteRow(
 
 	// Check that the "before" field agrees with the row in the table immediately
 	// before the updated timestamp.
-	return v.checkRowAt("before", primaryKeyDatums, rowJSON.Before, updated.Prev())
+	return v.checkRowAt("before", primaryKeyDatums, beforeValueDatums, updated.Prev())
 }
 
 func (v *beforeAfterValidator) checkRowAt(
