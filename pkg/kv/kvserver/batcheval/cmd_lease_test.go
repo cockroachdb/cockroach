@@ -66,13 +66,14 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 
 	cArgs.Args = &kvpb.RequestLeaseRequest{
 		Lease: roachpb.Lease{
-			Replica: replicas[1],
+			Replica:         replicas[1],
+			AcquisitionType: roachpb.LeaseAcquisitionType_Request,
 		},
 	}
 	_, err = RequestLease(ctx, nil, cArgs, nil)
 
 	const expForLearner = `cannot replace lease <empty> ` +
-		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil> pro=0,0: ` +
+		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil> pro=0,0 acq=Request: ` +
 		`lease target replica cannot hold lease`
 	require.EqualError(t, err, expForLearner)
 }
