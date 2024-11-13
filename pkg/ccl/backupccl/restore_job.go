@@ -1183,6 +1183,7 @@ func createImportingDescriptors(
 		for _, desc := range mutableTables {
 			if desc.GetParentID() == tempSystemDBID {
 				desc.SetPublic()
+				desc.LocalityConfig = nil
 			}
 		}
 	}
@@ -1250,6 +1251,13 @@ func createImportingDescriptors(
 
 				if db, ok := dbsByID[regionTypeDesc.GetParentID()]; ok {
 					desc := db.DatabaseDesc()
+					if db.GetName() == restoreTempSystemDB {
+						t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
+						t.TypeDesc().RegionConfig = nil
+						// TODO(foundations): should these be rewritten instead of blank? Does it matter since we drop the whole DB before the job exits?
+						t.TypeDesc().ReferencingDescriptorIDs = nil
+						continue
+					}
 					if desc.RegionConfig == nil {
 						return errors.AssertionFailedf(
 							"found MULTIREGION_ENUM on non-multi-region database %s", desc.Name)
