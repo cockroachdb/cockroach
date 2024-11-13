@@ -4,7 +4,7 @@ echo
 -- This test exercises send queue formation, prevention and flushing.
 -- The structure roughly follows:
 --   Start with three voters on [n1,n2,n3], where n1 is the leader+leaseholder.
---   Large regular write -16 MiB.
+--   Large regular write -4 MiB.
 --   Allow admission [n1,n2].
 --   - Tokens should be returned for n1 and n2.
 --   Block admission [n2].
@@ -19,14 +19,14 @@ echo
 --   Start n2.
 --   Add n4, n5, the voters now are [n1,n2,n3,n4,n5].
 --   Block admission [n4,n5] (already blocked)
---   Regular write -16 MiB.
+--   Regular write -4 MiB.
 --   Regular write -1  MiB.
 --   - Shouldn't be blocked on wait-for-eval because of quorum [n1,n2,n3]
 --   - Metrics should reflect send queue formation on n4,n5.
 --   Unblock admission [n4,n5].
 --   - Wait for tokens to be returned.
 --   Block admission [n2,n3,n4,n5].
---   Regular write -16 MiB.
+--   Regular write -4 MiB.
 --   Regular write -1  MiB.
 --   - Blocks on wait-for-eval, however the test bypasses this instance.    
 --   - Metrics should reflect 2 streams being prevented from forming a send queue.
@@ -39,29 +39,29 @@ SELECT name, crdb_internal.humanize_bytes(value::INT8)
    WHERE name LIKE '%kvflowcontrol%tokens%'
 ORDER BY name ASC;
 
-  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB  
-  kvflowcontrol.tokens.eval.elastic.deducted                        | 0 B     
-  kvflowcontrol.tokens.eval.elastic.returned                        | 0 B     
-  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B     
-  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B     
-  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB  
-  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B     
-  kvflowcontrol.tokens.eval.regular.returned                        | 0 B     
-  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B     
-  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B     
-  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB  
-  kvflowcontrol.tokens.send.elastic.deducted                        | 0 B     
-  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B     
-  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B     
-  kvflowcontrol.tokens.send.elastic.returned                        | 0 B     
-  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B     
-  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B     
-  kvflowcontrol.tokens.send.regular.available                       | 48 MiB  
-  kvflowcontrol.tokens.send.regular.deducted                        | 0 B     
-  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B     
-  kvflowcontrol.tokens.send.regular.returned                        | 0 B     
-  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B     
-  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B     
+  kvflowcontrol.tokens.eval.elastic.available                       | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.elastic.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 12 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 12 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
 
 
 -- Send queue metrics from n1.
@@ -91,12 +91,12 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  3        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  3        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
 
 
--- (Issuing 1x16MiB regular, 3x replicated write that's not admitted.)
+-- (Issuing 4x1MiB regular, 3x replicated write that's not admitted.)
 
 
 -- Observe the total tracked tokens per-stream on n1.
@@ -105,9 +105,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  70       | 1        | 16 MiB                
-  70       | 2        | 16 MiB                
-  70       | 3        | 16 MiB                
+  70       | 1        | 4.0 MiB               
+  70       | 2        | 4.0 MiB               
+  70       | 3        | 4.0 MiB               
 
 
 -- And, the per-store tokens available post-write from n1.
@@ -121,9 +121,9 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 0 B                    | -8.0 MiB               | 0 B                    | -8.0 MiB                
-  2        | 0 B                    | -8.0 MiB               | 0 B                    | -8.0 MiB                
-  3        | 0 B                    | -8.0 MiB               | 0 B                    | -8.0 MiB                
+  1        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
+  2        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
+  3        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
 
 
 -- (Allowing below-raft admission to proceed on n1 and n2.)
@@ -138,7 +138,7 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 -----------+----------+-----------------------
   70       | 1        | 0 B                   
   70       | 2        | 0 B                   
-  70       | 3        | 16 MiB                
+  70       | 3        | 4.0 MiB               
 
 
 -- Per-store tokens available from n1.
@@ -152,9 +152,9 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  3        | 0 B                    | -8.0 MiB               | 0 B                    | -8.0 MiB                
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  3        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
 
 
 -- (Blocking below-raft admission on n2.)
@@ -191,9 +191,9 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 15 MiB                 | 7.0 MiB                | 15 MiB                 | 7.0 MiB                 
-  3        | 0 B                    | -9.0 MiB               | 0 B                    | -8.0 MiB                
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 3.0 MiB                | 1.0 MiB                | 3.0 MiB                | 1.0 MiB                 
+  3        | 0 B                    | -3.0 MiB               | 0 B                    | -2.0 MiB                
 
 
 -- (Stopping n2.)
@@ -205,27 +205,27 @@ SELECT name, crdb_internal.humanize_bytes(value::INT8)
    WHERE name LIKE '%kvflowcontrol%tokens%'
 ORDER BY name ASC;
 
-  kvflowcontrol.tokens.eval.elastic.available                       | 7.0 MiB  
-  kvflowcontrol.tokens.eval.elastic.deducted                        | 51 MiB   
-  kvflowcontrol.tokens.eval.elastic.returned                        | 34 MiB   
+  kvflowcontrol.tokens.eval.elastic.available                       | 1.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 15 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned                        | 10 MiB   
   kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 1.0 MiB  
   kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.eval.regular.available                       | 32 MiB   
-  kvflowcontrol.tokens.eval.regular.deducted                        | 50 MiB   
-  kvflowcontrol.tokens.eval.regular.returned                        | 34 MiB   
+  kvflowcontrol.tokens.eval.regular.available                       | 8.0 MiB  
+  kvflowcontrol.tokens.eval.regular.deducted                        | 14 MiB   
+  kvflowcontrol.tokens.eval.regular.returned                        | 10 MiB   
   kvflowcontrol.tokens.eval.regular.returned.disconnect             | 1.0 MiB  
   kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.send.elastic.available                       | 7.0 MiB  
-  kvflowcontrol.tokens.send.elastic.deducted                        | 51 MiB   
+  kvflowcontrol.tokens.send.elastic.available                       | 1.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted                        | 15 MiB   
   kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 1.0 MiB  
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
-  kvflowcontrol.tokens.send.elastic.returned                        | 34 MiB   
+  kvflowcontrol.tokens.send.elastic.returned                        | 10 MiB   
   kvflowcontrol.tokens.send.elastic.returned.disconnect             | 1.0 MiB  
   kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.send.regular.available                       | 32 MiB   
-  kvflowcontrol.tokens.send.regular.deducted                        | 50 MiB   
+  kvflowcontrol.tokens.send.regular.available                       | 8.0 MiB  
+  kvflowcontrol.tokens.send.regular.deducted                        | 14 MiB   
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
-  kvflowcontrol.tokens.send.regular.returned                        | 34 MiB   
+  kvflowcontrol.tokens.send.regular.returned                        | 10 MiB   
   kvflowcontrol.tokens.send.regular.returned.disconnect             | 1.0 MiB  
   kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
 
@@ -254,7 +254,7 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
   70       | 1        | 0 B                   
-  70       | 3        | 17 MiB                
+  70       | 3        | 5.0 MiB               
 
 
 -- Per-store tokens available from n1, these should reflect the deducted 
@@ -269,9 +269,9 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  3        | 0 B                    | -9.0 MiB               | 0 B                    | -9.0 MiB                
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  3        | 0 B                    | -3.0 MiB               | 0 B                    | -3.0 MiB                
 
 
 -- (Enabling wait-for-eval bypass.)
@@ -307,7 +307,7 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
   70       | 1        | 0 B                   
-  70       | 3        | 18 MiB                
+  70       | 3        | 6.0 MiB               
 
 
 -- (Allowing below-raft admission to proceed on n1, n2, and n3. Note that n2 is still down.)
@@ -320,27 +320,27 @@ SELECT name, crdb_internal.humanize_bytes(value::INT8)
    WHERE name LIKE '%kvflowcontrol%tokens%'
 ORDER BY name ASC;
 
-  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
-  kvflowcontrol.tokens.eval.elastic.deducted                        | 53 MiB   
-  kvflowcontrol.tokens.eval.elastic.returned                        | 53 MiB   
+  kvflowcontrol.tokens.eval.elastic.available                       | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 17 MiB   
+  kvflowcontrol.tokens.eval.elastic.returned                        | 17 MiB   
   kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 1.0 MiB  
   kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
-  kvflowcontrol.tokens.eval.regular.deducted                        | 52 MiB   
-  kvflowcontrol.tokens.eval.regular.returned                        | 52 MiB   
+  kvflowcontrol.tokens.eval.regular.available                       | 12 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 16 MiB   
+  kvflowcontrol.tokens.eval.regular.returned                        | 16 MiB   
   kvflowcontrol.tokens.eval.regular.returned.disconnect             | 1.0 MiB  
   kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
-  kvflowcontrol.tokens.send.elastic.deducted                        | 53 MiB   
+  kvflowcontrol.tokens.send.elastic.available                       | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted                        | 17 MiB   
   kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 1.0 MiB  
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 1.0 MiB  
-  kvflowcontrol.tokens.send.elastic.returned                        | 53 MiB   
+  kvflowcontrol.tokens.send.elastic.returned                        | 17 MiB   
   kvflowcontrol.tokens.send.elastic.returned.disconnect             | 1.0 MiB  
   kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
-  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
-  kvflowcontrol.tokens.send.regular.deducted                        | 52 MiB   
+  kvflowcontrol.tokens.send.regular.available                       | 12 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 16 MiB   
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 1.0 MiB  
-  kvflowcontrol.tokens.send.regular.returned                        | 52 MiB   
+  kvflowcontrol.tokens.send.regular.returned                        | 16 MiB   
   kvflowcontrol.tokens.send.regular.returned.disconnect             | 1.0 MiB  
   kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
 
@@ -356,9 +356,9 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  3        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  3        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
 
 
 -- (Starting n2.)
@@ -401,14 +401,14 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  3        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  4        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  5        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  3        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  4        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  5        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
 
 
--- (Issuing 1x16MiB regular, 5x replicated write that's not admitted.)
+-- (Issuing 4x1MiB regular, 5x replicated write that's not admitted.)
 
 
 -- From n1. We should expect to see the unblocked streams quickly
@@ -424,11 +424,11 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  3        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  4        | 0 B                    | -8.0 MiB               | 0 B                    | -8.0 MiB                
-  5        | 0 B                    | -8.0 MiB               | 0 B                    | -8.0 MiB                
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  3        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  4        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
+  5        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
 SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
     FROM crdb_internal.kv_flow_control_handles_v2
 
@@ -437,8 +437,8 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
   70       | 1        | 0 B                   
   70       | 2        | 0 B                   
   70       | 3        | 0 B                   
-  70       | 4        | 16 MiB                
-  70       | 5        | 16 MiB                
+  70       | 4        | 4.0 MiB               
+  70       | 5        | 4.0 MiB               
 
 
 -- (Issuing 1x1MiB regular, 5x replicated write that's not admitted.)
@@ -469,11 +469,11 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  3        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  4        | 0 B                    | -9.0 MiB               | 0 B                    | -8.0 MiB                
-  5        | 0 B                    | -9.0 MiB               | 0 B                    | -8.0 MiB                
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  3        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  4        | 0 B                    | -3.0 MiB               | 0 B                    | -2.0 MiB                
+  5        | 0 B                    | -3.0 MiB               | 0 B                    | -2.0 MiB                
 
 
 -- (Allowing below-raft admission to proceed on n4 and n5.)
@@ -492,20 +492,20 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  3        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  4        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  5        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  3        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  4        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  5        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
 
 
 -- (Blocking below-raft admission on [n2,n3,n4,n5].)
 
 
--- (Issuing 1x16MiB regular, 5x replicated write that's not admitted.)
+-- (Issuing 4x1MiB regular, 5x replicated write that's not admitted.)
 
 
--- Send queue and flow token metrics from n1. The 16 MiB write should not be
+-- Send queue and flow token metrics from n1. The 4 MiB write should not be
 -- queued, but instead exhaust all available regular eval and send tokens across
 -- each stream, except s1 (as admission is not blocked).
 SELECT name, crdb_internal.humanize_bytes(value::INT8)
@@ -531,11 +531,11 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 0 B                    | -8.0 MiB               | 0 B                    | -8.0 MiB                
-  3        | 0 B                    | -8.0 MiB               | 0 B                    | -8.0 MiB                
-  4        | 0 B                    | -8.0 MiB               | 0 B                    | -8.0 MiB                
-  5        | 0 B                    | -8.0 MiB               | 0 B                    | -8.0 MiB                
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
+  3        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
+  4        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
+  5        | 0 B                    | -2.0 MiB               | 0 B                    | -2.0 MiB                
 
 
 -- (Enabling wait-for-eval bypass.)
@@ -548,7 +548,7 @@ SELECT store_id,
 
 
 -- Observe the total tracked tokens per-stream on n1. We should expect to see the
--- 1 MiB write being tracked across a quorum of streams, while the 16 MiB write
+-- 1 MiB write being tracked across a quorum of streams, while the 4 MiB write
 -- is tracked across each stream (except s1). Two(/4 non-leader) replica send 
 -- streams should be prevented from forming a send queue and have higher tracked
 -- tokens than the other two.
@@ -558,10 +558,10 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
   70       | 1        | 0 B                   
-  70       | 2        | 16 MiB                
-  70       | 3        | 16 MiB                
-  70       | 4        | 17 MiB                
-  70       | 5        | 17 MiB                
+  70       | 2        | 4.0 MiB               
+  70       | 3        | 4.0 MiB               
+  70       | 4        | 5.0 MiB               
+  70       | 5        | 5.0 MiB               
 
 
 -- Send queue and flow token metrics from n1.
@@ -588,11 +588,11 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 0 B                    | -9.0 MiB               | 0 B                    | -8.0 MiB                
-  3        | 0 B                    | -9.0 MiB               | 0 B                    | -8.0 MiB                
-  4        | -1.0 MiB               | -9.0 MiB               | -1.0 MiB               | -9.0 MiB                
-  5        | -1.0 MiB               | -9.0 MiB               | -1.0 MiB               | -9.0 MiB                
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 0 B                    | -3.0 MiB               | 0 B                    | -2.0 MiB                
+  3        | 0 B                    | -3.0 MiB               | 0 B                    | -2.0 MiB                
+  4        | -1.0 MiB               | -3.0 MiB               | -1.0 MiB               | -3.0 MiB                
+  5        | -1.0 MiB               | -3.0 MiB               | -1.0 MiB               | -3.0 MiB                
 
 
 -- (Allowing below-raft admission on [n1,n2,n3,n4,n5].)
@@ -622,11 +622,11 @@ SELECT store_id,
 
   store_id | eval_regular_available | eval_elastic_available | send_regular_available | send_elastic_available  
 -----------+------------------------+------------------------+------------------------+-------------------------
-  1        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  2        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  3        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  4        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
-  5        | 16 MiB                 | 8.0 MiB                | 16 MiB                 | 8.0 MiB                 
+  1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  3        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  4        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
+  5        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
 ----
 ----
 
