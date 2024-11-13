@@ -41,6 +41,7 @@ call
                           │    │    │    └── const: 0.1
                           │    │    └── null
                           │    └── subquery
+                          │         ├── tail-call
                           │         └── values
                           │              ├── columns: "_stmt_raise_2":7
                           │              ├── outer: (1)
@@ -83,6 +84,7 @@ call
                           │                                  ├── fd: ()-->(6)
                           │                                  └── tuple
                           │                                       └── subquery
+                          │                                            ├── tail-call
                           │                                            └── values
                           │                                                 ├── columns: "_implicit_return":3
                           │                                                 ├── cardinality: [1 - 1]
@@ -91,6 +93,7 @@ call
                           │                                                 └── tuple
                           │                                                      └── null
                           └── subquery
+                               ├── tail-call
                                └── values
                                     ├── columns: "_stmt_exec_4":11
                                     ├── outer: (1)
@@ -119,6 +122,7 @@ call
                                                         ├── fd: ()-->(10)
                                                         └── tuple
                                                              └── subquery
+                                                                  ├── tail-call
                                                                   └── values
                                                                        ├── columns: "_implicit_return":3
                                                                        ├── cardinality: [1 - 1]

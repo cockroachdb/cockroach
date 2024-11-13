@@ -493,7 +493,7 @@ func ExtractValueForConstColumn(
 // NOTE: ExtractTailCalls does not take into account whether the calling routine
 // has an exception handler. The execution engine must take this into account
 // before applying tail-call optimization.
-func ExtractTailCalls(expr opt.Expr, tailCalls map[*UDFCallExpr]struct{}) {
+func ExtractTailCalls(expr opt.Expr, tailCalls map[opt.ScalarExpr]struct{}) {
 	switch t := expr.(type) {
 	case *ProjectExpr:
 		// * The cardinality cannot be greater than one: Otherwise, a nested routine
@@ -525,16 +525,6 @@ func ExtractTailCalls(expr opt.Expr, tailCalls map[*UDFCallExpr]struct{}) {
 			ExtractTailCalls(t.Rows[0].(*TupleExpr).Elems[0], tailCalls)
 		}
 
-	case *SubqueryExpr:
-		// A subquery within a routine is lazily evaluated and passes through a
-		// single input row. Similar to Project, we require that the input have only
-		// one row and one column, since otherwise work may happen after the nested
-		// routine evaluates.
-		if t.Input.Relational().Cardinality.IsZeroOrOne() &&
-			t.Input.Relational().OutputCols.Len() == 1 {
-			ExtractTailCalls(t.Input, tailCalls)
-		}
-
 	case *CaseExpr:
 		// Case expressions guarantee that exactly one branch is evaluated, and pass
 		// through the result of the chosen branch. Therefore, a routine within a
@@ -543,6 +533,11 @@ func ExtractTailCalls(expr opt.Expr, tailCalls map[*UDFCallExpr]struct{}) {
 			ExtractTailCalls(t.Whens[i].(*WhenExpr).Value, tailCalls)
 		}
 		ExtractTailCalls(t.OrElse, tailCalls)
+
+	case *SubqueryExpr:
+		// A subquery within a routine is lazily evaluated as a nested routine.
+		// Therefore, we consider it a tail call.
+		tailCalls[t] = struct{}{}
 
 	case *UDFCallExpr:
 		// If we reached a scalar UDFCall expression, it is a tail call.
