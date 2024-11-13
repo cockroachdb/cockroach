@@ -49,7 +49,7 @@ func TestPartition(t *testing.T) {
 	result2 := SearchResult{QuerySquaredDistance: 13, ErrorBound: 0, CentroidDistance: 0.3333, ParentPartitionKey: 1, ChildKey: childKey40}
 	result3 := SearchResult{QuerySquaredDistance: 17, ErrorBound: 0, CentroidDistance: 1.6667, ParentPartitionKey: 1, ChildKey: childKey20}
 	results := roundResults(searchSet.PopResults(), 4)
-	require.Equal(t, []SearchResult{result1, result2, result3}, results)
+	require.Equal(t, SearchResults{result1, result2, result3}, results)
 
 	// Find method.
 	require.Equal(t, 2, partition.Find(childKey30))
@@ -68,7 +68,7 @@ func TestPartition(t *testing.T) {
 	require.Equal(t, []ChildKey{}, partition.ChildKeys())
 }
 
-func roundResults(results []SearchResult, prec int) []SearchResult {
+func roundResults(results SearchResults, prec int) SearchResults {
 	for i := range results {
 		result := &results[i]
 		result.QuerySquaredDistance = float32(scalar.Round(float64(result.QuerySquaredDistance), prec))
