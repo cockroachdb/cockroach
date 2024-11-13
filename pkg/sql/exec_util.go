@@ -3271,6 +3271,10 @@ func (m *sessionDataMutator) SetPartiallyDistributedPlansDisabled(val bool) {
 	m.data.PartiallyDistributedPlansDisabled = val
 }
 
+func (m *sessionDataMutator) SetDisableVecUnionEagerCancellation(val bool) {
+	m.data.DisableVecUnionEagerCancellation = val
+}
+
 func (m *sessionDataMutator) SetRequireExplicitPrimaryKeys(val bool) {
 	m.data.RequireExplicitPrimaryKeys = val
 }
