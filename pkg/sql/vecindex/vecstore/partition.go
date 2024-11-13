@@ -138,11 +138,8 @@ func (p *Partition) Search(
 // Add quantizes the given vector as part of this partition. It returns false if
 // the vector is already in the partition.
 func (p *Partition) Add(ctx context.Context, vector vector.T, childKey ChildKey) bool {
-	for i := range p.childKeys {
-		if p.childKeys[i].Equal(childKey) {
-			// Child key is already in partition.
-			return false
-		}
+	if p.Find(childKey) != -1 {
+		return false
 	}
 
 	vectorSet := vector.AsSet()

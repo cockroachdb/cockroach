@@ -215,8 +215,8 @@ func TestInMemoryStore(t *testing.T) {
 			ctx, txn, []PartitionKey{partitionKey1, partitionKey2}, vector.T{3, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(1), level)
-		result4 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: 2, ChildKey: childKey30}
-		result5 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 4.61, ParentPartitionKey: 3, ChildKey: childKey50}
+		result4 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 2.24, ParentPartitionKey: 2, ChildKey: childKey10}
+		result5 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: 2, ChildKey: childKey30}
 		require.Equal(t, SearchResults{result4, result5}, roundResults(searchSet.PopResults(), 2))
 		require.Equal(t, []int{3, 2}, partitionCounts)
 	})
