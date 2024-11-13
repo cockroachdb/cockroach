@@ -1184,6 +1184,13 @@ func (r *raft) tickElection() {
 func (r *raft) tickHeartbeat() {
 	assertTrue(r.state == pb.StateLeader, "tickHeartbeat called by non-leader")
 
+	// Check if we intended to step down. If so, step down it it's safe to do so.
+	// Otherwise, continue doing leader things.
+	if r.fortificationTracker.SteppingDown() && r.canSafelyStepDownAndForgetLeader() {
+		r.becomeFollower(r.Term, None)
+		return
+	}
+
 	r.heartbeatElapsed++
 	r.electionElapsed++
 
@@ -1553,8 +1560,13 @@ func (r *raft) Step(m pb.Message) error {
 					// step down to kick off this process of catching up to the term of the
 					// stranded peer.
 					if r.state == pb.StateLeader {
-						r.logMsgHigherTerm(m, "stepping down as leader to recover stranded peer")
-						r.becomeFollower(r.Term, r.id)
+						if r.canSafelyStepDownAndForgetLeader() {
+							r.logMsgHigherTerm(m, "stepping down as leader to recover stranded peer")
+							r.becomeFollower(r.Term, None)
+						} else {
+							r.logMsgHigherTerm(m, "intending to step down as leader to recover stranded peer")
+							r.fortificationTracker.IntendToStepDown()
+						}
 					} else {
 						r.logMsgHigherTerm(m, "ignoring and still supporting fortified leader")
 					}
@@ -2202,7 +2214,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 		case quorum.VoteLost:
 			// pb.MsgPreVoteResp contains future term of pre-candidate
 			// m.Term > r.Term; reuse r.Term
-			r.becomeFollower(r.Term, r.lead)
+			r.becomeFollower(r.Term, None)
 		}
 	}
 	return nil
@@ -2837,6 +2849,16 @@ func (r *raft) markFortifyingFollowersAsRecentlyActive() {
 			pr.RecentActive = true
 		}
 	})
+}
+
+// canSafelyStepDownAndForgetLeader returns true if the current leader can safely
+// step down and forget that it was a leader for this term.
+func (r *raft) canSafelyStepDownAndForgetLeader() bool {
+	assertTrue(r.state == pb.StateLeader, "only leaders step down and forget that they were leaders")
+	// If we don't need to defortify, or if we need to defortify and can
+	// defortify, it means that stepping down and forgetting that we were the
+	// leader would not cause LeadSupportUntil regressions.
+	return !r.fortificationTracker.NeedsDefortify() || r.fortificationTracker.CanDefortify()
 }
 
 // advanceCommitViaMsgAppOnly returns true if the commit index is advanced on
