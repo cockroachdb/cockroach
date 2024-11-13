@@ -479,10 +479,10 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 
 	var results int
 	return rditer.IterateReplicaKeySpans(&desc, snapshot, debugCtx.replicated, rditer.ReplicatedSpansAll,
-		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
+		func(iter storage.EngineIterator, _ roachpb.Span) error {
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				switch keyType {
-				case storage.IterKeyTypePointsOnly:
+				hasPoint, hasRange := iter.HasPointAndRange()
+				if hasPoint {
 					key, err := iter.UnsafeEngineKey()
 					if err != nil {
 						return err
@@ -496,8 +496,9 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 					if results == debugCtx.maxResults {
 						return iterutil.StopIteration()
 					}
+				}
 
-				case storage.IterKeyTypeRangesOnly:
+				if hasRange && iter.RangeKeyChanged() {
 					bounds, err := iter.EngineRangeBounds()
 					if err != nil {
 						return err

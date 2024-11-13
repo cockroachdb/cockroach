@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	io "io"
 	"path/filepath"
@@ -28,9 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )
@@ -276,10 +280,12 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 		EndKey:   roachpb.RKeyMax,
 	}
 	keySpans := rditer.MakeReplicatedKeySpans(&desc)
+	localSpans := keySpans[:len(keySpans)-1]
+	mvccSpan := keySpans[len(keySpans)-1]
 
 	msstw, err := newMultiSSTWriter(
-		ctx, cluster.MakeTestingClusterSettings(), scratch, keySpans, 0,
-		false, /* skipRangeDelForLastSpan */
+		ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0,
+		false /* skipRangeDelForMVCCSpan */, false, /* rangeKeysInOrder */
 	)
 	require.NoError(t, err)
 	_, err = msstw.Finish(ctx)
@@ -315,6 +321,139 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	}
 }
 
+func buildIterForScratch(
+	t *testing.T, keySpans []roachpb.Span, scratch *SSTSnapshotStorageScratch,
+) (storage.MVCCIterator, error) {
+	var openFiles []sstable.ReadableFile
+	for _, sstPath := range scratch.SSTs()[len(keySpans)-1:] {
+		f, err := vfs.Default.Open(sstPath)
+		require.NoError(t, err)
+		openFiles = append(openFiles, f)
+	}
+	mvccSpan := keySpans[len(keySpans)-1]
+
+	return storage.NewSSTIterator([][]sstable.ReadableFile{openFiles}, storage.IterOptions{
+		LowerBound: mvccSpan.Key,
+		UpperBound: mvccSpan.EndKey,
+	}, true /* forwardOnly */)
+}
+
+// TestMultiSSTWriterSize tests the effect of lowering the max size
+// of sstables in a multiSSTWriter, and ensuring that the produced sstables
+// are still correct.
+func TestMultiSSTWriterSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	testRangeID := roachpb.RangeID(1)
+	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
+	testLimiter := rate.NewLimiter(rate.Inf, 0)
+
+	cleanup, eng := newOnDiskEngine(ctx, t)
+	defer cleanup()
+	defer eng.Close()
+
+	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	ref := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
+	settings := cluster.MakeTestingClusterSettings()
+
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey("d"),
+		EndKey:   roachpb.RKeyMax,
+	}
+	keySpans := rditer.MakeReplicatedKeySpans(&desc)
+	localSpans := keySpans[:len(keySpans)-1]
+	mvccSpan := keySpans[len(keySpans)-1]
+
+	// Make a reference msstw with the default size.
+	referenceMsstw, err := newMultiSSTWriter(ctx, settings, ref, localSpans, mvccSpan, 0, false, true /* rangeKeysInOrder */)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), referenceMsstw.dataSize)
+	now := timeutil.Now().UnixNano()
+
+	for i := range localSpans {
+		require.NoError(t, referenceMsstw.Put(ctx, storage.EngineKey{Key: localSpans[i].Key}, []byte("foo")))
+	}
+
+	for i := 0; i < 1000; i++ {
+		key := binary.BigEndian.AppendUint32(append([]byte(nil), desc.StartKey...), uint32(i))
+		mvccKey := storage.MVCCKey{Key: roachpb.Key(key), Timestamp: hlc.Timestamp{WallTime: now}}
+		engineKey, ok := storage.DecodeEngineKey(storage.EncodeMVCCKey(mvccKey))
+		require.True(t, ok)
+
+		if i%50 == 0 {
+			// Add a range key.
+			endKey := binary.BigEndian.AppendUint32(desc.StartKey, uint32(i+10))
+			require.NoError(t, referenceMsstw.PutRangeKey(
+				ctx, key, endKey, storage.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
+		}
+		require.NoError(t, referenceMsstw.Put(ctx, engineKey, []byte("foobarbaz")))
+	}
+	_, err = referenceMsstw.Finish(ctx)
+	require.NoError(t, err)
+
+	refIter, err := buildIterForScratch(t, keySpans, ref)
+	require.NoError(t, err)
+	defer refIter.Close()
+
+	MaxSnapshotSSTableSize.Override(ctx, &settings.SV, 100)
+
+	multiSSTWriter, err := newMultiSSTWriter(ctx, settings, scratch, localSpans, mvccSpan, 0, false, true /* rangeKeysInOrder */)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), multiSSTWriter.dataSize)
+
+	for i := range localSpans {
+		require.NoError(t, multiSSTWriter.Put(ctx, storage.EngineKey{Key: localSpans[i].Key}, []byte("foo")))
+	}
+
+	for i := 0; i < 1000; i++ {
+		key := binary.BigEndian.AppendUint32(append([]byte(nil), desc.StartKey...), uint32(i))
+		mvccKey := storage.MVCCKey{Key: roachpb.Key(key), Timestamp: hlc.Timestamp{WallTime: now}}
+		engineKey, ok := storage.DecodeEngineKey(storage.EncodeMVCCKey(mvccKey))
+		require.True(t, ok)
+		if i%50 == 0 {
+			// Add a range key.
+			endKey := binary.BigEndian.AppendUint32(desc.StartKey, uint32(i+10))
+			require.NoError(t, multiSSTWriter.PutRangeKey(
+				ctx, key, endKey, storage.EncodeMVCCTimestampSuffix(mvccKey.Timestamp.WallPrev()), []byte("")))
+		}
+		require.NoError(t, multiSSTWriter.Put(ctx, engineKey, []byte("foobarbaz")))
+	}
+
+	_, err = multiSSTWriter.Finish(ctx)
+	require.NoError(t, err)
+	require.Greater(t, len(scratch.SSTs()), len(ref.SSTs()))
+
+	iter, err := buildIterForScratch(t, keySpans, scratch)
+	require.NoError(t, err)
+	defer iter.Close()
+
+	iter.SeekGE(storage.MVCCKey{Key: mvccSpan.Key})
+	refIter.SeekGE(storage.MVCCKey{Key: mvccSpan.Key})
+	valid, err := iter.Valid()
+	valid2, err2 := refIter.Valid()
+	require.NoError(t, err)
+	require.NoError(t, err2)
+
+	for valid && valid2 {
+
+		require.Equal(t, iter.UnsafeKey(), refIter.UnsafeKey())
+		val, err := iter.UnsafeValue()
+		require.NoError(t, err)
+		val2, err2 := refIter.UnsafeValue()
+		require.NoError(t, err2)
+		require.Equal(t, val, val2)
+		iter.Next()
+		refIter.Next()
+		valid, err = iter.Valid()
+		valid2, err2 = refIter.Valid()
+		require.NoError(t, err)
+		require.NoError(t, err2)
+	}
+	require.Equal(t, valid, valid2)
+}
+
 // TestMultiSSTWriterAddLastSpan tests that multiSSTWriter initializes each of
 // the SST files associated with the replicated key ranges by writing a range
 // deletion tombstone that spans the entire range of each respectively, except
@@ -342,14 +481,16 @@ func TestMultiSSTWriterAddLastSpan(t *testing.T) {
 				EndKey:   roachpb.RKeyMax,
 			}
 			keySpans := rditer.MakeReplicatedKeySpans(&desc)
+			localSpans := keySpans[:len(keySpans)-1]
+			mvccSpan := keySpans[len(keySpans)-1]
 
 			msstw, err := newMultiSSTWriter(
-				ctx, cluster.MakeTestingClusterSettings(), scratch, keySpans, 0,
-				true, /* skipRangeDelForLastSpan */
+				ctx, cluster.MakeTestingClusterSettings(), scratch, localSpans, mvccSpan, 0,
+				true /* skipRangeDelForMVCCSpan */, false, /* rangeKeysInOrder */
 			)
 			require.NoError(t, err)
 			if addRangeDel {
-				require.NoError(t, msstw.addRangeDelForLastSpan())
+				require.NoError(t, msstw.addClearForMVCCSpan())
 			}
 			testKey := storage.MVCCKey{Key: roachpb.RKey("d1").AsRawKey(), Timestamp: hlc.Timestamp{WallTime: 1}}
 			testEngineKey, _ := storage.DecodeEngineKey(storage.EncodeMVCCKey(testKey))

@@ -493,8 +493,8 @@ github.com/cockroachdb/gostdlib v1.19.0/go.mod h1:+dqqpARXbE/gRDEhCak6dm0l14AaTy
 github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b h1:r6VH0faHjZeQy818SGhaone5OnYfxFR/+AzdY3sf5aE=
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
-github.com/cockroachdb/pebble v1.1.2-0.20240729165622-7e594e283744 h1:9urOSbgK9+hKysVr5eqmAwgxCbrOs6iS1p+aK2b17Ws=
-github.com/cockroachdb/pebble v1.1.2-0.20240729165622-7e594e283744/go.mod h1:CnHUPUo2XSUfriPdNcyweFtE9dnZMSU8Gt10sXRGoJg=
+github.com/cockroachdb/pebble v1.1.2-0.20241107030133-19b47dc92d30 h1:QG63MGk228WUsCIbeT/bEWXqwkx8I+RNKH7fzGTZ6M8=
+github.com/cockroachdb/pebble v1.1.2-0.20241107030133-19b47dc92d30/go.mod h1:CnHUPUo2XSUfriPdNcyweFtE9dnZMSU8Gt10sXRGoJg=
 github.com/cockroachdb/raft/v3 v3.0.0-20240612143628-49a8a628fa47 h1:fT0adzNbw60Pd/iMkgz+Eq5gEJTqyZ9SnNlvIYjg22A=
 github.com/cockroachdb/raft/v3 v3.0.0-20240612143628-49a8a628fa47/go.mod h1:tP6U+sRzrl75ltgmFcdZg9reZVEyM3vKTxAWmwpHtB8=
 github.com/cockroachdb/redact v1.1.3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=

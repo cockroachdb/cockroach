@@ -3818,7 +3818,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 
 		err := rditer.IterateReplicaKeySpans(inSnap.Desc, sendingEngSnapshot, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
-			func(iter storage.EngineIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+			func(iter storage.EngineIterator, span roachpb.Span) error {
 				fw, ok := sstFileWriters[string(span.Key)]
 				if !ok || !fw.span.Equal(span) {
 					return errors.Errorf("unexpected span %s", span)
