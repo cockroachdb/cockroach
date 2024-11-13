@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -492,23 +491,4 @@ func getMapsDiff(beforeMap map[string]int64, afterMap map[string]int64) map[stri
 		}
 	}
 	return diffMap
-}
-
-// alwaysRunWithLeaderLeases configures settings to ensure the caller is always
-// using leader leases, regardless of any metamorphic constants.
-func alwaysRunWithLeaderLeases(ctx context.Context, st *cluster.Settings) {
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
-	kvserver.LeaderLeasesEnabled.Override(ctx, &st.SV, true)
-	kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
-	// TODO(arul): Once https://github.com/cockroachdb/cockroach/issues/118435 we
-	// can remove this. Leader leases require us to reject lease requests on
-	// replicas that are not the leader.
-	kvserver.RejectLeaseOnLeaderUnknown.Override(ctx, &st.SV, true)
-}
-
-func alwaysRunWithEpochLeases(ctx context.Context, st *cluster.Settings) {
-	// Only run the test with epoch based leases.
-	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, &st.SV, false)
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
-	kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 0.0)
 }

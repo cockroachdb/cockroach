@@ -1089,7 +1089,11 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "symmetric", func(t *testing.T, symmetric bool) {
 		st := cluster.MakeTestingClusterSettings()
-		alwaysRunWithLeaderLeases(ctx, st)
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+		// TODO(arul): Once https://github.com/cockroachdb/cockroach/issues/118435 we
+		// can remove this. Leader leases require us to reject lease requests on
+		// replicas that are not the leader.
+		kvserver.RejectLeaseOnLeaderUnknown.Override(ctx, &st.SV, true)
 
 		clusterArgs := base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -6480,7 +6484,7 @@ func TestRaftCheckQuorum(t *testing.T) {
 
 		// Turn on leader leases.
 		st := cluster.MakeTestingClusterSettings()
-		alwaysRunWithLeaderLeases(ctx, st)
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
 
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
