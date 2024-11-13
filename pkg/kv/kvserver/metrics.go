@@ -65,6 +65,12 @@ var (
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRaftLeaderNotFortifiedCount = metric.Metadata{
+		Name:        "replicas.leaders_not_fortified",
+		Help:        "Number of replicas that are not fortified Raft leaders",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRaftLeaderInvalidLeaseCount = metric.Metadata{
 		Name:        "replicas.leaders_invalid_lease",
 		Help:        "Number of replicas that are Raft leaders whose lease is invalid",
@@ -2585,6 +2591,7 @@ type StoreMetrics struct {
 	ReservedReplicaCount          *metric.Gauge
 	RaftLeaderCount               *metric.Gauge
 	RaftLeaderNotLeaseHolderCount *metric.Gauge
+	RaftLeaderNotFortifiedCount   *metric.Gauge
 	RaftLeaderInvalidLeaseCount   *metric.Gauge
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
@@ -3286,6 +3293,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReservedReplicaCount:          metric.NewGauge(metaReservedReplicaCount),
 		RaftLeaderCount:               metric.NewGauge(metaRaftLeaderCount),
 		RaftLeaderNotLeaseHolderCount: metric.NewGauge(metaRaftLeaderNotLeaseHolderCount),
+		RaftLeaderNotFortifiedCount:   metric.NewGauge(metaRaftLeaderNotFortifiedCount),
 		RaftLeaderInvalidLeaseCount:   metric.NewGauge(metaRaftLeaderInvalidLeaseCount),
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
