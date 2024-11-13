@@ -1953,7 +1953,7 @@ func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 	default:
 		panic("unexpected lease type")
 	}
-	w.Printf(" pro=%s", l.ProposedTS)
+	w.Printf(" pro=%s acq=%s", l.ProposedTS, l.AcquisitionType)
 }
 
 // Empty returns true for the Lease zero-value.
