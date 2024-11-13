@@ -8,9 +8,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -71,10 +68,12 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 			roachtestutil.SetAdmissionControl(ctx, t, c, true)
 
-			dataDir := "/mnt/data1"
-			if err := setBandwidthLimit(ctx, t, c, c.CRDBNodes(), "wbps", 128<<20 /* 128MiB */, false, dataDir); err != nil {
-				t.Fatal(err)
-			}
+			const provisionedBandwidth = 128 << 20 // 128 MiB
+			t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", provisionedBandwidth))
+			staller := roachtestutil.MakeCgroupDiskStaller(t, c,
+				false /* readsToo */, false /* logsToo */)
+			staller.Setup(ctx)
+			staller.Slow(ctx, c.CRDBNodes(), provisionedBandwidth)
 
 			// TODO(aaditya): Extend this test to also limit reads once we have a
 			// mechanism to pace read traffic in AC.
@@ -198,49 +197,4 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			m.Wait()
 		},
 	})
-}
-
-// TODO(aaditya): This function shares some of the logic with roachtestutil.DiskStaller. Consider merging the two.
-func setBandwidthLimit(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	nodes option.NodeListOption,
-	rw string,
-	bw int,
-	max bool,
-	dataDir string,
-) error {
-	res, err := c.RunWithDetailsSingleNode(context.TODO(), t.L(), option.WithNodes(nodes[:1]),
-		fmt.Sprintf("lsblk | grep %s | awk '{print $2}'", dataDir),
-	)
-	if err != nil {
-		t.Fatalf("error when determining block device: %s", err)
-	}
-	parts := strings.Split(strings.TrimSpace(res.Stdout), ":")
-	if len(parts) != 2 {
-		t.Fatalf("unexpected output from lsblk: %s", res.Stdout)
-	}
-	major, err := strconv.Atoi(parts[0])
-	if err != nil {
-		t.Fatalf("error when determining block device: %s", err)
-	}
-	minor, err := strconv.Atoi(parts[1])
-	if err != nil {
-		t.Fatalf("error when determining block device: %s", err)
-	}
-
-	cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", roachtestutil.SystemInterfaceSystemdUnitName()+".service", "io.max")
-	bytesPerSecondStr := "max"
-	if !max {
-		bytesPerSecondStr = fmt.Sprintf("%d", bw)
-	}
-	return c.RunE(ctx, option.WithNodes(nodes), "sudo", "/bin/bash", "-c", fmt.Sprintf(
-		`'echo %d:%d %s=%s > %s'`,
-		major,
-		minor,
-		rw,
-		bytesPerSecondStr,
-		cockroachIOController,
-	))
 }
