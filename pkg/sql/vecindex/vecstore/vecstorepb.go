@@ -32,3 +32,18 @@ func (s *IndexStats) String() string {
 func (k ChildKey) Equal(other ChildKey) bool {
 	return k.PartitionKey == other.PartitionKey && bytes.Equal(k.PrimaryKey, other.PrimaryKey)
 }
+
+// Compare returns an integer comparing two child keys. The result is zero if
+// the two are equal, -1 if this key is less than the other, and +1 if this key
+// is greater than the other.
+func (k ChildKey) Compare(other ChildKey) int {
+	if k.PrimaryKey != nil {
+		return bytes.Compare(k.PrimaryKey, other.PrimaryKey)
+	}
+	if k.PartitionKey < other.PartitionKey {
+		return -1
+	} else if k.PartitionKey > other.PartitionKey {
+		return 1
+	}
+	return 0
+}

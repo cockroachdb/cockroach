@@ -53,6 +53,10 @@ type VectorIndexOptions struct {
 	// limit the number of results that need to be reranked. This is useful for
 	// testing and benchmarking.
 	DisableErrorBounds bool
+	// Seed is used to initialize a deterministic random number generator for
+	// testing purposes. If this is zero, then the global random number generator
+	// is used intead.
+	Seed int64
 }
 
 // SearchOptions specifies options that apply to a particular search operation
@@ -120,6 +124,9 @@ type VectorIndex struct {
 	rootQuantizer quantize.Quantizer
 	// quantizer quantizes vectors in every partition except the root.
 	quantizer quantize.Quantizer
+	// fixups runs index maintenance operations like split and merge on a
+	// background goroutine.
+	fixups fixupProcessor
 }
 
 // NewVectorIndex constructs a new vector index instance. Typically, only one
@@ -149,6 +156,8 @@ func NewVectorIndex(
 		vi.options.QualitySamples = 16
 	}
 
+	vi.fixups.Init(vi, options.Seed)
+
 	return vi, nil
 }
 
@@ -164,9 +173,46 @@ func (vi *VectorIndex) CreateRoot(ctx context.Context, txn vecstore.Txn) error {
 	return vi.store.SetRootPartition(ctx, txn, rootPartition)
 }
 
+// Insert adds a new vector with the given primary key to the index. This is
+// called within the scope of a transaction so that the index does not appear to
+// change during the insert.
+//
+// NOTE: This can result in two vectors with the same primary key being inserted
+// into the index. To minimize this possibility, callers should call Delete
+// before Insert when a vector is updated. Even then, it's not guaranteed that
+// Delete will find the old vector. Vector index methods handle this rare case
+// by checking for duplicates when returning search results.
+func (vi *VectorIndex) Insert(
+	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.PrimaryKey,
+) error {
+	// Search for the leaf partition with the closest centroid to the query
+	// vector.
+	parentSearchCtx := searchContext{
+		Txn:      txn,
+		Original: vector,
+		Level:    vecstore.LeafLevel + 1,
+		Options: SearchOptions{
+			BaseBeamSize: vi.options.BaseBeamSize,
+			SkipRerank:   vi.options.DisableErrorBounds,
+		},
+	}
+	parentSearchCtx.Ctx = internal.WithWorkspace(ctx, &parentSearchCtx.Workspace)
+
+	// Randomize the vector if required by the quantizer.
+	tempRandomized := parentSearchCtx.Workspace.AllocVector(vi.quantizer.GetRandomDims())
+	defer parentSearchCtx.Workspace.FreeVector(tempRandomized)
+	vi.quantizer.RandomizeVector(ctx, vector, tempRandomized, false /* invert */)
+	parentSearchCtx.Randomized = tempRandomized
+
+	// Insert the vector into the secondary index.
+	childKey := vecstore.ChildKey{PrimaryKey: key}
+	return vi.insertHelper(&parentSearchCtx, childKey, true /* allowRetry */)
+}
+
 // Search finds vectors in the index that are closest to the given query vector
 // and returns them in the search set. Set searchSet.MaxResults to limit the
-// number of results.
+// number of results. This is called within the scope of a transaction so that
+// the index does not appear to change during the search.
 func (vi *VectorIndex) Search(
 	ctx context.Context,
 	txn vecstore.Txn,
@@ -190,6 +236,72 @@ func (vi *VectorIndex) Search(
 	searchCtx.Randomized = tempRandomized
 
 	return vi.searchHelper(&searchCtx, searchSet, true /* allowRetry */)
+}
+
+// insertHelper looks for the best partition in which to add the vector and then
+// adds the vector to that partition.
+func (vi *VectorIndex) insertHelper(
+	parentSearchCtx *searchContext, childKey vecstore.ChildKey, allowRetry bool,
+) error {
+	// The partition in which to insert the vector is at the parent level
+	// (level+1). Return enough results to have good candidates for inserting
+	// the vector into another partition.
+	searchSet := vecstore.SearchSet{MaxResults: 1}
+	err := vi.searchHelper(parentSearchCtx, &searchSet, allowRetry)
+	if err != nil {
+		return err
+	}
+	results := searchSet.PopResults()
+	parentPartitionKey := results[0].ParentPartitionKey
+	partitionKey := results[0].ChildKey.PartitionKey
+	_, err = vi.addToPartition(parentSearchCtx.Ctx, parentSearchCtx.Txn, parentPartitionKey,
+		partitionKey, parentSearchCtx.Randomized, childKey)
+	if errors.Is(err, vecstore.ErrPartitionNotFound) {
+		// Retry the insert after root partition cache invalidation.
+		if !allowRetry {
+			// This indicates index corruption, since it should only require a
+			// single retry to handle the case where the root partition is stale.
+			// There should be no other cases that a partition cannot be found.
+			panic(errors.AssertionFailedf("partition cannot be found even though root is not stale"))
+		}
+		return vi.insertHelper(parentSearchCtx, childKey, false /* allowRetry */)
+	} else if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// addToPartition calls the store to add the given vector to an existing
+// partition. If this causes the partition to exceed its maximum size, a split
+// fixup will be enqueued.
+func (vi *VectorIndex) addToPartition(
+	ctx context.Context,
+	txn vecstore.Txn,
+	parentPartitionKey vecstore.PartitionKey,
+	partitionKey vecstore.PartitionKey,
+	vector vector.T,
+	childKey vecstore.ChildKey,
+) (int, error) {
+	count, err := vi.store.AddToPartition(ctx, txn, partitionKey, vector, childKey)
+	if err != nil {
+		return 0, err
+	}
+	if count > vi.options.MaxPartitionSize {
+		vi.fixups.AddSplit(ctx, parentPartitionKey, partitionKey)
+	}
+	return count, nil
+}
+
+// removeFromPartition calls the store to remove a vector, by its key, from an
+// existing partition.
+func (vi *VectorIndex) removeFromPartition(
+	ctx context.Context,
+	txn vecstore.Txn,
+	partitionKey vecstore.PartitionKey,
+	childKey vecstore.ChildKey,
+) (int, error) {
+	return vi.store.RemoveFromPartition(ctx, txn, partitionKey, childKey)
 }
 
 // searchHelper contains the core search logic for the K-means tree. It begins
@@ -367,6 +479,11 @@ func (vi *VectorIndex) searchChildPartitions(
 // pruneDuplicates removes candidates with duplicate child keys. This is rare,
 // but it can happen when a vector updated in the primary index cannot be
 // located in the secondary index.
+// NOTE: This logic can remove the "wrong" duplicate, with a quantized distance
+// that doesn't correspond to the true distance. However, this has no impact as
+// long as we rerank candidates using the original full-size vectors. Even if
+// we're not reranking, the impact of this should be minimal, since duplicates
+// are so rare and there's already quite a bit of inaccuracy when not reranking.
 func (vi *VectorIndex) pruneDuplicates(candidates []vecstore.SearchResult) []vecstore.SearchResult {
 	if len(candidates) <= 1 {
 		// No possibility of duplicates.
