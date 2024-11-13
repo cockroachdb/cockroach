@@ -1017,7 +1017,7 @@ var specs = []stmtSpec{
 		inline: []string{"opt_drop_behavior"},
 		unlink: []string{"trigger_name"},
 		replace: map[string]string{
-			"name":         "trigger_name",
+			" name":        " trigger_name",
 			"'CASCADE' | ": "",
 		},
 		nosplit: true,
