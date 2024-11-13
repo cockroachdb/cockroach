@@ -1285,8 +1285,12 @@ message RowLevelTTLProgress {
   // UseDistSQL is no longer used in v23.1+ as all TTL jobs are using DistSQL.
   reserved 3;
 
-  // JobSpanCount is the number of spans for the entire TTL job.
-  int64 job_span_count = 4;
+  // JobTotalSpanCount is the number of spans for the entire TTL job.
+  int64 job_total_span_count = 4;
+
+  // JobProcessedSpanCount is the number of spans that have been processed by
+  // the TTL job so far.
+  int64 job_processed_span_count = 5;
 }
 
 message RowLevelTTLProcessorProgress {
