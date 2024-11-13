@@ -165,6 +165,8 @@ func (t testWrapper) L() *logger.Logger {
 // Status is part of the testI interface.
 func (t testWrapper) Status(args ...interface{}) {}
 
+func (t testWrapper) AddParam(label, value string) {}
+
 func TestClusterMachineType(t *testing.T) {
 	type machineTypeTestCase struct {
 		machineType      string
