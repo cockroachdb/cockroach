@@ -142,6 +142,7 @@ go_test(
         "open_test.go",
         "pebble_iterator_test.go",
         "pebble_key_schema_test.go",
+        "pebble_merge_test.go",
         "pebble_mvcc_scanner_test.go",
         "pebble_test.go",
         "read_as_of_iterator_test.go",
