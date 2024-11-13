@@ -657,6 +657,11 @@ func createChangefeedJobRecord(
 		}
 
 		details.Opts = opts.AsMap()
+
+		details.SinklessInfo = &jobspb.ChangefeedDetails_SinklessChangefeedInfo{
+			Description: description,
+		}
+
 		// Jobs should not be created for sinkless changefeeds. However, note that
 		// we create and return a job record for sinkless changefeeds below. This is
 		// because we need the job description and details to create our sinkless changefeed.

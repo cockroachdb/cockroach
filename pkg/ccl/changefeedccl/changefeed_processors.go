@@ -262,17 +262,29 @@ func (ca *changeAggregator) MustBeStreaming() bool {
 	return true
 }
 
-// wrapMetricsController wraps the supplied metricsRecorder to emit metrics to telemetry.
-// This method modifies ca.cancel().
-func (ca *changeAggregator) wrapMetricsController(
+// wrapMetricsRecorderWithTelemetry wraps the supplied metricsRecorder
+// so it periodically emits metrics to telemetry.
+func (ca *changeAggregator) wrapMetricsRecorderWithTelemetry(
 	ctx context.Context, recorder metricsRecorder,
 ) (metricsRecorder, error) {
-	job, err := ca.FlowCtx.Cfg.JobRegistry.LoadJob(ctx, ca.spec.JobID)
-	if err != nil {
-		return ca.sliMetrics, err
+	details := ca.spec.Feed
+	jobID := ca.spec.JobID
+	var description string
+	if ca.isSinkless() {
+		// Don't emit telemetry messages for core changefeeds without a description.
+		if details.SinklessInfo == nil {
+			return recorder, nil
+		}
+		description = details.SinklessInfo.Description
+	} else {
+		job, err := ca.FlowCtx.Cfg.JobRegistry.LoadJob(ctx, jobID)
+		if err != nil {
+			return nil, err
+		}
+		description = job.Payload().Description
 	}
 
-	recorderWithTelemetry, err := wrapMetricsRecorderWithTelemetry(ctx, job, ca.FlowCtx.Cfg.Settings, recorder)
+	recorderWithTelemetry, err := wrapMetricsRecorderWithTelemetry(ctx, details, description, jobID, ca.FlowCtx.Cfg.Settings, recorder)
 	if err != nil {
 		return ca.sliMetrics, err
 	}
@@ -337,18 +349,15 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 	ca.sliMetricsID = ca.sliMetrics.claimId()
 
-	// TODO(jayant): add support for sinkless changefeeds using UUID
 	recorder := metricsRecorder(ca.sliMetrics)
-	if !ca.isSinkless() {
-		recorder, err = ca.wrapMetricsController(ctx, recorder)
-		if err != nil {
-			if log.V(2) {
-				log.Infof(ca.Ctx(), "change aggregator moving to draining due to error wrapping metrics controller: %v", err)
-			}
-			ca.MoveToDraining(err)
-			ca.cancel()
-			return
+	recorder, err = ca.wrapMetricsRecorderWithTelemetry(ctx, recorder)
+	if err != nil {
+		if log.V(2) {
+			log.Infof(ca.Ctx(), "change aggregator moving to draining due to error wrapping metrics controller: %v", err)
 		}
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return
 	}
 
 	ca.sink, err = getEventSink(ctx, ca.FlowCtx.Cfg, ca.spec.Feed, timestampOracle,

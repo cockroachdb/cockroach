@@ -1123,6 +1123,16 @@ message ChangefeedDetails {
   sessiondatapb.SessionData session_data = 11;
   reserved 1, 2, 5;
   reserved "targets";
+
+  // SinklessChangefeedInfo contains some metadata for sinkless changefeeds that
+  // is normally stored in the job payload for changefeeds with sinks.
+  message SinklessChangefeedInfo {
+    string description = 1;
+  }
+
+  // SinklessInfo will only be set for sinkless changefeeds and contains metadata
+  // that is normally stored in the job payload for changefeeds with sinks.
+  SinklessChangefeedInfo sinkless_info = 12;
 }
 
 message ResolvedSpan {
