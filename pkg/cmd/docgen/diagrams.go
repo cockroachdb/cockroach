@@ -865,6 +865,22 @@ var specs = []stmtSpec{
 		unlink:  []string{"column_name"},
 	},
 	{
+		name:   "create_trigger",
+		stmt:   "create_trigger_stmt",
+		inline: []string{"opt_or_replace", "trigger_action_time", "trigger_event_list", "opt_trigger_transition_list", "trigger_for_each", "trigger_when", "function_or_procedure", "trigger_event", "trigger_transition_list", "trigger_for_opt_each", "trigger_for_type", "name_list", "trigger_transition", "transition_is_new", "transition_is_row", "opt_as", "table_alias_name"},
+		unlink: []string{"trigger_create_name"},
+		replace: map[string]string{
+			"'TRIGGER' name":   "'TRIGGER' trigger_create_name",
+			"| 'INSTEAD' 'OF'": "",
+			"( 'REFERENCING' ( ( ( ( 'NEW' | 'OLD' ) ( 'ROW' | 'TABLE' ) ( 'AS' |  ) ( name ) ) ) ( ( ( ( 'NEW' | 'OLD' ) ( 'ROW' | 'TABLE' ) ( 'AS' |  ) ( name ) ) ) )* ) |  )": "",
+			"| 'STATEMENT'":                       "",
+			"( 'OR' 'REPLACE' |  )":               "",
+			"'OF' ( ( name ) ( ( ',' name ) )* )": "",
+			"| 'TRUNCATE'":                        "",
+			"| 'PROCEDURE'":                       ""},
+		nosplit: true,
+	},
+	{
 		name: "create_type",
 		stmt: "create_type_stmt",
 	},
@@ -994,6 +1010,17 @@ var specs = []stmtSpec{
 		stmt:   "drop_table_stmt",
 		inline: []string{"opt_drop_behavior"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'TABLE'")},
+	},
+	{
+		name:   "drop_trigger",
+		stmt:   "drop_trigger_stmt",
+		inline: []string{"opt_drop_behavior"},
+		unlink: []string{"trigger_name"},
+		replace: map[string]string{
+			"name":         "trigger_name",
+			"'CASCADE' | ": "",
+		},
+		nosplit: true,
 	},
 	{
 		name:    "drop_type",
