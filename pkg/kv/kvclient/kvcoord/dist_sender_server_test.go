@@ -4700,24 +4700,18 @@ func TestPartialPartition(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(fmt.Sprintf("%t-%d", test.useProxy, test.numServers), func(t *testing.T) {
 			testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
-				st := cluster.MakeTestingClusterSettings()
-				kvcoord.ProxyBatchRequest.Override(ctx, &st.SV, test.useProxy)
-				switch leaseType {
-				case roachpb.LeaseExpiration:
-					kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
-				case roachpb.LeaseEpoch:
+				if leaseType == roachpb.LeaseEpoch {
 					// With epoch leases this test doesn't work reliably. It passes
 					// in cases where it should fail and fails in cases where it
 					// should pass.
 					// TODO(baptist): Attempt to pin the liveness leaseholder to
 					// node 3 to make epoch leases reliable.
 					skip.IgnoreLint(t, "flaky with epoch leases")
-				case roachpb.LeaseLeader:
-					kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
-					kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
-				default:
-					t.Fatalf("unknown lease type %s", leaseType)
 				}
+
+				st := cluster.MakeTestingClusterSettings()
+				kvcoord.ProxyBatchRequest.Override(ctx, &st.SV, test.useProxy)
+				kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 				kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
 				kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 				closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
@@ -4840,25 +4834,19 @@ func TestProxyTracing(t *testing.T) {
 	ctx := context.Background()
 
 	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
-		const numServers = 3
-		const numRanges = 3
-		st := cluster.MakeTestingClusterSettings()
-		switch leaseType {
-		case roachpb.LeaseExpiration:
-			kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
-		case roachpb.LeaseEpoch:
+		if leaseType == roachpb.LeaseEpoch {
 			// With epoch leases this test doesn't work reliably. It passes
 			// in cases where it should fail and fails in cases where it
 			// should pass.
 			// TODO(baptist): Attempt to pin the liveness leaseholder to
 			// node 3 to make epoch leases reliable.
 			skip.IgnoreLint(t, "flaky with epoch leases")
-		case roachpb.LeaseLeader:
-			kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
-			kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
-		default:
-			t.Fatalf("unknown lease type %s", leaseType)
 		}
+
+		const numServers = 3
+		const numRanges = 3
+		st := cluster.MakeTestingClusterSettings()
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 		kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
 		kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 		closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)

@@ -67,7 +67,7 @@ func TestRaftCheckQuorumEpochLeases(t *testing.T) {
 
 			// Only run the test with epoch based leases.
 			st := cluster.MakeTestingClusterSettings()
-			alwaysRunWithEpochLeases(ctx, st)
+			kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
 
 			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
@@ -230,7 +230,7 @@ func TestRequestsOnLaggingReplicaEpochLeases(t *testing.T) {
 	ctx := context.Background()
 
 	st := cluster.MakeTestingClusterSettings()
-	alwaysRunWithEpochLeases(ctx, st)
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
 
 	clusterArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,

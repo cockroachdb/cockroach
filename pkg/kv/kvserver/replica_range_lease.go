@@ -161,6 +161,23 @@ var RejectLeaseOnLeaderUnknown = settings.RegisterBoolSetting(
 	false,
 )
 
+// OverrideDefaultLeaseType overrides the default lease type for the cluster
+// settings, regardless of any metamorphic constants.
+func OverrideDefaultLeaseType(ctx context.Context, sv *settings.Values, typ roachpb.LeaseType) {
+	switch typ {
+	case roachpb.LeaseExpiration:
+		ExpirationLeasesOnly.Override(ctx, sv, true)
+	case roachpb.LeaseEpoch:
+		ExpirationLeasesOnly.Override(ctx, sv, false)
+		RaftLeaderFortificationFractionEnabled.Override(ctx, sv, 0.0)
+	case roachpb.LeaseLeader:
+		ExpirationLeasesOnly.Override(ctx, sv, false)
+		RaftLeaderFortificationFractionEnabled.Override(ctx, sv, 1.0)
+	default:
+		log.Fatalf(ctx, "unexpected lease type: %v", typ)
+	}
+}
+
 // leaseRequestHandle is a handle to an asynchronous lease request.
 type leaseRequestHandle struct {
 	p *pendingLeaseRequest
