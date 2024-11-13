@@ -37,9 +37,9 @@ exports_files([
 
 # Gazelle needs the following resolve hints.
 #
-# gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/runtime @com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library
-# gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/utilities @com_github_grpc_ecosystem_grpc_gateway//utilities:go_default_library
-# gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/internal @com_github_grpc_ecosystem_grpc_gateway//internal
+# gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/v2/runtime @com_github_grpc_ecosystem_grpc_gateway_v2//runtime:go_default_library
+# gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/v2/utilities @com_github_grpc_ecosystem_grpc_gateway_v2//utilities:go_default_library
+# gazelle:resolve go github.com/grpc-ecosystem/grpc-gateway/v2/internal @com_github_grpc_ecosystem_grpc_gateway_v2//internal
 # gazelle:resolve proto proto errorspb/errors.proto @com_github_cockroachdb_errors//errorspb:errorspb_proto
 # gazelle:resolve proto go errorspb/errors.proto @com_github_cockroachdb_errors//errorspb
 # gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto
