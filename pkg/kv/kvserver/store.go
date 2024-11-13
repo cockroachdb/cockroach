@@ -2329,9 +2329,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Register a callback to unquiesce any ranges with replicas on a
 	// node transitioning from non-live to live.
-	if s.cfg.NodeLiveness != nil {
-		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
-	}
+	s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
 
 	// SystemConfigProvider can be nil during some tests.
 	if scp := s.cfg.SystemConfigProvider; scp != nil {
