@@ -11479,6 +11479,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "org_golang_google_genproto_googleapis_bytestream",
+        build_file_proto_mode = "disable_global",
+        importpath = "google.golang.org/genproto/googleapis/bytestream",
+        sha256 = "2b2cf8112526b072037efddfeb1d22e42de1100fa4c5ada5b54f53bcf59c41b7",
+        strip_prefix = "google.golang.org/genproto/googleapis/bytestream@v0.0.0-20241104194629-dd2ea8efbc28",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/genproto/googleapis/bytestream/org_golang_google_genproto_googleapis_bytestream-v0.0.0-20241104194629-dd2ea8efbc28.zip",
+        ],
+    )
+    go_repository(
         name = "org_golang_google_genproto_googleapis_rpc",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/genproto/googleapis/rpc",
