@@ -224,7 +224,7 @@ func TestLeaseRequestTypeSwitchForwardsExpiration(t *testing.T) {
 				Replica:    replicas[0],
 				ProposedTS: now,
 				Start:      now,
-				Sequence:   prevLease.Sequence,
+				Sequence:   prevLease.Sequence + 1,
 			}
 			switch leaseType {
 			case roachpb.LeaseExpiration:
