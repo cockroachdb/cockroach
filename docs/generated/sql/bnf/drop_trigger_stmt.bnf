@@ -1,3 +1,0 @@
-drop_trigger_stmt ::=
-	'DROP' 'TRIGGER' name 'ON' table_name opt_drop_behavior
-	| 'DROP' 'TRIGGER' 'IF' 'EXISTS' name 'ON' table_name opt_drop_behavior
