@@ -4586,16 +4586,12 @@ func TestFlowControlSendQueue(t *testing.T) {
 
 						OverrideBypassAdmitWaitForEval: func(ctx context.Context) (bypass bool, waited bool) {
 							bypassAndWaited := noopWaitForEval.Load()
-							// TODO: remove printf.
 							if bypassAndWaited {
-								fmt.Printf("bypass and waited ****\n")
 								return true, true
 							}
 							if !isTestGeneratedPut(ctx) {
-								fmt.Printf("not test generated ****\n")
 								return true, false
 							}
-							fmt.Printf("not bypassed ****\n")
 							return false, false
 						},
 						// We want to test the behavior of the send queue, so we want to
