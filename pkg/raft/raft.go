@@ -1209,6 +1209,13 @@ func (r *raft) tickElection() {
 func (r *raft) tickHeartbeat() {
 	assertTrue(r.state == pb.StateLeader, "tickHeartbeat called by non-leader")
 
+	// Check if we intended to step down. If so, step down if it's safe to do so.
+	// Otherwise, continue doing leader things.
+	if r.fortificationTracker.SteppingDown() && r.fortificationTracker.CanDefortify() {
+		r.becomeFollower(r.fortificationTracker.SteppingDownTerm(), None)
+		return
+	}
+
 	r.heartbeatElapsed++
 	r.electionElapsed++
 
@@ -1573,18 +1580,30 @@ func (r *raft) Step(m pb.Message) error {
 					// larger term. Instead, we need to wait for the leader to learn about
 					// the stranded peer, step down, and defortify. The only thing to do
 					// here is check whether we are that leader, in which case we should
-					// step down to kick off this process of catching up to the term of the
-					// stranded peer.
+					// step down to kick off this process of catching up to the term of
+					// the stranded peer.
+					//
+					// However, the leader can't just blindly step down and defortify.
+					// Doing so could cause LeadSupportUntil to regress. Instead, the
+					// leader checks if it's safe to step down (it can defortify). If it
+					// is, it will step down. Otherwise, it will mark its intention to
+					// step down. This will freeze LeadSupportUntil, and eventually the
+					// leader will be able to safely step down.
 					if r.state == pb.StateLeader {
-						r.logMsgHigherTerm(m, "stepping down as leader to recover stranded peer")
-						r.becomeFollower(r.Term, r.id)
+						if r.fortificationTracker.CanDefortify() {
+							r.logMsgHigherTerm(m, "stepping down as leader to recover stranded peer")
+							r.deFortify(r.id, m.Term)
+							r.becomeFollower(m.Term, None)
+						} else {
+							r.logMsgHigherTerm(m, "intending to step down as leader to recover stranded peer")
+							r.fortificationTracker.BeginSteppingDown(m.Term)
+						}
 					} else {
 						r.logMsgHigherTerm(m, "ignoring and still supporting fortified leader")
 					}
 				}
 				return nil
 			}
-
 			// If we are willing process a message at a higher term, then make sure we
 			// record that we have withdrawn our support for the current leader, if we
 			// were still providing it with fortification support up to this point.
