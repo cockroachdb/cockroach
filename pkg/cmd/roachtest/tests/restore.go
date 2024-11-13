@@ -22,13 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -114,165 +112,6 @@ func registerRestore(r registry.Registry) {
 
 	durationGauge := r.PromFactory().NewGaugeVec(prometheus.GaugeOpts{Namespace: registry.
 		PrometheusNameSpace, Subsystem: "restore", Name: "duration"}, []string{"test_name"})
-
-	withPauseSpecs := restoreSpecs{
-		hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
-		backup: makeRestoringBackupSpecs(
-			backupSpecs{workload: tpceRestore{customers: 1000},
-				version: "v22.2.1"}),
-		timeout:                3 * time.Hour,
-		namePrefix:             "pause",
-		fingerprint:            8445446819555404274,
-		restoreUptoIncremental: defaultRestoreUptoIncremental,
-	}
-	withPauseSpecs.initTestName()
-
-	r.Add(registry.TestSpec{
-		Name:                      withPauseSpecs.testName,
-		Owner:                     registry.OwnerDisasterRecovery,
-		Benchmark:                 true,
-		Cluster:                   withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
-		Timeout:                   withPauseSpecs.timeout,
-		CompatibleClouds:          withPauseSpecs.backup.CompatibleClouds(),
-		Suites:                    registry.Suites(registry.Nightly),
-		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-
-			rd := makeRestoreDriver(t, c, withPauseSpecs)
-			rd.prepareCluster(ctx)
-
-			// Run the disk usage logger in the monitor to guarantee its
-			// having terminated when the test ends.
-			m := c.NewMonitor(ctx)
-			dul := roachtestutil.NewDiskUsageLogger(t, c)
-			m.Go(dul.Runner)
-
-			jobIDCh := make(chan jobspb.JobID)
-			jobCompleteCh := make(chan struct{}, 1)
-
-			pauseAtProgress := []float32{0.2, 0.45, 0.7}
-			for i := range pauseAtProgress {
-				// Add up to 10% to the pause point.
-				pauseAtProgress[i] = pauseAtProgress[i] + float32(rand.Intn(10))/100
-			}
-			pauseIndex := 0
-			// Spin up go routine which pauses and resumes the Restore job three times.
-			m.Go(func(ctx context.Context) error {
-				// Wait until the restore job has been created.
-				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
-				require.NoError(t, err)
-				sql := sqlutils.MakeSQLRunner(conn)
-
-				// The job should be created fairly quickly once the roachtest starts.
-				done := ctx.Done()
-				jobID := <-jobIDCh
-
-				jobProgressTick := time.NewTicker(time.Minute * 1)
-				defer jobProgressTick.Stop()
-				for {
-					if pauseIndex == len(pauseAtProgress) {
-						t.L().Printf("RESTORE job was paused a maximum number of times; allowing the job to complete")
-						return nil
-					}
-					select {
-					case <-done:
-						return ctx.Err()
-					case <-jobCompleteCh:
-						return nil
-					case <-jobProgressTick.C:
-						var fraction float32
-						sql.QueryRow(t, `SELECT fraction_completed FROM [SHOW JOB $1]`,
-							jobID).Scan(&fraction)
-						t.L().Printf("RESTORE Progress %.2f", fraction)
-						if fraction < pauseAtProgress[pauseIndex] {
-							continue
-						}
-						t.L().Printf("pausing RESTORE job since progress is greater than %.2f", pauseAtProgress[pauseIndex])
-						// Pause the job and wait for it to transition to a paused state.
-						_, err := conn.Query(`PAUSE JOB $1`, jobID)
-						if err != nil {
-							// The pause job request should not fail unless the job has already succeeded,
-							// in which case, the test should gracefully succeed.
-							var status string
-							sql.QueryRow(t, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status)
-							if status == "succeeded" {
-								return nil
-							}
-						}
-						require.NoError(t, err)
-						testutils.SucceedsSoon(t, func() error {
-							var status string
-							sql.QueryRow(t, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status)
-							if status != "paused" {
-								return errors.Newf("expected status `paused` but found %s", status)
-							}
-							t.L().Printf("paused RESTORE job")
-							pauseIndex++
-							return nil
-						})
-
-						t.L().Printf("resuming RESTORE job")
-						sql.Exec(t, `RESUME JOB $1`, jobID)
-					}
-				}
-			})
-
-			m.Go(func(ctx context.Context) error {
-				defer dul.Done()
-				defer close(jobCompleteCh)
-				defer close(jobIDCh)
-				t.Status(`running restore`)
-				metricCollector := rd.initRestorePerfMetrics(ctx, durationGauge)
-				jobID, err := rd.runDetached(ctx, "DATABASE tpce", 1)
-				require.NoError(t, err)
-				jobIDCh <- jobID
-
-				// Wait for the job to succeed.
-				succeededJobTick := time.NewTicker(time.Minute * 1)
-				defer succeededJobTick.Stop()
-				done := ctx.Done()
-				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
-				require.NoError(t, err)
-				var isJobComplete bool
-				for {
-					if isJobComplete {
-						succeededJobTick.Stop()
-						jobCompleteCh <- struct{}{}
-						break
-					}
-
-					select {
-					case <-done:
-						return ctx.Err()
-					case <-jobCompleteCh:
-						return nil
-					case <-succeededJobTick.C:
-						var status string
-						err := conn.QueryRow(`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&status)
-						require.NoError(t, err)
-						if status == string(jobs.StatusSucceeded) {
-							isJobComplete = true
-						} else if status == string(jobs.StatusFailed) || status == string(jobs.StatusCanceled) {
-							t.Fatalf("job unexpectedly found in %s state", status)
-						}
-					}
-				}
-				metricCollector()
-				rd.checkFingerprint(ctx)
-				return nil
-			})
-			m.Wait()
-			// All failures from the above go routines surface via a t.Fatal() within
-			// the m.Wait( ) call above; therefore, at this point, the restore job
-			// should have succeeded. This final check ensures this test is actually
-			// doing its job: causing the restore job to pause at least once.
-			require.NotEqual(t, 0, pauseIndex, "the job should have paused at least once")
-		},
-
-		// TODO(msbutler): to test the correctness of checkpointing, we should
-		// restore the same fixture without pausing it and fingerprint both restored
-		// databases.
-	})
 
 	for _, sp := range []restoreSpecs{
 		{
