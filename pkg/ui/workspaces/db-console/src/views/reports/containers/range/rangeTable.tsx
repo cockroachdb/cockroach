@@ -88,6 +88,11 @@ const rangeTableDisplayList: RangeTableRow[] = [
     compareToLeader: true,
   },
   {
+    variable: "leadSupportUntil",
+    display: "Lead Support Until",
+    compareToLeader: false,
+  },
+  {
     variable: "leaseAppliedIndex",
     display: "Lease Applied Index",
     compareToLeader: true,
@@ -735,6 +740,10 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           ? this.createContent("") // `problems` above will report "Awaiting GC" in this case
           : this.createContent(contentReplicaType(localReplica.type)),
         raftState: raftState,
+        leadSupportUntil: this.contentTimestamp(
+          info.raft_state.lead_support_until,
+          now,
+        ),
         quiescent: info.quiescent
           ? rangeTableQuiescent
           : rangeTableEmptyContent,
