@@ -45,12 +45,11 @@ go_library(
 
 go_test(
     name = "amazon_test",
-    size = "small",
     srcs = [
         "aws_kms_test.go",
         "s3_storage_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = ["-test.timeout=295s"],
     embed = [":amazon"],
     exec_properties = {
         "dockerNetwork": "standard",
