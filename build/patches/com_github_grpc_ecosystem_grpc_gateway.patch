@@ -70,3 +70,16 @@ index c4d18f624..41d5319fb 100644
          "@org_golang_google_grpc//codes:go_default_library",
          "@org_golang_google_grpc//grpclog:go_default_library",
          "@org_golang_google_grpc//metadata:go_default_library",
+
+diff -urN a/internal/descriptor/apiconfig/BUILD.bazel b/internal/descriptor/apiconfig/BUILD.bazel
+--- a/internal/descriptor/apiconfig/BUILD.bazel	2024-11-13 11:26:37
++++ b/internal/descriptor/apiconfig/BUILD.bazel	2024-11-13 11:26:33
+@@ -9,7 +9,7 @@
+     srcs = [
+         "apiconfig.proto",
+     ],
+-    deps = ["@googleapis//google/api:http_proto"],
++    deps = ["@go_googleapis//google/api:http_proto"],
+ )
+
+ go_proto_library(
