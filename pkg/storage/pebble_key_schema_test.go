@@ -340,7 +340,10 @@ func TestKeySchema_RandomKeys(t *testing.T) {
 	var it colblk.DataBlockIter
 	it.InitOnce(&keySchema, EngineKeyCompare, EngineKeySplit, nil)
 	require.NoError(t, it.Init(&dec, block.NoTransforms))
+	// Ensure that a scan across the block finds all the relevant keys.
+	var valBuf []byte
 	for k, kv := 0, it.First(); kv != nil; k, kv = k+1, it.Next() {
+
 		require.True(t, EngineKeyEqual(keys[k], kv.K.UserKey))
 		require.Zero(t, EngineKeyCompare(keys[k], kv.K.UserKey))
 		// Note we allow the key read from the block to be physically different,
@@ -352,6 +355,28 @@ func TestKeySchema_RandomKeys(t *testing.T) {
 			t.Fatalf("key %q is longer than original key %q", kv.K.UserKey, keys[k])
 		}
 		checkEngineKey(kv.K.UserKey)
+
+		// We write keys[k] as the value too, so check that it's verbatim equal.
+		value, callerOwned, err := kv.V.Value(valBuf)
+		require.NoError(t, err)
+		require.Equal(t, keys[k], value)
+		if callerOwned {
+			valBuf = value
+		}
 	}
+	// Ensure that seeking to each key finds the key.
+	for i := range keys {
+		kv := it.SeekGE(keys[i], 0)
+		require.True(t, EngineKeyEqual(keys[i], kv.K.UserKey))
+		require.Zero(t, EngineKeyCompare(keys[i], kv.K.UserKey))
+	}
+	// Ensure seeking to just the prefix of each key finds a key with the same
+	// prefix.
+	for i := range keys {
+		si := EngineKeySplit(keys[i])
+		kv := it.SeekGE(keys[i][:si], 0)
+		require.True(t, EngineKeyEqual(keys[i][:si], pebble.Split(EngineKeySplit).Prefix(kv.K.UserKey)))
+	}
+
 	require.NoError(t, it.Close())
 }
