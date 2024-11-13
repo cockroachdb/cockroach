@@ -519,8 +519,9 @@ func writeSpansToMetadata(
 			ts = hlc.Timestamp{}
 			j++
 		} else {
-			cmp := m.Spans[i].Key.Compare(m.IntroducedSpans[j].Key)
-			if cmp < 0 {
+			cmpStart := m.Spans[i].Key.Compare(m.IntroducedSpans[j].Key)
+			cmpEnd := m.Spans[i].EndKey.Compare(m.IntroducedSpans[j].EndKey)
+			if cmpStart < 0 || (cmpStart == 0 && cmpEnd < 0) {
 				sp = m.Spans[i]
 				ts = m.StartTime
 				i++
