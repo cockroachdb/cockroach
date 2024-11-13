@@ -559,9 +559,9 @@ func runRestore(
 			}
 
 		}
-		opts := ""
+		opts := "WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION"
 		if runOnline {
-			opts = "WITH EXPERIMENTAL DEFERRED COPY"
+			opts = "WITH EXPERIMENTAL DEFERRED COPY, UNSAFE_RESTORE_INCOMPATIBLE_VERSION"
 		}
 		if err := maybeAddSomeEmptyTables(ctx, rd); err != nil {
 			return errors.Wrapf(err, "failed to add some empty tables")
