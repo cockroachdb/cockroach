@@ -1,0 +1,72 @@
+# Load 500 512-dimension features and search them. Use small partition size to
+# ensure a deeper tree.
+
+new-index dims=512 min-partition-size=2 max-partition-size=8 quality-samples=4 beam-size=2 load-features=500 hide-tree
+----
+Created index with 500 vectors with 512 dimensions.
+
+# Start with 1 result and default beam size of 2.
+search max-results=1 use-feature=9999
+----
+vec441: 0.4646 (centroid=0.382)
+9 leaf vectors, 39 vectors, 2 full vectors, 5 partitions
+
+# Search for additional results.
+search max-results=3 use-feature=9999
+----
+vec441: 0.4646 (centroid=0.382)
+vec99: 0.6356 (centroid=0.382)
+vec296: 0.7638 (centroid=0.5962)
+9 leaf vectors, 39 vectors, 6 full vectors, 5 partitions
+
+# Use a larger beam size.
+search max-results=6 use-feature=9999 beam-size=8
+----
+vec74: 0.4155 (centroid=0.5092)
+vec195: 0.4359 (centroid=0.5127)
+vec441: 0.4646 (centroid=0.382)
+vec77: 0.4894 (centroid=0.4286)
+vec355: 0.5821 (centroid=0.4617)
+vec328: 0.6032 (centroid=0.5276)
+58 leaf vectors, 123 vectors, 14 full vectors, 15 partitions
+
+# Turn off re-ranking, which results in increased inaccuracy.
+search max-results=6 use-feature=9999 beam-size=8 skip-rerank
+----
+vec195: 0.4179 ±0.0264 (centroid=0.5127)
+vec74: 0.4322 ±0.0263 (centroid=0.5092)
+vec441: 0.4657 ±0.0215 (centroid=0.382)
+vec77: 0.4881 ±0.0221 (centroid=0.4286)
+vec355: 0.5658 ±0.0238 (centroid=0.4617)
+vec415: 0.6142 ±0.0302 (centroid=0.5306)
+58 leaf vectors, 123 vectors, 0 full vectors, 15 partitions
+
+# Return top 25 results.
+search max-results=25 use-feature=9999 beam-size=8
+----
+vec74: 0.4155 (centroid=0.5092)
+vec195: 0.4359 (centroid=0.5127)
+vec441: 0.4646 (centroid=0.382)
+vec77: 0.4894 (centroid=0.4286)
+vec355: 0.5821 (centroid=0.4617)
+vec328: 0.6032 (centroid=0.5276)
+vec389: 0.6183 (centroid=0.5267)
+vec415: 0.6298 (centroid=0.5306)
+vec99: 0.6356 (centroid=0.382)
+vec267: 0.6742 (centroid=0.526)
+vec6: 0.685 (centroid=0.6015)
+vec485: 0.6867 (centroid=0.362)
+vec236: 0.687 (centroid=0.5071)
+vec198: 0.6885 (centroid=0.5094)
+vec65: 0.6898 (centroid=0.4403)
+vec146: 0.6901 (centroid=0.5601)
+vec282: 0.7197 (centroid=0.4023)
+vec410: 0.728 (centroid=0.4261)
+vec356: 0.7341 (centroid=0.4352)
+vec439: 0.7428 (centroid=0.6023)
+vec116: 0.7462 (centroid=0.4643)
+vec273: 0.7555 (centroid=0.5226)
+vec453: 0.7735 (centroid=0.3571)
+vec233: 0.7737 (centroid=0.5502)
+vec331: 0.7793 (centroid=0.4871)
+58 leaf vectors, 123 vectors, 44 full vectors, 15 partitions

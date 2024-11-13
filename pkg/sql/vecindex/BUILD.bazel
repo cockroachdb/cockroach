@@ -8,11 +8,16 @@ filegroup(
 
 go_library(
     name = "vecindex",
-    srcs = ["kmeans.go"],
+    srcs = [
+        "kmeans.go",
+        "vector_index.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/vecindex/internal",
+        "//pkg/sql/vecindex/quantize",
+        "//pkg/sql/vecindex/vecstore",
         "//pkg/util/num32",
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
@@ -21,14 +26,21 @@ go_library(
 
 go_test(
     name = "vecindex_test",
-    srcs = ["kmeans_test.go"],
+    srcs = [
+        "kmeans_test.go",
+        "vector_index_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":vecindex"],
     deps = [
         "//pkg/sql/vecindex/internal",
+        "//pkg/sql/vecindex/quantize",
         "//pkg/sql/vecindex/testutils",
+        "//pkg/sql/vecindex/vecstore",
         "//pkg/util/num32",
         "//pkg/util/vector",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
         "@org_gonum_v1_gonum//floats/scalar",
         "@org_gonum_v1_gonum//stat",
