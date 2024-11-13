@@ -1242,8 +1242,11 @@ func saveDiskUsageToLogsDir(ctx context.Context, c cluster.Cluster) error {
 
 	// Don't hang forever.
 	return timeutil.RunWithTimeout(ctx, "disk usage", 20*time.Second, func(ctx context.Context) error {
-		return c.RunE(ctx, option.WithNodes(c.All()),
-			"du -c /mnt/data1 --exclude lost+found >> logs/diskusage.txt")
+		return c.RunE(
+			ctx,
+			option.WithNodes(c.All()),
+			"du {store-dir} -c --exclude lost+found >> logs/diskusage.txt",
+		)
 	})
 }
 
