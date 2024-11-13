@@ -1,0 +1,3 @@
+drop_trigger_stmt ::=
+	'DROP' 'TRIGGER' trigger_name 'ON' table_name ( 'RESTRICT' |  )
+	| 'DROP' 'TRIGGER' 'IF' 'EXISTS' trigger_name 'ON' table_name ( 'RESTRICT' |  )
