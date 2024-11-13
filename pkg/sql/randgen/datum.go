@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/bits"
 	"math/rand"
+	"strings"
 	"time"
 	"unicode"
 
@@ -261,6 +262,9 @@ func RandDatumWithNullChance(
 		}
 		if typ.Oid() == oid.T_name {
 			return tree.NewDName(string(p))
+		}
+		if typ.Oid() == oid.T_bpchar {
+			return tree.NewDString(strings.TrimRight(string(p), " "))
 		}
 		return tree.NewDString(string(p))
 	case types.BytesFamily:
