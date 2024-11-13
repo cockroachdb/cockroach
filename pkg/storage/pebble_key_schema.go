@@ -471,15 +471,6 @@ func (ks *cockroachKeySeeker) seekGEOnSuffix(index int, seekSuffix []byte) (row 
 	// Invariant: f(l-1) == false, f(u) == true.
 	l := index
 	u := ks.roachKeyChanged.SeekSetBitGE(index + 1)
-	if ks.suffixTypes&hasEmptySuffixes != 0 {
-		// Check if the key at index has an empty suffix. Since empty suffixes sort
-		// first, this is the only key in the range [index, u) which could have an
-		// empty suffix.
-		if len(ks.untypedVersions.At(index)) == 0 && ks.mvccWallTimes.At(index) == 0 && ks.mvccLogical.At(index) == 0 {
-			// Our seek suffix is not empty, so it must come after the empty suffix.
-			l = index + 1
-		}
-	}
 
 	for l < u {
 		m := int(uint(l+u) >> 1) // avoid overflow when computing m
@@ -488,9 +479,10 @@ func (ks *cockroachKeySeeker) seekGEOnSuffix(index int, seekSuffix []byte) (row 
 		if len(mVer) == 0 {
 			wallTime := ks.mvccWallTimes.At(m)
 			logicalTime := uint32(ks.mvccLogical.At(m))
-			if buildutil.CrdbTestBuild && wallTime == 0 && logicalTime == 0 {
-				// This can only happen for row at index.
-				panic(errors.AssertionFailedf("unexpected empty suffix at %d (l=%d, u=%d)", m, l, u))
+			if wallTime == 0 && logicalTime == 0 {
+				// This row has an empty suffix. Since the seek suffix is not empty, it comes after.
+				l = m + 1
+				continue
 			}
 
 			// Note: this path is not very performance sensitive: blocks that mix MVCC
