@@ -76,6 +76,22 @@ type FortificationTracker struct {
 	leaderMaxSupported atomicTimestamp
 
 	logger raftlogger.Logger
+
+	// steppingDown is set to true when the leader intends to step down. This is
+	// used to prevent the leader from stepping down and regressing its
+	// LeadSupportUntil promise. The leader with steppingDown set to true stops
+	// advancing the LeadSupportUntil. The leader will eventually step down when
+	// it's safe to do so, when the LeadSupportUntil is in the past.
+	steppingDown bool
+
+	// steppingDownTerm is the term for which the leader is stepping down. It is
+	// meaningful only when steppingDown is true. It's useful in cases where there
+	// is a stranded follower at a higher term . The leader can step down to the
+	// stranded follower's term and then campaign at one term higher, which then
+	// allows the follower to join the quorum. Without this, the leader would have
+	// to campaign at a lower term, then learns about the higher term, and then
+	// use it in the next campaign attempt.
+	steppingDownTerm uint64
 }
 
 // NewFortificationTracker initializes a FortificationTracker.
@@ -125,6 +141,8 @@ func (ft *FortificationTracker) Reset(term uint64) {
 	ft.needsDefortification = true
 	clear(ft.fortification)
 	ft.leaderMaxSupported.Reset()
+	ft.steppingDown = false
+	ft.steppingDownTerm = 0
 }
 
 // IsFortifiedBy returns whether the follower fortifies the leader or not.
@@ -157,8 +175,10 @@ func (ft *FortificationTracker) IsFortifiedBy(id pb.PeerID) (isFortified bool, i
 // fortification until based on the fortification being tracked for it by its
 // peers.
 func (ft *FortificationTracker) LeadSupportUntil(state pb.StateType) hlc.Timestamp {
-	if state != pb.StateLeader {
-		// We're not the leader, so LeadSupportUntil shouldn't advance.
+	// TODO(ibrahim): Consider removing the state from the function parameters.
+	if state != pb.StateLeader || ft.steppingDown {
+		// If we're not the leader or if we are intending to step down, we shouldn't
+		// advance LeadSupportUntil.
 		return ft.leaderMaxSupported.Load()
 	}
 
@@ -261,6 +281,26 @@ func (ft *FortificationTracker) InformCommittedTerm(committedTerm uint64) {
 		// T' in its log, it just needs to know such an entry exists.
 		ft.needsDefortification = false
 	}
+}
+
+// BeginSteppingDown marks the leader's intention to step down. The leader will
+// stop advancing the LeadSupportedUntil.
+func (ft *FortificationTracker) BeginSteppingDown(term uint64) {
+	ft.steppingDown = true
+	if ft.steppingDownTerm < term {
+		ft.steppingDownTerm = term
+	}
+}
+
+// SteppingDown returns whether the leader is intending to step down or not.
+func (ft *FortificationTracker) SteppingDown() bool {
+	return ft.steppingDown
+}
+
+// SteppingDownTerm returns the term for which the leader is intending to step
+// down to. It is meaningful only when SteppingDown is true.
+func (ft *FortificationTracker) SteppingDownTerm() uint64 {
+	return ft.steppingDownTerm
 }
 
 // ConfigChangeSafe returns whether it is safe to propose a configuration change
