@@ -6076,10 +6076,16 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+		// NB: In order for this test to work for sinkless feeds, we must
+		// have at least one row before creating the feed.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (-1)`)
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		defer closeFeed(t, foo)
-		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+		var jobID jobspb.JobID
+		if foo, ok := foo.(cdctest.EnterpriseTestFeed); ok {
+			jobID = foo.JobID()
+		}
 
 		for i := 0; i < 5; i++ {
 			beforeCreate := timeutil.Now()
@@ -6088,7 +6094,7 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+	cdcTest(t, testFn)
 }
 
 type testTelemetryLogger struct {
@@ -6112,6 +6118,9 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 		continuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+		// NB: In order for this test to work for sinkless feeds, we must
+		// have at least one row before creating the feed.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
 		var seen atomic.Bool
 		waitForIncEmittedCounters := func() error {
@@ -6138,8 +6147,10 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 		// Insert a row and wait for logs to be created.
 		beforeFirstLog := timeutil.Now()
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		var jobID jobspb.JobID
+		if foo, ok := foo.(cdctest.EnterpriseTestFeed); ok {
+			jobID = foo.JobID()
+		}
 		testutils.SucceedsSoon(t, waitForIncEmittedCounters)
 		verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeFirstLog.UnixNano(), interval.Nanoseconds(), false /* closing */)
 
@@ -6161,7 +6172,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 		verifyLogsWithEmittedBytesAndMessages(t, jobID, afterFirstLog.UnixNano(), interval.Nanoseconds(), true /* closing */)
 	}
 
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
+	cdcTest(t, testFn)
 }
 
 func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
