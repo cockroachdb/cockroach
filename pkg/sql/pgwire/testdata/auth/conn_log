@@ -58,13 +58,13 @@ ok defaultdb
 authlog 7
 .*client_connection_end
 ----
-6 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-7 {"EventType":"client_authentication_info","Info":"HBA rule: host  all root all cert-password # CockroachDB mandatory rule","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
-8 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
-9 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
-10 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=defaultdb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
-11 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-12 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+2 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+3 {"EventType":"client_authentication_info","Info":"HBA rule: host  all root all cert-password # CockroachDB mandatory rule","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
+4 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
+5 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
+6 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[database=defaultdb] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
+7 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+8 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect user=root password=secureabc sslmode=require sslcert= sslkey=
 ----
@@ -73,14 +73,14 @@ ok defaultdb
 authlog 8
 .*client_connection_end
 ----
-13 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-14 {"EventType":"client_authentication_info","Info":"HBA rule: host  all root all cert-password # CockroachDB mandatory rule","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
-15 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
-16 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
-17 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
-18 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=defaultdb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
-19 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-20 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+9 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+10 {"EventType":"client_authentication_info","Info":"HBA rule: host  all root all cert-password # CockroachDB mandatory rule","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
+11 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
+12 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
+13 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
+14 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[database=defaultdb] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
+15 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+16 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect user=root password=badpass sslmode=require sslcert= sslkey=
 ----
@@ -89,13 +89,13 @@ ERROR: password authentication failed for user root (SQLSTATE 28P01)
 authlog 7
 .*client_connection_end
 ----
-21 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-22 {"EventType":"client_authentication_info","Info":"HBA rule: host  all root all cert-password # CockroachDB mandatory rule","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
-23 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
-24 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
-25 {"Detail":"scram handshake error: challenge proof invalid","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
-26 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-27 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+17 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+18 {"EventType":"client_authentication_info","Info":"HBA rule: host  all root all cert-password # CockroachDB mandatory rule","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
+19 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl"}
+20 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
+21 {"Detail":"scram handshake error: challenge proof invalid","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"hostssl","User":"root"}
+22 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+23 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 
 subtest end
@@ -109,12 +109,12 @@ ok defaultdb
 authlog 6
 .*client_connection_end
 ----
-28 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-29 {"EventType":"client_authentication_info","Info":"HBA rule: host  all trusted all trust         # custom","InstanceID":1,"Method":"trust","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"trusted","Timestamp":"XXX","Transport":"hostssl"}
-30 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"trust","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"trusted","Timestamp":"XXX","Transport":"hostssl","User":"trusted"}
-31 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=defaultdb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"trust","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"trusted","Timestamp":"XXX","Transport":"hostssl","User":"trusted"}
-32 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-33 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+24 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+25 {"EventType":"client_authentication_info","Info":"HBA rule: host  all trusted all trust         # custom","InstanceID":1,"Method":"trust","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"trusted","Timestamp":"XXX","Transport":"hostssl"}
+26 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"trust","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"trusted","Timestamp":"XXX","Transport":"hostssl","User":"trusted"}
+27 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[database=defaultdb] and CustomOptions=[]","InstanceID":1,"Method":"trust","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"trusted","Timestamp":"XXX","Transport":"hostssl","User":"trusted"}
+28 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+29 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -127,14 +127,14 @@ ok defaultdb
 authlog 8
 .*client_connection_end
 ----
-34 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-35 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all     all cert-password # built-in CockroachDB default","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl"}
-36 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl"}
-37 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl","User":"userpw"}
-38 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl","User":"userpw"}
-39 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=defaultdb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl","User":"userpw"}
-40 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-41 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+30 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+31 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all     all cert-password # built-in CockroachDB default","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl"}
+32 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl"}
+33 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl","User":"userpw"}
+34 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl","User":"userpw"}
+35 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[database=defaultdb] and CustomOptions=[]","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl","User":"userpw"}
+36 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+37 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect user=userpw password=badpass
 ----
@@ -143,13 +143,13 @@ ERROR: password authentication failed for user userpw (SQLSTATE 28P01)
 authlog 7
 .*client_connection_end
 ----
-42 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-43 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all     all cert-password # built-in CockroachDB default","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl"}
-44 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl"}
-45 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl","User":"userpw"}
-46 {"Detail":"scram handshake error: challenge proof invalid","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl","User":"userpw"}
-47 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-48 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+38 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+39 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all     all cert-password # built-in CockroachDB default","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl"}
+40 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl"}
+41 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl","User":"userpw"}
+42 {"Detail":"scram handshake error: challenge proof invalid","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"hostssl","User":"userpw"}
+43 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+44 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -162,13 +162,13 @@ ERROR: password authentication failed for user usernopw (SQLSTATE 28P01)
 authlog 7
 .*client_connection_end
 ----
-49 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-50 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all     all cert-password # built-in CockroachDB default","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernopw","Timestamp":"XXX","Transport":"hostssl"}
-51 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernopw","Timestamp":"XXX","Transport":"hostssl"}
-52 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernopw","Timestamp":"XXX","Transport":"hostssl","User":"usernopw"}
-53 {"Detail":"user password hash not in SCRAM format","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernopw","Timestamp":"XXX","Transport":"hostssl","User":"usernopw"}
-54 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-55 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+45 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+46 {"EventType":"client_authentication_info","Info":"HBA rule: host  all all     all cert-password # built-in CockroachDB default","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernopw","Timestamp":"XXX","Transport":"hostssl"}
+47 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernopw","Timestamp":"XXX","Transport":"hostssl"}
+48 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernopw","Timestamp":"XXX","Transport":"hostssl","User":"usernopw"}
+49 {"Detail":"user password hash not in SCRAM format","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-password","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernopw","Timestamp":"XXX","Transport":"hostssl","User":"usernopw"}
+50 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+51 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 
 subtest end
@@ -187,12 +187,12 @@ ok defaultdb
 authlog 6
 .*client_connection_end
 ----
-56 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-57 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"local"}
-58 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"local","User":"root"}
-59 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=defaultdb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"local","User":"root"}
-60 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-61 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+52 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+53 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"local"}
+54 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"local","User":"root"}
+55 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[database=defaultdb] and CustomOptions=[]","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"local","User":"root"}
+56 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+57 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect_unix user=root password=badpass
 ----
@@ -201,11 +201,11 @@ ERROR: password authentication failed for user root (SQLSTATE 28P01)
 authlog 5
 .*client_connection_end
 ----
-62 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-63 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"local"}
-64 {"Detail":"password authentication failed for user root","EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"CREDENTIALS_INVALID","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"local","User":"root"}
-65 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-66 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+58 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+59 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"local"}
+60 {"Detail":"password authentication failed for user root","EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"CREDENTIALS_INVALID","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"root","Timestamp":"XXX","Transport":"local","User":"root"}
+61 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+62 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 
 subtest end
@@ -219,11 +219,11 @@ ERROR: authentication rejected by configuration (SQLSTATE 28000)
 authlog 5
 .*client_connection_end
 ----
-67 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-68 {"EventType":"client_authentication_info","Info":"HBA rule: local all trusted     reject        # custom","InstanceID":1,"Method":"reject","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"trusted","Timestamp":"XXX","Transport":"local"}
-69 {"Detail":"authentication rejected by configuration","EventType":"client_authentication_failed","InstanceID":1,"Method":"reject","Network":"unix","Reason":"LOGIN_DISABLED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"trusted","Timestamp":"XXX","Transport":"local","User":"trusted"}
-70 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-71 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+63 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+64 {"EventType":"client_authentication_info","Info":"HBA rule: local all trusted     reject        # custom","InstanceID":1,"Method":"reject","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"trusted","Timestamp":"XXX","Transport":"local"}
+65 {"Detail":"authentication rejected by configuration","EventType":"client_authentication_failed","InstanceID":1,"Method":"reject","Network":"unix","Reason":"LOGIN_DISABLED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"trusted","Timestamp":"XXX","Transport":"local","User":"trusted"}
+66 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+67 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -236,12 +236,12 @@ ok defaultdb
 authlog 6
 .*client_connection_end
 ----
-72 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-73 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"local"}
-74 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"local","User":"userpw"}
-75 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[client_encoding=UTF8; database=defaultdb; datestyle=ISO, MDY; extra_float_digits=2] and CustomOptions=[]","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"local","User":"userpw"}
-76 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-77 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+68 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+69 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"local"}
+70 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"local","User":"userpw"}
+71 {"EventType":"client_authentication_info","Info":"session created with SessionDefaults=[database=defaultdb] and CustomOptions=[]","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"local","User":"userpw"}
+72 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+73 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect_unix user=userpw password=badpass
 ----
@@ -250,11 +250,11 @@ ERROR: password authentication failed for user userpw (SQLSTATE 28P01)
 authlog 5
 .*client_connection_end
 ----
-78 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-79 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"local"}
-80 {"Detail":"password authentication failed for user userpw","EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"CREDENTIALS_INVALID","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"local","User":"userpw"}
-81 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-82 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+74 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+75 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"local"}
+76 {"Detail":"password authentication failed for user userpw","EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"CREDENTIALS_INVALID","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userpw","Timestamp":"XXX","Transport":"local","User":"userpw"}
+77 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+78 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -267,11 +267,11 @@ ERROR: usernologin does not have login privilege (SQLSTATE 28000)
 authlog 5
 .*client_connection_end
 ----
-83 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-84 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernologin","Timestamp":"XXX","Transport":"local"}
-85 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"LOGIN_DISABLED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernologin","Timestamp":"XXX","Transport":"local","User":"usernologin"}
-86 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-87 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+79 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+80 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernologin","Timestamp":"XXX","Transport":"local"}
+81 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"LOGIN_DISABLED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernologin","Timestamp":"XXX","Transport":"local","User":"usernologin"}
+82 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+83 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 
 connect_unix user=usernosqllogin password=123
@@ -281,11 +281,11 @@ ERROR: usernosqllogin does not have login privilege (SQLSTATE 28000)
 authlog 5
 .*client_connection_end
 ----
-88 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-89 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernosqllogin","Timestamp":"XXX","Transport":"local"}
-90 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"LOGIN_DISABLED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernosqllogin","Timestamp":"XXX","Transport":"local","User":"usernosqllogin"}
-91 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-92 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+84 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+85 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernosqllogin","Timestamp":"XXX","Transport":"local"}
+86 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"LOGIN_DISABLED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"usernosqllogin","Timestamp":"XXX","Transport":"local","User":"usernosqllogin"}
+87 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+88 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect_unix user=userglobalnosqllogin password=123
 ----
@@ -294,11 +294,11 @@ ERROR: userglobalnosqllogin does not have login privilege (SQLSTATE 28000)
 authlog 5
 .*client_connection_end
 ----
-93 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-94 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userglobalnosqllogin","Timestamp":"XXX","Transport":"local"}
-95 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"LOGIN_DISABLED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userglobalnosqllogin","Timestamp":"XXX","Transport":"local","User":"userglobalnosqllogin"}
-96 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-97 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+89 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+90 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userglobalnosqllogin","Timestamp":"XXX","Transport":"local"}
+91 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"LOGIN_DISABLED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userglobalnosqllogin","Timestamp":"XXX","Transport":"local","User":"userglobalnosqllogin"}
+92 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+93 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect_unix user=userinheritsnosqllogin password=123
 ----
@@ -307,11 +307,11 @@ ERROR: userinheritsnosqllogin does not have login privilege (SQLSTATE 28000)
 authlog 5
 .*client_connection_end
 ----
-98 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-99 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userinheritsnosqllogin","Timestamp":"XXX","Transport":"local"}
-100 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"LOGIN_DISABLED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userinheritsnosqllogin","Timestamp":"XXX","Transport":"local","User":"userinheritsnosqllogin"}
-101 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-102 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+94 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+95 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userinheritsnosqllogin","Timestamp":"XXX","Transport":"local"}
+96 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"LOGIN_DISABLED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userinheritsnosqllogin","Timestamp":"XXX","Transport":"local","User":"userinheritsnosqllogin"}
+97 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+98 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect_unix user=userexpired password=123
 ----
@@ -320,11 +320,11 @@ ERROR: password is expired (SQLSTATE 28000)
 authlog 5
 .*client_connection_end
 ----
-103 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-104 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local"}
-105 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"CREDENTIALS_EXPIRED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local","User":"userexpired"}
-106 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-107 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+99 {"EventType":"client_connection_start","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+100 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local"}
+101 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":"CREDENTIALS_EXPIRED","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"userexpired","Timestamp":"XXX","Transport":"local","User":"userexpired"}
+102 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+103 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
