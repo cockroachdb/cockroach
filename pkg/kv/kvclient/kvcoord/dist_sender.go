@@ -1193,7 +1193,7 @@ func (ds *DistSender) Send(
 	}
 
 	ctx = ds.AnnotateCtx(ctx)
-	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
+	ctx, sp := tracing.ChildSpan(ctx, "dist sender send")
 	defer sp.Finish()
 
 	// Send proxy requests directly through the transport. Any errors are
