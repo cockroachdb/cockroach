@@ -68,7 +68,6 @@ type RowProcessor interface {
 	ProcessRow(context.Context, isql.Txn, roachpb.KeyValue, roachpb.Value) (batchStats, error)
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
-	ReportMutations(*stats.Refresher)
 	Close(context.Context)
 }
 
@@ -258,10 +257,14 @@ func makeSQLProcessorFromQuerier(
 	}, nil
 }
 
-// ReportMutations implements the RowProcessor interface, but is a no-op for
+// ReportMutations implements the BatchHandler interface, but is a no-op for
 // sqlRowProcessor because its mutations are already reported by the queries it
 // runs when they are run.
 func (sqlRowProcessor) ReportMutations(_ *stats.Refresher) {}
+
+// ReleaseLeases implements the BatchHandler interface but is a no-op since each
+// query does this itself.
+func (sqlRowProcessor) ReleaseLeases(_ context.Context) {}
 
 func (*sqlRowProcessor) Close(ctx context.Context) {}
 

@@ -622,6 +622,10 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 
 	for _, p := range lrw.bh {
 		p.ReportMutations(lrw.FlowCtx.Cfg.StatsRefresher)
+		// We should drop our leases and re-acquire new ones at next flush, to avoid
+		// holding leases continually until they expire; re-acquire is cheap when it
+		// can be served from the cache so we can just stop these every checkpoint.
+		p.ReleaseLeases(ctx)
 	}
 	lrw.metrics.CheckpointEvents.Inc(1)
 	lrw.debug.RecordCheckpoint(lrw.frontier.Frontier().GoTime())
@@ -1130,6 +1134,7 @@ type BatchHandler interface {
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
 	ReportMutations(*stats.Refresher)
+	ReleaseLeases(context.Context)
 	Close(context.Context)
 }
 
