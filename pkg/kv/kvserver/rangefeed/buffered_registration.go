@@ -194,7 +194,20 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 		return err
 	}
 
-	firstIteration := true
+	var (
+		// The following variables facilitate logging when the registration was
+		// overflowed before the catchup scan completed.
+		//
+		// For long catchup scans this is often expected. Hopefully, the buffer
+		// contains a checkpoint with a non-empty timestamp. The buffer will always
+		// contain a checkpoint since one is added to the buffer during registration;
+		// but, it is possible that at the time of registration we did not have a
+		// resolved timestamp. We check for this case since it means that the entire
+		// catchup scan was wasted work.
+		firstIteration                 = true
+		wasOverflowedOnFirstIteration  = false
+		oneCheckpointWithTimestampSent = false
+	)
 	// Normal buffered output loop.
 	for {
 		overflowed := false
@@ -203,16 +216,29 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 			overflowed = br.mu.overflowed
 			br.mu.caughtUp = true
 		}
+		if firstIteration {
+			wasOverflowedOnFirstIteration = br.mu.overflowed
+		}
 		br.mu.Unlock()
+		firstIteration = false
+
 		if overflowed {
-			if firstIteration {
-				log.Warningf(ctx, "rangefeed on %s was already overflowed by the time that first iteration (after catch up scan from %s) ran", br.span, br.catchUpTimestamp)
+			if wasOverflowedOnFirstIteration && br.shouldLogOverflow(oneCheckpointWithTimestampSent) {
+				log.Warningf(ctx, "rangefeed %s overflowed during catch up scan from %s (useful checkpoint sent: %v)",
+					br.span, br.catchUpTimestamp, oneCheckpointWithTimestampSent)
 			}
+
 			return newErrBufferCapacityExceeded().GoError()
 		}
-		firstIteration = false
+
 		select {
 		case nextEvent := <-br.buf:
+
+			if wasOverflowedOnFirstIteration && !oneCheckpointWithTimestampSent {
+				isCheckpointEvent := nextEvent.event != nil && nextEvent.event.Checkpoint != nil
+				oneCheckpointWithTimestampSent = isCheckpointEvent && !nextEvent.event.Checkpoint.ResolvedTS.IsEmpty()
+			}
+
 			err := br.stream.SendUnbuffered(nextEvent.event)
 			nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
@@ -307,4 +333,13 @@ func (br *bufferedRegistration) detachCatchUpIter() *CatchUpIterator {
 	catchUpIter := br.mu.catchUpIter
 	br.mu.catchUpIter = nil
 	return catchUpIter
+}
+
+var overflowLogEvery = log.Every(5 * time.Second)
+
+// shouldLogOverflow returns true if the output loop should log about an
+// overflow on the first iteration. We don't want to log every case since we
+// expect this on some very busy servers.
+func (br *bufferedRegistration) shouldLogOverflow(checkpointSent bool) bool {
+	return (!checkpointSent) || log.V(1) || overflowLogEvery.ShouldLog()
 }
