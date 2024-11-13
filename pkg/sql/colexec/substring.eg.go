@@ -71,7 +71,7 @@ func newSubstringOperator(
 			return &substringInt32Int64Operator{base}
 		}
 	}
-	colexecerror.InternalError(errors.Errorf("unsupported substring argument types: %s %s", startType, lengthType))
+	colexecerror.InternalError(errors.AssertionFailedf("unsupported substring argument types: %s %s", startType, lengthType))
 	// This code is unreachable, but the compiler cannot infer that.
 	return nil
 }

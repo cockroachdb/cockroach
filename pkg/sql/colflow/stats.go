@@ -383,7 +383,7 @@ func (i *statsInvariantChecker) GetStats() *execinfrapb.ComponentStats {
 
 func (i *statsInvariantChecker) DrainMeta() []execinfrapb.ProducerMetadata {
 	if !i.statsRetrieved {
-		return []execinfrapb.ProducerMetadata{{Err: errors.New("GetStats wasn't called before DrainMeta")}}
+		return []execinfrapb.ProducerMetadata{{Err: errors.AssertionFailedf("GetStats wasn't called before DrainMeta")}}
 	}
 	return nil
 }

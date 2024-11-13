@@ -53,7 +53,7 @@ import (
 
 func checkNumIn(inputs []colexecargs.OpWithMetaInfo, numIn int) error {
 	if len(inputs) != numIn {
-		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
+		return errors.AssertionFailedf("expected %d input(s), got %d", numIn, len(inputs))
 	}
 	return nil
 }
@@ -241,6 +241,22 @@ var (
 	errWindowFunctionFilterClause     = errors.New("window functions with FILTER clause are not supported")
 	errDefaultAggregateWindowFunction = errors.New("default aggregate window functions not supported")
 	errStreamIngestionWrap            = errors.New("core.StreamIngestion{Data,Frontier} is not supported because of #55758")
+	errFallbackToRenderWrapping       = errors.New("falling back to wrapping a row-by-row processor due to many renders and low estimated row count")
+	errUnhandledSelectionExpression   = errors.New("unhandled selection expression")
+	errUnhandledProjectionExpression  = errors.New("unhandled projection expression")
+
+	errBinaryExprWithDatums = unimplemented.NewWithIssue(
+		49780, "datum-backed arguments on both sides and not datum-backed "+
+			"output of a binary expression is currently not supported",
+	)
+	errMixedTypeBinaryUnsupported = unimplemented.NewWithIssue(
+		46198, "dates and timestamptz not supported in mixed-type binary "+
+			"expressions in the vectorized engine",
+	)
+	errMixedTypeComparisonUnsupported = unimplemented.NewWithIssue(
+		44770, "dates and timestamp(tz) not supported in mixed-type "+
+			"comparison expressions in the vectorized engine",
+	)
 )
 
 func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCoreUnion) error {
@@ -1199,6 +1215,7 @@ func NewColOperator(
 							)
 							unlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 							ehj := colexecdisk.NewExternalHashJoiner(
+								ctx,
 								unlimitedAllocator,
 								flowCtx,
 								args,
@@ -1253,7 +1270,7 @@ func NewColOperator(
 			unlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 			mj := colexecjoin.NewMergeJoinOp(
-				unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx),
+				ctx, unlimitedAllocator, execinfra.GetWorkMemLimit(flowCtx),
 				args.DiskQueueCfg, args.FDSemaphore,
 				joinType, inputs[0].Root, inputs[1].Root,
 				spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes,
@@ -1362,6 +1379,7 @@ func NewColOperator(
 					// When we spill to disk, we just use a combo of an external
 					// hash join followed by an external hash aggregation.
 					ehj := colexecdisk.NewExternalHashJoiner(
+						ctx,
 						colmem.NewAllocator(ctx, ehjMemAccount, factory),
 						flowCtx,
 						args,
@@ -1452,7 +1470,7 @@ func NewColOperator(
 					}
 					castIdx := len(result.ColumnTypes)
 					input, err = colexecbase.GetCastOperator(
-						getStreamingAllocator(ctx, args, flowCtx), input, argIdxs[i],
+						ctx, getStreamingAllocator(ctx, args, flowCtx), input, argIdxs[i],
 						castIdx, argTypes[i], typ, flowCtx.EvalCtx,
 					)
 					if err != nil {
@@ -1769,7 +1787,7 @@ func NewColOperator(
 			if !actual.Identical(expected) {
 				castedIdx := len(r.ColumnTypes)
 				r.Root, err = colexecbase.GetCastOperator(
-					getStreamingAllocator(ctx, args, flowCtx), r.Root, i, castedIdx,
+					ctx, getStreamingAllocator(ctx, args, flowCtx), r.Root, i, castedIdx,
 					actual, expected, flowCtx.EvalCtx,
 				)
 				if err != nil {
@@ -1912,8 +1930,6 @@ var renderWrappingRenderCountThreshold = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-var errFallbackToRenderWrapping = errors.New("falling back to wrapping a row-by-row processor due to many renders and low estimated row count")
-
 // planPostProcessSpec plans the post processing stage specified in post on top
 // of r.Op.
 func (r *postProcessResult) planPostProcessSpec(
@@ -1961,7 +1977,10 @@ func (r *postProcessResult) planPostProcessSpec(
 				ctx, flowCtx.EvalCtx, expr, r.ColumnTypes, r.Op, getStreamingAllocator(ctx, args, flowCtx), releasables,
 			)
 			if err != nil {
-				return errors.Wrapf(err, "unable to columnarize render expression %q", expr)
+				if log.ExpensiveLogEnabled(ctx, 1) {
+					err = errors.Wrapf(err, "unable to columnarize render expression %q", expr)
+				}
+				return err
 			}
 			if outputIdx < 0 {
 				return errors.AssertionFailedf("missing outputIdx")
@@ -2051,7 +2070,10 @@ func (r opResult) planFilterExpr(
 		ctx, flowCtx.EvalCtx, expr, r.ColumnTypes, r.Root, allocator, &r.Releasables,
 	)
 	if err != nil {
-		return errors.Wrapf(err, "unable to columnarize filter expression %q", filter)
+		if log.ExpensiveLogEnabled(ctx, 1) {
+			err = errors.Wrapf(err, "unable to columnarize filter expression %q", filter)
+		}
+		return err
 	}
 	r.Root = op
 	if len(filterColumnTypes) > len(r.ColumnTypes) {
@@ -2241,7 +2263,11 @@ func planSelectionOperators(
 		op, err = colexecutils.BoolOrUnknownToSelOp(op, typs, resultIdx)
 		return op, resultIdx, typs, err
 	default:
-		return nil, resultIdx, nil, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
+		err = errUnhandledSelectionExpression
+		if log.ExpensiveLogEnabled(ctx, 1) {
+			err = errors.Newf("unhandled selection expression type: %s", reflect.TypeOf(t))
+		}
+		return nil, resultIdx, nil, err
 	}
 }
 
@@ -2249,6 +2275,7 @@ func planSelectionOperators(
 // 'inputIdx' coming from input of type 'fromType' into a column of type
 // 'toType' that will be output at index 'resultIdx'.
 func planCastOperator(
+	ctx context.Context,
 	columnTypes []*types.T,
 	input colexecop.Operator,
 	inputIdx int,
@@ -2258,7 +2285,7 @@ func planCastOperator(
 	evalCtx *eval.Context,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	outputIdx := len(columnTypes)
-	op, err = colexecbase.GetCastOperator(allocator, input, inputIdx, outputIdx, fromType, toType, evalCtx)
+	op, err = colexecbase.GetCastOperator(ctx, allocator, input, inputIdx, outputIdx, fromType, toType, evalCtx)
 	typs = append(columnTypes, toType)
 	return op, outputIdx, typs, err
 }
@@ -2315,7 +2342,7 @@ func planProjectionOperators(
 					leftExpr = tree.NewTypedCastExpr(leftExpr, types.String)
 				} else {
 					// This is unexpected.
-					return op, resultIdx, typs, errors.New("neither LHS or RHS of Concat operation is a STRING")
+					return op, resultIdx, typs, errors.AssertionFailedf("neither LHS or RHS of Concat operation is a STRING")
 				}
 			}
 		}
@@ -2394,7 +2421,7 @@ func planProjectionOperators(
 				// is given). In such case, we need to plan a cast.
 				fromType, toType := typs[thenIdxs[i]], typs[caseOutputIdx]
 				caseOps[i], thenIdxs[i], typs, err = planCastOperator(
-					typs, caseOps[i], thenIdxs[i], fromType, toType, allocator, evalCtx,
+					ctx, typs, caseOps[i], thenIdxs[i], fromType, toType, allocator, evalCtx,
 				)
 				if err != nil {
 					return nil, resultIdx, typs, err
@@ -2420,7 +2447,7 @@ func planProjectionOperators(
 			elseIdx := thenIdxs[len(t.Whens)]
 			fromType, toType := typs[elseIdx], typs[caseOutputIdx]
 			elseOp, thenIdxs[len(t.Whens)], typs, err = planCastOperator(
-				typs, elseOp, elseIdx, fromType, toType, allocator, evalCtx,
+				ctx, typs, elseOp, elseIdx, fromType, toType, allocator, evalCtx,
 			)
 			if err != nil {
 				return nil, resultIdx, typs, err
@@ -2438,7 +2465,7 @@ func planProjectionOperators(
 		if err != nil {
 			return nil, 0, nil, err
 		}
-		op, resultIdx, typs, err = planCastOperator(typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), allocator, evalCtx)
+		op, resultIdx, typs, err = planCastOperator(ctx, typs, op, resultIdx, expr.ResolvedType(), t.ResolvedType(), allocator, evalCtx)
 		return op, resultIdx, typs, err
 	case *tree.CoalesceExpr:
 		// We handle CoalesceExpr by planning the equivalent CASE expression.
@@ -2592,7 +2619,11 @@ func planProjectionOperators(
 		typs = append(typs, outputType)
 		return op, resultIdx, typs, err
 	default:
-		return nil, resultIdx, nil, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
+		err = errUnhandledProjectionExpression
+		if log.ExpensiveLogEnabled(ctx, 1) {
+			err = errors.Newf("unhandled projection expression type: %s", reflect.TypeOf(t))
+		}
+		return nil, resultIdx, nil, err
 	}
 }
 
@@ -2619,15 +2650,6 @@ func safeTypesForBinOrCmpExpr(leftTyp, rightTyp *types.T) bool {
 	}
 	return false
 }
-
-var errBinaryExprWithDatums = unimplemented.NewWithIssue(
-	49780, "datum-backed arguments on both sides and not datum-backed "+
-		"output of a binary expression is currently not supported",
-)
-var errMixedTypeBinaryUnsupported = unimplemented.NewWithIssue(
-	46198, "dates and timestamptz not supported in mixed-type binary "+
-		"expressions in the vectorized engine",
-)
 
 func checkSupportedBinaryExpr(left, right tree.TypedExpr, outputType *types.T) error {
 	leftTyp := left.ResolvedType()
@@ -2659,11 +2681,6 @@ func checkSupportedBinaryExpr(left, right tree.TypedExpr, outputType *types.T) e
 
 	return nil
 }
-
-var errMixedTypeComparisonUnsupported = unimplemented.NewWithIssue(
-	44770, "dates and timestamp(tz) not supported in mixed-type "+
-		"comparison expressions in the vectorized engine",
-)
 
 func checkSupportedComparisonExpr(left, right tree.TypedExpr) error {
 	leftTyp := left.ResolvedType()

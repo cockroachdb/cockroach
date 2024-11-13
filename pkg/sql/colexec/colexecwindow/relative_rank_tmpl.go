@@ -87,7 +87,7 @@ func NewRelativeRankOperator(
 			relativeRankInitFields: rrInitFields,
 		}, nil
 	default:
-		return nil, errors.Errorf("unsupported relative rank type %s", windowFn)
+		return nil, errors.AssertionFailedf("unsupported relative rank type %s", windowFn)
 	}
 }
 

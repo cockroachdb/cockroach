@@ -320,7 +320,7 @@ func newJoinReader(
 	case lookupJoinReaderType:
 		lookupCols = spec.LookupColumns
 	default:
-		return nil, errors.Errorf("unsupported joinReaderType")
+		return nil, errors.AssertionFailedf("unsupported joinReaderType")
 	}
 	// The joiner has a choice to make between getting DistSender-level
 	// parallelism for its lookup batches and setting row and memory limits (due
@@ -394,7 +394,7 @@ func newJoinReader(
 	case lookupJoinReaderType:
 		leftTypes = input.OutputTypes()
 	default:
-		return nil, errors.Errorf("unsupported joinReaderType")
+		return nil, errors.AssertionFailedf("unsupported joinReaderType")
 	}
 	rightTypes := spec.FetchSpec.FetchedColumnTypes()
 

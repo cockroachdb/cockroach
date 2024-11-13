@@ -91,7 +91,7 @@ func New_UPPERCASE_NAMEOperator(
 		}
 		// {{end}}
 	}
-	return nil, errors.Errorf("unsupported _OP_NAME window operator type %s", argType.Name())
+	return nil, errors.AssertionFailedf("unsupported _OP_NAME window operator type %s", argType.Name())
 }
 
 type _OP_NAMEBase struct {
