@@ -85,7 +85,7 @@ func (mb *mutationBuilder) buildRowLevelBeforeTriggers(
 
 		// Resolve the trigger function and build the invocation.
 		args := mb.buildTriggerFunctionArgs(trigger, eventType, oldColID, newColID)
-		triggerFn, def := mb.b.buildTriggerFunction(triggers[i], tableTyp, args)
+		triggerFn, def := mb.b.buildTriggerFunction(triggers[i], mb.tab.ID(), tableTyp, args)
 
 		// If there is a WHEN condition, wrap the trigger function invocation in a
 		// CASE WHEN statement that checks the WHEN condition.
@@ -711,7 +711,7 @@ func (tb *rowLevelAfterTriggerBuilder) Build(
 			}
 
 			// Resolve the trigger function and build the invocation.
-			triggerFn, def := b.buildTriggerFunction(trigger, tableTyp, args)
+			triggerFn, def := b.buildTriggerFunction(trigger, tb.mutatedTable.ID(), tableTyp, args)
 
 			// If there is a WHEN condition, wrap the trigger function invocation in a
 			// CASE WHEN statement that checks the WHEN condition.
@@ -762,17 +762,31 @@ func (tb *rowLevelAfterTriggerBuilder) Build(
 // Shared logic
 // ============================================================================
 
+type cachedTriggerFunc struct {
+	triggerName tree.Name
+	funDef      *memo.UDFDefinition
+	resolved    *tree.ResolvedFunctionDefinition
+}
+
 // buildTriggerFunction resolves and builds a trigger function invocation for
 // the given trigger, using the given arguments.
 func (b *Builder) buildTriggerFunction(
-	trigger cat.Trigger, tableTyp *types.T, args memo.ScalarListExpr,
+	trigger cat.Trigger, tableID cat.StableID, tableTyp *types.T, args memo.ScalarListExpr,
 ) (opt.ScalarExpr, *tree.ResolvedFunctionDefinition) {
+	cached := b.builtTriggerFuncs[tableID]
+	for _, cachedFunc := range cached {
+		if cachedFunc.triggerName == trigger.Name() {
+			private := &memo.UDFCallPrivate{Def: cachedFunc.funDef}
+			return b.factory.ConstructUDFCall(args, private), cachedFunc.resolved
+		}
+	}
+
 	f := b.factory
 	triggerFuncScope := b.allocScope()
 	funcRef := &tree.FunctionOID{OID: catid.FuncIDToOID(catid.DescID(trigger.FuncID()))}
 	funcExpr := tree.FuncExpr{Func: tree.ResolvableFunctionReference{FunctionReference: funcRef}}
 	triggerFuncScope.resolveType(&funcExpr, types.Any)
-	def := funcExpr.Func.FunctionReference.(*tree.ResolvedFunctionDefinition)
+	resolvedDef := funcExpr.Func.FunctionReference.(*tree.ResolvedFunctionDefinition)
 	o := funcExpr.ResolvedOverload()
 
 	// Build the set of parameters for the trigger function. The parameters are
@@ -790,34 +804,47 @@ func (b *Builder) buildTriggerFunction(
 		paramCols[colOrd] = col.id
 	}
 
+	// Initialize and cache the UDF definition before building the function body.
+	// This is necessary to handle recursive triggers.
+	//
+	// All triggers are called on NULL input.
+	const calledOnNullInput = true
+	const isTriggerFunc = true
+	udfDef := &memo.UDFDefinition{
+		Name:              resolvedDef.Name,
+		Typ:               tableTyp,
+		Volatility:        o.Volatility,
+		CalledOnNullInput: calledOnNullInput,
+		TriggerFunc:       isTriggerFunc,
+		RoutineType:       o.Type,
+		RoutineLang:       o.Language,
+		Params:            paramCols,
+	}
+	if b.builtTriggerFuncs == nil {
+		b.builtTriggerFuncs = make(map[cat.StableID][]cachedTriggerFunc)
+	}
+	b.builtTriggerFuncs[tableID] = append(b.builtTriggerFuncs[tableID],
+		cachedTriggerFunc{
+			triggerName: trigger.Name(),
+			funDef:      udfDef,
+			resolved:    resolvedDef,
+		},
+	)
+
 	// Parse and build the function body.
 	stmt, err := plpgsql.Parse(trigger.FuncBody())
 	if err != nil {
 		panic(err)
 	}
 	plBuilder := newPLpgSQLBuilder(
-		b, def.Name, stmt.AST.Label, nil /* colRefs */, params, tableTyp,
+		b, resolvedDef.Name, stmt.AST.Label, nil /* colRefs */, params, tableTyp,
 		false /* isProc */, true /* buildSQL */, nil, /* outScope */
 	)
 	stmtScope := plBuilder.buildRootBlock(stmt.AST, triggerFuncScope, params)
+	udfDef.Body = []memo.RelExpr{stmtScope.expr}
+	udfDef.BodyProps = []*physical.Required{stmtScope.makePhysicalProps()}
 
-	// All triggers are called on NULL input.
-	const calledOnNullInput = true
-	return f.ConstructUDFCall(args,
-		&memo.UDFCallPrivate{
-			Def: &memo.UDFDefinition{
-				Name:              def.Name,
-				Typ:               tableTyp,
-				Volatility:        o.Volatility,
-				CalledOnNullInput: calledOnNullInput,
-				RoutineType:       o.Type,
-				RoutineLang:       o.Language,
-				Body:              []memo.RelExpr{stmtScope.expr},
-				BodyProps:         []*physical.Required{stmtScope.makePhysicalProps()},
-				Params:            paramCols,
-			},
-		},
-	), def
+	return f.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: udfDef}), resolvedDef
 }
 
 // buildTriggerWhen wraps the trigger function invocation in a CASE WHEN
