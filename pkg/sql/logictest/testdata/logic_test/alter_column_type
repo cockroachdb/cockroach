@@ -1011,20 +1011,21 @@ t_bytes     CREATE TABLE public.t_bytes (
 statement ok
 DROP TABLE t_bytes;
 
-subtest validation_only_decimal
+subtest rewrite_decimal
 
 statement ok
-CREATE TABLE t_decimal (c1 DECIMAL(20,5), c2 DECIMAL(10,5), FAMILY F1(c1,c2,rowid));
+CREATE TABLE t_decimal (c1 DECIMAL(20,5), c2 DECIMAL(10,5), c3 DECIMAL(10,0), FAMILY F1(c1,c2,c3,rowid));
 
 statement ok
-INSERT INTO t_decimal VALUES (12345.6, 1.23456),(NULL,NULL),(100012.34,4563.21);
+INSERT INTO t_decimal VALUES (12345.6, 1.23456, 44.1234),(NULL,NULL,NULL),(100012.34,4563.21,22.9871),(99.77777,99.77777,-5.51);
 
-query FF
+query FFF
 SELECT * FROM t_decimal ORDER BY c1;
 ----
-NULL  NULL
-12345.6  1.23456
-100012.34  4563.21
+NULL  NULL  NULL
+99.77777 99.77777 -6
+12345.6  1.23456 44
+100012.34  4563.21 23
 
 # Reduce the overall precision of the decimal
 statement error pq: .*value with precision 7, scale 2 must round to an absolute value less than 10\^5
@@ -1037,37 +1038,29 @@ UPDATE t_decimal SET c1 = 10012.34 WHERE c1 = 100012.34;
 statement ok
 ALTER TABLE t_decimal ALTER COLUMN c1 SET DATA TYPE DECIMAL(7,2);
 
-# Reduce just the scale of the decimal. The legacy schema changer doesn't
-# properly detect this case.
-skipif config local-legacy-schema-changer
-statement error pq: validation of CHECK ".*" failed on row.*
-ALTER TABLE t_decimal ALTER COLUMN c2 SET DATA TYPE DECIMAL(10,2);
-
-query FF
-SELECT * FROM t_decimal ORDER BY c1;
-----
-NULL         NULL
-10012.34000  4563.21000
-12345.60000  1.23456
-
-statement ok
-UPDATE t_decimal SET c2 = 1.23 WHERE c1 = 12345.6;
-
 statement ok
 ALTER TABLE t_decimal ALTER COLUMN c2 SET DATA TYPE DECIMAL(10,2);
 
-query FF
+statement ok
+ALTER TABLE t_decimal ALTER COLUMN c3 SET DATA TYPE DECIMAL(5,2);
+
+statement ok
+ALTER TABLE t_decimal ALTER COLUMN c3 SET DATA TYPE DECIMAL(6,1);
+
+query FFF
 SELECT * FROM t_decimal ORDER BY c1;
 ----
-NULL  NULL
-10012.34  4563.21
-12345.60  1.23
+NULL         NULL NULL
+99.78 99.78 -6.0
+10012.34  4563.21 23.0
+12345.60  1.23 44.0
 
 query TTBTTTB rowsort
 SHOW COLUMNS FROM t_decimal;
 ----
 c1     DECIMAL(7,2)  true   NULL            ·  {t_decimal_pkey}  false
 c2     DECIMAL(10,2) true   NULL            ·  {t_decimal_pkey}  false
+c3     DECIMAL(6,1)  true   NULL            ·  {t_decimal_pkey}  false
 rowid  INT8          false  unique_rowid()  ·  {t_decimal_pkey}  true
 
 query TT colnames
@@ -1077,9 +1070,10 @@ table_name  create_statement
 t_decimal   CREATE TABLE public.t_decimal (
               c1 DECIMAL(7,2) NULL,
               c2 DECIMAL(10,2) NULL,
+              c3 DECIMAL(6,1) NULL,
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT t_decimal_pkey PRIMARY KEY (rowid ASC),
-              FAMILY f1 (c1, c2, rowid)
+              FAMILY f1 (c1, c2, c3, rowid)
             )
 
 statement ok
