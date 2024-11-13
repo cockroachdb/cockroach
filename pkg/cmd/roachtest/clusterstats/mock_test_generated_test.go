@@ -37,6 +37,18 @@ func (m *MockTest) EXPECT() *MockTestMockRecorder {
 	return m.recorder
 }
 
+// AddParam mocks base method.
+func (m *MockTest) AddParam(arg0, arg1 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddParam", arg0, arg1)
+}
+
+// AddParam indicates an expected call of AddParam.
+func (mr *MockTestMockRecorder) AddParam(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddParam", reflect.TypeOf((*MockTest)(nil).AddParam), arg0, arg1)
+}
+
 // ArtifactsDir mocks base method.
 func (m *MockTest) ArtifactsDir() string {
 	m.ctrl.T.Helper()

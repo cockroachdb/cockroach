@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
@@ -122,26 +123,27 @@ func TestCreatePostRequest(t *testing.T) {
 	const testName = "github_test"
 
 	type githubIssueOpts struct {
-		failures               []failure
-		runtimeAssertionsBuild bool
-		coverageBuild          bool
-		loadTeamsFailed        bool
+		failures        []failure
+		loadTeamsFailed bool
 	}
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "github"), func(t *testing.T, path string) {
 		clusterSpec := reg.MakeClusterSpec(1)
 
 		testSpec := &registry.TestSpec{
-			Name:    testName,
-			Owner:   OwnerUnitTest,
-			Cluster: clusterSpec,
+			Name:            testName,
+			Owner:           OwnerUnitTest,
+			Cluster:         clusterSpec,
+			CockroachBinary: registry.StandardCockroach,
 		}
 
 		ti := &testImpl{
-			spec:  testSpec,
-			l:     nilLogger(),
-			start: time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC),
-			end:   time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC),
+			spec:        testSpec,
+			l:           nilLogger(),
+			start:       time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC),
+			end:         time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC),
+			cockroach:   "cockroach",
+			cockroachEA: "cockroach-short",
 		}
 
 		testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
@@ -173,9 +175,10 @@ func TestCreatePostRequest(t *testing.T) {
 				}
 				message := b.String()
 
+				params := getTestParameters(ti, github.cluster, github.vmCreateOpts)
 				req, err := github.createPostRequest(
 					testName, ti.start, ti.end, testSpec, testCase.failures,
-					message, "https://app.side-eye.io/snapshots/1", testCase.runtimeAssertionsBuild, testCase.coverageBuild,
+					message, "https://app.side-eye.io/snapshots/1", roachtestutil.UsingRuntimeAssertions(ti), ti.goCoverEnabled, params,
 				)
 				if testCase.loadTeamsFailed {
 					// Assert that if TEAMS.yaml cannot be loaded then function errors.
@@ -230,6 +233,8 @@ func TestCreatePostRequest(t *testing.T) {
 				testCase.failures = append(testCase.failures, createFailure(refError))
 			case "add-label":
 				ti.spec.ExtraLabels = append(ti.spec.ExtraLabels, d.CmdArgs[0].Vals...)
+			case "add-param":
+				ti.AddParam(d.CmdArgs[0].Vals[0], d.CmdArgs[1].Vals[0])
 			case "set-cluster-create-failed":
 				// We won't have either if cluster create fails.
 				vmOpts = nil
@@ -240,9 +245,9 @@ func TestCreatePostRequest(t *testing.T) {
 				teamLoadFn = invalidTeamsFn
 				testCase.loadTeamsFailed = true
 			case "set-runtime-assertions-build":
-				testCase.runtimeAssertionsBuild = true
+				ti.spec.CockroachBinary = registry.RuntimeAssertionsCockroach
 			case "set-coverage-enabled-build":
-				testCase.coverageBuild = true
+				ti.goCoverEnabled = true
 			}
 
 			return "ok"
@@ -289,7 +294,7 @@ func formatPostRequest(req issues.PostRequest) (string, error) {
 	q.Add("title", formatter.Title(data))
 	q.Add("body", post.String())
 	u.RawQuery = q.Encode()
-	post.WriteString(fmt.Sprintf("Rendered:%s", u.String()))
+	post.WriteString(fmt.Sprintf("Rendered:\n%s", u.String()))
 
 	return post.String(), nil
 }
