@@ -306,6 +306,7 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/iterutil",
         "//pkg/util/json",
+        "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logcrash",

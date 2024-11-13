@@ -1451,7 +1451,7 @@ func TestRangeFeedIntentResolutionRace(t *testing.T) {
 	}
 	eventC := make(chan *kvpb.RangeFeedEvent)
 	sink := newChannelSink(ctx, eventC)
-	_, rErr := s3.RangeFeed(sink.ctx, &req, sink)
+	_, rErr := s3.RangeFeed(sink.ctx, &req, sink, nil)
 	require.NoError(t, rErr) // check if we've errored yet
 	require.NoError(t, sink.Error())
 	t.Logf("started rangefeed on %s", repl3)
@@ -1874,6 +1874,102 @@ func TestRangeFeedMetadataAutoSplit(t *testing.T) {
 			require.NotEqual(t, sp.Key, meta.Span.Key)
 			require.Equal(t, sp.EndKey, meta.Span.EndKey)
 			require.Equal(t, sp.Key, meta.ParentStartKey)
+		}
+	})
+}
+
+// TestRangefeedCatchupStarvation tests that a single MuxRangefeed
+// call cannot starve other users. Note that starvation is still
+// possible if there are more than 2 consumers of a given range.
+func TestRangefeedCatchupStarvation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunValues(t, "feed_type", feedTypes, func(t *testing.T, rt rangefeedTestType) {
+		ctx := context.Background()
+		settings := cluster.MakeTestingClusterSettings()
+		kvserver.RangefeedUseBufferedSender.Override(ctx, &settings.SV, rt.useBufferedSender)
+		kvserver.RangefeedEnabled.Override(ctx, &settings.SV, true)
+		// Lower the limit to make it more likely to get starved.
+		kvserver.ConcurrentRangefeedItersLimit.Override(ctx, &settings.SV, 8)
+		kvserver.PerConsumerCatchupLimit.Override(ctx, &settings.SV, 6)
+		srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
+			Settings: settings,
+		})
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
+		ts := s.Clock().Now()
+		scratchKey := append(s.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+		scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+		mkKey := func(k string) roachpb.Key {
+			return encoding.EncodeStringAscending(scratchKey, k)
+		}
+		ranges := 32
+		keysPerRange := 128
+		totalKeys := ranges * keysPerRange
+		for i := range ranges {
+			for j := range keysPerRange {
+				k := mkKey(fmt.Sprintf("%d-%d", i, j))
+				require.NoError(t, db.Put(ctx, k, 1))
+			}
+			_, _, err := srv.SplitRange(mkKey(fmt.Sprintf("%d", i)))
+			require.NoError(t, err)
+		}
+
+		span := roachpb.Span{Key: scratchKey, EndKey: scratchKey.PrefixEnd()}
+		f, err := rangefeed.NewFactory(s.AppStopper(), db, s.ClusterSettings(), nil)
+		require.NoError(t, err)
+
+		blocked := make(chan struct{})
+		r1, err := f.RangeFeed(ctx, "consumer-1-rf-1", []roachpb.Span{span}, ts,
+			func(ctx context.Context, value *kvpb.RangeFeedValue) {
+				blocked <- struct{}{}
+				<-ctx.Done()
+			},
+			rangefeed.WithConsumerID(1),
+		)
+		require.NoError(t, err)
+		defer r1.Close()
+		<-blocked
+
+		// Multiple rangefeeds from the same ConsumeID should
+		// be treated as the same consumer and thus they
+		// shouldn't be able to overwhelm the overall store
+		// quota.
+		for i := range 8 {
+			r1, err := f.RangeFeed(ctx, fmt.Sprintf("consumer-1-rf-%d", i+2), []roachpb.Span{span}, ts,
+				func(ctx context.Context, value *kvpb.RangeFeedValue) { <-ctx.Done() },
+				rangefeed.WithConsumerID(1),
+			)
+			require.NoError(t, err)
+			defer r1.Close()
+		}
+
+		// Despite 9 rangefeeds above each needing 32 catchup
+		// scans, the following rangefeed should always make
+		// progress because it has a different consumer ID.
+		r2ConsumedRow := make(chan roachpb.Key)
+		r2, err := f.RangeFeed(ctx, "rf2", []roachpb.Span{span}, ts,
+			func(ctx context.Context, value *kvpb.RangeFeedValue) {
+				r2ConsumedRow <- value.Key
+			},
+			rangefeed.WithConsumerID(2),
+		)
+		require.NoError(t, err)
+		defer r2.Close()
+
+		// Wait until we see every key we've writen on rf2.
+		seen := make(map[string]struct{}, 0)
+		for {
+			select {
+			case r := <-r2ConsumedRow:
+				seen[r.String()] = struct{}{}
+				if len(seen) >= totalKeys {
+					return
+				}
+			case <-time.After(testutils.DefaultSucceedsSoonDuration):
+				t.Fatal("test timed out")
+			}
 		}
 	})
 }
