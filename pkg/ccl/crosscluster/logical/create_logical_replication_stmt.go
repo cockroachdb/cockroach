@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -141,7 +143,6 @@ func createLogicalReplicationStreamPlanHook(
 			srcTableNames      = make([]string, len(stmt.From.Tables))
 			repPairs           = make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(stmt.Into.Tables))
 			srcTableDescs      = make([]*descpb.TableDescriptor, len(stmt.Into.Tables))
-			dstTableDescs      = make([]*tabledesc.Mutable, len(stmt.Into.Tables))
 		)
 		for i := range stmt.From.Tables {
 
@@ -155,7 +156,6 @@ func createLogicalReplicationStreamPlanHook(
 				return err
 			}
 			repPairs[i].DstDescriptorID = int32(td.GetID())
-			dstTableDescs[i] = td
 
 			tbNameWithSchema := tree.MakeTableNameWithSchema(
 				tree.Name(prefix.Database.GetName()),
@@ -177,6 +177,25 @@ func createLogicalReplicationStreamPlanHook(
 				}
 			}
 		}
+		if !p.ExtendedEvalContext().TxnIsSingleStmt {
+			return errors.New("cannot CREATE LOGICAL REPLICATION STREAM in a multi-statement transaction")
+		}
+
+		// Commit the planner txn because several operations below may take several
+		// seconds, which we would like to conduct outside the scope of the planner
+		// txn to prevent txn refresh errors.
+		if err := p.Txn().Commit(ctx); err != nil {
+			return err
+		}
+		// Release all descriptor leases here. We need to do this because we're
+		// about run schema changes below to lock the replicating tables. Note that
+		// we committed the underlying transaction above -- so we're not using any
+		// leases anymore, but we might be holding some.
+		//
+		// This is all a bit of a hack to deal with the fact that the usual
+		// machinery for releasing leases assumes that we do not close the planner
+		// txn during statement execution.
+		p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
 
 		streamAddress := crosscluster.StreamAddress(from)
 		streamURL, err := streamAddress.URL()
@@ -261,48 +280,56 @@ func createLogicalReplicationStreamPlanHook(
 		if cr, ok := options.GetDefaultFunction(); ok {
 			defaultConflictResolution = *cr
 		}
-
-		if buildutil.CrdbTestBuild {
-			if len(srcTableDescs) != len(dstTableDescs) {
-				panic("srcTableDescs and dstTableDescs should have the same length")
+		return p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			dstTableDescs := make([]*tabledesc.Mutable, 0, len(srcTableDescs))
+			for _, pair := range repPairs {
+				dstTableDesc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, catid.DescID(pair.DstDescriptorID))
+				if err != nil {
+					return err
+				}
+				dstTableDescs = append(dstTableDescs, dstTableDesc)
 			}
-		}
-		for i := range srcTableDescs {
-			err := tabledesc.CheckLogicalReplicationCompatibility(srcTableDescs[i], dstTableDescs[i].TableDesc(), options.SkipSchemaCheck())
-			if err != nil {
+
+			if buildutil.CrdbTestBuild {
+				if len(srcTableDescs) != len(dstTableDescs) {
+					panic("srcTableDescs and dstTableDescs should have the same length")
+				}
+			}
+			for i := range srcTableDescs {
+				err := tabledesc.CheckLogicalReplicationCompatibility(srcTableDescs[i], dstTableDescs[i].TableDesc(), options.SkipSchemaCheck())
+				if err != nil {
+					return err
+				}
+			}
+
+			jr := jobs.Record{
+				JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
+				Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, cleanedURI),
+				Username:    p.User(),
+				Details: jobspb.LogicalReplicationDetails{
+					StreamID:                  uint64(spec.StreamID),
+					SourceClusterID:           spec.SourceClusterID,
+					ReplicationStartTime:      replicationStartTime,
+					SourceClusterConnStr:      string(streamAddress),
+					ReplicationPairs:          repPairs,
+					TableNames:                srcTableNames,
+					DefaultConflictResolution: defaultConflictResolution,
+					Discard:                   discard,
+					Mode:                      mode,
+					MetricsLabel:              options.metricsLabel,
+				},
+				Progress: progress,
+			}
+
+			if err := replicationutils.LockLDRTables(ctx, txn, dstTableDescs, jr.JobID); err != nil {
 				return err
 			}
-		}
-
-		jr := jobs.Record{
-			JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
-			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, cleanedURI),
-			Username:    p.User(),
-			Details: jobspb.LogicalReplicationDetails{
-				StreamID:                  uint64(spec.StreamID),
-				SourceClusterID:           spec.SourceClusterID,
-				ReplicationStartTime:      replicationStartTime,
-				SourceClusterConnStr:      string(streamAddress),
-				ReplicationPairs:          repPairs,
-				TableNames:                srcTableNames,
-				DefaultConflictResolution: defaultConflictResolution,
-				Discard:                   discard,
-				Mode:                      mode,
-				MetricsLabel:              options.metricsLabel,
-			},
-			Progress: progress,
-		}
-
-		if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, p.InternalSQLTxn()); err != nil {
-			return err
-		}
-
-		if err := replicationutils.LockLDRTables(ctx, p.InternalSQLTxn(), dstTableDescs, jr.JobID); err != nil {
-			return err
-		}
-
-		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jr.JobID))}
-		return nil
+			if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
+				return err
+			}
+			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jr.JobID))}
+			return nil
+		})
 	}
 
 	return fn, streamCreationHeader, nil, false, nil
