@@ -19,7 +19,7 @@ var _ gwruntime.Marshaler = (*ProtoPb)(nil)
 type ProtoPb struct{}
 
 // ContentType implements gwruntime.Marshaler.
-func (*ProtoPb) ContentType() string {
+func (*ProtoPb) ContentType(_ interface{}) string {
 	// NB: This is the same as httputil.ProtoContentType which we can't use due
 	// to an import cycle.
 	const ProtoContentType = "application/x-protobuf"

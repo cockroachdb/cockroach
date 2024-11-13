@@ -26,7 +26,7 @@ var typeProtoMessage = reflect.TypeOf((*proto.Message)(nil)).Elem()
 type JSONPb jsonpb.Marshaler
 
 // ContentType implements gwruntime.Marshaler.
-func (*JSONPb) ContentType() string {
+func (*JSONPb) ContentType(_ interface{}) string {
 	// NB: This is the same as httputil.JSONContentType which we can't use due to
 	// an import cycle.
 	const JSONContentType = "application/json"
