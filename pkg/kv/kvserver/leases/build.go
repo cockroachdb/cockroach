@@ -174,6 +174,9 @@ func (i BuildInput) validate() error {
 	if i.Now.IsEmpty() {
 		return errors.AssertionFailedf("no clock timestamp provided")
 	}
+	if i.Now.Less(i.MinLeaseProposedTS) {
+		return errors.AssertionFailedf("clock timestamp earlier than minimum lease proposed timestamp")
+	}
 	if i.RaftStatus == nil {
 		return errors.AssertionFailedf("no raft status provided")
 	}
@@ -595,17 +598,17 @@ func prevLeaseManipulation(
 		return PrevLeaseManipulation{}
 	case i.Extension():
 		// If the previous lease has its expiration extended indirectly (i.e. not
-		// through a lease record update) and we are switching lease types, we must
-		// take care to ensure that the expiration does not regress. This is more
-		// involved than the common case because the lease's expiration may continue
-		// to advance on its own if we take no action. We avoid any expiration
-		// regression by revoking the lease and then advancing the minimum
-		// expiration of the next lease beyond the maximum expiration that the
-		// previous lease had.
+		// through a lease record update) and we are switching lease types before it
+		// has expired, we must take care to ensure that the expiration does not
+		// regress. This is more involved than the common case because the lease's
+		// expiration may continue to advance on its own if we take no action. We
+		// avoid any expiration regression by revoking the lease and then advancing
+		// the minimum expiration of the next lease beyond the maximum expiration
+		// that the previous lease had.
 		prevType := i.PrevLease.Type()
 		indirectExp := prevType != roachpb.LeaseExpiration
 		switchingType := prevType != nextLease.Type()
-		if indirectExp && switchingType && st.MinExpirationSupported {
+		if indirectExp && switchingType && !i.PrevLeaseExpired && st.MinExpirationSupported {
 			return PrevLeaseManipulation{
 				RevokeAndForwardNextExpiration: true,
 			}

@@ -46,6 +46,22 @@ func TestInputValidation(t *testing.T) {
 			expErr: "no lease target provided",
 		},
 		{
+			name: "no timestamp",
+			input: BuildInput{
+				NextLeaseHolder: repl2,
+			},
+			expErr: "no clock timestamp provided",
+		},
+		{
+			name: "invalid minimum lease proposed timestamp",
+			input: BuildInput{
+				NextLeaseHolder:    repl2,
+				Now:                cts20,
+				MinLeaseProposedTS: cts30,
+			},
+			expErr: "clock timestamp earlier than minimum lease proposed timestamp",
+		},
+		{
 			name: "remote transfer",
 			input: BuildInput{
 				LocalStoreID:    repl1.StoreID,
@@ -919,6 +935,30 @@ func TestBuild(t *testing.T) {
 				},
 			},
 			{
+				name: "switch epoch to expiration, previous expired",
+				st:   useExpirationSettings(),
+				input: func() BuildInput {
+					i := defaultInput
+					i.Now = cts30
+					i.PrevLeaseExpired = true
+					return i
+				}(),
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts30,
+						Expiration:            &ts50,
+						DeprecatedStartStasis: &ts50,
+						Sequence:              8, // sequence changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+					NodeLivenessManipulation: NodeLivenessManipulation{
+						Heartbeat: &defaultNodeLivenessRecord(repl1.NodeID).Liveness,
+					},
+				},
+			},
+			{
 				name:  "switch leader lease to expiration",
 				st:    useExpirationSettings(),
 				input: leaderInput,
@@ -952,6 +992,27 @@ func TestBuild(t *testing.T) {
 					},
 					PrevLeaseManipulation: PrevLeaseManipulation{
 						RevokeAndForwardNextExpiration: true,
+					},
+				},
+			},
+			{
+				name: "switch leader lease to expiration, prev expired",
+				st:   useExpirationSettings(),
+				input: func() BuildInput {
+					i := leaderInput
+					i.Now = cts30
+					i.PrevLeaseExpired = true
+					return i
+				}(),
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts30,
+						Expiration:            &ts50,
+						DeprecatedStartStasis: &ts50,
+						Sequence:              8, // sequence changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
 					},
 				},
 			},
