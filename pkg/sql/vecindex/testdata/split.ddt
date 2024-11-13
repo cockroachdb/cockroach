@@ -1,0 +1,106 @@
+# Simple partition split cases.
+
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
+----
+• 1 (0, 0)
+
+# Insert enough vectors in the store to trigger a split of the root.
+insert
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+vec4: (8, 11)
+vec5: (14, 1)
+----
+• 1 (6.0833, 3.9167)
+│
+├───• 2 (2.5, 2.5)
+│   │
+│   ├───• vec1 (1, 2)
+│   └───• vec3 (4, 3)
+│
+└───• 3 (9.6667, 5.3333)
+    │
+    ├───• vec2 (7, 4)
+    ├───• vec4 (8, 11)
+    └───• vec5 (14, 1)
+
+# Trigger another split, this time of a child.
+insert
+vec6: (8, 6)
+vec7: (5, 8)
+----
+• 1 (6.0833, 3.9167)
+│
+├───• 2 (2.5, 2.5)
+│   │
+│   ├───• vec1 (1, 2)
+│   └───• vec3 (4, 3)
+│
+├───• 4 (9.6667, 3.6667)
+│   │
+│   ├───• vec2 (7, 4)
+│   ├───• vec6 (8, 6)
+│   └───• vec5 (14, 1)
+│
+└───• 5 (6.5, 9.5)
+    │
+    ├───• vec4 (8, 11)
+    └───• vec7 (5, 8)
+
+# Trigger another split that adds a level to the tree.
+insert
+vec8: (-2, -3)
+vec9: (4, 2)
+vec10: (3, 5)
+vec11: (3, 2)
+vec12: (4, 4)
+----
+• 1 (4.0694, 3.4028)
+│
+├───• 10 (6.5556, 5.8889)
+│   │
+│   ├───• 5 (6.5, 9.5)
+│   │   │
+│   │   ├───• vec4 (8, 11)
+│   │   └───• vec7 (5, 8)
+│   │
+│   ├───• 4 (9.6667, 3.6667)
+│   │   │
+│   │   ├───• vec2 (7, 4)
+│   │   ├───• vec6 (8, 6)
+│   │   └───• vec5 (14, 1)
+│   │
+│   └───• 8 (3.5, 4.5)
+│       │
+│       ├───• vec12 (4, 4)
+│       └───• vec10 (3, 5)
+│
+└───• 11 (1.5833, 0.9167)
+    │
+    ├───• 7 (-0.5, -0.5)
+    │   │
+    │   ├───• vec8 (-2, -3)
+    │   └───• vec1 (1, 2)
+    │
+    └───• 9 (3.6667, 2.3333)
+        │
+        ├───• vec3 (4, 3)
+        ├───• vec9 (4, 2)
+        └───• vec11 (3, 2)
+
+# Search for closest vectors with beam-size=1.
+search max-results=2 beam-size=1
+(1, 3)
+----
+vec11: 5 (centroid=0.7454)
+vec3: 9 (centroid=0.7454)
+3 leaf vectors, 7 vectors, 3 full vectors, 3 partitions
+
+# Search for closest vectors with beam-size=2.
+search max-results=2 beam-size=2
+(1, 3)
+----
+vec1: 1 (centroid=2.9155)
+vec11: 5 (centroid=0.7454)
+5 leaf vectors, 9 vectors, 4 full vectors, 4 partitions
