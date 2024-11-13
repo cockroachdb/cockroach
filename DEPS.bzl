@@ -3893,10 +3893,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_gogo_protobuf.patch",
         ],
-        sha256 = "b141558c028173692c88c2ad48bf821969b4f297a09e653082718bce4aa06525",
-        strip_prefix = "github.com/cockroachdb/gogoproto@v1.3.3-0.20241112020851-af1104e4bb72",
+        sha256 = "359fb7974cb0a35be21377a09463216c3f276c063ec8382309a791c0b36f8c4b",
+        strip_prefix = "github.com/cockroachdb/gogoproto@v1.3.3-0.20241113180206-a3a930603783",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/gogoproto/com_github_cockroachdb_gogoproto-v1.3.3-0.20241112020851-af1104e4bb72.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/gogoproto/com_github_cockroachdb_gogoproto-v1.3.3-0.20241113180206-a3a930603783.zip",
         ],
     )
     go_repository(
