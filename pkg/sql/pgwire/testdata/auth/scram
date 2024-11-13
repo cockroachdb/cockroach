@@ -77,11 +77,11 @@ ERROR: password authentication failed for user abc (SQLSTATE 28P01)
 authlog 5
 .*client_connection_end
 ----
-5 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-6 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all password","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
-7 {"Detail":"password authentication failed for user abc","EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"tcp","Reason":"CREDENTIALS_INVALID","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
-8 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-9 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+2 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+3 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all password","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+4 {"Detail":"password authentication failed for user abc","EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"tcp","Reason":"CREDENTIALS_INVALID","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+5 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+6 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect user=abc password=abc
 ----
@@ -90,11 +90,11 @@ ok defaultdb
 authlog 5
 .*client_connection_end
 ----
-10 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-11 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all password","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
-12 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
-13 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-14 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+7 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+8 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all password","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+9 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+10 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+11 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect user=abc2 password=abc
 ----
@@ -103,11 +103,11 @@ ok defaultdb
 authlog 5
 .*client_connection_end
 ----
-15 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-16 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc2 all password","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
-17 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl","User":"abc2"}
-18 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-19 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+12 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+13 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc2 all password","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
+14 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl","User":"abc2"}
+15 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+16 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -144,11 +144,11 @@ ERROR: password authentication failed for user foo (SQLSTATE 28P01)
 authlog 5
 .*client_connection_end
 ----
-20 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-21 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-22 {"Detail":"user password hash not in SCRAM format","EventType":"client_authentication_failed","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-23 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-24 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+17 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+18 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+19 {"Detail":"user password hash not in SCRAM format","EventType":"client_authentication_failed","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+20 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+21 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 # User abc has SCRAM credentials, but 'mistake' is not its password.
 # Expect authn error.
@@ -159,11 +159,11 @@ ERROR: password authentication failed for user abc (SQLSTATE 28P01)
 authlog 5
 .*client_connection_end
 ----
-25 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-26 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
-27 {"Detail":"scram handshake error: challenge proof invalid","EventType":"client_authentication_failed","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
-28 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-29 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+22 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+23 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+24 {"Detail":"scram handshake error: challenge proof invalid","EventType":"client_authentication_failed","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+25 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+26 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect user=abc password=abc
 ----
@@ -172,11 +172,11 @@ ok defaultdb
 authlog 5
 .*client_connection_end
 ----
-30 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-31 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
-32 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
-33 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-34 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+27 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+28 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+29 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+30 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+31 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect user=abc2 password=abc
 ----
@@ -185,11 +185,11 @@ ok defaultdb
 authlog 5
 .*client_connection_end
 ----
-35 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-36 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc2 all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
-37 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl","User":"abc2"}
-38 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-39 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+32 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+33 {"EventType":"client_authentication_info","Info":"HBA rule: host all abc2 all scram-sha-256","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
+34 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl","User":"abc2"}
+35 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+36 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -223,12 +223,12 @@ ok defaultdb
 authlog 6
 .*client_connection_end
 ----
-40 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-41 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
-42 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
-43 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"testuser"}
-44 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-45 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+37 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+38 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
+39 {"EventType":"client_authentication_info","Info":"client presented certificate, proceeding with certificate validation","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl"}
+40 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"testuser","Timestamp":"XXX","Transport":"hostssl","User":"testuser"}
+41 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+42 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -241,12 +241,12 @@ ERROR: password authentication failed for user foo (SQLSTATE 28P01)
 authlog 6
 .*client_connection_end
 ----
-46 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-47 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-48 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with SCRAM authentication","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-49 {"Detail":"user password hash not in SCRAM format","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-50 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-51 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+43 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+44 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+45 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with SCRAM authentication","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+46 {"Detail":"user password hash not in SCRAM format","EventType":"client_authentication_failed","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","Reason":"PRE_HOOK_ERROR","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+47 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+48 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect user=abc password=abc
 ----
@@ -255,12 +255,12 @@ ok defaultdb
 authlog 6
 .*client_connection_end
 ----
-52 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-53 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
-54 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with SCRAM authentication","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
-55 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
-56 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-57 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+49 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+50 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+51 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with SCRAM authentication","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+52 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+53 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+54 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect user=abc2 password=abc
 ----
@@ -269,12 +269,12 @@ ok defaultdb
 authlog 6
 .*client_connection_end
 ----
-58 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-59 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
-60 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with SCRAM authentication","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
-61 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl","User":"abc2"}
-62 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-63 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+55 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+56 {"EventType":"client_authentication_info","Info":"HBA rule: host all all all cert-scram-sha-256","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
+57 {"EventType":"client_authentication_info","Info":"no client certificate, proceeding with SCRAM authentication","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl"}
+58 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-scram-sha-256","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc2","Timestamp":"XXX","Transport":"hostssl","User":"abc2"}
+59 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+60 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -309,13 +309,13 @@ ok defaultdb
 authlog 7
 .*client_connection_end
 ----
-64 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-65 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-66 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-67 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-68 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-69 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-70 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+61 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+62 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+63 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+64 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+65 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+66 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+67 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 connect user=abc password=abc
 ----
@@ -325,11 +325,11 @@ ok defaultdb
 authlog 5
 .*client_connection_end
 ----
-73 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
-74 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
-75 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
-76 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-77 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+70 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl"}
+71 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+72 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"abc","Timestamp":"XXX","Transport":"hostssl","User":"abc"}
+73 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+74 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -361,13 +361,13 @@ ok defaultdb
 authlog 7
 .*client_connection_end
 ----
-78 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-79 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-80 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-81 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-82 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-83 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-84 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+75 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+76 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+77 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+78 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+79 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+80 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+81 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 # Verify the stored hash has been converted now.
 sql
@@ -384,13 +384,13 @@ ok defaultdb
 authlog 7
 .*client_connection_end
 ----
-85 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-86 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-87 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-88 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-89 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-90 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-91 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+82 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+83 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+84 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+85 {"EventType":"client_authentication_info","Info":"no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+86 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+87 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+88 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 sql
 -- change back to bcrypt.
@@ -407,13 +407,13 @@ ok defaultdb
 authlog 7
 .*client_connection_end
 ----
-92 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-93 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-94 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-95 {"EventType":"client_authentication_info","Info":"found stored SCRAM-SHA-256 credentials but cluster is configured to downgrade to bcrypt; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-96 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-97 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-98 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+89 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+90 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+91 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+92 {"EventType":"client_authentication_info","Info":"found stored SCRAM-SHA-256 credentials but cluster is configured to downgrade to bcrypt; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+93 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+94 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+95 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 # Verify the stored hash has been converted to bcrypt now.
 sql
@@ -430,13 +430,13 @@ ok defaultdb
 authlog 7
 .*client_connection_end
 ----
-99 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-100 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-101 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-102 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-103 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-104 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-105 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+96 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+97 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+98 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+99 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+100 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+101 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+102 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 sql
 -- change back to SCRAM for future tests, and connect again to cause the upgrade.
@@ -452,13 +452,13 @@ ok defaultdb
 authlog 7
 .*client_connection_end
 ----
-106 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-107 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-108 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-109 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-110 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-111 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-112 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+103 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+104 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+105 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+106 {"EventType":"client_authentication_info","Info":"found stored crdb-bcrypt credentials; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+107 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+108 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+109 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
 
@@ -483,12 +483,12 @@ ok defaultdb
 authlog 7
 .*client_connection_end
 ----
-113 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-114 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-115 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
-116 {"EventType":"client_authentication_info","Info":"found stored SCRAM-SHA-256 credentials but cluster is configured to re-hash after SCRAM cost change; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-117 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
-118 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
-119 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+110 {"EventType":"client_connection_start","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+111 {"EventType":"client_authentication_info","Info":"HBA rule: host all foo all cert-password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+112 {"EventType":"client_authentication_info","Info":"client did not present TLS certificate","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl"}
+113 {"EventType":"client_authentication_info","Info":"found stored SCRAM-SHA-256 credentials but cluster is configured to re-hash after SCRAM cost change; requesting cleartext password","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+114 {"EventType":"client_authentication_ok","InstanceID":1,"Method":"cert-password","Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","SystemIdentity":"foo","Timestamp":"XXX","Transport":"hostssl","User":"foo"}
+115 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
+116 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"tcp","RemoteAddress":"XXX","SessionID":"XXX","Timestamp":"XXX"}
 
 subtest end
