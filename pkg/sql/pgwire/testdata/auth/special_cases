@@ -29,7 +29,7 @@ loopback all      all  all       trust
 host     all      root all       cert-password
 host     all      root 0.0.0.0/0 password
 
-connect user=root password=abc sslmode=verify-ca sslcert=
+connect user=root password=abc sslmode=verify-ca sslcert= sslkey=
 ----
 ERROR: password authentication failed for user root (SQLSTATE 28P01)
 
@@ -63,7 +63,7 @@ loopback all      all      all       trust
 host     all      root     all       cert-password
 host     all      testuser 0.0.0.0/0 cert
 
-connect user=testuser password=pass sslmode=verify-ca sslcert=
+connect user=testuser password=pass sslmode=verify-ca sslcert= sslkey=
 ----
 ERROR: no TLS peer certificates, but required for auth (SQLSTATE 28000)
 
