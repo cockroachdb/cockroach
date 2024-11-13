@@ -116,6 +116,7 @@ func RegisterTests(r registry.Registry) {
 	registerRebalanceLoad(r)
 	registerReplicaGC(r)
 	registerRestart(r)
+	registerRestartRollingAndRolling(r)
 	registerRestore(r)
 	registerRestoreNodeShutdown(r)
 	registerOnlineRestorePerf(r)
