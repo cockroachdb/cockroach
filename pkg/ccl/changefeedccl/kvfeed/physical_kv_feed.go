@@ -31,6 +31,7 @@ type rangeFeedConfig struct {
 	Spans         []kvcoord.SpanTimePair
 	WithDiff      bool
 	WithFiltering bool
+	ConsumerID    int64
 	RangeObserver kvcoord.RangeObserver
 	Knobs         TestingKnobs
 	Timers        *timers.ScopedTimers

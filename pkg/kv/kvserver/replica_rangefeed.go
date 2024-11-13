@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -241,6 +242,7 @@ func (r *Replica) RangeFeed(
 	args *kvpb.RangeFeedRequest,
 	stream rangefeed.Stream,
 	pacer *admission.Pacer,
+	perConsumerCatchupLimiter *limit.ConcurrentRequestLimiter,
 ) (rangefeed.Disconnector, error) {
 	streamCtx = r.AnnotateCtx(streamCtx)
 
@@ -281,8 +283,18 @@ func (r *Replica) RangeFeed(
 	iterSemRelease := func() {}
 	if !args.Timestamp.IsEmpty() {
 		usingCatchUpIter = true
+		perConsumerRelease := func() {}
+		if perConsumerCatchupLimiter != nil {
+			perConsumerAlloc, err := perConsumerCatchupLimiter.Begin(streamCtx)
+			if err != nil {
+				return nil, err
+			}
+			perConsumerRelease = perConsumerAlloc.Release
+		}
+
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(streamCtx)
 		if err != nil {
+			perConsumerRelease()
 			return nil, err
 		}
 
@@ -296,7 +308,11 @@ func (r *Replica) RangeFeed(
 		// scan.
 		var iterSemReleaseOnce sync.Once
 		iterSemRelease = func() {
-			iterSemReleaseOnce.Do(alloc.Release)
+			iterSemReleaseOnce.Do(func() {
+				alloc.Release()
+				perConsumerRelease()
+			})
+
 		}
 	}
 
