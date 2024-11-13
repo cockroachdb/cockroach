@@ -340,6 +340,7 @@ func TestKeySchema_RandomKeys(t *testing.T) {
 	var it colblk.DataBlockIter
 	it.InitOnce(&keySchema, EngineKeyCompare, EngineKeySplit, nil)
 	require.NoError(t, it.Init(&dec, block.NoTransforms))
+	// Ensure that a scan across the block finds all the relevant keys.
 	for k, kv := 0, it.First(); kv != nil; k, kv = k+1, it.Next() {
 		require.True(t, EngineKeyEqual(keys[k], kv.K.UserKey))
 		require.Zero(t, EngineKeyCompare(keys[k], kv.K.UserKey))
@@ -353,5 +354,19 @@ func TestKeySchema_RandomKeys(t *testing.T) {
 		}
 		checkEngineKey(kv.K.UserKey)
 	}
+	// Ensure that seeking to each key finds the key.
+	for i := range keys {
+		kv := it.SeekGE(keys[i], 0)
+		require.True(t, EngineKeyEqual(keys[i], kv.K.UserKey))
+		require.Zero(t, EngineKeyCompare(keys[i], kv.K.UserKey))
+	}
+	// Ensure seeking to just the prefix of each key finds a key with the same
+	// prefix.
+	for i := range keys {
+		si := EngineKeySplit(keys[i])
+		kv := it.SeekGE(keys[i][:si], 0)
+		require.True(t, EngineKeyEqual(keys[i][:si], pebble.Split(EngineKeySplit).Prefix(kv.K.UserKey)))
+	}
+
 	require.NoError(t, it.Close())
 }
