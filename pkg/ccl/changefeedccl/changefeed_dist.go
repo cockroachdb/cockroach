@@ -77,6 +77,7 @@ func distChangefeedFlow(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
+	description string,
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
 ) error {
@@ -132,7 +133,7 @@ func distChangefeedFlow(
 		}
 	}
 	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, initialHighWater, localState, resultsCh)
+		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh)
 }
 
 func fetchTableDescriptors(
@@ -227,6 +228,7 @@ func startDistChangefeed(
 	jobID jobspb.JobID,
 	schemaTS hlc.Timestamp,
 	details jobspb.ChangefeedDetails,
+	description string,
 	initialHighWater hlc.Timestamp,
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
@@ -259,7 +261,7 @@ func startDistChangefeed(
 	if progress := localState.progress.GetChangefeed(); progress != nil && progress.Checkpoint != nil {
 		checkpoint = progress.Checkpoint
 	}
-	p, planCtx, err := makePlan(execCtx, jobID, details, initialHighWater,
+	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
 		trackedSpans, checkpoint, localState.drainingNodes)(ctx, dsp)
 	if err != nil {
 		return err
@@ -373,6 +375,7 @@ func makePlan(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
+	description string,
 	initialHighWater hlc.Timestamp,
 	trackedSpans []roachpb.Span,
 	checkpoint *jobspb.ChangefeedProgress_Checkpoint,
@@ -476,12 +479,13 @@ func makePlan(
 			}
 
 			aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
-				Watches:    watches,
-				Checkpoint: aggregatorCheckpoint,
-				Feed:       details,
-				UserProto:  execCtx.User().EncodeProto(),
-				JobID:      jobID,
-				Select:     execinfrapb.Expression{Expr: details.Select},
+				Watches:     watches,
+				Checkpoint:  aggregatorCheckpoint,
+				Feed:        details,
+				UserProto:   execCtx.User().EncodeProto(),
+				JobID:       jobID,
+				Select:      execinfrapb.Expression{Expr: details.Select},
+				Description: description,
 			}
 		}
 
@@ -494,6 +498,7 @@ func makePlan(
 			Feed:         details,
 			JobID:        jobID,
 			UserProto:    execCtx.User().EncodeProto(),
+			Description:  description,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
