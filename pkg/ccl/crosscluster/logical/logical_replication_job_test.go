@@ -2288,4 +2288,21 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	dbA.Exec(t, "CANCEL JOB $1", jobAID)
 	jobutils.WaitForJobToCancel(t, dbA, jobAID)
 	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
+
+	// Add different default values to to the source and dest, verify the stream
+	// can be created, and that the default value is sent over the wire.
+	dbA.Exec(t, "CREATE TABLE tab2 (pk INT PRIMARY KEY, payload STRING DEFAULT 'cat')")
+	dbB.Exec(t, "CREATE TABLE b.tab2 (pk INT PRIMARY KEY, payload STRING DEFAULT 'dog')")
+	dbB.Exec(t, "Insert into tab2 values (1)")
+	dbA.QueryRow(t,
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab2 ON $1 INTO TABLE tab2",
+		dbBURL.String(),
+	).Scan(&jobAID)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, jobAID)
+	dbA.CheckQueryResults(t, "SELECT * FROM tab2", [][]string{{"1", "dog"}})
+
+	// Kill replication job.
+	dbA.Exec(t, "CANCEL JOB $1", jobAID)
+	jobutils.WaitForJobToCancel(t, dbA, jobAID)
+	replicationtestutils.WaitForAllProducerJobsToFail(t, dbB)
 }
