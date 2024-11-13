@@ -216,8 +216,9 @@ func (km *BalancedKmeans) assignPartitions() (leftOffsets, rightOffsets []uint64
 	}
 
 	// Arg sort by the distance differences in order of increasing distance to
-	// the left centroid, relative to the right centroid.
-	slices.SortFunc(km.offsets, func(i, j uint64) int {
+	// the left centroid, relative to the right centroid. Use a stable sort to
+	// ensure that tests are deterministic.
+	slices.SortStableFunc(km.offsets, func(i, j uint64) int {
 		return cmp.Compare(tempDistances[i], tempDistances[j])
 	})
 

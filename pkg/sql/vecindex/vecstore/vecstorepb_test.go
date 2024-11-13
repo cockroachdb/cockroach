@@ -25,4 +25,13 @@ func TestChildKey(t *testing.T) {
 	require.False(t, childKey3.Equal(childKey4))
 	require.False(t, childKey1.Equal(childKey5))
 	require.False(t, childKey4.Equal(childKey5))
+
+	// Compare method.
+	require.Equal(t, 0, childKey1.Compare(childKey1))
+	require.Equal(t, -1, childKey1.Compare(childKey2))
+	require.Equal(t, 1, childKey2.Compare(childKey1))
+
+	require.Equal(t, 0, childKey3.Compare(childKey3))
+	require.Equal(t, -1, childKey3.Compare(childKey4))
+	require.Equal(t, 1, childKey4.Compare(childKey3))
 }

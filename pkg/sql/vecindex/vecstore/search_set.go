@@ -55,26 +55,48 @@ func (r *SearchResult) MaybeCloser(r2 *SearchResult) bool {
 	return r.QuerySquaredDistance-r.ErrorBound <= r2.QuerySquaredDistance+r2.ErrorBound
 }
 
-// searchResultHeap implements heap.Interface for a min-heap of SearchResult
-// It compares using negative distances, since SearchSet needs to discard
-// results with the highest distances.
-type searchResultHeap []SearchResult
+// Compare returns an integer comparing two search results. The result is zero
+// if the two are equal, -1 if this result is less than the other, and +1 if
+// this result is greater than the other. Results are ordered by distance. If
+// distances are equal, then the highest error bound breaks ties. If error
+// bounds are equal, then the child key breaks ties.
+func (r *SearchResult) Compare(r2 *SearchResult) int {
+	// Compare distances.
+	distance1 := r.QuerySquaredDistance
+	distance2 := r2.QuerySquaredDistance
+	if distance1 < distance2 {
+		return -1
+	} else if distance1 > distance2 {
+		return 1
+	}
+
+	// Compare error bounds.
+	errorBound1 := r.ErrorBound
+	errorBound2 := r2.ErrorBound
+	if errorBound1 < errorBound2 {
+		return -1
+	} else if errorBound1 > errorBound2 {
+		return 1
+	}
+
+	// Compare child keys.
+	return r.ChildKey.Compare(r2.ChildKey)
+}
+
+// searchResultHeap implements heap.Interface for a max-heap of SearchResult.
+// Since the heap data structure is a min-heap, Less inverts its result to make
+// it into a max-heap. This is needed so that SearchSet can discard results
+// with the highest distances.
+type searchResultHeap SearchResults
 
 // Len implements heap.Interface.
 func (h searchResultHeap) Len() int { return len(h) }
 
 // Less implements heap.Interface.
 func (h searchResultHeap) Less(i, j int) bool {
-	distance1 := h[i].QuerySquaredDistance
-	distance2 := h[j].QuerySquaredDistance
-	if -distance1 < -distance2 {
-		return true
-	}
-	if distance1 == distance2 && h[i].ErrorBound < h[j].ErrorBound {
-		// If distance is equal, lower error bound sorts first.
-		return true
-	}
-	return false
+	// Flip the result of comparison in order to turn the min-heap into a
+	// max-heap.
+	return h[i].Compare(&h[j]) > 0
 }
 
 // Swap implements heap.Interface.
