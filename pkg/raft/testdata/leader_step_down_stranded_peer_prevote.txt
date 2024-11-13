@@ -344,65 +344,26 @@ stabilize 1 3
 > 1 receiving messages
   3->1 MsgAppResp Term:3 Log:0/0
   INFO 1 [logterm: 1, index: 11, vote: 1] ignored MsgAppResp from 3 [logterm: 0, index: 0] at term 1: supporting fortified leader 1 at epoch 1
-  INFO 1 [term: 1] received a MsgAppResp message with higher term from 3 [term: 3], stepping down as leader to recover stranded peer
-  INFO 1 became follower at term 1
-  DEBUG 1 reset election elapsed to 0
+  INFO 1 [term: 1] received a MsgAppResp message with higher term from 3 [term: 3], intending to step down as leader to recover stranded peer
   3->1 MsgAppResp Term:3 Log:0/0
   INFO 1 [logterm: 1, index: 11, vote: 1] ignored MsgAppResp from 3 [logterm: 0, index: 0] at term 1: supporting fortified leader 1 at epoch 1
-  INFO 1 [term: 1] received a MsgAppResp message with higher term from 3 [term: 3], ignoring and still supporting fortified leader
-> 1 handling Ready
-  Ready MustSync=false:
-  State:StateFollower
+  INFO 1 [term: 1] received a MsgAppResp message with higher term from 3 [term: 3], intending to step down as leader to recover stranded peer
 
-# Wait until the ex-leader can be safely defortified.
-campaign 1
+# Now that we are intending to step down, we should step down after the support
+# expired on the next tick.
+support-expired 1
 ----
-DEBUG 1 ignoring MsgHup due to leader fortification
+ok
 
-send-de-fortify 1 1
+tick-heartbeat 1
 ----
 DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
+INFO 1 became follower at term 3
+DEBUG 1 reset election elapsed to 0
 
-# With pre-vote, the ex-leader will learn about the higher term from the stranded
-# peer during the first time that it campaigns. When it campaigns again, it will
-# do so at the higher term and will be able to win the election.
-campaign 1
+support-expired 1 reset
 ----
-INFO 1 is starting a new election at term 1
-INFO 1 became pre-candidate at term 1
-INFO 1 [logterm: 1, index: 11] sent MsgPreVote request to 2 at term 1
-INFO 1 [logterm: 1, index: 11] sent MsgPreVote request to 3 at term 1
-
-stabilize
-----
-> 1 handling Ready
-  Ready MustSync=true:
-  State:StatePreCandidate
-  HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
-  Messages:
-  1->2 MsgPreVote Term:2 Log:1/11
-  1->3 MsgPreVote Term:2 Log:1/11
-  INFO 1 received MsgPreVoteResp from 1 at term 1
-  INFO 1 has received 1 MsgPreVoteResp votes and 0 vote rejections
-> 2 receiving messages
-  1->2 MsgPreVote Term:2 Log:1/11
-  INFO 2 [logterm: 1, index: 11, vote: 1] ignored MsgPreVote from 1 [logterm: 1, index: 11] at term 1: supporting fortified leader 1 at epoch 1
-> 3 receiving messages
-  1->3 MsgPreVote Term:2 Log:1/11
-  INFO 3 [logterm: 1, index: 10, vote: 3] rejected MsgPreVote from 1 [logterm: 1, index: 11] at term 3
-> 3 handling Ready
-  Ready MustSync=false:
-  Messages:
-  3->1 MsgPreVoteResp Term:3 Log:0/0 Rejected (Hint: 0)
-> 1 receiving messages
-  3->1 MsgPreVoteResp Term:3 Log:0/0 Rejected (Hint: 0)
-  INFO 1 [term: 1] received a MsgPreVoteResp message with higher term from 3 [term: 3], advancing term
-  INFO 1 became follower at term 3
-  DEBUG 1 reset election elapsed to 0
-> 1 handling Ready
-  Ready MustSync=true:
-  State:StateFollower
-  HardState Term:3 Commit:11 Lead:0 LeadEpoch:0
+ok
 
 campaign 1
 ----
@@ -414,30 +375,43 @@ INFO 1 [logterm: 1, index: 11] sent MsgPreVote request to 3 at term 3
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   State:StatePreCandidate
+  HardState Term:3 Commit:11 Lead:0 LeadEpoch:0
   Messages:
+  1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  1->3 MsgDeFortifyLeader Term:1 Log:0/0
   1->2 MsgPreVote Term:4 Log:1/11
   1->3 MsgPreVote Term:4 Log:1/11
   INFO 1 received MsgPreVoteResp from 1 at term 3
   INFO 1 has received 1 MsgPreVoteResp votes and 0 vote rejections
 > 2 receiving messages
+  1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
   1->2 MsgPreVote Term:4 Log:1/11
-  INFO 2 [logterm: 1, index: 11, vote: 1] ignored MsgPreVote from 1 [logterm: 1, index: 11] at term 1: supporting fortified leader 1 at epoch 1
+  INFO 2 [logterm: 1, index: 11, vote: 1] cast MsgPreVote for 1 [logterm: 1, index: 11] at term 1
 > 3 receiving messages
+  1->3 MsgDeFortifyLeader Term:1 Log:0/0
+  INFO 3 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 1 [term: 1]
   1->3 MsgPreVote Term:4 Log:1/11
   INFO 3 [logterm: 1, index: 10, vote: 3] cast MsgPreVote for 1 [logterm: 1, index: 11] at term 3
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+  Messages:
+  2->1 MsgPreVoteResp Term:4 Log:0/0
 > 3 handling Ready
   Ready MustSync=false:
   Messages:
   3->1 MsgPreVoteResp Term:4 Log:0/0
 > 1 receiving messages
-  3->1 MsgPreVoteResp Term:4 Log:0/0
-  INFO 1 received MsgPreVoteResp from 3 at term 3
+  2->1 MsgPreVoteResp Term:4 Log:0/0
+  INFO 1 received MsgPreVoteResp from 2 at term 3
   INFO 1 has received 2 MsgPreVoteResp votes and 0 vote rejections
   INFO 1 became candidate at term 4
   INFO 1 [logterm: 1, index: 11] sent MsgVote request to 2 at term 4
   INFO 1 [logterm: 1, index: 11] sent MsgVote request to 3 at term 4
+  3->1 MsgPreVoteResp Term:4 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:
   State:StateCandidate
@@ -449,13 +423,21 @@ stabilize
   INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 > 2 receiving messages
   1->2 MsgVote Term:4 Log:1/11
-  INFO 2 [logterm: 1, index: 11, vote: 1] ignored MsgVote from 1 [logterm: 1, index: 11] at term 1: supporting fortified leader 1 at epoch 1
+  INFO 2 [term: 1] received a MsgVote message with higher term from 1 [term: 4], advancing term
+  INFO 2 became follower at term 4
+  DEBUG 2 reset election elapsed to 0
+  INFO 2 [logterm: 1, index: 11, vote: 0] cast MsgVote for 1 [logterm: 1, index: 11] at term 4
 > 3 receiving messages
   1->3 MsgVote Term:4 Log:1/11
   INFO 3 [term: 3] received a MsgVote message with higher term from 1 [term: 4], advancing term
   INFO 3 became follower at term 4
   DEBUG 3 reset election elapsed to 0
   INFO 3 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 11] at term 4
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:4 Vote:1 Commit:11 Lead:0 LeadEpoch:0
+  Messages:
+  2->1 MsgVoteResp Term:4 Log:0/0
 > 3 handling Ready
   Ready MustSync=true:
   State:StateFollower
@@ -463,10 +445,11 @@ stabilize
   Messages:
   3->1 MsgVoteResp Term:4 Log:0/0
 > 1 receiving messages
-  3->1 MsgVoteResp Term:4 Log:0/0
-  INFO 1 received MsgVoteResp from 3 at term 4
+  2->1 MsgVoteResp Term:4 Log:0/0
+  INFO 1 received MsgVoteResp from 2 at term 4
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 1 became leader at term 4
+  3->1 MsgVoteResp Term:4 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:
   State:StateLeader
@@ -480,10 +463,6 @@ stabilize
   1->3 MsgApp Term:4 Log:1/11 Commit:11 Entries:[4/12 EntryNormal ""]
 > 2 receiving messages
   1->2 MsgFortifyLeader Term:4 Log:0/0
-  INFO 2 [term: 1] received a MsgFortifyLeader message with higher term from 1 [term: 4], new leader indicated, advancing term
-  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
-  INFO 2 became follower at term 4
-  DEBUG 2 reset election elapsed to 0
   1->2 MsgApp Term:4 Log:1/11 Commit:11 Entries:[4/12 EntryNormal ""]
 > 3 receiving messages
   1->3 MsgFortifyLeader Term:4 Log:0/0
@@ -491,7 +470,7 @@ stabilize
   DEBUG 3 [logterm: 0, index: 11] rejected MsgApp [logterm: 1, index: 11] from 1
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:4 Commit:11 Lead:1 LeadEpoch:1
+  HardState Term:4 Vote:1 Commit:11 Lead:1 LeadEpoch:1
   Entries:
   4/12 EntryNormal ""
   Messages:
@@ -535,7 +514,7 @@ stabilize
   ]
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:4 Commit:12 Lead:1 LeadEpoch:1
+  HardState Term:4 Vote:1 Commit:12 Lead:1 LeadEpoch:1
   CommittedEntries:
   4/12 EntryNormal ""
   Messages:
