@@ -888,6 +888,9 @@ func (v *validator) processOp(op Operation) {
 		if !transferLeaseResultIsIgnorable(t.Result) {
 			v.failIfError(op, t.Result) // fail on all other errors
 		}
+	case *ChangeSettingOperation:
+		execTimestampStrictlyOptional = true
+		v.failIfError(op, t.Result) // fail on all errors
 	case *ChangeZoneOperation:
 		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result) // fail on all errors
