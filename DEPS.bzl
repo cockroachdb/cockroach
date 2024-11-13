@@ -11472,10 +11472,10 @@ def go_deps():
         name = "org_golang_google_genproto_googleapis_api",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/genproto/googleapis/api",
-        sha256 = "c1edd4bce5227854998e5e952566fc315e9905b8e1161287379841cca31ac04a",
-        strip_prefix = "google.golang.org/genproto/googleapis/api@v0.0.0-20241021214115-324edc3d5d38",
+        sha256 = "d4e13bc80b29bc4a6abda54ca46694fb1e6026146ffba4cd16a644098b453889",
+        strip_prefix = "google.golang.org/genproto/googleapis/api@v0.0.0-20241104194629-dd2ea8efbc28",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/genproto/googleapis/api/org_golang_google_genproto_googleapis_api-v0.0.0-20241021214115-324edc3d5d38.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/genproto/googleapis/api/org_golang_google_genproto_googleapis_api-v0.0.0-20241104194629-dd2ea8efbc28.zip",
         ],
     )
     go_repository(
