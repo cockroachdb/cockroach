@@ -4,7 +4,11 @@
 # limiting (#102472).
 statement ok
 CREATE TABLE src (s STRING);
+
+statement ok
 CREATE TABLE dest (s STRING);
+
+statement ok
 INSERT INTO src SELECT repeat('a', 100000) FROM generate_series(1, 60)
 
 user host-cluster-root
@@ -36,6 +40,8 @@ user root
 
 statement ok
 DROP TABLE src;
+
+statement ok
 DROP TABLE dest
 
 # Regression test for UPSERT batching logic (#51391).
@@ -48,7 +54,11 @@ user root
 
 statement ok
 CREATE TABLE src (s STRING);
+
+statement ok
 CREATE TABLE dest (s STRING);
+
+statement ok
 INSERT INTO src
 SELECT
 	'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -69,11 +79,15 @@ user root
 
 statement ok
 DROP TABLE src;
+
+statement ok
 DROP TABLE dest
 
 # Regression test for finishing UPSERT too early (#54456).
 statement ok
 CREATE TABLE t54456 (c INT PRIMARY KEY);
+
+statement ok
 UPSERT INTO t54456 SELECT i FROM generate_series(1, 25000) AS i
 
 query I
