@@ -52,6 +52,7 @@ type cgroupDiskStaller struct {
 	c           cluster.Cluster
 	readOrWrite []bandwidthReadWrite
 	logsToo     bool
+	stores      int
 }
 
 var _ DiskStaller = (*cgroupDiskStaller)(nil)
@@ -61,7 +62,15 @@ func MakeCgroupDiskStaller(f Fataler, c cluster.Cluster, readsToo bool, logsToo 
 	if readsToo {
 		bwRW = append(bwRW, readBandwidth)
 	}
-	return &cgroupDiskStaller{f: f, c: c, readOrWrite: bwRW, logsToo: logsToo}
+	return &cgroupDiskStaller{f: f, c: c, readOrWrite: bwRW, logsToo: logsToo, stores: 1}
+}
+
+func MakeCgroupDiskStallerMultiStore(f Fataler, c cluster.Cluster, stores int) DiskStaller {
+	// TODO(pav-kv): clean this up. Have some kind of "options" instead of
+	// multiple funcs.
+	s := MakeCgroupDiskStaller(f, c, false /* readsToo */, false /* logsToo */)
+	s.(*cgroupDiskStaller).stores = stores
+	return s
 }
 
 func (s *cgroupDiskStaller) DataDir() string { return "{store-dir}" }
@@ -111,12 +120,13 @@ func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOp
 	}
 }
 
-func (s *cgroupDiskStaller) device(nodes option.NodeListOption) (major, minor int) {
+func (s *cgroupDiskStaller) device(nodes option.NodeListOption, store int) (major, minor int) {
 	// TODO(jackson): Programmatically determine the device major,minor numbers.
 	// eg,:
 	//    deviceName := getDevice(s.t, s.c)
 	//    `cat /proc/partitions` and find `deviceName`
-	res, err := s.c.RunWithDetailsSingleNode(context.TODO(), s.f.L(), option.WithNodes(nodes[:1]), "lsblk | grep /mnt/data1 | awk '{print $2}'")
+	res, err := s.c.RunWithDetailsSingleNode(context.TODO(), s.f.L(), option.WithNodes(nodes[:1]),
+		fmt.Sprintf("lsblk | grep /mnt/data%d | awk '{print $2}'", store))
 	if err != nil {
 		s.f.Fatalf("error when determining block device: %s", err)
 		return 0, 0
@@ -165,21 +175,26 @@ func (rw bandwidthReadWrite) cgroupV2BandwidthProp() string {
 func (s *cgroupDiskStaller) setThroughput(
 	ctx context.Context, nodes option.NodeListOption, rw bandwidthReadWrite, bw throughput,
 ) error {
-	maj, min := s.device(nodes)
 	cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", SystemInterfaceSystemdUnitName()+".service", "io.max")
-
 	bytesPerSecondStr := "max"
 	if bw.limited {
 		bytesPerSecondStr = fmt.Sprintf("%d", bw.bytesPerSecond)
 	}
-	return s.c.RunE(ctx, option.WithNodes(nodes), "sudo", "/bin/bash", "-c", fmt.Sprintf(
-		`'echo %d:%d %s=%s > %s'`,
-		maj,
-		min,
-		rw.cgroupV2BandwidthProp(),
-		bytesPerSecondStr,
-		cockroachIOController,
-	))
+
+	for store := 1; store <= s.stores; store++ {
+		maj, min := s.device(nodes, store)
+		if err := s.c.RunE(ctx, option.WithNodes(nodes), "sudo", "/bin/bash", "-c", fmt.Sprintf(
+			`'echo %d:%d %s=%s > %s'`,
+			maj,
+			min,
+			rw.cgroupV2BandwidthProp(),
+			bytesPerSecondStr,
+			cockroachIOController,
+		)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func GetDiskDevice(f Fataler, c cluster.Cluster, nodes option.NodeListOption) string {

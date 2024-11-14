@@ -33,8 +33,7 @@ func runRestartRollingAndRolling(ctx context.Context, t test.Test, c cluster.Clu
 	// Limit the disk throughput to 128 MiB/s, to more easily stress IO overload.
 	const diskBand = 128 << 20 // 128 MiB
 	t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", diskBand))
-	staller := roachtestutil.MakeCgroupDiskStaller(t, c,
-		false /* readsToo */, false /* logsToo */)
+	staller := roachtestutil.MakeCgroupDiskStallerMultiStore(t, c, 2)
 	staller.Unstall(ctx, c.CRDBNodes())
 	staller.Setup(ctx)
 
