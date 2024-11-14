@@ -123,6 +123,7 @@ message ReplicatedEvalResult {
   Merge merge = 4;
   ComputeChecksum compute_checksum = 21;
   bool is_lease_request = 6;
+  bool is_lease_transfer = 28;
   // Set to true for lease requests in v24.1 clusters, where new behavior in
   // Lease.Equivalent is supported which allows for expiration-based leases to
   // be promoted to epoch-based leases under the same lease sequence.
@@ -267,6 +268,8 @@ message ReplicatedEvalResult {
   }
 
   LinkExternalSSTable link_external_sstable = 27 [(gogoproto.customname) = "LinkExternalSSTable"];
+
+  // Next ID: 29
 
   reserved 1, 5, 7, 9, 10, 14, 15, 16, 19, 10001 to 10013;
 }

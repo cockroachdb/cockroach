@@ -90,7 +90,14 @@ func CheckForcedErr(
 				"rejected lease request %s; current lease %s; err: %s",
 				requestedLease, *replicaState.Lease, res.ForcedError)
 		}
+		if raftCmd.ReplicatedEvalResult.IsLeaseTransfer {
+			transferredLease := *raftCmd.ReplicatedEvalResult.State.Lease
+			log.Infof(ctx,
+				"rejected lease transfer %s; current lease %s; err: %s",
+				transferredLease, *replicaState.Lease, res.ForcedError)
+		}
 	}()
+
 	if raftCmd.ReplicatedEvalResult.IsProbe {
 		// A Probe is handled by forcing an error during application (which
 		// avoids a separate "success" code path for this type of request)
