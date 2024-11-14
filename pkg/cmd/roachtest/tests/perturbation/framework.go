@@ -92,6 +92,7 @@ type variations struct {
 	acceptableChange     float64
 	cloud                registry.CloudSet
 	acMode               admissionControlMode
+	diskBandwidthLimit   string
 	profileOptions       []roachtestutil.ProfileOptionFunc
 	specOptions          []spec.Option
 	clusterSettings      map[string]string
@@ -108,6 +109,7 @@ var numDisks = []int{1, 2}
 var memOptions = []spec.MemPerCPU{spec.Low, spec.Standard, spec.High}
 var cloudSets = []registry.CloudSet{registry.OnlyAWS, registry.OnlyGCE, registry.OnlyAzure}
 var admissionControlOptions = []admissionControlMode{elasticOnlyBoth, fullNormalElasticRepl, fullBoth}
+var diskBandwidthLimitOptions = []string{"0", "350MiB"}
 
 var leases = []registry.LeaseType{
 	registry.EpochLeases,
@@ -187,10 +189,12 @@ func (a admissionControlMode) getSettings() map[string]string {
 func (v variations) String() string {
 	return fmt.Sprintf("seed: %d, fillDuration: %s, maxBlockBytes: %d, perturbationDuration: %s, "+
 		"validationDuration: %s, ratioOfMax: %f, splits: %d, numNodes: %d, numWorkloadNodes: %d, "+
-		"vcpu: %d, disks: %d, memory: %s, leaseType: %s, cloud: %v, acMode: %s, perturbation: %+v",
+		"vcpu: %d, disks: %d, memory: %s, leaseType: %s, cloud: %v, acMode: %s, diskBandwidthLimit %s, "+
+		"perturbation: %+v",
 		v.seed, v.fillDuration, v.maxBlockBytes,
 		v.perturbationDuration, v.validationDuration, v.ratioOfMax, v.splits, v.numNodes, v.numWorkloadNodes,
-		v.vcpu, v.disks, v.mem, v.leaseType, v.cloud, v.acMode, v.perturbation)
+		v.vcpu, v.disks, v.mem, v.leaseType, v.cloud, v.acMode, v.diskBandwidthLimit,
+		v.perturbation)
 }
 
 // Normally a single worker can handle 20-40 nodes. If we find this is
@@ -213,6 +217,7 @@ func (v variations) randomize(rng *rand.Rand) variations {
 	v.cloud = registry.OnlyGCE
 	v.mem = memOptions[rng.Intn(len(memOptions))]
 	v.acMode = admissionControlOptions[rng.Intn(len(admissionControlOptions))]
+	v.diskBandwidthLimit = diskBandwidthLimitOptions[rng.Intn(len(diskBandwidthLimitOptions))]
 	return v
 }
 
@@ -233,6 +238,7 @@ func setup(p perturbation, acceptableChange float64) variations {
 	v.ratioOfMax = 0.5
 	v.cloud = registry.OnlyGCE
 	v.mem = spec.Standard
+	v.diskBandwidthLimit = "0"
 	v.perturbation = p
 	v.profileOptions = []roachtestutil.ProfileOptionFunc{
 		roachtestutil.ProfDbName("target"),
@@ -295,6 +301,7 @@ func (v variations) finishSetup() variations {
 	}
 	// Enable raft tracing. Remove this once raft tracing is the default.
 	v.clusterSettings["kv.raft.max_concurrent_traces"] = "10"
+	v.clusterSettings["kvadmission.store.provisioned_bandwidth"] = v.diskBandwidthLimit
 	return v
 }
 
@@ -326,6 +333,8 @@ func (v *variations) applyEnvOverride(key string, val string) (err error) {
 		if v.mem == -1 {
 			err = errors.Errorf("unknown memory setting: %s", val)
 		}
+	case "diskBandwidthLimit":
+		v.diskBandwidthLimit = val
 	case "leaseType":
 		for _, l := range leases {
 			if l.String() == val {
