@@ -2102,3 +2102,48 @@ statement ok
 DROP TABLE db1.t1_with_index_zone CASCADE;
 
 subtest end
+
+
+subtest invalid_zone_config
+
+statement ok
+CREATE DATABASE db_invalid_zone_config PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2"
+
+let $database_id
+select id from system.namespace WHERE name='db_invalid_zone_config'
+
+statement ok
+UPSERT INTO system.zones (id, config)
+VALUES
+	(
+		$database_id,
+		(
+			SELECT
+				crdb_internal.json_to_pb(
+					'cockroach.config.zonepb.ZoneConfig',
+					jsonb_set(
+						crdb_internal.pb_to_json(
+							'cockroach.config.zonepb.ZoneConfig',
+							config
+						),
+						ARRAY['rangeMinBytes'],
+						'-1'::JSONB
+					)
+				)
+			FROM
+				system.zones
+			WHERE
+				id = $database_id
+		)
+	);
+
+statement error RangeMinBytes -1 less than minimum allowed 0
+ALTER DATABASE db_invalid_zone_config ADD REGION 'us-east-1'
+
+statement error RangeMinBytes -1 less than minimum allowed 0
+ALTER DATABASE db_invalid_zone_config DROP REGION 'ap-southeast-2'
+
+statement error RangeMinBytes -1 less than minimum allowed 0
+ALTER DATABASE db_invalid_zone_config SET SECONDARY REGION 'us-east-1'
+
+subtest end
