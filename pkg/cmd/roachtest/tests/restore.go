@@ -167,7 +167,7 @@ func registerRestore(r registry.Registry) {
 				done := ctx.Done()
 				jobID := <-jobIDCh
 
-				jobProgressTick := time.NewTicker(time.Minute * 1)
+				jobProgressTick := time.NewTicker(time.Second * 5)
 				defer jobProgressTick.Stop()
 				for {
 					if pauseIndex == len(pauseAtProgress) {
