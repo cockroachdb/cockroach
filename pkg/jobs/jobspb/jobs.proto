@@ -1276,8 +1276,8 @@ message RowLevelTTLDetails {
 
 message RowLevelTTLProgress {
 
-  // JobRowCount is the number of deleted rows for the entire TTL job.
-  int64 job_row_count = 1;
+  // JobDeletedRowCount is the number of rows deleted by TTL job so far.
+  int64 job_deleted_row_count = 1;
 
   // ProcessorProgresses is the progress per DistSQL processor.
   repeated RowLevelTTLProcessorProgress processor_progresses = 2 [(gogoproto.nullable)=false];
@@ -1285,8 +1285,12 @@ message RowLevelTTLProgress {
   // UseDistSQL is no longer used in v23.1+ as all TTL jobs are using DistSQL.
   reserved 3;
 
-  // JobSpanCount is the number of spans for the entire TTL job.
-  int64 job_span_count = 4;
+  // JobTotalSpanCount is the number of spans for the entire TTL job.
+  int64 job_total_span_count = 4;
+
+  // JobProcessedSpanCount is the number of spans that have been processed by
+  // the TTL job so far.
+  int64 job_processed_span_count = 5;
 }
 
 message RowLevelTTLProcessorProgress {

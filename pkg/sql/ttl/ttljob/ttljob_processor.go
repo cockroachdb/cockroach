@@ -165,7 +165,53 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	if processorSpanCount < processorConcurrency {
 		processorConcurrency = processorSpanCount
 	}
-	var processorRowCount int64
+	var processorRowCount atomic.Int64
+	var spansProccessedSinceLastUpdate atomic.Int64
+	var rowsProccessedSinceLastUpdate atomic.Int64
+
+	// Update progress for approximately every 1% of spans processed.
+	updateEvery := max(1, processorSpanCount/100)
+	updateFractionCompleted := func() error {
+		jobID := ttlSpec.JobID
+		spansToAdd := spansProccessedSinceLastUpdate.Swap(0)
+		rowsToAdd := rowsProccessedSinceLastUpdate.Swap(0)
+
+		var jobRowCount, jobSpanCount int64
+		var fractionCompleted float32
+
+		err := jobRegistry.UpdateJobWithTxn(
+			ctx,
+			jobID,
+			nil, /* txn */
+			func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				progress := md.Progress
+				rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
+				rowLevelTTL.JobProcessedSpanCount += spansToAdd
+				rowLevelTTL.JobDeletedRowCount += rowsToAdd
+				jobRowCount = rowLevelTTL.JobDeletedRowCount
+				jobSpanCount = rowLevelTTL.JobTotalSpanCount
+
+				fractionCompleted = float32(rowLevelTTL.JobProcessedSpanCount) / float32(rowLevelTTL.JobTotalSpanCount)
+				progress.Progress = &jobspb.Progress_FractionCompleted{
+					FractionCompleted: fractionCompleted,
+				}
+
+				ju.UpdateProgress(progress)
+				return nil
+			},
+		)
+		if err != nil {
+			return err
+		}
+		processorID := t.ProcessorID
+		log.Infof(
+			ctx,
+			"TTL fractionCompleted updated processorID=%d tableID=%d jobRowCount=%d jobSpanCount=%d fractionCompleted=%.3f",
+			processorID, tableID, jobRowCount, jobSpanCount, fractionCompleted,
+		)
+		return nil
+	}
+
 	err = func() error {
 		boundsChan := make(chan QueryBounds, processorConcurrency)
 		defer close(boundsChan)
@@ -205,7 +251,9 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 						deleteBuilder,
 					)
 					// add before returning err in case of partial success
-					atomic.AddInt64(&processorRowCount, spanRowCount)
+					processorRowCount.Add(spanRowCount)
+					rowsProccessedSinceLastUpdate.Add(spanRowCount)
+					spansProccessedSinceLastUpdate.Add(1)
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
@@ -238,6 +286,15 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			} else if hasRows {
 				// Only process bounds from spans with rows inside them.
 				boundsChan <- bounds
+			} else {
+				// If the span has no rows, we still need to increment the processed
+				// count.
+				spansProccessedSinceLastUpdate.Add(1)
+			}
+			if spansProccessedSinceLastUpdate.Load() >= updateEvery {
+				if err := updateFractionCompleted(); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -247,6 +304,9 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	}
 
 	if err := group.Wait(); err != nil {
+		return err
+	}
+	if err := updateFractionCompleted(); err != nil {
 		return err
 	}
 
@@ -259,21 +319,24 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
 			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
-			rowLevelTTL.JobRowCount += processorRowCount
 			processorID := t.ProcessorID
 			rowLevelTTL.ProcessorProgresses = append(rowLevelTTL.ProcessorProgresses, jobspb.RowLevelTTLProcessorProgress{
 				ProcessorID:          processorID,
 				SQLInstanceID:        sqlInstanceID,
-				ProcessorRowCount:    processorRowCount,
+				ProcessorRowCount:    processorRowCount.Load(),
 				ProcessorSpanCount:   processorSpanCount,
 				ProcessorConcurrency: processorConcurrency,
 			})
+			var fractionCompleted float32
+			if f, ok := progress.Progress.(*jobspb.Progress_FractionCompleted); ok {
+				fractionCompleted = f.FractionCompleted
+			}
 			ju.UpdateProgress(progress)
 			log.VInfof(
 				ctx,
 				2, /* level */
-				"TTL processorRowCount updated jobID=%d processorID=%d sqlInstanceID=%d tableID=%d jobRowCount=%d processorRowCount=%d",
-				jobID, processorID, sqlInstanceID, tableID, rowLevelTTL.JobRowCount, processorRowCount,
+				"TTL processorRowCount updated processorID=%d sqlInstanceID=%d tableID=%d jobRowCount=%d processorRowCount=%d fractionCompleted=%.3f",
+				processorID, sqlInstanceID, tableID, rowLevelTTL.JobDeletedRowCount, processorRowCount.Load(), fractionCompleted,
 			)
 			return nil
 		},
