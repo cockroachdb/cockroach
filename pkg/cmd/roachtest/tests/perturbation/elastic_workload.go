@@ -28,7 +28,7 @@ type elasticWorkload struct{}
 var _ perturbation = elasticWorkload{}
 
 func (e elasticWorkload) setup() variations {
-	return setup(e, 5.0)
+	return setup(e, 20.0)
 }
 
 func (e elasticWorkload) setupMetamorphic(rng *rand.Rand) variations {
