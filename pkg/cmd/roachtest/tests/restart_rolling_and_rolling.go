@@ -49,21 +49,30 @@ func runRestartRollingAndRolling(ctx context.Context, t test.Test, c cluster.Clu
 
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
-		t.Status("running kv workload")
-		const duration = 24 * time.Hour // basically infinite, we're relying on ctx getting canceled
+		t.WorkerStatus("running kv workload")
+		defer t.WorkerStatus()
+		const duration = 10 * time.Minute
 		// TODO: Tune the workload are to keep the cluster busy 60% CPU, and IO
 		// overload metric approaching 10-20%.
-		cmd := roachtestutil.NewCommand("./cockroach workload run kv "+
-			"--histograms=perf/stats.json --concurrency=500 "+
-			"--max-rate=5000 --read-percent=5 "+
-			"--min-block-bytes=128 --max-block-bytes=256 "+
-			"--txn-qos='regular' --tolerate-errors "+
-			"--duration=%v {pgurl%s}", duration, c.CRDBNodes())
-		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
-		if ctx.Err() != nil {
-			return nil // happy case
+		for i := 0; ; i++ {
+			maxRate := 100
+			if i%2 == 1 {
+				maxRate = 5000
+			}
+			cmd := roachtestutil.NewCommand("./cockroach workload run kv "+
+				"--histograms=perf/stats.json --concurrency=500 "+
+				"--max-rate=%d --read-percent=5 "+
+				"--min-block-bytes=128 --max-block-bytes=256 "+
+				"--txn-qos='regular' --tolerate-errors "+
+				"--duration=%v {pgurl%s}", maxRate, duration, c.CRDBNodes())
+			err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
+			if ctx.Err() != nil {
+				return nil // happy case
+			}
+			if err != nil {
+				return err // workload returned actual error
+			}
 		}
-		return err // workload returned actual error
 	})
 
 	restart := func(transitionToNew bool) {
