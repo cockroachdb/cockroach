@@ -75,7 +75,7 @@ func runRestartRollingAndRolling(ctx context.Context, t test.Test, c cluster.Clu
 			t.Status(fmt.Sprintf("Node %d stopped. Restarting.", n))
 			time.Sleep(15 * time.Second)
 			if transitionToNew {
-				c.Run(ctx, option.WithNodes(c.CRDBNodes()), "mv cockroach cockroach-old && mv cockroach-new cockroach")
+				c.Run(ctx, option.WithNodes(c.Node(n)), "mv cockroach cockroach-old && mv cockroach-new cockroach")
 			}
 
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(n))
