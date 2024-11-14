@@ -94,7 +94,9 @@ func (in *Inflights) grow() {
 	if newSize == 0 {
 		newSize = 1
 	} else if newSize > in.size {
-		newSize = in.size
+		// See the comment above Add(). Add() is still valid and allowed, even if
+		// the tracker is Full(). We grow the size in this case.
+		in.size = newSize
 	}
 	newBuffer := make([]inflight, newSize)
 	copy(newBuffer, in.buffer)
