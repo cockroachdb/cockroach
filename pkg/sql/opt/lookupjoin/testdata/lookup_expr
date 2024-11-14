@@ -43,7 +43,7 @@ lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=
 x IN (1, 2, 3) AND y = 4 AND z = c
 ----
 input projections:
-  lookup_join_const_col_@8 = 4
+  lookup_join_const_col_@8 = 4 [type=INT8]
 lookup expression:
   ((x IN (1, 2, 3)) AND (lookup_join_const_col_@8 = y)) AND (c = z)
 
@@ -51,7 +51,7 @@ lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=
 x IN (1, 2, 3) AND y = b AND z = 1
 ----
 input projections:
-  lookup_join_const_col_@9 = 1
+  lookup_join_const_col_@9 = 1 [type=INT8]
 lookup expression:
   ((x IN (1, 2, 3)) AND (b = y)) AND (lookup_join_const_col_@9 = z)
 
@@ -102,7 +102,7 @@ x = 1 AND z = c
 optional: y IN (3, 4)
 ----
 input projections:
-  lookup_join_const_col_@7 = 1
+  lookup_join_const_col_@7 = 1 [type=INT8]
 lookup expression:
   ((lookup_join_const_col_@7 = x) AND (y IN (3, 4))) AND (c = z)
 
@@ -129,7 +129,7 @@ x = 1 AND y = b
 optional: z IN (3, 4)
 ----
 input projections:
-  lookup_join_const_col_@7 = 1
+  lookup_join_const_col_@7 = 1 [type=INT8]
 lookup expression:
   ((lookup_join_const_col_@7 = x) AND (b = y)) AND (z IN (3, 4))
 
@@ -155,7 +155,7 @@ lookup-constraints left=(a int) right=(x int, y bool, z int) index=(x, y, z)
 x = a AND y = false AND z > 0
 ----
 input projections:
-  lookup_join_const_col_@6 = false
+  lookup_join_const_col_@6 = false [type=BOOL]
 lookup expression:
   ((a = x) AND (lookup_join_const_col_@6 = y)) AND (z > 0)
 
@@ -201,7 +201,7 @@ lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=
 x = 1 AND y = b AND z > 0
 ----
 input projections:
-  lookup_join_const_col_@7 = 1
+  lookup_join_const_col_@7 = 1 [type=INT8]
 lookup expression:
   ((lookup_join_const_col_@7 = x) AND (b = y)) AND (z > 0)
 
@@ -209,7 +209,7 @@ lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=
 x = a AND y = 1 AND z > 0
 ----
 input projections:
-  lookup_join_const_col_@8 = 1
+  lookup_join_const_col_@8 = 1 [type=INT8]
 lookup expression:
   ((a = x) AND (lookup_join_const_col_@8 = y)) AND (z > 0)
 
@@ -218,7 +218,7 @@ x = 1 AND y = b
 optional: z > 0
 ----
 input projections:
-  lookup_join_const_col_@7 = 1
+  lookup_join_const_col_@7 = 1 [type=INT8]
 lookup expression:
   ((lookup_join_const_col_@7 = x) AND (b = y)) AND (z > 0)
 
