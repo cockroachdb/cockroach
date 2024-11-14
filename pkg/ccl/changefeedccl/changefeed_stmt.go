@@ -653,7 +653,8 @@ func createChangefeedJobRecord(
 		// changefeed, thus ensuring that no job is created for this changefeed as
 		// desired.
 		sinklessRecord := &jobs.Record{
-			Details: details,
+			Description: jobDescription,
+			Details:     details,
 		}
 		return sinklessRecord, nil
 	}
@@ -1562,13 +1563,11 @@ func getCommonChangefeedEventDetails(
 		sinkType = parsedSink.Scheme
 	}
 
-	var initialScan string
 	initialScanType, initialScanSet := opts[changefeedbase.OptInitialScan]
 	_, initialScanOnlySet := opts[changefeedbase.OptInitialScanOnly]
 	_, noInitialScanSet := opts[changefeedbase.OptNoInitialScan]
-	if initialScanSet && initialScanType == `` {
-		initialScan = `yes`
-	} else if initialScanSet && initialScanType != `` {
+	initialScan := `yes`
+	if initialScanSet && initialScanType != `` {
 		initialScan = initialScanType
 	} else if initialScanOnlySet {
 		initialScan = `only`
