@@ -579,15 +579,16 @@ const (
 	// did not find one.
 	planFlagOptCacheMiss
 
-	// planFlagFullyDistributed is set if the query execution is is fully
-	// distributed.
+	// planFlagFullyDistributed is set if the query is planned to use full
+	// distribution.
 	planFlagFullyDistributed
 
-	// planFlagPartiallyDistributed is set if the query execution is is partially
-	// distributed (see physicalplan.PartiallyDistributedPlan).
+	// planFlagPartiallyDistributed is set if the query is planned to use partial
+	// distribution (see physicalplan.PartiallyDistributedPlan).
 	planFlagPartiallyDistributed
 
-	// planFlagNotDistributed is set if the query execution is not distributed.
+	// planFlagNotDistributed is set if the query is planned to not use
+	// distribution.
 	planFlagNotDistributed
 
 	// planFlagImplicitTxn marks that the plan was run inside of an implicit
@@ -645,6 +646,10 @@ const (
 	// planFlagOptimized is set if optimization was performed during the
 	// current execution of the query.
 	planFlagOptimized
+
+	// planFlagDistributedExecution is set if execution of any part of the plan
+	// was distributed.
+	planFlagDistributedExecution
 )
 
 // IsSet returns true if the receiver has all of the given flags set.
