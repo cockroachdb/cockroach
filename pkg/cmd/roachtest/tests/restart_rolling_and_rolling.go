@@ -40,7 +40,7 @@ func runRestartRollingAndRolling(ctx context.Context, t test.Test, c cluster.Clu
 	// Init KV workload with a bunch of pre-split ranges and pre-inserted rows.
 	// The block sizes are picked the same as for the workload below.
 	c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(
-		"./cockroach workload init kv --drop --splits=30000 --insert-count=10000 "+
+		"./cockroach workload init kv --drop --splits=7500 --insert-count=10000 "+
 			"--min-block-bytes=128 --max-block-bytes=256 {pgurl%s}",
 		c.Node(1)))
 
