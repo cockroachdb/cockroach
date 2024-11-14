@@ -47,6 +47,7 @@ func TestTrace(t *testing.T) {
 		"range lookup",
 		"local proposal",
 		"admissionWorkQueueWait",
+		"index recommendation",
 	}
 
 	testData := []struct {
