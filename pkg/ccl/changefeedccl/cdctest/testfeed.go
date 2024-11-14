@@ -7,6 +7,7 @@ package cdctest
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -75,6 +76,8 @@ type EnterpriseTestFeed interface {
 	Resume() error
 	// WaitForStatus waits for the provided func to return true, or returns an error.
 	WaitForStatus(func(s jobs.Status) bool) error
+	// WaitDurationForStatus waits for a specified time for the provided func to return true, or returns an error.
+	WaitDurationForStatus(dur time.Duration, statusPred func(status jobs.Status) bool) error
 	// FetchTerminalJobErr retrieves the error message from changefeed job.
 	FetchTerminalJobErr() error
 	// FetchRunningStatus retrieves running status from changefeed job.

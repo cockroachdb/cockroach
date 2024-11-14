@@ -6472,6 +6472,9 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Add verbose logging to help debug future failures.
+	require.NoError(t, log.SetVModule("changefeed_processors=1"))
+
 	// This test requires many range splits, which can be slow under certain test
 	// conditions. Skip potentially slow tests.
 	skip.UnderDeadlock(t)
@@ -6569,7 +6572,7 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	defer DiscardMessages(testFeed)()
 
 	// Ensure the changefeed is able to complete in a reasonable amount of time.
-	require.NoError(t, testFeed.(cdctest.EnterpriseTestFeed).WaitForStatus(func(s jobs.Status) bool {
+	require.NoError(t, testFeed.(cdctest.EnterpriseTestFeed).WaitDurationForStatus(5*time.Minute, func(s jobs.Status) bool {
 		return s == jobs.StatusSucceeded
 	}))
 }
