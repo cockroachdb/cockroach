@@ -967,6 +967,9 @@ func (p *planner) DecodeGist(ctx context.Context, gist string, external bool) ([
 func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	ctx context.Context,
 ) (_ []indexrec.Rec, err error) {
+	ctx, sp := tracing.EnsureChildSpan(ctx, opc.p.execCfg.AmbientCtx.Tracer, "index recommendation")
+	defer sp.Finish()
+
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate internal errors without having to add
