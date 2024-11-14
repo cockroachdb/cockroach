@@ -187,8 +187,8 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				progress := md.Progress
 				rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
 				rowLevelTTL.JobProcessedSpanCount += spansToAdd
-				rowLevelTTL.JobRowCount += rowsToAdd
-				jobRowCount = rowLevelTTL.JobRowCount
+				rowLevelTTL.JobDeletedRowCount += rowsToAdd
+				jobRowCount = rowLevelTTL.JobDeletedRowCount
 				jobSpanCount = rowLevelTTL.JobTotalSpanCount
 
 				fractionCompleted = float32(rowLevelTTL.JobProcessedSpanCount) / float32(rowLevelTTL.JobTotalSpanCount)
@@ -336,7 +336,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				ctx,
 				2, /* level */
 				"TTL processorRowCount updated processorID=%d sqlInstanceID=%d tableID=%d jobRowCount=%d processorRowCount=%d fractionCompleted=%.3f",
-				processorID, sqlInstanceID, tableID, rowLevelTTL.JobRowCount, processorRowCount.Load(), fractionCompleted,
+				processorID, sqlInstanceID, tableID, rowLevelTTL.JobDeletedRowCount, processorRowCount.Load(), fractionCompleted,
 			)
 			return nil
 		},
