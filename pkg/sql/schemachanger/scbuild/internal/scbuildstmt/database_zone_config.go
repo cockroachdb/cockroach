@@ -27,21 +27,30 @@ type databaseZoneConfigObj struct {
 
 var _ zoneConfigObject = &databaseZoneConfigObj{}
 
-func (dzo *databaseZoneConfigObj) incrementSeqNum() {
-	dzo.seqNum += 1
-}
-
 func (dzo *databaseZoneConfigObj) isNoOp() bool {
 	return dzo.zoneConfig == nil
 }
 
-func (dzo *databaseZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
+func (dzo *databaseZoneConfigObj) getZoneConfigElemForAdd(
+	_ BuildCtx,
+) (scpb.Element, []scpb.Element) {
+	elem := &scpb.DatabaseZoneConfig{
+		DatabaseID: dzo.databaseID,
+		ZoneConfig: dzo.zoneConfig,
+		SeqNum:     dzo.seqNum + 1,
+	}
+	return elem, nil
+}
+
+func (dzo *databaseZoneConfigObj) getZoneConfigElemForDrop(
+	_ BuildCtx,
+) (scpb.Element, []scpb.Element) {
 	elem := &scpb.DatabaseZoneConfig{
 		DatabaseID: dzo.databaseID,
 		ZoneConfig: dzo.zoneConfig,
 		SeqNum:     dzo.seqNum,
 	}
-	return elem
+	return elem, nil
 }
 
 func (dzo *databaseZoneConfigObj) checkPrivilegeForSetZoneConfig(

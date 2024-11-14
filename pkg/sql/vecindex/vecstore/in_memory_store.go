@@ -90,6 +90,7 @@ func (s *InMemoryStore) CommitTransaction(ctx context.Context, txn Txn) error {
 	case partitionLock:
 		s.txnLock.Unlock()
 	}
+	inMemTxn.lock = noLock
 	return nil
 }
 

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
@@ -816,40 +817,62 @@ func (s *TestState) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 func (s *TestState) UpdateZoneConfig(
 	ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig,
 ) error {
-	if s.catalogChanges.zoneConfigsToUpdate == nil {
-		s.catalogChanges.zoneConfigsToUpdate = make(map[descpb.ID]*zonepb.ZoneConfig)
+	oldZc := s.uncommittedInMemory.LookupZoneConfig(id)
+
+	var rawBytes []byte
+	// If the zone config already exists, we need to preserve the raw bytes as the
+	// expected value that we will be updating. Otherwise, this will be a clean
+	// insert with no expected raw bytes.
+	if oldZc != nil {
+		rawBytes = oldZc.GetRawBytesInStorage()
 	}
-	s.catalogChanges.zoneConfigsToUpdate[id] = zc
-	return nil
+	newZc := zone.NewZoneConfigWithRawBytes(zc, rawBytes)
+	return s.WriteZoneConfigToBatch(ctx, id, newZc)
 }
 
 // UpdateSubzoneConfig implements the scexec.Catalog interface.
 func (s *TestState) UpdateSubzoneConfig(
 	ctx context.Context,
-	tableID descpb.ID,
-	subzones []zonepb.Subzone,
+	parentZone catalog.ZoneConfig,
+	subzone zonepb.Subzone,
 	subzoneSpans []zonepb.SubzoneSpan,
-) error {
-	if s.catalogChanges.zoneConfigsToUpdate == nil {
-		s.catalogChanges.zoneConfigsToUpdate = make(map[descpb.ID]*zonepb.ZoneConfig)
-	}
+) (catalog.ZoneConfig, error) {
+	var rawBytes []byte
 	var zc *zonepb.ZoneConfig
-	if czc, ok := s.catalogChanges.zoneConfigsToUpdate[tableID]; ok {
-		czc.Subzones = subzones
-		czc.SubzoneSpans = subzoneSpans
-		zc = czc
+	// If the zone config already exists, we need to preserve the raw bytes as the
+	// expected value that we will be updating. Otherwise, this will be a clean
+	// insert with no expected raw bytes.
+	if parentZone != nil {
+		rawBytes = parentZone.GetRawBytesInStorage()
+		zc = parentZone.ZoneConfigProto()
 	} else {
+		// If no zone config exists, create a new one that is a subzone placeholder.
 		zc = zonepb.NewZoneConfig()
 		zc.DeleteTableConfig()
-		zc.Subzones = subzones
-		zc.SubzoneSpans = subzoneSpans
 	}
-	s.catalogChanges.zoneConfigsToUpdate[tableID] = zc
-	return nil
+
+	// Update the subzone in the zone config.
+	zc.SetSubzone(subzone)
+	subzoneIdx := zc.GetSubzoneIndex(subzone.IndexID, subzone.PartitionName)
+
+	// Update the subzone spans.
+	subzoneSpansToWrite := subzoneSpans
+	// If there are subzone spans that currently exist, merge those with the new
+	// spans we are updating. Otherwise, the zone config's set of subzone spans
+	// will be our input subzoneSpans.
+	if len(zc.SubzoneSpans) != 0 {
+		zc.DeleteSubzoneSpansForSubzoneIndex(subzoneIdx)
+		zc.MergeSubzoneSpans(subzoneSpansToWrite)
+		subzoneSpansToWrite = zc.SubzoneSpans
+	}
+	zc.SubzoneSpans = subzoneSpansToWrite
+
+	newZc := zone.NewZoneConfigWithRawBytes(zc, rawBytes)
+	return newZc, nil
 }
 
 // DeleteZoneConfig implements the scexec.Catalog interface.
-func (s *TestState) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
+func (s *TestState) DeleteZoneConfig(_ context.Context, id descpb.ID) error {
 	s.catalogChanges.zoneConfigsToDelete.Add(id)
 	return nil
 }
@@ -1390,6 +1413,17 @@ func (s *TestState) ResolveFunctionByOID(
 // ZoneConfigGetter implements scexec.Dependencies.
 func (s *TestState) ZoneConfigGetter() scdecomp.ZoneConfigGetter {
 	return s
+}
+
+// WriteZoneConfigToBatch implements scexec.Dependencies.
+func (s *TestState) WriteZoneConfigToBatch(
+	_ context.Context, id descpb.ID, zc catalog.ZoneConfig,
+) error {
+	if s.catalogChanges.zoneConfigsToUpdate == nil {
+		s.catalogChanges.zoneConfigsToUpdate = make(map[descpb.ID]*zonepb.ZoneConfig)
+	}
+	s.catalogChanges.zoneConfigsToUpdate[id] = zc.ZoneConfigProto()
+	return nil
 }
 
 // GetZoneConfig implements scexec.Dependencies.

@@ -1330,3 +1330,59 @@ statement error index "nonexistent" (?:not found in relation "fooba"|does not ex
 ALTER PARTITION rest OF INDEX fooba@nonexistent CONFIGURE ZONE USING num_replicas = 1;
 
 subtest end
+
+# Regression test for #134986 where subzone configs in an explicit txn were
+# incorrect due to faulty seqNum logic.
+subtest subzone_side_effects
+
+statement ok
+CREATE TABLE person (
+    name STRING,
+    country STRING,
+    birth_date DATE,
+    PRIMARY KEY (country, birth_date, name),
+    FAMILY fam_0_birth_date (birth_date),
+    FAMILY fam_1_country_name (country, name)
+)
+    PARTITION BY LIST (country) (
+            PARTITION australia
+                VALUES IN ('AU', 'NZ')
+                PARTITION BY RANGE (birth_date)
+                    (
+                        PARTITION old_au VALUES FROM (minvalue) TO ('1995-01-01'),
+                        PARTITION yung_au VALUES FROM ('1995-01-01') TO (maxvalue)
+                    )
+        );
+
+statement ok
+BEGIN;
+SET LOCAL use_declarative_schema_changer = 'unsafe_always';
+ALTER PARTITION australia OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 2;
+ALTER PARTITION old_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 4;
+ALTER PARTITION yung_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 5;
+COMMIT;
+
+query TT
+SHOW CREATE person;
+----
+person  CREATE TABLE public.person (
+          name STRING NOT NULL,
+          country STRING NOT NULL,
+          birth_date DATE NOT NULL,
+          CONSTRAINT person_pkey PRIMARY KEY (country ASC, birth_date ASC, name ASC),
+          FAMILY fam_0_birth_date (birth_date),
+          FAMILY fam_1_country_name (country, name)
+        ) PARTITION BY LIST (country) (
+          PARTITION australia VALUES IN (('AU'), ('NZ')) PARTITION BY RANGE (birth_date) (
+            PARTITION old_au VALUES FROM (MINVALUE) TO ('1995-01-01'),
+            PARTITION yung_au VALUES FROM ('1995-01-01') TO (MAXVALUE)
+          )
+        );
+        ALTER PARTITION australia OF INDEX foo.public.person@person_pkey CONFIGURE ZONE USING
+          gc.ttlseconds = 2;
+        ALTER PARTITION old_au OF INDEX foo.public.person@person_pkey CONFIGURE ZONE USING
+          gc.ttlseconds = 4;
+        ALTER PARTITION yung_au OF INDEX foo.public.person@person_pkey CONFIGURE ZONE USING
+          gc.ttlseconds = 5
+
+subtest end
