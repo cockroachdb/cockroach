@@ -6,6 +6,7 @@
 package vecstore
 
 import (
+	"bytes"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
@@ -168,6 +169,10 @@ type SearchSet struct {
 	// among the best results.
 	MaxExtraResults int
 
+	// MatchKey, if non-nil, filters out all search candidates that do not have
+	// a matching primary key.
+	MatchKey PrimaryKey
+
 	// Stats tracks useful information about the search, such as how many vectors
 	// and partitions were scanned.
 	Stats SearchStats
@@ -180,6 +185,11 @@ type SearchSet struct {
 // Add includes a new candidate in the search set. If set limits have been
 // reached, then the candidate with the farthest distance will be discarded.
 func (ss *SearchSet) Add(candidate *SearchResult) {
+	if ss.MatchKey != nil && !bytes.Equal(ss.MatchKey, candidate.ChildKey.PrimaryKey) {
+		// Filter out candidates without a matching primary key.
+		return
+	}
+
 	// Fast path where no pruning is necessary.
 	if len(ss.results) < ss.MaxResults {
 		heap.Push[*SearchResult](&ss.results, candidate)
