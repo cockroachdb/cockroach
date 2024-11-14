@@ -202,10 +202,14 @@ func (p *kvRowProcessor) ReleaseLeases(ctx context.Context) {
 // ConditionFailedError with HadNewerOriginTimetamp=true.
 const maxRefreshCount = 10
 
-func makeKVBatch(txn *kv.Txn) *kv.Batch {
+func makeKVBatch(lowPri bool, txn *kv.Txn) *kv.Batch {
 	b := txn.NewBatch()
 	b.Header.WriteOptions = originID1Options
-	b.AdmissionHeader.Priority = int32(admissionpb.BulkLowPri)
+	if lowPri {
+		b.AdmissionHeader.Priority = int32(admissionpb.BulkLowPri)
+	} else {
+		b.AdmissionHeader.Priority = int32(admissionpb.NormalPri)
+	}
 	b.AdmissionHeader.Source = kvpb.AdmissionHeader_FROM_SQL
 	return b
 }
@@ -220,7 +224,7 @@ func (p *kvRowProcessor) processOneRow(
 	refreshCount int,
 ) error {
 	if err := p.cfg.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		b := makeKVBatch(txn)
+		b := makeKVBatch(useLowPriority.Get(&p.cfg.Settings.SV), txn)
 
 		if err := p.addToBatch(ctx, txn, b, dstTableID, row, k, prevValue); err != nil {
 			return err
