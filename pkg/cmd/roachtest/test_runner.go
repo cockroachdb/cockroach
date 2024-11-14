@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -844,7 +846,9 @@ func (r *testRunner) runWorker(
 		handleClusterCreationFailure := func(err error) {
 			t.Error(errClusterProvisioningFailed(err))
 
-			if _, err := github.MaybePost(t, l, t.failureMsg(), "" /* sideEyeTimeoutSnapshotURL */); err != nil {
+			params := getTestParameters(t, github.cluster, github.vmCreateOpts)
+			logTestParameters(l, params)
+			if _, err := github.MaybePost(t, l, t.failureMsg(), "" /* sideEyeTimeoutSnapshotURL */, params); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		}
@@ -1153,7 +1157,9 @@ func (r *testRunner) runTest(
 				}
 
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
-				issue, err := github.MaybePost(t, l, output, sideEyeTimeoutSnapshotURL)
+				params := getTestParameters(t, github.cluster, github.vmCreateOpts)
+				logTestParameters(l, params)
+				issue, err := github.MaybePost(t, l, output, sideEyeTimeoutSnapshotURL, params)
 				if err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
 				}
@@ -2009,4 +2015,58 @@ func grafanaAnnotateTestStart(ctx context.Context, t test.Test, c cluster.Cluste
 	if err := c.AddGrafanaAnnotation(ctx, t.L(), grafana.AddAnnotationRequest{Text: text, Tags: tags}); err != nil {
 		t.L().Printf(errors.Wrap(err, "error adding annotation for test start").Error())
 	}
+}
+
+func logTestParameters(l *logger.Logger, params map[string]string) {
+	// Log the parameters as we've seen cases where it's hard to extract the information (i.e.
+	// encryption at rest) if we don't have the Github issue to refer to.
+	if jsonBytes, err := json.MarshalIndent(params, "", " "); err == nil {
+		// Attempt to log the parameters to their own file, but log to stdout
+		// anyway if child logger creation fails. Knowing the test parameters
+		// is worth the noise.
+		paramLogger, err := l.ChildLogger("params", logger.QuietStdout, logger.QuietStderr)
+		if err == nil {
+			defer paramLogger.Close()
+			paramLogger.Printf("Roachtest Parameters:\n%s", jsonBytes)
+		} else {
+			l.Printf("Roachtest Parameters:\n%s", jsonBytes)
+		}
+	}
+}
+
+func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) map[string]string {
+	spec := t.spec
+	clusterParams := map[string]string{
+		"cloud":                  roachtestflags.Cloud.String(),
+		"cpu":                    fmt.Sprintf("%d", spec.Cluster.CPUs),
+		"ssd":                    fmt.Sprintf("%d", spec.Cluster.SSDs),
+		"runtimeAssertionsBuild": fmt.Sprintf("%t", tests.UsingRuntimeAssertions(t)),
+		"coverageBuild":          fmt.Sprintf("%t", t.goCoverEnabled),
+	}
+	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
+	if spec.Cluster.Arch != "" {
+		clusterParams["arch"] = string(spec.Cluster.Arch)
+	}
+	// These params can be probabilistically set, so we pass them here to
+	// show what their actual values are in the posted issue.
+	if createOpts != nil {
+		clusterParams["fs"] = createOpts.SSDOpts.FileSystem
+		clusterParams["localSSD"] = fmt.Sprintf("%v", createOpts.SSDOpts.UseLocalSSD)
+	}
+
+	if c != nil {
+		clusterParams["encrypted"] = fmt.Sprintf("%v", c.encAtRest)
+		if spec.Cluster.Arch == "" {
+			// N.B. when Arch is specified, it cannot differ from cluster's arch.
+			// Hence, we only emit when arch was unspecified.
+			clusterParams["arch"] = string(c.arch)
+		}
+	}
+
+	extraParams := t.getExtraParams()
+	for label, value := range extraParams {
+		clusterParams[label] = value
+	}
+
+	return clusterParams
 }
