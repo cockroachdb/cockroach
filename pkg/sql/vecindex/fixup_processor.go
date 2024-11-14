@@ -8,6 +8,7 @@ package vecindex
 import (
 	"context"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
@@ -87,6 +88,10 @@ type fixupProcessor struct {
 	// maxFixups limit has been reached.
 	fixupsLimitHit log.EveryN
 
+	// pendingCount tracks the number of pending fixups that still need to be
+	// processed.
+	pendingCount sync.WaitGroup
+
 	// --------------------------------------------------
 	// The following fields should only be accessed on a single background
 	// goroutine (or a single foreground goroutine in deterministic tests).
@@ -131,8 +136,34 @@ func (fp *fixupProcessor) AddSplit(
 	})
 }
 
-// runAll processes all fixups in the queue. This should only be called by
-// tests on one foreground goroutine.
+// Start is meant to be called on a background goroutine. It runs until the
+// provided context is canceled, processing fixups as they are added to the
+// fixup processor.
+func (fp *fixupProcessor) Start(ctx context.Context) {
+	for {
+		// Wait to run the next fixup in the queue.
+		ok, err := fp.run(ctx, true /* wait */)
+		if err != nil {
+			// This is a background goroutine, so just log error and continue.
+			log.Errorf(ctx, "fixup processor error: %v", err)
+			continue
+		}
+
+		if !ok {
+			// Context was canceled, so exit.
+			return
+		}
+	}
+}
+
+// Wait blocks until all pending fixups have been processed by the background
+// goroutine. This is useful in testing.
+func (fp *fixupProcessor) Wait() {
+	fp.pendingCount.Wait()
+}
+
+// runAll processes all fixups in the queue. This should only be called by tests
+// on one foreground goroutine, and only in cases where Start was not called.
 func (fp *fixupProcessor) runAll(ctx context.Context) error {
 	for {
 		ok, err := fp.run(ctx, false /* wait */)
@@ -188,6 +219,9 @@ func (fp *fixupProcessor) run(ctx context.Context, wait bool) (ok bool, err erro
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
+	// Decrement the number of pending fixups.
+	fp.pendingCount.Done()
+
 	switch next.Type {
 	case splitFixup:
 		key := partitionFixupKey{Type: next.Type, PartitionKey: next.PartitionKey}
@@ -221,6 +255,9 @@ func (fp *fixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 		}
 		fp.mu.pendingPartitions[key] = true
 	}
+
+	// Increment the number of pending fixups.
+	fp.pendingCount.Add(1)
 
 	// Note that the channel send operation should never block, since it has
 	// maxFixups capacity.
