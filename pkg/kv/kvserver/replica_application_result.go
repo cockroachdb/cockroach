@@ -44,6 +44,7 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// they don't trigger an assertion at the end of the application process
 	// (which checks that all fields were handled).
 	r.IsLeaseRequest = false
+	r.IsLeaseTransfer = false
 	r.IsLeaseRequestWithExpirationToEpochEquivalent = false
 	r.WriteTimestamp = hlc.Timestamp{}
 	r.PrevLeaseProposal = nil
