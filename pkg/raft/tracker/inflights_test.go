@@ -20,14 +20,25 @@ package tracker
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/container/ring"
 	"github.com/stretchr/testify/require"
 )
 
+func checkEquality(t *testing.T, expected Inflights, actual Inflights) {
+	expBuf := expected.buffer
+	actualBuf := actual.buffer
+	expected.buffer = ring.Buffer[inflight]{}
+	actual.buffer = ring.Buffer[inflight]{}
+	require.Equal(t, expected, actual)
+	require.Equal(t, expBuf.Length(), actualBuf.Length())
+	for i := 0; i < expBuf.Length(); i++ {
+		require.Equal(t, expBuf.At(i), actualBuf.At(i))
+	}
+}
+
 func TestInflightsAdd(t *testing.T) {
-	// no rotating case
 	in := &Inflights{
-		size:   10,
-		buffer: make([]inflight, 10),
+		size: 10,
 	}
 
 	for i := 0; i < 5; i++ {
@@ -35,24 +46,20 @@ func TestInflightsAdd(t *testing.T) {
 	}
 
 	wantIn := &Inflights{
-		start: 0,
-		count: 5,
 		bytes: 510,
 		size:  10,
 		buffer: inflightsBuffer(
 			//       ↓------------
-			[]uint64{0, 1, 2, 3, 4, 0, 0, 0, 0, 0},
-			[]uint64{100, 101, 102, 103, 104, 0, 0, 0, 0, 0}),
+			[]uint64{0, 1, 2, 3, 4},
+			[]uint64{100, 101, 102, 103, 104}),
 	}
-	require.Equal(t, wantIn, in)
+	checkEquality(t, *wantIn, *in)
 
 	for i := 5; i < 10; i++ {
 		in.Add(uint64(i), uint64(100+i))
 	}
 
 	wantIn2 := &Inflights{
-		start: 0,
-		count: 10,
 		bytes: 1045,
 		size:  10,
 		buffer: inflightsBuffer(
@@ -60,50 +67,25 @@ func TestInflightsAdd(t *testing.T) {
 			[]uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 			[]uint64{100, 101, 102, 103, 104, 105, 106, 107, 108, 109}),
 	}
-	require.Equal(t, wantIn2, in)
+	checkEquality(t, *wantIn2, *in)
 
-	// rotating case
-	in2 := &Inflights{
-		start:  5,
-		size:   10,
-		buffer: make([]inflight, 10),
+	// Can grow beyond size.
+	for i := 10; i < 15; i++ {
+		in.Add(uint64(i), uint64(100+i))
 	}
 
-	for i := 0; i < 5; i++ {
-		in2.Add(uint64(i), uint64(100+i))
-	}
-
-	wantIn21 := &Inflights{
-		start: 5,
-		count: 5,
-		bytes: 510,
+	wantIn3 := &Inflights{
+		bytes: 1605,
 		size:  10,
 		buffer: inflightsBuffer(
-			//                      ↓------------
-			[]uint64{0, 0, 0, 0, 0, 0, 1, 2, 3, 4},
-			[]uint64{0, 0, 0, 0, 0, 100, 101, 102, 103, 104}),
+			//       ↓---------------------------
+			[]uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14},
+			[]uint64{100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114}),
 	}
-	require.Equal(t, wantIn21, in2)
-
-	for i := 5; i < 10; i++ {
-		in2.Add(uint64(i), uint64(100+i))
-	}
-
-	wantIn22 := &Inflights{
-		start: 5,
-		count: 10,
-		bytes: 1045,
-		size:  10,
-		buffer: inflightsBuffer(
-			//       -------------- ↓------------
-			[]uint64{5, 6, 7, 8, 9, 0, 1, 2, 3, 4},
-			[]uint64{105, 106, 107, 108, 109, 100, 101, 102, 103, 104}),
-	}
-	require.Equal(t, wantIn22, in2)
+	checkEquality(t, *wantIn3, *in)
 }
 
 func TestInflightFreeTo(t *testing.T) {
-	// no rotating case
 	in := NewInflights(10, 0)
 	for i := 0; i < 10; i++ {
 		in.Add(uint64(i), uint64(100+i))
@@ -112,46 +94,39 @@ func TestInflightFreeTo(t *testing.T) {
 	in.FreeLE(0)
 
 	wantIn0 := &Inflights{
-		start: 1,
-		count: 9,
 		bytes: 945,
 		size:  10,
 		buffer: inflightsBuffer(
-			//          ↓------------------------
-			[]uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
-			[]uint64{100, 101, 102, 103, 104, 105, 106, 107, 108, 109}),
+			//       ↓------------------------
+			[]uint64{1, 2, 3, 4, 5, 6, 7, 8, 9},
+			[]uint64{101, 102, 103, 104, 105, 106, 107, 108, 109}),
 	}
-	require.Equal(t, wantIn0, in)
+	checkEquality(t, *wantIn0, *in)
 
 	in.FreeLE(4)
 
 	wantIn := &Inflights{
-		start: 5,
-		count: 5,
 		bytes: 535,
 		size:  10,
 		buffer: inflightsBuffer(
-			//                      ↓------------
-			[]uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
-			[]uint64{100, 101, 102, 103, 104, 105, 106, 107, 108, 109}),
+			//       ↓------------
+			[]uint64{5, 6, 7, 8, 9},
+			[]uint64{105, 106, 107, 108, 109}),
 	}
-	require.Equal(t, wantIn, in)
+	checkEquality(t, *wantIn, *in)
 
 	in.FreeLE(8)
 
 	wantIn2 := &Inflights{
-		start: 9,
-		count: 1,
 		bytes: 109,
 		size:  10,
 		buffer: inflightsBuffer(
 			//                                  ↓
-			[]uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
-			[]uint64{100, 101, 102, 103, 104, 105, 106, 107, 108, 109}),
+			[]uint64{9},
+			[]uint64{109}),
 	}
-	require.Equal(t, wantIn2, in)
+	checkEquality(t, *wantIn2, *in)
 
-	// rotating case
 	for i := 10; i < 15; i++ {
 		in.Add(uint64(i), uint64(100+i))
 	}
@@ -159,29 +134,21 @@ func TestInflightFreeTo(t *testing.T) {
 	in.FreeLE(12)
 
 	wantIn3 := &Inflights{
-		start: 3,
-		count: 2,
 		bytes: 227,
 		size:  10,
 		buffer: inflightsBuffer(
-			//                   ↓-----
-			[]uint64{10, 11, 12, 13, 14, 5, 6, 7, 8, 9},
-			[]uint64{110, 111, 112, 113, 114, 105, 106, 107, 108, 109}),
+			//       ↓-----
+			[]uint64{13, 14},
+			[]uint64{113, 114}),
 	}
-	require.Equal(t, wantIn3, in)
+	checkEquality(t, *wantIn3, *in)
 
 	in.FreeLE(14)
 
 	wantIn4 := &Inflights{
-		start: 0,
-		count: 0,
-		size:  10,
-		buffer: inflightsBuffer(
-			//       ↓
-			[]uint64{10, 11, 12, 13, 14, 5, 6, 7, 8, 9},
-			[]uint64{110, 111, 112, 113, 114, 105, 106, 107, 108, 109}),
+		size: 10,
 	}
-	require.Equal(t, wantIn4, in)
+	checkEquality(t, *wantIn4, *in)
 }
 
 func TestInflightsFull(t *testing.T) {
@@ -244,13 +211,13 @@ func TestInflightsReset(t *testing.T) {
 	require.Equal(t, 0, in.Count())
 }
 
-func inflightsBuffer(indices []uint64, sizes []uint64) []inflight {
+func inflightsBuffer(indices []uint64, sizes []uint64) ring.Buffer[inflight] {
 	if len(indices) != len(sizes) {
 		panic("len(indices) != len(sizes)")
 	}
-	buffer := make([]inflight, 0, len(indices))
+	var buffer ring.Buffer[inflight]
 	for i, idx := range indices {
-		buffer = append(buffer, inflight{index: idx, bytes: sizes[i]})
+		buffer.Push(inflight{index: idx, bytes: sizes[i]})
 	}
 	return buffer
 }
