@@ -43,8 +43,8 @@ const (
 	// received from the client after TLS negotiation.
 	codeUnexpectedStartupMessage
 
-	// codeParamsRoutingFailed indicates an error choosing a backend address based
-	// on the client's session parameters.
+	// codeParamsRoutingFailed indicates an error choosing a backend address
+	// based on the client's session parameters.
 	codeParamsRoutingFailed
 
 	// codeBackendDialFailed indicates an error establishing a connection
@@ -59,8 +59,10 @@ const (
 	// (with a connection error) while in a session with backend SQL server.
 	codeClientDisconnected
 
-	// codeProxyRefusedConnection indicates that the proxy refused the connection
-	// request due to high load or too many connection attempts.
+	// codeProxyRefusedConnection indicates that the proxy refused the
+	// connection request due to too many invalid connection attempts, or
+	// because the incoming connection session does not match the ACL rules
+	// for the cluster.
 	codeProxyRefusedConnection
 
 	// codeExpiredClientConnection indicates that proxy connection to the client
@@ -68,15 +70,18 @@ const (
 	codeExpiredClientConnection
 
 	// codeUnavailable indicates that the backend SQL server exists but is not
-	// accepting connections. For example, a tenant cluster that has maxPods set to 0.
+	// accepting connections. For example, a tenant cluster that has maxPods
+	// set to 0.
 	codeUnavailable
 )
 
 // errWithCode combines an error with one of the above codes to ease
 // the processing of the errors.
+//
 // This follows the same pattern used by cockroachdb/errors that allows
 // decorating errors with additional information. Check WithStack, WithHint,
 // WithDetail etc.
+//
 // By using the pattern, the decorations are chained and allow searching and
 // extracting later on. See getErrorCode bellow.
 type errWithCode struct {

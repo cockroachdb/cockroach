@@ -137,7 +137,9 @@ func TestRacingRequests(t *testing.T) {
 	nextTime := l.nextTime
 
 	for _, status := range []AttemptStatus{AttemptOK, AttemptInvalidCredentials} {
-		require.Error(t, throttle.ReportAttempt(ctx, connection, throttleTime, status))
+		err := throttle.ReportAttempt(ctx, connection, throttleTime, status)
+		require.Error(t, err)
+		require.Regexp(t, "throttler refused connection", err.Error())
 
 		// Verify the throttled report has no affect on limiter state.
 		l := throttle.lockedGetThrottle(connection)
