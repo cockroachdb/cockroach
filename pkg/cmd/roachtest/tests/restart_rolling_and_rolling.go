@@ -51,13 +51,14 @@ func runRestartRollingAndRolling(ctx context.Context, t test.Test, c cluster.Clu
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		t.WorkerStatus("running kv workload")
 		defer t.WorkerStatus()
-		const duration = 10 * time.Minute
 		// TODO: Tune the workload are to keep the cluster busy 60% CPU, and IO
 		// overload metric approaching 10-20%.
 		for i := 0; ; i++ {
 			maxRate := 100
+			duration := 2 * time.Minute
 			if i%2 == 1 {
 				maxRate = 5000
+				duration = 5 * time.Minute
 			}
 			cmd := roachtestutil.NewCommand("./cockroach workload run kv "+
 				"--histograms=perf/stats.json --concurrency=500 "+
@@ -95,6 +96,7 @@ func runRestartRollingAndRolling(ctx context.Context, t test.Test, c cluster.Clu
 			time.Sleep(2 * time.Minute)
 
 			db := c.Conn(ctx, t.L(), 2)
+			// NB: takes ~3m with 7.5k ranges.
 			if err := roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db); err != nil {
 				t.Fatal(err)
 			}
