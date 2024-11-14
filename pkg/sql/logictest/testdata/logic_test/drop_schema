@@ -21,3 +21,22 @@ BEGIN;
 ALTER TYPE schema_123539.enum_123539 DROP VALUE 's';
 DROP SCHEMA schema_123539 CASCADE;
 COMMIT;
+
+# Check that we block dropping the public schema of the system database, as
+# well as virtual schemas.
+
+statement error must be owner of schema public
+DROP SCHEMA system.public
+
+statement error must be owner of schema pg_catalog
+DROP SCHEMA pg_catalog
+
+user testuser
+
+statement error must be owner of schema public
+DROP SCHEMA system.public
+
+statement error must be owner of schema crdb_internal
+DROP SCHEMA crdb_internal
+
+user root
