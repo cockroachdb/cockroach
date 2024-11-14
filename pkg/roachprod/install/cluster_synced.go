@@ -855,7 +855,6 @@ func (c *SyncedCluster) Monitor(
 				OneShot     bool
 				Node        Node
 				IgnoreEmpty bool
-				Store       string
 				Local       bool
 				Separator   string
 				SkippedMsg  string
@@ -866,7 +865,6 @@ func (c *SyncedCluster) Monitor(
 				OneShot:     opts.OneShot,
 				Node:        node,
 				IgnoreEmpty: opts.IgnoreEmptyNodes,
-				Store:       c.NodeDir(node, 1 /* storeIndex */),
 				Local:       c.IsLocal(),
 				Separator:   separator,
 				SkippedMsg:  skippedMsg,
@@ -876,6 +874,9 @@ func (c *SyncedCluster) Monitor(
 			}
 
 			storeFor := func(name string, instance int) string {
+				if name == SystemInterfaceName {
+					return c.NodeDir(node, 1 /* storeIndex */)
+				}
 				return c.InstanceStoreDir(node, name, instance)
 			}
 
@@ -894,7 +895,7 @@ dead_parent() {
 {{ range .Processes }}
 monitor_process_{{$.Node}}_{{.Name}}_{{.Instance}}() {
   {{ if $.IgnoreEmpty }}
-  if ! ls {{storeFor .Name .Instance}}/marker.* 1> /dev/null 2>&1; then
+  if ! find {{storeFor .Name .Instance}} -name 'marker.*' 2> /dev/null | grep . > /dev/null; then
     echo "{{.Name}}{{$.Separator}}{{.Instance}}{{$.Separator}}{{$.SkippedMsg}}"
     return 0
   fi

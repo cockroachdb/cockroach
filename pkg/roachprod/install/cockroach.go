@@ -520,8 +520,9 @@ func (c *SyncedCluster) LogDir(node Node, virtualClusterName string, instance in
 	return dirName
 }
 
-// InstanceStoreDir returns the data directory for the given instance of
-// the given virtual cluster.
+// InstanceStoreDir returns the data directory for the given instance of the
+// given virtual cluster. This should only be used for external processes. For
+// shared processes to get the data directory, use NodeDir.
 func (c *SyncedCluster) InstanceStoreDir(
 	node Node, virtualClusterName string, instance int,
 ) string {
