@@ -1,96 +1,96 @@
-# Load 1000 512-dimension features and search them. Use small partition size to
+# Load 500 512-dimension features and search them. Use small partition size to
 # ensure a deeper tree.
 
-new-index dims=512 min-partition-size=2 max-partition-size=8 quality-samples=4 beam-size=2 load-features=1000 hide-tree
+new-index dims=512 min-partition-size=4 max-partition-size=16 quality-samples=4 beam-size=2 load-features=1000 hide-tree
 ----
 Created index with 1000 vectors with 512 dimensions.
 
 # Start with 1 result and default beam size of 2.
 search max-results=1 use-feature=5000
 ----
-vec302: 0.6601 (centroid=0.4138)
-14 leaf vectors, 33 vectors, 4 full vectors, 5 partitions
+vec356: 0.5976 (centroid=0.5046)
+18 leaf vectors, 34 vectors, 3 full vectors, 4 partitions
 
 # Search for additional results.
 search max-results=6 use-feature=5000
 ----
-vec302: 0.6601 (centroid=0.4138)
-vec329: 0.6871 (centroid=0.5033)
-vec386: 0.7301 (centroid=0.5117)
-vec240: 0.7723 (centroid=0.4702)
-vec347: 0.7745 (centroid=0.6267)
-vec11: 0.777 (centroid=0.5067)
-14 leaf vectors, 33 vectors, 10 full vectors, 5 partitions
+vec356: 0.5976 (centroid=0.5046)
+vec95: 0.7008 (centroid=0.5551)
+vec11: 0.777 (centroid=0.6306)
+vec848: 0.7958 (centroid=0.5294)
+vec246: 0.8141 (centroid=0.5237)
+vec650: 0.8432 (centroid=0.6338)
+18 leaf vectors, 34 vectors, 10 full vectors, 4 partitions
 
 # Use a larger beam size.
 search max-results=6 use-feature=5000 beam-size=8
 ----
-vec771: 0.5624 (centroid=0.4676)
-vec302: 0.6601 (centroid=0.4138)
-vec329: 0.6871 (centroid=0.5033)
-vec386: 0.7301 (centroid=0.5117)
-vec240: 0.7723 (centroid=0.4702)
-vec347: 0.7745 (centroid=0.6267)
-50 leaf vectors, 91 vectors, 12 full vectors, 15 partitions
+vec771: 0.5624 (centroid=0.631)
+vec356: 0.5976 (centroid=0.5046)
+vec640: 0.6525 (centroid=0.6245)
+vec329: 0.6871 (centroid=0.5083)
+vec95: 0.7008 (centroid=0.5551)
+vec386: 0.7301 (centroid=0.5489)
+70 leaf vectors, 115 vectors, 17 full vectors, 13 partitions
 
 # Turn off re-ranking, which results in increased inaccuracy.
 search max-results=6 use-feature=5000 beam-size=8 skip-rerank
 ----
-vec771: 0.5499 ±0.0291 (centroid=0.4676)
-vec302: 0.6246 ±0.0274 (centroid=0.4138)
-vec329: 0.6609 ±0.0333 (centroid=0.5033)
-vec386: 0.7245 ±0.0338 (centroid=0.5117)
-vec347: 0.7279 ±0.0415 (centroid=0.6267)
-vec11: 0.7509 ±0.0336 (centroid=0.5067)
-50 leaf vectors, 91 vectors, 0 full vectors, 15 partitions
+vec771: 0.5937 ±0.0437 (centroid=0.631)
+vec356: 0.6205 ±0.0328 (centroid=0.5046)
+vec640: 0.6564 ±0.0433 (centroid=0.6245)
+vec329: 0.6787 ±0.0311 (centroid=0.5083)
+vec95: 0.7056 ±0.0388 (centroid=0.5551)
+vec386: 0.7212 ±0.0336 (centroid=0.5489)
+70 leaf vectors, 115 vectors, 0 full vectors, 13 partitions
 
 # Return top 25 results with large beam size.
 search max-results=25 use-feature=5000 beam-size=64
 ----
-vec771: 0.5624 (centroid=0.4676)
-vec356: 0.5976 (centroid=0.5117)
-vec640: 0.6525 (centroid=0.6139)
-vec302: 0.6601 (centroid=0.4138)
-vec329: 0.6871 (centroid=0.5033)
-vec95: 0.7008 (centroid=0.5542)
-vec249: 0.7268 (centroid=0.3715)
-vec386: 0.7301 (centroid=0.5117)
-vec309: 0.7311 (centroid=0.4912)
-vec633: 0.7513 (centroid=0.4095)
-vec117: 0.7576 (centroid=0.4538)
-vec556: 0.7595 (centroid=0.5531)
-vec25: 0.761 (centroid=0.4576)
-vec872: 0.7707 (centroid=0.6427)
-vec859: 0.7708 (centroid=0.6614)
-vec240: 0.7723 (centroid=0.4702)
-vec347: 0.7745 (centroid=0.6267)
-vec11: 0.777 (centroid=0.5067)
-vec340: 0.7858 (centroid=0.4752)
-vec239: 0.7878 (centroid=0.4584)
-vec704: 0.7916 (centroid=0.7117)
-vec423: 0.7956 (centroid=0.4608)
-vec220: 0.7957 (centroid=0.4226)
-vec387: 0.8038 (centroid=0.4652)
-vec637: 0.8039 (centroid=0.5211)
-356 leaf vectors, 567 vectors, 97 full vectors, 103 partitions
+vec771: 0.5624 (centroid=0.631)
+vec356: 0.5976 (centroid=0.5046)
+vec640: 0.6525 (centroid=0.6245)
+vec302: 0.6601 (centroid=0.5159)
+vec329: 0.6871 (centroid=0.5083)
+vec95: 0.7008 (centroid=0.5551)
+vec249: 0.7268 (centroid=0.4459)
+vec386: 0.7301 (centroid=0.5489)
+vec309: 0.7311 (centroid=0.5569)
+vec633: 0.7513 (centroid=0.4747)
+vec117: 0.7576 (centroid=0.5211)
+vec556: 0.7595 (centroid=0.459)
+vec25: 0.761 (centroid=0.4394)
+vec776: 0.7633 (centroid=0.4892)
+vec872: 0.7707 (centroid=0.5141)
+vec859: 0.7708 (centroid=0.5757)
+vec240: 0.7723 (centroid=0.5266)
+vec347: 0.7745 (centroid=0.5297)
+vec11: 0.777 (centroid=0.6306)
+vec340: 0.7858 (centroid=0.5312)
+vec239: 0.7878 (centroid=0.5127)
+vec704: 0.7916 (centroid=0.5169)
+vec423: 0.7956 (centroid=0.4941)
+vec220: 0.7957 (centroid=0.4916)
+vec848: 0.7958 (centroid=0.5294)
+683 leaf vectors, 787 vectors, 100 full vectors, 74 partitions
 
 # Test recall at different beam sizes.
+recall topk=10 beam-size=4 samples=50
+----
+50.00% recall@10
+44.26 leaf vectors, 75.42 vectors, 20.38 full vectors, 7.00 partitions
+
 recall topk=10 beam-size=8 samples=50
 ----
-53.60% recall@10
-46.62 leaf vectors, 86.08 vectors, 20.18 full vectors, 15.00 partitions
+70.40% recall@10
+85.90 leaf vectors, 136.26 vectors, 24.44 full vectors, 13.00 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-76.40% recall@10
-94.02 leaf vectors, 168.58 vectors, 24.84 full vectors, 29.00 partitions
+85.20% recall@10
+169.94 leaf vectors, 263.62 vectors, 27.90 full vectors, 25.00 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
-91.80% recall@10
-188.30 leaf vectors, 317.30 vectors, 28.52 full vectors, 55.00 partitions
-
-recall topk=10 beam-size=64 samples=50
-----
-97.40% recall@10
-371.40 leaf vectors, 585.00 vectors, 31.60 full vectors, 103.00 partitions
+97.00% recall@10
+336.46 leaf vectors, 440.46 vectors, 31.52 full vectors, 42.00 partitions

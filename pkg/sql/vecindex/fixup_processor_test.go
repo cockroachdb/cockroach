@@ -22,7 +22,7 @@ func TestSplitPartitionData(t *testing.T) {
 	quantizer := quantize.NewRaBitQuantizer(2, 42)
 	store := vecstore.NewInMemoryStore(2, 42)
 	options := VectorIndexOptions{Seed: 42}
-	index, err := NewVectorIndex(ctx, store, quantizer, &options)
+	index, err := NewVectorIndex(ctx, store, quantizer, &options, nil /* stopper */)
 	require.NoError(t, err)
 
 	vectors := vector.MakeSetFromRawData([]float32{
