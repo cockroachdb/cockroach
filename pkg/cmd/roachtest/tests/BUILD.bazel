@@ -158,6 +158,7 @@ go_library(
         "registry.go",
         "replicagc.go",
         "restart.go",
+        "restart_rolling_and_rolling.go",
         "restore.go",
         "roachmart.go",
         "roachtest.go",

@@ -1472,6 +1472,11 @@ func (r *testRunner) postTestAssertions(
 			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
 		}
 
+		if db == nil {
+			db = c.Conn(ctx, t.L(), 1)
+			validationNode = 1
+		}
+
 		// We avoid trying to do this when t.Failed() (and in particular when there
 		// are dead nodes) because for reasons @tbg does not understand this gets
 		// stuck occasionally, which really ruins the roachtest run. The method
