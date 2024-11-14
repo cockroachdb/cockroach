@@ -105,6 +105,7 @@ func runRestartRollingAndRolling(ctx context.Context, t test.Test, c cluster.Clu
 		}
 	}
 
+	time.Sleep(5 * time.Minute) // let the workload run for a bit
 	for i := 0; i < 3; i++ {
 		t.Status(fmt.Sprintf("Rolling restart #%d", i))
 		transitionToNew := i == 0
