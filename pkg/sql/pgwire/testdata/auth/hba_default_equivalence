@@ -43,7 +43,7 @@ ERROR: password authentication failed for user root (SQLSTATE 28P01)
 
 # When no client cert is presented, the server would otherwise require
 # password auth. However, root does not have a password.
-connect user=root password=foo sslmode=verify-ca sslcert=
+connect user=root password=foo sslmode=verify-ca sslcert= sslkey=
 ----
 ERROR: password authentication failed for user root (SQLSTATE 28P01)
 
@@ -78,11 +78,11 @@ connect_unix user=testuser password=pass
 ok defaultdb
 
 # If we don't present the client certificate, the password is required.
-connect user=testuser password=invalid sslmode=verify-ca sslcert=
+connect user=testuser password=invalid sslmode=verify-ca sslcert= sslkey=
 ----
 ERROR: password authentication failed for user testuser (SQLSTATE 28P01)
 
-connect user=testuser password=pass sslmode=verify-ca sslcert=
+connect user=testuser password=pass sslmode=verify-ca sslcert= sslkey=
 ----
 ok defaultdb
 
