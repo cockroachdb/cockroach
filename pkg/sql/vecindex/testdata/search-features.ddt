@@ -73,3 +73,20 @@ vec220: 0.7957 (centroid=0.4226)
 vec387: 0.8038 (centroid=0.4652)
 vec637: 0.8039 (centroid=0.5211)
 356 leaf vectors, 567 vectors, 97 full vectors, 103 partitions
+
+# Test recall at different beam sizes.
+recall topk=10 beam-size=8 samples=50
+----
+53.60% recall@10
+
+recall topk=10 beam-size=16 samples=50
+----
+76.40% recall@10
+
+recall topk=10 beam-size=32 samples=50
+----
+91.80% recall@10
+
+recall topk=10 beam-size=64 samples=50
+----
+97.40% recall@10

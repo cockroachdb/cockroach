@@ -7,8 +7,10 @@ package vecindex
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,6 +50,9 @@ func TestDataDriven(t *testing.T) {
 
 			case "delete":
 				return state.Delete(d)
+
+			case "recall":
+				return state.Recall(d)
 			}
 
 			t.Fatalf("unknown cmd: %s", d.Cmd)
@@ -289,6 +296,81 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 	return tree
 }
 
+func (s *testState) Recall(d *datadriven.TestData) string {
+	searchSet := vecstore.SearchSet{MaxResults: 1}
+	options := SearchOptions{}
+	samples := 50
+	var err error
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "samples":
+			require.Len(s.T, arg.Vals, 1)
+			samples, err = strconv.Atoi(arg.Vals[0])
+			require.NoError(s.T, err)
+
+		case "topk":
+			require.Len(s.T, arg.Vals, 1)
+			searchSet.MaxResults, err = strconv.Atoi(arg.Vals[0])
+			require.NoError(s.T, err)
+
+		case "beam-size":
+			require.Len(s.T, arg.Vals, 1)
+			options.BaseBeamSize, err = strconv.Atoi(arg.Vals[0])
+			require.NoError(s.T, err)
+		}
+	}
+
+	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+
+	// calcTruth calculates the true nearest neighbors for the query vector.
+	calcTruth := func(queryVector vector.T, data []vecstore.VectorWithKey) []vecstore.PrimaryKey {
+		distances := make([]float32, len(data))
+		offsets := make([]int, len(data))
+		for i := 0; i < len(data); i++ {
+			distances[i] = num32.L2SquaredDistance(queryVector, data[i].Vector)
+			offsets[i] = i
+		}
+		sort.SliceStable(offsets, func(i int, j int) bool {
+			res := cmp.Compare(distances[offsets[i]], distances[offsets[j]])
+			if res != 0 {
+				return res < 0
+			}
+			return data[offsets[i]].Key.Compare(data[offsets[j]].Key) < 0
+		})
+
+		truth := make([]vecstore.PrimaryKey, searchSet.MaxResults)
+		for i := 0; i < len(truth); i++ {
+			truth[i] = data[offsets[i]].Key.PrimaryKey
+		}
+		return truth
+	}
+
+	data := s.InMemStore.GetAllVectors()
+
+	// Search for last "samples" features.
+	sumMAP := 0.0
+	for feature := s.Features.Count - samples; feature < s.Features.Count; feature++ {
+		// Calculate truth set for the vector.
+		queryVector := s.Features.At(feature)
+		truth := calcTruth(queryVector, data)
+
+		// Calculate prediction set for the vector.
+		err = s.Index.Search(s.Ctx, txn, queryVector, &searchSet, options)
+		require.NoError(s.T, err)
+		results := searchSet.PopResults()
+
+		prediction := make([]vecstore.PrimaryKey, searchSet.MaxResults)
+		for res := 0; res < len(results); res++ {
+			prediction[res] = results[res].ChildKey.PrimaryKey
+		}
+
+		sumMAP += findMAP(prediction, truth)
+	}
+
+	return fmt.Sprintf("%.2f%% recall@%d", sumMAP/float64(samples)*100, searchSet.MaxResults)
+}
+
 // parseVector parses a vector string in this form: (1.5, 6, -4).
 func (s *testState) parseVector(str string) vector.T {
 	// Remove parentheses and split by commas.
@@ -327,4 +409,28 @@ func beginTransaction(ctx context.Context, t *testing.T, store vecstore.Store) v
 func commitTransaction(ctx context.Context, t *testing.T, store vecstore.Store, txn vecstore.Txn) {
 	err := store.CommitTransaction(ctx, txn)
 	require.NoError(t, err)
+}
+
+// findMAP return mean average precision, which compares a set of predicted
+// results with the true set of results. Both sets are expected to be of equal
+// length. It returns the percentage overlap of the predicted set with the truth
+// set.
+func findMAP(prediction, truth []vecstore.PrimaryKey) float64 {
+	if len(prediction) != len(truth) {
+		panic(errors.AssertionFailedf("prediction and truth sets are not same length"))
+	}
+
+	predictionMap := make(map[string]bool, len(prediction))
+	for _, p := range prediction {
+		predictionMap[string(p)] = true
+	}
+
+	var intersect float64
+	for _, t := range truth {
+		_, ok := predictionMap[string(t)]
+		if ok {
+			intersect++
+		}
+	}
+	return intersect / float64(len(truth))
 }
