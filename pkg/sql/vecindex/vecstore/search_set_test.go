@@ -132,4 +132,9 @@ func TestSearchSet(t *testing.T) {
 	otherSet.MaxExtraResults = 1
 	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
 	require.Equal(t, SearchResults{result3, result1, result4, result7}, otherSet.PopResults())
+
+	// Ignore results without a matching primary key.
+	otherSet = SearchSet{MaxResults: 2, MatchKey: []byte{60}}
+	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
+	require.Equal(t, SearchResults{result6}, otherSet.PopResults())
 }
