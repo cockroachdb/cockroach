@@ -7,7 +7,6 @@ package main
 
 import (
 	"context"
-	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -1490,8 +1489,7 @@ func (r *testRunner) postTestAssertions(
 			postAssertionErr(errors.WithDetail(err, "Unable to check health status"))
 		}
 
-		var db *gosql.DB
-		var validationNode int
+		validationNode := 0
 		for _, s := range statuses {
 			if s.Err != nil {
 				t.L().Printf("n%d:/health?ready=1 error=%s", s.Node, s.Err)
@@ -1503,9 +1501,8 @@ func (r *testRunner) postTestAssertions(
 				continue
 			}
 
-			if db == nil {
-				db = c.Conn(ctx, t.L(), s.Node)
-				validationNode = s.Node
+			if validationNode == 0 {
+				validationNode = s.Node // NB: s.Node is never zero
 			}
 			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
 		}
@@ -1518,25 +1515,34 @@ func (r *testRunner) postTestAssertions(
 		//
 		// TODO(testinfra): figure out why this can still get stuck despite the
 		// above.
-		if db != nil {
-			defer db.Close()
-			t.L().Printf("running validation checks on node %d (<10m)", validationNode)
-			// If this validation fails due to a timeout, it is very likely that
-			// the replica divergence check below will also fail.
-			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
+		if validationNode == 0 {
+			t.L().Printf("no live node found, skipping validation checks")
+			return
+		}
+
+		t.L().Printf("running validation checks on node %d (<10m)", validationNode)
+		// If this validation fails due to a timeout, it is very likely that
+		// the replica divergence check below will also fail.
+		if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
+			func() {
+				db := c.Conn(ctx, t.L(), validationNode)
+				defer db.Close()
 				if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
 					postAssertionErr(errors.WithDetail(err, "invalid descriptors check failed"))
 				}
-			}
-			// Detect replica divergence (i.e. ranges in which replicas have arrived
-			// at the same log position with different states).
-			if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
+			}()
+		}
+		// Detect replica divergence (i.e. ranges in which replicas have arrived
+		// at the same log position with different states).
+		if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
+			func() {
+				// NB: the consistency checks should run at the system tenant level.
+				db := c.Conn(ctx, t.L(), validationNode, option.VirtualClusterName("system"))
+				defer db.Close()
 				if err := c.assertConsistentReplicas(ctx, db, t); err != nil {
 					postAssertionErr(errors.WithDetail(err, "consistency check failed"))
 				}
-			}
-		} else {
-			t.L().Printf("no live node found, skipping validation checks")
+			}()
 		}
 	})
 
