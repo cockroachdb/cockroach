@@ -184,7 +184,7 @@ func initFlags() {
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
 
 	listCmd.Flags().BoolVarP(&listCost,
-		"cost", "c", os.Getenv("ROACHPROD_NO_COST_ESTIMATES") != "true",
+		"cost", "c", false,
 		"Show cost estimates",
 	)
 	listCmd.Flags().BoolVarP(&listDetails,
