@@ -135,7 +135,7 @@ func runDebugZipUpload(cmd *cobra.Command, args []string) error {
 	}
 
 	// a unique ID for this upload session. This should be used to tag all the artifacts uploaded in this session
-	uploadID := newUploadID(debugZipUploadOpts.clusterName)
+	uploadID := newUploadID(debugZipUploadOpts.clusterName, timeutil.Now())
 
 	// override the list of artifacts to upload if the user has provided any
 	artifactsToUpload := zipArtifactTypes
@@ -848,9 +848,8 @@ var doUploadReq = func(req *http.Request) ([]byte, error) {
 // Everything is converted to lowercase and spaces are replaced with hyphens. Because,
 // datadog will do this anyway and we want to make sure the UUIDs match when we generate the
 // explore/dashboard links.
-var newUploadID = func(cluster string) string {
-	currentTime := timeutil.Now()
-	formattedTime := currentTime.Format("20060102150405")
+var newUploadID = func(cluster string, uploadTime time.Time) string {
+	formattedTime := uploadTime.Format("20060102150405")
 	return strings.ToLower(
 		strings.ReplaceAll(
 			fmt.Sprintf("%s-%s", cluster, formattedTime), " ", "-",
