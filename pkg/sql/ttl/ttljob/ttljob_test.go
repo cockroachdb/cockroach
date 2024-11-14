@@ -214,7 +214,7 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRowsJobOnly(
 		var progress jobspb.Progress
 		require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
 
-		actualNumExpiredRows := progress.UnwrapDetails().(jobspb.RowLevelTTLProgress).JobRowCount
+		actualNumExpiredRows := progress.UnwrapDetails().(jobspb.RowLevelTTLProgress).JobDeletedRowCount
 		require.Equal(t, int64(expectedNumExpiredRows), actualNumExpiredRows)
 		jobCount++
 	}
@@ -272,7 +272,7 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 		}
 		require.Equal(t, expectedJobSpanCount, rowLevelTTLProgress.JobProcessedSpanCount)
 		require.Equal(t, expectedJobSpanCount, rowLevelTTLProgress.JobTotalSpanCount)
-		require.Equal(t, expectedJobRowCount, rowLevelTTLProgress.JobRowCount)
+		require.Equal(t, expectedJobRowCount, rowLevelTTLProgress.JobDeletedRowCount)
 		jobCount++
 	}
 	require.Equal(t, 1, jobCount)
