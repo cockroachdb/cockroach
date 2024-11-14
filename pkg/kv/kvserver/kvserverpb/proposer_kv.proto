@@ -303,6 +303,18 @@ message RaftCommand {
   // - the command applies on replica 2
   uint64 proposer_lease_sequence = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
 
+  // ProposerLease is the lease is only set for lease acquisition/transfer
+  // requests. It corresponds tot he full lease under which the command was
+  // proposed (unlike proposer_lease_sequence which is only the sequence
+  // number). It allows us to make stronger assertions below raft when applying
+  // the command.
+  //
+  // TODO(arul): improve this comment.
+  //
+  // Note that this field was introduced in 24.3, so nodes running versions <
+  // 24.3 do not populate it.
+    roachpb.Lease proposer_lease = 22 [(gogoproto.nullable) = false];
+
   // When the command is applied, its result is an error if the lease log
   // counter has already reached (or exceeded) max_lease_index.
   //
@@ -399,6 +411,9 @@ message RaftCommand {
   // to inform said node of this raft command's (virtual) admission in order for
   // it to release flow tokens for subsequent commands.
   int32 admission_origin_node = 20 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // Next ID: 22
+
 
   reserved 1, 2, 10001 to 10014;
 }

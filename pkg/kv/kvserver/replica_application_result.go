@@ -299,6 +299,7 @@ func (r *Replica) makeReproposal(origP *ProposalData) (reproposal *ProposalData,
 
 	newCommand := kvserverpb.RaftCommand{
 		ProposerLeaseSequence: origP.command.ProposerLeaseSequence,
+		ProposerLease:         origP.command.ProposerLease,
 		ReplicatedEvalResult:  origP.command.ReplicatedEvalResult,
 		WriteBatch:            origP.command.WriteBatch,
 		LogicalOpLog:          origP.command.LogicalOpLog,

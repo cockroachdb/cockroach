@@ -250,8 +250,14 @@ func (r *Replica) evalAndPropose(
 		switch t := ba.Requests[0].GetInner().(type) {
 		case *kvpb.RequestLeaseRequest:
 			seq = t.PrevLease.Sequence
+			if kvserverbase.BelowRaftPreviousLeaseAssertions {
+				proposal.command.ProposerLease = t.PrevLease
+			}
 		case *kvpb.TransferLeaseRequest:
 			seq = t.PrevLease.Sequence
+			if kvserverbase.BelowRaftPreviousLeaseAssertions {
+				proposal.command.ProposerLease = t.PrevLease
+			}
 		default:
 		}
 		proposal.command.ProposerLeaseSequence = seq
