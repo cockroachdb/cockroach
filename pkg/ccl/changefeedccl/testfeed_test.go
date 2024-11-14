@@ -440,13 +440,15 @@ func (f *jobFeed) status() (status string, err error) {
 	return
 }
 
-func (f *jobFeed) WaitForStatus(statusPred func(status jobs.Status) bool) error {
+func (f *jobFeed) WaitDurationForStatus(
+	dur time.Duration, statusPred func(status jobs.Status) bool,
+) error {
 	if f.jobID == jobspb.InvalidJobID {
 		// Job may not have been started.
 		return nil
 	}
 	// Wait for the job status predicate to become true.
-	return testutils.SucceedsSoonError(func() error {
+	return testutils.SucceedsWithinError(func() error {
 		var status string
 		var err error
 		if status, err = f.status(); err != nil {
@@ -456,7 +458,11 @@ func (f *jobFeed) WaitForStatus(statusPred func(status jobs.Status) bool) error 
 			return nil
 		}
 		return errors.Newf("still waiting for job status; current %s", status)
-	})
+	}, dur)
+}
+
+func (f *jobFeed) WaitForStatus(statusPred func(status jobs.Status) bool) error {
+	return f.WaitDurationForStatus(testutils.SucceedsSoonDuration(), statusPred)
 }
 
 // Pause implements the TestFeed interface.
