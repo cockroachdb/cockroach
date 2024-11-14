@@ -1121,7 +1121,7 @@ func restoreJobDescription(
 	ctx context.Context,
 	p sql.PlanHookState,
 	restore *tree.Restore,
-	from [][]string,
+	from []string,
 	incFrom []string,
 	opts tree.RestoreOptions,
 	intoDB string,
@@ -1133,7 +1133,6 @@ func restoreJobDescription(
 		DescriptorCoverage: restore.DescriptorCoverage,
 		AsOf:               restore.AsOf,
 		Targets:            restore.Targets,
-		From:               make([]tree.StringOrPlaceholderOptList, len(restore.From)),
 		Subdir:             tree.NewDString("/" + strings.TrimPrefix(resolvedSubdir, "/")),
 	}
 
@@ -1145,15 +1144,12 @@ func restoreJobDescription(
 	}
 	r.Options = options
 
-	for i, backup := range from {
-		r.From[i] = make(tree.StringOrPlaceholderOptList, len(backup))
-		r.From[i], err = sanitizeURIList(backup)
-		for _, uri := range r.From[i] {
-			logSanitizedRestoreDestination(ctx, uri.String())
-		}
-		if err != nil {
-			return "", err
-		}
+	r.From, err = sanitizeURIList(from)
+	if err != nil {
+		return "", err
+	}
+	for _, uri := range r.From {
+		logSanitizedRestoreDestination(ctx, uri.String())
 	}
 
 	ann := p.ExtendedEvalContext().Annotations
@@ -1171,11 +1167,11 @@ func restoreTypeCheck(
 	}
 	if err := exprutil.TypeCheck(
 		ctx, "RESTORE", p.SemaCtx(),
-		append(
-			exprutil.MakeStringArraysFromOptList(restoreStmt.From),
+		exprutil.StringArrays{
+			tree.Exprs(restoreStmt.From),
 			tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
 			tree.Exprs(restoreStmt.Options.IncrementalStorage),
-		),
+		},
 		exprutil.Strings{
 			restoreStmt.Subdir,
 			restoreStmt.Options.EncryptionPassphrase,
@@ -1231,13 +1227,9 @@ func restorePlanHook(
 
 	exprEval := p.ExprEvaluator("RESTORE")
 
-	from := make([][]string, len(restoreStmt.From))
-	for i, expr := range restoreStmt.From {
-		v, err := exprEval.StringArray(ctx, tree.Exprs(expr))
-		if err != nil {
-			return nil, nil, nil, false, err
-		}
-		from[i] = v
+	from, err := exprEval.StringArray(ctx, tree.Exprs(restoreStmt.From))
+	if err != nil {
+		return nil, nil, nil, false, err
 	}
 
 	var pw string
@@ -1293,11 +1285,6 @@ func restorePlanHook(
 
 	var incStorage []string
 	if restoreStmt.Options.IncrementalStorage != nil {
-		if restoreStmt.Subdir == nil {
-			err := errors.New("incremental_location can only be used with the following" +
-				" syntax: 'RESTORE [target] FROM [subdirectory] IN [destination]'")
-			return nil, nil, nil, false, err
-		}
 		var err error
 		incStorage, err = exprEval.StringArray(
 			ctx, tree.Exprs(restoreStmt.Options.IncrementalStorage),
@@ -1447,17 +1434,9 @@ func restorePlanHook(
 // checkRestoreDestinationPrivileges iterates over the External Storage URIs and
 // ensures the user has adequate privileges to use each of them.
 func checkRestoreDestinationPrivileges(
-	ctx context.Context, p sql.PlanHookState, from [][]string,
+	ctx context.Context, p sql.PlanHookState, from []string,
 ) error {
-	// Check destination specific privileges.
-	for _, uris := range from {
-		uris := uris
-		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, uris); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return cloudprivilege.CheckDestinationPrivileges(ctx, p, from)
 }
 
 // checkRestorePrivilegesOnDatabase check that the user has adequate privileges
@@ -1490,7 +1469,7 @@ func checkRestorePrivilegesOnDatabase(
 // This method is also responsible for checking the privileges on the
 // destination URIs the restore is reading from.
 func checkPrivilegesForRestore(
-	ctx context.Context, restoreStmt *tree.Restore, p sql.PlanHookState, from [][]string,
+	ctx context.Context, restoreStmt *tree.Restore, p sql.PlanHookState, from []string,
 ) error {
 	// If the user is admin no further checks need to be performed.
 	hasAdmin, err := p.HasAdminRole(ctx)
@@ -1669,7 +1648,7 @@ func doRestorePlan(
 	restoreStmt *tree.Restore,
 	exprEval *exprutil.Evaluator,
 	p sql.PlanHookState,
-	from [][]string,
+	from []string,
 	incFrom []string,
 	passphrase string,
 	kms []string,
@@ -1682,12 +1661,8 @@ func doRestorePlan(
 	subdir string,
 	execLocality roachpb.Locality,
 ) error {
-	if len(from) == 0 || len(from[0]) == 0 {
+	if len(from) == 0 {
 		return errors.New("invalid base backup specified")
-	}
-
-	if subdir != "" && len(from) != 1 {
-		return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
 	}
 
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
@@ -1702,7 +1677,7 @@ func doRestorePlan(
 
 	if strings.EqualFold(subdir, backupbase.LatestFileName) {
 		// set subdir to content of latest file
-		latest, err := backupdest.ReadLatestFile(ctx, from[0][0],
+		latest, err := backupdest.ReadLatestFile(ctx, from[0],
 			p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
 		if err != nil {
 			return err
@@ -1712,7 +1687,7 @@ func doRestorePlan(
 		fullyResolvedSubdir = subdir
 	}
 
-	fullyResolvedBaseDirectory, err := backuputils.AppendPaths(from[0][:], fullyResolvedSubdir)
+	fullyResolvedBaseDirectory, err := backuputils.AppendPaths(from[:], fullyResolvedSubdir)
 	if err != nil {
 		return err
 	}
@@ -1722,7 +1697,7 @@ func doRestorePlan(
 		p.User(),
 		p.ExecCfg(),
 		incFrom,
-		from[0],
+		from,
 		fullyResolvedSubdir,
 	)
 	if err != nil {
@@ -1811,25 +1786,11 @@ func doRestorePlan(
 
 	// Given the stores for the base full backup, and the fully resolved backup
 	// directories, return the URIs and manifests of all backup layers in all
-	// localities.
-	var defaultURIs []string
-	var mainBackupManifests []backuppb.BackupManifest
-	var localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
-	var memReserved int64
-	if len(from) <= 1 {
-		// Incremental layers are not specified explicitly. They will be searched for automatically.
-		// This could be either INTO-syntax, OR TO-syntax.
-		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = backupdest.ResolveBackupManifests(
-			ctx, &mem, baseStores, incStores, mkStore, fullyResolvedBaseDirectory,
-			fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(),
-		)
-	} else {
-		// Incremental layers are specified explicitly.
-		// This implies the old, deprecated TO-syntax.
-		defaultURIs, mainBackupManifests, localityInfo, memReserved, err =
-			backupdest.DeprecatedResolveBackupManifestsExplicitIncrementals(ctx, &mem, mkStore, from,
-				endTime, encryption, &kmsEnv, p.User())
-	}
+	// localities. Incrementals will be searched for automatically.
+	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
+		ctx, &mem, baseStores, incStores, mkStore, fullyResolvedBaseDirectory,
+		fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(),
+	)
 	if err != nil {
 		return err
 	}
