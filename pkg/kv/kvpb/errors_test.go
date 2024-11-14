@@ -380,7 +380,7 @@ func TestNotLeaseholderError(t *testing.T) {
 		err *NotLeaseHolderError
 	}{
 		{
-			exp: `[NotLeaseHolderError] r1: replica not lease holder; current lease is repl=(n1,s1):1 seq=2 start=0.000000002,0 epo=1 min-exp=0.000000003,0 pro=0.000000001,0`,
+			exp: `[NotLeaseHolderError] r1: replica not lease holder; current lease is repl=(n1,s1):1 seq=2 start=0.000000002,0 epo=1 min-exp=0.000000003,0 pro=0.000000001,0 acq=Transfer`,
 			err: &NotLeaseHolderError{
 				RangeID: 1,
 				Lease: &roachpb.Lease{
