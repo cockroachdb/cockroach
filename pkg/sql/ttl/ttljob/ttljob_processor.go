@@ -291,7 +291,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			progress.Progress = &jobspb.Progress_FractionCompleted{
 				FractionCompleted: fractionCompleted,
 			}
-			rowLevelTTL.JobRowCount += rowsDeletedSoFar.Load()
+			rowLevelTTL.JobDeletedRowCount += rowsDeletedSoFar.Load()
 			rowLevelTTL.JobProcessedSpanCount += spansProccessedSoFar.Load()
 			rowLevelTTL.ProcessorProgresses = append(rowLevelTTL.ProcessorProgresses, jobspb.RowLevelTTLProcessorProgress{
 				ProcessorID:          processorID,
@@ -305,7 +305,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				ctx,
 				2, /* level */
 				"TTL processorRowCount updated processorID=%d sqlInstanceID=%d tableID=%d jobRowCount=%d processorRowCount=%d fractionCompleted=%.3f",
-				processorID, sqlInstanceID, tableID, rowLevelTTL.JobRowCount, rowsDeletedSoFar.Load(), fractionCompleted,
+				processorID, sqlInstanceID, tableID, rowLevelTTL.JobDeletedRowCount, rowsDeletedSoFar.Load(), fractionCompleted,
 			)
 			return nil
 		},

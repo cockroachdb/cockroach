@@ -1244,8 +1244,8 @@ message RowLevelTTLDetails {
 
 message RowLevelTTLProgress {
 
-  // JobRowCount is the number of deleted rows for the entire TTL job.
-  int64 job_row_count = 1;
+  // JobDeletedRowCount is the number of rows deleted by TTL job so far.
+  int64 job_deleted_row_count = 1;
 
   // ProcessorProgresses is the progress per DistSQL processor.
   repeated RowLevelTTLProcessorProgress processor_progresses = 2 [(gogoproto.nullable)=false];
