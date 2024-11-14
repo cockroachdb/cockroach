@@ -198,6 +198,16 @@ var GetMultiRegionEnumAddValuePlacementCCL = func(
 	)
 }
 
+// validateExistingZoneCfg validates existing zone configs for a given descriptor
+// ID.
+func (p *planner) validateExistingZoneCfg(ctx context.Context, id descpb.ID) error {
+	zc, err := p.Descriptors().GetZoneConfig(ctx, p.txn, id)
+	if err != nil || zc == nil {
+		return err
+	}
+	return zc.ZoneConfigProto().Validate()
+}
+
 func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		params.ctx,
@@ -213,6 +223,10 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		catpb.RegionName(n.n.Region),
 		n.desc.ID == keys.SystemDatabaseID,
 	); err != nil {
+		return err
+	}
+
+	if err := params.p.validateExistingZoneCfg(params.ctx, n.desc.ID); err != nil {
 		return err
 	}
 
@@ -721,6 +735,11 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 	if n.n == nil {
 		return nil
 	}
+
+	if err := params.p.validateExistingZoneCfg(params.ctx, n.desc.ID); err != nil {
+		return err
+	}
+
 	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
 		return err
@@ -1131,6 +1150,11 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 }
 
 func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
+
+	// Validate if the existing zone config is good.
+	if err := params.p.validateExistingZoneCfg(params.ctx, n.desc.ID); err != nil {
+		return err
+	}
 
 	// There are two paths to consider here: either this is the first setting of
 	// the primary region, OR we're updating the primary region. In the case where
@@ -1891,6 +1915,10 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 				"ALTER DATABASE %s PRIMARY REGION <region_name>",
 			n.n.DatabaseName.String(),
 		)
+	}
+
+	if err := params.p.validateExistingZoneCfg(params.ctx, n.desc.ID); err != nil {
+		return err
 	}
 
 	// Verify that the secondary region is part of the region list.
