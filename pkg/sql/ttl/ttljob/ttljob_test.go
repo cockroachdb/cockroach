@@ -270,7 +270,8 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 			require.Equal(t, expectedProcessorRowCount, processorProgress.ProcessorRowCount)
 			expectedJobRowCount += expectedProcessorRowCount
 		}
-		require.Equal(t, expectedJobSpanCount, rowLevelTTLProgress.JobSpanCount)
+		require.Equal(t, expectedJobSpanCount, rowLevelTTLProgress.JobProcessedSpanCount)
+		require.Equal(t, expectedJobSpanCount, rowLevelTTLProgress.JobTotalSpanCount)
 		require.Equal(t, expectedJobRowCount, rowLevelTTLProgress.JobRowCount)
 		jobCount++
 	}
