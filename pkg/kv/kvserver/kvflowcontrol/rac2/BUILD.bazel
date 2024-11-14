@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "rac2",
     srcs = [
-        "circular_buffer.go",
         "log_tracker.go",
         "metrics.go",
         "priority.go",
@@ -28,6 +27,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/container/ring",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
@@ -45,7 +45,6 @@ go_library(
 go_test(
     name = "rac2_test",
     srcs = [
-        "circular_buffer_test.go",
         "log_tracker_test.go",
         "priority_test.go",
         "range_controller_test.go",
