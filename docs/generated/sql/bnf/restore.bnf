@@ -1,19 +1,19 @@
 restore_stmt ::=
-	'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' restore_options_list
-	| 'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' restore_options_list ')'
-	| 'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
-	| 'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )  'WITH' restore_options_list
-	| 'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )  'WITH' 'OPTIONS' '(' restore_options_list ')'
-	| 'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )  
-	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' restore_options_list
-	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' restore_options_list ')'
-	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
-	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )  'WITH' restore_options_list
-	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )  'WITH' 'OPTIONS' '(' restore_options_list ')'
-	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )  
-	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' restore_options_list
-	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' restore_options_list ')'
-	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
-	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )  'WITH' restore_options_list
-	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )  'WITH' 'OPTIONS' '(' restore_options_list ')'
-	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )  
+	'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' restore_options_list
+	| 'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
+	| 'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list  'WITH' restore_options_list
+	| 'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list  'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 'RESTORE' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list  
+	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' restore_options_list
+	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
+	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list  'WITH' restore_options_list
+	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list  'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 'RESTORE' ( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list  
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' restore_options_list
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list  'WITH' restore_options_list
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list  'WITH' 'OPTIONS' '(' restore_options_list ')'
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' ( ( subdirectory | 'LATEST' ) ) 'IN' ( ( subdirectory | 'LATEST' ) )_opt_list  

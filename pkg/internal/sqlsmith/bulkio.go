@@ -150,7 +150,7 @@ func makeRestore(s *Smither) (tree.Statement, bool) {
 	return &tree.Restore{
 		Targets: targets,
 		Subdir:  tree.NewStrVal("LATEST"),
-		From:    []tree.StringOrPlaceholderOptList{{tree.NewStrVal(name)}},
+		From:    tree.StringOrPlaceholderOptList{tree.NewStrVal(name)},
 		AsOf:    makeAsOf(s),
 		Options: tree.RestoreOptions{
 			IntoDB: tree.NewStrVal("into_db"),
