@@ -988,7 +988,7 @@ SELECT store_id,
 	   crdb_internal.humanize_bytes(available_elastic_tokens)
   FROM crdb_internal.kv_flow_controller
  ORDER BY store_id ASC;
-`, "range_id", "regular_available", "elastic_available")
+`, "store_id", "regular_available", "elastic_available")
 }
 
 // TestFlowControlRaftTransportBreak tests flow token behavior when the raft
@@ -3051,7 +3051,7 @@ SELECT store_id,
 	   crdb_internal.humanize_bytes(available_eval_elastic_tokens)
   FROM crdb_internal.kv_flow_controller_v2
  ORDER BY store_id ASC;
-`, "range_id", "eval_regular_available", "eval_elastic_available")
+`, "store_id", "eval_regular_available", "eval_elastic_available")
 		})
 	})
 }
