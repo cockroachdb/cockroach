@@ -131,7 +131,7 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 					sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
 					sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
 					sctestdeps.WithSessionData(sctestdeps.ReadSessionDataFromDB(t, tdb, func(
-						sd *sessiondata.SessionData,
+						sd *sessiondata.SessionData, localData sessiondatapb.LocalOnlySessionData,
 					) {
 						// For setting up a builder inside tests we will ensure that the new schema
 						// changer will allow non-fully implemented operations.
@@ -139,6 +139,7 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 						sd.TempTablesEnabled = true
 						sd.ApplicationName = ""
 						sd.EnableUniqueWithoutIndexConstraints = true // this allows `ADD UNIQUE WITHOUT INDEX` in the testing suite.
+						sd.SerialNormalizationMode = localData.SerialNormalizationMode
 					})),
 					sctestdeps.WithTestingKnobs(&scexec.TestingKnobs{
 						BeforeStage: func(p scplan.Plan, stageIdx int) error {
