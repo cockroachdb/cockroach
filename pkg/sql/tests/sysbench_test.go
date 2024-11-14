@@ -155,7 +155,10 @@ func newSysbenchSQL(ctx context.Context, b *testing.B) (sysbenchDriver, func()) 
 	// NOTE: disabling background work makes the benchmark more predictable, but
 	// also moderately less realistic.
 	disableBackgroundWork(st)
-	s := serverutils.StartServerOnly(b, base.TestServerArgs{Settings: st})
+	s := serverutils.StartServerOnly(b, base.TestServerArgs{
+		Settings:  st,
+		CacheSize: sysbenchCacheSize,
+	})
 	pgURL, cleanupURL := s.ApplicationLayer().PGUrl(b, serverutils.DBName(sysbenchDB))
 	conn := try(pgx.Connect(ctx, pgURL.String()))
 	cleanup := func() {
@@ -286,7 +289,10 @@ func newSysbenchKV(ctx context.Context, b *testing.B) (sysbenchDriver, func()) {
 	// NOTE: disabling background work makes the benchmark more predictable, but
 	// also moderately less realistic.
 	disableBackgroundWork(st)
-	s, _, db := serverutils.StartServer(b, base.TestServerArgs{Settings: st})
+	s, _, db := serverutils.StartServer(b, base.TestServerArgs{
+		Settings:  st,
+		CacheSize: sysbenchCacheSize,
+	})
 	cleanup := func() {
 		s.Stopper().Stop(ctx)
 	}
@@ -609,6 +615,8 @@ func sysbenchOltpBeginCommit(s sysbenchDriver, _ *rand.Rand) {
 	s.Begin()
 	s.Commit()
 }
+
+const sysbenchCacheSize = 2 * 1024 * 1024 * 1024 // 2GB
 
 func BenchmarkSysbench(b *testing.B) {
 	defer log.Scope(b).Close(b)
