@@ -4020,3 +4020,13 @@ SELECT a, sum_int(c) AS s FROM t124101 GROUP BY a, c ORDER BY a, a, s, c LIMIT 2
 
 statement ok
 RESET testing_optimizer_disable_rule_probability;
+
+# Regression test for erroring out on FLOAT4 type and percentile_cont (#90519).
+statement ok
+CREATE TABLE t90519 (i int);
+INSERT INTO t90519 VALUES (1),(2),(3),(4);
+
+query R
+SELECT percentile_cont(ARRAY[.4::FLOAT]) WITHIN GROUP (ORDER BY i::FLOAT4) FROM t90519;
+----
+{2.2}
