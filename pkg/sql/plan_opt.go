@@ -590,14 +590,10 @@ func (opc *optPlanningCtx) incPlanTypeTelemetry(cachedMemo *memo.Memo) {
 	}
 }
 
-// useGenericPlan returns true if a generic query plan should be used instead of
-// a custom plan.
-func (opc *optPlanningCtx) useGenericPlan() bool {
+// buildNonIdealGenericPlan returns true if we should attempt to build a
+// non-ideal generic query plan.
+func (opc *optPlanningCtx) buildNonIdealGenericPlan() bool {
 	prep := opc.p.stmt.Prepared
-	// Always use an ideal generic plan.
-	if prep.IdealGenericPlan {
-		return true
-	}
 	switch opc.p.SessionData().PlanCacheMode {
 	case sessiondatapb.PlanCacheModeForceGeneric:
 		return true
@@ -621,6 +617,17 @@ func (opc *optPlanningCtx) useGenericPlan() bool {
 	}
 }
 
+// reuseGenericPlan returns true if a cached generic query plan should be
+// reused. An ideal generic query plan is always reused, if it exists.
+func (opc *optPlanningCtx) reuseGenericPlan() bool {
+	prep := opc.p.stmt.Prepared
+	// Always use an ideal generic plan.
+	if prep.IdealGenericPlan {
+		return true
+	}
+	return opc.buildNonIdealGenericPlan()
+}
+
 // chooseValidPreparedMemo returns an optimized memo that is equal to, or built
 // from, baseMemo or genericMemo. It returns nil if both memos are stale. It
 // selects baseMemo or genericMemo based on the following rules, in order:
@@ -640,7 +647,7 @@ func (opc *optPlanningCtx) useGenericPlan() bool {
 //     new memo.
 func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.Memo, error) {
 	prep := opc.p.stmt.Prepared
-	if opc.useGenericPlan() {
+	if opc.reuseGenericPlan() {
 		if prep.GenericMemo == nil {
 			// A generic plan does not yet exist.
 			return nil, nil
@@ -721,7 +728,7 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 	// build a generic memo from it instead of building the memo from
 	// scratch.
 	opc.log(ctx, "rebuilding cached memo")
-	buildGeneric := opc.useGenericPlan()
+	buildGeneric := opc.buildNonIdealGenericPlan()
 	newMemo, typ, err := opc.buildReusableMemo(ctx, buildGeneric)
 	if err != nil {
 		return nil, err
@@ -738,7 +745,7 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 			prep.Costs.SetGeneric(newMemo.RootExpr().(memo.RelExpr).Cost())
 			// Now that the cost of the generic plan is known, we need to
 			// re-evaluate the decision to use a generic or custom plan.
-			if !opc.useGenericPlan() {
+			if !opc.reuseGenericPlan() {
 				// The generic plan that we just built is too expensive, so we need
 				// to build a custom plan. We recursively call fetchPreparedMemo in
 				// case we have a custom plan that can be reused as a starting point
