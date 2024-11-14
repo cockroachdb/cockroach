@@ -352,6 +352,19 @@ func (s *InMemoryStore) DeleteVector(txn Txn, key PrimaryKey) {
 	delete(s.mu.vectors, string(key))
 }
 
+// GetAllVectors returns all vectors that have been added to the store as key
+// and vector pairs. This is used for testing.
+func (s *InMemoryStore) GetAllVectors() []VectorWithKey {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	refs := make([]VectorWithKey, 0, len(s.mu.vectors))
+	for key, vec := range s.mu.vectors {
+		refs = append(refs, VectorWithKey{Key: ChildKey{PrimaryKey: PrimaryKey(key)}, Vector: vec})
+	}
+	return refs
+}
+
 // MarshalBinary saves the in-memory store as a bytes. This allows the store to
 // be saved and later loaded without needing to rebuild it from scratch.
 func (s *InMemoryStore) MarshalBinary() (data []byte, err error) {
