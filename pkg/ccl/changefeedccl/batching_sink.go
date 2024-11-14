@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // SinkClient is an interface to an external sink, where messages are written
@@ -429,7 +430,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		select {
 		case req := <-s.eventCh:
 			if err := s.pacer.Pace(ctx); err != nil {
-				if pacerLogEvery.ShouldLog() {
+				if !errors.Is(err, context.Canceled) && pacerLogEvery.ShouldLog() {
 					log.Errorf(ctx, "automatic sink batcher pacing: %v", err)
 				}
 			}
