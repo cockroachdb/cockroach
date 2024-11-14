@@ -22,6 +22,8 @@ import (
 func runRestartRollingAndRolling(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Status("starting the cluster")
 	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.StoreCount = 2
+	startOpts.RoachprodOpts.WALFailover = "among-stores"
 	cs := install.MakeClusterSettings()
 	cs.ClusterSettings["server.consistency_check.interval"] = "1m"
 	cs.ClusterSettings["server.consistency_check.max_rate"] = "1GB"
@@ -115,9 +117,10 @@ func runRestartRollingAndRolling(ctx context.Context, t test.Test, c cluster.Clu
 
 func registerRestartRollingAndRolling(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "restart/rolling-and-rolling",
-		Owner:            registry.OwnerKV,
-		Cluster:          r.MakeClusterSpec(4, spec.CPU(4), spec.WorkloadNode(), spec.ReuseNone()),
+		Name:  "restart/rolling-and-rolling",
+		Owner: registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(4, spec.CPU(4), spec.SSD(2),
+			spec.WorkloadNode(), spec.ReuseNone()),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.ManualOnly,
 		Leases:           registry.EpochLeases,
