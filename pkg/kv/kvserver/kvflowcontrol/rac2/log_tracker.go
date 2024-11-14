@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/container/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -109,7 +110,7 @@ type LogTracker struct {
 	//	- waiting[pri][i].Term <= last.Term
 	//	- waiting[pri][i].Index < waiting[pri][i+1].Index
 	//	- waiting[pri][i].Term <= waiting[pri][i+1].Term
-	waiting [raftpb.NumPriorities]CircularBuffer[LogMark]
+	waiting [raftpb.NumPriorities]ring.Buffer[LogMark]
 }
 
 // NewLogTracker returns a LogTracker initialized to the given log mark. The
@@ -354,7 +355,7 @@ func (l *LogTracker) errorf(ctx context.Context, format string, args ...any) {
 
 // truncate updates the slice to be a prefix of the ordered log marks slice,
 // with all marks at index > after removed from it.
-func truncate(marks *CircularBuffer[LogMark], after uint64) {
+func truncate(marks *ring.Buffer[LogMark], after uint64) {
 	n := marks.Length()
 	for i := n; i > 0; i-- {
 		if marks.At(i-1).Index <= after {

@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package rac2
+package ring
 
 import (
 	"fmt"
@@ -15,11 +15,13 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
+// TODO: test Clone
+
 func TestCircularBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	cb := CircularBuffer[int]{}
+	cb := Buffer[int]{}
 	cbString := func() string {
 		var b strings.Builder
 		printStats := func() {
@@ -72,7 +74,7 @@ func TestCircularBuffer(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				cb = CircularBuffer[int]{}
+				cb = Buffer[int]{}
 				return ""
 
 			case "push":
