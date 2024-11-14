@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -1546,9 +1545,10 @@ func (c *clusterImpl) HealthStatus(
 	if err != nil {
 		return nil, errors.WithDetail(err, "Unable to get admin UI address(es)")
 	}
+	client := roachtestutil.DefaultHTTPClient(c, l)
 	getStatus := func(ctx context.Context, node int) *HealthStatusResult {
 		url := fmt.Sprintf(`https://%s/health?ready=1`, adminAddrs[node-1])
-		resp, err := httputil.Get(ctx, url)
+		resp, err := client.Get(ctx, url)
 		if err != nil {
 			return newHealthStatusResult(node, 0, nil, err)
 		}
