@@ -134,7 +134,20 @@ func CheckForcedErr(
 			// It is only possible for this to fail when expiration-based
 			// lease extensions are proposed concurrently.
 			expToEpochEquiv := raftCmd.ReplicatedEvalResult.IsLeaseRequestWithExpirationToEpochEquivalent
-			leaseMismatch = !replicaState.Lease.Equivalent(requestedLease, expToEpochEquiv)
+			if !replicaState.Lease.Equivalent(requestedLease, expToEpochEquiv) {
+				if !replicaState.Lease.Start.Equal(requestedLease.Start) {
+					// It should never be possible for two leases to have the same
+					// sequence numbers but different start times. This would mean that
+					// the replica that committed the lease has a different view of the
+					// previous lease than us, as otherwise it wouldn't have assigned it
+					// this sequence number.
+					log.Fatalf(ctx,
+						"current lease %s has the same sequence number as committed lease %s; but start times differ",
+						replicaState.Lease, requestedLease,
+					)
+				}
+				leaseMismatch = true
+			}
 		}
 
 		// This is a check to see if the lease we proposed this lease request
