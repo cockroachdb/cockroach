@@ -215,6 +215,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (re
 				progress := md.Progress
 				rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
 				rowLevelTTL.JobTotalSpanCount = int64(jobSpanCount)
+				rowLevelTTL.JobProcessedSpanCount = 0
+				progress.Progress = &jobspb.Progress_FractionCompleted{
+					FractionCompleted: 0,
+				}
 				ju.UpdateProgress(progress)
 				return nil
 			},
