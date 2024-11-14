@@ -241,9 +241,9 @@ reset_stmt ::=
 	| reset_csetting_stmt
 
 restore_stmt ::=
-	'RESTORE' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' backup_targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	'RESTORE' 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' backup_targets 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 
 resume_stmt ::=
 	resume_jobs_stmt
@@ -728,9 +728,6 @@ reset_session_stmt ::=
 
 reset_csetting_stmt ::=
 	'RESET' 'CLUSTER' 'SETTING' var_name
-
-list_of_string_or_placeholder_opt_list ::=
-	( string_or_placeholder_opt_list ) ( ( ',' string_or_placeholder_opt_list ) )*
 
 opt_with_restore_options ::=
 	'WITH' restore_options_list

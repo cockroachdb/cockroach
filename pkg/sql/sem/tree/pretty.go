@@ -2187,15 +2187,10 @@ func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
 	if node.DescriptorCoverage == RequestedDescriptors {
 		items = append(items, node.Targets.docRow(p))
 	}
-	from := make([]pretty.Doc, len(node.From))
-	for i := range node.From {
-		from[i] = p.Doc(&node.From[i])
-	}
+	from := p.Doc(&node.From)
 	if node.Subdir != nil {
 		items = append(items, p.row("FROM", p.Doc(node.Subdir)))
-		items = append(items, p.row("IN", p.commaSeparated(from...)))
-	} else {
-		items = append(items, p.row("FROM", p.commaSeparated(from...)))
+		items = append(items, p.row("IN", from))
 	}
 
 	if node.AsOf.Expr != nil {
