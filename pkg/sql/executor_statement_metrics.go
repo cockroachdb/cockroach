@@ -20,8 +20,11 @@ import (
 
 // EngineMetrics groups a set of SQL metrics.
 type EngineMetrics struct {
-	// The subset of SELECTs that are processed through DistSQL.
+	// The subset of SELECTs that are requested to be processed through DistSQL.
 	DistSQLSelectCount *metric.Counter
+	// The subset of SELECTs that were executed by DistSQL with full or partial
+	// distribution.
+	DistSQLSelectDistributedCount *metric.Counter
 	// The subset of queries which we attempted and failed to plan with the
 	// cost-based optimizer.
 	SQLOptFallbackCount   *metric.Counter
@@ -143,6 +146,9 @@ func (ex *connExecutor) recordStatementSummary(
 		if flags.IsDistributed() {
 			if _, ok := stmt.AST.(*tree.Select); ok {
 				m.DistSQLSelectCount.Inc(1)
+				if flags.IsSet(planFlagDistributedExecution) {
+					m.DistSQLSelectDistributedCount.Inc(1)
+				}
 			}
 			if shouldIncludeInLatencyMetrics {
 				m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())

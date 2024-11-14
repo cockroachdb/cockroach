@@ -858,6 +858,9 @@ func (dsp *DistSQLPlanner) Run(
 				dsp.cancelFlowsCoordinator.addFlowsToCancel(flows)
 			}
 		}()
+		if planCtx.planner != nil {
+			planCtx.planner.curPlan.flags.Set(planFlagDistributedExecution)
+		}
 	}
 
 	// Currently, we get the statement only if there is a planner available in
