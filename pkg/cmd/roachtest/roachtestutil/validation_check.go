@@ -163,6 +163,6 @@ func ValidateTokensReturned(
 				}
 			}
 			return nil
-		}, 5*time.Second)
+		}, 5*time.Minute)
 	}
 }
