@@ -52,7 +52,6 @@ go_library(
         "//pkg/testutils/skip",
         "//pkg/util/allstacks",
         "//pkg/util/ctxgroup",
-        "//pkg/util/httputil",
         "//pkg/util/leaktest",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
