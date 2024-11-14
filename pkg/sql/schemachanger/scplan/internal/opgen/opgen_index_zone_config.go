@@ -16,7 +16,6 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.IndexZoneConfig) *scop.AddIndexZoneConfig {
-
 					return &scop.AddIndexZoneConfig{
 						TableID:      this.TableID,
 						Subzone:      this.Subzone,

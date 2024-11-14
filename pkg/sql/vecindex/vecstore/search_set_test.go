@@ -11,48 +11,60 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSearchResultHeap(t *testing.T) {
-	// Note that smaller distances are actually "less than" higher distances,
-	// since results need to be sorted in reverse order by the heap.
-	results := searchResultHeap{
-		SearchResult{
-			QuerySquaredDistance: 1,
-			ErrorBound:           0.5,
-			CentroidDistance:     10,
-			ParentPartitionKey:   100,
-			ChildKey:             ChildKey{PrimaryKey: []byte{10}},
-		},
-		SearchResult{
-			QuerySquaredDistance: 2,
-			ErrorBound:           0,
-			CentroidDistance:     20,
-			ParentPartitionKey:   200,
-			ChildKey:             ChildKey{PrimaryKey: []byte{30}},
-		},
-		SearchResult{
-			QuerySquaredDistance: 2,
-			ErrorBound:           1,
-			CentroidDistance:     20,
-			ParentPartitionKey:   200,
-			ChildKey:             ChildKey{PrimaryKey: []byte{20}},
-		},
-		SearchResult{
-			QuerySquaredDistance: 2,
-			ErrorBound:           1,
-			CentroidDistance:     30,
-			ParentPartitionKey:   300,
-			ChildKey:             ChildKey{PrimaryKey: []byte{40}},
-		},
+func TestSearchResult(t *testing.T) {
+	r1 := SearchResult{
+		QuerySquaredDistance: 1,
+		ErrorBound:           0.5,
+		CentroidDistance:     10,
+		ParentPartitionKey:   100,
+		ChildKey:             ChildKey{PrimaryKey: []byte{10}},
+	}
+	r2 := SearchResult{
+		QuerySquaredDistance: 2,
+		ErrorBound:           0,
+		CentroidDistance:     20,
+		ParentPartitionKey:   200,
+		ChildKey:             ChildKey{PrimaryKey: []byte{20}},
+	}
+	r3 := SearchResult{
+		QuerySquaredDistance: 2,
+		ErrorBound:           1,
+		CentroidDistance:     20,
+		ParentPartitionKey:   200,
+		ChildKey:             ChildKey{PrimaryKey: []byte{30}},
+	}
+	r4 := SearchResult{
+		QuerySquaredDistance: 2,
+		ErrorBound:           1,
+		CentroidDistance:     30,
+		ParentPartitionKey:   300,
+		ChildKey:             ChildKey{PrimaryKey: []byte{40}},
+	}
+	r5 := SearchResult{
+		QuerySquaredDistance: 4,
+		ErrorBound:           1,
+		CentroidDistance:     30,
+		ParentPartitionKey:   300,
+		ChildKey:             ChildKey{PrimaryKey: []byte{40}},
 	}
 
-	require.True(t, results.Less(1, 0))
-	require.False(t, results.Less(0, 1))
-	require.True(t, results.Less(1, 2))
-	require.False(t, results.Less(2, 1))
+	// MaybeCloser.
+	require.True(t, r1.MaybeCloser(&r1))
+	require.True(t, r1.MaybeCloser(&r2))
+	require.False(t, r2.MaybeCloser(&r1))
+	require.True(t, r3.MaybeCloser(&r1))
+	require.True(t, r5.MaybeCloser(&r4))
 
-	// Equal case.
-	require.False(t, results.Less(2, 3))
-	require.False(t, results.Less(3, 2))
+	// Compare.
+	require.Equal(t, 0, r1.Compare(&r1))
+	require.Equal(t, -1, r1.Compare(&r2))
+	require.Equal(t, 1, r2.Compare(&r1))
+
+	require.Equal(t, -1, r2.Compare(&r3))
+	require.Equal(t, 1, r3.Compare(&r2))
+
+	require.Equal(t, -1, r3.Compare(&r4))
+	require.Equal(t, 1, r4.Compare(&r3))
 }
 
 func TestSearchStats(t *testing.T) {
@@ -108,16 +120,16 @@ func TestSearchSet(t *testing.T) {
 	result7 := SearchResult{
 		QuerySquaredDistance: 4, ErrorBound: 1.5, CentroidDistance: 70, ParentPartitionKey: 700, ChildKey: ChildKey{PrimaryKey: []byte{70}}}
 	searchSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
-	require.Equal(t, SearchResults{result3, result1, result7, result4, result6, result5}, searchSet.PopResults())
+	require.Equal(t, SearchResults{result3, result1, result4, result7, result6, result5}, searchSet.PopResults())
 
 	result8 := SearchResult{
 		QuerySquaredDistance: 0.5, ErrorBound: 0.5, CentroidDistance: 80, ParentPartitionKey: 800, ChildKey: ChildKey{PrimaryKey: []byte{80}}}
 	searchSet.AddAll(SearchResults{result1, result2, result3, result4})
 	searchSet.AddAll(SearchResults{result5, result6, result7, result8})
-	require.Equal(t, SearchResults{result8, result3, result1, result7, result4}, searchSet.PopResults())
+	require.Equal(t, SearchResults{result8, result3, result1, result4, result7}, searchSet.PopResults())
 
 	// Allow one extra result.
 	otherSet.MaxExtraResults = 1
 	otherSet.AddAll(SearchResults{result1, result2, result3, result4, result5, result6, result7})
-	require.Equal(t, SearchResults{result3, result1, result7, result4}, otherSet.PopResults())
+	require.Equal(t, SearchResults{result3, result1, result4, result7}, otherSet.PopResults())
 }

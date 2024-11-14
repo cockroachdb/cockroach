@@ -219,6 +219,26 @@ func (d *txnDeps) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 	return d.descsCollection.DeleteDescToBatch(ctx, d.kvTrace, id, d.getOrCreateBatch())
 }
 
+// GetZoneConfig implements the scexec.Catalog interface.
+func (d *txnDeps) GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.ZoneConfig, error) {
+	zc, err := d.descsCollection.GetZoneConfig(ctx, d.txn.KV(), id)
+	if err != nil {
+		return nil, err
+	}
+	return zc, nil
+}
+
+// WriteZoneConfigToBatch implements the scexec.Catalog interface.
+func (d *txnDeps) WriteZoneConfigToBatch(
+	ctx context.Context, id descpb.ID, zc catalog.ZoneConfig,
+) error {
+	err := d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id, zc)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // UpdateZoneConfig implements the scexec.Catalog interface.
 func (d *txnDeps) UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig) error {
 	var newZc catalog.ZoneConfig
@@ -241,39 +261,42 @@ func (d *txnDeps) UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb
 // UpdateSubzoneConfig implements the scexec.Catalog interface.
 func (d *txnDeps) UpdateSubzoneConfig(
 	ctx context.Context,
-	tableID descpb.ID,
-	subzones []zonepb.Subzone,
+	parentZone catalog.ZoneConfig,
+	subzone zonepb.Subzone,
 	subzoneSpans []zonepb.SubzoneSpan,
-) error {
-	var newZc catalog.ZoneConfig
-	oldZc, err := d.descsCollection.GetZoneConfig(ctx, d.txn.KV(), tableID)
-	if err != nil {
-		return err
-	}
-
+) (catalog.ZoneConfig, error) {
 	var rawBytes []byte
 	var zc *zonepb.ZoneConfig
 	// If the zone config already exists, we need to preserve the raw bytes as the
 	// expected value that we will be updating. Otherwise, this will be a clean
 	// insert with no expected raw bytes.
-	if oldZc != nil {
-		rawBytes = oldZc.GetRawBytesInStorage()
-		zc = oldZc.ZoneConfigProto()
+	if parentZone != nil {
+		rawBytes = parentZone.GetRawBytesInStorage()
+		zc = parentZone.ZoneConfigProto()
 	} else {
 		// If no zone config exists, create a new one that is a subzone placeholder.
 		zc = zonepb.NewZoneConfig()
 		zc.DeleteTableConfig()
 	}
 
-	// Update the subzones in the zone config.
-	for _, s := range subzones {
-		zc.SetSubzone(s)
-	}
-	zc.SubzoneSpans = subzoneSpans
+	// Update the subzone in the zone config.
+	zc.SetSubzone(subzone)
+	subzoneIdx := zc.GetSubzoneIndex(subzone.IndexID, subzone.PartitionName)
 
-	newZc = zone.NewZoneConfigWithRawBytes(zc, rawBytes)
-	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(),
-		tableID, newZc)
+	// Update the subzone spans.
+	subzoneSpansToWrite := subzoneSpans
+	// If there are subzone spans that currently exist, merge those with the new
+	// spans we are updating. Otherwise, the zone config's set of subzone spans
+	// will be our input subzoneSpans.
+	if len(zc.SubzoneSpans) != 0 {
+		zc.DeleteSubzoneSpansForSubzoneIndex(subzoneIdx)
+		zc.MergeSubzoneSpans(subzoneSpansToWrite)
+		subzoneSpansToWrite = zc.SubzoneSpans
+	}
+	zc.SubzoneSpans = subzoneSpansToWrite
+
+	newZc := zone.NewZoneConfigWithRawBytes(zc, rawBytes)
+	return newZc, nil
 }
 
 // DeleteZoneConfig implements the scexec.Catalog interface.

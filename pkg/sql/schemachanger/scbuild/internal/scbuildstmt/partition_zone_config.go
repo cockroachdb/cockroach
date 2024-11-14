@@ -38,7 +38,9 @@ func (pzo *partitionZoneConfigObj) getTableZoneConfig() *zonepb.ZoneConfig {
 	return pzo.tableZoneConfigObj.zoneConfig
 }
 
-func (pzo *partitionZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
+func (pzo *partitionZoneConfigObj) getZoneConfigElemForAdd(
+	b BuildCtx,
+) (scpb.Element, []scpb.Element) {
 	subzones := []zonepb.Subzone{*pzo.partitionSubzone}
 
 	// Merge the new subzones with the old subzones so that we can generate
@@ -54,15 +56,45 @@ func (pzo *partitionZoneConfigObj) getZoneConfigElem(b BuildCtx) scpb.Element {
 		panic(err)
 	}
 
-	elem := &scpb.PartitionZoneConfig{
-		TableID:       pzo.tableID,
-		IndexID:       pzo.indexID,
-		PartitionName: pzo.partitionName,
-		Subzone:       *pzo.partitionSubzone,
-		SubzoneSpans:  ss,
-		SeqNum:        pzo.seqNum,
+	// TODO(annie): This does a little more work than necessary -- we should be
+	// able to just update the affected subzone spans. This can be done by
+	// comparing the parent's subzone spans with `ss`.
+	//
+	// Update the partition that is represented by pzo, along with all other
+	// subzones.
+	idxToSpansMap := getSubzoneSpansWithIdx(len(subzones), ss)
+	var szCfg scpb.Element
+	var szCfgsToUpdate []scpb.Element
+	for i, sub := range subzones {
+		if spans, ok := idxToSpansMap[int32(i)]; ok {
+			if len(sub.PartitionName) > 0 {
+				if sub.PartitionName == pzo.partitionName && sub.IndexID == uint32(pzo.indexID) {
+					szCfg = &scpb.PartitionZoneConfig{
+						TableID:       pzo.tableID,
+						IndexID:       catid.IndexID(sub.IndexID),
+						PartitionName: sub.PartitionName,
+						Subzone:       sub,
+						SubzoneSpans:  spans,
+						SeqNum:        pzo.seqNum + 1,
+					}
+				} else {
+					szCfgsToUpdate = append(szCfgsToUpdate, constructSideEffectPartitionElem(b, pzo, sub, spans))
+				}
+			} else {
+				szCfgsToUpdate = append(szCfgsToUpdate, constructSideEffectIndexElem(b, pzo, sub, spans))
+			}
+		}
 	}
-	return elem
+
+	return szCfg, szCfgsToUpdate
+}
+
+func (pzo *partitionZoneConfigObj) getZoneConfigElemForDrop(
+	b BuildCtx,
+) (scpb.Element, []scpb.Element) {
+	// TODO(annie): this will need to be revised in order to implement subzone
+	// discards. This is fine for now as we fallback before we can get here.
+	return pzo.getZoneConfigElemForAdd(b)
 }
 
 func (pzo *partitionZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {
@@ -101,10 +133,6 @@ func (pzo *partitionZoneConfigObj) retrieveCompleteZoneConfig(
 	if getInheritedDefault {
 		zc, err = pzo.getInheritedDefaultZoneConfig(b)
 	} else {
-		//zc, err = pzo.tableZoneConfigObj.getZoneConfig(b, false /* inheritDefaultRange */)
-		//if err != nil {
-		//	return nil, nil, err
-		//}
 		placeholder, err = pzo.getZoneConfig(b, false /* inheritDefaultRange */)
 	}
 	if err != nil {
@@ -163,6 +191,20 @@ func (pzo *partitionZoneConfigObj) getInheritedFieldsForPartialSubzone(
 	// Since we have just a partition, we should copy from the inherited
 	// zone's fields (whether that was the table or database).
 	return &zoneInheritedFields, nil
+}
+
+func (pzo *partitionZoneConfigObj) getZoneConfig(
+	b BuildCtx, inheritDefaultRange bool,
+) (*zonepb.ZoneConfig, error) {
+	_, subzones, err := lookUpSystemZonesTable(b, pzo, inheritDefaultRange, true /* isSubzoneConfig */)
+	if err != nil {
+		return nil, err
+	}
+	subzoneConfig := zonepb.NewZoneConfig()
+	subzoneConfig.DeleteTableConfig()
+	subzoneConfig.Subzones = subzones
+
+	return subzoneConfig, nil
 }
 
 func (pzo *partitionZoneConfigObj) applyZoneConfig(

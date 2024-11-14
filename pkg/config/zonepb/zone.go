@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -1113,6 +1114,21 @@ func (z *ZoneConfig) GetSubzoneExact(indexID uint32, partition string) *Subzone 
 	return nil
 }
 
+// GetSubzoneIndex returns the index of the most specific Subzone that applies
+// to the specified index ID and partition, if any exists. The partition can be
+// left unspecified to get the Subzone for an entire index, if it exists. The
+// index ID, however, must always be provided -- even when looking for a
+// partition's Subzone. If nothing exists in z for the provided index ID and
+// partition, this method returns -1.
+func (z *ZoneConfig) GetSubzoneIndex(indexID uint32, partition string) int32 {
+	for i, s := range z.Subzones {
+		if s.IndexID == indexID && s.PartitionName == partition {
+			return int32(i)
+		}
+	}
+	return -1
+}
+
 // GetSubzoneForKeySuffix returns the ZoneConfig for the subzone that contains
 // keySuffix, if it exists and its position in the subzones slice.
 func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) (*Subzone, int32) {
@@ -1151,6 +1167,58 @@ func (z *ZoneConfig) DeleteSubzone(indexID uint32, partition string) bool {
 		}
 	}
 	return false
+}
+
+// DeleteSubzoneSpansForSubzoneIndex removes all subzoneSpans with the given
+// subzoneIndex from z, if any exist.
+func (z *ZoneConfig) DeleteSubzoneSpansForSubzoneIndex(subzoneIndex int32) {
+	filteredSpans := make([]SubzoneSpan, 0, len(z.SubzoneSpans))
+	for _, s := range z.SubzoneSpans {
+		if s.SubzoneIndex != subzoneIndex {
+			filteredSpans = append(filteredSpans, s)
+		}
+	}
+	z.SubzoneSpans = filteredSpans
+}
+
+// DeleteSubzoneSpans deletes all given SubzoneSpan from z.
+func (z *ZoneConfig) DeleteSubzoneSpans(spansToDelete []SubzoneSpan) {
+	toDeleteMap := make(map[string]struct{}, len(spansToDelete))
+	for _, span := range spansToDelete {
+		key := span.Key.String() + span.EndKey.String()
+		toDeleteMap[key] = struct{}{}
+	}
+
+	filteredSpans := make([]SubzoneSpan, 0, len(z.SubzoneSpans))
+	for _, s := range z.SubzoneSpans {
+		key := s.Key.String() + s.EndKey.String()
+		if _, found := toDeleteMap[key]; !found {
+			filteredSpans = append(filteredSpans, s)
+		}
+	}
+
+	z.SubzoneSpans = filteredSpans
+}
+
+// MergeSubzoneSpans merges the given subzoneSpans into z.
+func (z *ZoneConfig) MergeSubzoneSpans(subzoneSpans []SubzoneSpan) {
+	z.SubzoneSpans = append(z.SubzoneSpans, subzoneSpans...)
+	slices.SortFunc(z.SubzoneSpans, func(a, b SubzoneSpan) int {
+		// Our spans are non-overlapping; comparing `EndKey`s is not necessary.
+		return a.Key.Compare(b.Key)
+	})
+}
+
+// FilterSubzoneSpansByIdx retrieves all subzone spans with the given
+// SubzoneIndex.
+func (z *ZoneConfig) FilterSubzoneSpansByIdx(subzoneIdx int32) []SubzoneSpan {
+	filteredSpans := make([]SubzoneSpan, 0, len(z.SubzoneSpans))
+	for _, s := range z.SubzoneSpans {
+		if s.SubzoneIndex == subzoneIdx {
+			filteredSpans = append(filteredSpans, s)
+		}
+	}
+	return filteredSpans
 }
 
 // DeleteIndexSubzones deletes all subzones that refer to the index with the
