@@ -11,12 +11,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,18 +40,6 @@ var realSequenceOpts tree.SequenceOptions
 var virtualSequenceOpts = tree.SequenceOptions{
 	tree.SequenceOption{Name: tree.SeqOptVirtual},
 }
-
-// cachedSequencesCacheSize is the default cache size used when
-// SessionNormalizationMode is SerialUsesCachedSQLSequences or
-// SerialUsesCachedNodeSQLSequences.
-var cachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"sql.defaults.serial_sequences_cache_size",
-	"the default cache size when the session's serial normalization mode is set to cached sequences"+
-		"A cache size of 1 means no caching. Any cache size less than 1 is invalid.",
-	256,
-	settings.PositiveInt,
-)
 
 // generateSequenceForSerial generates a new sequence
 // which will be used when creating a SERIAL column.
@@ -208,14 +196,14 @@ func (p *planner) generateSerialInColumnDef(
 	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedSQLSequences {
 		seqType = "cached "
 
-		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
+		value := sqlclustersettings.CachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
 		seqOpts = tree.SequenceOptions{
 			tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &value},
 		}
 	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedNodeSQLSequences {
 		seqType = "cached node "
 
-		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
+		value := sqlclustersettings.CachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
 		seqOpts = tree.SequenceOptions{
 			tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &value},
 		}
