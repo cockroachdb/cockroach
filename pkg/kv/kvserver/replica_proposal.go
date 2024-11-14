@@ -1036,6 +1036,7 @@ func (r *Replica) evaluateProposal(
 			// change, not that it **is** being promoted without a sequence change.
 			res.Replicated.IsLeaseRequestWithExpirationToEpochEquivalent = true
 		}
+		res.Replicated.IsLeaseTransfer = ba.IsSingleTransferLeaseRequest()
 		if ba.AppliesTimestampCache() {
 			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
 		}
