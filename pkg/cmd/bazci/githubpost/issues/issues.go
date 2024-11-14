@@ -273,16 +273,18 @@ func (p *poster) templateData(
 		artifactsURL = p.teamcityArtifactsURL(req.Artifacts).String()
 	}
 	return TemplateData{
-		PostRequest:      req,
-		Parameters:       p.parameters(req.ExtraParams),
-		CondensedMessage: CondensedMessage(req.Message),
-		Branch:           p.Branch,
-		Commit:           p.SHA,
-		ArtifactsURL:     artifactsURL,
-		URL:              p.buildURL().String(),
-		RelatedIssues:    relatedIssues,
-		PackageNameShort: strings.TrimPrefix(req.PackageName, CockroachPkgPrefix),
-		CommitURL:        fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.Org, p.Repo, p.SHA),
+		PostRequest:        req,
+		PackageNameShort:   strings.TrimPrefix(req.PackageName, CockroachPkgPrefix),
+		Parameters:         p.parameters(req.ExtraParams),
+		CondensedMessage:   CondensedMessage(req.Message),
+		Commit:             p.SHA,
+		CommitURL:          fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.Org, p.Repo, p.SHA),
+		Branch:             p.Branch,
+		ArtifactsURL:       artifactsURL,
+		URL:                p.buildURL().String(),
+		SideEyeSnapshotURL: req.SideEyeSnapshotURL,
+		SideEyeSnapshotMsg: req.SideEyeSnapshotMsg,
+		RelatedIssues:      relatedIssues,
 	}
 }
 

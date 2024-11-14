@@ -66,7 +66,7 @@ func TestPrivateEndpoints(t *testing.T) {
 			},
 		}
 		err := p.CheckConnection(ctx, makeConn("bar"))
-		require.EqualError(t, err, "connection to '42' denied: cluster does not allow private connections from endpoint 'bar'")
+		require.EqualError(t, err, "cluster does not allow private connections from endpoint 'bar'")
 	})
 
 	t.Run("default behavior if no entries", func(t *testing.T) {
@@ -78,7 +78,7 @@ func TestPrivateEndpoints(t *testing.T) {
 			},
 		}
 		err := p.CheckConnection(ctx, makeConn("bar"))
-		require.EqualError(t, err, "connection to '42' denied: cluster does not allow private connections from endpoint 'bar'")
+		require.EqualError(t, err, "cluster does not allow private connections from endpoint 'bar'")
 	})
 
 	t.Run("good private connection", func(t *testing.T) {

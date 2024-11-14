@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -140,13 +141,19 @@ func TestAuthenticateThrottled(t *testing.T) {
 	go server(t, sqlServer)
 	go client(t, sqlClient)
 
-	_, err := authenticate(proxyToClient, proxyToServer, nil, /* proxyBackendKeyData */
+	// The error returned from authenticate should be different from the error
+	// received at the client.
+	_, err := authenticate(
+		proxyToClient,
+		proxyToServer,
+		nil, /* proxyBackendKeyData */
 		func(status throttler.AttemptStatus) error {
 			require.Equal(t, throttler.AttemptInvalidCredentials, status)
-			return authThrottledError
-		})
+			return errors.New("request denied")
+		},
+	)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "too many failed authentication attempts")
+	require.Contains(t, err.Error(), "request denied")
 
 	proxyToServer.Close()
 	proxyToClient.Close()
