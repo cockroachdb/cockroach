@@ -352,6 +352,15 @@ func (s *InMemoryStore) DeleteVector(txn Txn, key PrimaryKey) {
 	delete(s.mu.vectors, string(key))
 }
 
+// GetVector returns a single vector from the store, by its primary key. This
+// is used for testing.
+func (s *InMemoryStore) GetVector(key PrimaryKey) vector.T {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.mu.vectors[string(key)]
+}
+
 // GetAllVectors returns all vectors that have been added to the store as key
 // and vector pairs. This is used for testing.
 func (s *InMemoryStore) GetAllVectors() []VectorWithKey {
