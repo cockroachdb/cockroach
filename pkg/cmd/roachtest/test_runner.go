@@ -1498,7 +1498,7 @@ func (r *testRunner) postTestAssertions(
 			}
 
 			if db == nil {
-				db = c.Conn(ctx, t.L(), s.Node)
+				db = c.Conn(ctx, t.L(), s.Node, option.VirtualClusterName("system"))
 				validationNode = s.Node
 			}
 			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
