@@ -70,7 +70,9 @@ func runRestartRollingAndRolling(ctx context.Context, t test.Test, c cluster.Clu
 				return nil // happy case
 			}
 			if err != nil {
-				return err // workload returned actual error
+				// We keep going since we're starting the workload when a node in
+				// the cluster may currently be restarted.
+				t.L().Errorf("ignoring workload error: %v", err)
 			}
 		}
 	})
