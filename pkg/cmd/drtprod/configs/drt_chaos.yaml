@@ -7,6 +7,7 @@ environment:
   ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
   CLUSTER: drt-chaos
   WORKLOAD_CLUSTER: workload-chaos
+  WORKLOAD_NODES: 1
 
 targets:
   - target_name: $CLUSTER
@@ -114,6 +115,16 @@ targets:
           - $WORKLOAD_CLUSTER
           - certs-$CLUSTER
           - certs
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachprod
+          - roachprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - pkg/cmd/drt/scripts/roachtest_operations_run.sh
+          - roachtest_operations_run.sh
       - command: ssh
         args:
           - $WORKLOAD_CLUSTER
@@ -128,3 +139,22 @@ targets:
         flags:
           warehouses: 12000
           db: cct_tpcc
+      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
+        args:
+          - cct_tpcc # suffix added to script name tpcc_run.sh
+          - false # determines whether to execute the script immediately on workload node
+        flags:
+          db: cct_tpcc
+          warehouses: 12000
+          max-rate: 500
+          workers: 50
+          conns: 50
+          duration: 12h
+          ramp: 10m
+          wait: 0
+      - script: "pkg/cmd/drtprod/scripts/generate_kv_run.sh"
+        args:
+          - false # determines whether to execute the script immediately on workload node
+      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_drop.sh"
+        args:
+          - false # determines whether to execute the script immediately on workload node
