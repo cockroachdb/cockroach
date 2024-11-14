@@ -288,7 +288,7 @@ func (b *builderState) mustOwn(id catid.DescID) {
 	b.ensureDescriptor(id)
 	if c := b.descCache[id]; !c.hasOwnership {
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-			"must be owner of %s %s", c.desc.DescriptorType(), c.desc.GetName()))
+			"must be owner of %s %s", c.desc.DescriptorType(), tree.Name(c.desc.GetName())))
 	}
 }
 
@@ -936,9 +936,22 @@ func (b *builderState) checkOwnershipOrPrivilegesOnSchemaDesc(
 	name tree.ObjectNamePrefix, sc catalog.SchemaDescriptor, p scbuildstmt.ResolveParams,
 ) {
 	switch sc.SchemaKind() {
-	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
+	case catalog.SchemaTemporary:
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
 			"%s permission denied for schema %q", p.RequiredPrivilege.DisplayName(), name))
+	case catalog.SchemaPublic, catalog.SchemaVirtual:
+		if p.RequireOwnership {
+			if ok, err := b.auth.HasOwnership(b.ctx, sc); err != nil {
+				panic(err)
+			} else if !ok {
+				panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+					"must be owner of schema %s", tree.Name(name.Schema())))
+			}
+		} else {
+			if err := b.auth.CheckPrivilege(b.ctx, sc, p.RequiredPrivilege); err != nil {
+				panic(err)
+			}
+		}
 	case catalog.SchemaUserDefined:
 		b.ensureDescriptor(sc.GetID())
 		if p.RequireOwnership {
