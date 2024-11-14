@@ -156,9 +156,12 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		}
 	}
 
-	settings := cluster.MakeTestingClusterSettings()
+	st := cluster.MakeTestingClusterSettings()
 	// TODO(mira): Remove this cluster setting once the default is set to true.
-	kvcoord.KeepRefreshSpansOnSavepointRollback.Override(ctx, &settings.SV, true)
+	kvcoord.KeepRefreshSpansOnSavepointRollback.Override(ctx, &st.SV, true)
+	if cfg.leaseTypeOverride != 0 {
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, cfg.leaseTypeOverride)
+	}
 
 	return base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -183,7 +186,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 					},
 				},
 			},
-			Settings: settings,
+			Settings: st,
 		},
 	}
 }
@@ -262,6 +265,8 @@ type kvnemesisTestCfg struct {
 	// invariants (in particular that we don't double-apply a request or
 	// proposal).
 	assertRaftApply bool
+	// If set, overrides the default lease type for ranges.
+	leaseTypeOverride roachpb.LeaseType
 }
 
 func TestKVNemesisSingleNode(t *testing.T) {
@@ -306,6 +311,22 @@ func TestKVNemesisMultiNode(t *testing.T) {
 		invalidLeaseAppliedIndexProb: 0.2,
 		injectReproposalErrorProb:    0.2,
 		assertRaftApply:              true,
+	})
+}
+
+func TestKVNemesisMultiNode_LeaderLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		leaseTypeOverride:            roachpb.LeaseLeader,
 	})
 }
 

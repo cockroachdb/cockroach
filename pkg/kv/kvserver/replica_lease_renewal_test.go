@@ -40,17 +40,7 @@ func TestLeaseRenewer(t *testing.T) {
 	leases.RunEachLeaseType(t, func(t *testing.T, leaseType roachpb.LeaseType) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		if leaseType == roachpb.LeaseExpiration {
-			ExpirationLeasesOnly.Override(ctx, &st.SV, true)
-		} else {
-			ExpirationLeasesOnly.Override(ctx, &st.SV, false)
-		}
-		if leaseType == roachpb.LeaseLeader {
-			RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
-			LeaderLeasesEnabled.Override(ctx, &st.SV, true)
-		} else {
-			LeaderLeasesEnabled.Override(ctx, &st.SV, false)
-		}
+		OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 		tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
