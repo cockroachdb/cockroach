@@ -8,6 +8,7 @@ package vecstore
 import (
 	"context"
 	"runtime"
+	"slices"
 	"sync"
 	"testing"
 
@@ -53,6 +54,15 @@ func TestInMemoryStore(t *testing.T) {
 		require.Nil(t, results[1].Vector)
 		require.Equal(t, vec2, results[2].Vector)
 		require.Nil(t, results[3].Vector)
+
+		vectors := store.GetAllVectors()
+		slices.SortFunc(vectors, func(a, b VectorWithKey) int {
+			return a.Key.Compare(b.Key)
+		})
+		require.Equal(t, []VectorWithKey{
+			{Key: ChildKey{PrimaryKey: PrimaryKey{11}}, Vector: vector.T{100, 200}},
+			{Key: ChildKey{PrimaryKey: PrimaryKey{12}}, Vector: vector.T{300, 400}},
+		}, vectors)
 	})
 
 	t.Run("insert empty root partition into the store", func(t *testing.T) {
