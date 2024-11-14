@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 // ProposalRejectionType indicates how to handle a proposal that was
@@ -72,7 +73,22 @@ func CheckForcedErr(
 	raftCmd *kvserverpb.RaftCommand,
 	isLocal bool,
 	replicaState *kvserverpb.ReplicaState,
-) ForcedErrResult {
+) (res ForcedErrResult) {
+	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
+
+	defer func() {
+		if res.ForcedError != nil &&
+			raftCmd.ReplicatedEvalResult.State != nil &&
+			raftCmd.ReplicatedEvalResult.State.Lease != nil {
+			op := redact.SafeString("transfer")
+			if isLeaseRequest {
+				op = "request"
+			}
+			log.Infof(ctx, "rejected lease %s %s; current lease %s; err: %s",
+				op, raftCmd.ReplicatedEvalResult.State.Lease, replicaState.Lease, res.ForcedError)
+		}
+	}()
+
 	if raftCmd.ReplicatedEvalResult.IsProbe {
 		// A Probe is handled by forcing an error during application (which
 		// avoids a separate "success" code path for this type of request)
@@ -84,7 +100,6 @@ func CheckForcedErr(
 		}
 	}
 	leaseIndex := replicaState.LeaseAppliedIndex
-	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
 	var requestedLease roachpb.Lease
 	if isLeaseRequest {
 		requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
