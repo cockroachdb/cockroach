@@ -174,6 +174,7 @@ echo $delta`
 				goodOpts := option.DefaultStartOpts()
 				goodOpts.RoachprodOpts.ExtraArgs = append(goodOpts.RoachprodOpts.ExtraArgs,
 					"--clock-device=/dev/ptp0",
+					"--disable-max-offset-check", // see https://github.com/cockroachdb/cockroach/issues/134760
 				)
 				c.Start(ctx, t.L(), goodOpts, install.MakeClusterSettings(), nodes)
 				require.NoError(t, workload(ctx))
@@ -220,7 +221,11 @@ echo $delta`
 			{
 				t.L().Printf("restoring system clock and running CRDB against it once more")
 				require.NoError(t, setOffset(ctx, 0)) // this also stops the clock-skewer service
-				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
+				opts := option.DefaultStartOpts()
+				opts.RoachprodOpts.ExtraArgs = []string{
+					"--disable-max-offset-check", // see https://github.com/cockroachdb/cockroach/issues/134760
+				}
+				c.Start(ctx, t.L(), opts, install.MakeClusterSettings(), nodes)
 				require.NoError(t, workload(ctx))
 				c.Stop(ctx, t.L(), option.DefaultStopOpts(), nodes)
 			}
