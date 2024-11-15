@@ -29,6 +29,5 @@
   withdrawn:
   - 24.2.1
   predecessor: "24.1"
-"24.3":
-  latest: 24.3.0-beta.3
+"25.1":
   predecessor: "24.2"

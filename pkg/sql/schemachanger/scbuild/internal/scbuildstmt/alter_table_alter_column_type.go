@@ -313,8 +313,7 @@ func handleGeneralColumnConversion(
 	// general path works. Without these rules, we encounter failures during the
 	// ALTER operation. To avoid this, we revert to legacy handling if not running
 	// on version 25.1.
-	// TODO(25.1): Update V24_3 here once V25_1 is defined.
-	if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V24_3) {
+	if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_1) {
 		panic(scerrors.NotImplementedErrorf(t,
 			"old active version; ALTER COLUMN TYPE requires backfill. Reverting to legacy handling"))
 	}
