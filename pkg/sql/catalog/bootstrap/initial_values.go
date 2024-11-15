@@ -138,6 +138,11 @@ func copySystemTableKVs(
 	tables := []catconstants.SystemTableName{
 		catconstants.ZonesTableName, // we need to filter out data for tables we don't need
 		catconstants.TenantSettingsTableName,
+		// Latest value for `tenant_id_seq` can be read using `.Scan` because in
+		// `updateTenantIDSequence` we use `.Put` to update instead of
+		// `InternalExecutor`.
+		catconstants.TenantIDSequenceTableName,
+		catconstants.RoleIDSequenceName,
 	}
 
 	batch := kvTxn.NewBatch()

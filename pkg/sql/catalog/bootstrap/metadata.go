@@ -173,17 +173,19 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		add(catalogkeys.EncodeNameKey(ms.codec, desc), nameValue)
 
 		// Set initial sequence values.
-		if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsSequence() && tbl.GetID() != keys.DescIDSequenceID {
-			// Note that we skip over the DescIDSequence here,
-			// the value is initialized earlier in this function.
-			// DescIDSequence is special cased such that there
-			// is a special "descIDGenerator" for the system tenant.
-			// Because of this, there is no DescIDSequence for
-			// the system tenant and thus this loop over descriptors
-			// will not initialize the value for the system tenant.
-			value := roachpb.Value{}
-			value.SetInt(tbl.GetSequenceOpts().Start)
-			add(ms.codec.SequenceKey(uint32(tbl.GetID())), value)
+		if ms.codec.TenantID != roachpb.TenantTwo {
+			if tbl, ok := desc.(catalog.TableDescriptor); ok && tbl.IsSequence() && tbl.GetID() != keys.DescIDSequenceID {
+				// Note that we skip over the DescIDSequence here,
+				// the value is initialized earlier in this function.
+				// DescIDSequence is special cased such that there
+				// is a special "descIDGenerator" for the system tenant.
+				// Because of this, there is no DescIDSequence for
+				// the system tenant and thus this loop over descriptors
+				// will not initialize the value for the system tenant.
+				value := roachpb.Value{}
+				value.SetInt(tbl.GetSequenceOpts().Start)
+				add(ms.codec.SequenceKey(uint32(tbl.GetID())), value)
+			}
 		}
 
 		// Create descriptor metadata key.
