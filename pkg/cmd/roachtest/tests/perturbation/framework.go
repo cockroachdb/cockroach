@@ -169,8 +169,6 @@ func setup(p perturbation, acceptableChange float64) variations {
 	}
 	v.acceptableChange = acceptableChange
 	v.clusterSettings = make(map[string]string)
-	// Enable raft tracing. Remove this once raft tracing is the default.
-	v.clusterSettings["kv.raft.max_concurrent_traces"] = "10"
 	return v
 }
 
@@ -206,10 +204,18 @@ func (v variations) perturbationName() string {
 	return t.Name()
 }
 
+// finishSetup completes initialization of the variations.
+func (v variations) finishSetup() variations {
+	// Enable raft tracing. Remove this once raft tracing is the default.
+	v.clusterSettings["kv.raft.max_concurrent_traces"] = "10"
+	return v
+}
+
 func addMetamorphic(r registry.Registry, p perturbation) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
+	v = v.finishSetup()
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
@@ -224,6 +230,7 @@ func addMetamorphic(r registry.Registry, p perturbation) {
 
 func addFull(r registry.Registry, p perturbation) {
 	v := p.setup()
+	v = v.finishSetup()
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
@@ -261,6 +268,7 @@ func addDev(r registry.Registry, p perturbation) {
 
 	// Allow the test to run on dev machines.
 	v.cloud = registry.AllClouds
+	v = v.finishSetup()
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
