@@ -114,7 +114,7 @@ func (d *dbConsoleCypressTest) RunTest(ctx context.Context, targetNode int, l *l
 	url := fmt.Sprintf("https://%s", adminUIAddrs[0])
 	require.NoError(d.t, rtCluster.RunE(ctx, option.WithNodes(workloadNode), "mkdir", "-p", d.artifactPath))
 	dockerRun := fmt.Sprintf(
-		`docker run -v %s:/e2e/artifacts %s --config baseUrl=%s,screenshotsFolder=/e2e/artifacts,videosFolder=/e2e/artifacts %s`,
+		`docker run -e NO_COLOR=1 -v %s:/e2e/artifacts %s --config baseUrl=%s,screenshotsFolder=/e2e/artifacts,videosFolder=/e2e/artifacts %s`,
 		d.artifactPath, d.imageName, url, specStr)
 	// If the Docker run fails, get the test failure artifacts and write them to
 	// roachtest's artifact directory.
@@ -123,7 +123,7 @@ func (d *dbConsoleCypressTest) RunTest(ctx context.Context, targetNode int, l *l
 		if mkDirErr := os.MkdirAll(testArtifactsDir, 0777); mkDirErr != nil {
 			d.t.Fatal(mkDirErr)
 		}
-		require.NoError(d.t, rtCluster.Get(ctx, d.t.L(), d.artifactPath, testArtifactsDir, workloadNode))
+		require.NoError(d.t, rtCluster.Get(context.Background(), d.t.L(), d.artifactPath, testArtifactsDir, workloadNode))
 		d.t.Fatal(err)
 	}
 }
@@ -195,11 +195,16 @@ func (d *dbConsoleCypressTest) writeCypressFilesToWorkloadNode(ctx context.Conte
 }
 
 func registerDbConsole(r registry.Registry) {
+	// Explicitly set CockroachBinary to registry.StandardCockroach to ensure that a binary
+	// containing db console is used. Currently, registry.RuntimeAssertionsCockroach
+	// is built using cockroach-short and the default of registry.RandomizedCockroach
+	// causes the tests to be flaky
 	r.Add(registry.TestSpec{
 		Name:             "db-console/mixed-version-cypress",
 		Owner:            registry.OwnerObservability,
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
 		CompatibleClouds: registry.AllClouds,
+		CockroachBinary:  registry.StandardCockroach,
 		Suites:           registry.Suites(registry.Nightly),
 		Randomized:       false,
 		Run:              runDbConsoleCypressMixedVersions,
@@ -210,6 +215,7 @@ func registerDbConsole(r registry.Registry) {
 		Owner:            registry.OwnerObservability,
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
 		CompatibleClouds: registry.AllClouds,
+		CockroachBinary:  registry.StandardCockroach,
 		Suites:           registry.Suites(registry.Nightly),
 		Randomized:       false,
 		Run:              runDbConsoleCypress,
