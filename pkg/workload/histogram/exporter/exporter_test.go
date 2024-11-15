@@ -209,7 +209,7 @@ func TestOpenMetricsFileWithJson(t *testing.T) {
 							return errors.Errorf("invalid summary count: %f", countValue)
 						}
 					}
-
+					quantile *= 100
 					if int64(countValue) != hist.ValueAtQuantile(quantile) {
 						return errors.Errorf("invalid summary quantile: %f", quantile)
 					}
