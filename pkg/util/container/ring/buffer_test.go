@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package rac2
+package ring
 
 import (
 	"fmt"
@@ -13,15 +13,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
-func TestCircularBuffer(t *testing.T) {
+func TestBuffer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	cb := CircularBuffer[int]{}
+	cb := Buffer[int]{}
 	cbString := func() string {
 		var b strings.Builder
+		// Clone cb and trash the clone's state. It should not affect cb.
+		cbClone := cb.Clone()
+		require.Equal(t, cbClone, cb)
+		for i := 0; i < len(cbClone.buf); i++ {
+			cbClone.buf[i] = -1
+		}
+		cbClone = Buffer[int]{}
 		printStats := func() {
 			fmt.Fprintf(&b, "first: %d len: %d cap: %d pushes: %d, max-len: %d\n",
 				cb.first, cb.len, len(cb.buf), cb.pushesSinceCheck, cb.maxObservedLen)
@@ -68,11 +76,11 @@ func TestCircularBuffer(t *testing.T) {
 		printStats()
 		return b.String()
 	}
-	datadriven.RunTest(t, "testdata/circular_buffer",
+	datadriven.RunTest(t, "testdata/buffer",
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
-				cb = CircularBuffer[int]{}
+				cb = Buffer[int]{}
 				return ""
 
 			case "push":

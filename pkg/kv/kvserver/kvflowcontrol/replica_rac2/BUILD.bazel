@@ -24,6 +24,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
+        "//pkg/util/container/ring",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/stop",

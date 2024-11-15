@@ -3,20 +3,20 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package rac2
+package ring
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
-// CircularBuffer provides functionality akin to a []T, for cases that usually
+// Buffer provides functionality akin to a []T, for cases that usually
 // push to the back and pop from the front, and would like to reduce
 // allocations. The assumption made here is that the capacity needed for
 // holding the live entries is somewhat stable. The circular buffer grows as
 // needed, and over time will shrink. Liveness of shrinking depends on new
 // entries being pushed.
-type CircularBuffer[T any] struct {
+type Buffer[T any] struct {
 	// len(buf) == cap(buf). These are powers of 2 and >= minCap.
 	buf []T
 	// first is in [0, len(buf)).
@@ -41,7 +41,7 @@ const minCap = 32
 const shrinkCheckInterval = 3
 
 // Push adds an entry to the end of the buffer.
-func (cb *CircularBuffer[T]) Push(a T) {
+func (cb *Buffer[T]) Push(a T) {
 	needed := cb.len + 1
 	cap := len(cb.buf)
 	if needed > cap {
@@ -78,7 +78,7 @@ func (cb *CircularBuffer[T]) Push(a T) {
 // Pop removes the first num entries.
 //
 // REQUIRES: num <= cb.len.
-func (cb *CircularBuffer[T]) Pop(num int) {
+func (cb *Buffer[T]) Pop(num int) {
 	if buildutil.CrdbTestBuild && num > cb.len {
 		panic(errors.AssertionFailedf("num %d > cb.len %d", num, cb.len))
 	}
@@ -96,7 +96,7 @@ func (cb *CircularBuffer[T]) Pop(num int) {
 // ShrinkToPrefix shrinks the buffer to retain the first num entries.
 //
 // REQUIRES: num <= cb.len.
-func (cb *CircularBuffer[T]) ShrinkToPrefix(num int) {
+func (cb *Buffer[T]) ShrinkToPrefix(num int) {
 	if buildutil.CrdbTestBuild && num > cb.len {
 		panic(errors.AssertionFailedf("num %d > cb.len %d", num, cb.len))
 	}
@@ -106,7 +106,7 @@ func (cb *CircularBuffer[T]) ShrinkToPrefix(num int) {
 // At returns the entry at index.
 //
 // REQUIRES: index < cb.len.
-func (cb *CircularBuffer[T]) At(index int) T {
+func (cb *Buffer[T]) At(index int) T {
 	if buildutil.CrdbTestBuild && index >= cb.len {
 		panic(errors.AssertionFailedf("index %d >= cb.len %d", index, cb.len))
 	}
@@ -117,7 +117,7 @@ func (cb *CircularBuffer[T]) At(index int) T {
 // SetLast overwrites the last entry.
 //
 // REQUIRES: Length() > 0.
-func (cb *CircularBuffer[T]) SetLast(a T) {
+func (cb *Buffer[T]) SetLast(a T) {
 	if buildutil.CrdbTestBuild && cb.len == 0 {
 		panic(errors.AssertionFailedf("buffer is empty"))
 	}
@@ -128,7 +128,7 @@ func (cb *CircularBuffer[T]) SetLast(a T) {
 // SetFirst overwrites the first entry.
 //
 // REQUIRES: Length() > 0.
-func (cb *CircularBuffer[T]) SetFirst(a T) {
+func (cb *Buffer[T]) SetFirst(a T) {
 	if buildutil.CrdbTestBuild && cb.len == 0 {
 		panic(errors.AssertionFailedf("buffer is empty"))
 	}
@@ -136,11 +136,17 @@ func (cb *CircularBuffer[T]) SetFirst(a T) {
 }
 
 // Length returns the current length.
-func (cb *CircularBuffer[T]) Length() int {
+func (cb *Buffer[T]) Length() int {
 	return cb.len
 }
 
-func (cb *CircularBuffer[T]) reallocate(size int) {
+func (cb *Buffer[T]) Clone() Buffer[T] {
+	b := *cb
+	b.buf = append([]T(nil), cb.buf...)
+	return b
+}
+
+func (cb *Buffer[T]) reallocate(size int) {
 	buf := make([]T, size)
 	capacity := len(cb.buf)
 	// cb.buf is split into a prefix and suffix, where the prefix is

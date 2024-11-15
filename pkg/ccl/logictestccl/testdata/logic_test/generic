@@ -1220,3 +1220,100 @@ ALTER TABLE a RENAME TO b
 
 statement error pgcode 42P01 pq: relation \"a\" does not exist
 EXECUTE p
+
+statement ok
+DEALLOCATE p
+
+# Regression test for #135151. Do not build suboptimal generic plans when an
+# ideal generic plan (using the placeholder fast path) was previously planned.
+statement ok
+CREATE TABLE t135151 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX (a, b)
+);
+
+statement ok
+SET plan_cache_mode = force_custom_plan;
+
+statement ok
+PREPARE p AS SELECT k FROM t135151 WHERE a = $1 AND b = $2;
+
+query T
+EXPLAIN ANALYZE EXECUTE p(1, 2);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
+  KV rows decoded: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  missing stats
+  table: t135151@t135151_a_b_idx
+  spans: [/1/2 - /1/2]
+
+statement ok
+ALTER TABLE t135151 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10,
+    "avg_size": 1
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10,
+    "avg_size": 1
+  }
+]';
+
+query T
+EXPLAIN ANALYZE EXECUTE p(1, 2);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  KV time: 0µs
+  KV contention time: 0µs
+  KV rows decoded: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  estimated row count: 100 (1.0% of the table; stats collected <hidden> ago)
+  table: t135151@t135151_a_b_idx
+  spans: [/1/2 - /1/2]

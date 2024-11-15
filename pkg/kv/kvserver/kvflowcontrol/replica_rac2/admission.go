@@ -6,8 +6,8 @@
 package replica_rac2
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/container/ring"
 )
 
 // lowPriOverrideState records which raft log entries have their priority
@@ -69,7 +69,7 @@ type lowPriOverrideState struct {
 	//
 	// A call to getEffectivePriority for index i causes a prefix of indices <=
 	// i to be discarded.
-	intervals rac2.CircularBuffer[interval]
+	intervals ring.Buffer[interval]
 	// Highest term observed so far.
 	leaderTerm uint64
 }
