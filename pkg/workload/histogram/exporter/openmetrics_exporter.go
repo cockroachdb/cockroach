@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	prom "github.com/prometheus/client_model/go"
@@ -94,6 +95,7 @@ func (o *OpenMetricsExporter) Close(f func() error) error {
 func (o *OpenMetricsExporter) emitGaugeMetric(
 	name string, value float64, timestamp time.Time,
 ) error {
+	name = util.SanitizeMetricName(name)
 	gaugeMetric := prom.MetricFamily{
 		Name: &name,
 		Help: nil,
@@ -139,8 +141,10 @@ func (o *OpenMetricsExporter) SetLabels(labels *map[string]string) {
 	var labelValues []*prom.LabelPair
 
 	for label, value := range *labels {
-		labelName := sanitizeOpenMetricsLabels(label)
-		labelValue := value
+		labelName := util.SanitizeKey(label)
+
+		// In case the label value already has surrounding quotes, we should trim them
+		labelValue := util.SanitizeValue(strings.Trim(value, "\""))
 		labelPair := &prom.LabelPair{
 			Name:  &labelName,
 			Value: &labelValue,

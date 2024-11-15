@@ -8,6 +8,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -192,12 +193,17 @@ func runAdmissionControlSnapshotOverloadIO(
 	t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
+
+		labels := map[string]string{
+			"concurrency":  "4000",
+			"read-percent": strconv.Itoa(cfg.readPercent),
+		}
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 			fmt.Sprintf("./cockroach workload run kv --tolerate-errors "+
-				"--splits=1000 --histograms=%s/stats.json --read-percent=%d "+
+				"--splits=1000 %s --read-percent=%d "+
 				"--max-rate=600 --max-block-bytes=%d --min-block-bytes=%d "+
 				"--concurrency=4000 --duration=%s {pgurl:1-2}",
-				t.PerfArtifactsDir(),
+				roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
 				cfg.readPercent,
 				cfg.workloadBlockBytes,
 				cfg.workloadBlockBytes,

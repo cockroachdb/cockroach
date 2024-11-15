@@ -81,25 +81,31 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 						"--min-block-bytes=512 --max-block-bytes=1024 {pgurl%s}",
 					binary, c.Node(1)))
 			}
+			labels := map[string]string{
+				"concurrency":  "500",
+				"read-percent": "5",
+			}
 			// The workloads are tuned to keep the cluster busy at 30-40% CPU, and IO
 			// overload metric approaching 20-30% which causes elastic traffic being
 			// de-prioritized and wait.
 			runForeground := func(ctx context.Context, duration time.Duration) error {
 				cmd := roachtestutil.NewCommand("./cockroach workload run kv "+
-					"--histograms=perf/stats.json --concurrency=500 "+
+					"%s --concurrency=500 "+
 					"--max-rate=5000 --read-percent=5 "+
 					"--min-block-bytes=512 --max-block-bytes=1024 "+
 					"--txn-qos='regular' "+
-					"--duration=%v {pgurl%s}", duration, c.CRDBNodes())
+					"--duration=%v {pgurl%s}", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration, c.CRDBNodes())
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 			}
+
+			labels["read-percent"] = "0"
 			runBackground := func(ctx context.Context, duration time.Duration) error {
 				cmd := roachtestutil.NewCommand("./cockroach workload run kv "+
-					"--histograms=perf/stats.json --concurrency=500 "+
+					"%s --concurrency=500 "+
 					"--max-rate=10000 --read-percent=0 "+
 					"--min-block-bytes=2048 --max-block-bytes=4096 "+
 					"--txn-qos='background' "+
-					"--duration=%v {pgurl%s}", duration, c.CRDBNodes())
+					"--duration=%v {pgurl%s}", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), duration, c.CRDBNodes())
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 			}
 			runWorkloads := func(ctx2 context.Context) error {
