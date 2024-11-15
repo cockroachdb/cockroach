@@ -165,7 +165,21 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	if processorSpanCount < processorConcurrency {
 		processorConcurrency = processorSpanCount
 	}
-	var processorRowCount int64
+	var rowsDeletedSoFar atomic.Int64
+	var spansProccessedSoFar atomic.Int64
+
+	// Log progress approximately every 1% of spans processed.
+	updateEvery := max(1, processorSpanCount/100)
+	logProgress := func() error {
+		processorID := t.ProcessorID
+		log.Infof(
+			ctx,
+			"TTL progress processorID=%d tableID=%d deletedRowCount=%d processedSpanCountForProcessor=%d totalSpanCountForProcessor=%d",
+			processorID, tableID, rowsDeletedSoFar.Load(), spansProccessedSoFar.Load(), processorSpanCount,
+		)
+		return nil
+	}
+
 	err = func() error {
 		boundsChan := make(chan QueryBounds, processorConcurrency)
 		defer close(boundsChan)
@@ -205,7 +219,8 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 						deleteBuilder,
 					)
 					// add before returning err in case of partial success
-					atomic.AddInt64(&processorRowCount, spanRowCount)
+					rowsDeletedSoFar.Add(spanRowCount)
+					spansProccessedSoFar.Add(1)
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
@@ -238,6 +253,15 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			} else if hasRows {
 				// Only process bounds from spans with rows inside them.
 				boundsChan <- bounds
+			} else {
+				// If the span has no rows, we still need to increment the processed
+				// count.
+				spansProccessedSoFar.Add(1)
+			}
+			if spansProccessedSoFar.Load() >= updateEvery {
+				if err := logProgress(); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -247,6 +271,9 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	}
 
 	if err := group.Wait(); err != nil {
+		return err
+	}
+	if err := logProgress(); err != nil {
 		return err
 	}
 
@@ -259,12 +286,17 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
 			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
-			rowLevelTTL.JobRowCount += processorRowCount
 			processorID := t.ProcessorID
+			fractionCompleted := float32(processorSpanCount) / float32(rowLevelTTL.JobTotalSpanCount)
+			progress.Progress = &jobspb.Progress_FractionCompleted{
+				FractionCompleted: fractionCompleted,
+			}
+			rowLevelTTL.JobDeletedRowCount += rowsDeletedSoFar.Load()
+			rowLevelTTL.JobProcessedSpanCount += spansProccessedSoFar.Load()
 			rowLevelTTL.ProcessorProgresses = append(rowLevelTTL.ProcessorProgresses, jobspb.RowLevelTTLProcessorProgress{
 				ProcessorID:          processorID,
 				SQLInstanceID:        sqlInstanceID,
-				ProcessorRowCount:    processorRowCount,
+				ProcessorRowCount:    rowsDeletedSoFar.Load(),
 				ProcessorSpanCount:   processorSpanCount,
 				ProcessorConcurrency: processorConcurrency,
 			})
@@ -272,8 +304,8 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			log.VInfof(
 				ctx,
 				2, /* level */
-				"TTL processorRowCount updated jobID=%d processorID=%d sqlInstanceID=%d tableID=%d jobRowCount=%d processorRowCount=%d",
-				jobID, processorID, sqlInstanceID, tableID, rowLevelTTL.JobRowCount, processorRowCount,
+				"TTL processorRowCount updated processorID=%d sqlInstanceID=%d tableID=%d jobRowCount=%d processorRowCount=%d fractionCompleted=%.3f",
+				processorID, sqlInstanceID, tableID, rowLevelTTL.JobDeletedRowCount, rowsDeletedSoFar.Load(), fractionCompleted,
 			)
 			return nil
 		},
