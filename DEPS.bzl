@@ -1765,10 +1765,10 @@ def go_deps():
         name = "com_github_cockroachdb_crlib",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/crlib",
-        sha256 = "dee26092797ad5509d6d3da5d4a0ecbdbaf45971740bc2af61b05140aa4fa29a",
-        strip_prefix = "github.com/cockroachdb/crlib@v0.0.0-20241030175859-ddcdee82a927",
+        sha256 = "4e55a6088c146af4bda503535b067a9c5c980449e0f185a48b5e1e06606d0ef8",
+        strip_prefix = "github.com/cockroachdb/crlib@v0.0.0-20241112164430-1264a2edc35b",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/crlib/com_github_cockroachdb_crlib-v0.0.0-20241030175859-ddcdee82a927.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/crlib/com_github_cockroachdb_crlib-v0.0.0-20241112164430-1264a2edc35b.zip",
         ],
     )
     go_repository(
@@ -1795,16 +1795,6 @@ def go_deps():
         strip_prefix = "github.com/cockroachdb/errors@v1.11.3",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.11.3.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_cockroachdb_fifo",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/cockroachdb/fifo",
-        sha256 = "41e682b393cc82891ab5fcefbd28cc6173f16887702ab8760bcbc66d122e5900",
-        strip_prefix = "github.com/cockroachdb/fifo@v0.0.0-20240606204812-0bbfbd93a7ce",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/fifo/com_github_cockroachdb_fifo-v0.0.0-20240606204812-0bbfbd93a7ce.zip",
         ],
     )
     go_repository(
@@ -1858,10 +1848,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "5c903bb483ab156010c92e3393b3a5fd03222574014e2794dbfecc8f641c6370",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20241112220713-8e01ef310206",
+        sha256 = "1e865102793f389cee9b62f20fff5c50fa1787dc3fe44498a3a535b2e9f5c9b2",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20241114191304-97771076bfa0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20241112220713-8e01ef310206.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20241114191304-97771076bfa0.zip",
         ],
     )
     go_repository(
