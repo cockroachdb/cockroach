@@ -298,6 +298,10 @@ var LogicTestConfigs = []TestClusterConfig{
 		OverrideVectorize:   "off",
 	},
 	{
+		Name:     "radubious",
+		NumNodes: 1,
+	},
+	{
 		Name:                        "local-read-committed",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
@@ -565,6 +569,7 @@ var (
 		"local",
 		"local-legacy-schema-changer",
 		"local-vec-off",
+		"radubious",
 		"local-read-committed",
 		"local-repeatable-read",
 		"fakedist",
