@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // jobDescriptionFromMutationID returns a string description of a mutation with
@@ -212,6 +213,8 @@ func createSchemaChangeJobsFromMutations(
 			Progress: jobspb.SchemaChangeProgress{},
 		}
 		jobID := jr.MakeJobID()
+		ctx = logtags.AddTag(ctx, "job", jobID)
+
 		if _, err := jr.CreateJobWithTxn(ctx, jobRecord, jobID, txn); err != nil {
 			return err
 		}
