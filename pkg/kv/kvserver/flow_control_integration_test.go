@@ -988,7 +988,7 @@ SELECT store_id,
 	   crdb_internal.humanize_bytes(available_elastic_tokens)
   FROM crdb_internal.kv_flow_controller
  ORDER BY store_id ASC;
-`, "range_id", "regular_available", "elastic_available")
+`, "store_id", "regular_available", "elastic_available")
 }
 
 // TestFlowControlRaftTransportBreak tests flow token behavior when the raft
@@ -3051,7 +3051,7 @@ SELECT store_id,
 	   crdb_internal.humanize_bytes(available_eval_elastic_tokens)
   FROM crdb_internal.kv_flow_controller_v2
  ORDER BY store_id ASC;
-`, "range_id", "eval_regular_available", "eval_elastic_available")
+`, "store_id", "eval_regular_available", "eval_elastic_available")
 		})
 	})
 }
@@ -4507,6 +4507,416 @@ ORDER BY streams DESC;
 	h.query(n2, v2FlowTokensQueryStr)
 }
 
+type testGeneratedPut struct{}
+
+func contextWithTestGeneratedPut(ctx context.Context) context.Context {
+	return context.WithValue(ctx, testGeneratedPut{}, &testGeneratedPut{})
+}
+
+func isTestGeneratedPut(ctx context.Context) bool {
+	val := ctx.Value(testGeneratedPut{})
+	_, ok := val.(*testGeneratedPut)
+	return ok
+}
+
+// TestFlowControlSendQueue exercises the send queue formation, prevention and
+// flushing via selective (logical) admission of entries and token return. See
+// the initial comment for an overview of the test structure.
+func TestFlowControlSendQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const numNodes = 5
+	var noopWaitForEval atomic.Bool
+	disableWorkQueueGrantingServers := make([]atomic.Bool, numNodes)
+	setTokenReturnEnabled := func(enabled bool, serverIdxs ...int) {
+		for _, serverIdx := range serverIdxs {
+			disableWorkQueueGrantingServers[serverIdx].Store(!enabled)
+		}
+	}
+
+	mkStream := func(serverIdx int) kvflowcontrol.Stream {
+		return kvflowcontrol.Stream{
+			StoreID:  roachpb.StoreID(serverIdx + 1),
+			TenantID: roachpb.SystemTenantID,
+		}
+	}
+
+	settings := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Mode.Override(ctx, &settings.SV, kvflowcontrol.ApplyToAll)
+	// We want to exhaust tokens but not overload the test, so we set the limits
+	// lower (8 and 16 MiB default).
+	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, 2<<20)
+	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, 4<<20)
+
+	stickyArgsPerServer := make(map[int]base.TestServerArgs)
+	for i := range disableWorkQueueGrantingServers {
+		// Start with admission (logical token return) disabled across all nodes.
+		disableWorkQueueGrantingServers[i].Store(true)
+		stickyArgsPerServer[i] = base.TestServerArgs{
+			Settings: settings,
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:    true,
+					StickyVFSID: strconv.FormatInt(int64(i), 10),
+				},
+			},
+			RaftConfig: base.RaftConfig{
+				// Suppress timeout-based elections. This test doesn't want to deal
+				// with leadership changing hands unintentionally.
+				RaftElectionTimeoutTicks: 1000000,
+			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyVFSRegistry: fs.NewStickyRegistry(),
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
+						UseOnlyForScratchRanges: true,
+						OverrideTokenDeduction: func(tokens kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+							// This test sends several puts, with each put potentially
+							// diverging by a few bytes between runs, in aggregate this can
+							// accumulate to enough tokens to produce a diff in metrics. In
+							// addition, under stress/race the larger writes may overload the
+							// system with many concurrent tests. Deduct every write as 1
+							// MiB, regardless of how large it actually is.
+							return kvflowcontrol.Tokens(1 << 20)
+						},
+
+						OverrideBypassAdmitWaitForEval: func(ctx context.Context) (bypass bool, waited bool) {
+							bypassAndWaited := noopWaitForEval.Load()
+							if bypassAndWaited {
+								return true, true
+							}
+							if !isTestGeneratedPut(ctx) {
+								return true, false
+							}
+							return false, false
+						},
+						// We want to test the behavior of the send queue, so we want to
+						// always have up-to-date stats. This ensures that the send queue
+						// stats are always refreshed on each call to
+						// RangeController.HandleRaftEventRaftMuLocked.
+						OverrideAlwaysRefreshSendStreamStats: true,
+					},
+				},
+				AdmissionControl: &admission.TestingKnobs{
+					DisableWorkQueueFastPath: true,
+					DisableWorkQueueGranting: func() bool {
+						idx := i
+						return disableWorkQueueGrantingServers[idx].Load()
+					},
+				},
+			},
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: stickyArgsPerServer,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// We setup 3 voters initially on n1, n2, n3. Later, we add n4, n5.
+	k := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+
+	h := newFlowControlTestHelper(
+		t, tc, "flow_control_integration_v2", /* testdata */
+		kvflowcontrol.V2EnabledWhenLeaderV2Encoding, true, /* isStatic */
+	)
+	h.init(kvflowcontrol.ApplyToAll)
+	defer h.close("send_queue")
+
+	desc, err := tc.LookupRange(k)
+	require.NoError(t, err)
+	h.enableVerboseRaftMsgLoggingForRange(desc.RangeID)
+	n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
+	// We shouldn't need this, since we use contextWithTestGeneratedPut to only
+	// subject the test's puts to RAC. But there was a test failure that had
+	// 4KiB of tokens deducted and returned, so a send-queue must have formed,
+	// possibly because the replica was not in StateReplicate when some entries
+	// not subject to RAC were processed.
+	h.resetV2TokenMetrics(ctx)
+
+	h.comment(`
+-- This test exercises send queue formation, prevention and flushing.
+-- The structure roughly follows:
+--   Start with three voters on [n1,n2,n3], where n1 is the leader+leaseholder.
+--   Large regular write -4 MiB.
+--   Allow admission [n1,n2].
+--   - Tokens should be returned for n1 and n2.
+--   Block admission [n2].
+--   Regular write -1 MiB.
+--   - Shouldn't be blocked on wait-for-eval because of quorum [n1,n2].
+--   - Metrics should reflect send queue formation on n3.
+--   Stop n2.
+--   Regular write -1 MiB.
+--   - Blocks on wait-for-eval, however the test bypasses this instance.
+--   - Metrics should reflect n3 being force flushed.
+--   Allow admission [n1,n2,n3].
+--   Start n2.
+--   Add n4, n5, the voters now are [n1,n2,n3,n4,n5].
+--   Block admission [n4,n5] (already blocked)
+--   Regular write -4 MiB.
+--   Regular write -1  MiB.
+--   - Shouldn't be blocked on wait-for-eval because of quorum [n1,n2,n3]
+--   - Metrics should reflect send queue formation on n4,n5.
+--   Unblock admission [n4,n5].
+--   - Wait for tokens to be returned.
+--   Block admission [n2,n3,n4,n5].
+--   Regular write -4 MiB.
+--   Regular write -1  MiB.
+--   - Blocks on wait-for-eval, however the test bypasses this instance.    
+--   - Metrics should reflect 2 streams being prevented from forming a send queue.
+--   Allow admission [n1,n2,n3,n4,n5] (all).
+--   Assert all tokens returned.
+--
+-- Start by printing the relevant metrics on n1, first the flow token metrics.
+`)
+	h.query(n1, v2FlowTokensQueryStr)
+	h.comment(`-- Send queue metrics from n1.`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.comment(`-- Per-store tokens available from n1.`)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`-- (Issuing 4x1MiB regular, 3x replicated write that's not admitted.)`)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 12<<20 /* 12MiB */, 0 /* serverIdx */)
+	h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
+	h.query(n1, `
+  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+`, "range_id", "store_id", "total_tracked_tokens")
+	h.comment(`-- And, the per-store tokens available post-write from n1.`)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`
+-- (Allowing below-raft admission to proceed on n1 and n2.)
+-- [n1(enabled),n2(enabled),n3(blocked)]`)
+	setTokenReturnEnabled(true /* enabled */, 0, 1)
+	// Wait for token return on n1, n2. We should only be tracking the tokens for
+	// n3 now.
+	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */, mkStream(0), mkStream(1))
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 4<<20 /* 4MiB */, 0 /* serverIdx */)
+	h.comment(`-- Observe the total tracked tokens per-stream on n1.`)
+	h.query(n1, `
+  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+`, "range_id", "store_id", "total_tracked_tokens")
+	h.comment(`-- Per-store tokens available from n1.`)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	// Re-disable admission on n2. This is to track a write to n2 that won't be
+	// admitted before it's stopped.
+	h.comment(`-- (Blocking below-raft admission on n2.)`)
+	setTokenReturnEnabled(false /* enabled */, 1)
+
+	h.comment(`-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)`)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	// NB: The write won't be tracked because the quorum [n1,n2] have tokens for
+	// eval.
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 5<<20 /* 5 MiB */, 0 /* serverIdx */)
+	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */, mkStream(0))
+	h.waitForSendQueueSize(ctx, desc.RangeID, 1<<20 /* 1MiB expSize */, 0 /* serverIdx */)
+	h.comment(`
+-- The send queue metrics from n1 should reflect the 1 MiB write being queued
+-- for n3 and 1 MiB tracked for n2 that is yet to be admitted.
+`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.comment(`-- Per-store tokens available from n1.`)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`-- (Stopping n2.)`)
+	tc.StopServer(1 /* n2 */)
+	// There should now be 2 connected streams (n1,n3).
+	h.waitForConnectedStreams(ctx, desc.RangeID, 2, 0 /* serverIdx */)
+	// There should also be 5 MiB of tracked tokens for n1->n3, 4 + 1 MiB.
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 5<<20 /* 5 MiB */, 0 /* serverIdx */)
+	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */, mkStream(0), mkStream(1))
+	h.waitForSendQueueSize(ctx, desc.RangeID, 0 /* expSize */, 0 /* serverIdx */)
+	h.comment(`
+-- Flow token metrics from n1, the disconnect should be reflected in the metrics.`)
+	h.query(n1, v2FlowTokensQueryStr)
+
+	h.comment(`
+-- Send queue metrics from n1, n3's send queue should have been force-flushed.`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.comment(`
+-- Observe the total tracked tokens per-stream on n1, n3's flushed entries 
+-- will also be tracked here.`)
+	h.query(n1, `
+  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+`, "range_id", "store_id", "total_tracked_tokens")
+	h.comment(`
+-- Per-store tokens available from n1, these should reflect the deducted 
+-- tokens from force-flushing n3.`)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`-- (Enabling wait-for-eval bypass.)`)
+	noopWaitForEval.Store(true)
+	h.comment(`-- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)`)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.comment(`-- (Disabling wait-for-eval bypass.)`)
+	noopWaitForEval.Store(false)
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 6<<20 /* 6 MiB */, 0 /* serverIdx */)
+	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */, mkStream(0), mkStream(1))
+
+	h.comment(`
+-- Send queue metrics from n1, n3's should not be allowed to form a send queue.`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.comment(`
+-- Observe the total tracked tokens per-stream on n1, n3's should track the latest write
+-- as well.`)
+	h.query(n1, `
+  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+`, "range_id", "store_id", "total_tracked_tokens")
+
+	h.comment(`
+-- (Allowing below-raft admission to proceed on n1, n2, and n3. Note that n2 is still down.)
+-- [n1(enabled),n2(enabled),n3(enabled)]`)
+	setTokenReturnEnabled(true /* enabled */, 0, 1, 2)
+	h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
+	h.comment(`-- Flow token metrics from n1.`)
+	h.query(n1, v2FlowTokensQueryStr)
+	h.comment(`-- Per-store tokens available from n1.`)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`-- (Starting n2.)`)
+	require.NoError(t, tc.RestartServer(1))
+	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
+	h.comment(`-- There should now be 3 connected streams again.`)
+	h.query(n1, `
+  SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
+`, "range_id", "stream_count")
+
+	h.comment(`-- (Adding VOTER to n4 and n5.)`)
+	tc.AddVotersOrFatal(t, k, tc.Targets(3, 4)...)
+	h.waitForConnectedStreams(ctx, desc.RangeID, 5, 0 /* serverIdx */)
+	h.waitForAllTokensReturned(ctx, 5, 0 /* serverIdx */)
+	h.comment(`
+-- Now, after adding n4,n5, there should be 5 connected streams.
+-- [n1,n2,n3,n4,n5]
+`)
+	h.query(n1, `
+  SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
+`, "range_id", "stream_count")
+	h.comment(`-- Per-store tokens available from n1.`)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`-- (Issuing 4x1MiB regular, 5x replicated write that's not admitted.)`)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	// Expect the unblocked streams (n1,n2,n3) to track, then untrack quickly as
+	// admission is allowed. While n4,n5 will continue to track as they are
+	// blocked from admitting.
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 8<<20 /* 8 MiB */, 0 /* serverIdx */)
+	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */, mkStream(0), mkStream(1), mkStream(2))
+	h.comment(`
+-- From n1. We should expect to see the unblocked streams quickly
+-- untrack as admission is allowed (so not observed here), while n4,n5 will continue
+-- to track as they are blocked from admitting (logically).
+`)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+	h.query(n1, `
+  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+`, "range_id", "store_id", "total_tracked_tokens")
+
+	h.comment(`-- (Issuing 1x1MiB regular, 5x replicated write that's not admitted.)`)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	// The total tracked tokens should not change, as the quorum (n1,n2,n3)
+	// quickly admits and untracks. While n4,n5 queue the write, not sending the
+	// msg, deducting and tracking the entry tokens.
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 8<<20 /* 8 MiB */, 0 /* serverIdx */)
+	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */, mkStream(0), mkStream(1), mkStream(2))
+	h.comment(`
+-- Send queue and flow token metrics from n1. The 1 MiB write should be queued
+-- for n4,n5, while the quorum (n1,n2,n3) proceeds.
+`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`
+-- (Allowing below-raft admission to proceed on n4 and n5.)
+-- [n1(enabled),n2(enabled),n3(enabled),n4(enabled),n5(enabled)]`)
+	setTokenReturnEnabled(true /* enabled */, 0, 1, 2, 3, 4)
+	h.waitForAllTokensReturned(ctx, 5, 0 /* serverIdx */)
+	h.comment(`
+-- Per-store tokens available from n1. Expect these to return to the same as 
+-- the initial state.
+`)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`-- (Blocking below-raft admission on [n2,n3,n4,n5].)`)
+	setTokenReturnEnabled(false /* enabled */, 1, 2, 3, 4)
+
+	h.comment(`-- (Issuing 4x1MiB regular, 5x replicated write that's not admitted.)`)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	// XXX:
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 16<<20 /* 16 MiB */, 0 /* serverIdx */)
+	h.comment(`
+-- Send queue and flow token metrics from n1. The 4 MiB write should not be
+-- queued, but instead exhaust all available regular eval and send tokens across
+-- each stream, except s1 (as admission is not blocked).
+`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`-- (Enabling wait-for-eval bypass.)`)
+	noopWaitForEval.Store(true)
+	h.comment(`-- (Issuing 1x1MiB regular, 5x replicated write that's not admitted.)`)
+	h.put(contextWithTestGeneratedPut(ctx), k, 1, admissionpb.NormalPri)
+	h.comment(`-- (Disabling wait-for-eval bypass.)`)
+	noopWaitForEval.Store(false)
+	// Expect 4 x 4 MiB tracked tokens for the 4 MiB write = 16 MiB.
+	// Expect 2 x 1 MiB tracked tokens for the 1 MiB write =  2 MiB.
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 18<<20 /* 18MiB */, 0 /* serverIdx */)
+	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */, mkStream(0))
+	h.comment(`
+-- Observe the total tracked tokens per-stream on n1. We should expect to see the
+-- 1 MiB write being tracked across a quorum of streams, while the 4 MiB write
+-- is tracked across each stream (except s1). Two(/4 non-leader) replica send 
+-- streams should be prevented from forming a send queue and have higher tracked
+-- tokens than the other two.
+`)
+	h.query(n1, `
+  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+`, "range_id", "store_id", "total_tracked_tokens")
+	h.comment(`-- Send queue and flow token metrics from n1.`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`-- (Allowing below-raft admission on [n1,n2,n3,n4,n5].)`)
+	setTokenReturnEnabled(true /* enabled */, 0, 1, 2, 3, 4)
+
+	h.waitForAllTokensReturned(ctx, 5, 0 /* serverIdx */)
+	h.comment(`
+-- Send queue and flow token metrics from n1. All tokens should be returned.`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+}
+
 type flowControlTestHelper struct {
 	t             testing.TB
 	tc            *testcluster.TestCluster
@@ -4593,6 +5003,37 @@ func (h *flowControlTestHelper) waitForAllTokensReturned(
 	})
 }
 
+// waitForAllTokensReturnedForStreamsV2 waits for all tokens to be returned
+// across the specified streams. This only works for RACv2.
+func (h *flowControlTestHelper) waitForAllTokensReturnedForStreamsV2(
+	ctx context.Context, serverIdx int, streamIDs ...kvflowcontrol.Stream,
+) {
+	testutils.SucceedsSoon(h.t, func() error {
+		return h.checkTokensAvailableForStreamsV2(ctx, len(streamIDs), serverIdx,
+			h.tokensAvailableLimitWithDelta(kvflowinspectpb.Stream{}), streamIDs...)
+	})
+}
+
+func (h *flowControlTestHelper) waitForSendQueueSize(
+	ctx context.Context, rangeID roachpb.RangeID, expSize int64, serverIdx int,
+) {
+	testutils.SucceedsSoon(h.t, func() error {
+		return h.checkSendQueueSize(ctx, rangeID, expSize, serverIdx)
+	})
+}
+
+func (h *flowControlTestHelper) checkSendQueueSize(
+	ctx context.Context, rangeID roachpb.RangeID, expSize int64, serverIdx int,
+) error {
+	stats := rac2.RangeSendStreamStats{}
+	h.tc.GetFirstStoreFromServer(h.t, serverIdx).GetReplicaIfExists(rangeID).SendStreamStats(&stats)
+	_, sizeBytes := stats.SumSendQueues()
+	if sizeBytes != expSize {
+		return errors.Errorf("expected send queue size %d, got %d [%v]", expSize, sizeBytes, stats)
+	}
+	return nil
+}
+
 // checkAllTokensReturned checks that all tokens have been returned across all
 // streams. It also checks that the expected number of streams are present. The
 // protocol level is passed in as an argument, in order to allow switching
@@ -4600,7 +5041,7 @@ func (h *flowControlTestHelper) waitForAllTokensReturned(
 func (h *flowControlTestHelper) checkAllTokensReturned(
 	ctx context.Context, expStreamCount, serverIdx int, lvl ...kvflowcontrol.V2EnabledWhenLeaderLevel,
 ) error {
-	return h.checkTokensAvailable(
+	return h.checkTokensAvailableWithLevel(
 		ctx, expStreamCount, serverIdx, h.tokensAvailableLimitWithDelta(kvflowinspectpb.Stream{}), lvl...)
 }
 
@@ -4653,15 +5094,36 @@ func (h *flowControlTestHelper) waitForAllTokensAvailable(
 	lvl ...kvflowcontrol.V2EnabledWhenLeaderLevel,
 ) {
 	testutils.SucceedsSoon(h.t, func() error {
-		return h.checkTokensAvailable(ctx, expStreamCount, serverIdx, expTokensStream, lvl...)
+		return h.checkTokensAvailableWithLevel(ctx, expStreamCount, serverIdx, expTokensStream, lvl...)
 	})
 }
 
-// checkTokensAvailable checks that the expected number of tokens are available
-// across all streams. The expected number of streams and protocol level is
-// passed in as an argument, in order to allow switching between v1 and v2 flow
-// control.
-func (h *flowControlTestHelper) checkTokensAvailable(
+// checkTokensAvailableForStreamsV2 checks that the expected number of tokens
+// are available across the specified streams. This only works for RACv2.
+func (h *flowControlTestHelper) checkTokensAvailableForStreamsV2(
+	ctx context.Context,
+	expStreamCount, serverIdx int,
+	expTokensStream kvflowinspectpb.Stream,
+	streamIDs ...kvflowcontrol.Stream,
+) error {
+	streams := h.tc.GetFirstStoreFromServer(h.t, serverIdx).GetStoreConfig().KVFlowStreamTokenProvider.Inspect(ctx)
+	filteredStreams := make([]kvflowinspectpb.Stream, 0, len(streams))
+	for _, stream := range streams {
+		for _, s := range streamIDs {
+			if s.TenantID == stream.TenantID && s.StoreID == stream.StoreID {
+				filteredStreams = append(filteredStreams, stream)
+				break
+			}
+		}
+	}
+	return h.checkTokensAvailable(
+		ctx, expStreamCount, serverIdx, expTokensStream, filteredStreams, h.level)
+}
+
+// checkTokensAvailableWithLevel checks that the expected number of tokens are
+// available across all streams. The V2EnabledWhenLeaderLevel may be passed in
+// as an argument, in order to allow switching between v1 and v2 flow control.
+func (h *flowControlTestHelper) checkTokensAvailableWithLevel(
 	ctx context.Context,
 	expStreamCount, serverIdx int,
 	expTokensStream kvflowinspectpb.Stream,
@@ -4677,7 +5139,20 @@ func (h *flowControlTestHelper) checkTokensAvailable(
 	default:
 		h.t.Fatalf("unknown level: %v", level)
 	}
+	return h.checkTokensAvailable(ctx, expStreamCount, serverIdx, expTokensStream, streams, level)
+}
 
+// checkTokensAvailable checks that the expected number of tokens are available
+// across all streams. The expected number of streams and protocol level is
+// passed in as an argument, in order to allow switching between v1 and v2 flow
+// control.
+func (h *flowControlTestHelper) checkTokensAvailable(
+	ctx context.Context,
+	expStreamCount, serverIdx int,
+	expTokensStream kvflowinspectpb.Stream,
+	streams []kvflowinspectpb.Stream,
+	level kvflowcontrol.V2EnabledWhenLeaderLevel,
+) error {
 	if len(streams) != expStreamCount {
 		return fmt.Errorf("expected %d replication streams, got %d [%+v]", expStreamCount, len(streams), streams)
 	}
@@ -4688,7 +5163,7 @@ func (h *flowControlTestHelper) checkTokensAvailable(
 		typName string,
 	) error {
 		if actualTokens != expTokens {
-			return fmt.Errorf("expected %v of %v flow tokens for %v, got %v [level=%+v stream=%v]",
+			return fmt.Errorf("expected %v of %v flow tokens for %v, got %v [level=%v stream=%v]",
 				humanize.IBytes(uint64(expTokens)), typName, stream,
 				humanize.IBytes(uint64(actualTokens)),
 				level,
@@ -4837,13 +5312,50 @@ const v2FlowTokensQueryStr = `
 ORDER BY name ASC;
 `
 
+// flowSendQueueQueryStr is the query string to fetch flow control send queue
+// metrics from the node metrics table.
+const flowSendQueueQueryStr = `
+
+  SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%send_queue%'
+     AND name != 'kvflowcontrol.send_queue.count'
+ORDER BY name ASC;
+`
+
+// flowPerStoreTokenQueryStr is the query string to fetch per-store flow tokens
+// metrics from the kv_flow_controller_v2 table.
+const flowPerStoreTokenQueryStr = `
+  SELECT store_id,
+     crdb_internal.humanize_bytes(available_eval_regular_tokens),
+     crdb_internal.humanize_bytes(available_eval_elastic_tokens),
+     crdb_internal.humanize_bytes(available_send_regular_tokens),
+     crdb_internal.humanize_bytes(available_send_elastic_tokens)
+  FROM crdb_internal.kv_flow_controller_v2
+  ORDER BY store_id ASC;
+`
+
+// flowPerStoreTokenQueryHeaderStrs are the headers for the per-store flow
+// token query.
+var flowPerStoreTokenQueryHeaderStrs = []string{
+	"store_id",
+	"eval_regular_available", "eval_elastic_available",
+	"send_regular_available", "send_elastic_available",
+}
+
 // query runs the given SQL query against the given SQLRunner, and appends the
 // output to the testdata file buffer.
 func (h *flowControlTestHelper) query(runner *sqlutils.SQLRunner, sql string, headers ...string) {
 	// NB: We update metric gauges here to ensure that periodically updated
 	// metrics (via the node metrics loop) are up-to-date.
-	for _, server := range h.tc.Servers {
+	for idx, server := range h.tc.Servers {
+		if h.tc.ServerStopped(idx) {
+			// The test has explicitly stopped this server, so we should skip it.
+			continue
+		}
 		require.NoError(h.t, server.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			_, err := s.ComputeMetricsPeriodically(context.Background(), nil, 0)
+			require.NoError(h.t, err)
 			s.GetStoreConfig().KVFlowStreamTokenProvider.UpdateMetricGauges()
 			return nil
 		}))
