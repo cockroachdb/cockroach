@@ -41,20 +41,20 @@ var _ metric.Struct = DistSQLMetrics{}
 var (
 	metaQueriesActive = metric.Metadata{
 		Name:        "sql.distsql.queries.active",
-		Help:        "Number of SQL queries currently active",
-		Measurement: "Queries",
+		Help:        "Number of invocations of the DistSQL engine currently active",
+		Measurement: "DistSQL runs",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaQueriesTotal = metric.Metadata{
 		Name:        "sql.distsql.queries.total",
-		Help:        "Number of SQL queries executed",
-		Measurement: "Queries",
+		Help:        "Number of invocations of the DistSQL engine executed",
+		Measurement: "DistSQL runs",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaDistributedCount = metric.Metadata{
 		Name:        "sql.distsql.distributed.count",
-		Help:        "Number of SQL queries executed with full or partial distribution",
-		Measurement: "Queries",
+		Help:        "Number of invocations of the DistSQL engine executed with full or partial distribution",
+		Measurement: "DistSQL runs",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaContendedQueriesCount = metric.Metadata{
@@ -181,8 +181,8 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 	}
 }
 
-// QueryStart registers the start of a new DistSQL query.
-func (m *DistSQLMetrics) QueryStart(distributed bool) {
+// RunStart registers the start of an invocation of the DistSQL engine.
+func (m *DistSQLMetrics) RunStart(distributed bool) {
 	m.QueriesActive.Inc(1)
 	m.QueriesTotal.Inc(1)
 	if distributed {
@@ -190,8 +190,8 @@ func (m *DistSQLMetrics) QueryStart(distributed bool) {
 	}
 }
 
-// QueryStop registers the end of a DistSQL query.
-func (m *DistSQLMetrics) QueryStop() {
+// RunStop registers the end of an invocation of the DistSQL engine.
+func (m *DistSQLMetrics) RunStop() {
 	m.QueriesActive.Dec(1)
 }
 
