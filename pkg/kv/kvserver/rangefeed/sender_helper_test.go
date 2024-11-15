@@ -32,7 +32,11 @@ func (c *testRangefeedCounter) UpdateMetricsOnRangefeedConnect() {
 }
 
 func (c *testRangefeedCounter) UpdateMetricsOnRangefeedDisconnect() {
-	c.count.Add(-1)
+	c.UpdateMetricsOnRangefeedDisconnectBy(1)
+}
+
+func (c *testRangefeedCounter) UpdateMetricsOnRangefeedDisconnectBy(num int64) {
+	c.count.Add(int32(-num))
 }
 
 func (c *testRangefeedCounter) get() int {
