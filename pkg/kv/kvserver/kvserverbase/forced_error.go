@@ -9,10 +9,10 @@ package kvserverbase
 import (
 	"context"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -44,6 +44,19 @@ type ForcedErrResult struct {
 	Rejection   ProposalRejectionType
 	ForcedError *kvpb.Error
 }
+
+// BelowRaftPreviousLeaseAssertions dictates whether extra lease validation
+// assertions should be performed below Raft or not when deciding whether to
+// apply a lease request or lease transfer command. These assertions are
+// performed on the lease used by the proposer to perform the command. We're
+// able to perform stricter checks on the lease used by the proposer, instead of
+// the lease being proposed, because we know that the proposer's lease
+// corresponds to a lease that was actually applied. In some sense, this acts
+// like a form of eager consistency checking for leases.
+var BelowRaftPreviousLeaseAssertions = envutil.EnvOrDefaultBool(
+	"COCKROACH_BELOW_RAFT_PREVIOUS_LEASE_ASSERTIONS",
+	true,
+)
 
 // CheckForcedErr determines whether or not a command should be applied to the
 // replicated state machine after it has been committed to the Raft log. This
@@ -85,9 +98,15 @@ func CheckForcedErr(
 	}
 	leaseIndex := replicaState.LeaseAppliedIndex
 	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
+	isLeaseTransfer := raftCmd.ReplicatedEvalResult.State != nil &&
+		raftCmd.ReplicatedEvalResult.State.Lease != nil && !isLeaseRequest
 	var requestedLease roachpb.Lease
+	var proposerLease roachpb.Lease
 	if isLeaseRequest {
 		requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
+	}
+	if isLeaseRequest || isLeaseTransfer {
+		proposerLease = raftCmd.ProposerLease
 	}
 	if idKey == "" {
 		// This is an empty Raft command, which is sent by Raft after elections to
@@ -99,6 +118,49 @@ func CheckForcedErr(
 			LeaseIndex:  leaseIndex,
 			Rejection:   ProposalRejectionPermanent,
 			ForcedError: noopOnEmptyRaftCommandErr,
+		}
+	}
+
+	// Perform some extra validation for lease requests and lease transfers if
+	// the BelowRaftPreviousLeaseAssertions is set.
+
+	// The ProposerLease field was introduced in v24.3. In a mixed version state,
+	// 23.1/2 nodes will not set it. Moreover, it is only set when the
+	// BelowRaftPreviousLeaseAssertions is set on the proposer.  So the field may
+	// be empty.
+	if BelowRaftPreviousLeaseAssertions && (isLeaseRequest || isLeaseTransfer) && !proposerLease.Empty() {
+		s1, s2 := proposerLease.Sequence, replicaState.Lease.Sequence
+		switch {
+		case s2 < s1:
+			// Our sequence number is lower than the proposer's. We may be behind in
+			// applying leases, but there can be a difference of at-most 1. Otherwise,
+			// we missed an application.
+			if s1-s2 > 1 {
+				log.Fatalf(ctx,
+					"lease sequence numbers differ by more than 1; our lease: %s; proposer's lease: %s",
+					replicaState.Lease, proposerLease,
+				)
+			}
+		case s2 == s1:
+			// Within a given lease sequence number that is actually applied by replicas
+			// of a range, the leaseholder should always be the same replica. If it
+			// isn't, there's a lease divergence in the range. Kill the node.
+			//
+			// TODO(arul): Instead of just comparing the holders, I think what we need
+			// is a commutative check we can run on two leases for the same sequence
+			// number.
+			if proposerLease.Replica != replicaState.Lease.Replica {
+				log.Fatalf(
+					ctx,
+					"applied lease %s holder differs from lease transferees understanding of the leaseholder "+
+						"at same sequence numbers; transferee's lease: %s",
+					replicaState.Lease, proposerLease,
+				)
+			}
+		case s2 > s1:
+			// Our sequence number is higher than the proposer's. This means the
+			// proposer is using an old lease. Nothing to verify, this will be
+			// rejected below.
 		}
 	}
 
