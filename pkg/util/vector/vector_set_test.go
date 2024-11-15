@@ -13,114 +13,145 @@ import (
 )
 
 func TestVectorSet(t *testing.T) {
-	vs := MakeSet(2)
-	require.Equal(t, 2, vs.Dims)
-	require.Equal(t, 0, vs.Count)
-	require.Equal(t, T{0, 0}, vs.Centroid(T{-1, -1}))
+	t.Run("Add methods", func(t *testing.T) {
+		vs := MakeSet(2)
+		require.Equal(t, 2, vs.Dims)
+		require.Equal(t, 0, vs.Count)
+		require.Equal(t, T{0, 0}, vs.Centroid(T{-1, -1}))
 
-	// Add methods.
-	v1 := T{1, 2}
-	v2 := T{5, 3}
-	v3 := T{6, 6}
-	vs.Add(v1)
-	vs.Add(v2)
-	vs.Add(v3)
-	require.Equal(t, 3, vs.Count)
-	require.Equal(t, []float32{1, 2, 5, 3, 6, 6}, vs.Data)
+		// Add methods.
+		v1 := T{1, 2}
+		v2 := T{5, 3}
+		v3 := T{6, 6}
+		vs.Add(v1)
+		vs.Add(v2)
+		vs.Add(v3)
+		require.Equal(t, 3, vs.Count)
+		require.Equal(t, []float32{1, 2, 5, 3, 6, 6}, vs.Data)
 
-	vs.AddSet(&vs)
-	require.Equal(t, 6, vs.Count)
-	require.Equal(t, []float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6}, vs.Data)
+		vs.AddSet(&vs)
+		require.Equal(t, 6, vs.Count)
+		require.Equal(t, []float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6}, vs.Data)
 
-	vs.AddUndefined(2)
-	copy(vs.At(6), []float32{3, 1})
-	copy(vs.At(7), []float32{4, 4})
-	vs.AddUndefined(0)
-	require.Equal(t, 8, vs.Count)
-	require.Equal(t, []float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6, 3, 1, 4, 4}, vs.Data)
+		vs.AddUndefined(2)
+		copy(vs.At(6), []float32{3, 1})
+		copy(vs.At(7), []float32{4, 4})
+		vs.AddUndefined(0)
+		require.Equal(t, 8, vs.Count)
+		require.Equal(t, []float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6, 3, 1, 4, 4}, vs.Data)
 
-	// Centroid method.
-	vs2 := T{-10.5}.AsSet()
-	require.Equal(t, T{3.875, 3.375}, vs.Centroid(T{-1, -1}))
-	require.Equal(t, T{-10.5}, vs2.Centroid(T{-1}))
+		vs2 := MakeSetFromRawData([]float32{0, 1, -1, 3}, 2)
+		vs2.AddSet(&vs)
+		require.Equal(t, 10, vs2.Count)
+		require.Equal(t, []float32{0, 1, -1, 3, 1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6, 3, 1, 4, 4}, vs2.Data)
+	})
 
-	// ReplaceWithLast.
-	vs.ReplaceWithLast(1)
-	vs.ReplaceWithLast(4)
-	vs.ReplaceWithLast(5)
-	require.Equal(t, 5, vs.Count)
-	require.Equal(t, []float32{1, 2, 4, 4, 6, 6, 1, 2, 3, 1}, vs.Data)
+	t.Run("Centroid method", func(t *testing.T) {
+		vs := MakeSetFromRawData([]float32{1, 4, 5, 3, 6, 2, 0, 0}, 2)
+		require.Equal(t, T{3, 2.25}, vs.Centroid(T{-1, -1}))
 
-	// Clear.
-	vs.Clear()
-	require.Equal(t, 2, vs.Dims)
-	require.Equal(t, 0, vs.Count)
+		vs2 := T{-10.5}.AsSet()
+		require.Equal(t, T{-10.5}, vs2.Centroid(T{-1}))
+	})
 
-	vs3 := MakeSetFromRawData(vs.Data, 2)
-	require.Equal(t, vs, vs3)
+	t.Run("ReplaceWithLast and Clear methods", func(t *testing.T) {
+		vs := MakeSetFromRawData([]float32{1, 2, 5, 3, 6, 6, 1, 2, 5, 3, 6, 6, 3, 1, 4, 4}, 2)
 
-	// Ensure capacity.
-	vs4 := MakeSet(3)
-	vs4.EnsureCapacity(5)
-	require.Equal(t, 0, len(vs4.Data))
-	require.GreaterOrEqual(t, cap(vs4.Data), 15)
-	vs4.AddUndefined(2)
-	copy(vs4.At(0), []float32{3, 1, 2})
-	copy(vs4.At(1), []float32{4, 4, 4})
-	require.Equal(t, 2, vs4.Count)
-	require.Equal(t, 6, len(vs4.Data))
+		// ReplaceWithLast.
+		vs.ReplaceWithLast(1)
+		vs.ReplaceWithLast(4)
+		vs.ReplaceWithLast(5)
+		require.Equal(t, 5, vs.Count)
+		require.Equal(t, []float32{1, 2, 4, 4, 6, 6, 1, 2, 3, 1}, vs.Data)
 
-	// AsSet.
-	vs5 := T{1, 2, 3}.AsSet()
-	require.Equal(t, 3, cap(vs5.Data))
-	vs4.AddSet(&vs5)
-	require.Equal(t, 3, vs4.Count)
-	require.Equal(t, []float32{3, 1, 2, 4, 4, 4, 1, 2, 3}, vs4.Data)
+		// Clear.
+		vs.Clear()
+		require.Equal(t, 2, vs.Dims)
+		require.Equal(t, 0, vs.Count)
+	})
 
-	// SplitAt.
-	vs6 := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
-	vs7 := vs6.SplitAt(0)
-	require.Equal(t, 0, vs6.Count)
-	require.Equal(t, []float32{}, vs6.Data)
-	require.Equal(t, 3, vs7.Count)
-	require.Equal(t, []float32{1, 2, 3, 4, 5, 6}, vs7.Data)
+	t.Run("EnsureCapacity method", func(t *testing.T) {
+		vs := MakeSet(3)
+		vs.EnsureCapacity(5)
+		require.Equal(t, 0, len(vs.Data))
+		require.GreaterOrEqual(t, cap(vs.Data), 15)
+		vs.AddUndefined(2)
+		copy(vs.At(0), []float32{3, 1, 2})
+		copy(vs.At(1), []float32{4, 4, 4})
+		require.Equal(t, 2, vs.Count)
+		require.Equal(t, 6, len(vs.Data))
+	})
 
-	// Append to vs6 and ensure that it does not affect vs7.
-	vs6.Add([]float32{7, 8})
-	require.Equal(t, []float32{1, 2, 3, 4, 5, 6}, vs7.Data)
+	t.Run("AsSet method", func(t *testing.T) {
+		vs5 := T{1, 2, 3}.AsSet()
+		require.Equal(t, 3, cap(vs5.Data))
+	})
 
-	vs8 := vs7.SplitAt(2)
-	require.Equal(t, 2, vs7.Count)
-	require.Equal(t, []float32{1, 2, 3, 4}, vs7.Data)
-	require.Equal(t, 1, vs8.Count)
-	require.Equal(t, []float32{5, 6}, vs8.Data)
+	t.Run("SplitAt method", func(t *testing.T) {
+		vs := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
+		vs2 := vs.SplitAt(0)
+		require.Equal(t, 0, vs.Count)
+		require.Equal(t, []float32{}, vs.Data)
+		require.Equal(t, 3, vs2.Count)
+		require.Equal(t, []float32{1, 2, 3, 4, 5, 6}, vs2.Data)
 
-	vs9 := vs7.SplitAt(2)
-	require.Equal(t, 2, vs7.Count)
-	require.Equal(t, []float32{1, 2, 3, 4}, vs7.Data)
-	require.Equal(t, 0, vs9.Count)
-	require.Equal(t, []float32{}, vs9.Data)
+		// Append to vs and ensure that it does not affect vs2.
+		vs.Add([]float32{7, 8})
+		require.Equal(t, []float32{1, 2, 3, 4, 5, 6}, vs2.Data)
 
-	// AsMatrix.
-	vs10 := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
-	mat := vs10.AsMatrix()
-	require.Equal(t, num32.Matrix{Rows: 3, Cols: 2, Stride: 2, Data: vs10.Data}, mat)
+		vs3 := vs2.SplitAt(2)
+		require.Equal(t, 2, vs2.Count)
+		require.Equal(t, []float32{1, 2, 3, 4}, vs2.Data)
+		require.Equal(t, 1, vs3.Count)
+		require.Equal(t, []float32{5, 6}, vs3.Data)
 
-	// Check that invalid operations will panic.
-	vs11 := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
-	require.Panics(t, func() { vs11.At(-1) })
-	require.Panics(t, func() { vs11.SplitAt(-1) })
-	require.Panics(t, func() { vs11.AddUndefined(-1) })
-	require.Panics(t, func() { vs11.AddSet(nil) })
-	require.Panics(t, func() { vs11.ReplaceWithLast(-1) })
-	require.Panics(t, func() { vs11.Centroid([]float32{0, 0, 0}) })
+		vs4 := vs2.SplitAt(2)
+		require.Equal(t, 2, vs2.Count)
+		require.Equal(t, []float32{1, 2, 3, 4}, vs2.Data)
+		require.Equal(t, 0, vs4.Count)
+		require.Equal(t, []float32{}, vs4.Data)
+	})
 
-	vs12 := MakeSet(2)
-	require.Panics(t, func() { vs12.At(0) })
-	require.Panics(t, func() { vs12.SplitAt(1) })
-	require.Panics(t, func() { vs12.ReplaceWithLast(0) })
+	t.Run("AsMatrix method", func(t *testing.T) {
+		vs := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
+		mat := vs.AsMatrix()
+		require.Equal(t, num32.Matrix{Rows: 3, Cols: 2, Stride: 2, Data: vs.Data}, mat)
+	})
 
-	vs13 := MakeSet(-1)
-	require.Panics(t, func() { vs13.Add(v1) })
-	require.Panics(t, func() { vs13.AddUndefined(1) })
+	t.Run("Clone method", func(t *testing.T) {
+		vs := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
+		vs2 := vs.Clone()
+
+		vs.Add(T{0, 1})
+		vs.ReplaceWithLast(1)
+		add := MakeSetFromRawData([]float32{7, 8, 9, 10}, 2)
+		vs2.AddSet(&add)
+		vs2.ReplaceWithLast(0)
+
+		// Ensure that changes to each did not impact the other.
+		require.Equal(t, 3, vs.Count)
+		require.Equal(t, []float32{1, 2, 0, 1, 5, 6}, vs.Data)
+
+		require.Equal(t, 4, vs2.Count)
+		require.Equal(t, []float32{9, 10, 3, 4, 5, 6, 7, 8}, vs2.Data)
+	})
+
+	t.Run("check that invalid operations will panic", func(t *testing.T) {
+		vs := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
+		require.Panics(t, func() { vs.At(-1) })
+		require.Panics(t, func() { vs.SplitAt(-1) })
+		require.Panics(t, func() { vs.AddUndefined(-1) })
+		require.Panics(t, func() { vs.AddSet(nil) })
+		require.Panics(t, func() { vs.ReplaceWithLast(-1) })
+		require.Panics(t, func() { vs.Centroid([]float32{0, 0, 0}) })
+
+		vs2 := MakeSet(2)
+		require.Panics(t, func() { vs2.At(0) })
+		require.Panics(t, func() { vs2.SplitAt(1) })
+		require.Panics(t, func() { vs2.ReplaceWithLast(0) })
+
+		vs3 := MakeSet(-1)
+		require.Panics(t, func() { vs3.Add(vs.At(0)) })
+		require.Panics(t, func() { vs3.AddUndefined(1) })
+	})
 }

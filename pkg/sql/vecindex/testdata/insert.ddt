@@ -54,17 +54,17 @@ vec9: (-2, 8)
 │   ├───• vec6 (14, 1)
 │   └───• vec5 (8, 11)
 │
-├───• 4 (0.3333, 2)
+├───• 4 (4.3333, 4)
 │   │
-│   ├───• vec8 (0, 4)
-│   ├───• vec7 (0, 0)
-│   └───• vec1 (1, 2)
+│   ├───• vec3 (4, 3)
+│   ├───• vec4 (4, 3)
+│   └───• vec2 (5, 6)
 │
-└───• 5 (2.75, 5)
+└───• 5 (0.3333, 2)
     │
-    ├───• vec2 (5, 6)
-    ├───• vec4 (4, 3)
-    ├───• vec3 (4, 3)
+    ├───• vec1 (1, 2)
+    ├───• vec7 (0, 0)
+    ├───• vec8 (0, 4)
     └───• vec9 (-2, 8)
 
 # Overwrite vector with a new value that won't be found in the index, causing
@@ -83,30 +83,33 @@ vec2: (-5, -5)
 │   ├───• vec6 (14, 1)
 │   └───• vec5 (8, 11)
 │
-├───• 4 (0.3333, 2)
+├───• 4 (4.3333, 4)
 │   │
-│   ├───• vec8 (0, 4)
-│   ├───• vec7 (0, 0)
-│   ├───• vec1 (1, 2)
+│   ├───• vec3 (4, 3)
+│   ├───• vec4 (4, 3)
 │   └───• vec2 (-5, -5)
 │
-└───• 5 (2.75, 5)
+├───• 6 (-1, 6)
+│   │
+│   ├───• vec9 (-2, 8)
+│   └───• vec8 (0, 4)
+│
+└───• 7 (-1.3333, -1)
     │
-    ├───• vec2 (-5, -5)
-    ├───• vec4 (4, 3)
-    ├───• vec3 (4, 3)
-    └───• vec9 (-2, 8)
+    ├───• vec7 (0, 0)
+    ├───• vec1 (1, 2)
+    └───• vec2 (-5, -5)
 
 search max-results=10 beam-size=8
 (-5, -5)
 ----
-vec2: 0 (centroid=2.4622)
-vec7: 50 (centroid=2.0276)
-vec1: 85 (centroid=0.6667)
-vec8: 106 (centroid=2.0276)
-vec3: 145 (centroid=2.3585)
-vec4: 145 (centroid=2.3585)
-vec9: 178 (centroid=5.6181)
+vec2: 0 (centroid=2.1082)
+vec7: 50 (centroid=1.6667)
+vec1: 85 (centroid=3.8006)
+vec8: 106 (centroid=2.2361)
+vec3: 145 (centroid=1.0541)
+vec4: 145 (centroid=1.0541)
+vec9: 178 (centroid=2.2361)
 vec6: 397 (centroid=5.831)
 vec5: 425 (centroid=5.831)
-10 leaf vectors, 13 vectors, 9 full vectors, 4 partitions
+10 leaf vectors, 14 vectors, 9 full vectors, 5 partitions

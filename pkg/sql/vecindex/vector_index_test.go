@@ -148,9 +148,6 @@ func (s *testState) FormatTree(d *datadriven.TestData) string {
 }
 
 func (s *testState) Search(d *datadriven.TestData) string {
-	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
-
 	var vector vector.T
 	searchSet := vecstore.SearchSet{MaxResults: 1}
 	options := SearchOptions{}
@@ -185,8 +182,11 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		vector = s.parseVector(d.Input)
 	}
 
+	// Search the index within a transaction.
+	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
 	err = s.Index.Search(s.Ctx, txn, vector, &searchSet, options)
 	require.NoError(s.T, err)
+	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 	var buf bytes.Buffer
 	results := searchSet.PopResults()
@@ -205,6 +205,9 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	buf.WriteString(fmt.Sprintf("%d vectors, ", searchSet.Stats.QuantizedVectorCount))
 	buf.WriteString(fmt.Sprintf("%d full vectors, ", searchSet.Stats.FullVectorCount))
 	buf.WriteString(fmt.Sprintf("%d partitions", searchSet.Stats.PartitionCount))
+
+	// Handle any fixups triggered by the search.
+	require.NoError(s.T, s.runAllFixups())
 
 	return buf.String()
 }
@@ -253,18 +256,15 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		}
 	}
 
-	// Insert vectors into the store in randomly-sized blocks.
-	var rng *rand.Rand
-	if s.Index.cancel == nil {
-		// Block size needs to be deterministic.
-		rng = rand.New(rand.NewSource(42))
-	} else {
-		rng = rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	}
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	var wait sync.WaitGroup
 	i := 0
 	for i < vectors.Count {
-		step := rng.Intn(s.Options.MaxPartitionSize*2) + 1
+		// Use static step size if the test needs to be deterministic.
+		step := (s.Options.MinPartitionSize + s.Options.MaxPartitionSize) / 2
+		if s.Index.cancel != nil {
+			step = rng.Intn(s.Options.MaxPartitionSize*2) + 1
+		}
 
 		// Insert block of vectors within the scope of a transaction.
 		insertBlock := func(start, end int) {
@@ -353,15 +353,14 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 
 		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
-		if (i+1)%s.Options.MaxPartitionSize == 0 {
-			// Periodically, run synchronous fixups so that test results are
-			// deterministic.
-			require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+		if (i+1)%s.Options.MaxPartitionSize == 0 && s.Index.cancel == nil {
+			// Run synchronous fixups so that test results are deterministic.
+			require.NoError(s.T, s.runAllFixups())
 		}
 	}
 
 	// Handle any remaining fixups.
-	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+	require.NoError(s.T, s.runAllFixups())
 
 	return s.FormatTree(d)
 }
