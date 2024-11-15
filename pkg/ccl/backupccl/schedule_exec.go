@@ -321,7 +321,6 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 	redactedBackupNode, err := GetRedactedBackupNode(
 		backupNode.Backup,
 		destinations,
-		nil, /* incrementalFrom */
 		kmsURIs,
 		"",
 		nil,

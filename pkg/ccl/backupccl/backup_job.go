@@ -614,12 +614,12 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	defaultURI := details.URI
 	var backupDest backupdest.ResolvedDestination
 	if details.URI == "" {
-		// Choose which scheduled backup pts we will update at the the end of the
+		// Choose which scheduled backup pts we will update at the end of the
 		// backup _before_ we resolve the destination of the backup. This avoids a
 		// race with inc backups where backup destination resolution leads this backup
 		// to extend a chain that is about to be superseded by a new full backup
 		// chain, which could cause this inc to accidentally push the pts for the
-		// _new_ chain instead of the old chain it is apart of. By choosing the pts to
+		// _new_ chain instead of the old chain it is a part of. By choosing the pts to
 		// move before we resolve the destination, we guarantee that we push the old
 		// chain.
 		insqlDB := p.ExecCfg().InternalDB
@@ -630,8 +630,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 
 		var err error
-		backupDest, err = backupdest.ResolveDest(ctx, p.User(), details.Destination, details.EndTime,
-			details.IncrementalFrom, p.ExecCfg())
+		backupDest, err = backupdest.ResolveDest(ctx, p.User(), details.Destination, details.EndTime, p.ExecCfg())
 		if err != nil {
 			return err
 		}
@@ -1069,9 +1068,7 @@ func collectTelemetry(
 		countSource("backup.span.incremental")
 		telemetry.CountBucketed("backup.incremental-span-sec",
 			int64(backupDetails.EndTime.GoTime().Sub(backupDetails.StartTime.GoTime()).Seconds()))
-		if len(initialDetails.IncrementalFrom) == 0 {
-			countSource("backup.auto-incremental")
-		}
+		countSource("backup.auto-incremental")
 	}
 	if len(backupDetails.URIsByLocalityKV) > 1 {
 		countSource("backup.partitioned")
