@@ -37,6 +37,7 @@ var testPredecessorMapping = map[string]*clusterupgrade.Version{
 	"24.1": clusterupgrade.MustParseVersion("v23.2.4"),
 	"24.2": clusterupgrade.MustParseVersion("v24.1.1"),
 	"24.3": clusterupgrade.MustParseVersion("v24.2.2"),
+	"25.1": clusterupgrade.MustParseVersion("v24.3.0"),
 }
 
 //go:embed testdata/test_releases.yaml
@@ -244,7 +245,7 @@ func Test_choosePreviousReleases(t *testing.T) {
 			arch:              vm.ArchAMD64,
 			numUpgrades:       3,
 			enableSkipVersion: true,
-			expectedReleases:  []string{"23.2.4", "24.1.1", "24.2.2"},
+			expectedReleases:  []string{"23.1.17", "23.2.4", "24.1.1"},
 		},
 	}
 
