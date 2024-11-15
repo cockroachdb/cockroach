@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/container/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -31,7 +32,7 @@ type Tracker struct {
 	term uint64
 	// tracked contains the per-priority tracked log entries ordered by log index.
 	// All the tracked entries are in the term's leader log.
-	tracked [raftpb.NumPriorities]CircularBuffer[tracked]
+	tracked [raftpb.NumPriorities]ring.Buffer[tracked]
 
 	stream kvflowcontrol.Stream // used for logging only
 }
@@ -45,7 +46,7 @@ type tracked struct {
 func (t *Tracker) Init(term uint64, stream kvflowcontrol.Stream) {
 	*t = Tracker{
 		term:    term,
-		tracked: [raftpb.NumPriorities]CircularBuffer[tracked]{},
+		tracked: [raftpb.NumPriorities]ring.Buffer[tracked]{},
 		stream:  stream,
 	}
 }
@@ -136,7 +137,7 @@ func (t *Tracker) UntrackAll() (returned [raftpb.NumPriorities]kvflowcontrol.Tok
 			returned[pri] += t.tracked[pri].At(i).tokens
 		}
 	}
-	t.tracked = [raftpb.NumPriorities]CircularBuffer[tracked]{}
+	t.tracked = [raftpb.NumPriorities]ring.Buffer[tracked]{}
 	return returned
 }
 
