@@ -186,6 +186,24 @@ func init() {
 			}
 		},
 	)
+
+	registerDepRule(
+		"Final compute expression is always added after transient compute expression",
+		scgraph.SameStagePrecedence,
+		"transient-compute-expression", "final-compute-expression",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.ColumnComputeExpression)(nil)),
+				to.Type((*scpb.ColumnComputeExpression)(nil)),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+				from.El.AttrEq(screl.Usage, scpb.ColumnComputeExpression_ALTER_TYPE_USING),
+				to.El.AttrEq(screl.Usage, scpb.ColumnComputeExpression_REGULAR),
+				ToPublicOrTransient(from, to),
+				from.CurrentStatus(scpb.Status_TRANSIENT_ABSENT),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+			}
+		},
+	)
 }
 
 // This rule ensures that columns depend on each other in increasing order.

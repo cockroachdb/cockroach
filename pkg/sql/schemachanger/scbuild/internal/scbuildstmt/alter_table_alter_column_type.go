@@ -88,6 +88,7 @@ func alterTableAlterColumnType(
 		panic(err)
 	}
 
+	validateNewTypeForComputedColumn(b, tbl.TableID, colID, tn, newColType.Type)
 	validateAutomaticCastForNewType(b, tbl.TableID, colID, t.Column.String(),
 		oldColType.Type, newColType.Type, t.Using != nil)
 
@@ -166,6 +167,47 @@ func validateAutomaticCastForNewType(
 	})
 }
 
+// validateNewTypeForComputedColumn will check if the new type is valid for a
+// computed column.
+func validateNewTypeForComputedColumn(
+	b BuildCtx, tableID catid.DescID, colID catid.ColumnID, tn *tree.TableName, toType *types.T,
+) {
+	colComputeExpression := b.QueryByID(tableID).FilterColumnComputeExpression().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComputeExpression) bool {
+			return e.ColumnID == colID
+		}).MustGetZeroOrOneElement()
+	// Early out if the column isn't computed.
+	if colComputeExpression == nil {
+		return
+	}
+
+	// The use case for type changes on computed columns is quite limited. The new type
+	// generally needs to belong to the same type family (e.g., INT2 -> INT4). This is because
+	// the computed expression itself isn’t changing, so it continues to return the same type.
+	// As a result, the old and new types must be compatible with each other. We use
+	// DequalifyAndValidateExprImpl to enforce this compatibility, and we only check for any
+	// errors returned by that call.
+	//
+	// Now, create a tree.Expr for the computed expression.
+	expr, err := parser.ParseExpr(string(colComputeExpression.Expression.Expr))
+	if err != nil {
+		panic(err)
+	}
+
+	_, _, _, err = schemaexpr.DequalifyAndValidateExprImpl(b, expr, toType,
+		tree.StoredComputedColumnExpr, b.SemaCtx(), volatility.Volatile, tn, b.ClusterSettings().Version.ActiveVersion(b),
+		func() colinfo.ResultColumns {
+			return getNonDropResultColumns(b, tableID)
+		},
+		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+			return columnLookupFn(b, tableID, columnName)
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+}
+
 // handleTrivialColumnConversion is called to just change the type in-place without
 // no rewrite or validation required.
 func handleTrivialColumnConversion(
@@ -240,13 +282,14 @@ func handleGeneralColumnConversion(
 			panic(sqlerrors.NewAlterColumnTypeColWithConstraintNotSupportedErr())
 		case *scpb.SecondaryIndex:
 			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
-		case *scpb.ColumnComputeExpression:
-			// TODO(#125844): we currently lose the original computed expression.
-			panic(scerrors.NotImplementedErrorf(t,
-				"backfilling during ALTER COLUMN TYPE for a column "+
-					"with a computed expression is not supported"))
 		}
 	})
+
+	if oldColType.IsVirtual {
+		// TODO(#125840): we currently don't support altering the type of a virtual column
+		panic(scerrors.NotImplementedErrorf(t,
+			"backfilling during ALTER COLUMN TYPE for a virtual column is not supported"))
+	}
 
 	// We block any attempt to alter the type of a column that is a key column in
 	// the primary key. We can't use walkColumnDependencies here, as it doesn't
@@ -299,7 +342,8 @@ func handleGeneralColumnConversion(
 	oldDefExpr, newDefExpr := getColumnDefaultExpressionsForColumnReplacement(b, tbl.TableID, col.ColumnID, newColID)
 	oldOnUpdateExpr, newOnUpdateExpr := getColumnOnUpdateExpressionsForColumnReplacement(b, tbl.TableID, col.ColumnID, newColID)
 
-	oldColComment, newColComment := getColumnCommentForColumnReplacement(b, tbl.TableID, col.ColumnID, newColID)
+	oldComputeExpr, newComputeExpr := getColumnComputeExpressionsForColumnReplacement(b, tbl.TableID, col.ColumnID, newColID)
+	oldColComment, newColComment := getColumnCommentForColumnReplacement(b, tbl.TableID, col.ColumnID)
 
 	// First, set the target status of the old column to drop. This column will be
 	// replaced by a new one but remains visible until the new column is ready to be
@@ -308,6 +352,9 @@ func handleGeneralColumnConversion(
 	b.Drop(col)
 	b.Drop(colName)
 	b.Drop(oldColType)
+	if oldComputeExpr != nil {
+		b.Drop(oldComputeExpr)
+	}
 	if oldDefExpr != nil {
 		b.Drop(oldDefExpr)
 	}
@@ -358,14 +405,14 @@ func handleGeneralColumnConversion(
 		onUpdate: newOnUpdateExpr,
 		comment:  newColComment,
 		colType:  newColType,
-		compute: &scpb.ColumnComputeExpression{
+		compute:  newComputeExpr,
+		transientCompute: &scpb.ColumnComputeExpression{
 			TableID:    tbl.TableID,
 			ColumnID:   newColID,
 			Expression: *b.WrapExpression(tbl.TableID, expr),
 			Usage:      scpb.ColumnComputeExpression_ALTER_TYPE_USING,
 		},
-		transientCompute: true,
-		notNull:          retrieveColumnNotNull(b, tbl.TableID, col.ColumnID) != nil,
+		notNull: retrieveColumnNotNull(b, tbl.TableID, col.ColumnID) != nil,
 		// The new column will be placed in the same column family as the one
 		// it's replacing, so there's no need to specify a family.
 		fam: nil,
@@ -512,11 +559,27 @@ func getColumnOnUpdateExpressionsForColumnReplacement(
 	return
 }
 
+// getColumnComputeExpressionsForColumnReplacement returns both old and new ColumnComputeExpressions
+// for a column type conversion needing a backfill.
+func getColumnComputeExpressionsForColumnReplacement(
+	b BuildCtx, tableID catid.DescID, oldColID, newColID catid.ColumnID,
+) (oldComputeExpr, newComputeExpr *scpb.ColumnComputeExpression) {
+	oldComputeExpr = b.QueryByID(tableID).FilterColumnComputeExpression().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComputeExpression) bool {
+			return e.ColumnID == oldColID
+		}).MustGetZeroOrOneElement()
+	if oldComputeExpr != nil {
+		newComputeExpr = protoutil.Clone(oldComputeExpr).(*scpb.ColumnComputeExpression)
+		newComputeExpr.ColumnID = newColID
+	}
+	return
+}
+
 // getColumnCommentForColumnReplacement returns two versions of ColumnComment when
 // replacing a column: one for the old column and one for the new column. If no
 // column comment exists, both output parameters will be nil.
 func getColumnCommentForColumnReplacement(
-	b BuildCtx, tableID catid.DescID, oldColID, newColID catid.ColumnID,
+	b BuildCtx, tableID catid.DescID, oldColID catid.ColumnID,
 ) (oldColumnComment, newColumnComment *scpb.ColumnComment) {
 	oldColumnComment = retrieveColumnComment(b, tableID, oldColID)
 	if oldColumnComment != nil {
