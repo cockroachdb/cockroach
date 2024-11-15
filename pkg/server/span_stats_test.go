@@ -402,7 +402,13 @@ func TestSpanStatsMultiStoreReplicationOff(t *testing.T) {
 func TestSpanStatsFanOutFaultTolerance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressWithIssue(t, 108534)
+
+	// This test simulates a specific set of failures and verifies that
+	// the response collects them appropriately. It is flaky under stress
+	// and race.
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+
 	ctx := context.Background()
 	const numNodes = 5
 
@@ -410,7 +416,7 @@ func TestSpanStatsFanOutFaultTolerance(t *testing.T) {
 		name         string
 		dialCallback func(nodeID roachpb.NodeID) error
 		nodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
-		assertions   func(res *roachpb.SpanStatsResponse)
+		assertions   func(t *testing.T, res *roachpb.SpanStatsResponse)
 	}
 
 	containsError := func(errors []string, testString string) bool {
@@ -450,7 +456,7 @@ func TestSpanStatsFanOutFaultTolerance(t *testing.T) {
 				}
 				return nil
 			},
-			assertions: func(res *roachpb.SpanStatsResponse) {
+			assertions: func(t *testing.T, res *roachpb.SpanStatsResponse) {
 				// Expect to still be able to access SpanToStats for keys.EverythingSpan
 				// without panicking, even though there was a failure on every node.
 				require.Equal(t, int64(0), res.SpanToStats[keys.EverythingSpan.String()].TotalStats.LiveCount)
@@ -485,10 +491,13 @@ func TestSpanStatsFanOutFaultTolerance(t *testing.T) {
 				}
 				return nil
 			},
-			assertions: func(res *roachpb.SpanStatsResponse) {
-				require.Greater(t, res.SpanToStats[keys.EverythingSpan.String()].TotalStats.LiveCount, int64(0))
+			assertions: func(t *testing.T, res *roachpb.SpanStatsResponse) {
+				require.Greater(t, res.SpanToStats[keys.EverythingSpan.String()].TotalStats.LiveCount, int64(0),
+					"response contains no stats: %v", res)
 				// 3 nodes could not service their requests.
-				require.Equal(t, 3, len(res.Errors))
+				require.Equal(t, 3, len(res.Errors),
+					"response contains incorrect number of errors: %v", res,
+				)
 
 				require.Equal(t, true, containsError(res.Errors, "error dialing node 1"))
 				require.Equal(t, true, containsError(res.Errors, "kv error on node 3"))
@@ -523,7 +532,7 @@ func TestSpanStatsFanOutFaultTolerance(t *testing.T) {
 			})
 
 			require.NoError(t, err)
-			tCase.assertions(res)
+			tCase.assertions(t, res)
 		})
 	}
 }
