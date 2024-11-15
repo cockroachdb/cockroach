@@ -12,6 +12,7 @@ import {
 import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
 import map from "lodash/map";
+import sortby from "lodash/sortBy";
 import Long from "long";
 import moment from "moment-timezone";
 import { RouteComponentProps } from "react-router";
@@ -77,7 +78,15 @@ function rollupStoreMetrics(
 
 export const nodesReducerObj = new CachedDataReducer(
   (req: api.NodesRequestMessage, timeout?: moment.Duration) =>
-    api.getNodesUI(req, timeout).then(rollupStoreMetrics),
+    api
+      .getNodesUI(req, timeout)
+      .then(rollupStoreMetrics)
+      .then(nodeStatuses => {
+        nodeStatuses.forEach(ns => {
+          ns.store_statuses = sortby(ns.store_statuses, ss => ss.desc.store_id);
+        });
+        return nodeStatuses;
+      }),
   "nodes",
   moment.duration(10, "s"),
 );
