@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -47,6 +48,12 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/petermattis/goid"
 )
+
+func init() {
+	pollPreemptionInterval.Lock()
+	defer pollPreemptionInterval.Unlock()
+	pollPreemptionInterval.interval = 5 * time.Minute
+}
 
 var (
 	errTestsFailed = fmt.Errorf("some tests failed")
@@ -1219,13 +1226,9 @@ func (r *testRunner) runTest(
 			}
 		}()
 
-<<<<<<< HEAD
-=======
-		grafanaAnnotateTestStart(runCtx, t, c)
 		// Actively poll for VM preemptions, so we can bail out of tests early and
 		// avoid situations where a test times out and the flake assignment logic fails.
 		monitorForPreemptedVMs(runCtx, t, c, l)
->>>>>>> b982f631b01 (roachtest: periodically check if VMs have been preempted)
 		// This is the call to actually run the test.
 		s.Run(runCtx, t, c)
 	}()
@@ -1929,20 +1932,29 @@ var getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger
 	return c.GetPreemptedVMs(ctx, l)
 }
 
-// pollPreemptionInterval is how often to poll for preempted VMs.
-var pollPreemptionInterval = 5 * time.Minute
+// pollPreemptionInterval is how often to poll for preempted VMs. We use a
+// mutex protected struct to allow for unit tests to safely modify it.
+// Interval defaults to 5 minutes if not set.
+var pollPreemptionInterval struct {
+	syncutil.Mutex
+	interval time.Duration
+}
 
 func monitorForPreemptedVMs(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger) {
 	if c.IsLocal() || !c.Spec().UseSpotVMs {
 		return
 	}
 
+	pollPreemptionInterval.Lock()
+	defer pollPreemptionInterval.Unlock()
+	interval := pollPreemptionInterval.interval
+
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(pollPreemptionInterval):
+			case <-time.After(interval):
 				preemptedVMs, err := getPreemptedVMsHook(c, ctx, l)
 				if err != nil {
 					l.Printf("WARN: monitorForPreemptedVMs: failed to check preempted VMs:\n%+v", err)
