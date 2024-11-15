@@ -189,6 +189,16 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			query:        "SELECT new_col FROM tbl LIMIT 1",
 		},
 		{
+			desc: "alter column type general compute",
+			setup: []string{
+				"SET enable_experimental_alter_column_type_general=TRUE",
+				"ALTER TABLE tbl ADD COLUMN new_col DATE NOT NULL DEFAULT '2013-05-06', " +
+					"ADD COLUMN new_comp DATE AS (new_col) STORED",
+			},
+			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_comp SET DATA TYPE DATE USING '2021-05-06'",
+			query:        "SELECT new_comp FROM tbl LIMIT 1",
+		},
+		{
 			desc:         "add column default udf",
 			setup:        []string{"CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$"},
 			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col INT NOT NULL DEFAULT f()",

@@ -226,6 +226,16 @@ func alterColumnTypeGeneral(
 		}
 	}
 
+	// The algorithm relies heavily on the computed column expression, so we don’t
+	// support altering a column if it’s also computed. There’s currently no way to
+	// track the original expression in this case. However, this is supported in the
+	// declarative schema changer.
+	if col.IsComputed() {
+		return unimplemented.Newf("ALTER COLUMN ... TYPE",
+			"ALTER COLUMN TYPE requiring an on-disk data rewrite with the legacy schema changer "+
+				"is not supported for computed columns")
+	}
+
 	nameExists := func(name string) bool {
 		return catalog.FindColumnByName(tableDesc, name) != nil
 	}

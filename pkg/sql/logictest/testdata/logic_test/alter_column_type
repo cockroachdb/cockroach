@@ -1347,4 +1347,147 @@ rowid  INT8   false  unique_rowid()  ·  {t_many_pkey}  true
 statement ok
 DROP TABLE t_many;
 
+subtest stored_compute
+
+statement ok
+CREATE TABLE stored1 (A INT NOT NULL PRIMARY KEY, COMP1 SMALLINT NOT NULL AS (A) STORED, FAMILY F1(A, COMP1));
+
+statement ok
+INSERT INTO stored1 VALUES (10),(150),(190),(2000);
+
+query II
+SELECT * FROM stored1 ORDER BY A;
+----
+10 10
+150 150
+190 190
+2000 2000
+
+# Do trivial column change (SMALLINT -> BIGINT)
+statement ok
+ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE BIGINT;
+
+query TT
+SHOW CREATE TABLE stored1;
+----
+stored1  CREATE TABLE public.stored1 (
+           a INT8 NOT NULL,
+           comp1 INT8 NOT NULL AS (a) STORED,
+           CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
+           FAMILY f1 (a, comp1)
+         )
+
+query II
+SELECT * FROM stored1 ORDER BY A;
+----
+10 10
+150 150
+190 190
+2000 2000
+
+# Do validation-only change (BIGINT -> INT4). But first insert a row that will violate INT4.
+statement ok
+INSERT INTO stored1 VALUES (2147483648),(2147483647);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+statement error pq: validate check constraint: integer out of range for type int4
+ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
+
+# Legacy blocks the type conversion entirely for computed columns
+onlyif config local-legacy-schema-changer
+statement error pq: unimplemented: ALTER COLUMN TYPE requiring an on-disk data rewrite with the legacy schema changer is not supported for computed columns
+ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
+
+statement ok
+DELETE FROM stored1 WHERE a = 2147483648;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+statement ok
+ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+query TT
+SHOW CREATE TABLE stored1;
+----
+stored1  CREATE TABLE public.stored1 (
+           a INT8 NOT NULL,
+           comp1 INT4 NOT NULL AS (a) STORED,
+           CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
+           FAMILY f1 (a, comp1)
+         )
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+query II
+SELECT * FROM stored1 ORDER BY A;
+----
+10 10
+150 150
+190 190
+2000 2000
+2147483647  2147483647
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
+# Attempt to convert to a type that is incompatible with the computed expression
+statement error pq: expected STORED COMPUTED COLUMN expression to have type bool, but 'a' has type int
+ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE BOOL;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
+statement error pq: expected STORED COMPUTED COLUMN expression to have type string, but 'a' has type int
+ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE TEXT;
+
+# Convert the type to something compatible, but specify a custom value for the
+# column with the USING expression. This will force a type conversion with a backfill.
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
+statement ok
+ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT2 USING -1;
+
+statement ok
+INSERT INTO stored1 VALUES (-1000);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
+query TT
+SHOW CREATE TABLE stored1;
+----
+stored1  CREATE TABLE public.stored1 (
+           a INT8 NOT NULL,
+           comp1 INT2 NOT NULL AS (a) STORED,
+           CONSTRAINT stored1_pkey PRIMARY KEY (a ASC),
+           FAMILY f1 (a, comp1)
+         )
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
+query II
+SELECT * FROM stored1 ORDER BY A;
+----
+-1000 -1000
+10 -1
+150 -1
+190 -1
+2000 -1
+2147483647  -1
+
+# Attempt to drop stored along with changing the column type
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
+statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
+ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT4 USING -1, ALTER COLUMN comp1 drop stored;
+
+statement ok
+DROP TABLE stored1;
+
 subtest end
