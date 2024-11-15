@@ -2139,13 +2139,14 @@ func monitorForPreemptedVMs(ctx context.Context, t test.Test, c cluster.Cluster,
 	if c.IsLocal() || !c.Spec().UseSpotVMs {
 		return
 	}
+	interval := pollPreemptionInterval
 
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(pollPreemptionInterval):
+			case <-time.After(interval):
 				preemptedVMs, err := getPreemptedVMsHook(c, ctx, l)
 				if err != nil {
 					l.Printf("WARN: monitorForPreemptedVMs: failed to check preempted VMs:\n%+v", err)
