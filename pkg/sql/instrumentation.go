@@ -458,6 +458,9 @@ func (ih *instrumentationHelper) Setup(
 
 	var previouslySampled bool
 	previouslySampled, ih.savePlanForStats = statsCollector.ShouldSample(fingerprint, implicitTxn, p.SessionData().Database)
+	if !previouslySampled && (fingerprint == "BEGIN TRANSACTION" || fingerprint == "COMMIT TRANSACTION") {
+		previouslySampled = true
+	}
 
 	defer func() { ih.finalizeSetup(newCtx, cfg) }()
 
