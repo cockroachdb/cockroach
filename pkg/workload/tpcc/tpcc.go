@@ -19,6 +19,7 @@ import (
 	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v5"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
@@ -45,6 +47,9 @@ const (
 
 	// Max rows that can be updated in a single txn, used while resetting the w_ytd values
 	maxRowsToUpdateTxn = 10_000
+
+	// The maximum number of times a transaction is retried.
+	maxRetries = 50
 )
 
 type tpcc struct {
@@ -1096,7 +1101,22 @@ func (w *tpcc) executeTx(
 	}
 
 	if w.txnRetries {
-		return onTxnStartDuration, crdbpgx.ExecuteTx(ctx, conn, txOpts, txnFuncWithStartFuncs)
+		for i := 0; i <= maxRetries; i++ {
+			tx, err := conn.BeginTx(ctx, txOpts)
+			if err != nil {
+				return onTxnStartDuration, err
+			}
+			err = txnFuncWithStartFuncs(tx)
+			if err == nil {
+				return onTxnStartDuration, tx.Commit(ctx)
+			}
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+				continue
+			}
+			return onTxnStartDuration, err
+		}
+		return onTxnStartDuration, err
 	}
 
 	tx, err := conn.BeginTx(ctx, txOpts)
