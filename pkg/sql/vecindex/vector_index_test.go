@@ -19,7 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -27,8 +30,13 @@ import (
 )
 
 func TestDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
-	state := testState{T: t, Ctx: ctx}
+	state := testState{T: t, Ctx: ctx, Stopper: stop.NewStopper()}
+	defer state.Stopper.Stop(ctx)
+
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		if !strings.HasSuffix(path, ".ddt") {
 			// Skip files that are not data-driven tests.
@@ -53,6 +61,9 @@ func TestDataDriven(t *testing.T) {
 
 			case "recall":
 				return state.Recall(d)
+
+			case "validate-tree":
+				return state.ValidateTree(d)
 			}
 
 			t.Fatalf("unknown cmd: %s", d.Cmd)
@@ -64,6 +75,7 @@ func TestDataDriven(t *testing.T) {
 type testState struct {
 	T          *testing.T
 	Ctx        context.Context
+	Stopper    *stop.Stopper
 	Quantizer  quantize.Quantizer
 	InMemStore *vecstore.InMemoryStore
 	Index      *VectorIndex
@@ -73,6 +85,7 @@ type testState struct {
 
 func (s *testState) NewIndex(d *datadriven.TestData) string {
 	var err error
+	var stopper *stop.Stopper
 	dims := 2
 	s.Options = VectorIndexOptions{Seed: 42}
 	for _, arg := range d.CmdArgs {
@@ -101,12 +114,16 @@ func (s *testState) NewIndex(d *datadriven.TestData) string {
 			require.Len(s.T, arg.Vals, 1)
 			s.Options.BaseBeamSize, err = strconv.Atoi(arg.Vals[0])
 			require.NoError(s.T, err)
+
+		case "background-fixups":
+			require.Len(s.T, arg.Vals, 0)
+			stopper = s.Stopper
 		}
 	}
 
 	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
 	s.InMemStore = vecstore.NewInMemoryStore(dims, 42)
-	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, &s.Options)
+	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, &s.Options, stopper)
 	require.NoError(s.T, err)
 
 	// Insert empty root partition.
@@ -244,12 +261,12 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		if (i+1)%s.Options.MaxPartitionSize == 0 {
 			// Periodically, run synchronous fixups so that test results are
 			// deterministic.
-			require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+			require.NoError(s.T, s.runAllFixups(true /* skipBackground */))
 		}
 	}
 
 	// Handle any remaining fixups.
-	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+	require.NoError(s.T, s.runAllFixups(false /* skipBackground */))
 
 	if hideTree {
 		return fmt.Sprintf("Created index with %d vectors with %d dimensions.\n",
@@ -402,6 +419,66 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	buf.WriteString(fmt.Sprintf("%.2f full vectors, ", fullVectors))
 	buf.WriteString(fmt.Sprintf("%.2f partitions", partitions))
 	return buf.String()
+}
+
+func (s *testState) ValidateTree(d *datadriven.TestData) string {
+	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+
+	vectorCount := 0
+	partitionKeys := []vecstore.PartitionKey{vecstore.RootKey}
+	for {
+		// Get all child keys for next level.
+		var childKeys []vecstore.ChildKey
+		for _, key := range partitionKeys {
+			partition, err := s.InMemStore.GetPartition(s.Ctx, txn, key)
+			require.NoError(s.T, err)
+			childKeys = append(childKeys, partition.ChildKeys()...)
+		}
+
+		if len(childKeys) == 0 {
+			break
+		}
+
+		// Verify full vectors exist for the level.
+		refs := make([]vecstore.VectorWithKey, len(childKeys))
+		for i := range childKeys {
+			refs[i].Key = childKeys[i]
+		}
+		err := s.InMemStore.GetFullVectors(s.Ctx, txn, refs)
+		require.NoError(s.T, err)
+		for i := range refs {
+			require.NotNil(s.T, refs[i].Vector)
+		}
+
+		// If this is not the leaf level, then process the next level.
+		if childKeys[0].PrimaryKey == nil {
+			partitionKeys = make([]vecstore.PartitionKey, len(childKeys))
+			for i := range childKeys {
+				partitionKeys[i] = childKeys[i].PartitionKey
+			}
+		} else {
+			// This is the leaf level, so count vectors and end.
+			vectorCount += len(childKeys)
+			break
+		}
+	}
+
+	return fmt.Sprintf("Validated index with %d vectors.\n", vectorCount)
+}
+
+// runAllFixups forces all pending fixups to be processed.
+func (s *testState) runAllFixups(skipBackground bool) error {
+	if s.Index.cancel != nil {
+		// Background fixup goroutine is running, so wait until it has processed
+		// all fixups.
+		if !skipBackground {
+			s.Index.fixups.Wait()
+		}
+		return nil
+	}
+	// Synchronously run fixups.
+	return s.Index.fixups.runAll(s.Ctx)
 }
 
 // parseVector parses a vector string in this form: (1.5, 6, -4).
