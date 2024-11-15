@@ -6,7 +6,6 @@ go_library(
         "budget.go",
         "buffered_registration.go",
         "buffered_sender.go",
-        "buffered_stream.go",
         "catchup_scan.go",
         "event_queue.go",
         "event_size.go",
