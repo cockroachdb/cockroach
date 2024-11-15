@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,6 +35,8 @@ const (
 	// WindowedHistogramWrapNum is the number of histograms to keep in rolling
 	// window.
 	WindowedHistogramWrapNum = 2
+	// CardinalityLimit is the max number of distinct label values combinations for any given MetricVec.
+	CardinalityLimit = 2000
 )
 
 // Iterable provides a method for synchronized access to interior objects.
@@ -178,6 +181,7 @@ func (m *Metadata) AddLabel(name, value string) {
 var _ Iterable = &Gauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
+var _ Iterable = &UniqueCounter{}
 var _ Iterable = &CounterFloat64{}
 var _ Iterable = &GaugeVec{}
 var _ Iterable = &CounterVec{}
@@ -186,6 +190,7 @@ var _ Iterable = &HistogramVec{}
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
+var _ json.Marshaler = &UniqueCounter{}
 var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
 var _ json.Marshaler = &GaugeVec{}
@@ -195,6 +200,7 @@ var _ json.Marshaler = &HistogramVec{}
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
+var _ PrometheusExportable = &UniqueCounter{}
 var _ PrometheusExportable = &CounterFloat64{}
 
 var _ PrometheusVector = &GaugeVec{}
@@ -825,6 +831,76 @@ func (c *Counter) GetMetadata() Metadata {
 	return baseMetadata
 }
 
+// UniqueCounter performs set cardinality estimation. You feed keys,
+// and it produces an estimate of how many unique keys its has seen.
+type UniqueCounter struct {
+	Metadata
+
+	mu struct {
+		syncutil.Mutex
+		sketch *hyperloglog.Sketch
+	}
+}
+
+// NewUniqueCounter creates a counter.
+func NewUniqueCounter(metadata Metadata) *UniqueCounter {
+	ret := &UniqueCounter{
+		Metadata: metadata,
+	}
+	ret.Clear()
+	return ret
+}
+
+// Clear resets the counter to zero.
+func (c *UniqueCounter) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.sketch, _ = hyperloglog.NewSketch(14, true)
+}
+
+// Add a value to the set
+func (c *UniqueCounter) Add(v []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.sketch.Insert(v)
+}
+
+// Count returns the current value of the counter.
+func (c *UniqueCounter) Count() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return int64(c.mu.sketch.Estimate())
+}
+
+// GetType returns the prometheus type enum for this metric.
+func (c *UniqueCounter) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_COUNTER.Enum()
+}
+
+// Inspect calls the given closure with itself.
+func (c *UniqueCounter) Inspect(f func(interface{})) { f(c) }
+
+// MarshalJSON marshals to JSON.
+func (c *UniqueCounter) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.Count())
+}
+
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (c *UniqueCounter) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Counter: &prometheusgo.Counter{Value: proto.Float64(float64(c.Count()))},
+	}
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (c *UniqueCounter) GetMetadata() Metadata {
+	baseMetadata := c.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_COUNTER
+	return baseMetadata
+}
+
 type CounterFloat64 struct {
 	Metadata
 	count syncutil.AtomicFloat64
@@ -1102,13 +1178,18 @@ func (v *vector) getOrderedValues(labels map[string]string) []string {
 
 // recordLabels records the given combination of label values if they haven't
 // been seen before. This is used to iterate over all the counters created
-// based on unique label combinations.
-func (v *vector) recordLabels(labelValues []string) {
+// based on unique label combinations. recordLabels will return an error if the
+// labelValues are novel, and the cardinality limit has been reached.
+func (v *vector) recordLabels(labelValues []string) error {
 	v.RLock()
 	lookupKey := strings.Join(labelValues, "_")
 	if _, ok := v.encounteredLabelsLookup[lookupKey]; ok {
 		v.RUnlock()
-		return
+		return nil
+	}
+	if len(v.encounteredLabelsLookup) >= CardinalityLimit {
+		v.RUnlock()
+		return fmt.Errorf("metric cardinality limit reached")
 	}
 	v.RUnlock()
 
@@ -1116,6 +1197,15 @@ func (v *vector) recordLabels(labelValues []string) {
 	defer v.Unlock()
 	v.encounteredLabelsLookup[lookupKey] = struct{}{}
 	v.encounteredLabelValues = append(v.encounteredLabelValues, labelValues)
+	return nil
+}
+
+// clear flushes the labels from the vector.
+func (v *vector) clear() {
+	v.Lock()
+	defer v.Unlock()
+	v.encounteredLabelsLookup = make(map[string]struct{})
+	v.encounteredLabelValues = [][]string{}
 }
 
 // GaugeVec is a collector for gauges that have a variable set of labels.
@@ -1150,21 +1240,27 @@ func NewExportedGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
 // Update updates the gauge value for the given combination of labels.
 func (gv *GaugeVec) Update(labels map[string]string, v int64) {
 	labelValues := gv.getOrderedValues(labels)
-	gv.recordLabels(labelValues)
+	if err := gv.recordLabels(labelValues); err != nil {
+		return
+	}
 	gv.promVec.WithLabelValues(labelValues...).Set(float64(v))
 }
 
 // Inc increments the gauge value for the given combination of labels.
 func (gv *GaugeVec) Inc(labels map[string]string, v int64) {
 	labelValues := gv.getOrderedValues(labels)
-	gv.recordLabels(labelValues)
+	if err := gv.recordLabels(labelValues); err != nil {
+		return
+	}
 	gv.promVec.WithLabelValues(labelValues...).Add(float64(v))
 }
 
 // Dec decrements the gauge value for the given combination of labels.
 func (gv *GaugeVec) Dec(labels map[string]string, v int64) {
 	labelValues := gv.getOrderedValues(labels)
-	gv.recordLabels(labelValues)
+	if err := gv.recordLabels(labelValues); err != nil {
+		return
+	}
 	gv.promVec.WithLabelValues(labelValues...).Sub(float64(v))
 }
 
@@ -1236,7 +1332,9 @@ func NewExportedCounterVec(metadata Metadata, labelNames []string) *CounterVec {
 // difference. This panics if the current value is greater than the new value.
 func (cv *CounterVec) Update(labels map[string]string, v int64) {
 	labelValues := cv.getOrderedValues(labels)
-	cv.recordLabels(labelValues)
+	if err := cv.recordLabels(labelValues); err != nil {
+		return
+	}
 
 	currentValue := cv.Count(labels)
 	if currentValue > v {
@@ -1249,7 +1347,9 @@ func (cv *CounterVec) Update(labels map[string]string, v int64) {
 // Inc increments the value for the given combination of labels.
 func (cv *CounterVec) Inc(labels map[string]string, v int64) {
 	labelValues := cv.getOrderedValues(labels)
-	cv.recordLabels(labelValues)
+	if err := cv.recordLabels(labelValues); err != nil {
+		return
+	}
 	cv.promVec.WithLabelValues(labelValues...).Add(float64(v))
 }
 
@@ -1333,8 +1433,16 @@ func NewExportedHistogramVec(
 // combination of labels.
 func (hv *HistogramVec) Observe(labels map[string]string, v float64) {
 	labelValues := hv.getOrderedValues(labels)
-	hv.recordLabels(labelValues)
+	if err := hv.recordLabels(labelValues); err != nil {
+		return
+	}
 	hv.promVec.WithLabelValues(labelValues...).Observe(v)
+}
+
+// Clear removes all the metrics and the label vector, preserving the metadata and configuration.
+func (hv *HistogramVec) Clear() {
+	hv.vector.clear()
+	hv.promVec.Reset()
 }
 
 // GetMetadata implements Iterable.
