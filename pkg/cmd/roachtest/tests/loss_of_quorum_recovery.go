@@ -9,8 +9,8 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"encoding/json"
 	"fmt"
+	"io"
 	"path"
 	"path/filepath"
 	"time"
@@ -343,8 +343,10 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		}
 	}
 
-	recordOutcome, buffer := initPerfCapture()
-	recordOutcome(testOutcome)
+	recordOutcome, buffer := initPerfCapture(t, c)
+	if err := recordOutcome(testOutcome); err != nil {
+		t.L().Errorf("failed to record outcome: %s", err)
+	}
 	buffer.upload(ctx, t, c)
 
 	if testOutcome == success {
@@ -569,8 +571,10 @@ func runHalfOnlineRecoverLossOfQuorum(
 		}
 	}
 
-	recordOutcome, buffer := initPerfCapture()
-	recordOutcome(testOutcome)
+	recordOutcome, buffer := initPerfCapture(t, c)
+	if err = recordOutcome(testOutcome); err != nil {
+		t.L().Errorf("failed to record outcome: %s", err)
+	}
 	buffer.upload(ctx, t, c)
 
 	if testOutcome == success {
@@ -619,7 +623,7 @@ type perfArtifact bytes.Buffer
 func (p *perfArtifact) upload(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Upload the perf artifacts to any one of the nodes so that the test
 	// runner copies it into an appropriate directory path.
-	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+	dest := filepath.Join(t.PerfArtifactsDir(), roachtestutil.GetBenchmarkMetricsFileName(t))
 	if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
 		t.L().Errorf("failed to create perf dir: %+v", err)
 	}
@@ -631,20 +635,25 @@ func (p *perfArtifact) upload(ctx context.Context, t test.Test, c cluster.Cluste
 // Register histogram and create a function that would record test outcome value.
 // Returned buffer contains all recorded ticks for the test and is updated
 // every time metric function is called.
-func initPerfCapture() (func(testOutcomeMetric), *perfArtifact) {
-	reg := histogram.NewRegistry(time.Second*time.Duration(success), histogram.MockWorkloadName)
+func initPerfCapture(
+	t test.Test, c cluster.Cluster,
+) (func(testOutcomeMetric) error, *perfArtifact) {
+	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+	reg := histogram.NewRegistryWithExporter(time.Second*time.Duration(success), histogram.MockWorkloadName, exporter)
 	bytesBuf := bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(bytesBuf)
+	writer := io.Writer(bytesBuf)
+	exporter.Init(&writer)
 
 	writeSnapshot := func() {
 		reg.Tick(func(tick histogram.Tick) {
-			_ = jsonEnc.Encode(tick.Snapshot())
+			_ = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 		})
 	}
 
-	recordOutcome := func(metric testOutcomeMetric) {
+	recordOutcome := func(metric testOutcomeMetric) error {
 		reg.GetHandle().Get("recovery_result").Record(time.Duration(metric) * time.Second)
 		writeSnapshot()
+		return exporter.Close(nil)
 	}
 
 	// Capture start time for the test.

@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -137,7 +136,8 @@ func registerImportTPCC(r registry.Registry) {
 			m.Go(hc.Runner)
 		}
 
-		tick, perfBuf := initBulkJobPerfArtifacts(testName, timeout)
+		exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+		tick, perfBuf := initBulkJobPerfArtifacts(timeout, t, exporter)
 		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081' {pgurl:1}`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
@@ -148,7 +148,7 @@ func registerImportTPCC(r registry.Registry) {
 			} else {
 				defer hc.Done()
 			}
-			cmd := fmt.Sprintf(workloadStr, warehouses)
+			cmd := fmt.Sprintf(workloadStr, 1)
 			// Tick once before starting the import, and once after to capture the
 			// total elapsed time. This is used by roachperf to compute and display
 			// the average MB/sec per node.
@@ -156,14 +156,8 @@ func registerImportTPCC(r registry.Registry) {
 			c.Run(ctx, option.WithNodes(c.Node(1)), cmd)
 			tick()
 
-			// Upload the perf artifacts to any one of the nodes so that the test
-			// runner copies it into an appropriate directory path.
-			dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-			if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-				t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
-			}
-			if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
-				t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+			if _, err := roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, exporter, c.Node(1)); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -238,7 +232,9 @@ func registerImportTPCH(r registry.Registry) {
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				tick, perfBuf := initBulkJobPerfArtifacts(t.Name(), item.timeout)
+				exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+
+				tick, perfBuf := initBulkJobPerfArtifacts(item.timeout, t, exporter)
 
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				conn := c.Conn(ctx, t.L(), 1)
@@ -323,14 +319,8 @@ func registerImportTPCH(r registry.Registry) {
 					}
 					tick()
 
-					// Upload the perf artifacts to any one of the nodes so that the test
-					// runner copies it into an appropriate directory path.
-					dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-					if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-						t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
-					}
-					if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
-						t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+					if _, err = roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, exporter, c.Node(1)); err != nil {
+						return err
 					}
 					return nil
 				})

@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"maps"
 	"math"
 	"math/rand"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -279,7 +281,7 @@ func runTPCC(
 		// Make a copy of i for the goroutine.
 		i := i
 		m.Go(func(ctx context.Context) error {
-			// Only prefix stats.json with workload_i_ if we have multiple workloads,
+			// Only prefix stats file with workload_i_ if we have multiple workloads,
 			// in case other processes relied on previous behavior.
 			var statsPrefix string
 			if len(workloadInstances) > 1 {
@@ -288,11 +290,18 @@ func runTPCC(
 			l.Printf("running tpcc worker=%d warehouses=%d ramp=%s duration=%s on %s (<%s)",
 				i, opts.Warehouses, rampDur, opts.Duration, pgURLs[i], time.Minute)
 
-			histogramsPath := fmt.Sprintf("%s/%sstats.json", t.PerfArtifactsDir(), statsPrefix)
+			fileName := roachtestutil.GetBenchmarkMetricsFileName(t)
+			histogramsPath := fmt.Sprintf("%s/%s%s", t.PerfArtifactsDir(), statsPrefix, fileName)
+			var labelsMap map[string]string
+			if t.ExportOpenmetrics() {
+				labelsMap = getTpccLabels(opts.Warehouses, rampDur, opts.Duration, map[string]string{"database": opts.DB})
+			}
 			cmd := roachtestutil.NewCommand("%s workload run %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
 				MaybeFlag(opts.DB != "", "db", opts.DB).
 				Flag("warehouses", opts.Warehouses).
 				MaybeFlag(!opts.DisableHistogram, "histograms", histogramsPath).
+				MaybeFlag(t.ExportOpenmetrics(), "histogram-export-format", "openmetrics").
+				MaybeFlag(t.ExportOpenmetrics(), "openmetrics-labels", clusterstats.GetOpenmetricsLabelString(t, c, labelsMap)).
 				Flag("ramp", rampDur).
 				Flag("duration", opts.Duration).
 				Flag("prometheus-port", workloadInstances[i].prometheusPort).
@@ -484,11 +493,18 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 				workloadDur = 100 * time.Minute
 			}
 		}
+		histogramsPath := fmt.Sprintf("%s/%s", t.PerfArtifactsDir(), roachtestutil.GetBenchmarkMetricsFileName(t))
+		var labelsMap map[string]string
+		if t.ExportOpenmetrics() {
+			labelsMap = getTpccLabels(headroomWarehouses, rampDur, workloadDur/time.Millisecond, nil)
+		}
 		cmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
 			Arg("{pgurl%s}", c.CRDBNodes()).
 			Flag("duration", workloadDur).
 			Flag("warehouses", headroomWarehouses).
-			Flag("histograms", t.PerfArtifactsDir()+"/stats.json").
+			Flag("histograms", histogramsPath).
+			MaybeFlag(t.ExportOpenmetrics(), "histogram-export-format", "openmetrics").
+			MaybeFlag(t.ExportOpenmetrics(), "openmetrics-labels", clusterstats.GetOpenmetricsLabelString(t, c, labelsMap)).
 			Flag("ramp", rampDur).
 			Flag("prometheus-port", 2112).
 			Flag("pprofport", workloadPProfStartPort).
@@ -1667,15 +1683,18 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					extraFlags += " --method=simple"
 				}
 				t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
-				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", t.PerfArtifactsDir(), warehouses)
+				histogramsPath := fmt.Sprintf("%s/warehouses=%d/%s", t.PerfArtifactsDir(), warehouses, roachtestutil.GetBenchmarkMetricsFileName(t))
 				var tenantSuffix string
 				if b.SharedProcessMT {
 					tenantSuffix = fmt.Sprintf(":%s", appTenantName)
 				}
+
+				labels := getTpccLabels(warehouses, rampDur, loadDur, nil)
+
 				cmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --active-warehouses=%d "+
-					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s%s}",
+					"--tolerate-errors --ramp=%s --duration=%s%s %s {pgurl%s%s}",
 					b.LoadWarehouses(c.Cloud()), warehouses, rampDur,
-					loadDur, extraFlags, histogramsPath, sqlGateways, tenantSuffix)
+					loadDur, extraFlags, roachtestutil.GetWorkloadHistogramArgs(t, c, labels), sqlGateways, tenantSuffix)
 				err := c.RunE(ctx, option.WithNodes(group.LoadNodes), cmd)
 				loadDone <- timeutil.Now()
 				if err != nil {
@@ -1683,23 +1702,26 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					// count.
 					return errors.Wrapf(err, "error running tpcc load generator")
 				}
-				roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
-				if err := c.Get(
-					ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.LoadNodes,
-				); err != nil {
-					// NB: this will let the line search continue. The reason we do this
-					// is because it's conceivable that we made it here, but a VM just
-					// froze up on us. The next search iteration will handle this state.
-					return err
+				if !t.ExportOpenmetrics() {
+					roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
+					if err := c.Get(
+						ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.LoadNodes,
+					); err != nil {
+						// NB: this will let the line search continue. The reason we do this
+						// is because it's conceivable that we made it here, but a VM just
+						// froze up on us. The next search iteration will handle this state.
+						return err
+					}
+					snapshots, err := histogram.DecodeSnapshots(roachtestHistogramsPath)
+					if err != nil {
+						// If we got this far, and can't decode data, it's not a case of
+						// overload but something that deserves failing the whole test.
+						t.Fatal(err)
+					}
+					result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
+					resultChan <- result
+					return nil
 				}
-				snapshots, err := histogram.DecodeSnapshots(roachtestHistogramsPath)
-				if err != nil {
-					// If we got this far, and can't decode data, it's not a case of
-					// overload but something that deserves failing the whole test.
-					t.Fatal(err)
-				}
-				result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
-				resultChan <- result
 				return nil
 			})
 		}
@@ -1831,4 +1853,20 @@ func setupPrometheusForRoachtest(
 		}
 	}
 	return cfg, cleanupFunc
+}
+
+func getTpccLabels(
+	warehouses int, rampDur time.Duration, duration time.Duration, extraLabels map[string]string,
+) map[string]string {
+	labels := map[string]string{
+		"warehouses": fmt.Sprintf("%d", warehouses),
+		"duration":   duration.String(),
+		"ramp":       rampDur.String(),
+	}
+
+	if extraLabels != nil {
+		maps.Copy(labels, extraLabels)
+	}
+
+	return labels
 }

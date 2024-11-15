@@ -6,25 +6,17 @@
 package exporter
 
 import (
-	"regexp"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	prom "github.com/prometheus/client_model/go"
 )
 
 var (
-	invalidCharRegex      = regexp.MustCompile(`[^a-zA-Z0-9_]`)
-	invalidFirstCharRegex = regexp.MustCompile(`^[^a-zA-Z_]`)
-	summaryQuantiles      = []float64{50, 95, 99, 100}
+	summaryQuantiles = []float64{50, 95, 99, 100}
 )
-
-func sanitizeOpenMetricsLabels(input string) string {
-	sanitized := invalidCharRegex.ReplaceAllString(input, "_")
-	sanitized = invalidFirstCharRegex.ReplaceAllString(sanitized, "_")
-	return sanitized
-}
 
 // ConvertHdrHistogramToPrometheusMetricFamily converts a Hdr histogram into MetricFamily which is used
 // by expfmt.MetricFamilyToOpenMetrics to export openmetrics
@@ -52,8 +44,9 @@ func ConvertHdrHistogramToPrometheusMetricFamily(
 	summary.Quantile = valueQuantiles
 	summary.SampleCount = &totalCount
 	timestampMs := proto.Int64(start.UTC().UnixMilli())
+	sanitizedName := util.SanitizeMetricName(*name)
 	return &prom.MetricFamily{
-		Name: name,
+		Name: &sanitizedName,
 		Type: prom.MetricType_SUMMARY.Enum(),
 		Metric: []*prom.Metric{{
 			Summary:     summary,
