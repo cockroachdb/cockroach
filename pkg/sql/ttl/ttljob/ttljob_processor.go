@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"math/rand"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -169,14 +170,18 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	var spansProccessedSinceLastUpdate atomic.Int64
 	var rowsProccessedSinceLastUpdate atomic.Int64
 
-	// Update progress for approximately every 1% of spans processed.
+	// Update progress for approximately every 1% of spans processed, at least
+	// 60 seconds apart with jitter.
 	updateEvery := max(1, processorSpanCount/100)
+	updateEveryDuration := 60*time.Second + time.Duration(rand.Int63n(10*1000))*time.Millisecond
+	lastUpdated := timeutil.Now()
 	updateFractionCompleted := func() error {
 		jobID := ttlSpec.JobID
+		lastUpdated = timeutil.Now()
 		spansToAdd := spansProccessedSinceLastUpdate.Swap(0)
 		rowsToAdd := rowsProccessedSinceLastUpdate.Swap(0)
 
-		var jobRowCount, jobSpanCount int64
+		var deletedRowCount, processedSpanCount, totalSpanCount int64
 		var fractionCompleted float32
 
 		err := jobRegistry.UpdateJobWithTxn(
@@ -188,8 +193,9 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
 				rowLevelTTL.JobProcessedSpanCount += spansToAdd
 				rowLevelTTL.JobDeletedRowCount += rowsToAdd
-				jobRowCount = rowLevelTTL.JobDeletedRowCount
-				jobSpanCount = rowLevelTTL.JobTotalSpanCount
+				deletedRowCount = rowLevelTTL.JobDeletedRowCount
+				processedSpanCount = rowLevelTTL.JobProcessedSpanCount
+				totalSpanCount = rowLevelTTL.JobTotalSpanCount
 
 				fractionCompleted = float32(rowLevelTTL.JobProcessedSpanCount) / float32(rowLevelTTL.JobTotalSpanCount)
 				progress.Progress = &jobspb.Progress_FractionCompleted{
@@ -206,8 +212,8 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		processorID := t.ProcessorID
 		log.Infof(
 			ctx,
-			"TTL fractionCompleted updated processorID=%d tableID=%d jobRowCount=%d jobSpanCount=%d fractionCompleted=%.3f",
-			processorID, tableID, jobRowCount, jobSpanCount, fractionCompleted,
+			"TTL fractionCompleted updated processorID=%d tableID=%d deletedRowCount=%d processedSpanCount=%d totalSpanCount=%d fractionCompleted=%.3f",
+			processorID, tableID, deletedRowCount, processedSpanCount, totalSpanCount, fractionCompleted,
 		)
 		return nil
 	}
@@ -291,7 +297,9 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				// count.
 				spansProccessedSinceLastUpdate.Add(1)
 			}
-			if spansProccessedSinceLastUpdate.Load() >= updateEvery {
+
+			if spansProccessedSinceLastUpdate.Load() >= updateEvery &&
+				timeutil.Since(lastUpdated) >= updateEveryDuration {
 				if err := updateFractionCompleted(); err != nil {
 					return err
 				}
