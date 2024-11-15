@@ -796,6 +796,12 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	MetaUniqueStatementCount = metric.Metadata{
+		Name:        "sql.query.unique.count",
+		Help:        "Cardinality estimate of the set of statement fingerprints",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaTxnAbort = metric.Metadata{
 		Name:        "sql.txn.abort.count",
 		Help:        "Number of SQL transaction abort errors",

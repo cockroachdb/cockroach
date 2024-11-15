@@ -134,6 +134,19 @@ var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
 	"cluster connections are limited",
 )
 
+// detailedLatencyMetrics enables separate per-statement-fingerprint latency histograms. The utility of this extra
+// detail is expected to exceed its costs in most workloads.
+var detailedLatencyMetrics = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.detailed_latency_metrics.enabled",
+	"label latency metrics with the statement fingerprint. Workloads with tens of thousands of "+
+		"distinct query fingerprints should leave this setting false.",
+	false,
+)
+
+// The metric label name we'll use to facet latency metrics by statement fingerprint.
+var detailedLatencyMetricLabel = "fingerprint"
+
 // A connExecutor is in charge of executing queries received on a given client
 // connection. The connExecutor implements a state machine (dictated by the
 // Postgres/pgwire session semantics). The state machine is supposed to run
@@ -411,7 +424,7 @@ type ServerMetrics struct {
 // NewServer creates a new Server. Start() needs to be called before the Server
 // is used.
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
-	metrics := makeMetrics(false /* internal */)
+	metrics := makeMetrics(false /* internal */, &cfg.Settings.SV)
 	serverMetrics := makeServerMetrics(cfg)
 	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics, cfg.InsightsTestingKnobs)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
@@ -446,7 +459,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	s := &Server{
 		cfg:                     cfg,
 		Metrics:                 metrics,
-		InternalMetrics:         makeMetrics(true /* internal */),
+		InternalMetrics:         makeMetrics(true /* internal */, &cfg.Settings.SV),
 		ServerMetrics:           serverMetrics,
 		pool:                    pool,
 		reportedStats:           reportedSQLStats,
@@ -502,26 +515,40 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	return s
 }
 
-func makeMetrics(internal bool) Metrics {
+func makeMetrics(internal bool, sv *settings.Values) Metrics {
+	// For internal metrics, don't facet the latency metrics on the fingerprint
+	facetLabels := make([]string, 0, 1)
+	if !internal {
+		facetLabels = append(facetLabels, detailedLatencyMetricLabel)
+	}
+
+	distSqlExecLatency := metric.NewExportedHistogramVec(
+		getMetricMeta(MetaDistSQLExecLatency, internal),
+		metric.IOLatencyBuckets,
+		facetLabels,
+	)
+	sqlExecLatency := metric.NewExportedHistogramVec(
+		getMetricMeta(MetaSQLExecLatency, internal),
+		metric.IOLatencyBuckets,
+		facetLabels,
+	)
+
+	// Clear the latency metrics when we toggle the fingerprint detail setting on or off
+	detailedLatencyMetrics.SetOnChange(sv, func(ctx context.Context) {
+		distSqlExecLatency.Clear()
+		sqlExecLatency.Clear()
+	})
+
 	return Metrics{
 		EngineMetrics: EngineMetrics{
-			DistSQLSelectCount:    metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
-			SQLOptFallbackCount:   metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
-			SQLOptPlanCacheHits:   metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
-			SQLOptPlanCacheMisses: metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
+			DistSQLSelectCount:        metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
+			SQLOptFallbackCount:       metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
+			SQLOptPlanCacheHits:       metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
+			SQLOptPlanCacheMisses:     metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
+			StatementFingerprintCount: metric.NewUniqueCounter(getMetricMeta(MetaUniqueStatementCount, internal)),
+			DistSQLExecLatency:        distSqlExecLatency,
+			SQLExecLatency:            sqlExecLatency,
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
-			DistSQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     getMetricMeta(MetaDistSQLExecLatency, internal),
-				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.IOLatencyBuckets,
-			}),
-			SQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     getMetricMeta(MetaSQLExecLatency, internal),
-				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.IOLatencyBuckets,
-			}),
 			DistSQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaDistSQLServiceLatency, internal),

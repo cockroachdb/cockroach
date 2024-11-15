@@ -777,11 +777,9 @@ def go_deps():
         name = "com_github_axiomhq_hyperloglog",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/axiomhq/hyperloglog",
-        sha256 = "812834322ee2ca50dc36f91f9ac3f2cde4631af2f9c330b1271c78b46024a540",
-        strip_prefix = "github.com/axiomhq/hyperloglog@v0.0.0-20181223111420-4b99d0c2c99e",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/axiomhq/hyperloglog/com_github_axiomhq_hyperloglog-v0.0.0-20181223111420-4b99d0c2c99e.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:u1XT3yyY1rjzlWuP6NQIrV4bRYHOaqZaovqjcBEvZJo=",
+        version = "v0.2.0",
     )
     go_repository(
         name = "com_github_aymanbagabas_go_osc52",
