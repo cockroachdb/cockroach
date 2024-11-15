@@ -1571,6 +1571,7 @@ var cockroachdbMetrics = map[string]string{
 	"sql_disk_distsql_spilled_bytes_written":                      "sql.disk.distsql.spilled.bytes.written",
 	"sql_distsql_contended_queries_count":                         "sql.distsql.contended.queries",
 	"sql_distsql_cumulative_contention_nanos":                     "sql.distsql.cumulative_contention_nanos",
+	"sql_distsql_distributed_count":                               "sql.distsql.distributed.count",
 	"sql_distsql_dist_query_rerun_locally_count":                  "sql.distsql.dist_query_rerun_locally.count",
 	"sql_distsql_dist_query_rerun_locally_failure_count":          "sql.distsql.dist_query_rerun_locally.failure_count",
 	"sql_distsql_exec_latency":                                    "sql.distsql.exec.latency",

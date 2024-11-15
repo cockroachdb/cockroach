@@ -16,6 +16,7 @@ import (
 type DistSQLMetrics struct {
 	QueriesActive               *metric.Gauge
 	QueriesTotal                *metric.Counter
+	DistributedCount            *metric.Counter
 	ContendedQueriesCount       *metric.Counter
 	CumulativeContentionNanos   *metric.Counter
 	FlowsActive                 *metric.Gauge
@@ -47,6 +48,12 @@ var (
 	metaQueriesTotal = metric.Metadata{
 		Name:        "sql.distsql.queries.total",
 		Help:        "Number of SQL queries executed",
+		Measurement: "Queries",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDistributedCount = metric.Metadata{
+		Name:        "sql.distsql.distributed.count",
+		Help:        "Number of SQL queries executed with full or partial distribution",
 		Measurement: "Queries",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -145,6 +152,7 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 	return DistSQLMetrics{
 		QueriesActive:             metric.NewGauge(metaQueriesActive),
 		QueriesTotal:              metric.NewCounter(metaQueriesTotal),
+		DistributedCount:          metric.NewCounter(metaDistributedCount),
 		ContendedQueriesCount:     metric.NewCounter(metaContendedQueriesCount),
 		CumulativeContentionNanos: metric.NewCounter(metaCumulativeContentionNanos),
 		FlowsActive:               metric.NewGauge(metaFlowsActive),
@@ -174,9 +182,12 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 }
 
 // QueryStart registers the start of a new DistSQL query.
-func (m *DistSQLMetrics) QueryStart() {
+func (m *DistSQLMetrics) QueryStart(distributed bool) {
 	m.QueriesActive.Inc(1)
 	m.QueriesTotal.Inc(1)
+	if distributed {
+		m.DistributedCount.Inc(1)
+	}
 }
 
 // QueryStop registers the end of a DistSQL query.
