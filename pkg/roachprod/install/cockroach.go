@@ -1294,11 +1294,6 @@ func (c *SyncedCluster) setClusterSettings(
 func (c *SyncedCluster) generateClusterSettingCmd(
 	ctx context.Context, l *logger.Logger, node Node, virtualCluster string,
 ) (string, error) {
-	if config.CockroachDevLicense == "" {
-		l.Printf("%s: COCKROACH_DEV_LICENSE unset: enterprise features will be unavailable",
-			c.Name)
-	}
-
 	var tenantPrefix string
 	if virtualCluster != "" && virtualCluster != SystemInterfaceName {
 		tenantPrefix = fmt.Sprintf("ALTER TENANT '%s' ", virtualCluster)
