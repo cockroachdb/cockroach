@@ -56,7 +56,7 @@ func (ex *connExecutor) execPrepare(
 		return ev, payload
 	}
 
-	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "prepare stmt")
+	ctx, sp := tracing.ChildSpan(ctx, "prepare stmt")
 	defer sp.Finish()
 
 	// The anonymous statement can be overwritten.
