@@ -34,8 +34,13 @@ func ConvertHdrHistogramToPrometheusMetricFamily(
 		if value == 0 {
 			continue
 		}
+
+		// Openmetrics standard mandates that quantile should be b/w 0 to 1.
+		// https://github.com/prometheus/OpenMetrics/blob/296468bc2359ebac83f24301b54a0871f2268016/specification/OpenMetrics.md?plain=1#L294
+		// Since hdrHistogram has quantiles in percentage, we need to convert it
+		openMetricsQuantile := quantile / 100
 		valueQuantile := prom.Quantile{
-			Quantile: &quantile,
+			Quantile: &openMetricsQuantile,
 			Value:    &value,
 		}
 
