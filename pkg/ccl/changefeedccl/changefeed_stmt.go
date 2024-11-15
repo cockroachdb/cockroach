@@ -386,7 +386,7 @@ func createChangefeedJobRecord(
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 	}
 
-	jobDescription, err := changefeedJobDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
+	jobDescription, err := makeChangefeedJobDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -658,7 +658,7 @@ func createChangefeedJobRecord(
 		details.Opts = opts.AsMap()
 		// Jobs should not be created for sinkless changefeeds. However, note that
 		// we create and return a job record for sinkless changefeeds below. This is
-		// because we need the details field to create our sinkless changefeed.
+		// because we need the job description and details to create our sinkless changefeed.
 		// After this job record is returned, we create our forever running sinkless
 		// changefeed, thus ensuring that no job is created for this changefeed as
 		// desired.
@@ -980,31 +980,35 @@ func requiresTopicInValue(s Sink) bool {
 	return s.getConcreteType() == sinkTypeWebhook
 }
 
-func changefeedJobDescription(
+func makeChangefeedJobDescription(
 	ctx context.Context,
 	changefeed *tree.CreateChangefeed,
 	sinkURI string,
 	opts changefeedbase.StatementOptions,
 ) (string, error) {
-	// Redacts user sensitive information from job description.
-	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, nil)
-	if err != nil {
-		return "", err
-	}
-
-	cleanedSinkURI, err = changefeedbase.RedactUserFromURI(cleanedSinkURI)
-	if err != nil {
-		return "", err
-	}
-
-	logSanitizedChangefeedDestination(ctx, cleanedSinkURI)
-
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
-		SinkURI: tree.NewDString(cleanedSinkURI),
 		Select:  changefeed.Select,
 	}
-	if err = opts.ForEachWithRedaction(func(k string, v string) {
+
+	if sinkURI != "" {
+		// Redacts user sensitive information from job description.
+		cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, nil)
+		if err != nil {
+			return "", err
+		}
+
+		cleanedSinkURI, err = changefeedbase.RedactUserFromURI(cleanedSinkURI)
+		if err != nil {
+			return "", err
+		}
+
+		logSanitizedChangefeedDestination(ctx, cleanedSinkURI)
+
+		c.SinkURI = tree.NewDString(cleanedSinkURI)
+	}
+
+	if err := opts.ForEachWithRedaction(func(k string, v string) {
 		opt := tree.KVOption{Key: tree.Name(k)}
 		if len(v) > 0 {
 			opt.Value = tree.NewDString(v)
@@ -1014,6 +1018,7 @@ func changefeedJobDescription(
 		return "", err
 	}
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
+
 	return tree.AsStringWithFlags(c, tree.FmtShowFullURIs), nil
 }
 
