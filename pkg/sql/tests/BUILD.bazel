@@ -86,6 +86,7 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency",
         "//pkg/roachpb",
+        "//pkg/rpc/nodedialer",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
