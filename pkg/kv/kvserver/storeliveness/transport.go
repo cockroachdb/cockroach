@@ -76,8 +76,8 @@ type Transport struct {
 	// handlers stores the MessageHandler for each store on the node.
 	handlers syncutil.Map[roachpb.StoreID, MessageHandler]
 
-	// TransportTestingKnobs includes all knobs for testing.
-	knobs *TransportTestingKnobs
+	// TransportKnobs includes all knobs for testing.
+	knobs *TransportKnobs
 }
 
 var _ MessageSender = (*Transport)(nil)
@@ -89,10 +89,10 @@ func NewTransport(
 	clock *hlc.Clock,
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
-	knobs *TransportTestingKnobs,
+	knobs *TransportKnobs,
 ) *Transport {
 	if knobs == nil {
-		knobs = &TransportTestingKnobs{}
+		knobs = &TransportKnobs{}
 	}
 	t := &Transport{
 		AmbientContext: ambient,
@@ -383,12 +383,4 @@ func (t *Transport) processQueue(q *sendQueue, stream slpb.StoreLiveness_StreamC
 			batch.Now = hlc.ClockTimestamp{}
 		}
 	}
-}
-
-// TransportTestingKnobs includes all knobs that facilitate testing Transport.
-type TransportTestingKnobs struct {
-	// OverrideIdleTimeout overrides the idleTimeout, which controls how
-	// long until an instance of processQueue winds down after not observing any
-	// messages.
-	OverrideIdleTimeout func() time.Duration
 }

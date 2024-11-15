@@ -16,7 +16,6 @@ import (
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,7 +34,7 @@ func TestStoreLiveness(t *testing.T) {
 		t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 			ctx := context.Background()
 			storeID := slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
-			engine := &testEngine{Engine: storage.NewDefaultInMemForTesting()}
+			engine := NewTestEngine(storeID)
 			defer engine.Close()
 			settings := clustersettings.MakeTestingClusterSettings()
 			stopper := stop.NewStopper()
@@ -43,7 +42,7 @@ func TestStoreLiveness(t *testing.T) {
 			manual := timeutil.NewManualTime(timeutil.Unix(1, 0))
 			clock := hlc.NewClockForTesting(manual)
 			sender := testMessageSender{}
-			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, &sender)
+			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, &sender, nil)
 			require.NoError(t, sm.onRestart(ctx))
 			datadriven.RunTest(
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -92,7 +91,7 @@ func TestStoreLiveness(t *testing.T) {
 						gracePeriod := parseDuration(t, d, "grace-period")
 						o := Options{SupportWithdrawalGracePeriod: gracePeriod}
 						sm = NewSupportManager(
-							storeID, engine, o, settings, stopper, clock, &sender,
+							storeID, engine, o, settings, stopper, clock, &sender, nil,
 						)
 						manual.AdvanceTo(now.GoTime())
 						require.NoError(t, sm.onRestart(ctx))
