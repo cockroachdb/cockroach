@@ -209,6 +209,63 @@ func (vi *VectorIndex) Insert(
 	return vi.insertHelper(&parentSearchCtx, childKey, true /* allowRetry */)
 }
 
+// Delete attempts to remove a vector from the index, given its value and
+// primary key. This is called within the scope of a transaction so that the
+// index does not appear to change during the delete.
+//
+// NOTE: Delete may not be able to locate the vector in the index, meaning a
+// "dangling vector" reference will be left in the tree. Vector index methods
+// handle this rare case by checking for duplicates when returning search
+// results.
+func (vi *VectorIndex) Delete(
+	ctx context.Context, txn vecstore.Txn, vector vector.T, key vecstore.PrimaryKey,
+) error {
+	// Search for the vector in the index.
+	searchCtx := searchContext{
+		Txn:      txn,
+		Original: vector,
+		Level:    vecstore.LeafLevel,
+		Options: SearchOptions{
+			SkipRerank: vi.options.DisableErrorBounds,
+		},
+	}
+	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
+
+	// Randomize the vector if required by the quantizer.
+	tempRandomized := searchCtx.Workspace.AllocVector(vi.quantizer.GetRandomDims())
+	defer searchCtx.Workspace.FreeVector(tempRandomized)
+	vi.quantizer.RandomizeVector(ctx, vector, tempRandomized, false /* invert */)
+	searchCtx.Randomized = tempRandomized
+
+	searchSet := vecstore.SearchSet{MaxResults: 1, MatchKey: key}
+
+	// Search with the base beam size. If that fails to find the vector, try again
+	// with a larger beam size, in order to minimize the chance of dangling
+	// vector references in the index.
+	baseBeamSize := max(vi.options.BaseBeamSize, 1)
+	for {
+		searchCtx.Options.BaseBeamSize = baseBeamSize
+
+		err := vi.searchHelper(&searchCtx, &searchSet, true /* allowRetry */)
+		if err != nil {
+			return err
+		}
+		results := searchSet.PopResults()
+		if len(results) == 0 {
+			// Retry search with significantly higher beam size.
+			if baseBeamSize == vi.options.BaseBeamSize {
+				baseBeamSize *= 8
+				continue
+			}
+			return nil
+		}
+
+		// Remove the vector from its partition in the store.
+		_, err = vi.removeFromPartition(ctx, txn, results[0].ParentPartitionKey, results[0].ChildKey)
+		return err
+	}
+}
+
 // Search finds vectors in the index that are closest to the given query vector
 // and returns them in the search set. Set searchSet.MaxResults to limit the
 // number of results. This is called within the scope of a transaction so that
