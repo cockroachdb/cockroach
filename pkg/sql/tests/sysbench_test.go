@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -126,6 +127,31 @@ const (
 	sysbenchStmtInsert         = `INSERT INTO sbtest%d (id, k, c, pad) VALUES ($1, $2, $3, $4)`          // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_common.lua#L276
 )
 
+// sysbenchDriverConstructor constructs a new sysbenchDriver, along with a
+// cleanup function for that driver.
+type sysbenchDriverConstructor func(context.Context, *testing.B) (sysbenchDriver, func())
+
+func newTestCluster(
+	b *testing.B, nodes int, localRPCFastPath bool,
+) serverutils.TestClusterInterface {
+	st := cluster.MakeTestingClusterSettings()
+	// NOTE: disabling background work makes the benchmark more predictable, but
+	// also moderately less realistic.
+	disableBackgroundWork(st)
+	const cacheSize = 2 * 1024 * 1024 * 1024 // 2GB
+	return serverutils.StartCluster(b, nodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings:  st,
+			CacheSize: cacheSize,
+			Knobs: base.TestingKnobs{
+				DialerKnobs: nodedialer.DialerTestingKnobs{
+					TestingNoLocalClientOptimization: !localRPCFastPath,
+				},
+			},
+		}},
+	)
+}
+
 // sysbenchSQL is SQL-based implementation of sysbenchDriver. It runs SQL
 // statements against a single node cluster.
 //
@@ -150,25 +176,21 @@ type sysbenchSQL struct {
 	}
 }
 
-func newSysbenchSQL(ctx context.Context, b *testing.B) (sysbenchDriver, func()) {
-	st := cluster.MakeTestingClusterSettings()
-	// NOTE: disabling background work makes the benchmark more predictable, but
-	// also moderately less realistic.
-	disableBackgroundWork(st)
-	s := serverutils.StartServerOnly(b, base.TestServerArgs{
-		Settings:  st,
-		CacheSize: sysbenchCacheSize,
-	})
-	pgURL, cleanupURL := s.ApplicationLayer().PGUrl(b, serverutils.DBName(sysbenchDB))
-	conn := try(pgx.Connect(ctx, pgURL.String()))
-	cleanup := func() {
-		cleanupURL()
-		s.Stopper().Stop(ctx)
+func newSysbenchSQL(nodes int, localRPCFastPath bool) sysbenchDriverConstructor {
+	return func(ctx context.Context, b *testing.B) (sysbenchDriver, func()) {
+		tc := newTestCluster(b, nodes, localRPCFastPath)
+		try0(tc.WaitForFullReplication())
+		pgURL, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName(sysbenchDB))
+		conn := try(pgx.Connect(ctx, pgURL.String()))
+		cleanup := func() {
+			cleanupURL()
+			tc.Stopper().Stop(ctx)
+		}
+		return &sysbenchSQL{
+			ctx:  ctx,
+			conn: conn,
+		}, cleanup
 	}
-	return &sysbenchSQL{
-		ctx:  ctx,
-		conn: conn,
-	}, cleanup
 }
 
 func (s *sysbenchSQL) Begin() {
@@ -284,22 +306,18 @@ type sysbenchKV struct {
 	indexPrefix [sysbenchTables]roachpb.Key
 }
 
-func newSysbenchKV(ctx context.Context, b *testing.B) (sysbenchDriver, func()) {
-	st := cluster.MakeTestingClusterSettings()
-	// NOTE: disabling background work makes the benchmark more predictable, but
-	// also moderately less realistic.
-	disableBackgroundWork(st)
-	s, _, db := serverutils.StartServer(b, base.TestServerArgs{
-		Settings:  st,
-		CacheSize: sysbenchCacheSize,
-	})
-	cleanup := func() {
-		s.Stopper().Stop(ctx)
+func newSysbenchKV(nodes int, localRPCFastPath bool) sysbenchDriverConstructor {
+	return func(ctx context.Context, b *testing.B) (sysbenchDriver, func()) {
+		tc := newTestCluster(b, nodes, localRPCFastPath)
+		db := tc.Server(0).DB()
+		cleanup := func() {
+			tc.Stopper().Stop(ctx)
+		}
+		return &sysbenchKV{
+			ctx: ctx,
+			db:  db,
+		}, cleanup
 	}
-	return &sysbenchKV{
-		ctx: ctx,
-		db:  db,
-	}, cleanup
 }
 
 func (s *sysbenchKV) Begin() {
@@ -616,16 +634,18 @@ func sysbenchOltpBeginCommit(s sysbenchDriver, _ *rand.Rand) {
 	s.Commit()
 }
 
-const sysbenchCacheSize = 2 * 1024 * 1024 * 1024 // 2GB
-
 func BenchmarkSysbench(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	drivers := []struct {
 		name          string
-		constructorFn func(context.Context, *testing.B) (sysbenchDriver, func())
+		constructorFn sysbenchDriverConstructor
 	}{
-		{"SQL", newSysbenchSQL},
-		{"KV", newSysbenchKV},
+		{"SQL/1node_local", newSysbenchSQL(1, true)},
+		{"SQL/1node_remote", newSysbenchSQL(1, false)},
+		{"SQL/3node", newSysbenchSQL(3, false)},
+		{"KV/1node_local", newSysbenchKV(1, true)},
+		{"KV/1node_remote", newSysbenchKV(1, false)},
+		{"KV/3node", newSysbenchKV(3, false)},
 	}
 	workloads := []struct {
 		name string
