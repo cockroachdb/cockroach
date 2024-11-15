@@ -31,6 +31,10 @@ const (
 	// mergeFixup is a fixup that includes the key of a partition to merge as
 	// well as the key of its parent partition.
 	mergeFixup
+	// vectorDeleteFixup is a fixup that includes the primary key of a vector to
+	// delete from the index, as well as the key of the partition that contains
+	// it.
+	vectorDeleteFixup
 )
 
 // maxFixups specifies the maximum number of pending index fixups that can be
@@ -49,6 +53,8 @@ type fixup struct {
 	// ParentPartitionKey is the key of the parent of the fixup's target
 	// partition, if the fixup operates on a partition
 	ParentPartitionKey vecstore.PartitionKey
+	// VectorKey is the primary key of the fixup vector.
+	VectorKey vecstore.PrimaryKey
 }
 
 // partitionFixupKey is used as a key in a uniqueness map for partition fixups.
@@ -80,6 +86,9 @@ type fixupProcessor struct {
 
 		// pendingPartitions tracks pending fixups that operate on a partition.
 		pendingPartitions map[partitionFixupKey]bool
+
+		// pendingVectors tracks pending fixups for deleting vectors.
+		pendingVectors map[string]bool
 	}
 
 	// --------------------------------------------------
@@ -125,6 +134,7 @@ func (fp *fixupProcessor) Init(index *VectorIndex, seed int64) {
 		fp.rng = rand.New(rand.NewSource(seed))
 	}
 	fp.mu.pendingPartitions = make(map[partitionFixupKey]bool, maxFixups)
+	fp.mu.pendingVectors = make(map[string]bool, maxFixups)
 	fp.fixups = make(chan fixup, maxFixups)
 	fp.fixupsLimitHit = log.Every(time.Second)
 }
@@ -148,6 +158,17 @@ func (fp *fixupProcessor) AddMerge(
 		Type:               mergeFixup,
 		ParentPartitionKey: parentPartitionKey,
 		PartitionKey:       partitionKey,
+	})
+}
+
+// AddDeleteVector enqueues a vector deletion fixup for later processing.
+func (fp *fixupProcessor) AddDeleteVector(
+	ctx context.Context, partitionKey vecstore.PartitionKey, vectorKey vecstore.PrimaryKey,
+) {
+	fp.addFixup(ctx, fixup{
+		Type:         vectorDeleteFixup,
+		PartitionKey: partitionKey,
+		VectorKey:    vectorKey,
 	})
 }
 
@@ -235,6 +256,11 @@ func (fp *fixupProcessor) run(ctx context.Context, wait bool) (ok bool, err erro
 			err = errors.Wrapf(err, "merging partition %d", next.PartitionKey)
 		}
 
+	case vectorDeleteFixup:
+		if err = fp.deleteVector(ctx, next.PartitionKey, next.VectorKey); err != nil {
+			err = errors.Wrap(err, "deleting vector")
+		}
+
 	default:
 		return false, errors.AssertionFailedf("unknown fixup %d", next.Type)
 	}
@@ -251,6 +277,9 @@ func (fp *fixupProcessor) run(ctx context.Context, wait bool) (ok bool, err erro
 	case splitFixup, mergeFixup:
 		key := partitionFixupKey{Type: next.Type, PartitionKey: next.PartitionKey}
 		delete(fp.mu.pendingPartitions, key)
+
+	case vectorDeleteFixup:
+		delete(fp.mu.pendingVectors, string(next.VectorKey))
 	}
 
 	return true, err
@@ -263,7 +292,7 @@ func (fp *fixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	defer fp.mu.Unlock()
 
 	// Check whether fixup limit has been reached.
-	if len(fp.mu.pendingPartitions) >= maxFixups {
+	if len(fp.mu.pendingPartitions)+len(fp.mu.pendingVectors) >= maxFixups {
 		// Don't enqueue the fixup.
 		if fp.fixupsLimitHit.ShouldLog() {
 			log.Warning(ctx, "reached limit of unprocessed fixups")
@@ -279,6 +308,15 @@ func (fp *fixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 			return
 		}
 		fp.mu.pendingPartitions[key] = true
+
+	case vectorDeleteFixup:
+		if _, ok := fp.mu.pendingVectors[string(fixup.VectorKey)]; ok {
+			return
+		}
+		fp.mu.pendingVectors[string(fixup.VectorKey)] = true
+
+	default:
+		panic(errors.AssertionFailedf("unknown fixup %d", fixup.Type))
 	}
 
 	// Increment the number of pending fixups.
@@ -822,6 +860,48 @@ func (fp *fixupProcessor) mergePartition(
 	return nil
 }
 
+// deleteVector deletes a vector from the store that has had its primary key
+// deleted in the primary index, but was never deleted from the secondary index.
+func (fp *fixupProcessor) deleteVector(
+	ctx context.Context, partitionKey vecstore.PartitionKey, vectorKey vecstore.PrimaryKey,
+) (err error) {
+	// Run the deletion within a transaction.
+	txn, err := fp.index.store.BeginTransaction(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err == nil {
+			err = fp.index.store.CommitTransaction(ctx, txn)
+		} else {
+			err = errors.CombineErrors(err, fp.index.store.AbortTransaction(ctx, txn))
+		}
+	}()
+
+	log.VEventf(ctx, 2, "deleting dangling vector from partition %d", partitionKey)
+
+	// Verify that the vector is still missing from the primary index. This guards
+	// against a race condition where a row is created and deleted repeatedly with
+	// the same primary key.
+	childKey := vecstore.ChildKey{PrimaryKey: vectorKey}
+	fp.tempVectorsWithKeys = ensureSliceLen(fp.tempVectorsWithKeys, 1)
+	fp.tempVectorsWithKeys[0] = vecstore.VectorWithKey{Key: childKey}
+	if err = fp.index.store.GetFullVectors(ctx, txn, fp.tempVectorsWithKeys); err != nil {
+		return errors.Wrap(err, "getting full vector")
+	}
+	if fp.tempVectorsWithKeys[0].Vector != nil {
+		log.VEventf(ctx, 2, "primary key row exists, do not delete vector")
+		return nil
+	}
+
+	_, err = fp.index.removeFromPartition(ctx, txn, partitionKey, childKey)
+	if errors.Is(err, vecstore.ErrPartitionNotFound) {
+		log.VEventf(ctx, 2, "partition %d no longer exists, do not delete vector", partitionKey)
+		return nil
+	}
+	return err
+}
+
 // getFullVectorsForPartition fetches the full-size vectors (potentially
 // randomized by the quantizer) that are quantized by the given partition.
 // Discard any dangling vectors in the partition.
@@ -834,7 +914,7 @@ func (fp *fixupProcessor) getFullVectorsForPartition(
 	childKeys := partition.ChildKeys()
 	fp.tempVectorsWithKeys = ensureSliceLen(fp.tempVectorsWithKeys, len(childKeys))
 	for i := range childKeys {
-		fp.tempVectorsWithKeys[i].Key = childKeys[i]
+		fp.tempVectorsWithKeys[i] = vecstore.VectorWithKey{Key: childKeys[i]}
 	}
 	err := fp.index.store.GetFullVectors(ctx, txn, fp.tempVectorsWithKeys)
 	if err != nil {

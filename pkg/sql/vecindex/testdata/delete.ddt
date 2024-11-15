@@ -182,10 +182,9 @@ search max-results=2
 ----
 vec4: 5 (centroid=1.118)
 vec1: 10 (centroid=1.5811)
-4 leaf vectors, 6 vectors, 4 full vectors, 3 partitions
+3 leaf vectors, 5 vectors, 3 full vectors, 3 partitions
 
 # Vector should now be gone from the index.
-# TODO(andyk): This will be true once fixups are added.
 format-tree
 ----
 • 1 (4.25, 3.5)
@@ -197,7 +196,6 @@ format-tree
 │
 └───• 3 (2.5, 2.5)
     │
-    ├───• vec3 (MISSING)
     └───• vec1 (1, 2)
 
 # Delete all vectors from one branch of the tree.
@@ -213,14 +211,13 @@ vec1
 │
 └───• 3 (2.5, 2.5)
     │
-    ├───• vec3 (MISSING)
     └───• vec1 (MISSING)
 
 # Search the empty branch.
 search max-results=1 beam-size=1
 (1, 2)
 ----
-2 leaf vectors, 4 vectors, 2 full vectors, 2 partitions
+1 leaf vectors, 3 vectors, 1 full vectors, 2 partitions
 
 # ----------
 # Search root partition with only missing vectors.
@@ -243,3 +240,8 @@ search max-results=1 beam-size=1
 (1, 2)
 ----
 1 leaf vectors, 1 vectors, 1 full vectors, 1 partitions
+
+# Root should be empty.
+format-tree
+----
+• 1 (0, 0)

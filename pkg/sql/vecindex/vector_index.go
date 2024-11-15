@@ -682,7 +682,8 @@ func (vi *VectorIndex) getRerankVectors(
 		// Exclude deleted vectors from results.
 		if candidates[i].Vector == nil {
 			// Vector was deleted, so add fixup to delete it.
-			// TODO(andyk): Enqueue a delete of a vector.
+			vi.fixups.AddDeleteVector(
+				searchCtx.Ctx, candidates[i].ParentPartitionKey, candidates[i].ChildKey.PrimaryKey)
 
 			// Move the last candidate to the current position and reduce size
 			// of slice by one.

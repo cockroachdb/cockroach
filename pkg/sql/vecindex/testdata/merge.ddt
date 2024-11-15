@@ -196,8 +196,7 @@ vec4
 │
 ├───• 2 (3.25, 6)
 │   │
-│   ├───• vec6 (MISSING)
-│   └───• vec5 (MISSING)
+│   └───• vec6 (MISSING)
 │
 └───• 3 (-0.3333, 3.3333)
     │
@@ -210,7 +209,7 @@ search
 (5, 2)
 ----
 vec7: 17 (centroid=1.3744)
-5 leaf vectors, 7 vectors, 4 full vectors, 3 partitions
+4 leaf vectors, 6 vectors, 3 full vectors, 3 partitions
 
 format-tree
 ----
@@ -241,14 +240,13 @@ vec1
 │
 └───• 3 (-0.3333, 3.3333)
     │
-    ├───• vec3 (-2, 8)
-    └───• vec7 (MISSING)
+    └───• vec3 (-2, 8)
 
 search
 (1, 3)
 ----
 vec3: 34 (centroid=4.9554)
-2 leaf vectors, 3 vectors, 2 full vectors, 2 partitions
+1 leaf vectors, 2 vectors, 1 full vectors, 2 partitions
 
 format-tree
 ----
