@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
@@ -24,12 +25,13 @@ type EngineMetrics struct {
 	DistSQLSelectCount *metric.Counter
 	// The subset of queries which we attempted and failed to plan with the
 	// cost-based optimizer.
-	SQLOptFallbackCount   *metric.Counter
-	SQLOptPlanCacheHits   *metric.Counter
-	SQLOptPlanCacheMisses *metric.Counter
+	SQLOptFallbackCount       *metric.Counter
+	SQLOptPlanCacheHits       *metric.Counter
+	SQLOptPlanCacheMisses     *metric.Counter
+	StatementFingerprintCount *metric.UniqueCounter
 
-	DistSQLExecLatency    metric.IHistogram
-	SQLExecLatency        metric.IHistogram
+	DistSQLExecLatency    *metric.HistogramVec
+	SQLExecLatency        *metric.HistogramVec
 	DistSQLServiceLatency metric.IHistogram
 	SQLServiceLatency     metric.IHistogram
 	SQLTxnLatency         metric.IHistogram
@@ -135,25 +137,8 @@ func (ex *connExecutor) recordStatementSummary(
 	execOverheadSec := svcLatSec - processingLatSec
 
 	stmt := &planner.stmt
-	shouldIncludeInLatencyMetrics := shouldIncludeStmtInLatencyMetrics(stmt)
 	flags := planner.curPlan.flags
-	if automaticRetryCount == 0 {
-		ex.updateOptCounters(flags)
-		m := &ex.metrics.EngineMetrics
-		if flags.IsDistributed() {
-			if _, ok := stmt.AST.(*tree.Select); ok {
-				m.DistSQLSelectCount.Inc(1)
-			}
-			if shouldIncludeInLatencyMetrics {
-				m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-				m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
-			}
-		}
-		if shouldIncludeInLatencyMetrics {
-			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
-		}
-	}
+	ex.recordStatementLatencyMetrics(stmt, flags, automaticRetryCount, runLatRaw, svcLatRaw)
 
 	fullScan := flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
 	recordedStmtStatsKey := appstatspb.StatementStatisticsKey{
@@ -301,6 +286,42 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	return stmtFingerprintID
+}
+
+func (ex *connExecutor) recordStatementLatencyMetrics(
+	stmt *Statement,
+	flags planFlags,
+	automaticRetryCount int,
+	runLatRaw time.Duration,
+	svcLatRaw time.Duration,
+) {
+	shouldIncludeInLatencyMetrics := shouldIncludeStmtInLatencyMetrics(stmt)
+	if automaticRetryCount == 0 {
+		ex.updateOptCounters(flags)
+		m := &ex.metrics.EngineMetrics
+
+		m.StatementFingerprintCount.Add([]byte(stmt.StmtNoConstants))
+
+		labels := map[string]string{}
+		if detailedLatencyMetrics.Get(&ex.server.cfg.Settings.SV) {
+			labels = map[string]string{
+				detailedLatencyMetricLabel: stmt.StmtNoConstants,
+			}
+		}
+		if flags.IsDistributed() {
+			if _, ok := stmt.AST.(*tree.Select); ok {
+				m.DistSQLSelectCount.Inc(1)
+			}
+			if shouldIncludeInLatencyMetrics {
+				m.DistSQLExecLatency.Observe(labels, float64(runLatRaw.Nanoseconds()))
+				m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+			}
+		}
+		if shouldIncludeInLatencyMetrics {
+			m.SQLExecLatency.Observe(labels, float64(runLatRaw.Nanoseconds()))
+			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
+		}
+	}
 }
 
 func (ex *connExecutor) updateOptCounters(planFlags planFlags) {

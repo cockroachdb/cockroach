@@ -134,6 +134,19 @@ var maxNumNonRootConnectionsReason = settings.RegisterStringSetting(
 	"cluster connections are limited",
 )
 
+// detailedLatencyMetrics enables separate per-statement-fingerprint latency histograms. The utility of this extra
+// detail is expected to exceed its costs in most workloads.
+var detailedLatencyMetrics = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"server.detailed_latency_metrics.enabled",
+	"label latency metrics with the statement fingerprint. Workloads with tens of thousands of "+
+		"distinct query fingerprints should leave this setting false.",
+	false,
+)
+
+// The metric label name we'll use to facet latency metrics by statement fingerprint.
+var detailedLatencyMetricLabel = "fingerprint"
+
 // A connExecutor is in charge of executing queries received on a given client
 // connection. The connExecutor implements a state machine (dictated by the
 // Postgres/pgwire session semantics). The state machine is supposed to run
@@ -505,23 +518,22 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 func makeMetrics(internal bool) Metrics {
 	return Metrics{
 		EngineMetrics: EngineMetrics{
-			DistSQLSelectCount:    metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
-			SQLOptFallbackCount:   metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
-			SQLOptPlanCacheHits:   metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
-			SQLOptPlanCacheMisses: metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
+			DistSQLSelectCount:        metric.NewCounter(getMetricMeta(MetaDistSQLSelect, internal)),
+			SQLOptFallbackCount:       metric.NewCounter(getMetricMeta(MetaSQLOptFallback, internal)),
+			SQLOptPlanCacheHits:       metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
+			SQLOptPlanCacheMisses:     metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
+			StatementFingerprintCount: metric.NewUniqueCounter(MetaUniqueStatementCount),
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
-			DistSQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     getMetricMeta(MetaDistSQLExecLatency, internal),
-				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.IOLatencyBuckets,
-			}),
-			SQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     getMetricMeta(MetaSQLExecLatency, internal),
-				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.IOLatencyBuckets,
-			}),
+			DistSQLExecLatency: metric.NewExportedHistogramVec(
+				getMetricMeta(MetaDistSQLExecLatency, internal),
+				metric.IOLatencyBuckets,
+				[]string{detailedLatencyMetricLabel},
+			),
+			SQLExecLatency: metric.NewExportedHistogramVec(
+				getMetricMeta(MetaSQLExecLatency, internal),
+				metric.IOLatencyBuckets,
+				[]string{detailedLatencyMetricLabel},
+			),
 			DistSQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaDistSQLServiceLatency, internal),
