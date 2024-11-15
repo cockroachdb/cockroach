@@ -922,3 +922,36 @@ func isPQErrWithCode(err error, codes ...pgcode.Code) bool {
 	}
 	return false
 }
+
+func TestSchemaChangerFailsOnMissingDesc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	var params base.TestServerArgs
+	params.Knobs = base.TestingKnobs{
+		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+			AfterStage: func(p scplan.Plan, stageIdx int) error {
+				if p.Params.ExecutionPhase != scop.PostCommitPhase || stageIdx > 1 {
+					return nil
+				}
+
+				return catalog.ErrDescriptorNotFound
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+	tdb.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
+	tdb.ExpectErr(t, "descriptor not found", `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
+	// Validate the job has hit a terminal state.
+	tdb.CheckQueryResults(t, "SELECT status FROM crdb_internal.jobs WHERE statement LIKE '%ADD COLUMN%'",
+		[][]string{{"failed"}})
+}
