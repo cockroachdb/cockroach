@@ -12,7 +12,7 @@ upgrade 1
 query T nodeidx=0
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.3
+25.1
 
 query T nodeidx=2
 SELECT crdb_internal.node_executable_version()
@@ -25,7 +25,7 @@ user testuser nodeidx=0
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.3
+25.1
 
 # Verify that a root user can login on the upgraded node.
 user root nodeidx=1
@@ -33,7 +33,7 @@ user root nodeidx=1
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.3
+25.1
 
 # Verify that a non-root user can login on the non-upgraded node.
 user testuser nodeidx=2
@@ -56,4 +56,4 @@ upgrade 2
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.3
+25.1

@@ -126,10 +126,10 @@ func processReleaseData(data []Release) map[string]release.Series {
 			continue
 		}
 
-		// For the purposes of the cockroach_releases file, we are only
-		// interested in beta and rc pre-releases, as we do not support
-		// upgrades from alpha releases.
-		if pre := v.PreRelease(); pre != "" && !strings.HasPrefix(pre, "rc") && !strings.HasPrefix(pre, "beta") {
+		// For the purposes of the cockroach_releases file, we are only interested
+		// in rc pre-releases, as we do not support upgrades from alpha or beta
+		// releases.
+		if pre := v.PreRelease(); pre != "" && !strings.HasPrefix(pre, "rc") {
 			continue
 		}
 		// Skip cloud-only releases, because the binaries are not yet publicly available.
@@ -322,7 +322,7 @@ func releaseName(name string) string {
 }
 
 func generateRepositoriesFile(versions ...string) error {
-	client := httputil.NewClientWithTimeout(15 * time.Second)
+	client := httputil.NewClientWithTimeout(45 * time.Second)
 	cfgKeys := map[string]string{
 		"CONFIG_LINUX_AMD64":  "linux-amd64",
 		"CONFIG_LINUX_ARM64":  "linux-arm64",
@@ -334,12 +334,13 @@ func generateRepositoriesFile(versions ...string) error {
 		versionToCfgToHash[v] = make(map[string]string)
 		for cfgKey, cfg := range cfgKeys {
 			url := fmt.Sprintf("https://binaries.cockroachdb.com/cockroach-v%s.%s.tgz", v, cfg)
+			fmt.Printf("getting %s\n", url)
 			resp, err := client.Get(context.Background(), url)
 			if err != nil {
 				return fmt.Errorf("could not download cockroach release: %w", err)
 			}
 			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("unexpected status code %d when downloading %s", resp.StatusCode, url)
+				return fmt.Errorf("unexpected status code %d when downloading %s; consider turning off NetSkope", resp.StatusCode, url)
 			}
 			var blob bytes.Buffer
 			if _, err := io.Copy(&blob, resp.Body); err != nil {
