@@ -474,9 +474,9 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 	var sp *tracing.Span
 	switch opt.SpanOpt {
 	case FollowsFromSpan:
-		ctx, sp = tracing.EnsureForkSpan(ctx, s.tracer, opt.TaskName)
+		ctx, sp = tracing.ForkSpan(ctx, opt.TaskName)
 	case ChildSpan:
-		ctx, sp = tracing.EnsureChildSpan(ctx, s.tracer, opt.TaskName)
+		ctx, sp = tracing.ChildSpan(ctx, opt.TaskName)
 	case SterileRootSpan:
 		ctx, sp = s.tracer.StartSpanCtx(ctx, opt.TaskName, tracing.WithSterile())
 	default:
