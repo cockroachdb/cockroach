@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -178,6 +179,7 @@ func (m *Metadata) AddLabel(name, value string) {
 var _ Iterable = &Gauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
+var _ Iterable = &UniqueCounter{}
 var _ Iterable = &CounterFloat64{}
 var _ Iterable = &GaugeVec{}
 var _ Iterable = &CounterVec{}
@@ -186,6 +188,7 @@ var _ Iterable = &HistogramVec{}
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
+var _ json.Marshaler = &UniqueCounter{}
 var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
 var _ json.Marshaler = &GaugeVec{}
@@ -195,6 +198,7 @@ var _ json.Marshaler = &HistogramVec{}
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
+var _ PrometheusExportable = &UniqueCounter{}
 var _ PrometheusExportable = &CounterFloat64{}
 
 var _ PrometheusVector = &GaugeVec{}
@@ -825,6 +829,76 @@ func (c *Counter) GetMetadata() Metadata {
 	return baseMetadata
 }
 
+// UniqueCounter performs set cardinality estimation. You feed keys,
+// and it produces an estimate of how many unique keys its has seen.
+type UniqueCounter struct {
+	Metadata
+
+	mu struct {
+		syncutil.Mutex
+		sketch *hyperloglog.Sketch
+	}
+}
+
+// NewUniqueCounter creates a counter.
+func NewUniqueCounter(metadata Metadata) *UniqueCounter {
+	ret := &UniqueCounter{
+		Metadata: metadata,
+	}
+	ret.Clear()
+	return ret
+}
+
+// Clear resets the counter to zero.
+func (c *UniqueCounter) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.sketch, _ = hyperloglog.NewSketch(14, true)
+}
+
+// Add a value to the set
+func (c *UniqueCounter) Add(v []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.sketch.Insert(v)
+}
+
+// Count returns the current value of the counter.
+func (c *UniqueCounter) Count() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return int64(c.mu.sketch.Estimate())
+}
+
+// GetType returns the prometheus type enum for this metric.
+func (c *UniqueCounter) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_COUNTER.Enum()
+}
+
+// Inspect calls the given closure with itself.
+func (c *UniqueCounter) Inspect(f func(interface{})) { f(c) }
+
+// MarshalJSON marshals to JSON.
+func (c *UniqueCounter) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.Count())
+}
+
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (c *UniqueCounter) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Counter: &prometheusgo.Counter{Value: proto.Float64(float64(c.Count()))},
+	}
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (c *UniqueCounter) GetMetadata() Metadata {
+	baseMetadata := c.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_COUNTER
+	return baseMetadata
+}
+
 type CounterFloat64 struct {
 	Metadata
 	count syncutil.AtomicFloat64
@@ -1118,6 +1192,14 @@ func (v *vector) recordLabels(labelValues []string) {
 	v.encounteredLabelValues = append(v.encounteredLabelValues, labelValues)
 }
 
+// clear flushes the labels from the vector.
+func (v *vector) clear() {
+	v.Lock()
+	defer v.Unlock()
+	v.encounteredLabelsLookup = make(map[string]struct{})
+	v.encounteredLabelValues = [][]string{}
+}
+
 // GaugeVec is a collector for gauges that have a variable set of labels.
 // This uses the prometheus.GaugeVec under the hood. The contained gauges are
 // not persisted by the internal TSDB, nor are they aggregated; see aggmetric
@@ -1335,6 +1417,12 @@ func (hv *HistogramVec) Observe(labels map[string]string, v float64) {
 	labelValues := hv.getOrderedValues(labels)
 	hv.recordLabels(labelValues)
 	hv.promVec.WithLabelValues(labelValues...).Observe(v)
+}
+
+// Clear removes all the metrics and the label vector, preserving the metadata and configuration.
+func (hv *HistogramVec) Clear() {
+	hv.vector.clear()
+	hv.promVec.Reset()
 }
 
 // GetMetadata implements Iterable.
