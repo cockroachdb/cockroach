@@ -269,31 +269,52 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 		}
 	}
 
-	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+	for i, line := range strings.Split(d.Input, "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
 
-	// Get root in order to acquire partition lock.
-	_, err := s.InMemStore.GetPartition(s.Ctx, txn, vecstore.RootKey)
-	require.NoError(s.T, err)
+		// If vector to delete has a colon, then its value is specified as well
+		// as its name. This is useful for forcing a certain value to delete.
+		var key vecstore.PrimaryKey
+		var vec vector.T
+		parts := strings.Split(line, ":")
+		if len(parts) == 1 {
+			// Get the value from the store.
+			key = vecstore.PrimaryKey(line)
+			vec = s.InMemStore.GetVector(key)
+		} else {
+			require.Len(s.T, parts, 2)
+			// Parse the value after the colon.
+			key = vecstore.PrimaryKey(parts[0])
+			vec = s.parseVector(parts[1])
+		}
 
-	if notFound {
-		for _, line := range strings.Split(d.Input, "\n") {
-			line = strings.TrimSpace(line)
-			if len(line) == 0 {
-				continue
-			}
+		// Delete within the scope of a transaction.
+		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
 
-			// Simulate case where the vector is deleted in the primary index, but
-			// it cannot be found in the secondary index.
-			s.InMemStore.DeleteVector(txn, []byte(line))
+		// If notFound=true, then simulate case where the vector is deleted in
+		// the primary index, but it cannot be found in the secondary index.
+		if !notFound {
+			err := s.Index.Delete(s.Ctx, txn, vec, key)
+			require.NoError(s.T, err)
+		}
+		s.InMemStore.DeleteVector(txn, key)
+
+		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+
+		if (i+1)%s.Options.MaxPartitionSize == 0 {
+			// Periodically, run synchronous fixups so that test results are
+			// deterministic.
+			require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
 		}
 	}
 
-	// TODO(andyk): Add code to delete vector from index.
+	// Handle any remaining fixups.
+	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
 
-	tree, err := s.Index.Format(s.Ctx, txn, FormatOptions{PrimaryKeyStrings: true})
-	require.NoError(s.T, err)
-	return tree
+	return s.FormatTree(d)
 }
 
 func (s *testState) Recall(d *datadriven.TestData) string {
