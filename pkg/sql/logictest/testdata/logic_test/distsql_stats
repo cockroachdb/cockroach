@@ -3412,3 +3412,203 @@ pstat_allindex_partial  {a}                       3          3               0
 pstat_allindex_partial  {b}                       3          3               0
 pstat_allindex_partial  {crdb_internal_idx_expr}  3          3               0
 pstat_allindex_partial  {d}                       3          3               0
+
+# Regression test for #134031. Check that we still have a valid, forecast-able
+# histogram after merging partial stats with full stats that have been modified
+# by addOuterBucket.
+
+statement ok
+CREATE TABLE t134031 (
+  a INT PRIMARY KEY
+) WITH (sql_stats_automatic_collection_enabled = false, sql_stats_histogram_buckets_count = 4)
+
+# These stats were created with the following statements:
+#
+#   INSERT INTO t134031 SELECT 2 * i * i FROM generate_series(0, 1000) s(i);
+#   CREATE STATISTICS __auto__ FROM t134031;
+#
+#   INSERT INTO t134031 VALUES (2000002);
+#   SELECT pg_sleep(1);
+#   CREATE STATISTICS __auto__ FROM t134031;
+#
+#   INSERT INTO t134031 VALUES (2000004);
+#   SELECT pg_sleep(1);
+#   CREATE STATISTICS __auto__ FROM t134031;
+#
+#   INSERT INTO t134031 VALUES (3000000);
+#   SELECT pg_sleep(2);
+#   CREATE STATISTICS __auto_partial__ FROM t134031 USING EXTREMES;
+
+statement ok
+ALTER TABLE t134031 INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-11-15 17:38:35.191236",
+        "distinct_count": 1001,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 331.79445036468786,
+                "num_eq": 1,
+                "num_range": 332,
+                "upper_bound": "221778"
+            },
+            {
+                "distinct_range": 332.043798577731,
+                "num_eq": 1,
+                "num_range": 332,
+                "upper_bound": "887112"
+            },
+            {
+                "distinct_range": 333.16175105758106,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "2000000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 1021122691703046145,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1001
+    },
+    {
+        "avg_size": 4,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-11-15 17:38:36.240863",
+        "distinct_count": 1002,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 331.7944820909316,
+                "num_eq": 1,
+                "num_range": 332,
+                "upper_bound": "221778"
+            },
+            {
+                "distinct_range": 333.0442332658522,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "889778"
+            },
+            {
+                "distinct_range": 333.16128464321633,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "2000002"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 1021122695141097473,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1002
+    },
+    {
+        "avg_size": 4,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-11-15 17:38:37.296779",
+        "distinct_count": 1003,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "-9223372036854775808"
+            },
+            {
+                "distinct_range": 5.684341886080802E-14,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "0"
+            },
+            {
+                "distinct_range": 332.7947242432267,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "223112"
+            },
+            {
+                "distinct_range": 333.0446396262168,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "892448"
+            },
+            {
+                "distinct_range": 333.16063613055655,
+                "num_eq": 1,
+                "num_range": 333,
+                "upper_bound": "2000004"
+            },
+            {
+                "distinct_range": 5.684341886080185E-14,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "9223372036854775807"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 1021122698602217473,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1003
+    },
+    {
+        "avg_size": 4,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2024-11-15 17:38:39.337031",
+        "distinct_count": 1,
+        "full_statistic_id": 1021122698602217473,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "3000000"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "id": 1021122705285644289,
+        "name": "__auto_partial__",
+        "null_count": 0,
+        "partial_predicate": "(a IS NULL) OR ((a \u003c 0:::INT8) OR (a \u003e 2000004:::INT8))",
+        "row_count": 1
+    }
+]'
+
+# Make sure the first bucket of both merged and forecast histograms has 0 for
+# distinct_range and num_range.
+query TT
+SELECT stat->>'name', stat->'histo_buckets'->0
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE t134031 WITH MERGE, FORECAST]
+)
+WHERE stat->'name' <@ '["__merged__", "__forecast__"]'
+ORDER BY stat->>'name' DESC
+----
+__merged__    {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "0"}
+__forecast__  {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "0"}
