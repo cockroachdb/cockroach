@@ -59,27 +59,30 @@ vec12: (4, 4)
 vec13: (3, 4)
 vec14: (3, 3)
 ----
-• 1 (5.2917, 4.375)
+• 1 (5.125, 4.2639)
 │
-├───• 10 (2.5, 2.1667)
+├───• 10 (2.1667, 1.9444)
 │   │
-│   ├───• 9 (3.5, 4)
+│   ├───• 9 (3.3333, 4.3333)
 │   │   │
-│   │   ├───• vec12 (4, 4)
-│   │   ├───• vec3 (4, 3)
 │   │   ├───• vec10 (3, 5)
+│   │   ├───• vec12 (4, 4)
 │   │   └───• vec13 (3, 4)
 │   │
-│   ├───• 8 (3, 2.5)
+│   ├───• 7 (-0.5, -0.5)
+│   │   │
+│   │   └───• vec8 (-2, -3)
+│   │
+│   ├───• 12 (2.6667, 2.6667)
 │   │   │
 │   │   ├───• vec14 (3, 3)
-│   │   ├───• vec11 (3, 2)
-│   │   └───• vec9 (4, 1)
+│   │   ├───• vec3 (4, 3)
+│   │   └───• vec1 (1, 2)
 │   │
-│   └───• 7 (1, 0)
+│   └───• 13 (3.5, 1.5)
 │       │
-│       ├───• vec1 (1, 2)
-│       └───• vec8 (-2, -3)
+│       ├───• vec9 (4, 1)
+│       └───• vec11 (3, 2)
 │
 └───• 11 (8.0833, 6.5833)
     │
@@ -107,9 +110,9 @@ search max-results=3 beam-size=3
 (4, 7)
 ----
 vec7: 2 (centroid=2.1213)
-vec10: 5 (centroid=1.118)
-vec12: 9 (centroid=0.5)
-9 leaf vectors, 16 vectors, 5 full vectors, 6 partitions
+vec10: 5 (centroid=0.7454)
+vec12: 9 (centroid=0.7454)
+8 leaf vectors, 16 vectors, 6 full vectors, 6 partitions
 
 # ----------
 # Test linking nearby vectors from other partitions.
@@ -216,58 +219,132 @@ vec8: (4, 4)
     └───• vec3 (1, 1)
 
 # ----------
-# Test edge cases that occur with tiny max partition sizes.
+# Test splits in the presence of dangling vectors.
 # ----------
-new-index min-partition-size=0 max-partition-size=1 beam-size=2
-vec1: (-5, -5)
-vec2: (5, 5)
-vec3: (5, -4)
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (0, -1)
+vec2: (3, 9)
+vec3: (-2, 8)
+vec4: (-2, 8)
 ----
-• 1 (0, -2.25)
+• 1 (0, 0)
 │
-├───• 6 (5, 0.5)
-│   │
-│   ├───• 5 (5, -4)
-│   │   │
-│   │   └───• vec3 (5, -4)
-│   │
-│   └───• 4 (5, 5)
-│       │
-│       └───• vec2 (5, 5)
+├───• vec1 (0, -1)
+├───• vec2 (3, 9)
+├───• vec3 (-2, 8)
+└───• vec4 (-2, 8)
+
+# Trigger split of root with dangling vectors.
+delete not-found
+vec1
+vec4
+----
+• 1 (0, 0)
 │
-└───• 7 (-5, -5)
-    │
-    └───• 3 (-5, -5)
-        │
-        └───• vec1 (-5, -5)
+├───• vec1 (MISSING)
+├───• vec2 (3, 9)
+├───• vec3 (-2, 8)
+└───• vec4 (MISSING)
 
 insert
-vec4: (4, 4)
+vec5: (4, 3)
+vec6: (1, 2)
+vec7: (5, 0)
+vec8: (2, 2)
 ----
-• 1 (-0.125, -2.375)
+• 1 (1.5, 5.5)
 │
-├───• 12 (4.75, 0.25)
+├───• 2 (0.5, 8.5)
 │   │
-│   ├───• 11 (5, -4)
-│   │   │
-│   │   └───• 5 (5, -4)
-│   │       │
-│   │       └───• vec3 (5, -4)
-│   │
-│   └───• 10 (4.5, 4.5)
-│       │
-│       ├───• 9 (5, 5)
-│       │   │
-│       │   └───• vec2 (5, 5)
-│       │
-│       └───• 8 (4, 4)
-│           │
-│           └───• vec4 (4, 4)
+│   ├───• vec3 (-2, 8)
+│   └───• vec2 (3, 9)
 │
-└───• 13 (-5, -5)
+└───• 3 (2.5, 2.5)
     │
-    └───• 7 (-5, -5)
-        │
-        └───• 3 (-5, -5)
-            │
-            └───• vec1 (-5, -5)
+    ├───• vec6 (1, 2)
+    ├───• vec5 (4, 3)
+    ├───• vec7 (5, 0)
+    └───• vec8 (2, 2)
+
+# Again, this time at a lower level, with more dangling vectors.
+delete not-found
+vec5
+vec6
+vec7
+----
+• 1 (1.5, 5.5)
+│
+├───• 2 (0.5, 8.5)
+│   │
+│   ├───• vec3 (-2, 8)
+│   └───• vec2 (3, 9)
+│
+└───• 3 (2.5, 2.5)
+    │
+    ├───• vec6 (MISSING)
+    ├───• vec5 (MISSING)
+    ├───• vec7 (MISSING)
+    └───• vec8 (2, 2)
+
+insert
+vec9: (6, 1)
+----
+• 1 (1.5, 5.5)
+│
+├───• 2 (0.5, 8.5)
+│   │
+│   ├───• vec3 (-2, 8)
+│   └───• vec2 (3, 9)
+│
+├───• 4 (6, 1)
+│   │
+│   └───• vec9 (6, 1)
+│
+└───• 5 (2, 2)
+    │
+    └───• vec8 (2, 2)
+
+# ----------
+# Test split of root partition with every vector dangling.
+# ----------
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (0, -1)
+vec2: (3, 9)
+vec3: (-2, 8)
+vec4: (-2, 8)
+----
+• 1 (0, 0)
+│
+├───• vec1 (0, -1)
+├───• vec2 (3, 9)
+├───• vec3 (-2, 8)
+└───• vec4 (-2, 8)
+
+# Delete all vectors in the primary index, but leave them "dangling" in the
+# secondary index.
+delete not-found
+vec1
+vec2
+vec3
+vec4
+----
+• 1 (0, 0)
+│
+├───• vec1 (MISSING)
+├───• vec2 (MISSING)
+├───• vec3 (MISSING)
+└───• vec4 (MISSING)
+
+# Trigger a split.
+# TODO(andyk): Consider cleaning up the dangling vectors while attempting to
+# split rather than waiting for a search to clean them up.
+insert
+vec5: (4, 3)
+----
+• 1 (0, 0)
+│
+├───• vec1 (MISSING)
+├───• vec2 (MISSING)
+├───• vec3 (MISSING)
+├───• vec4 (MISSING)
+└───• vec5 (4, 3)

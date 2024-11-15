@@ -16,7 +16,7 @@ vec1
 # ----------
 # Delete vectors with duplicate values.
 # ----------
-new-index min-partition-size=1 max-partition-size=3 beam-size=2
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
 vec1: (1, 2)
 vec2: (1, 2)
 vec3: (1, 2)
@@ -65,53 +65,47 @@ vec3: (4, 3)
 vec4: (-4, 5)
 vec5: (1, 11)
 vec6: (1, -6)
-vec7: (0, 4)
-vec8: (-2, 8)
-vec9: (2, 8)
+vec7: (2, 8)
 ----
-• 1 (1.5, 1.875)
+• 1 (2, 3.5)
 │
-├───• 2 (1, -2)
+├───• 2 (5.5, 3.5)
+│   │
+│   ├───• vec3 (4, 3)
+│   └───• vec2 (7, 4)
+│
+├───• 4 (1, -2)
 │   │
 │   ├───• vec1 (1, 2)
 │   └───• vec6 (1, -6)
 │
-├───• 4 (1.75, 4)
-│   │
-│   ├───• vec3 (4, 3)
-│   ├───• vec4 (-4, 5)
-│   ├───• vec7 (0, 4)
-│   └───• vec2 (7, 4)
-│
-└───• 5 (0.3333, 9)
+└───• 5 (-1.5, 8)
     │
     ├───• vec5 (1, 11)
-    ├───• vec8 (-2, 8)
-    └───• vec9 (2, 8)
+    ├───• vec4 (-4, 5)
+    └───• vec7 (2, 8)
 
 # Test case where initial search fails to find vector to delete and it must be
 # retried.
 delete
-vec1: (0, 8)
+vec1: (4, 8)
 ----
-• 1 (1.5, 1.875)
+• 1 (2, 3.5)
 │
-├───• 2 (1, -2)
+├───• 2 (5.5, 3.5)
+│   │
+│   ├───• vec3 (4, 3)
+│   └───• vec2 (7, 4)
+│
+├───• 4 (1, -2)
 │   │
 │   └───• vec6 (1, -6)
 │
-├───• 4 (1.75, 4)
-│   │
-│   ├───• vec3 (4, 3)
-│   ├───• vec4 (-4, 5)
-│   ├───• vec7 (0, 4)
-│   └───• vec2 (7, 4)
-│
-└───• 5 (0.3333, 9)
+└───• 5 (-1.5, 8)
     │
     ├───• vec5 (1, 11)
-    ├───• vec8 (-2, 8)
-    └───• vec9 (2, 8)
+    ├───• vec4 (-4, 5)
+    └───• vec7 (2, 8)
 
 # Delete multiple vectors.
 delete
@@ -119,19 +113,23 @@ vec4
 vec5
 vec6
 ----
-• 1 (1.5, 1.875)
+• 1 (2, 3.5)
 │
-├───• 2 (1, -2)
-├───• 4 (1.75, 4)
+├───• 2 (5.5, 3.5)
 │   │
 │   ├───• vec3 (4, 3)
-│   ├───• vec2 (7, 4)
-│   └───• vec7 (0, 4)
+│   └───• vec2 (7, 4)
 │
-└───• 5 (0.3333, 9)
+├───• 4 (1, -2)
+└───• 5 (-1.5, 8)
     │
-    ├───• vec9 (2, 8)
-    └───• vec8 (-2, 8)
+    └───• vec7 (2, 8)
+
+# Search for vector in empty leaf partition.
+search max-results=1 beam-size=1
+(1, -6)
+----
+0 leaf vectors, 3 vectors, 0 full vectors, 2 partitions
 
 # ----------
 # Delete vectors from primary index, but not from secondary index.
@@ -224,7 +222,9 @@ search max-results=1 beam-size=1
 ----
 2 leaf vectors, 4 vectors, 2 full vectors, 2 partitions
 
+# ----------
 # Search root partition with only missing vectors.
+# ----------
 new-index min-partition-size=1 max-partition-size=3 beam-size=2
 vec1: (1, 2)
 ----

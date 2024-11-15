@@ -105,4 +105,8 @@ type QuantizedVectorSet interface {
 	// set, replacing it with the last quantized vector in the set. The modified
 	// set has one less element and the last quantized vector's position changes.
 	ReplaceWithLast(offset int)
+
+	// Clone makes a deep copy of this quantized vector set. Changes to either
+	// the original or clone will not affect the other.
+	Clone() QuantizedVectorSet
 }
