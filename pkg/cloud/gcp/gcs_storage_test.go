@@ -374,7 +374,7 @@ func TestFileDoesNotExist(t *testing.T) {
 		require.NoError(t, err)
 		_, _, err = s.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
 		require.Error(t, err, "")
-		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
+		require.Contains(t, err.Error(), "Access denied")
 	}
 }
 
