@@ -255,6 +255,11 @@ const (
 	// to the system.table_metadata table
 	V24_3_AddTableMetadataCols
 
+	// V24_3 is CockroachDB v24.3. It's used for all v24.3.x patch releases.
+	V24_3
+
+	V25_1_Start
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -314,6 +319,11 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_3_UseRACV2Full:                                 {Major: 24, Minor: 2, Internal: 20},
 	V24_3_AddTableMetadataCols:                         {Major: 24, Minor: 2, Internal: 22},
 
+	V24_3: {Major: 24, Minor: 3, Internal: 0},
+
+	// v25.1 versions. Internal versions must be even.
+	V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -327,19 +337,17 @@ const Latest Key = numKeys - 1
 // MinSupported is the minimum logical cluster version supported by this branch.
 const MinSupported Key = V24_2
 
-// PreviousRelease is the logical cluster version of the previous release.
-//
-// Note: this is always the last element of SupportedPreviousReleases(); it is
-// also provided as a constant for convenience.
+// PreviousRelease is the logical cluster version of the previous release (which must
+// have at least an RC build published).
 const PreviousRelease Key = V24_2
 
-// V24_3 is a placeholder that will eventually be replaced by the actual 24.3
+// V25_1 is a placeholder that will eventually be replaced by the actual 25.1
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
 // a cluster is running 24.3 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 24.3.
-const V24_3 = Latest
+// only need to check that the cluster has upgraded to 25.1.
+const V25_1 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
@@ -398,7 +406,7 @@ func (k Key) String() string {
 // cluster).
 func SupportedPreviousReleases() []Key {
 	res := make([]Key, 0, 2)
-	for k := MinSupported; k < Latest; k++ {
+	for k := MinSupported; k <= PreviousRelease; k++ {
 		if k.IsFinal() {
 			res = append(res, k)
 		}

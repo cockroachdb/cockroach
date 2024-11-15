@@ -183,7 +183,10 @@ avoid large changes on `master` which might cause merge conflicts for backports.
 
 - [ ] Update `PreviousRelease` constant
 
-- [ ] Add start version (e.g. `V24.2Start` with version `24.1-2`)
+- [ ] Add start version (e.g. `V24.2Start` with version `24.1-2`) and add a new
+  first upgrade for it (in `upgrades/upgrades.go`).
+ 
+- [ ] Update `roachpb.successorSeries` map and update `TestReleaseSeriesSuccessor`
 
 - [ ] Update `pkg/build/version.txt` to the new version (e.g. `v24.2.0-alpha.00000000`)
 
@@ -208,13 +211,11 @@ avoid large changes on `master` which might cause merge conflicts for backports.
   no longer have that code around. The data is obtained from the release branch
   (e.g. `release-24.1`) using the `sql-bootstrap-data` utility:
   ```
-  ./dev build sql-bootstrap-data
-  ./bin/sql-bootstrap-data
+  ./dev build sql-bootstrap-data && bin/sql-bootstrap-data
   ```
-  This will create a pair of files that need to be copied to
+  This will create a set of files that need to be copied to
   `pkg/sql/catalog/bootstrap/data` on the `master` branch; it will also output
-  what code modifications need to be performed. Note that the BUILD.bazel will
-- also need to be modified to include the new embedded files under `embedsrcs`.
+  what code modifications need to be performed.
 
 - [ ] Update releases file:
   ```
