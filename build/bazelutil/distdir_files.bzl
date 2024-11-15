@@ -587,7 +587,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/safehtml/com_github_google_safehtml-v0.0.2.zip": "394b34566cbe96a3758d2d2716377f0707f3448dbd9ccfc49ec5117e445ab36d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/shlex/com_github_google_shlex-v0.0.0-20191202100458-e7afc7fbc510.zip": "1bf70bdb4c889b47b1976370832da79060c36cad282f278f279603200623775c",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/skylark/com_github_google_skylark-v0.0.0-20181101142754-a5f7082aabed.zip": "401bbeea49fb3939c4a7246da4154d411d4612881b510657cae4a5bfa05f8c21",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/uuid/com_github_google_uuid-v1.5.0.zip": "668a7373c2590b9406de3c1652a564e292446fa39f3fbf6815f4c63d3c1a6585",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/uuid/com_github_google_uuid-v1.6.0.zip": "d0f02f377217f42702e259684e06441edbf5140dddcc34ba9bea56038b38a6ed",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/googleapis/enterprise-certificate-proxy/com_github_googleapis_enterprise_certificate_proxy-v0.2.3.zip": "e3a5b32ca7fc4f8bc36274d87c3547975a2b0603b2a1e4b1129530504d9ddeb7",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/googleapis/gax-go/com_github_googleapis_gax_go-v0.0.0-20161107002406-da06d194a00e.zip": "a40c27a2fb3b353950f5a797f52a5f1b402a385ee8249a6f94eb77e285ad4703",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/googleapis/gax-go/v2/com_github_googleapis_gax_go_v2-v2.7.1.zip": "b9bdfe36843cdc62b1eb2ba66ac1410164c2478c88c6bfe16c9ce2859922ee80",

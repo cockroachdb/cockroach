@@ -4243,10 +4243,10 @@ def go_deps():
         name = "com_github_google_uuid",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/uuid",
-        sha256 = "668a7373c2590b9406de3c1652a564e292446fa39f3fbf6815f4c63d3c1a6585",
-        strip_prefix = "github.com/google/uuid@v1.5.0",
+        sha256 = "d0f02f377217f42702e259684e06441edbf5140dddcc34ba9bea56038b38a6ed",
+        strip_prefix = "github.com/google/uuid@v1.6.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/uuid/com_github_google_uuid-v1.5.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/uuid/com_github_google_uuid-v1.6.0.zip",
         ],
     )
     go_repository(
