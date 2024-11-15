@@ -128,9 +128,6 @@ func (s *testState) FormatTree(d *datadriven.TestData) string {
 }
 
 func (s *testState) Search(d *datadriven.TestData) string {
-	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
-
 	var vector vector.T
 	searchSet := vecstore.SearchSet{MaxResults: 1}
 	options := SearchOptions{}
@@ -165,8 +162,11 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		vector = s.parseVector(d.Input)
 	}
 
+	// Search the index within a transaction.
+	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
 	err = s.Index.Search(s.Ctx, txn, vector, &searchSet, options)
 	require.NoError(s.T, err)
+	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 	var buf bytes.Buffer
 	results := searchSet.PopResults()
@@ -185,6 +185,9 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	buf.WriteString(fmt.Sprintf("%d vectors, ", searchSet.Stats.QuantizedVectorCount))
 	buf.WriteString(fmt.Sprintf("%d full vectors, ", searchSet.Stats.FullVectorCount))
 	buf.WriteString(fmt.Sprintf("%d partitions", searchSet.Stats.PartitionCount))
+
+	// Handle any fixups triggered by the search.
+	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
 
 	return buf.String()
 }

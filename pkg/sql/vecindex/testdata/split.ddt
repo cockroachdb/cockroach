@@ -1,5 +1,6 @@
-# Simple partition split cases.
-
+# ----------
+# Construct empty index.
+# ----------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
 ----
 • 1 (0, 0)
@@ -104,3 +105,87 @@ search max-results=2 beam-size=2
 vec1: 1 (centroid=2.9155)
 vec11: 5 (centroid=0.7454)
 5 leaf vectors, 9 vectors, 4 full vectors, 4 partitions
+
+# ----------
+# Construct new index with vectors in the root.
+# ----------
+new-index min-partition-size=1 max-partition-size=4 beam-size=2
+vec1: (0, -1)
+vec2: (3, 9)
+vec3: (-2, 8)
+vec4: (-2, 8)
+----
+• 1 (0, 0)
+│
+├───• vec1 (0, -1)
+├───• vec2 (3, 9)
+├───• vec3 (-2, 8)
+└───• vec4 (-2, 8)
+
+# Trigger split with dangling vectors.
+delete not-found
+vec1
+vec4
+----
+• 1 (0, 0)
+│
+├───• vec1 (MISSING)
+├───• vec2 (3, 9)
+├───• vec3 (-2, 8)
+└───• vec4 (MISSING)
+
+insert
+vec5: (4, 3)
+vec6: (1, 2)
+vec7: (5, 0)
+----
+• 1 (1.9167, 5.0833)
+│
+├───• 2 (3.3333, 1.6667)
+│   │
+│   ├───• vec7 (5, 0)
+│   ├───• vec5 (4, 3)
+│   └───• vec6 (1, 2)
+│
+└───• 3 (0.5, 8.5)
+    │
+    ├───• vec3 (-2, 8)
+    └───• vec2 (3, 9)
+
+# Again, this time at a lower level.
+delete not-found
+vec7
+----
+• 1 (1.9167, 5.0833)
+│
+├───• 2 (3.3333, 1.6667)
+│   │
+│   ├───• vec7 (MISSING)
+│   ├───• vec5 (4, 3)
+│   └───• vec6 (1, 2)
+│
+└───• 3 (0.5, 8.5)
+    │
+    ├───• vec3 (-2, 8)
+    └───• vec2 (3, 9)
+
+insert
+vec8: (2, 2)
+vec9: (6, 1)
+----
+• 1 (1.9167, 5.0833)
+│
+├───• 3 (0.5, 8.5)
+│   │
+│   ├───• vec3 (-2, 8)
+│   └───• vec2 (3, 9)
+│
+├───• 4 (5, 2)
+│   │
+│   ├───• vec9 (6, 1)
+│   └───• vec5 (4, 3)
+│
+└───• 5 (1.5, 2)
+    │
+    ├───• vec6 (1, 2)
+    └───• vec8 (2, 2)
