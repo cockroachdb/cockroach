@@ -340,7 +340,7 @@ func generateRepositoriesFile(versions ...string) error {
 				return fmt.Errorf("could not download cockroach release: %w", err)
 			}
 			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("unexpected status code %d when downloading %s; consider turning off NetSkope", resp.StatusCode, url)
+				return fmt.Errorf("unexpected status code %d when downloading %s", resp.StatusCode, url)
 			}
 			var blob bytes.Buffer
 			if _, err := io.Copy(&blob, resp.Body); err != nil {
