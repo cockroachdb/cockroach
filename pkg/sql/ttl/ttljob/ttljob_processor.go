@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"math/rand"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -169,10 +170,14 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	var spansProccessedSinceLastUpdate atomic.Int64
 	var rowsProccessedSinceLastUpdate atomic.Int64
 
-	// Update progress for approximately every 1% of spans processed.
+	// Update progress for approximately every 1% of spans processed, at least
+	// 60 seconds apart with jitter.
 	updateEvery := max(1, processorSpanCount/100)
+	updateEveryDuration := 60*time.Second + time.Duration(rand.Int63n(10*1000))*time.Millisecond
+	lastUpdated := timeutil.Now()
 	updateFractionCompleted := func() error {
 		jobID := ttlSpec.JobID
+		lastUpdated = timeutil.Now()
 		spansToAdd := spansProccessedSinceLastUpdate.Swap(0)
 		rowsToAdd := rowsProccessedSinceLastUpdate.Swap(0)
 
@@ -292,7 +297,9 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				// count.
 				spansProccessedSinceLastUpdate.Add(1)
 			}
-			if spansProccessedSinceLastUpdate.Load() >= updateEvery {
+
+			if spansProccessedSinceLastUpdate.Load() >= updateEvery &&
+				timeutil.Since(lastUpdated) >= updateEveryDuration {
 				if err := updateFractionCompleted(); err != nil {
 					return err
 				}
