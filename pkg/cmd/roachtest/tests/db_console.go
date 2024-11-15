@@ -244,7 +244,7 @@ func runDbConsoleCypressMixedVersions(ctx context.Context, t test.Test, c cluste
 	if c.IsLocal() {
 		t.Fatal("cannot be run in local mode")
 	}
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.CRDBNodes())
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.CRDBNodes(), mixedversion.EnableWaitForReplication)
 	cypressTest := newDbConsoleCypressTest(t, c, "cypress/e2e/health-check/*.ts", seedQueries)
 	init := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		_, db := h.RandomDB(r)
