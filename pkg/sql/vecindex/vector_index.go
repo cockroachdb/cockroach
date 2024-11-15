@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -127,15 +128,21 @@ type VectorIndex struct {
 	// fixups runs index maintenance operations like split and merge on a
 	// background goroutine.
 	fixups fixupProcessor
+	// cancel stops the background fixup processing goroutine.
+	cancel func()
 }
 
 // NewVectorIndex constructs a new vector index instance. Typically, only one
 // VectorIndex instance should be created for each index in the process.
+// NOTE: If "stopper" is not nil, then the vector index will start a background
+// goroutine to process index fixups. When the index is no longer needed, the
+// caller must call Close to shut down the background goroutine.
 func NewVectorIndex(
 	ctx context.Context,
 	store vecstore.Store,
 	quantizer quantize.Quantizer,
 	options *VectorIndexOptions,
+	stopper *stop.Stopper,
 ) (*VectorIndex, error) {
 	vi := &VectorIndex{
 		options:       *options,
@@ -158,7 +165,23 @@ func NewVectorIndex(
 
 	vi.fixups.Init(vi, options.Seed)
 
+	if stopper != nil {
+		// Start the background goroutine.
+		ctx, vi.cancel = stopper.WithCancelOnQuiesce(ctx)
+		err := stopper.RunAsyncTask(ctx, "vecindex-fixups", vi.fixups.Start)
+		if err != nil {
+			return nil, errors.Wrap(err, "starting fixup processor")
+		}
+	}
+
 	return vi, nil
+}
+
+// Close cancels the background goroutine, if it's running.
+func (vi *VectorIndex) Close() {
+	if vi.cancel != nil {
+		vi.cancel()
+	}
 }
 
 // CreateRoot creates an empty root partition in the store. This should only be
