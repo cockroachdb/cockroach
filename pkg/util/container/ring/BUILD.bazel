@@ -26,6 +26,7 @@ go_test(
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
