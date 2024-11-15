@@ -2155,24 +2155,17 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 	if node.Targets != nil {
 		items = append(items, node.Targets.docRow(p))
 	}
-	if node.Nested {
-		if node.Subdir != nil {
-			items = append(items, p.row("INTO ", p.Doc(node.Subdir)))
-			items = append(items, p.row(" IN ", p.Doc(&node.To)))
-		} else if node.AppendToLatest {
-			items = append(items, p.row("INTO LATEST IN", p.Doc(&node.To)))
-		} else {
-			items = append(items, p.row("INTO", p.Doc(&node.To)))
-		}
+	if node.Subdir != nil {
+		items = append(items, p.row("INTO ", p.Doc(node.Subdir)))
+		items = append(items, p.row(" IN ", p.Doc(&node.To)))
+	} else if node.AppendToLatest {
+		items = append(items, p.row("INTO LATEST IN", p.Doc(&node.To)))
 	} else {
-		items = append(items, p.row("TO", p.Doc(&node.To)))
+		items = append(items, p.row("INTO", p.Doc(&node.To)))
 	}
 
 	if node.AsOf.Expr != nil {
 		items = append(items, node.AsOf.docRow(p))
-	}
-	if node.IncrementalFrom != nil {
-		items = append(items, p.row("INCREMENTAL FROM", p.Doc(&node.IncrementalFrom)))
 	}
 	if !node.Options.IsDefault() {
 		items = append(items, p.row("WITH", p.Doc(&node.Options)))

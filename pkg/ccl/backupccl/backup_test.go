@@ -723,7 +723,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 		"BACKUP INTO LATEST IN $4 WITH incremental_location=($1, $2, $3)",
 		append(incrementals, collections[0])...)
 
-	sqlDB.ExpectErr(t, "A full backup cannot be written to \"/subdir\", a user defined subdirectory. To take a full backup, remove the subdirectory from the backup command",
+	sqlDB.ExpectErr(t, "No full backup exists in \"/subdir\" to append an incremental backup to. To take a full backup, remove the subdirectory from the backup command",
 		"BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
 
 	time.Sleep(time.Second + 2)

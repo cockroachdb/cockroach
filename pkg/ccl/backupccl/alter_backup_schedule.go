@@ -240,8 +240,7 @@ func emitAlteredSchedule(
 	for i, incDest := range stmt.Options.IncrementalStorage {
 		incDests[i] = tree.AsStringWithFlags(incDest, tree.FmtBareStrings|tree.FmtShowFullURIs)
 	}
-	if err := emitSchedule(job, stmt, to, nil, /* incrementalFrom */
-		kmsURIs, incDests, resultsCh); err != nil {
+	if err := emitSchedule(job, stmt, to, kmsURIs, incDests, resultsCh); err != nil {
 		return err
 	}
 	return nil

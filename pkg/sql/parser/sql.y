@@ -3359,7 +3359,6 @@ backup_stmt:
     $$.val = &tree.Backup{
       Targets: $2.backupTargetListPtr(),
       To: $6.stringOrPlaceholderOptList(),
-      Nested: true,
       AppendToLatest: false,
       Subdir: $4.expr(),
       AsOf: $7.asOfClause(),
@@ -3371,7 +3370,6 @@ backup_stmt:
     $$.val = &tree.Backup{
       Targets: $2.backupTargetListPtr(),
       To: $4.stringOrPlaceholderOptList(),
-      Nested: true,
       AsOf: $5.asOfClause(),
       Options: *$6.backupOptions(),
     }
@@ -3381,7 +3379,6 @@ backup_stmt:
     $$.val = &tree.Backup{
       Targets: $2.backupTargetListPtr(),
       To: $6.stringOrPlaceholderOptList(),
-      Nested: true,
       AppendToLatest: true,
       AsOf: $7.asOfClause(),
       Options: *$8.backupOptions(),
