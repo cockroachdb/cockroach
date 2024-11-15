@@ -145,9 +145,6 @@ func (s *testState) FormatTree(d *datadriven.TestData) string {
 }
 
 func (s *testState) Search(d *datadriven.TestData) string {
-	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-	defer commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
-
 	var vector vector.T
 	searchSet := vecstore.SearchSet{MaxResults: 1}
 	options := SearchOptions{}
@@ -182,8 +179,11 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		vector = s.parseVector(d.Input)
 	}
 
+	// Search the index within a transaction.
+	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
 	err = s.Index.Search(s.Ctx, txn, vector, &searchSet, options)
 	require.NoError(s.T, err)
+	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
 	var buf bytes.Buffer
 	results := searchSet.PopResults()
@@ -202,6 +202,9 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	buf.WriteString(fmt.Sprintf("%d vectors, ", searchSet.Stats.QuantizedVectorCount))
 	buf.WriteString(fmt.Sprintf("%d full vectors, ", searchSet.Stats.FullVectorCount))
 	buf.WriteString(fmt.Sprintf("%d partitions", searchSet.Stats.PartitionCount))
+
+	// Handle any fixups triggered by the search.
+	require.NoError(s.T, s.runAllFixups(false /* skipBackground */))
 
 	return buf.String()
 }
@@ -324,12 +327,12 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 		if (i+1)%s.Options.MaxPartitionSize == 0 {
 			// Periodically, run synchronous fixups so that test results are
 			// deterministic.
-			require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+			require.NoError(s.T, s.runAllFixups(true /* skipBackground */))
 		}
 	}
 
 	// Handle any remaining fixups.
-	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+	require.NoError(s.T, s.runAllFixups(false /* skipBackground */))
 
 	return s.FormatTree(d)
 }
@@ -467,7 +470,9 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 	return fmt.Sprintf("Validated index with %d vectors.\n", vectorCount)
 }
 
-// runAllFixups forces all pending fixups to be processed.
+// runAllFixups forces all pending fixups to be processed. If "skipBackground"
+// is true, then don't wait for the background goroutine to finish processing
+// pending fixups.
 func (s *testState) runAllFixups(skipBackground bool) error {
 	if s.Index.cancel != nil {
 		// Background fixup goroutine is running, so wait until it has processed
