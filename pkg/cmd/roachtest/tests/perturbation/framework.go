@@ -13,8 +13,10 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -278,12 +280,80 @@ func (v variations) perturbationName() string {
 
 // finishSetup completes initialization of the variations.
 func (v variations) finishSetup() variations {
+	// Apply any environment variable overrides first.
+	if overrides, found := os.LookupEnv("PERTURBATION_OVERRIDE"); found {
+		for _, override := range strings.Split(overrides, ",") {
+			parts := strings.Split(override, "=")
+			if err := v.applyEnvOverride(parts[0], parts[1]); err != nil {
+				panic(fmt.Sprintf("can't apply override: %s: %v", override, err))
+			}
+		}
+	}
+
 	for k, val := range v.acMode.getSettings() {
 		v.clusterSettings[k] = val
 	}
 	// Enable raft tracing. Remove this once raft tracing is the default.
 	v.clusterSettings["kv.raft.max_concurrent_traces"] = "10"
 	return v
+}
+
+// applyEnvOverride applies a single override to the test.
+func (v *variations) applyEnvOverride(key string, val string) (err error) {
+	switch key {
+	case "fillDuration":
+		v.fillDuration, err = time.ParseDuration(val)
+	case "blockSize":
+		v.maxBlockBytes, err = strconv.Atoi(val)
+	case "perturbationDuration":
+		v.perturbationDuration, err = time.ParseDuration(val)
+	case "validationDuration":
+		v.validationDuration, err = time.ParseDuration(val)
+	case "ratioOfMax":
+		v.ratioOfMax, err = strconv.ParseFloat(val, 64)
+	case "splits":
+		v.splits, err = strconv.Atoi(val)
+	case "numNodes":
+		v.numNodes, err = strconv.Atoi(val)
+	case "numWorkloadNodes":
+		v.numWorkloadNodes, err = strconv.Atoi(val)
+	case "vcpu":
+		v.vcpu, err = strconv.Atoi(val)
+	case "disks":
+		v.disks, err = strconv.Atoi(val)
+	case "mem":
+		v.mem = spec.ParseMemCPU(val)
+		if v.mem == -1 {
+			err = errors.Errorf("unknown memory setting: %s", val)
+		}
+	case "leaseType":
+		for _, l := range leases {
+			if l.String() == val {
+				v.leaseType = l
+				return nil
+			}
+		}
+		return errors.Errorf("unknown lease type: %s", val)
+	case "cloud":
+		for _, c := range cloudSets {
+			if c.String() == val {
+				v.cloud = c
+				return nil
+			}
+		}
+		return errors.Errorf("unknown cloud: %s", val)
+	case "acMode":
+		for _, a := range admissionControlOptions {
+			if a.String() == val {
+				v.acMode = a
+				return nil
+			}
+		}
+		return errors.Errorf("unknown admission control mode: %s", val)
+	default:
+		return errors.Errorf("unknown key: %s", key)
+	}
+	return err
 }
 
 func addMetamorphic(r registry.Registry, p perturbation) {
