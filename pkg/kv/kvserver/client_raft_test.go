@@ -1273,7 +1273,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 			// above, so we don't have to worry about Raft messages other than
 			// snapshots being dropped.
 			partitionStore.StoreLivenessTransport().ListenMessages(
-				partitionStore.Ident.StoreID, partitionStore.TestingStoreLivenessMessageHandler(),
+				partitionStore.Ident.StoreID, partitionStore.TestingStoreLivenessSupportManager(),
 			)
 		}
 		// Remove the unreliable transport from the other stores, so that messages
@@ -1286,7 +1286,7 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 			store := tc.GetFirstStoreFromServer(t, i)
 			store.Transport().ListenIncomingRaftMessages(store.StoreID(), store)
 			store.StoreLivenessTransport().ListenMessages(
-				store.StoreID(), store.TestingStoreLivenessMessageHandler(),
+				store.StoreID(), store.TestingStoreLivenessSupportManager(),
 			)
 		}
 
