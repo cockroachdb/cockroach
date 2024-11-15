@@ -497,7 +497,9 @@ func (v variations) applyClusterSettings(ctx context.Context, t test.Test) {
 	db := v.Conn(ctx, t.L(), 1)
 	defer db.Close()
 	for key, value := range v.clusterSettings {
-		if _, err := db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", key, value)); err != nil {
+		setCmd := fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", key, value)
+		t.L().Printf(setCmd)
+		if _, err := db.ExecContext(ctx, setCmd); err != nil {
 			t.Fatal(err)
 		}
 	}
