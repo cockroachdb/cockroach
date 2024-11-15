@@ -224,7 +224,7 @@ SELECT store_id,
   FROM crdb_internal.kv_flow_controller_v2
  ORDER BY store_id ASC;
 
-  range_id | eval_regular_available | eval_elastic_available  
+  store_id | eval_regular_available | eval_elastic_available  
 -----------+------------------------+-------------------------
   1        | 16 MiB                 | 8.0 MiB                 
   2        | 16 MiB                 | 8.0 MiB                 
