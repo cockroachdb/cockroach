@@ -58,6 +58,7 @@ type tpcc struct {
 	numConns         int
 	idleConns        int
 	txnRetries       bool
+	repairOrderIds   bool
 
 	// txnPreambleFile queries that will be executed before each operation.
 	txnPreambleFile       string
@@ -257,6 +258,7 @@ var tpccMeta = workload.Meta{
 			`conns`:                    {RuntimeOnly: true},
 			`idle-conns`:               {RuntimeOnly: true},
 			`txn-retries`:              {RuntimeOnly: true},
+			`order-id-repairs`:         {RuntimeOnly: true},
 			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`local-warehouses`:         {RuntimeOnly: true},
 			`regions`:                  {RuntimeOnly: true},
@@ -287,6 +289,7 @@ var tpccMeta = workload.Meta{
 		))
 		g.flags.IntVar(&g.idleConns, `idle-conns`, 0, `Number of idle connections. Defaults to 0`)
 		g.flags.BoolVar(&g.txnRetries, `txn-retries`, true, `Run transactions in a retry loop`)
+		g.flags.BoolVar(&g.repairOrderIds, `repair-order-ids`, false, `Attempt to repair next order id field of district rows automatically in reaction to unique violation during new-order txns (useful when running LDR on overlapping warehouses)`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
 		g.flags.IntVar(&g.clientPartitions, `client-partitions`, 0, `Make client behave as if the tables are partitioned, but does not actually partition underlying data. Requires --partition-affinity.`)
 		g.flags.IntSliceVar(&g.affinityPartitions, `partition-affinity`, nil, `Run load generator against specific partition (requires partitions). `+
