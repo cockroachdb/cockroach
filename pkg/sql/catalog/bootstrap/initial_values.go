@@ -264,7 +264,7 @@ func systemTenantTableKVs(
 // avoid some dependency headache for the time being. GetTenantRecordByID
 // retrieves a tenant in system.tenants.
 func GetTenantRecords(ctx context.Context, txn isql.Txn) ([]*mtinfopb.TenantInfo, error) {
-	q := `SELECT id, info, name, data_state, service_mode FROM system.tenants WHERE data_state != $1 ORDER BY id`
+	q := `SELECT id, info, name, data_state, service_mode FROM system.tenants ORDER BY id`
 	var arg interface{} = mtinfopb.DataStateDrop
 
 	rows, err := txn.QueryBufferedEx(ctx, "get-tenants-info",
