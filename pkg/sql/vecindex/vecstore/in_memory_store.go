@@ -118,7 +118,10 @@ func (s *InMemoryStore) GetPartition(
 	if !ok {
 		return nil, ErrPartitionNotFound
 	}
-	return partition, nil
+
+	// Make a deep copy of the partition, since the caller is allowed to modify
+	// it, and that shouldn't impact the store's copy.
+	return partition.Clone(), nil
 }
 
 // SetRootPartition implements the Store interface.

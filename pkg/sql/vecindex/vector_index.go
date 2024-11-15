@@ -100,6 +100,7 @@ type searchContext struct {
 	// Original and different values in those dimensions.
 	Randomized vector.T
 
+	tempResults         [1]vecstore.SearchResult
 	tempKeys            []vecstore.PartitionKey
 	tempCounts          []int
 	tempVectorsWithKeys []vecstore.VectorWithKey
@@ -405,9 +406,9 @@ func (vi *VectorIndex) searchHelper(
 	maxResults := max(
 		searchSet.MaxResults, vi.options.QualitySamples, searchCtx.Options.BaseBeamSize*4)
 	subSearchSet := vecstore.SearchSet{MaxResults: maxResults}
-	searchCtx.tempKeys = ensureSliceLen(searchCtx.tempKeys, 1)
-	searchCtx.tempKeys[0] = vecstore.RootKey
-	searchLevel, err := vi.searchChildPartitions(searchCtx, &subSearchSet, searchCtx.tempKeys)
+	searchCtx.tempResults[0] = vecstore.SearchResult{
+		ChildKey: vecstore.ChildKey{PartitionKey: vecstore.RootKey}}
+	searchLevel, err := vi.searchChildPartitions(searchCtx, &subSearchSet, searchCtx.tempResults[:])
 	if err != nil {
 		return err
 	}
@@ -428,7 +429,7 @@ func (vi *VectorIndex) searchHelper(
 
 	for {
 		results := subSearchSet.PopUnsortedResults()
-		if len(results) == 0 {
+		if len(results) == 0 && searchLevel > vecstore.LeafLevel {
 			// This should never happen, as it means that interior partition(s)
 			// have no children. The vector deletion logic should prevent that.
 			panic(errors.AssertionFailedf(
@@ -509,13 +510,8 @@ func (vi *VectorIndex) searchHelper(
 
 		// Search up to beamSize child partitions.
 		results.Sort()
-		keyCount := min(beamSize, len(results))
-		searchCtx.tempKeys = ensureSliceLen(searchCtx.tempKeys, keyCount)
-		for i := 0; i < keyCount; i++ {
-			searchCtx.tempKeys[i] = results[i].ChildKey.PartitionKey
-		}
-
-		_, err = vi.searchChildPartitions(searchCtx, &subSearchSet, searchCtx.tempKeys)
+		results = results[:min(beamSize, len(results))]
+		_, err = vi.searchChildPartitions(searchCtx, &subSearchSet, results)
 		if errors.Is(err, vecstore.ErrPartitionNotFound) {
 			// The cached root partition must be stale, so retry the search.
 			if !allowRetry {
@@ -534,23 +530,37 @@ func (vi *VectorIndex) searchHelper(
 	return nil
 }
 
-// searchChildPartitions searches the set of requested partitions for the query
-// vector and adds the closest matches to the given search set.
+// searchChildPartitions searches for nearest neighbors to the query vector in
+// the set of partitions referenced by the given search results. It adds the
+// closest matches to the given search set.
 func (vi *VectorIndex) searchChildPartitions(
-	searchCtx *searchContext, searchSet *vecstore.SearchSet, partitionKeys []vecstore.PartitionKey,
+	searchCtx *searchContext, searchSet *vecstore.SearchSet, parentResults vecstore.SearchResults,
 ) (level vecstore.Level, err error) {
-	searchCtx.tempCounts = ensureSliceLen(searchCtx.tempCounts, len(partitionKeys))
+	searchCtx.tempKeys = ensureSliceLen(searchCtx.tempKeys, len(parentResults))
+	for i := range parentResults {
+		searchCtx.tempKeys[i] = parentResults[i].ChildKey.PartitionKey
+	}
+
+	searchCtx.tempCounts = ensureSliceLen(searchCtx.tempCounts, len(parentResults))
 	level, err = vi.store.SearchPartitions(
-		searchCtx.Ctx, searchCtx.Txn, partitionKeys, searchCtx.Randomized,
+		searchCtx.Ctx, searchCtx.Txn, searchCtx.tempKeys, searchCtx.Randomized,
 		searchSet, searchCtx.tempCounts)
 	if err != nil {
 		return 0, err
 	}
 
-	for i := 0; i < len(searchCtx.tempCounts); i++ {
+	for i := range parentResults {
 		count := searchCtx.tempCounts[i]
 		searchSet.Stats.SearchedPartition(level, count)
-		// TODO(andyk): Enqueue a split/merge fixup for the partition.
+
+		partitionKey := parentResults[i].ChildKey.PartitionKey
+		if count < vi.options.MinPartitionSize && partitionKey != vecstore.RootKey {
+			vi.fixups.AddMerge(
+				searchCtx.Ctx, parentResults[i].ParentPartitionKey, partitionKey)
+		} else if count > vi.options.MaxPartitionSize {
+			vi.fixups.AddSplit(
+				searchCtx.Ctx, parentResults[i].ParentPartitionKey, partitionKey)
+		}
 	}
 
 	return level, nil

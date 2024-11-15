@@ -1,0 +1,374 @@
+# ----------
+# Construct new multi-level index.
+# ----------
+new-index min-partition-size=2 max-partition-size=4 beam-size=2
+vec1: (0, -1)
+vec2: (3, 9)
+vec3: (-2, 8)
+vec4: (2, 7)
+vec5: (3, 6)
+vec6: (14, 1)
+vec7: (0, 0)
+vec8: (0, 4)
+vec9: (5, 2)
+----
+• 1 (2, 3.6)
+│
+├───• 3 (0, 1)
+│   │
+│   ├───• vec1 (0, -1)
+│   ├───• vec7 (0, 0)
+│   └───• vec8 (0, 4)
+│
+├───• 4 (1.5, 7.5)
+│   │
+│   ├───• vec5 (3, 6)
+│   ├───• vec2 (3, 9)
+│   ├───• vec3 (-2, 8)
+│   └───• vec4 (2, 7)
+│
+└───• 5 (9.5, 1.5)
+    │
+    ├───• vec6 (14, 1)
+    └───• vec9 (5, 2)
+
+# Delete a vector from a partition, causing it to drop below min-partition-size.
+delete
+vec6
+----
+• 1 (2, 3.6)
+│
+├───• 3 (0, 1)
+│   │
+│   ├───• vec1 (0, -1)
+│   ├───• vec7 (0, 0)
+│   └───• vec8 (0, 4)
+│
+├───• 4 (1.5, 7.5)
+│   │
+│   ├───• vec5 (3, 6)
+│   ├───• vec2 (3, 9)
+│   ├───• vec3 (-2, 8)
+│   └───• vec4 (2, 7)
+│
+└───• 5 (9.5, 1.5)
+    │
+    └───• vec9 (5, 2)
+
+# Search will trigger a merge operation of the under-sized partition.
+search
+(8, 2)
+----
+vec9: 9 (centroid=4.5277)
+4 leaf vectors, 7 vectors, 4 full vectors, 3 partitions
+
+format-tree
+----
+• 1 (2, 3.6)
+│
+├───• 3 (0, 1)
+│   │
+│   ├───• vec1 (0, -1)
+│   ├───• vec7 (0, 0)
+│   ├───• vec8 (0, 4)
+│   └───• vec9 (5, 2)
+│
+└───• 4 (1.5, 7.5)
+    │
+    ├───• vec5 (3, 6)
+    ├───• vec2 (3, 9)
+    ├───• vec3 (-2, 8)
+    └───• vec4 (2, 7)
+
+# Delete all but one vector in a partition and expect it to be merged.
+delete
+vec5
+vec2
+vec3
+----
+• 1 (2, 3.6)
+│
+├───• 3 (0, 1)
+│   │
+│   ├───• vec1 (0, -1)
+│   ├───• vec7 (0, 0)
+│   ├───• vec8 (0, 4)
+│   └───• vec9 (5, 2)
+│
+└───• 4 (1.5, 7.5)
+    │
+    └───• vec4 (2, 7)
+
+# Partition was merged (and then split).
+search
+(0, 0)
+----
+vec7: 0 (centroid=1)
+5 leaf vectors, 7 vectors, 2 full vectors, 3 partitions
+
+format-tree
+----
+• 1 (2, 3.6)
+│
+├───• 6 (3.5, 4.5)
+│   │
+│   ├───• vec4 (2, 7)
+│   └───• vec9 (5, 2)
+│
+└───• 7 (0, 1)
+    │
+    ├───• vec8 (0, 4)
+    ├───• vec7 (0, 0)
+    └───• vec1 (0, -1)
+
+# Delete all but one vector and ensure that remaining partition is merged into
+# the root.
+delete
+vec4
+vec9
+vec8
+vec1
+----
+• 1 (2, 3.6)
+│
+└───• 7 (0, 1)
+    │
+    └───• vec7 (0, 0)
+
+search
+(0, 0)
+----
+vec7: 0 (centroid=1)
+1 leaf vectors, 2 vectors, 1 full vectors, 2 partitions
+
+format-tree
+----
+• 1 (0, 0)
+│
+└───• vec7 (0, 0)
+
+# ----------
+# Construct new index with higher min/max partition size.
+# ----------
+new-index min-partition-size=3 max-partition-size=6 beam-size=2
+vec1: (0, -1)
+vec2: (3, 9)
+vec3: (-2, 8)
+vec4: (2, 7)
+vec5: (3, 6)
+vec6: (5, 2)
+vec7: (1, 3)
+----
+• 1 (1.4583, 4.6667)
+│
+├───• 2 (3.25, 6)
+│   │
+│   ├───• vec6 (5, 2)
+│   ├───• vec2 (3, 9)
+│   ├───• vec5 (3, 6)
+│   └───• vec4 (2, 7)
+│
+└───• 3 (-0.3333, 3.3333)
+    │
+    ├───• vec3 (-2, 8)
+    ├───• vec1 (0, -1)
+    └───• vec7 (1, 3)
+
+# Trigger merge when a partition contains only dangling vectors.
+delete not-found
+vec6
+vec5
+----
+• 1 (1.4583, 4.6667)
+│
+├───• 2 (3.25, 6)
+│   │
+│   ├───• vec6 (MISSING)
+│   ├───• vec2 (3, 9)
+│   ├───• vec5 (MISSING)
+│   └───• vec4 (2, 7)
+│
+└───• 3 (-0.3333, 3.3333)
+    │
+    ├───• vec3 (-2, 8)
+    ├───• vec1 (0, -1)
+    └───• vec7 (1, 3)
+
+delete
+vec2
+vec4
+----
+• 1 (1.4583, 4.6667)
+│
+├───• 2 (3.25, 6)
+│   │
+│   ├───• vec6 (MISSING)
+│   └───• vec5 (MISSING)
+│
+└───• 3 (-0.3333, 3.3333)
+    │
+    ├───• vec3 (-2, 8)
+    ├───• vec1 (0, -1)
+    └───• vec7 (1, 3)
+
+# Search will trigger merge of the partition containing only missing vectors.
+search
+(5, 2)
+----
+vec7: 17 (centroid=1.3744)
+5 leaf vectors, 7 vectors, 4 full vectors, 3 partitions
+
+format-tree
+----
+• 1 (1.4583, 4.6667)
+│
+└───• 3 (-0.3333, 3.3333)
+    │
+    ├───• vec3 (-2, 8)
+    ├───• vec1 (0, -1)
+    └───• vec7 (1, 3)
+
+# Repeat, but this time merge with both a missing and a present vector.
+delete not-found
+vec7
+----
+• 1 (1.4583, 4.6667)
+│
+└───• 3 (-0.3333, 3.3333)
+    │
+    ├───• vec3 (-2, 8)
+    ├───• vec1 (0, -1)
+    └───• vec7 (MISSING)
+
+delete
+vec1
+----
+• 1 (1.4583, 4.6667)
+│
+└───• 3 (-0.3333, 3.3333)
+    │
+    ├───• vec3 (-2, 8)
+    └───• vec7 (MISSING)
+
+search
+(1, 3)
+----
+vec3: 34 (centroid=4.9554)
+2 leaf vectors, 3 vectors, 2 full vectors, 2 partitions
+
+format-tree
+----
+• 1 (-2, 8)
+│
+└───• vec3 (-2, 8)
+
+# ----------
+# Construct new index with 3 levels.
+# ----------
+new-index min-partition-size=2 max-partition-size=4 beam-size=2
+vec1: (0, -1)
+vec2: (3, 9)
+vec3: (-2, 8)
+vec4: (2, 7)
+vec5: (3, 6)
+vec6: (14, 1)
+vec7: (0, 0)
+vec8: (0, 4)
+vec9: (5, 2)
+vec10: (3, 6)
+vec11: (2, 10)
+vec12: (6, 8)
+vec13: (4, 6)
+vec14: (2, 7)
+vec15: (3, 7)
+vec16: (3, 7)
+vec17: (3, 7)
+vec18: (6, 6)
+----
+• 1 (3.75, 5.1667)
+│
+├───• 10 (1.3333, 5.5)
+│   │
+│   ├───• 3 (0, 1)
+│   │   │
+│   │   ├───• vec1 (0, -1)
+│   │   ├───• vec7 (0, 0)
+│   │   └───• vec8 (0, 4)
+│   │
+│   ├───• 9 (2.75, 7)
+│   │   │
+│   │   ├───• vec15 (3, 7)
+│   │   ├───• vec16 (3, 7)
+│   │   ├───• vec17 (3, 7)
+│   │   └───• vec4 (2, 7)
+│   │
+│   └───• 7 (1.25, 8.5)
+│       │
+│       ├───• vec2 (3, 9)
+│       ├───• vec14 (2, 7)
+│       ├───• vec11 (2, 10)
+│       └───• vec3 (-2, 8)
+│
+└───• 11 (6.1667, 4.8333)
+    │
+    ├───• 8 (4, 6)
+    │   │
+    │   ├───• vec18 (6, 6)
+    │   ├───• vec5 (3, 6)
+    │   ├───• vec13 (4, 6)
+    │   └───• vec10 (3, 6)
+    │
+    └───• 4 (8.3333, 3.6667)
+        │
+        ├───• vec6 (14, 1)
+        ├───• vec12 (6, 8)
+        └───• vec9 (5, 2)
+
+# Delete all vectors.
+delete
+vec1
+vec2
+vec3
+vec4
+vec5
+vec6
+vec7
+vec8
+vec9
+vec10
+vec11
+vec12
+vec13
+vec14
+vec15
+vec16
+vec17
+vec18
+----
+• 1 (3.75, 5.1667)
+│
+└───• 10 (1.3333, 5.5)
+    │
+    └───• 8 (4, 6)
+
+# Search in order to trigger merge.
+search max-results=1 beam-size=1
+(3, 6)
+----
+0 leaf vectors, 2 vectors, 0 full vectors, 3 partitions
+
+format-tree
+----
+• 1 (4, 6)
+│
+└───• 8 (4, 6)
+
+# Search again to trigger merge to root.
+search max-results=1 beam-size=1
+(3, 6)
+----
+0 leaf vectors, 1 vectors, 0 full vectors, 2 partitions
+
+format-tree
+----
+• 1 (0, 0)
