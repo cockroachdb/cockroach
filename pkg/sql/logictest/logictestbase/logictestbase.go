@@ -589,8 +589,7 @@ var (
 		"fakedist-vec-off",
 		"fakedist-disk",
 		"local-mixed-24.2",
-		// TODO(radu): enable this.
-		//"local-mixed-24.3",
+		"local-mixed-24.3",
 	}
 	// FiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	FiveNodeDefaultConfigName = "5node-default-configs"
