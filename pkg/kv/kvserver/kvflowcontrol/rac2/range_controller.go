@@ -2601,6 +2601,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 		}
 		rss.mu.sendQueue.indexToSend = event.sendingEntries[n-1].id.index + 1
 		var sendTokensToDeduct [admissionpb.NumWorkClasses]kvflowcontrol.Tokens
+		var sendQPreciseSizeDelta kvflowcontrol.Tokens
 		for _, entry := range event.sendingEntries {
 			if !entry.usesFlowControl {
 				continue
@@ -2628,10 +2629,13 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 			if inSendQueue && entry.id.index >= rss.mu.nextRaftIndexInitial {
 				// Was in send-queue and had eval tokens deducted for it.
 				rss.mu.sendQueue.originalEvalTokens[WorkClassFromRaftPriority(entry.pri)] -= tokens
-				rss.applySendQueuePreciseSizeDeltaRaftMuAndStreamLocked(ctx, -tokens)
+				sendQPreciseSizeDelta -= tokens
 			}
 			rss.raftMu.tracker.Track(ctx, entry.id, pri, tokens)
 			sendTokensToDeduct[WorkClassFromRaftPriority(pri)] += tokens
+		}
+		if sendQPreciseSizeDelta != 0 {
+			rss.applySendQueuePreciseSizeDeltaRaftMuAndStreamLocked(ctx, sendQPreciseSizeDelta)
 		}
 		flag := AdjNormal
 		if directive.preventSendQNoForceFlush {
