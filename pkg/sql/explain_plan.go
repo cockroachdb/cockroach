@@ -261,6 +261,14 @@ func closeExplainPlan(ctx context.Context, ep *explain.Plan) {
 	for i := range ep.Checks {
 		closeExplainNode(ctx, ep.Checks[i].WrappedNode())
 	}
+	for _, trigger := range ep.Triggers {
+		// We don't want to create new plans if they haven't been cached - all
+		// necessary plans must have been created already in explain.Emit call.
+		const createPlanIfMissing = false
+		if tp, _ := trigger.GetExplainPlan(ctx, createPlanIfMissing); tp != nil {
+			closeExplainPlan(ctx, tp.(*explain.Plan))
+		}
+	}
 }
 
 func (e *explainPlanNode) Close(ctx context.Context) {

@@ -279,6 +279,11 @@ type PostQuery struct {
 	// PostQuery describes a set of AFTER triggers.
 	FKConstraint cat.ForeignKeyConstraint
 
+	// CascadeHasBeforeTriggers is set only for cascades. It indicates whether the
+	// mutation planned for the cascade will fire BEFORE triggers. It is used
+	// during EXPLAIN.
+	CascadeHasBeforeTriggers bool
+
 	// Triggers is used for logging and EXPLAIN purposes. It is nil if this
 	// PostQuery describes a foreign-key cascade action.
 	Triggers []cat.Trigger
@@ -287,9 +292,9 @@ type PostQuery struct {
 	// the mutation. It is nil if the cascade does not require a buffer.
 	Buffer Node
 
-	// PlanFn builds the cascade query and creates the plan for it.
-	// Note that the generated Plan can in turn contain more cascades (as well as
-	// checks, which should run after all cascades are executed).
+	// PlanFn builds the cascade/trigger query and creates the plan for it.
+	// Note that the generated Plan can in turn contain more cascades, triggers,
+	// and checks.
 	//
 	// The bufferRef is a reference that can be used with ConstructWithBuffer to
 	// read the mutation input. It is conceptually the same as the Buffer field;
@@ -297,8 +302,8 @@ type PostQuery struct {
 	// implementation of the node (e.g. to facilitate early cleanup of the
 	// original plan).
 	//
-	// If the cascade does not require input buffering (Buffer is nil), then
-	// bufferRef should be nil and numBufferedRows should be 0.
+	// If the cascade/trigger does not require input buffering (Buffer is nil),
+	// then bufferRef should be nil and numBufferedRows should be 0.
 	//
 	// This method does not mutate any captured state; it is ok to call PlanFn
 	// methods concurrently (provided that they don't use a single non-thread-safe
@@ -313,10 +318,10 @@ type PostQuery struct {
 		allowAutoCommit bool,
 	) (Plan, error)
 
-	// GetExplainPlan returns the explain plan for the cascade query. It will
-	// always return a cached plan if there is one, and the boolean argument
-	// controls whether this function can create a new plan (which will be
-	// cached going forward). If createPlanIfMissing is false and there is no
+	// GetExplainPlan returns the explain plan for the cascade or trigger query.
+	// It will always return a cached plan if there is one, and the boolean
+	// argument controls whether this function can create a new plan (which will
+	// be cached going forward). If createPlanIfMissing is false and there is no
 	// cached plan, then nil, nil is returned.
 	GetExplainPlan func(_ context.Context, createPlanIfMissing bool) (Plan, error)
 }
