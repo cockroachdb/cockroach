@@ -1990,11 +1990,11 @@ INSERT INTO b VALUES (1, 1), (2, 2), (3, 4);
 INSERT INTO c VALUES (2, 1), (1, 2);
 
 # Perform a standard cascading update.
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement ok
 UPDATE a SET id = id*10;
 
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 query TII rowsort
 SELECT name, id1, id2 FROM (
   SELECT 'a' AS name, id AS id1, 0 AS id2 FROM a
@@ -2017,26 +2017,26 @@ c  10  20
 c  20  10
 
 # Try to update one value to fail c.less_than_100
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 100:::INT8\)
 UPDATE a SET id = id*10;
 
 # Try to update one value to fail c.less_than_100 or c.less_than_1000
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 100:::INT8\)
 UPDATE a SET id = id*10;
 
 # Try to update one value to fail c.less_than_100
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 1000:::INT8\)
 UPDATE a SET id = 1000 WHERE id = 30;
 
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 1000:::INT8\)
 UPDATE a SET id = 1000 WHERE id = 40;
 
 # Update a value that would fail the check if it was cascaded, but wasn't.
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement ok
 UPDATE a SET id = 100000 WHERE id = 50;
 

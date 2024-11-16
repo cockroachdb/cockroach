@@ -47,7 +47,10 @@ filegroup(
 go_library(
     name = "logictest",
     testonly = 1,
-    srcs = ["logic.go"],
+    srcs = [
+        "logic.go",
+        "parsing.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/logictest",
     visibility = ["//visibility:public"],
     deps = [
