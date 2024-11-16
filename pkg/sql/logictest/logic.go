@@ -405,12 +405,12 @@ import (
 //    etc. Should be near top of test file. Note that this is different from
 //    `skipif`.
 //
-//  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
+//  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG[,CONFIG...] [ISSUE]>
 //    Skips the following `statement` or `query` if the argument is postgresql,
 //    cockroachdb, or a config matching the currently running
 //    configuration. Note that this is different from `skip`.
 //
-//  - onlyif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
+//  - onlyif <mysql/mssql/postgresql/cockroachdb/config CONFIG[,CONFIG...] [ISSUE]>
 //    Skips the following `statement` or `query` if the argument is not
 //    postgresql, cockroachdb, or a config matching the currently
 //    running configuration.
@@ -2538,6 +2538,8 @@ func (t *logicTest) processSubtest(
 	repeat := 1
 	t.retry = false
 
+	// onlyIfConfig is used to disallow multiple "onlyif config" lines.
+	onlyIfConfig := false
 	for s.Scan() {
 		t.curPath, t.curLineNo = path, s.Line+subtest.lineLineIndexIntoFile
 		if *maxErrs > 0 && t.failures >= *maxErrs {
@@ -2644,6 +2646,7 @@ func (t *logicTest) processSubtest(
 			// command.
 			t.retry = true
 		case "statement":
+			onlyIfConfig = false
 			stmt := logicStatement{
 				pos:         fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile),
 				expectCount: -1,
@@ -2721,6 +2724,7 @@ func (t *logicTest) processSubtest(
 			t.success(path)
 
 		case "query":
+			onlyIfConfig = false
 			var query logicQuery
 			query.pos = fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile)
 			query.nodeIdx = t.nodeIdx
@@ -3232,15 +3236,20 @@ func (t *logicTest) processSubtest(
 				continue
 			case "config":
 				if len(fields) < 3 {
-					return errors.New("skipif config CONFIG [ISSUE] command requires configuration parameter")
+					return errors.New("skipif config CONFIG[,CONFIG...] [ISSUE] missing argument")
 				}
-				configName := fields[2]
-				if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
-					issue := "no issue given"
-					if len(fields) > 3 {
-						issue = fields[3]
+				if len(fields) > 4 {
+					return errors.New("skipif config CONFIG[,CONFIG...] [ISSUE] extra argument")
+				}
+				for _, configName := range strings.Split(fields[2], ",") {
+					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
+						issue := "no issue given"
+						if len(fields) > 3 {
+							issue = fields[3]
+						}
+						s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, issue))
+						break
 					}
-					s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, issue))
 				}
 			case "backup-restore":
 				if config.BackupRestoreProbability > 0.0 {
@@ -3268,16 +3277,32 @@ func (t *logicTest) processSubtest(
 				s.SetSkip("")
 				continue
 			case "config":
-				if len(fields) < 3 {
-					return errors.New("onlyif config CONFIG [ISSUE] command requires configuration parameter")
+				if onlyIfConfig {
+					return errors.New("multiple onlyif config statements are not allowed")
 				}
-				configName := fields[2]
-				if t.cfg.Name != configName && !logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
+				onlyIfConfig = true
+
+				if len(fields) < 3 {
+					return errors.New("onlyif config CONFIG[,CONFIG...] [ISSUE] missing argument")
+				}
+				if len(fields) > 4 {
+					return errors.New("onlyif config CONFIG[,CONFIG...] [ISSUE] extra argument")
+				}
+
+				shouldSkip := true
+				for _, configName := range strings.Split(fields[2], ",") {
+					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
+						// Our config matches one item in the list.
+						shouldSkip = false
+						break
+					}
+				}
+				if shouldSkip {
 					issue := "no issue given"
 					if len(fields) > 3 {
 						issue = fields[3]
 					}
-					s.SetSkip(fmt.Sprintf("unsupported configuration %s, statement/query only supports %s (%s)", t.cfg.Name, configName, issue))
+					s.SetSkip(fmt.Sprintf("unsupported configuration %s, statement/query only supports %s (%s)", t.cfg.Name, fields[2], issue))
 				}
 				continue
 			default:
