@@ -115,12 +115,12 @@ func (q *raBitQuantizer) GetRandomDims() int {
 
 // RandomizeVector implements the Quantizer interface.
 func (q *raBitQuantizer) RandomizeVector(
-	ctx context.Context, original vector.T, randomized vector.T, invert bool,
+	ctx context.Context, input vector.T, output vector.T, invert bool,
 ) {
 	if !invert {
-		num32.MulMatrixByVector(&q.rot, original, randomized, num32.NoTranspose)
+		num32.MulMatrixByVector(&q.rot, input, output, num32.NoTranspose)
 	} else {
-		num32.MulMatrixByVector(&q.rot, randomized, original, num32.Transpose)
+		num32.MulMatrixByVector(&q.rot, input, output, num32.Transpose)
 	}
 }
 

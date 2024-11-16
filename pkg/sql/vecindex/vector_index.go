@@ -73,7 +73,8 @@ type SearchOptions struct {
 	// reduce accuracy. It is currently only used for testing.
 	SkipRerank bool
 	// ReturnVectors specifies whether to return the original full-size vectors
-	// in search results.
+	// in search results. If this is a leaf-level search then the returned
+	// vectors have not been randomized.
 	ReturnVectors bool
 }
 
@@ -273,7 +274,7 @@ func (vi *VectorIndex) Delete(
 		if err != nil {
 			return err
 		}
-		results := searchSet.PopResults()
+		results := searchSet.PopUnsortedResults()
 		if len(results) == 0 {
 			// Retry search with significantly higher beam size.
 			if baseBeamSize == vi.options.BaseBeamSize {
@@ -331,7 +332,7 @@ func (vi *VectorIndex) insertHelper(
 	if err != nil {
 		return err
 	}
-	results := searchSet.PopResults()
+	results := searchSet.PopUnsortedResults()
 	parentPartitionKey := results[0].ParentPartitionKey
 	partitionKey := results[0].ChildKey.PartitionKey
 	_, err = vi.addToPartition(parentSearchCtx.Ctx, parentSearchCtx.Txn, parentPartitionKey,
@@ -428,7 +429,7 @@ func (vi *VectorIndex) searchHelper(
 
 	for {
 		results := subSearchSet.PopUnsortedResults()
-		if len(results) == 0 {
+		if len(results) == 0 && searchLevel > vecstore.LeafLevel {
 			// This should never happen, as it means that interior partition(s)
 			// have no children. The vector deletion logic should prevent that.
 			panic(errors.AssertionFailedf(
@@ -698,12 +699,16 @@ func (vi *VectorIndex) Format(
 	var buf bytes.Buffer
 
 	// Format each number to 4 decimal places, removing unnecessary trailing
-	// zeros.
+	// zeros. Don't print negative zero, since this causes diffs when running on
+	// Linux vs. Mac.
 	formatFloat := func(value float32) string {
 		s := strconv.FormatFloat(float64(value), 'f', 4, 32)
 		if strings.Contains(s, ".") {
 			s = strings.TrimRight(s, "0")
 			s = strings.TrimRight(s, ".")
+		}
+		if s == "-0" {
+			return "0"
 		}
 		return s
 	}
@@ -754,7 +759,7 @@ func (vi *VectorIndex) Format(
 		// the original vector.
 		random := partition.Centroid()
 		original := make(vector.T, len(random))
-		vi.quantizer.RandomizeVector(ctx, original, random, true /* invert */)
+		vi.quantizer.RandomizeVector(ctx, random, original, true /* invert */)
 		buf.WriteString(parentPrefix)
 		buf.WriteString("• ")
 		buf.WriteString(strconv.FormatInt(int64(partitionKey), 10))
