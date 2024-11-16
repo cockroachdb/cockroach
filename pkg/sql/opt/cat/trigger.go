@@ -6,9 +6,12 @@
 package cat
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -207,4 +210,61 @@ func ValidateCreateTrigger(
 		}
 	}
 	return nil
+}
+
+// HasRowLevelTriggers returns true if the given table has any row-level
+// triggers that match the given action time and event type.
+func HasRowLevelTriggers(
+	tab Table, actionTime tree.TriggerActionTime, eventToMatch tree.TriggerEventType,
+) bool {
+	for i := 0; i < tab.TriggerCount(); i++ {
+		trigger := tab.Trigger(i)
+		if !trigger.Enabled() || !trigger.ForEachRow() ||
+			trigger.ActionTime() != actionTime {
+			continue
+		}
+		for j := 0; j < trigger.EventCount(); j++ {
+			if eventToMatch == trigger.Event(j).EventType {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// GetRowLevelTriggers returns the set of row-level triggers for the given
+// table and given trigger event type and timing. The triggers are returned in
+// the order in which they should be executed.
+func GetRowLevelTriggers(
+	tab Table, actionTime tree.TriggerActionTime, eventsToMatch tree.TriggerEventTypeSet,
+) []Trigger {
+	var neededTriggers intsets.Fast
+	for i := 0; i < tab.TriggerCount(); i++ {
+		trigger := tab.Trigger(i)
+		if !trigger.Enabled() || !trigger.ForEachRow() ||
+			trigger.ActionTime() != actionTime {
+			continue
+		}
+		for j := 0; j < trigger.EventCount(); j++ {
+			if eventsToMatch.Contains(trigger.Event(j).EventType) {
+				// The conditions have been met for this trigger to fire.
+				neededTriggers.Add(i)
+				break
+			}
+		}
+	}
+	if neededTriggers.Empty() {
+		return nil
+	}
+	triggers := make([]Trigger, 0, neededTriggers.Len())
+	for i, ok := neededTriggers.Next(0); ok; i, ok = neededTriggers.Next(i + 1) {
+		triggers = append(triggers, tab.Trigger(i))
+	}
+	// Triggers fire in alphabetical order of the name. The names are always
+	// unique within a given table, so a stable sort is not necessary.
+	less := func(i, j int) bool {
+		return triggers[i].Name() < triggers[j].Name()
+	}
+	sort.Slice(triggers, less)
+	return triggers
 }
