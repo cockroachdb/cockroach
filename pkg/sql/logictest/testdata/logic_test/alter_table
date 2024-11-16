@@ -1584,19 +1584,19 @@ statement error column "g" does not exist
 ALTER TABLE unique_without_index ADD CONSTRAINT bad_partial_unique UNIQUE WITHOUT INDEX (f) WHERE g > 0
 
 # The unique constraint prevents new duplicate values.
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "my_unique_f"\nDETAIL: Key \(f\)=\(1\) already exists\.
 INSERT INTO unique_without_index (f) VALUES (1), (1)
 
 # There is no unique constraint on e, yet, so this insert succeeds.
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement ok
 INSERT INTO unique_without_index (e, f) VALUES (1, 1), (1, 2)
 
 # But trying to add a unique constraint now fails.
 # Note that we omit the constraint name in the expected error message because if the declarative schema changer is used,
 # the constraint name, at the time of validation failure, is still a place-holder name.
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX (e)
 
@@ -1606,7 +1606,7 @@ ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e2 UNIQUE WITHOUT INDEX (e) NOT VALID
 
 # Trying to validate one of the constraints will fail.
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
@@ -1618,7 +1618,7 @@ statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # All these constraints are already valid, so validation should succeed.
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_a_b;

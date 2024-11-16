@@ -1,5 +1,5 @@
 # LogicTest: 3node-tenant-multiregion
-skip under duress 118627
+skip under duress #118627
 
 user host-cluster-root
 

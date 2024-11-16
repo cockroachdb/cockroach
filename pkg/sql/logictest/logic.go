@@ -392,7 +392,7 @@ import (
 //    When using a cockroach-go/testserver logictest, upgrades the node at
 //    index N to the version specified by the logictest config.
 //
-//  - skip <ISSUE> [args...]
+//  - skip #ISSUE [args...]
 //    Skips this entire logic test using skip.WithIssue(). Should be near top of
 //    test file. Note that this is different from `skipif`.
 //
@@ -400,17 +400,17 @@ import (
 //    Skips this entire logic test using skip.IgnoreLint(). Should be near top
 //    of test file. Note that this is different from `skipif`.
 //
-//  - skip under <deadlock/race/stress/metamorphic/duress> [ISSUE] [args...]
+//  - skip under <deadlock/race/stress/metamorphic/duress> [#ISSUE] [args...]
 //    Skips this entire logic test using skip.UnderDeadlock(), skip.UnderRace(),
 //    etc. Should be near top of test file. Note that this is different from
 //    `skipif`.
 //
-//  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
+//  - skipif <mysql/mssql/postgresql/cockroachdb/config [#ISSUE] CONFIG [CONFIG...]
 //    Skips the following `statement` or `query` if the argument is postgresql,
 //    cockroachdb, or a config matching the currently running
 //    configuration. Note that this is different from `skip`.
 //
-//  - onlyif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
+//  - onlyif <mysql/mssql/postgresql/cockroachdb/config [#ISSUE] CONFIG [CONFIG...]
 //    Skips the following `statement` or `query` if the argument is not
 //    postgresql, cockroachdb, or a config matching the currently
 //    running configuration.
@@ -2538,6 +2538,8 @@ func (t *logicTest) processSubtest(
 	repeat := 1
 	t.retry = false
 
+	// onlyIfConfig is used to disallow multiple "onlyif config" lines.
+	onlyIfConfig := false
 	for s.Scan() {
 		t.curPath, t.curLineNo = path, s.Line+subtest.lineLineIndexIntoFile
 		if *maxErrs > 0 && t.failures >= *maxErrs {
@@ -2644,6 +2646,7 @@ func (t *logicTest) processSubtest(
 			// command.
 			t.retry = true
 		case "statement":
+			onlyIfConfig = false
 			stmt := logicStatement{
 				pos:         fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile),
 				expectCount: -1,
@@ -2721,6 +2724,7 @@ func (t *logicTest) processSubtest(
 			t.success(path)
 
 		case "query":
+			onlyIfConfig = false
 			var query logicQuery
 			query.pos = fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile)
 			query.nodeIdx = t.nodeIdx
@@ -3136,31 +3140,10 @@ func (t *logicTest) processSubtest(
 				return errors.Errorf("skip requires an argument")
 			}
 
-			// Parse [ISSUE] [args...] as the trailing arguments for most skip
-			// commands. Returns -1 if the first field is not parsable as a GitHub
-			// issue number.
-			parse := func(fields []string) (int, []interface{}) {
-				if len(fields) < 1 {
-					return -1, nil
-				}
-				if githubIssueID, err := strconv.ParseUint(fields[0], 10, 32); err == nil {
-					args := make([]interface{}, len(fields)-1)
-					for i := range args {
-						args[i] = fields[i+1]
-					}
-					return int(githubIssueID), args
-				}
-				args := make([]interface{}, len(fields))
-				for i := range args {
-					args[i] = fields[i]
-				}
-				return -1, args
-			}
-
 			switch fields[1] {
 			case "ignorelint":
-				if githubIssueID, args := parse(fields[2:]); githubIssueID < 0 {
-					skip.IgnoreLint(t.t(), args...)
+				if githubIssueID, args := extractGithubIssue(fields[2:]); githubIssueID < 0 {
+					skip.IgnoreLint(t.t(), strings.Join(args, " "))
 				} else {
 					return errors.Errorf("skip ignorelint does not take an issue ID: %v", githubIssueID)
 				}
@@ -3168,36 +3151,38 @@ func (t *logicTest) processSubtest(
 				if len(fields) < 3 || fields[2] == "" {
 					return errors.Errorf("skip under command requires an argument")
 				}
+				githubIssueID, args := extractGithubIssue(fields[3:])
+				msg := strings.Join(args, " ")
 				switch fields[2] {
 				case "deadlock":
-					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
-						skip.UnderDeadlock(t.t(), args...)
+					if githubIssueID < 0 {
+						skip.UnderDeadlock(t.t(), msg)
 					} else {
-						skip.UnderDeadlockWithIssue(t.t(), githubIssueID, args...)
+						skip.UnderDeadlockWithIssue(t.t(), githubIssueID, msg)
 					}
 				case "race":
-					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
-						skip.UnderRace(t.t(), args...)
+					if githubIssueID < 0 {
+						skip.UnderRace(t.t(), msg)
 					} else {
-						skip.UnderRaceWithIssue(t.t(), githubIssueID, args...)
+						skip.UnderRaceWithIssue(t.t(), githubIssueID, msg)
 					}
 				case "stress":
-					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
-						skip.UnderStress(t.t(), args...)
+					if githubIssueID < 0 {
+						skip.UnderStress(t.t(), msg)
 					} else {
-						skip.UnderStressWithIssue(t.t(), githubIssueID, args...)
+						skip.UnderStressWithIssue(t.t(), githubIssueID, msg)
 					}
 				case "metamorphic":
-					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
-						skip.UnderMetamorphic(t.t(), args...)
+					if githubIssueID < 0 {
+						skip.UnderMetamorphic(t.t(), msg)
 					} else {
-						skip.UnderMetamorphicWithIssue(t.t(), githubIssueID, args...)
+						skip.UnderMetamorphicWithIssue(t.t(), githubIssueID, msg)
 					}
 				case "duress":
-					if githubIssueID, args := parse(fields[3:]); githubIssueID < 0 {
-						skip.UnderDuress(t.t(), args...)
+					if githubIssueID < 0 {
+						skip.UnderDuress(t.t(), msg)
 					} else {
-						skip.UnderDuressWithIssue(t.t(), githubIssueID, args...)
+						skip.UnderDuressWithIssue(t.t(), githubIssueID, msg)
 					}
 				default:
 					return errors.Errorf("unsupported skip under command: %v", fields[2])
@@ -3208,11 +3193,11 @@ func (t *logicTest) processSubtest(
 					path, s.Line+subtest.lineLineIndexIntoFile,
 				)
 			default:
-				githubIssueID, args := parse(fields[1:])
+				githubIssueID, args := extractGithubIssue(fields[1:])
 				if githubIssueID < 0 {
 					return errors.Errorf("unsupported skip command: %v", fields[1])
 				}
-				skip.WithIssue(t.t(), githubIssueID, args...)
+				skip.WithIssue(t.t(), githubIssueID, strings.Join(args, " "))
 			}
 
 		case "force-backup-restore":
@@ -3232,15 +3217,14 @@ func (t *logicTest) processSubtest(
 				continue
 			case "config":
 				if len(fields) < 3 {
-					return errors.New("skipif config CONFIG [ISSUE] command requires configuration parameter")
+					return errors.New("skipif config [#ISSUE] CONFIG [CONFIG...] missing argument")
 				}
-				configName := fields[2]
-				if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
-					issue := "no issue given"
-					if len(fields) > 3 {
-						issue = fields[3]
+				githubIssueID, args := extractGithubIssue(fields[2:])
+				for _, configName := range args {
+					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
+						s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, githubIssueStr(githubIssueID)))
+						break
 					}
-					s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, issue))
 				}
 			case "backup-restore":
 				if config.BackupRestoreProbability > 0.0 {
@@ -3268,16 +3252,26 @@ func (t *logicTest) processSubtest(
 				s.SetSkip("")
 				continue
 			case "config":
-				if len(fields) < 3 {
-					return errors.New("onlyif config CONFIG [ISSUE] command requires configuration parameter")
+				if onlyIfConfig {
+					return errors.New("multiple onlyif config statements are not allowed")
 				}
-				configName := fields[2]
-				if t.cfg.Name != configName && !logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
-					issue := "no issue given"
-					if len(fields) > 3 {
-						issue = fields[3]
+				onlyIfConfig = true
+
+				if len(fields) < 3 {
+					return errors.New("onlyif config [#ISSUE] CONFIG [CONFIG...] missing argument")
+				}
+				githubIssueID, args := extractGithubIssue(fields[2:])
+				shouldSkip := true
+				for _, configName := range args {
+					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
+						// Our config matches one item in the list.
+						shouldSkip = false
+						break
 					}
-					s.SetSkip(fmt.Sprintf("unsupported configuration %s, statement/query only supports %s (%s)", t.cfg.Name, configName, issue))
+				}
+				if shouldSkip {
+					s.SetSkip(fmt.Sprintf("unsupported configuration %s, statement/query only supports %s (%s)",
+						t.cfg.Name, strings.Join(args, "/"), githubIssueStr(githubIssueID)))
 				}
 				continue
 			default:
