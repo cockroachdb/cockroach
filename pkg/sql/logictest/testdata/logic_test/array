@@ -120,13 +120,13 @@ SELECT ARRAY(VALUES (1),(2),(1))
 
 # This query works in local config but fails in distributed config since the
 # support for nested arrays is incomplete.
-onlyif config local 32552
+onlyif config #32252 local
 query T
 SELECT ARRAY(VALUES (ARRAY[1]))
 ----
 {"{1}"}
 
-onlyif config fakedist 32552
+onlyif config #32252 fakedist
 query error unimplemented: nested arrays are not fully supported.*\nHINT.*\n.*32552
 SELECT ARRAY(VALUES (ARRAY[1]))
 
@@ -452,13 +452,13 @@ CREATE TABLE badtable (b INT[][])
 
 # This query works in local config but fails in distributed config since the
 # support for nested arrays is incomplete.
-onlyif config local 32552
+onlyif config #32252 local
 query T
 SELECT ARRAY[ARRAY[1,2,3]]
 ----
 {"{1,2,3}"}
 
-onlyif config fakedist 32552
+onlyif config #32552 fakedist
 query error unimplemented: nested arrays are not fully supported.*\nHINT.*\n.*32552
 SELECT ARRAY[ARRAY[1,2,3]]
 

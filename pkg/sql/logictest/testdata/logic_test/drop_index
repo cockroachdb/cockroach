@@ -360,7 +360,7 @@ DROP INDEX t_secondary CASCADE;
 ALTER TABLE t DROP COLUMN b;
 INSERT INTO t SELECT a + 1 FROM t;
 
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement error pgcode 23505 duplicate key value violates unique constraint "t_secondary"\nDETAIL: Key \(b\)=\(0\.0\) already exists
 UPSERT INTO t SELECT a + 1 FROM t;
 

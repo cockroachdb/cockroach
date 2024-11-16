@@ -706,27 +706,27 @@ CREATE TABLE uniq_no_index (
   UNIQUE WITHOUT INDEX (v)
 )
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement ok
 INSERT INTO uniq_no_index VALUES (1, 10), (2, 20)
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 INSERT INTO uniq_no_index VALUES (3, 8)
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPDATE uniq_no_index SET b=b+11 WHERE a < 2
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPSERT INTO uniq_no_index VALUES (2, 30), (5, 6)
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement ok
 INSERT INTO uniq_no_index VALUES (5, 6) ON CONFLICT (v) DO UPDATE SET b=15
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 query III colnames,rowsort
 SELECT * FROM uniq_no_index
 ----
@@ -743,23 +743,23 @@ CREATE TABLE uniq_no_index_multi (
   UNIQUE WITHOUT INDEX (v, c)
 )
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement ok
 INSERT INTO uniq_no_index_multi VALUES (1, 1, 1), (2, 4, 2), (3, 3, 3)
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 INSERT INTO uniq_no_index_multi VALUES (4, 2, 2)
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPDATE uniq_no_index_multi SET c=2 WHERE a=3
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement ok
 UPSERT INTO uniq_no_index_multi VALUES (3, 3, 10)
 
-skipif config weak-iso-level-configs 110873
+skipif config #110873 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPSERT INTO uniq_no_index_multi VALUES (3, 3, 2)
 
