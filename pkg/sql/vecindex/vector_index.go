@@ -73,7 +73,8 @@ type SearchOptions struct {
 	// reduce accuracy. It is currently only used for testing.
 	SkipRerank bool
 	// ReturnVectors specifies whether to return the original full-size vectors
-	// in search results.
+	// in search results. If this is a leaf-level search then the returned
+	// vectors have not been randomized.
 	ReturnVectors bool
 }
 
@@ -428,7 +429,7 @@ func (vi *VectorIndex) searchHelper(
 
 	for {
 		results := subSearchSet.PopUnsortedResults()
-		if len(results) == 0 {
+		if len(results) == 0 && searchLevel > vecstore.LeafLevel {
 			// This should never happen, as it means that interior partition(s)
 			// have no children. The vector deletion logic should prevent that.
 			panic(errors.AssertionFailedf(
@@ -620,7 +621,7 @@ func (vi *VectorIndex) rerankSearchResults(
 			queryVector = searchCtx.Workspace.AllocVector(vi.quantizer.GetOriginalDims())
 			defer searchCtx.Workspace.FreeVector(queryVector)
 			vi.quantizer.RandomizeVector(
-				searchCtx.Ctx, searchCtx.Randomized, queryVector, true /* invert */)
+				searchCtx.Ctx, queryVector, searchCtx.Randomized, true /* invert */)
 		}
 	}
 

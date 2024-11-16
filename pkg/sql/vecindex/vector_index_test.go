@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
@@ -251,22 +252,39 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	}
 
 	// Insert vectors into the store.
-	for i := 0; i < vectors.Count; i++ {
-		// Insert within the scope of a transaction.
-		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-		s.InMemStore.InsertVector(txn, childKeys[i].PrimaryKey, vectors.At(i))
-		require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(i), childKeys[i].PrimaryKey))
-		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+	var wait sync.WaitGroup
+	for i := 0; i < vectors.Count; i += s.Options.MaxPartitionSize {
+		// Insert block of vectors within the scope of a transaction.
+		insertBlock := func(start, end int) {
+			txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+			for j := start; j < end; j++ {
+				s.InMemStore.InsertVector(txn, childKeys[j].PrimaryKey, vectors.At(j))
+				require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(j), childKeys[j].PrimaryKey))
+			}
+			commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+		}
 
-		if (i+1)%s.Options.MaxPartitionSize == 0 {
-			// Periodically, run synchronous fixups so that test results are
-			// deterministic.
-			require.NoError(s.T, s.runAllFixups(true /* skipBackground */))
+		// If background fixups are not enabled, do inserts in series, since the
+		// test needs to be deterministic.
+		end := min(i+s.Options.MaxPartitionSize, vectors.Count)
+		if s.Index.cancel == nil {
+			insertBlock(i, end)
+
+			// Run synchronous fixups so that test results are deterministic.
+			require.NoError(s.T, s.runAllFixups())
+		} else {
+			// Run inserts in parallel.
+			wait.Add(1)
+			go func() {
+				insertBlock(i, end)
+				wait.Done()
+			}()
 		}
 	}
+	wait.Wait()
 
 	// Handle any remaining fixups.
-	require.NoError(s.T, s.runAllFixups(false /* skipBackground */))
+	require.NoError(s.T, s.runAllFixups())
 
 	if hideTree {
 		return fmt.Sprintf("Created index with %d vectors with %d dimensions.\n",
@@ -468,13 +486,11 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 }
 
 // runAllFixups forces all pending fixups to be processed.
-func (s *testState) runAllFixups(skipBackground bool) error {
+func (s *testState) runAllFixups() error {
 	if s.Index.cancel != nil {
 		// Background fixup goroutine is running, so wait until it has processed
 		// all fixups.
-		if !skipBackground {
-			s.Index.fixups.Wait()
-		}
+		s.Index.fixups.Wait()
 		return nil
 	}
 	// Synchronously run fixups.
