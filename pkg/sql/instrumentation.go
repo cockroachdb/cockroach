@@ -1104,6 +1104,15 @@ func (m execNodeTraceMetadata) annotateExplain(
 	for i := range plan.Checks {
 		walk(plan.Checks[i])
 	}
+	for _, trigger := range plan.Triggers {
+		// We don't want to create new plans if they haven't been cached - all
+		// necessary plans must have been created during the actual execution of
+		// the query.
+		const createPlanIfMissing = false
+		if tp, _ := trigger.GetExplainPlan(ctx, createPlanIfMissing); tp != nil {
+			m.annotateExplain(ctx, tp.(*explain.Plan), spans, makeDeterministic, p)
+		}
+	}
 }
 
 // SetIndexRecommendations checks if we should generate a new index recommendation.
