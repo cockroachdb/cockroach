@@ -34,6 +34,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/util/encoding",
+        "//pkg/util/intsets",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
