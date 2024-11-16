@@ -42,6 +42,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/replication",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/gcjob",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
