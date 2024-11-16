@@ -904,6 +904,16 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
 			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
 		}
+		beforeTriggers := cat.GetRowLevelTriggers(
+			a.Table, tree.TriggerActionTimeBefore, tree.MakeTriggerEventTypeSet(tree.TriggerEventInsert),
+		)
+		if len(beforeTriggers) > 0 {
+			ob.EnterMetaNode("before-triggers")
+			for _, trigger := range beforeTriggers {
+				ob.Attrf("trigger", "%s", trigger.Name())
+			}
+			ob.LeaveNode()
+		}
 
 	case insertFastPathOp:
 		a := n.args.(*insertFastPathArgs)
@@ -933,6 +943,11 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if len(a.Rows) > 0 {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Rows[0]))
 		}
+		if cat.HasRowLevelTriggers(a.Table, tree.TriggerActionTimeBefore, tree.TriggerEventInsert) {
+			// The insert fast path should not be planned if there are applicable
+			// triggers.
+			return errors.AssertionFailedf("insert fast path with before-triggers")
+		}
 
 	case upsertOp:
 		a := n.args.(*upsertArgs)
@@ -961,6 +976,17 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
 			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
 		}
+		beforeTriggers := cat.GetRowLevelTriggers(
+			a.Table, tree.TriggerActionTimeBefore,
+			tree.MakeTriggerEventTypeSet(tree.TriggerEventInsert, tree.TriggerEventUpdate),
+		)
+		if len(beforeTriggers) > 0 {
+			ob.EnterMetaNode("before-triggers")
+			for _, trigger := range beforeTriggers {
+				ob.Attrf("trigger", "%s", trigger.Name())
+			}
+			ob.LeaveNode()
+		}
 
 	case updateOp:
 		a := n.args.(*updateArgs)
@@ -972,12 +998,32 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
+		beforeTriggers := cat.GetRowLevelTriggers(
+			a.Table, tree.TriggerActionTimeBefore, tree.MakeTriggerEventTypeSet(tree.TriggerEventUpdate),
+		)
+		if len(beforeTriggers) > 0 {
+			ob.EnterMetaNode("before-triggers")
+			for _, trigger := range beforeTriggers {
+				ob.Attrf("trigger", "%s", trigger.Name())
+			}
+			ob.LeaveNode()
+		}
 
 	case deleteOp:
 		a := n.args.(*deleteArgs)
 		ob.Attrf("from", "%s", a.Table.Name())
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
+		}
+		beforeTriggers := cat.GetRowLevelTriggers(
+			a.Table, tree.TriggerActionTimeBefore, tree.MakeTriggerEventTypeSet(tree.TriggerEventDelete),
+		)
+		if len(beforeTriggers) > 0 {
+			ob.EnterMetaNode("before-triggers")
+			for _, trigger := range beforeTriggers {
+				ob.Attrf("trigger", "%s", trigger.Name())
+			}
+			ob.LeaveNode()
 		}
 
 	case deleteRangeOp:
@@ -992,6 +1038,10 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			IndexConstraint: a.IndexConstraint,
 		}
 		e.emitSpans("spans", a.Table, a.Table.Index(cat.PrimaryIndex), params)
+		if cat.HasRowLevelTriggers(a.Table, tree.TriggerActionTimeBefore, tree.TriggerEventDelete) {
+			// DeleteRange should not be planned if there are applicable triggers.
+			return errors.AssertionFailedf("delete range with before-triggers")
+		}
 
 	case showCompletionsOp:
 		a := n.args.(*showCompletionsArgs)
