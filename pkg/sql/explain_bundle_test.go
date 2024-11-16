@@ -204,7 +204,9 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			{"intervalstyle", "iso_8601"},
 			{"large_full_scan_rows", "2000"},
 			{"locality_optimized_partitioned_index_scan", "off"},
-			{"null_ordered_last", "on"},
+			// TODO(#129956): Enable this once non-default NULLS ordering with
+			// subqueries is allowed in tests.
+			// {"null_ordered_last", "on"},
 			{"on_update_rehome_row_enabled", "off"},
 			{"opt_split_scan_limit", "1000"},
 			{"optimizer_use_histograms", "off"},
