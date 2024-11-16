@@ -42,6 +42,8 @@ insert xy
  ├── insert-mapping:
  │    ├── x_new:22 => x:1
  │    └── y_new:23 => y:2
+ ├── before-triggers
+ │    └── tr
  └── project
       ├── columns: x_new:22 y_new:23 column1:5 column2:6 new:7 f:21
       ├── barrier
@@ -73,6 +75,8 @@ root
  │    ├── update-mapping:
  │    │    ├── x_new:26 => x:1
  │    │    └── y_new:27 => y:2
+ │    ├── before-triggers
+ │    │    └── tr
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── child_x_fkey
@@ -117,6 +121,8 @@ root
            ├── fetch columns: k:32 child.x:33
            ├── update-mapping:
            │    └── x_new:37 => child.x:29
+           ├── before-triggers
+           │    └── tr_child
            ├── input binding: &2
            ├── barrier
            │    ├── columns: k:32 child.x:33 x_old:36 x_new:37 old:38 new:39 f:53 "check-rows":54
@@ -183,6 +189,8 @@ root
  ├── delete xy
  │    ├── columns: <none>
  │    ├── fetch columns: x:5 y:6
+ │    ├── before-triggers
+ │    │    └── tr
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── child_x_fkey
@@ -212,6 +220,8 @@ root
       └── delete child
            ├── columns: <none>
            ├── fetch columns: k:28 child.x:29
+           ├── before-triggers
+           │    └── tr_child
            └── barrier
                 ├── columns: k:28 child.x:29 old:33 f:47 "check-rows":48
                 └── select
@@ -260,6 +270,8 @@ root
  │    ├── update-mapping:
  │    │    ├── upsert_x:33 => x:1
  │    │    └── upsert_y:34 => y:2
+ │    ├── before-triggers
+ │    │    └── tr
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── child_x_fkey
@@ -335,6 +347,8 @@ root
            ├── fetch columns: k:39 child.x:40
            ├── update-mapping:
            │    └── x_new:44 => child.x:36
+           ├── before-triggers
+           │    └── tr_child
            ├── input binding: &2
            ├── barrier
            │    ├── columns: k:39 child.x:40 x_old:43 x_new:44 old:45 new:46 f:60 "check-rows":61
@@ -409,6 +423,8 @@ root
  │    ├── update-mapping:
  │    │    ├── upsert_x:34 => x:1
  │    │    └── upsert_y:35 => y:2
+ │    ├── before-triggers
+ │    │    └── tr
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── child_x_fkey
@@ -488,6 +504,8 @@ root
            ├── fetch columns: k:40 child.x:41
            ├── update-mapping:
            │    └── x_new:45 => child.x:37
+           ├── before-triggers
+           │    └── tr_child
            ├── input binding: &2
            ├── barrier
            │    ├── columns: k:40 child.x:41 x_old:44 x_new:45 old:46 new:47 f:61 "check-rows":62
@@ -562,6 +580,8 @@ insert computed
  │    ├── k_new:24 => k:1
  │    ├── v_comp:25 => v:2
  │    └── w_comp:26 => w:3
+ ├── before-triggers
+ │    └── tr
  └── project
       ├── columns: v_comp:25 w_comp:26 column1:6 v_comp:7 w_comp:8 new:9 f:23 k_new:24
       ├── project
@@ -597,6 +617,8 @@ update computed
  │    ├── k_new:30 => k:1
  │    ├── v_comp:31 => v:2
  │    └── w_comp:32 => w:3
+ ├── before-triggers
+ │    └── tr
  └── project
       ├── columns: v_comp:31 w_comp:32 k:6 v:7 w:8 k_new:30
       ├── project
@@ -662,6 +684,8 @@ insert ab
  │    ├── a_new:49 => a:1
  │    ├── b_new:50 => b:2
  │    └── rowid_default:8 => rowid:3
+ ├── before-triggers
+ │    └── tr
  └── project
       ├── columns: a_new:49 b_new:50 column1:6 column2:7 rowid_default:8 new:9 insert_ab:48
       ├── barrier
@@ -724,6 +748,8 @@ insert ab
       │         │                                       │    │    ├── a_new:44 => a:34
       │         │                                       │    │    ├── b_new:45 => b:35
       │         │                                       │    │    └── rowid_default:41 => rowid:36
+      │         │                                       │    ├── before-triggers
+      │         │                                       │    │    └── tr
       │         │                                       │    └── project
       │         │                                       │         ├── columns: a_new:44 b_new:45 column1:39 column2:40 rowid_default:41 new:42 insert_ab:43
       │         │                                       │         ├── barrier
@@ -902,6 +928,8 @@ root
  │    └── delete child
  │         ├── columns: <none>
  │         ├── fetch columns: k:13 child.x:14
+ │         ├── before-triggers
+ │         │    └── tr_child
  │         └── barrier
  │              ├── columns: k:13 child.x:14 old:17 f:31 "check-rows":32
  │              └── select
