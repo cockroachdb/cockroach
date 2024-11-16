@@ -1,0 +1,206 @@
+# LogicTest: local
+
+# Put both columns in a family to avoid column-family randomization changing the
+# plans non-deterministically.
+statement ok
+CREATE TABLE xy (x INT, y INT, FAMILY (x, y));
+
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE NOTICE '%: % -> %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END;
+$$ LANGUAGE PLpgSQL;
+
+# ==============================================================================
+# Display BEFORE triggers in the EXPLAIN output.
+# ==============================================================================
+
+subtest explain_before
+
+statement ok
+CREATE TRIGGER t BEFORE INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+query T
+EXPLAIN INSERT INTO xy VALUES (1, 2);
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ into: xy(x, y, rowid)
+│ auto commit
+│
+├── • before-triggers
+│     trigger: t
+│
+└── • render
+    │
+    └── • filter
+        │ estimated row count: 1
+        │ filter: f IS DISTINCT FROM NULL
+        │
+        └── • render
+            │
+            └── • values
+                  size: 4 columns, 1 row
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM xy WHERE y = 2;
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: xy
+│ auto commit
+│
+├── • before-triggers
+│     trigger: t
+│
+└── • project
+    │ columns: (rowid)
+    │
+    └── • filter
+        │ columns: (f, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, old)
+        │ estimated row count: 10 (missing stats)
+        │ filter: f IS DISTINCT FROM NULL
+        │
+        └── • render
+            │ columns: (f, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, old)
+            │ render f: f(NULL, old, 't', 'BEFORE', 'ROW', 'DELETE', 106, 'xy', 'xy', 'public', 0, ARRAY[])
+            │ render x: x
+            │ render y: y
+            │ render rowid: rowid
+            │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+            │ render tableoid: tableoid
+            │ render crdb_internal_origin_id: crdb_internal_origin_id
+            │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+            │ render old: old
+            │
+            └── • render
+                │ columns: (old, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                │ render old: ((x, y) AS x, y)
+                │ render x: x
+                │ render y: y
+                │ render rowid: rowid
+                │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+                │ render tableoid: tableoid
+                │ render crdb_internal_origin_id: crdb_internal_origin_id
+                │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+                │
+                └── • filter
+                    │ columns: (x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                    │ estimated row count: 10 (missing stats)
+                    │ filter: y = 2
+                    │
+                    └── • scan
+                          columns: (x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                          estimated row count: 1,000 (missing stats)
+                          table: xy@xy_pkey
+                          spans: FULL SCAN
+
+query T
+EXPLAIN ANALYZE (VERBOSE) UPDATE xy SET x = 3 WHERE y = 2;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• update
+│ columns: ()
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ vectorized batch count: 0
+│ estimated row count: 0 (missing stats)
+│ table: xy
+│ set: x, y
+│ auto commit
+│
+├── • before-triggers
+│     trigger: t
+│
+└── • render
+    │ columns: (x, y, rowid, x_new, y_new)
+    │ render x_new: (f).x
+    │ render y_new: (f).y
+    │ render x: x
+    │ render y: y
+    │ render rowid: rowid
+    │
+    └── • filter
+        │ columns: (f, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, x_new, old, new)
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 0
+        │ vectorized batch count: 0
+        │ estimated row count: 10 (missing stats)
+        │ filter: f IS DISTINCT FROM NULL
+        │
+        └── • render
+            │ columns: (f, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, x_new, old, new)
+            │ render f: f(new, old, 't', 'BEFORE', 'ROW', 'UPDATE', 106, 'xy', 'xy', 'public', 0, ARRAY[])
+            │ render x: x
+            │ render y: y
+            │ render rowid: rowid
+            │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+            │ render tableoid: tableoid
+            │ render crdb_internal_origin_id: crdb_internal_origin_id
+            │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+            │ render x_new: x_new
+            │ render old: old
+            │ render new: new
+            │
+            └── • render
+                │ columns: (new, old, x_new, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                │ render new: ((3, y) AS x, y)
+                │ render old: ((x, y) AS x, y)
+                │ render x_new: 3
+                │ render x: x
+                │ render y: y
+                │ render rowid: rowid
+                │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+                │ render tableoid: tableoid
+                │ render crdb_internal_origin_id: crdb_internal_origin_id
+                │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+                │
+                └── • filter
+                    │ columns: (x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                    │ sql nodes: <hidden>
+                    │ regions: <hidden>
+                    │ actual row count: 0
+                    │ vectorized batch count: 0
+                    │ estimated row count: 10 (missing stats)
+                    │ filter: y = 2
+                    │
+                    └── • scan
+                          columns: (x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                          sql nodes: <hidden>
+                          kv nodes: <hidden>
+                          regions: <hidden>
+                          actual row count: 0
+                          vectorized batch count: 0
+                          KV time: 0µs
+                          KV contention time: 0µs
+                          KV rows decoded: 0
+                          KV pairs read: 0
+                          KV bytes read: 0 B
+                          KV gRPC calls: 0
+                          estimated max memory allocated: 0 B
+                          MVCC step count (ext/int): 0/0
+                          MVCC seek count (ext/int): 0/0
+                          estimated row count: 1,000 (missing stats)
+                          table: xy@xy_pkey
+                          spans: FULL SCAN
