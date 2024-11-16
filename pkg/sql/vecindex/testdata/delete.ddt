@@ -1,5 +1,5 @@
 # ----------
-# Construct new index with one vector in the root.
+# Delete remaining vector in the root.
 # ----------
 new-index min-partition-size=1 max-partition-size=3 beam-size=2
 vec1: (1, 2)
@@ -8,14 +8,13 @@ vec1: (1, 2)
 │
 └───• vec1 (1, 2)
 
-# Delete remaining vector in the root.
 delete
 vec1
 ----
 • 1 (0, 0)
 
 # ----------
-# Construct new index with only duplicate vectors.
+# Delete vectors with duplicate values.
 # ----------
 new-index min-partition-size=1 max-partition-size=3 beam-size=2
 vec1: (1, 2)
@@ -57,7 +56,7 @@ vec5
     └───• vec6 (1, 2)
 
 # ----------
-# Construct new index with multiple levels.
+# Delete vector from index with multiple levels.
 # ----------
 new-index min-partition-size=1 max-partition-size=3 beam-size=1
 vec1: (1, 2)
@@ -135,7 +134,7 @@ vec6
     └───• vec8 (-2, 8)
 
 # ----------
-# Construct new index with multiple levels.
+# Delete vectors from primary index, but not from secondary index.
 # ----------
 new-index min-partition-size=1 max-partition-size=3 beam-size=2
 vec1: (1, 2)
