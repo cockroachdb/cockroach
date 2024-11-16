@@ -144,6 +144,7 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 				cols[i] = mb.fetchColIDs[tabOrd]
 			}
 			var builder memo.PostQueryBuilder
+			var triggerEventType tree.TriggerEventType
 			switch a {
 			case tree.Cascade:
 				// Try the fast builder first; if it cannot be used, use the regular builder.
@@ -155,16 +156,22 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 					mb.ensureWithID()
 					builder = newOnDeleteCascadeBuilder(mb.tab, i, h.otherTab, cols)
 				}
+				triggerEventType = tree.TriggerEventDelete
 			case tree.SetNull, tree.SetDefault:
 				mb.ensureWithID()
 				builder = newOnDeleteSetBuilder(mb.tab, i, h.otherTab, a, cols)
+				triggerEventType = tree.TriggerEventUpdate
 			default:
 				panic(errors.AssertionFailedf("unhandled action type %s", a))
 			}
+			hasBeforeTriggers := cat.HasRowLevelTriggers(
+				h.otherTab, tree.TriggerActionTimeBefore, triggerEventType,
+			)
 			mb.cascades = append(mb.cascades, memo.FKCascade{
-				FKConstraint: h.fk,
-				Builder:      builder,
-				WithID:       mb.withID,
+				FKConstraint:      h.fk,
+				HasBeforeTriggers: hasBeforeTriggers,
+				Builder:           builder,
+				WithID:            mb.withID,
 			})
 			continue
 		}
@@ -303,11 +310,15 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 				oldCols[j] = fetchColID
 				newCols[j] = updateColID
 			}
+			hasBeforeTriggers := cat.HasRowLevelTriggers(
+				h.otherTab, tree.TriggerActionTimeBefore, tree.TriggerEventUpdate,
+			)
 			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a, oldCols, newCols)
 			mb.cascades = append(mb.cascades, memo.FKCascade{
-				FKConstraint: h.fk,
-				Builder:      builder,
-				WithID:       mb.withID,
+				FKConstraint:      h.fk,
+				HasBeforeTriggers: hasBeforeTriggers,
+				Builder:           builder,
+				WithID:            mb.withID,
 			})
 			continue
 		}
@@ -421,11 +432,15 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 				oldCols[j] = fetchColID
 				newCols[j] = updateColID
 			}
+			hasBeforeTriggers := cat.HasRowLevelTriggers(
+				h.otherTab, tree.TriggerActionTimeBefore, tree.TriggerEventUpdate,
+			)
 			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a, oldCols, newCols)
 			mb.cascades = append(mb.cascades, memo.FKCascade{
-				FKConstraint: h.fk,
-				Builder:      builder,
-				WithID:       mb.withID,
+				FKConstraint:      h.fk,
+				HasBeforeTriggers: hasBeforeTriggers,
+				Builder:           builder,
+				WithID:            mb.withID,
 			})
 			continue
 		}
