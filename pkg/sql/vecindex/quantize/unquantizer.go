@@ -41,17 +41,17 @@ func (q *unQuantizer) GetRandomDims() int {
 
 // RandomizeVector implements the Quantizer interface.
 func (q *unQuantizer) RandomizeVector(
-	ctx context.Context, original vector.T, randomized vector.T, invert bool,
+	ctx context.Context, input vector.T, output vector.T, invert bool,
 ) {
-	if len(original) != q.dims {
+	if len(input) != q.dims {
 		panic(errors.AssertionFailedf(
-			"original dimensions %d do not match quantizer dims %d", len(original), q.dims))
+			"input dimensions %d do not match quantizer dims %d", len(input), q.dims))
 	}
-	if len(randomized) != q.dims {
+	if len(output) != q.dims {
 		panic(errors.AssertionFailedf(
-			"randomized dimensions %d do not match quantizer dims %d", len(original), q.dims))
+			"output dimensions %d do not match quantizer dims %d", len(output), q.dims))
 	}
-	copy(randomized, original)
+	copy(output, input)
 }
 
 // Quantize implements the Quantizer interface.

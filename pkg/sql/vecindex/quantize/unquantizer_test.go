@@ -52,6 +52,13 @@ func TestUnQuantizerSimple(t *testing.T) {
 	require.Equal(t, []float32{29, 5, 61, 25, 61}, roundFloats(distances, 2))
 	require.Equal(t, []float32{0, 0, 0, 0, 0}, roundFloats(errorBounds, 2))
 
+	// Call RandomizeVector.
+	output := vector.T{3, 4}
+	quantizer.RandomizeVector(ctx, vector.T{1, 2}, output, false /* invert */)
+	require.Equal(t, vector.T{1, 2}, output)
+	quantizer.RandomizeVector(ctx, vector.T{5, 6}, output, true /* invert */)
+	require.Equal(t, vector.T{5, 6}, output)
+
 	// Remove quantized vectors.
 	quantizedSet.ReplaceWithLast(1)
 	quantizedSet.ReplaceWithLast(3)

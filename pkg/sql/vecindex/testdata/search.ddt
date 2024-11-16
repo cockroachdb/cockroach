@@ -1,5 +1,5 @@
 # ----------
-# Construct new index with only root-level vectors.
+# Search tree with only root-level vectors.
 # ----------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
 vec1: (1, 2)
@@ -28,7 +28,7 @@ vec1: 13 (centroid=2.2361)
 3 leaf vectors, 3 vectors, 3 full vectors, 1 partitions
 
 # ----------
-# Construct new index with multiple levels.
+# Search tree with multiple levels.
 # ----------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
 vec1: (1, 2)
@@ -45,51 +45,51 @@ vec11: (1, 1)
 vec12: (5, 4)
 vec13: (6, 2)
 ----
-• 1 (1.6, 4.3)
+• 1 (1.5, 1.875)
 │
-├───• 5 (1, -1)
+├───• 2 (1, -2)
 │   │
-│   ├───• vec6 (1, -6)
-│   ├───• vec1 (1, 2)
-│   └───• vec11 (1, 1)
+│   ├───• vec11 (1, 1)
+│   └───• vec6 (1, -6)
 │
-├───• 4 (-1.5, 5)
+├───• 5 (0.3333, 9)
 │   │
-│   ├───• vec4 (-4, 5)
-│   ├───• vec10 (0, 3)
 │   ├───• vec8 (-2, 8)
-│   └───• vec7 (0, 4)
+│   ├───• vec9 (2, 8)
+│   └───• vec5 (1, 11)
 │
-├───• 6 (1.5, 9.5)
+├───• 6 (5.5, 3.25)
 │   │
-│   ├───• vec5 (1, 11)
-│   └───• vec9 (2, 8)
+│   ├───• vec3 (4, 3)
+│   ├───• vec13 (6, 2)
+│   ├───• vec12 (5, 4)
+│   └───• vec2 (7, 4)
 │
-└───• 7 (5.3333, 3.6667)
+└───• 7 (-1.3333, 4)
     │
-    ├───• vec3 (4, 3)
-    ├───• vec2 (7, 4)
-    ├───• vec12 (5, 4)
-    └───• vec13 (6, 2)
+    ├───• vec7 (0, 4)
+    ├───• vec10 (0, 3)
+    ├───• vec4 (-4, 5)
+    └───• vec1 (1, 2)
 
 # Search for closest vectors with beam-size=1.
 search max-results=2 beam-size=1
 (1, 6)
 ----
-vec7: 5 (centroid=1.8028)
-vec10: 10 (centroid=2.5)
+vec7: 5 (centroid=1.3333)
+vec10: 10 (centroid=1.6667)
 4 leaf vectors, 8 vectors, 4 full vectors, 2 partitions
 
 # Search for closest vectors with beam-size=2.
 search max-results=2 beam-size=2
 (1, 6)
 ----
-vec7: 5 (centroid=1.8028)
-vec9: 5 (centroid=1.5811)
-6 leaf vectors, 10 vectors, 6 full vectors, 3 partitions
+vec7: 5 (centroid=1.3333)
+vec9: 5 (centroid=1.9437)
+7 leaf vectors, 11 vectors, 7 full vectors, 3 partitions
 
 # ----------
-# Construct new index with only duplicate vectors.
+# Search tree with only duplicate vectors.
 # ----------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
 vec1: (4, 9)
@@ -123,8 +123,8 @@ vec3: 2 (centroid=0)
 6 leaf vectors, 8 vectors, 6 full vectors, 3 partitions
 
 # ----------
-# Construct new index with duplicate keys. This can happen when a vector is
-# updated in the primary index, but it cannot be found in the secondary index.
+# Search tree with duplicate keys. This can happen when a vector is updated in
+# the primary index, but it cannot be found in the secondary index.
 # ----------
 new-index min-partition-size=1 max-partition-size=3 beam-size=2
 vec1: (1, 2)
