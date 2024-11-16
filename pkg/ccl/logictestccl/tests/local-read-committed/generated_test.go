@@ -2771,6 +2771,13 @@ func TestReadCommittedLogicCCL_triggers(
 	runCCLLogicTest(t, "triggers")
 }
 
+func TestReadCommittedLogicCCL_triggers_explain(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "triggers_explain")
+}
+
 func TestReadCommittedLogicCCL_udf_params(
 	t *testing.T,
 ) {

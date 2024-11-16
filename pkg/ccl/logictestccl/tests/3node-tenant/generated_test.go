@@ -2850,6 +2850,13 @@ func TestTenantLogicCCL_triggers(
 	runCCLLogicTest(t, "triggers")
 }
 
+func TestTenantLogicCCL_triggers_explain(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "triggers_explain")
+}
+
 func TestTenantLogicCCL_udf_params(
 	t *testing.T,
 ) {
