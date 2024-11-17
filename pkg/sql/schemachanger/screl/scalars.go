@@ -128,8 +128,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		*scpb.TriggerWhen, *scpb.TriggerFunctionCall, *scpb.TriggerDeps:
 		return version.IsActive(clusterversion.V24_3)
 	case *scpb.NamedRangeZoneConfig:
-		// TODO(annie): change this to v25_1 once the version is in.
-		return version.IsActive(clusterversion.Latest)
+		return version.IsActive(clusterversion.V25_1)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
