@@ -297,7 +297,7 @@ func (f *fullReconciler) reconcile(
 		storeWithLatestSpanConfigs.Apply(ctx, del)
 	}
 
-	if !f.codec.ForSystemTenant() {
+	if f.codec.TenantID != roachpb.TenantOne {
 		found := false
 		tenantPrefixKey := f.codec.TenantPrefix()
 		// We want to ensure tenant ranges do not straddle tenant boundaries. As
@@ -337,7 +337,7 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 	ctx context.Context,
 ) (*spanconfigstore.Store, error) {
 	var targets []spanconfig.Target
-	if f.codec.ForSystemTenant() || f.tenID == roachpb.TenantOne {
+	if f.codec.ForSystemTenant() {
 		// The system tenant governs all system keys (meta, liveness, timeseries
 		// ranges, etc.) and system tenant tables.
 		//
@@ -354,10 +354,19 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 			Key:    keys.EverythingSpan.Key,
 			EndKey: keys.SystemSpanConfigSpan.Key,
 		}))
-		targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
-			Key:    keys.TableDataMin,
-			EndKey: keys.TableDataMax,
-		}))
+
+		if f.tenID == roachpb.TenantOne { // TenantOne is system tenant
+			targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
+				Key:    keys.PrefixlessNamespaceTableMin,
+				EndKey: keys.PrefixlessNamespaceTableMax,
+			}))
+		} else {
+			tenPrefix := keys.MakeTenantPrefix(f.tenID)
+			targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
+				Key:    tenPrefix,
+				EndKey: tenPrefix.PrefixEnd(),
+			}))
+		}
 
 		// The system tenant also governs all SystemSpanConfigs set on its entire
 		// keyspace (including secondary tenants), on its tenant keyspace, and on
@@ -371,12 +380,19 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 			targets[1] = spanconfig.MakeTargetFromSpan(roachpb.Span{Key: sp.Key, EndKey: keys.ScratchRangeMax})
 		}
 	} else {
-		// Secondary tenants govern everything prefixed by their tenant ID.
-		tenPrefix := keys.MakeTenantPrefix(f.tenID)
-		targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
-			Key:    tenPrefix,
-			EndKey: tenPrefix.PrefixEnd(),
-		}))
+		if f.tenID == roachpb.TenantOne { // TenantOne is a secondary tenant
+			targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
+				Key:    keys.PrefixlessNamespaceTableMin,
+				EndKey: keys.PrefixlessNamespaceTableMax,
+			}))
+		} else {
+			// Secondary tenants govern everything prefixed by their tenant ID.
+			tenPrefix := keys.MakeTenantPrefix(f.tenID)
+			targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
+				Key:    tenPrefix,
+				EndKey: tenPrefix.PrefixEnd(),
+			}))
+		}
 		// Secondary tenants also govern all SystemSpanConfigs set by the tenant on
 		// its entire keyspace.
 		targets = append(targets,
