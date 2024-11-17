@@ -323,6 +323,7 @@ func TestExport(t *testing.T) {
 		mockTest := getMockTest(t, ctrl, true, statsFileDest)
 		mockCluster := NewMockCluster(ctrl)
 		mockTest.EXPECT().Name().Return("mock_name")
+		mockTest.EXPECT().GetRunId().Return("mock_id").AnyTimes()
 		mockCluster.EXPECT().Cloud().Times(1).Return(spec.GCE)
 		mockTest.EXPECT().Spec().Times(1).Return(&registry.TestSpec{
 			Owner: "roachtest_mock", Suites: registry.Suites(registry.Nightly),
