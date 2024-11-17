@@ -73,6 +73,10 @@ type testWrapper struct {
 	l *logger.Logger
 }
 
+func (t testWrapper) GetRunId() string {
+	return "mock-run-id"
+}
+
 func (t testWrapper) ExportOpenmetrics() bool {
 	return false
 }
