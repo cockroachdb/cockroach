@@ -141,6 +141,8 @@ type testImpl struct {
 	// If true, the stats exporter will export metrics in openmetrics format.
 	// else the exporter will export in the JSON format.
 	exportOpenmetrics bool
+	// If set, this is used for adding labels to the benchmark metrics
+	runID string
 }
 
 func newFailure(squashedErr error, errs []error) failure {
@@ -199,6 +201,10 @@ func (t *testImpl) Cockroach() string {
 
 func (t *testImpl) ExportOpenmetrics() bool {
 	return t.exportOpenmetrics
+}
+
+func (t *testImpl) GetRunId() string {
+	return t.runID
 }
 
 func (t *testImpl) RuntimeAssertionsCockroach() string {

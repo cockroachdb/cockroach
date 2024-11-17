@@ -211,6 +211,20 @@ func (mr *MockTestMockRecorder) Fatalf(arg0 interface{}, arg1 ...interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fatalf", reflect.TypeOf((*MockTest)(nil).Fatalf), varargs...)
 }
 
+// GetRunId mocks base method.
+func (m *MockTest) GetRunId() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRunId")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetRunId indicates an expected call of GetRunId.
+func (mr *MockTestMockRecorder) GetRunId() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunId", reflect.TypeOf((*MockTest)(nil).GetRunId))
+}
+
 // Go mocks base method.
 func (m *MockTest) Go(arg0 task.Func, arg1 ...task.Option) {
 	m.ctrl.T.Helper()
