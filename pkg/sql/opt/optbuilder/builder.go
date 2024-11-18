@@ -194,6 +194,12 @@ type Builder struct {
 	// builtTriggerFuncs caches already-built trigger functions for a table. It is
 	// necessary to cache these functions since triggers can recursively reference
 	// one another.
+	//
+	// NOTE: Since we map from StableID, multiple mutations to the same table may
+	// reuse the same cached UDFDefinition to invoke a trigger function. This is
+	// ok because UDFDefinitions are independent of the context in which they are
+	// built, and can be safely reused across different call-sites within the same
+	// memo.
 	builtTriggerFuncs map[cat.StableID][]cachedTriggerFunc
 }
 
