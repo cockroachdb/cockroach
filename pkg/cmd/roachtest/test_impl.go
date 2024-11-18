@@ -60,10 +60,10 @@ type testImpl struct {
 	spec *registry.TestSpec
 
 	cockroach   string // path to main cockroach binary
-	cockroachEA string // path to cockroach-short binary compiled with --crdb_test build tag
+	cockroachEA string // path to cockroach binary compiled with --crdb_test build tag
 
 	randomCockroachOnce sync.Once
-	randomizedCockroach string // either `cockroach` or `cockroach-short`, picked randomly
+	randomizedCockroach string // either `cockroach` or `cockroach-ea`, picked randomly
 
 	deprecatedWorkload string // path to workload binary
 	debug              bool   // whether the test is in debug mode.

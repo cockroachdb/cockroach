@@ -195,16 +195,11 @@ func (d *dbConsoleCypressTest) writeCypressFilesToWorkloadNode(ctx context.Conte
 }
 
 func registerDbConsole(r registry.Registry) {
-	// Explicitly set CockroachBinary to registry.StandardCockroach to ensure that a binary
-	// containing db console is used. Currently, registry.RuntimeAssertionsCockroach
-	// is built using cockroach-short and the default of registry.RandomizedCockroach
-	// causes the tests to be flaky
 	r.Add(registry.TestSpec{
 		Name:             "db-console/mixed-version-cypress",
 		Owner:            registry.OwnerObservability,
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
 		CompatibleClouds: registry.AllClouds,
-		CockroachBinary:  registry.StandardCockroach,
 		Suites:           registry.Suites(registry.Nightly),
 		Randomized:       false,
 		Run:              runDbConsoleCypressMixedVersions,
@@ -215,7 +210,6 @@ func registerDbConsole(r registry.Registry) {
 		Owner:            registry.OwnerObservability,
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
 		CompatibleClouds: registry.AllClouds,
-		CockroachBinary:  registry.StandardCockroach,
 		Suites:           registry.Suites(registry.Nightly),
 		Randomized:       false,
 		Run:              runDbConsoleCypress,
