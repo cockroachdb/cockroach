@@ -840,7 +840,7 @@ func ProcessorSpan(
 	eventListeners ...tracing.EventListener,
 ) (context.Context, *tracing.Span) {
 	sp := tracing.SpanFromContext(ctx)
-	if sp == nil {
+	if sp == nil || sp.IsNoop() {
 		return ctx, nil
 	}
 	var listenersOpt tracing.SpanOption
