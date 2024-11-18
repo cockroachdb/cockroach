@@ -1437,14 +1437,14 @@ ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE TEXT;
 
 # Convert the type to something compatible, but specify a custom value for the
 # column with the USING expression. This will force a type conversion with a backfill.
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2 local-mixed-24.3
 statement ok
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT2 USING -1;
 
 statement ok
 INSERT INTO stored1 VALUES (-1000);
 
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2 local-mixed-24.3
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1455,7 +1455,7 @@ stored1  CREATE TABLE public.stored1 (
            FAMILY f1 (a, comp1)
          )
 
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2 local-mixed-24.3
 query II
 SELECT * FROM stored1 ORDER BY A;
 ----
@@ -1467,7 +1467,7 @@ SELECT * FROM stored1 ORDER BY A;
 2147483647  -1
 
 # Attempt to drop stored along with changing the column type
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2 local-mixed-24.3
 statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT4 USING -1, ALTER COLUMN comp1 drop stored;
 
