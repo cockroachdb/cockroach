@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -294,7 +295,9 @@ func (r *Replica) RangeFeed(
 			perConsumerRelease = perConsumerAlloc.Release
 		}
 
+		startTime := crtime.NowMono()
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(streamCtx)
+		r.store.metrics.RangeFeedMetrics.RangefeedCatchUpBlockedNanos.Inc(startTime.Elapsed().Nanoseconds())
 		if err != nil {
 			perConsumerRelease()
 			return nil, err
