@@ -384,8 +384,10 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 			require.LessOrEqual(t, float64(0), ioll.flushUtilTargetFraction)
 			require.LessOrEqual(t, int64(0), ioll.totalNumByteTokens)
 			require.LessOrEqual(t, int64(0), ioll.byteTokensAllocated)
-			require.LessOrEqual(t, int64(0), ioll.elasticDiskWriteTokens)
-			require.LessOrEqual(t, int64(0), ioll.elasticDiskWriteTokensAllocated)
+			require.LessOrEqual(t, int64(0), ioll.diskWriteTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskWriteTokensAllocated)
+			require.LessOrEqual(t, int64(0), ioll.diskReadTokens)
+			require.LessOrEqual(t, int64(0), ioll.diskReadTokensAllocated)
 		}
 	}
 }
@@ -423,16 +425,19 @@ func (g *testGranterWithIOTokens) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
 	elasticDiskBandwidthTokens int64,
+	elasticReadBandwidthTokens int64,
 	maxIOTokens int64,
 	maxElasticIOTokens int64,
 	maxElasticDiskBandwidthTokens int64,
 	lastTick bool,
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s(elastic %s) "+
-		"elastic-disk-bw-tokens=%s max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
+		"elastic-disk-bw-tokens=%s read-bw-tokens=%s "+
+		"max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
 		tokensForTokenTickDurationToString(ioTokens),
 		tokensForTokenTickDurationToString(elasticIOTokens),
 		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
+		tokensForTokenTickDurationToString(elasticReadBandwidthTokens),
 		tokensForTokenTickDurationToString(maxIOTokens),
 		tokensForTokenTickDurationToString(maxElasticIOTokens),
 		tokensForTokenTickDurationToString(maxElasticDiskBandwidthTokens),
@@ -486,6 +491,7 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
 	elasticDiskBandwidthTokens int64,
+	elasticDiskReadBandwidthTokens int64,
 	_ int64,
 	_ int64,
 	_ int64,
@@ -494,6 +500,7 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 	require.LessOrEqual(g.t, int64(0), ioTokens)
 	require.LessOrEqual(g.t, int64(0), elasticIOTokens)
 	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
+	require.LessOrEqual(g.t, int64(0), elasticDiskReadBandwidthTokens)
 	return 0, 0
 }
 
@@ -556,6 +563,33 @@ func TestTokenAllocationTickerAdjustmentCalculation(t *testing.T) {
 		}
 		time.Sleep(1 * time.Millisecond)
 	}
+}
+
+func TestTokenAllocationTickerErrorAdjustmentThreshold(t *testing.T) {
+	ticker := tokenAllocationTicker{}
+	defer ticker.stop()
+	ticker.adjustmentStart(false /* loaded */)
+
+	// Knowing we are using unloaded duration. The first iteration will have 60 ticks.
+	require.False(t, ticker.shouldAdjustForError(60 /* remainingTicks */, false /* loaded */))
+	// Verify that we correctly reset the lastErrorAdjustmentTick value.
+	require.Equal(t, uint64(60), ticker.lastErrorAdjustmentTick)
+
+	// We should not do error adjustment unless 1s has passed. i.e. 4 ticks.
+	require.False(t, ticker.shouldAdjustForError(58 /* remainingTicks */, false /* loaded */))
+	require.True(t, ticker.shouldAdjustForError(56 /* remainingTicks */, false /* loaded */))
+	require.Equal(t, uint64(56), ticker.lastErrorAdjustmentTick)
+
+	// We should adjust for error on the last tick.
+	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, false /* loaded */))
+
+	// Re-run the above with loaded system. Now the error adjustment threshold is every 1000 ticks.
+	require.False(t, ticker.shouldAdjustForError(15000 /* remainingTicks */, true /* loaded */))
+	require.Equal(t, uint64(15000), ticker.lastErrorAdjustmentTick)
+	require.False(t, ticker.shouldAdjustForError(14001 /* remainingTicks */, true /* loaded */))
+	require.True(t, ticker.shouldAdjustForError(14000 /* remainingTicks */, true /* loaded */))
+	require.Equal(t, uint64(14000), ticker.lastErrorAdjustmentTick)
+	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, true /* loaded */))
 }
 
 func TestTokenAllocationTicker(t *testing.T) {

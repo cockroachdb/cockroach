@@ -269,7 +269,7 @@ type granterWithIOTokens interface {
 	// negative, though that will be rare, since it is possible for tokens to be
 	// returned.
 	setAvailableTokens(
-		ioTokens int64, elasticIOTokens int64, elasticDiskWriteTokens int64,
+		ioTokens int64, elasticIOTokens int64, elasticDiskWriteTokens int64, elasticDiskReadTokens int64,
 		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskWriteTokensCapacity int64,
 		lastTick bool,
 	) (tokensUsed int64, tokensUsedByElasticWork int64)
