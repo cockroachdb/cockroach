@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -188,8 +189,8 @@ func parseDDInput(t *testing.T, input string, w *datadogWriter) {
 func TestTsDumpFormatsDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer testutils.TestingHook(&newUploadID, func(cluster string) string {
-		return fmt.Sprintf("%s-1234", cluster)
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
 	})()
 
 	datadriven.Walk(t, "testdata/tsdump", func(t *testing.T, path string) {
