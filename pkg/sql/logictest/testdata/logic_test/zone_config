@@ -295,19 +295,19 @@ CREATE VIEW v (x, y) AS SELECT a, b FROM zc; ALTER TABLE v CONFIGURE ZONE USING 
 
 user root
 
-onlyif config local-legacy-schema-changer
+onlyif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
 statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation pg_type
 ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-onlyif config local-legacy-schema-changer
+onlyif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
 statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation columns
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
 statement error pq: pg_type is a system catalog
 ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
 statement error pq: columns is a virtual object and cannot be modified
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
 

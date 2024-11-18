@@ -256,10 +256,14 @@ func TestAuthenticateTenant(t *testing.T) {
 				ctx = metadata.NewIncomingContext(ctx, md)
 			}
 
-			clusterSettings := map[settings.InternalKey]settings.EncodedValue{
-				security.ClientCertSubjectRequiredSettingName: {Value: strconv.FormatBool(tc.subjectRequired), Type: "b"},
-			}
-			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, clusterSettings)
+			sv := &settings.Values{}
+			sv.Init(ctx, settings.TestOpaque)
+			u := settings.NewUpdater(sv)
+			err = u.Set(ctx, security.ClientCertSubjectRequiredSettingName,
+				settings.EncodedValue{Value: strconv.FormatBool(tc.subjectRequired), Type: "b"})
+			require.NoError(t, err)
+
+			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, sv)
 
 			if tc.expErr == "" {
 				require.Equal(t, tc.expTenID, tenID)
@@ -269,6 +273,76 @@ func TestAuthenticateTenant(t *testing.T) {
 				require.Error(t, err)
 				require.Equal(t, codes.Unauthenticated, status.Code(err))
 				require.Regexp(t, tc.expErr, err)
+			}
+		})
+	}
+}
+
+func BenchmarkAuthenticate(b *testing.B) {
+	correctOU := []string{security.TenantsOU}
+	stid := roachpb.SystemTenantID
+	for _, tc := range []struct {
+		name         string
+		systemID     roachpb.TenantID
+		ous          []string
+		commonName   string
+		rootDNString string
+		nodeDNString string
+	}{
+		// Success case with a tenant certificate.
+		{name: "tenTen", systemID: stid, ous: correctOU, commonName: "10"},
+		// Success cases with root or node DN.
+		{name: "rootDN", systemID: stid, ous: nil, commonName: "foo", rootDNString: "CN=foo"},
+		{name: "nodeDN", systemID: stid, ous: nil, commonName: "foo", nodeDNString: "CN=foo"},
+		// Success cases that fallback to the global scope.
+		{name: "commonRoot", systemID: stid, ous: nil, commonName: "root"},
+		{name: "commonNode", systemID: stid, ous: nil, commonName: "node"},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			var err error
+			if tc.rootDNString != "" {
+				err = security.SetRootSubject(tc.rootDNString)
+				if err != nil {
+					b.Fatalf("could not set root subject DN, err: %v", err)
+				}
+			}
+			if tc.nodeDNString != "" {
+				err = security.SetNodeSubject(tc.nodeDNString)
+				if err != nil {
+					b.Fatalf("could not set node subject DN, err: %v", err)
+				}
+			}
+			defer func() {
+				security.UnsetRootSubject()
+				security.UnsetNodeSubject()
+			}()
+
+			cert := &x509.Certificate{
+				Subject: pkix.Name{
+					CommonName:         tc.commonName,
+					OrganizationalUnit: tc.ous,
+				},
+			}
+			cert.RawSubject, err = asn1.Marshal(cert.Subject.ToRDNSequence())
+			if err != nil {
+				b.Fatalf("unable to marshal rdn sequence to raw subject, err: %v", err)
+			}
+			tlsInfo := credentials.TLSInfo{
+				State: tls.ConnectionState{
+					PeerCertificates: []*x509.Certificate{cert},
+				},
+			}
+			p := peer.Peer{AuthInfo: tlsInfo}
+			ctx := peer.NewContext(context.Background(), &p)
+			sv := &settings.Values{}
+			sv.Init(ctx, settings.TestOpaque)
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, sv)
+				if err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 	}
