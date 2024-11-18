@@ -145,7 +145,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 			propCtx := ctx // raft scheduler's ctx
 			var propSp *tracing.Span
 			// If the client has a trace, put a child into propCtx.
-			if sp := tracing.SpanFromContext(cmd.proposal.Context()); sp != nil {
+			if sp := tracing.SpanFromContext(cmd.proposal.Context()); sp != nil && !sp.IsNoop() {
 				propCtx, propSp = sp.Tracer().StartSpanCtx(
 					propCtx, "local proposal", tracing.WithParent(sp),
 				)
