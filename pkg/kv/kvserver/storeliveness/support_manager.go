@@ -284,6 +284,9 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	if !sm.SupportFromEnabled(ctx) {
 		return
 	}
+	if sm.knobs != nil && sm.knobs.DisableHeartbeats != nil && sm.knobs.DisableHeartbeats.Load() == sm.storeID {
+		return
+	}
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	livenessInterval := sm.options.LivenessInterval
