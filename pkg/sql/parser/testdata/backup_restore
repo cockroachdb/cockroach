@@ -428,22 +428,22 @@ RESTORE TABLE _ FROM $1 IN $2 WITH OPTIONS (incremental_location = '*****') -- i
 RESTORE TABLE foo FROM $1 IN $2 WITH OPTIONS (incremental_location = 'bar') -- passwords exposed
 
 parse
-RESTORE TABLE foo FROM 'abc' IN $1, $2, 'bar'
+RESTORE TABLE foo FROM 'abc' IN ($1, $2, 'bar')
 ----
-RESTORE TABLE foo FROM 'abc' IN $1, $2, '*****' -- normalized!
-RESTORE TABLE (foo) FROM ('abc') IN ($1), ($2), ('*****') -- fully parenthesized
-RESTORE TABLE foo FROM '_' IN $1, $1, '_' -- literals removed
-RESTORE TABLE _ FROM 'abc' IN $1, $2, '*****' -- identifiers removed
-RESTORE TABLE foo FROM 'abc' IN $1, $2, 'bar' -- passwords exposed
+RESTORE TABLE foo FROM 'abc' IN ($1, $2, '*****') -- normalized!
+RESTORE TABLE (foo) FROM ('abc') IN (($1), ($2), ('*****')) -- fully parenthesized
+RESTORE TABLE foo FROM '_' IN ($1, $1, '_') -- literals removed
+RESTORE TABLE _ FROM 'abc' IN ($1, $2, '*****') -- identifiers removed
+RESTORE TABLE foo FROM 'abc' IN ($1, $2, 'bar') -- passwords exposed
 
 parse
-RESTORE TABLE foo FROM $4 IN $1, $2, 'bar'
+RESTORE TABLE foo FROM $4 IN ($1, $2, 'bar')
 ----
-RESTORE TABLE foo FROM $4 IN $1, $2, '*****' -- normalized!
-RESTORE TABLE (foo) FROM ($4) IN ($1), ($2), ('*****') -- fully parenthesized
-RESTORE TABLE foo FROM $1 IN $1, $1, '_' -- literals removed
-RESTORE TABLE _ FROM $4 IN $1, $2, '*****' -- identifiers removed
-RESTORE TABLE foo FROM $4 IN $1, $2, 'bar' -- passwords exposed
+RESTORE TABLE foo FROM $4 IN ($1, $2, '*****') -- normalized!
+RESTORE TABLE (foo) FROM ($4) IN (($1), ($2), ('*****')) -- fully parenthesized
+RESTORE TABLE foo FROM $1 IN ($1, $1, '_') -- literals removed
+RESTORE TABLE _ FROM $4 IN ($1, $2, '*****') -- identifiers removed
+RESTORE TABLE foo FROM $4 IN ($1, $2, 'bar') -- passwords exposed
 
 parse
 RESTORE TABLE foo, baz FROM LATEST IN 'bar'
@@ -573,52 +573,28 @@ RESTORE DATABASE foo FROM $1 IN ($1, $1) -- literals removed
 RESTORE DATABASE _ FROM $1 IN ($2, $3) -- identifiers removed
 
 parse
-RESTORE DATABASE foo FROM $1 IN ($2), ($3)
+RESTORE DATABASE foo FROM $1 IN ($2)
 ----
-RESTORE DATABASE foo FROM $1 IN $2, $3 -- normalized!
-RESTORE DATABASE foo FROM ($1) IN ($2), ($3) -- fully parenthesized
-RESTORE DATABASE foo FROM $1 IN $1, $1 -- literals removed
-RESTORE DATABASE _ FROM $1 IN $2, $3 -- identifiers removed
+RESTORE DATABASE foo FROM $1 IN $2 -- normalized!
+RESTORE DATABASE foo FROM ($1) IN ($2) -- fully parenthesized
+RESTORE DATABASE foo FROM $1 IN $1 -- literals removed
+RESTORE DATABASE _ FROM $1 IN $2 -- identifiers removed
 
 parse
-RESTORE DATABASE foo FROM $1 IN ($2), ($3, $4)
+RESTORE DATABASE foo FROM LATEST IN ($1, $2)
 ----
-RESTORE DATABASE foo FROM $1 IN $2, ($3, $4) -- normalized!
-RESTORE DATABASE foo FROM ($1) IN ($2), (($3), ($4)) -- fully parenthesized
-RESTORE DATABASE foo FROM $1 IN $1, ($1, $1) -- literals removed
-RESTORE DATABASE _ FROM $1 IN $2, ($3, $4) -- identifiers removed
+RESTORE DATABASE foo FROM 'latest' IN ($1, $2) -- normalized!
+RESTORE DATABASE foo FROM ('latest') IN (($1), ($2)) -- fully parenthesized
+RESTORE DATABASE foo FROM '_' IN ($1, $1) -- literals removed
+RESTORE DATABASE _ FROM 'latest' IN ($1, $2) -- identifiers removed
 
 parse
-RESTORE DATABASE foo FROM $1 IN ($2, $3), $4
+RESTORE DATABASE foo FROM LATEST IN ($1, $2) AS OF SYSTEM TIME '1'
 ----
-RESTORE DATABASE foo FROM $1 IN ($2, $3), $4
-RESTORE DATABASE foo FROM ($1) IN (($2), ($3)), ($4) -- fully parenthesized
-RESTORE DATABASE foo FROM $1 IN ($1, $1), $1 -- literals removed
-RESTORE DATABASE _ FROM $1 IN ($2, $3), $4 -- identifiers removed
-
-parse
-RESTORE DATABASE foo FROM $1 IN $2, ($3, $4)
-----
-RESTORE DATABASE foo FROM $1 IN $2, ($3, $4)
-RESTORE DATABASE foo FROM ($1) IN ($2), (($3), ($4)) -- fully parenthesized
-RESTORE DATABASE foo FROM $1 IN $1, ($1, $1) -- literals removed
-RESTORE DATABASE _ FROM $1 IN $2, ($3, $4) -- identifiers removed
-
-parse
-RESTORE DATABASE foo FROM LATEST IN ($1, $2), ($3, $4)
-----
-RESTORE DATABASE foo FROM 'latest' IN ($1, $2), ($3, $4) -- normalized!
-RESTORE DATABASE foo FROM ('latest') IN (($1), ($2)), (($3), ($4)) -- fully parenthesized
-RESTORE DATABASE foo FROM '_' IN ($1, $1), ($1, $1) -- literals removed
-RESTORE DATABASE _ FROM 'latest' IN ($1, $2), ($3, $4) -- identifiers removed
-
-parse
-RESTORE DATABASE foo FROM LATEST IN ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
-----
-RESTORE DATABASE foo FROM 'latest' IN ($1, $2), ($3, $4) AS OF SYSTEM TIME '1' -- normalized!
-RESTORE DATABASE foo FROM ('latest') IN (($1), ($2)), (($3), ($4)) AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE DATABASE foo FROM '_' IN ($1, $1), ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
-RESTORE DATABASE _ FROM 'latest' IN ($1, $2), ($3, $4) AS OF SYSTEM TIME '1' -- identifiers removed
+RESTORE DATABASE foo FROM 'latest' IN ($1, $2) AS OF SYSTEM TIME '1' -- normalized!
+RESTORE DATABASE foo FROM ('latest') IN (($1), ($2)) AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE DATABASE foo FROM '_' IN ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
+RESTORE DATABASE _ FROM 'latest' IN ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
 
 parse
 RESTORE FROM LATEST IN ($1, $2)
@@ -629,63 +605,28 @@ RESTORE FROM '_' IN ($1, $1) -- literals removed
 RESTORE FROM 'latest' IN ($1, $2) -- identifiers removed
 
 parse
-RESTORE FROM LATEST IN ($1, $2), $3
+RESTORE FROM LATEST IN ($1)
 ----
-RESTORE FROM 'latest' IN ($1, $2), $3 -- normalized!
-RESTORE FROM ('latest') IN (($1), ($2)), ($3) -- fully parenthesized
-RESTORE FROM '_' IN ($1, $1), $1 -- literals removed
-RESTORE FROM 'latest' IN ($1, $2), $3 -- identifiers removed
+RESTORE FROM 'latest' IN $1 -- normalized!
+RESTORE FROM ('latest') IN ($1) -- fully parenthesized
+RESTORE FROM '_' IN $1 -- literals removed
+RESTORE FROM 'latest' IN $1 -- identifiers removed
 
 parse
-RESTORE FROM LATEST IN $1, ($2, $3)
+RESTORE FROM LATEST IN ($1, $2) AS OF SYSTEM TIME '1'
 ----
-RESTORE FROM 'latest' IN $1, ($2, $3) -- normalized!
-RESTORE FROM ('latest') IN ($1), (($2), ($3)) -- fully parenthesized
-RESTORE FROM '_' IN $1, ($1, $1) -- literals removed
-RESTORE FROM 'latest' IN $1, ($2, $3) -- identifiers removed
+RESTORE FROM 'latest' IN ($1, $2) AS OF SYSTEM TIME '1' -- normalized!
+RESTORE FROM ('latest') IN (($1), ($2)) AS OF SYSTEM TIME ('1') -- fully parenthesized
+RESTORE FROM '_' IN ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
+RESTORE FROM 'latest' IN ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
 
 parse
-RESTORE FROM LATEST IN ($1, $2), ($3, $4)
+RESTORE FROM $4 IN $1 AS OF SYSTEM TIME '1' WITH skip_missing_foreign_keys
 ----
-RESTORE FROM 'latest' IN ($1, $2), ($3, $4) -- normalized!
-RESTORE FROM ('latest') IN (($1), ($2)), (($3), ($4)) -- fully parenthesized
-RESTORE FROM '_' IN ($1, $1), ($1, $1) -- literals removed
-RESTORE FROM 'latest' IN ($1, $2), ($3, $4) -- identifiers removed
-
-parse
-RESTORE FROM LATEST IN ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
-----
-RESTORE FROM 'latest' IN ($1, $2), ($3, $4) AS OF SYSTEM TIME '1' -- normalized!
-RESTORE FROM ('latest') IN (($1), ($2)), (($3), ($4)) AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE FROM '_' IN ($1, $1), ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
-RESTORE FROM 'latest' IN ($1, $2), ($3, $4) AS OF SYSTEM TIME '1' -- identifiers removed
-
-parse
-RESTORE FROM LATEST IN $1, $2, 'bar'
-----
-RESTORE FROM 'latest' IN $1, $2, '*****' -- normalized!
-RESTORE FROM ('latest') IN ($1), ($2), ('*****') -- fully parenthesized
-RESTORE FROM '_' IN $1, $1, '_' -- literals removed
-RESTORE FROM 'latest' IN $1, $2, '*****' -- identifiers removed
-RESTORE FROM 'latest' IN $1, $2, 'bar' -- passwords exposed
-
-parse
-RESTORE FROM $4 IN $1, $2, 'bar'
-----
-RESTORE FROM $4 IN $1, $2, '*****' -- normalized!
-RESTORE FROM ($4) IN ($1), ($2), ('*****') -- fully parenthesized
-RESTORE FROM $1 IN $1, $1, '_' -- literals removed
-RESTORE FROM $4 IN $1, $2, '*****' -- identifiers removed
-RESTORE FROM $4 IN $1, $2, 'bar' -- passwords exposed
-
-parse
-RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH skip_missing_foreign_keys
-----
-RESTORE FROM $4 IN $1, $2, '*****' AS OF SYSTEM TIME '1' WITH OPTIONS (skip_missing_foreign_keys) -- normalized!
-RESTORE FROM ($4) IN ($1), ($2), ('*****') AS OF SYSTEM TIME ('1') WITH OPTIONS (skip_missing_foreign_keys) -- fully parenthesized
-RESTORE FROM $1 IN $1, $1, '_' AS OF SYSTEM TIME '_' WITH OPTIONS (skip_missing_foreign_keys) -- literals removed
-RESTORE FROM $4 IN $1, $2, '*****' AS OF SYSTEM TIME '1' WITH OPTIONS (skip_missing_foreign_keys) -- identifiers removed
-RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH OPTIONS (skip_missing_foreign_keys) -- passwords exposed
+RESTORE FROM $4 IN $1 AS OF SYSTEM TIME '1' WITH OPTIONS (skip_missing_foreign_keys) -- normalized!
+RESTORE FROM ($4) IN ($1) AS OF SYSTEM TIME ('1') WITH OPTIONS (skip_missing_foreign_keys) -- fully parenthesized
+RESTORE FROM $1 IN $1 AS OF SYSTEM TIME '_' WITH OPTIONS (skip_missing_foreign_keys) -- literals removed
+RESTORE FROM $4 IN $1 AS OF SYSTEM TIME '1' WITH OPTIONS (skip_missing_foreign_keys) -- identifiers removed
 
 parse
 RESTORE abc.xzy FROM 'a' IN 'b' WITH into_db = 'foo', skip_missing_foreign_keys
