@@ -532,9 +532,7 @@ ALTER INDEX a@bar CONFIGURE ZONE USING gc.ttlseconds = 15000
 
 # verify zone config changes are logged
 ##################
-skipif config 3node-tenant-default-configs
-skipif config local-mixed-24.1
-skipif config local-mixed-24.2
+skipif config 3node-tenant-default-configs local-mixed-24.1 local-mixed-24.2 local-mixed-24.3
 query IT
 SELECT "reportingID", "info"::JSONB - 'Timestamp' - 'DescriptorID' - 'Statement'
 FROM system.eventlog
