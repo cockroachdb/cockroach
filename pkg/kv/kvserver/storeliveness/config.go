@@ -5,7 +5,10 @@
 
 package storeliveness
 
-import "time"
+import (
+	"sync/atomic"
+	"time"
+)
 
 // Options includes all Store Liveness durations needed by the SupportManager.
 // TODO(mira): make sure these are initialized correctly as part of #125066.
@@ -50,10 +53,15 @@ type TransportKnobs struct {
 }
 
 // SupportManagerKnobs includes all knobs that facilitate testing the
-// SupportManager.
+// SupportManager. It is convenient to pass the same knobs to the entire node,
+// and distinguish which store they are intended for within the knobs. E.g.
+// TestEngine has a storeID field; DisableHeartbeats points to a store ID.
 type SupportManagerKnobs struct {
 	// TestEngine is a test engine to be used instead of a real one.
 	TestEngine *TestEngine
+	// DisableHeartbeats denotes the ID of a store whose heartbeats should be
+	// stopped. Setting DisableHeartbeats to nil will re-enable heartbeats.
+	DisableHeartbeats *atomic.Value // slpb.StoreIdent
 }
 
 // TestingKnobs is a wrapper around TransportKnobs and SupportManagerKnobs.
