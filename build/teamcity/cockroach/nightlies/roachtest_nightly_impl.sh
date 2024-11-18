@@ -84,5 +84,4 @@ build/teamcity-roachtest-invoke.sh \
   --suite nightly \
   --selective-tests="${SELECTIVE_TESTS:-true}" \
   --side-eye-token="${SIDE_EYE_API_TOKEN}" \
-  --export-openmetrics="${EXPORT_OPENMETRICS}" \
   "${TESTS}"
