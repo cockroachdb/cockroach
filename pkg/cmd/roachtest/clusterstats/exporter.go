@@ -413,7 +413,6 @@ func GetOpenmetricsLabelMap(
 	defaultMap := map[string]string{
 		"cloud": c.Cloud().String(),
 		"owner": string(t.Spec().(*registry.TestSpec).Owner),
-		"suite": t.Spec().(*registry.TestSpec).Suites.String(),
 	}
 
 	// Since the roachtest have / delimiter for subtests
