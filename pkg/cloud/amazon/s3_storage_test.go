@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -529,11 +530,11 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 	q.Add(S3RegionParam, "us-east-1")
 
-	// Very long, very random bucket name, that hopefully nobody will ever create.
-	bucket := "VIBK1H88MOJ665V2RAPVH6X3TWUS0HCWTW5A27AFPPLHMABKH7X445K86K1BP2"
 	u := url.URL{
-		Scheme:   "s3",
-		Host:     bucket,
+		Scheme: "s3",
+		// Use UUID to create a random bucket name that does not exist. If this was
+		// a constent, someone could create the bucket and break the test.
+		Host:     uuid.NewV4().String(),
 		Path:     "backup-test",
 		RawQuery: q.Encode(),
 	}
@@ -563,8 +564,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	}
 
 	_, _, err = s.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
-	require.Error(t, err, "")
-	require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist), "error is not cloud.ErrFileDoesNotExist: %v", err)
+	require.ErrorIs(t, err, cloud.ErrFileDoesNotExist)
 }
 
 func TestAntagonisticS3Read(t *testing.T) {
