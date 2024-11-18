@@ -28,7 +28,7 @@ type elasticWorkload struct{}
 var _ perturbation = elasticWorkload{}
 
 func (e elasticWorkload) setup() variations {
-	return setup(e, 5.0)
+	return setup(e, 20.0)
 }
 
 func (e elasticWorkload) setupMetamorphic(rng *rand.Rand) variations {
@@ -37,7 +37,12 @@ func (e elasticWorkload) setupMetamorphic(rng *rand.Rand) variations {
 	// almost all regular requests. To prevent this, we set the min latency to
 	// 100ms instead of the default.
 	v.profileOptions = append(v.profileOptions, roachtestutil.ProfMinimumLatency(100*time.Millisecond))
-	return v.randomize(rng)
+	v = v.randomize(rng)
+	// TODO(#134668): Remove this once this test passes with a longer perturbation duration.
+	if v.perturbationDuration > 10*time.Minute {
+		v.perturbationDuration = 10 * time.Minute
+	}
+	return v
 }
 
 func (e elasticWorkload) startTargetNode(ctx context.Context, t test.Test, v variations) {
