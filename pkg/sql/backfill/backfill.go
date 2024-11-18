@@ -795,9 +795,9 @@ func (ib *IndexBackfiller) init(
 // provided, and builds all the added indexes.
 // The method accounts for the memory used by the index entries for this chunk
 // using the memory monitor associated with ib and returns the amount of memory
-// that needs to be freed once the returned IndexEntry slice is freed.
-// It is the callers responsibility to clear the associated bound account when
-// appropriate.
+// that needs to be freed once the returned IndexEntry slice is freed. This is
+// returned for the successful and failure cases. It is the callers responsibility
+// to clear the associated bound account when appropriate.
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -805,21 +805,21 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	sp roachpb.Span,
 	chunkSize int64,
 	traceKV bool,
-) ([]rowenc.IndexEntry, roachpb.Key, int64, error) {
+) (entries []rowenc.IndexEntry, resumeKey roachpb.Key, memUsedPerChunk int64, err error) {
 	// This ought to be chunkSize but in most tests we are actually building smaller
 	// indexes so use a smaller value.
 	const initBufferSize = 1000
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(rowenc.IndexEntry{}))
-	var memUsedPerChunk int64
 
 	indexEntriesInChunkInitialBufferSize :=
 		sizeOfIndexEntry * initBufferSize * int64(len(ib.added))
-	if err := ib.GrowBoundAccount(ctx, indexEntriesInChunkInitialBufferSize); err != nil {
-		return nil, nil, 0, errors.Wrap(err,
+	if err = ib.GrowBoundAccount(ctx, indexEntriesInChunkInitialBufferSize); err != nil {
+		err = errors.Wrap(err,
 			"failed to initialize empty buffer to store the index entries of all rows in the chunk")
+		return
 	}
 	memUsedPerChunk += indexEntriesInChunkInitialBufferSize
-	entries := make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
+	entries = make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
 
 	var fetcherCols []descpb.ColumnID
 	for i, c := range ib.cols {
@@ -843,13 +843,13 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	var spec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(
+	if err = rowenc.InitIndexFetchSpec(
 		&spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
 	); err != nil {
-		return nil, nil, 0, err
+		return
 	}
 	var fetcher row.Fetcher
-	if err := fetcher.Init(
+	if err = fetcher.Init(
 		ctx,
 		row.FetcherInitArgs{
 			Txn:                        txn,
@@ -860,16 +860,16 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			ForceProductionKVBatchSize: ib.evalCtx.TestingKnobs.ForceProductionValues,
 		},
 	); err != nil {
-		return nil, nil, 0, err
+		return
 	}
 	defer fetcher.Close(ctx)
-	if err := fetcher.StartScan(
+	if err = fetcher.StartScan(
 		ctx, []roachpb.Span{sp}, nil, /* spanIDs */
 		rowinfra.GetDefaultBatchBytesLimit(ib.evalCtx.TestingKnobs.ForceProductionValues),
 		initBufferSize,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
-		return nil, nil, 0, err
+		return
 	}
 
 	iv := &schemaexpr.RowIndexedVarContainer{
@@ -879,9 +879,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ib.evalCtx.IVarContainer = iv
 
 	indexEntriesPerRowInitialBufferSize := int64(len(ib.added)) * sizeOfIndexEntry
-	if err := ib.GrowBoundAccount(ctx, indexEntriesPerRowInitialBufferSize); err != nil {
-		return nil, nil, 0, errors.Wrap(err,
+	if err = ib.GrowBoundAccount(ctx, indexEntriesPerRowInitialBufferSize); err != nil {
+		err = errors.Wrap(err,
 			"failed to initialize empty buffer to store the index entries of a single row")
+		return
 	}
 	memUsedPerChunk += indexEntriesPerRowInitialBufferSize
 	buffer := make([]rowenc.IndexEntry, len(ib.added))
@@ -918,9 +919,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		return nil
 	}
 	for i := int64(0); i < chunkSize; i++ {
-		ok, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
+		var ok bool
+		ok, err = fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
 		if err != nil {
-			return nil, nil, 0, err
+			return
 		}
 		if !ok {
 			break
@@ -930,11 +932,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// First populate default values, then populate computed expressions which
 		// may reference default values.
 		if len(ib.colExprs) > 0 {
-			if err := evaluateExprs(ib.addedCols); err != nil {
-				return nil, nil, 0, err
+			if err = evaluateExprs(ib.addedCols); err != nil {
+				return
 			}
-			if err := evaluateExprs(ib.computedCols); err != nil {
-				return nil, nil, 0, err
+			if err = evaluateExprs(ib.computedCols); err != nil {
+				return
 			}
 		}
 
@@ -954,9 +956,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				// predicate expression evaluates to true.
 				texpr := ib.predicates[idx.GetID()]
 
-				val, err := eval.Expr(ctx, ib.evalCtx, texpr)
+				var val tree.Datum
+				val, err = eval.Expr(ctx, ib.evalCtx, texpr)
 				if err != nil {
-					return nil, nil, 0, err
+					return
 				}
 
 				if val == tree.DBoolTrue {
@@ -989,10 +992,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				&ib.muBoundAccount.boundAccount,
 			)
 		}(buffer)
-		if err != nil {
-			return nil, nil, 0, err
-		}
+		// Account for memory use prior to error checking
 		memUsedPerChunk += memUsedDuringEncoding
+		if err != nil {
+			return
+		}
 
 		// The memory monitor has already accounted for cap(entries). If the number
 		// of index entries are going to cause the entries buffer to re-slice, then
@@ -1000,8 +1004,8 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// another cap(entries) in the index memory account.
 		if cap(entries)-len(entries) < len(buffer) {
 			resliceSize := sizeOfIndexEntry * int64(cap(entries))
-			if err := ib.GrowBoundAccount(ctx, resliceSize); err != nil {
-				return nil, nil, 0, err
+			if err = ib.GrowBoundAccount(ctx, resliceSize); err != nil {
+				return
 			}
 			memUsedPerChunk += resliceSize
 		}
@@ -1015,7 +1019,6 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ib.ShrinkBoundAccount(ctx, shrinkSize)
 	memUsedPerChunk -= shrinkSize
 
-	var resumeKey roachpb.Key
 	if fetcher.Key() != nil {
 		resumeKey = make(roachpb.Key, len(fetcher.Key()))
 		copy(resumeKey, fetcher.Key())
