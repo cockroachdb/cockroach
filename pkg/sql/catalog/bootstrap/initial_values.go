@@ -105,10 +105,8 @@ func buildLatestInitialValues(
 	schema := MakeMetadataSchema(opts.Codec, opts.DefaultZoneConfig, opts.DefaultSystemZoneConfig)
 	kvs, splits = schema.GetInitialValues()
 
-	ctx := context.Background()
-
-	if opts.Codec.TenantID == roachpb.TenantTwo {
-		copiedKVs, err := copySystemTableKVs(ctx, opts.Txn, opts.IsqlTxn, opts.Codec, schema.descsMap)
+	if !roachpb.EnableExperimentalUA && opts.Codec.TenantID == roachpb.TenantTwo {
+		copiedKVs, err := copySystemTableKVs(context.Background(), opts.Txn, opts.IsqlTxn, opts.Codec, schema.descsMap)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -199,7 +197,7 @@ func copySystemTableKVs(
 
 func systemTenantTableKVs(
 	ctx context.Context,
-	kvTxn *kv.Txn,
+	_ *kv.Txn,
 	isqlTxn isql.Txn,
 	targetCodec keys.SQLCodec,
 	descMap map[string]catalog.Descriptor,
