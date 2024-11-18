@@ -361,10 +361,16 @@ func (nm *nodeMetrics) UpdateMetricsOnRangefeedConnect() {
 	nm.ActiveMuxRangeFeed.Inc(1)
 }
 
-// UpdateOnRangefeedDisconnect decrements rangefeed metrics when a server
-// rangefeed is disconnected.
+// UpdateMetricsOnRangefeedDisconnect decrements rangefeed metrics when one
+// server rangefeed is disconnected.
 func (nm *nodeMetrics) UpdateMetricsOnRangefeedDisconnect() {
-	nm.ActiveMuxRangeFeed.Dec(1)
+	nm.UpdateMetricsOnRangefeedDisconnectBy(1)
+}
+
+// UpdateMetricsOnRangefeedDisconnectBy decrements rangefeed metrics by the
+// given num argument when there are multiple rangefeed disconnects.
+func (nm *nodeMetrics) UpdateMetricsOnRangefeedDisconnectBy(num int64) {
+	nm.ActiveMuxRangeFeed.Dec(num)
 }
 
 // A Node manages a map of stores (by store ID) for which it serves
