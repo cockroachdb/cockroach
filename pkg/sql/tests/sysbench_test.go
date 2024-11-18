@@ -9,7 +9,12 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"regexp"
+	"runtime"
+	runtimepprof "runtime/pprof"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -25,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
 )
 
 // This file contains a microbenchmark test suite that emulates the sysbench
@@ -636,6 +643,7 @@ func sysbenchOltpBeginCommit(s sysbenchDriver, _ *rand.Rand) {
 
 func BenchmarkSysbench(b *testing.B) {
 	defer log.Scope(b).Close(b)
+
 	drivers := []struct {
 		name          string
 		constructorFn sysbenchDriverConstructor
@@ -674,6 +682,9 @@ func BenchmarkSysbench(b *testing.B) {
 					rng := rand.New(rand.NewSource(0))
 					sys.prep(rng)
 
+					maybeSaveHeapProfile(b, true)
+					defer maybeSaveHeapProfile(b, false)
+					defer b.StopTimer()
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						workload.opFn(sys, rng)
@@ -682,6 +693,45 @@ func BenchmarkSysbench(b *testing.B) {
 			}
 		})
 	}
+}
+
+// If -test.benchmem is passed, also write a base alloc profile when the
+// setup is done. This can be used via `pprof -base` to show only the
+// allocs during run (excluding the setup).
+//
+// The file name for the base profile will be derived from -test.memprofile, and
+// will contain it as a prefix (mod the file extension).
+func maybeSaveHeapProfile(b testing.TB, base bool) {
+	b.Helper()
+	var benchMemFile string
+	pf := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	pf.StringVar(&benchMemFile, "test.memprofile", "", "")
+	var args []string
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "-test.memprofile") {
+			arg = "-" + arg
+		}
+		args = append(args, arg)
+	}
+	_ = pf.Parse(args)
+	if benchMemFile == "" {
+		return
+	}
+	saniRE := regexp.MustCompile(`\W+`)
+	saniName := saniRE.ReplaceAllString(b.Name(), "_")
+	dest := strings.ReplaceAll(benchMemFile, ".pb.gz", "") + "_"
+	if base {
+		dest += "base_"
+	} else {
+		dest += "post_"
+	}
+	dest += saniName + ".pb.gz"
+	f, err := os.Create(dest)
+	require.NoError(b, err)
+	runtime.GC()
+	require.NoError(b, runtimepprof.Lookup("allocs").WriteTo(f, 0))
+	require.NoError(b, f.Close())
+	b.Logf("alloc profile written to %s", dest)
 }
 
 func try0(err error) {
