@@ -108,7 +108,7 @@ func setupZipDir(t *testing.T, inputs zipUploadTestContents) (string, func()) {
 func TestUploadZipEndToEnd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer testutils.TestingHook(&newUploadID, func(string) string {
+	defer testutils.TestingHook(&newUploadID, func(string, time.Time) string {
 		return "123"
 	})()
 	defer testutils.TestingHook(&newRandStr, func(l int, n bool) string {
