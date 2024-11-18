@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -43,14 +42,6 @@ import (
 // TODO(msbutler): for the post cutover dummy producer job, the default
 // expiration window will be 24 hours.
 const defaultExpirationWindow = time.Hour * 24
-
-var streamMaxProcsPerPartition = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"stream_replication.ingest_processor_parallelism",
-	"controls the maximum number of ingest processors to assign to each source-planned partition",
-	8,
-	settings.PositiveInt,
-)
 
 // notAReplicationJobError returns an error that is returned anytime
 // the user passes a job ID not related to a replication stream job.
@@ -283,7 +274,7 @@ func getPhysicalReplicationStreamSpec(
 	if j.Status() != jobs.StatusRunning {
 		return nil, jobIsNotRunningError(jobID, j.Status(), "create stream spec")
 	}
-	return buildReplicationStreamSpec(ctx, evalCtx, details.TenantID, false, details.Spans, 0, true)
+	return buildReplicationStreamSpec(ctx, evalCtx, details.TenantID, false, details.Spans, true)
 
 }
 
@@ -293,7 +284,6 @@ func buildReplicationStreamSpec(
 	tenantID roachpb.TenantID,
 	forSpanConfigs bool,
 	targetSpans roachpb.Spans,
-	targetPartitionCount int,
 	useStreaks bool,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
@@ -318,14 +308,6 @@ func buildReplicationStreamSpec(
 	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, targetSpans)
 	if err != nil {
 		return nil, err
-	}
-
-	// If more partitions were requested, try to repartition the spans.
-	if targetPartitionCount > len(spanPartitions) {
-		spanPartitions = repartitionSpans(spanPartitions, max(1, targetPartitionCount/len(spanPartitions)))
-	} else if targetPartitionCount < 1 {
-		// No explicit target requested, so fallback to 8x controlled via setting.
-		spanPartitions = repartitionSpans(spanPartitions, int(streamMaxProcsPerPartition.Get(&evalCtx.Settings.SV)))
 	}
 
 	var spanConfigsStreamID streampb.StreamID
@@ -354,31 +336,6 @@ func buildReplicationStreamSpec(
 		})
 	}
 	return res, nil
-}
-
-// repartitionSpans breaks up each of partition in partitions into parts smaller
-// partitions that are round-robin assigned its spans. NB: we round-robin rather
-// than assigning the first k to 1, next k to 2, etc since spans earlier in the
-// key-space are generally smaller than those later in it due to the avoidance
-// of skewed distributions during once-through streak-affinity planning (since
-// early in the planning a small streak skews the overall distribution planned
-// so far). It would be unfortunate to have round-robin assignment mean we do
-// not colocate adjacent spans in the same processor, but we already expect gaps
-// between these spans for spans assigned to other partitions, so we don't worry
-// about that here.
-func repartitionSpans(partitions []sql.SpanPartition, parts int) []sql.SpanPartition {
-	result := make([]sql.SpanPartition, 0, parts*len(partitions))
-	for part := range partitions {
-		repartitioned := make([]sql.SpanPartition, min(parts, len(partitions[part].Spans)))
-		for i := range repartitioned {
-			repartitioned[i].SQLInstanceID = partitions[part].SQLInstanceID
-		}
-		for x, sp := range partitions[part].Spans {
-			repartitioned[x%parts].Spans = append(repartitioned[x%parts].Spans, sp)
-		}
-		result = append(result, repartitioned...)
-	}
-	return result
 }
 
 func completeReplicationStream(
