@@ -26,6 +26,7 @@ func TestTenantZip(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "test too slow under race")
+	skip.UnderDeadlock(t, "this test takes cpu profiles")
 
 	tenants := []struct {
 		testName      string

@@ -189,15 +189,6 @@ func transformPrincipal(commonName string) string {
 	return mappedName
 }
 
-func getCertificatePrincipals(cert *x509.Certificate) []string {
-	results := make([]string, 0, 1+len(cert.DNSNames))
-	results = append(results, transformPrincipal(cert.Subject.CommonName))
-	for _, name := range cert.DNSNames {
-		results = append(results, transformPrincipal(name))
-	}
-	return results
-}
-
 // GetCertificateUserScope extracts the certificate scopes from a client
 // certificate. It tries to get CRDB prefixed SAN URIs and extracts tenantID and
 // user information. If there is no such URI, then it gets principal transformed
@@ -205,42 +196,82 @@ func getCertificatePrincipals(cert *x509.Certificate) []string {
 func GetCertificateUserScope(
 	peerCert *x509.Certificate,
 ) (userScopes []CertificateUserScope, _ error) {
+	collectFn := func(userScope CertificateUserScope) (halt bool, err error) {
+		userScopes = append(userScopes, userScope)
+		return false, nil
+	}
+	err := forEachCertificateUserScope(peerCert, collectFn)
+	return userScopes, err
+}
+
+// CertificateUserScopeContainsFunc returns true if the given function returns
+// true for any of the scopes in the client certificate.
+func CertificateUserScopeContainsFunc(
+	peerCert *x509.Certificate, fn func(CertificateUserScope) bool,
+) (ok bool, _ error) {
+	res := false
+	containsFn := func(userScope CertificateUserScope) (halt bool, err error) {
+		if fn(userScope) {
+			res = true
+			return true, nil
+		}
+		return false, nil
+	}
+	err := forEachCertificateUserScope(peerCert, containsFn)
+	return res, err
+}
+
+func forEachCertificateUserScope(
+	peerCert *x509.Certificate, fn func(userScope CertificateUserScope) (halt bool, err error),
+) error {
+	hasCRDBSANURI := false
 	for _, uri := range peerCert.URIs {
-		if isCRDBSANURI(uri) {
-			var scope CertificateUserScope
-			if isTenantNameSANURI(uri) {
-				tenantName, user, err := parseTenantNameURISAN(uri)
-				if err != nil {
-					return nil, err
-				}
-				scope = CertificateUserScope{
-					Username:   user,
-					TenantName: tenantName,
-				}
-			} else {
-				tenantID, user, err := parseTenantURISAN(uri)
-				if err != nil {
-					return nil, err
-				}
-				scope = CertificateUserScope{
-					Username: user,
-					TenantID: tenantID,
-				}
+		if !isCRDBSANURI(uri) {
+			continue
+		}
+		hasCRDBSANURI = true
+		var scope CertificateUserScope
+		if isTenantNameSANURI(uri) {
+			tenantName, user, err := parseTenantNameURISAN(uri)
+			if err != nil {
+				return err
 			}
-			userScopes = append(userScopes, scope)
+			scope = CertificateUserScope{
+				Username:   user,
+				TenantName: tenantName,
+			}
+		} else {
+			tenantID, user, err := parseTenantURISAN(uri)
+			if err != nil {
+				return err
+			}
+			scope = CertificateUserScope{
+				Username: user,
+				TenantID: tenantID,
+			}
+		}
+		if halt, err := fn(scope); halt || err != nil {
+			return err
 		}
 	}
-	if len(userScopes) == 0 {
-		users := getCertificatePrincipals(peerCert)
-		for _, user := range users {
-			scope := CertificateUserScope{
+	if !hasCRDBSANURI {
+		globalScope := func(user string) CertificateUserScope {
+			return CertificateUserScope{
 				Username: user,
 				Global:   true,
 			}
-			userScopes = append(userScopes, scope)
+		}
+		halt, err := fn(globalScope(transformPrincipal(peerCert.Subject.CommonName)))
+		if halt || err != nil {
+			return err
+		}
+		for _, name := range peerCert.DNSNames {
+			if halt, err := fn(globalScope(transformPrincipal(name))); halt || err != nil {
+				return err
+			}
 		}
 	}
-	return userScopes, nil
+	return nil
 }
 
 // Contains returns true if the specified string is present in the given slice.

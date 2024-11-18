@@ -329,3 +329,54 @@ SELECT pg_has_role('ldap_user', 'ldap.user.parent.2', 'MEMBER')
 false
 
 subtest end
+
+subtest partial_ldap_groups_map
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+
+sql
+CREATE ROLE "ldap-parent-synced";
+----
+ok
+
+ldap_mock set_groups=(ldap_user,cn=ldap-parent-synced,cn=ldap-parent-unsynced)
+----
+
+connect user=ldap_user password="ldap_pwd"
+----
+ok defaultdb
+
+query_row
+SELECT pg_has_role('ldap_user', 'ldap-parent-synced', 'MEMBER')
+----
+true
+
+query_row
+SELECT 1 FROM pg_roles WHERE rolname='ldap-parent-synced'
+----
+1
+
+query_row
+SELECT 1 FROM pg_roles WHERE rolname='ldap-parent-unsynced'
+----
+ERROR: no rows in result set
+
+query_row
+SELECT pg_has_role('ldap_user', 'ldap-parent-unsynced', 'MEMBER')
+----
+ERROR: pg_has_role(): role 'ldap-parent-unsynced' does not exist (SQLSTATE 42704)
+
+subtest end

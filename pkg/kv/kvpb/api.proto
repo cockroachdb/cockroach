@@ -1954,7 +1954,7 @@ message ExportResponse {
         (gogoproto.nullable) = false,
         (gogoproto.customname) = "EndKeyTS"
     ];
-    string path = 2;
+    reserved 2;
 
     BulkOpSummary exported = 6 [(gogoproto.nullable) = false];
 
