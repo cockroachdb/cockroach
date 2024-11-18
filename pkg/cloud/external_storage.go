@@ -128,6 +128,10 @@ type SQLConnI interface {
 // ErrFileDoesNotExist is a sentinel error for indicating that a specified
 // bucket/object/key/file (depending on storage terminology) does not exist.
 // This error is raised by the ReadFile method.
+//
+// On GCS, a non-existent bucket returns a 403 forbidden, so a not found is
+// only returned if the bucket exists and the user has the permissions needed
+// to interact with the bucket.
 var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
 // ErrListingUnsupported is a marker for indicating listing is unsupported.
