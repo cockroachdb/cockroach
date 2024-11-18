@@ -447,10 +447,6 @@ func assert(condition bool, msg string) {
 	}
 }
 
-func supportChangeStr(
-	current slpb.SupportState, previous slpb.SupportState,
-) redact.RedactableString {
-	return redact.Sprintf(
-		"store %+v; current = %+v, previous = %+v", current.Target, current, previous,
-	)
+func supportChangeStr(ssOld slpb.SupportState, ssNew slpb.SupportState) redact.RedactableString {
+	return redact.Sprintf("store %+v; old = %+v, new = %+v", ssNew.Target, ssOld, ssNew)
 }
