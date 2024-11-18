@@ -8,8 +8,7 @@ test       root  NULL  NULL  {}  NULL
 
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
-skipif config 3node-tenant-default-configs
-skipif config local-mixed-24.2
+skipif config 3node-tenant-default-configs local-mixed-24.2
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] ORDER BY 2
 ----
