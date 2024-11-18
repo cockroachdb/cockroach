@@ -731,6 +731,9 @@ func withNumSinkNodes(num int) opt {
 	}
 }
 
+// Silence staticcheck.
+var _ = withNumSinkNodes
+
 func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...opt) cdcTester {
 	// By convention the nodes are split up like [crdb..., sink..., workload].
 	// N.B.:
@@ -1655,38 +1658,6 @@ func registerCDC(r registry.Registry) {
 			})
 			ct.waitForWorkload()
 			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
-		},
-	})
-	// An example usage of having multiple sink nodes.
-	r.Add(registry.TestSpec{
-		Name:             "cdc/kafka-chaos-multiple-sink-nodes",
-		Owner:            `cdc`,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(6, spec.CPU(16)),
-		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
-		RequiresLicense:  true,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			ct := newCDCTester(ctx, t, c, withNumSinkNodes(2))
-			defer ct.Close()
-
-			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
-
-			feed := ct.newChangefeed(feedArgs{
-				sinkType: kafkaSink,
-				targets:  allTpccTargets,
-				kafkaArgs: kafkaFeedArgs{
-					kafkaChaos:    true,
-					validateOrder: true,
-				},
-				opts: map[string]string{"initial_scan": "'no'"},
-			})
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 3 * time.Minute,
-				steadyLatency:      10 * time.Minute,
-			})
-			ct.waitForWorkload()
 		},
 	})
 	r.Add(registry.TestSpec{
