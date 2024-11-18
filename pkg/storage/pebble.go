@@ -712,12 +712,12 @@ var EngineComparer = &pebble.Comparer{
 var MVCCMerger = &pebble.Merger{
 	Name: "cockroach_merge_operator",
 	Merge: func(_, value []byte) (pebble.ValueMerger, error) {
-		res := &MVCCValueMerger{}
-		err := res.MergeNewer(value)
+		merger := NewMVCCValueMerger()
+		err := merger.MergeNewer(value)
 		if err != nil {
 			return nil, err
 		}
-		return res, nil
+		return merger, nil
 	},
 }
 
