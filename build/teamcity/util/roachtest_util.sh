@@ -25,7 +25,10 @@ source  $root/build/teamcity/util/roachtest_arch_util.sh
 stats_dir="$(date +"%Y%m%d")-${TC_BUILD_ID}"
 stats_file_name="stats.json"
 
-if [[ "${EXPORT_OPENMETRICS}" == "true"]]; then
+# Provide a default value for EXPORT_OPENMETRICS if it is not set
+EXPORT_OPENMETRICS="${EXPORT_OPENMETRICS:-false}"
+
+if [[ "${EXPORT_OPENMETRICS}" == "true" ]]; then
   stats_file_name="stats.om"
 fi
 
@@ -33,7 +36,7 @@ fi
 function upload_stats {
   if tc_release_branch; then
       bucket="${ROACHTEST_BUCKET:-cockroach-nightly-${CLOUD}}"
-      if [[ "${EXPORT_OPENMETRICS}" == "true"]]; then
+      if [[ "${EXPORT_OPENMETRICS}" == "true" ]]; then
           bucket="${ROACHTEST_BUCKET:-cockroach-roachperf-nightly/metrics-loader/incoming/${CLOUD}}"
       fi
 
@@ -97,12 +100,12 @@ function upload_binaries {
 }
 
 function upload_all {
-  
-  if [[ "${EXPORT_OPENMETRICS}" == "true"]]; then
+
+  if [[ "${EXPORT_OPENMETRICS}" == "true" && "$ROACHPERF_OPENMETRICS_CREDENTIALS" ]]; then
       echo "$ROACHPERF_OPENMETRICS_CREDENTIALS" > roachperf.json
       gcloud auth activate-service-account --key-file=roachperf.json
   fi
-  
+
   upload_stats
   upload_binaries
 }
