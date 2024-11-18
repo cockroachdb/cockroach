@@ -6,10 +6,17 @@
 package tests_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	runtimepprof "runtime/pprof"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -24,7 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/google/pprof/profile"
 	"github.com/jackc/pgx/v5"
+	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
 )
 
 // This file contains a microbenchmark test suite that emulates the sysbench
@@ -636,6 +646,7 @@ func sysbenchOltpBeginCommit(s sysbenchDriver, _ *rand.Rand) {
 
 func BenchmarkSysbench(b *testing.B) {
 	defer log.Scope(b).Close(b)
+
 	drivers := []struct {
 		name          string
 		constructorFn sysbenchDriverConstructor
@@ -674,6 +685,8 @@ func BenchmarkSysbench(b *testing.B) {
 					rng := rand.New(rand.NewSource(0))
 					sys.prep(rng)
 
+					defer startAllocsProfile(b).Stop(b)
+					defer b.StopTimer()
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						workload.opFn(sys, rng)
@@ -697,4 +710,80 @@ func try[T any](t T, err error) T {
 		panic(errors.WrapWithDepth(1, err, "try failed"))
 	}
 	return t
+}
+
+type doneFn func(testing.TB)
+
+func (f doneFn) Stop(b testing.TB) {
+	f(b)
+}
+
+func startAllocsProfile(b testing.TB) doneFn {
+	out := benchmemFile(b)
+	if out == "" {
+		return func(tb testing.TB) {}
+	}
+
+	// The below is essentially cribbed from pprof.go in net/http/pprof.
+	p := runtimepprof.Lookup("allocs")
+	var buf bytes.Buffer
+	runtime.GC()
+	require.NoError(b, p.WriteTo(&buf, 0))
+	pBase, err := profile.ParseData(buf.Bytes())
+	require.NoError(b, err)
+
+	return func(b testing.TB) {
+		runtime.GC()
+		var buf bytes.Buffer
+		require.NoError(b, p.WriteTo(&buf, 0))
+		pNew, err := profile.ParseData(buf.Bytes())
+		require.NoError(b, err)
+		pBase.Scale(-1)
+		pMerged, err := profile.Merge([]*profile.Profile{pBase, pNew})
+		require.NoError(b, err)
+		pMerged.TimeNanos = pNew.TimeNanos
+		pMerged.DurationNanos = pNew.TimeNanos - pBase.TimeNanos
+
+		buf = bytes.Buffer{}
+		require.NoError(b, pMerged.Write(&buf))
+		require.NoError(b, os.WriteFile(out, buf.Bytes(), 0644))
+	}
+}
+
+// If -test.benchmem is passed, also write a base alloc profile when the
+// setup is done. This can be used via `pprof -base` to show only the
+// allocs during run (excluding the setup).
+//
+// The file name for the base profile will be derived from -test.memprofile, and
+// will contain it as a prefix (mod the file extension).
+func benchmemFile(b testing.TB) string {
+	b.Helper()
+	var benchMemFile string
+	var outputDir string
+	pf := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	pf.StringVar(&benchMemFile, "test.memprofile", "", "")
+	pf.StringVar(&outputDir, "test.outputdir", "", "")
+	var args []string
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "-") {
+			if !strings.HasPrefix(arg, "-test.memprofile") && !strings.HasPrefix(arg, "-test.outputdir") {
+				continue
+			}
+			arg = "-" + arg
+		}
+		args = append(args, arg)
+	}
+	require.NoError(b, pf.Parse(args))
+
+	if benchMemFile == "" {
+		return ""
+	}
+
+	saniRE := regexp.MustCompile(`\W+`)
+	saniName := saniRE.ReplaceAllString(strings.TrimPrefix(b.Name(), "Benchmark"), "_")
+	dest := strings.Replace(benchMemFile, ".", "_"+saniName+".", 1)
+	if outputDir != "" {
+		dest = filepath.Join(outputDir, dest)
+	}
+	return dest
 }
