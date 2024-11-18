@@ -1941,7 +1941,8 @@ func setupSpanForIncomingRPC(
 		// This is either a local request which circumvented gRPC, or a remote
 		// request that didn't specify tracing information. We make a child span
 		// if the incoming request would like to be traced.
-		ctx, newSpan = tracing.ChildSpan(ctx, grpcinterceptor.BatchMethodName)
+		ctx, newSpan = tracing.ChildSpan(ctx,
+			grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
 	} else {
 		// Non-local call. Tracing information comes from the request proto.
 
