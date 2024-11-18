@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -251,10 +252,12 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error {
 	streamID := atomic.AddInt64(&m.seqID, 1)
 
+	startTime := crtime.NowMono()
 	// Before starting single rangefeed, acquire catchup scan quota.
 	if err := s.acquireCatchupScanQuota(ctx, m.catchupSem, m.metrics); err != nil {
 		return err
 	}
+	m.metrics.RangefeedCatchUpBlockedNanos.Inc(startTime.Elapsed().Nanoseconds())
 
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, m.ds.rpcRetryOptions); r.Next(); {

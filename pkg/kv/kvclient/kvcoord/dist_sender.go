@@ -263,6 +263,12 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderRangefeedCatchUpBlockedNanos = metric.Metadata{
+		Name:        "distsender.rangefeed.catchup_scan_blocked_nanos",
+		Help:        "Time spent in RangeFeed waiting for the client-side catch-up rate limiter",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaDistSenderRangefeedErrorCatchupRanges = metric.Metadata{
 		Name:        "distsender.rangefeed.error_catchup_ranges",
 		Help:        `Number of ranges in catchup mode which experienced an error`,
@@ -467,6 +473,7 @@ type DistSenderRangeFeedMetrics struct {
 	RangefeedCatchupRanges                  *metric.Gauge
 	RangefeedLocalRanges                    *metric.Gauge
 	RangefeedCatchupRangesWaitingClientSide *metric.Gauge
+	RangefeedCatchUpBlockedNanos            *metric.Counter
 	Errors                                  rangeFeedErrorCounters
 }
 
@@ -597,6 +604,7 @@ func makeDistSenderRangeFeedMetrics() DistSenderRangeFeedMetrics {
 		RangefeedCatchupRanges:                  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
 		RangefeedLocalRanges:                    metric.NewGauge(metaDistSenderRangefeedLocalRanges),
 		RangefeedCatchupRangesWaitingClientSide: metric.NewGauge(metaDistSenderRangefeedCatchupRangesWaitingClientSide),
+		RangefeedCatchUpBlockedNanos:            metric.NewCounter(metaDistSenderRangefeedCatchUpBlockedNanos),
 		Errors:                                  makeRangeFeedErrorCounters(),
 	}
 }
