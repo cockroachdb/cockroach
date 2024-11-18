@@ -59,40 +59,6 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
-	newFirstUpgrade(clusterversion.V24_2Start.Version()),
-
-	upgrade.NewTenantUpgrade(
-		"add the redacted column to system.statement_diagnostics_requests table",
-		clusterversion.V24_2_StmtDiagRedacted.Version(),
-		upgrade.NoPrecondition,
-		stmtDiagRedactedMigration,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"create all missing system tables in app tenants",
-		clusterversion.V24_2_TenantSystemTables.Version(),
-		upgrade.NoPrecondition,
-		createTenantSystemTables,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore these tables"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"add new columns to the system.tenant_usage table to store tenant consumption rates",
-		clusterversion.V24_2_TenantRates.Version(),
-		upgrade.NoPrecondition,
-		tenantRatesMigration,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"delete version row in system.tenant_settings",
-		clusterversion.V24_2_DeleteTenantSettingsVersion.Version(),
-		upgrade.NoPrecondition,
-		deleteVersionTenantSettings,
-		upgrade.RestoreActionImplemented("bad row skipped when restoring system.tenant_settings"),
-	),
-
 	newFirstUpgrade(clusterversion.V24_3_Start.Version()),
 
 	upgrade.NewSystemUpgrade(
