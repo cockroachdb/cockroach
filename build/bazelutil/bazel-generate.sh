@@ -37,10 +37,14 @@ files_unchanged_from_upstream () {
     return 1
   fi
 
-  # Check if the files are unchanged.
-  DIFF=$(git diff --no-ext-diff --name-only $BASE -- "$@") || return 1
-  if [ -z "$DIFF" ]; then
-    # No diffs.
+  # Check if the files are unchanged. This `git diff` will return 1
+  # if there are any diffs in the given files.
+  git diff --quiet --no-ext-diff $BASE -- "$@" || return 1
+
+  # Finally we have to check if any of the files are untracked; `git diff`
+  # won't find those.
+  EXTRA=$(git status --porcelain -- "$@")
+  if [ -z "$EXTRA" ]; then
     return 0
   fi
   return 1
