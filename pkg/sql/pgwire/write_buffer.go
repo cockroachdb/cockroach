@@ -97,9 +97,24 @@ func (b *writeBuffer) writeFromFmtCtx(fmtCtx *tree.FmtCtx) {
 
 // writeLengthPrefixedString writes a length-prefixed string. The
 // length is encoded as an int32.
-func (b *writeBuffer) writeLengthPrefixedString(s string) {
-	b.putInt32(int32(len(s)))
+func (b *writeBuffer) writeLengthPrefixedString(s string, specifiedLength ...int32) {
+	if len(specifiedLength) > 0 {
+		b.putInt32(specifiedLength[0])
+	} else {
+		b.putInt32(int32(len(s)))
+	}
+
 	b.writeString(s)
+}
+
+func (b *writeBuffer) writeLengthPrefixedByteSlice(v []byte, specifiedLength ...int32) {
+	if len(specifiedLength) > 0 {
+		b.putInt32(specifiedLength[0])
+	} else {
+		b.putInt32(int32(len(v)))
+	}
+
+	b.write(v)
 }
 
 // writeLengthPrefixedDatum writes a length-prefixed Datum in its
