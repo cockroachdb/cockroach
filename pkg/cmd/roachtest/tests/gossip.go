@@ -12,6 +12,8 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
+	"runtime/trace"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,8 +56,14 @@ SELECT node_id
  WHERE expiration > now();
 `
 
+			tBeforePing := timeutil.Now()
 			db := c.Conn(ctx, t.L(), node)
 			defer db.Close()
+			require.NoError(t, db.Ping())
+			tAfterPing := timeutil.Now()
+			if pingDur := tAfterPing.Sub(tBeforePing); pingDur > 20*time.Second {
+				t.L().Printf("sql connection ready after %.2fs", pingDur.Seconds())
+			}
 
 			rows, err := db.Query(query)
 			if err != nil {
@@ -68,7 +76,11 @@ SELECT node_id
 				require.NotZero(t, nodeID)
 				nodes = append(nodes, nodeID)
 			}
+			require.NoError(t, rows.Err())
 			sort.Ints(nodes)
+			if scanDur := timeutil.Since(tAfterPing); scanDur > 20*time.Second {
+				t.L().Printf("query processed after %.2fs", scanDur.Seconds())
+			}
 			return nodes
 		}
 
@@ -145,10 +157,24 @@ SELECT node_id
 
 		waitForGossip(0)
 		nodes := c.All()
+
 		for j := 0; j < 10; j++ {
+			traceFile := filepath.Join(t.ArtifactsDir(), "trace_"+strconv.Itoa(j)+".bin")
+			f, err := os.Create(traceFile)
+			require.NoError(t, err)
+			if err := trace.Start(f); err != nil {
+				_ = f.Close()
+				f = nil
+				_ = os.Remove(traceFile)
+			}
 			deadNode := nodes.RandNode()[0]
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(deadNode))
 			waitForGossip(deadNode)
+			if f != nil {
+				trace.Stop()
+				_ = f.Close()
+				t.L().Printf("execution trace: %s", traceFile)
+			}
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(deadNode))
 		}
 	}
