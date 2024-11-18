@@ -165,8 +165,15 @@ var (
 	}
 )
 
-func expirationGauge(metadata metric.Metadata, ci *CertInfo) *metric.Gauge {
+// certClosure defines a way to expose a certificate to the below metric types.
+// Closures are used to expose certificates instead of direct references,
+// because the references can become outdated if the system loads new
+// certificates.
+type certClosure func() *CertInfo
+
+func expirationGauge(metadata metric.Metadata, certFunc certClosure) *metric.Gauge {
 	return metric.NewFunctionalGauge(metadata, func() int64 {
+		ci := certFunc()
 		if ci != nil && ci.Error == nil {
 			return ci.ExpirationTime.Unix()
 		} else {
@@ -174,8 +181,12 @@ func expirationGauge(metadata metric.Metadata, ci *CertInfo) *metric.Gauge {
 		}
 	})
 }
-func ttlGauge(metadata metric.Metadata, ci *CertInfo, ts timeutil.TimeSource) *metric.Gauge {
+
+func ttlGauge(
+	metadata metric.Metadata, certFunc certClosure, ts timeutil.TimeSource,
+) *metric.Gauge {
 	return metric.NewFunctionalGauge(metadata, func() int64 {
+		ci := certFunc()
 		if ci != nil && ci.Error == nil {
 			expiry := ci.ExpirationTime.Unix()
 			sec := timeutil.Unix(expiry, 0).Sub(ts.Now()).Seconds()
@@ -195,31 +206,31 @@ var defaultTimeSource = timeutil.DefaultTimeSource{}
 // If the corresponding certificate is missing or invalid (Error != nil), we reset the
 // metric to zero.
 // cm.mu must be held to protect the certificates. Metrics do their own atomicity.
-func (cm *CertificateManager) createMetricsLocked() Metrics {
+func createMetricsLocked(cm *CertificateManager) *Metrics {
 	ts := cm.timeSource
 	if ts == nil {
 		ts = defaultTimeSource
 	}
 	b := aggmetric.MakeBuilder(SQLUserLabel)
-	return Metrics{
-		CAExpiration:         expirationGauge(metaCAExpiration, cm.caCert),
-		TenantExpiration:     expirationGauge(metaTenantExpiration, cm.tenantCert),
-		TenantCAExpiration:   expirationGauge(metaTenantCAExpiration, cm.tenantCACert),
-		UIExpiration:         expirationGauge(metaUIExpiration, cm.uiCert),
-		UICAExpiration:       expirationGauge(metaUICAExpiration, cm.uiCACert),
+	return &Metrics{
+		CAExpiration:         expirationGauge(metaCAExpiration, cm.CACert),
+		TenantExpiration:     expirationGauge(metaTenantExpiration, func() *CertInfo { return cm.tenantCert }),
+		TenantCAExpiration:   expirationGauge(metaTenantCAExpiration, func() *CertInfo { return cm.tenantCACert }),
+		UIExpiration:         expirationGauge(metaUIExpiration, cm.UICert),
+		UICAExpiration:       expirationGauge(metaUICAExpiration, cm.UICACert),
 		ClientExpiration:     b.Gauge(metaClientExpiration),
-		ClientCAExpiration:   expirationGauge(metaClientCAExpiration, cm.clientCACert),
-		NodeExpiration:       expirationGauge(metaNodeExpiration, cm.nodeCert),
-		NodeClientExpiration: expirationGauge(metaNodeClientExpiration, cm.nodeClientCert),
+		ClientCAExpiration:   expirationGauge(metaClientCAExpiration, cm.ClientCACert),
+		NodeExpiration:       expirationGauge(metaNodeExpiration, cm.NodeCert),
+		NodeClientExpiration: expirationGauge(metaNodeClientExpiration, func() *CertInfo { return cm.nodeClientCert }),
 
-		CATTL:         ttlGauge(metaCATTL, cm.caCert, ts),
-		TenantTTL:     ttlGauge(metaTenantTTL, cm.tenantCert, ts),
-		TenantCATTL:   ttlGauge(metaTenantCATTL, cm.tenantCACert, ts),
-		UITTL:         ttlGauge(metaUITTL, cm.uiCert, ts),
-		UICATTL:       ttlGauge(metaUICATTL, cm.uiCACert, ts),
+		CATTL:         ttlGauge(metaCATTL, cm.CACert, ts),
+		TenantTTL:     ttlGauge(metaTenantTTL, func() *CertInfo { return cm.tenantCert }, ts),
+		TenantCATTL:   ttlGauge(metaTenantCATTL, func() *CertInfo { return cm.tenantCACert }, ts),
+		UITTL:         ttlGauge(metaUITTL, cm.UICert, ts),
+		UICATTL:       ttlGauge(metaUICATTL, cm.UICACert, ts),
 		ClientTTL:     b.Gauge(metaClientTTL),
-		ClientCATTL:   ttlGauge(metaClientCATTL, cm.clientCACert, ts),
-		NodeTTL:       ttlGauge(metaNodeTTL, cm.nodeCert, ts),
-		NodeClientTTL: ttlGauge(metaNodeClientTTL, cm.nodeClientCert, ts),
+		ClientCATTL:   ttlGauge(metaClientCATTL, cm.ClientCACert, ts),
+		NodeTTL:       ttlGauge(metaNodeTTL, cm.NodeCert, ts),
+		NodeClientTTL: ttlGauge(metaNodeClientTTL, func() *CertInfo { return cm.nodeClientCert }, ts),
 	}
 }

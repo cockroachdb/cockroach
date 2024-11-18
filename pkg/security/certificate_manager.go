@@ -50,7 +50,7 @@ type CertificateManager struct {
 
 	// The metrics struct is initialized at init time and metrics do their
 	// own locking.
-	certMetrics Metrics
+	certMetrics *Metrics
 
 	// Client cert expiration cache.
 	clientCertExpirationCache *ClientCertExpirationCache
@@ -93,12 +93,14 @@ func makeCertificateManager(
 		fn(&o)
 	}
 
-	return &CertificateManager{
+	cm := &CertificateManager{
 		Locator:          certnames.MakeLocator(certsDir),
 		tenantIdentifier: o.tenantIdentifier,
 		timeSource:       o.timeSource,
 		tlsSettings:      tlsSettings,
 	}
+	cm.certMetrics = createMetricsLocked(cm)
+	return cm
 }
 
 type cmOptions struct {
@@ -160,7 +162,7 @@ func (cm *CertificateManager) IsForTenant() bool {
 }
 
 // Metrics returns the metrics struct.
-func (cm *CertificateManager) Metrics() Metrics {
+func (cm *CertificateManager) Metrics() *Metrics {
 	return cm.certMetrics
 }
 
@@ -404,7 +406,6 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.tenantCert = tenantCert
 	cm.tenantSigningCert = tenantSigningCert
 
-	cm.certMetrics = cm.createMetricsLocked()
 	return nil
 }
 
