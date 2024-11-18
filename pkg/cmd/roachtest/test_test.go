@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -319,8 +320,8 @@ func TestRunnerTestTimeout(t *testing.T) {
 	copt := defaultClusterOpt()
 	lopt := defaultLoggingOpt(&buf)
 	numTasks := 3
-	startedAllTasks := make(chan struct{})
-	var tasksDone atomic.Uint32
+	tasksWaitGroup := sync.WaitGroup{}
+	tasksWaitGroup.Add(numTasks)
 	test := registry.TestSpec{
 		Name:             `timeout`,
 		Owner:            OwnerUnitTest,
@@ -333,13 +334,12 @@ func TestRunnerTestTimeout(t *testing.T) {
 			for i := 0; i < numTasks; i++ {
 				t.Go(func(taskCtx context.Context, l *logger.Logger) error {
 					defer func() {
-						tasksDone.Add(1)
+						tasksWaitGroup.Done()
 					}()
 					<-taskCtx.Done()
 					return nil
 				})
 			}
-			close(startedAllTasks)
 			<-ctx.Done()
 		},
 	}
@@ -356,8 +356,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 	}
 
 	// Ensure tasks are also canceled.
-	<-startedAllTasks
-	require.Equal(t, uint32(numTasks), tasksDone.Load())
+	tasksWaitGroup.Wait()
 }
 
 func TestRegistryPrepareSpec(t *testing.T) {
