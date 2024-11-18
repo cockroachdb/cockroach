@@ -39,6 +39,7 @@ import (
 // cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
 // init-store-grant-coordinator
 // set-tokens io-tokens=<int> disk-write-tokens=<int>
+// adjust-disk-error actual-write-bytes=<int> actual-read-bytes=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -249,9 +250,13 @@ func TestGranterBasic(t *testing.T) {
 		case "set-tokens-loop":
 			var ioTokens int
 			var elasticDiskWriteTokens int
+			var elasticDiskReadTokens int
 			var loop int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
 			d.ScanArgs(t, "disk-write-tokens", &elasticDiskWriteTokens)
+			if d.HasArg("disk-read-tokens") {
+				d.ScanArgs(t, "disk-read-tokens", &elasticDiskReadTokens)
+			}
 			d.ScanArgs(t, "loop", &loop)
 
 			for loop > 0 {
@@ -262,6 +267,7 @@ func TestGranterBasic(t *testing.T) {
 					int64(ioTokens),
 					int64(ioTokens),
 					int64(elasticDiskWriteTokens),
+					int64(elasticDiskReadTokens),
 					int64(ioTokens*250),
 					int64(ioTokens*250),
 					int64(elasticDiskWriteTokens*250),
@@ -274,9 +280,13 @@ func TestGranterBasic(t *testing.T) {
 		case "set-tokens":
 			var ioTokens int
 			var elasticDiskWriteTokens int
+			var elasticDiskReadTokens int
 			var tickInterval int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
 			d.ScanArgs(t, "disk-write-tokens", &elasticDiskWriteTokens)
+			if d.HasArg("disk-read-tokens") {
+				d.ScanArgs(t, "disk-read-tokens", &elasticDiskReadTokens)
+			}
 			elasticIOTokens := ioTokens
 			if d.HasArg("elastic-io-tokens") {
 				d.ScanArgs(t, "elastic-io-tokens", &elasticIOTokens)
@@ -298,6 +308,7 @@ func TestGranterBasic(t *testing.T) {
 				int64(ioTokens),
 				int64(elasticIOTokens),
 				int64(elasticDiskWriteTokens),
+				int64(elasticDiskReadTokens),
 				int64(ioTokens*burstMultiplier),
 				int64(elasticIOTokens*burstMultiplier),
 				int64(elasticDiskWriteTokens*burstMultiplier),
@@ -313,6 +324,17 @@ func TestGranterBasic(t *testing.T) {
 			requesters[scanWorkKind(t, d)].granter.(granterWithStoreReplicatedWorkAdmitted).storeWriteDone(
 				int64(origTokens), StoreWorkDoneInfo{WriteBytes: int64(writeBytes)})
 			coord.testingTryGrant()
+			return flushAndReset()
+
+		case "adjust-disk-error":
+			var readBytes, writeBytes int
+			d.ScanArgs(t, "actual-write-bytes", &writeBytes)
+			d.ScanArgs(t, "actual-read-bytes", &readBytes)
+			m := StoreMetrics{DiskStats: DiskStats{
+				BytesRead:    uint64(readBytes),
+				BytesWritten: uint64(writeBytes),
+			}}
+			coord.adjustDiskTokenError(m)
 			return flushAndReset()
 
 		default:

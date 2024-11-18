@@ -302,7 +302,16 @@ type kvStoreTokenGranter struct {
 		// TODO(aaditya): add support for read/IOPS tokens.
 		// Disk bandwidth tokens.
 		diskTokensAvailable diskTokens
-		diskTokensUsed      [admissionpb.NumStoreWorkTypes]diskTokens
+		diskTokensError     struct {
+			// prevObserved{Writes,Reads} is the observed disk metrics in the last
+			// call to adjustDiskTokenErrorLocked. These are used to compute the
+			// delta.
+			prevObservedWrites             uint64
+			prevObservedReads              uint64
+			diskWriteTokensAlreadyDeducted int64
+			diskReadTokensAlreadyDeducted  int64
+		}
+		diskTokensUsed [admissionpb.NumStoreWorkTypes]diskTokens
 	}
 
 	ioTokensExhaustedDurationMetric [admissionpb.NumWorkClasses]*metric.Counter
@@ -423,6 +432,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		if sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] > 0 {
 			sg.subtractIOTokensLocked(count, count, false)
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
+			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
@@ -433,6 +443,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 			sg.subtractIOTokensLocked(count, count, false)
 			sg.coordMu.elasticIOTokensUsedByElastic += count
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
+			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
@@ -441,6 +452,7 @@ func (sg *kvStoreTokenGranter) tryGetLocked(count int64, demuxHandle int8) grant
 		// writeByteTokens.
 		if sg.coordMu.diskTokensAvailable.writeByteTokens > 0 {
 			sg.coordMu.diskTokensAvailable.writeByteTokens -= diskWriteTokens
+			sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskWriteTokens
 			sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskWriteTokens
 			return grantSuccess
 		}
@@ -477,13 +489,60 @@ func (sg *kvStoreTokenGranter) subtractTokensForStoreWorkTypeLocked(
 	case admissionpb.RegularStoreWorkType, admissionpb.ElasticStoreWorkType:
 		diskTokenCount := sg.writeAmpLM.applyLinearModel(count)
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= diskTokenCount
+		sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += diskTokenCount
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += diskTokenCount
 	case admissionpb.SnapshotIngestStoreWorkType:
 		// Do not apply the writeAmpLM since these writes do not incur additional
 		// write-amp.
 		sg.coordMu.diskTokensAvailable.writeByteTokens -= count
+		sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted += count
 		sg.coordMu.diskTokensUsed[wt].writeByteTokens += count
 	}
+}
+
+// adjustDiskTokenErrorLocked is used to account for extra reads and writes that
+// are in excess of tokens already deducted.
+//
+// (1) For writes, we deduct tokens at admission for each request. If the actual
+// writes seen on disk for a given interval is higher than the tokens already
+// deducted, the delta is the write error. This value is then subtracted from
+// available disk tokens.
+//
+// (2) For reads, we do not deduct any tokens at admission. However, we deduct
+// tokens in advance during token estimation in the diskBandwidthLimiter for the
+// next adjustment interval. These pre-deducted tokens are then allocated at the
+// same interval as write tokens. Any additional reads in the interval are
+// considered error and are subtracted from the available disk write tokens.
+//
+// For both reads, and writes, we reset the
+// disk{read,write}TokensAlreadyDeducted to 0 for the next adjustment interval.
+// For writes, we do this so that we are accounting for errors only in the given
+// interval, and not across them. For reads, this is so that we don't grow
+// arbitrarily large "burst" tokens, since they are not capped to an allocation
+// period.
+func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writeBytes uint64) {
+	intWrites := int64(writeBytes - sg.coordMu.diskTokensError.prevObservedWrites)
+	intReads := int64(readBytes - sg.coordMu.diskTokensError.prevObservedReads)
+
+	// Compensate for error due to writes.
+	writeError := intWrites - sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted
+	if writeError > 0 {
+		sg.coordMu.diskTokensAvailable.writeByteTokens -= writeError
+	}
+
+	// Compensate for error due to reads.
+	readError := intReads - sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted
+	if readError > 0 {
+		sg.coordMu.diskTokensAvailable.writeByteTokens -= readError
+	}
+
+	// We have compensated for error, if any, in this interval, so we reset the
+	// deducted count for the next compensation interval.
+	sg.coordMu.diskTokensError.diskWriteTokensAlreadyDeducted = 0
+	sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted = 0
+
+	sg.coordMu.diskTokensError.prevObservedWrites = writeBytes
+	sg.coordMu.diskTokensError.prevObservedReads = readBytes
 }
 
 func (sg *kvStoreTokenGranter) tookWithoutPermission(
@@ -591,10 +650,11 @@ func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantRe
 func (sg *kvStoreTokenGranter) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	elasticDiskWriteTokens int64,
+	diskWriteTokens int64,
+	diskReadTokens int64,
 	ioTokenCapacity int64,
 	elasticIOTokenCapacity int64,
-	elasticDiskWriteTokensCapacity int64,
+	diskWriteTokensCapacity int64,
 	lastTick bool,
 ) (ioTokensUsed int64, ioTokensUsedByElasticWork int64) {
 	sg.coord.mu.Lock()
@@ -627,6 +687,8 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 		// which case we want availableIOTokens[ElasticWorkClass] to not exceed it.
 		sg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass] =
 			min(sg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass], sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass])
+		// We also want to avoid very negative disk write tokens, so we reset them.
+		sg.coordMu.diskTokensAvailable.writeByteTokens = max(sg.coordMu.diskTokensAvailable.writeByteTokens, 0)
 	}
 	var w admissionpb.WorkClass
 	for w = 0; w < admissionpb.NumWorkClasses; w++ {
@@ -634,10 +696,16 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 	}
 	sg.startingIOTokens = sg.coordMu.availableIOTokens[admissionpb.RegularWorkClass]
 
-	sg.coordMu.diskTokensAvailable.writeByteTokens += elasticDiskWriteTokens
-	if sg.coordMu.diskTokensAvailable.writeByteTokens > elasticDiskWriteTokensCapacity {
-		sg.coordMu.diskTokensAvailable.writeByteTokens = elasticDiskWriteTokensCapacity
+	// Allocate disk write and read tokens.
+	sg.coordMu.diskTokensAvailable.writeByteTokens += diskWriteTokens
+	if sg.coordMu.diskTokensAvailable.writeByteTokens > diskWriteTokensCapacity {
+		sg.coordMu.diskTokensAvailable.writeByteTokens = diskWriteTokensCapacity
 	}
+	// NB: We don't cap the disk read tokens as they are only deducted during the
+	// error accounting loop. So essentially, we give reads the "burst" capacity
+	// of the error accounting interval. See `adjustDiskTokenErrorLocked` for the
+	// error accounting logic, and where we reset this bucket to 0.
+	sg.coordMu.diskTokensError.diskReadTokensAlreadyDeducted += diskReadTokens
 
 	return ioTokensUsed, ioTokensUsedByElasticWork
 }
