@@ -317,7 +317,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		}
 		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
 	case *tree.DTuple:
-		return encodeUntaggedTuple(t, b, encoding.NoColumnID, nil)
+		res, _, err := encodeUntaggedTuple(t, b, nil)
+		return res, err
 	case *tree.DTSQuery:
 		encoded := tsearch.EncodeTSQueryPGBinary(nil, t.TSQuery)
 		return encoding.EncodeUntaggedBytesValue(b, encoded), nil

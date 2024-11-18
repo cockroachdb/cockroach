@@ -1583,7 +1583,7 @@ func writeColumnValues(
 		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.ColID)
 		lastColID = col.ColID
 		var err error
-		value, err = valueside.Encode(value, colIDDelta, val, nil)
+		value, err = valueside.Encode(value, colIDDelta, val)
 		if err != nil {
 			return nil, err
 		}

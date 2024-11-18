@@ -117,7 +117,7 @@ func valueEncodePartitionTuple(
 		if err := colinfo.CheckDatumTypeFitsColumnType(cols[i], datum.ResolvedType()); err != nil {
 			return nil, err
 		}
-		value, err = valueside.Encode(value, valueside.NoColumnID, datum, scratch)
+		value, scratch, err = valueside.EncodeWithScratch(value, valueside.NoColumnID, datum, scratch[:0])
 		if err != nil {
 			return nil, err
 		}
