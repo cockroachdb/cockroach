@@ -7271,6 +7271,7 @@ MetricMetadataResponse contains the metadata for all metrics.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | metadata | [MetricMetadataResponse.MetadataEntry](#cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.MetadataEntry) | repeated |  | [reserved](#support-status) |
+| recordedNames | [MetricMetadataResponse.RecordedNamesEntry](#cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.RecordedNamesEntry) | repeated | Maps of metric metadata names to the tsdb recorded metric names | [reserved](#support-status) |
 
 
 
@@ -7286,6 +7287,20 @@ MetricMetadataResponse contains the metadata for all metrics.
 | ----- | ---- | ----- | ----------- | -------------- |
 | key | [string](#cockroach.server.serverpb.MetricMetadataResponse-string) |  |  |  |
 | value | [cockroach.util.metric.Metadata](#cockroach.server.serverpb.MetricMetadataResponse-cockroach.util.metric.Metadata) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.RecordedNamesEntry"></a>
+#### MetricMetadataResponse.RecordedNamesEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.MetricMetadataResponse-string) |  |  |  |
+| value | [string](#cockroach.server.serverpb.MetricMetadataResponse-string) |  |  |  |
 
 
 

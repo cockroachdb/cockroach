@@ -846,6 +846,8 @@ message MetricMetadataRequest {
 // MetricMetadataResponse contains the metadata for all metrics.
 message MetricMetadataResponse {
   map<string, cockroach.util.metric.Metadata> metadata = 1 [(gogoproto.nullable) = false];
+  // Maps of metric metadata names to the tsdb recorded metric names
+  map<string, string> recordedNames = 2 [(gogoproto.nullable) = false];
 }
 
 message EnqueueRangeRequest {
