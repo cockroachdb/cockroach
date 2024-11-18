@@ -1287,7 +1287,6 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> drop_schedule_stmt
 %type <tree.Statement> restore_stmt
 %type <tree.StringOrPlaceholderOptList> string_or_placeholder_opt_list
-%type <[]tree.StringOrPlaceholderOptList> list_of_string_or_placeholder_opt_list
 %type <tree.Statement> revoke_stmt
 %type <tree.Statement> refresh_stmt
 %type <*tree.Select> select_stmt
@@ -3816,12 +3815,12 @@ restore_stmt:
     setErr(sqllex, errors.New("The `RESTORE FROM <backupURI>` syntax is no longer supported. Please use `RESTORE FROM <subdirectory> IN <collectionURI>`."))
     return helpWith(sqllex, "RESTORE")
   }
-| RESTORE FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE FROM string_or_placeholder IN string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
     DescriptorCoverage: tree.AllDescriptors,
 		Subdir: $3.expr(),
-		From: $5.listOfStringOrPlaceholderOptList(),
+		From: $5.stringOrPlaceholderOptList(),
 		AsOf: $6.asOfClause(),
 		Options: *($7.restoreOptions()),
     }
@@ -3831,12 +3830,12 @@ restore_stmt:
     setErr(sqllex, errors.New("The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`."))
     return helpWith(sqllex, "RESTORE")
   }
-| RESTORE backup_targets FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE backup_targets FROM string_or_placeholder IN string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
       Targets: $2.backupTargetList(),
       Subdir: $4.expr(),
-      From: $6.listOfStringOrPlaceholderOptList(),
+      From: $6.stringOrPlaceholderOptList(),
       AsOf: $7.asOfClause(),
       Options: *($8.restoreOptions()),
     }
@@ -3846,12 +3845,12 @@ restore_stmt:
     setErr(sqllex, errors.New("The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`."))
     return helpWith(sqllex, "RESTORE")
   }
-| RESTORE SYSTEM USERS FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE SYSTEM USERS FROM string_or_placeholder IN string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
     $$.val = &tree.Restore{
       DescriptorCoverage: tree.SystemUsers,
       Subdir: $5.expr(),
-      From: $7.listOfStringOrPlaceholderOptList(),
+      From: $7.stringOrPlaceholderOptList(),
       AsOf: $8.asOfClause(),
       Options: *($9.restoreOptions()),
     }
@@ -3866,16 +3865,6 @@ string_or_placeholder_opt_list:
 | '(' string_or_placeholder_list ')'
   {
     $$.val = tree.StringOrPlaceholderOptList($2.exprs())
-  }
-
-list_of_string_or_placeholder_opt_list:
-  string_or_placeholder_opt_list
-  {
-    $$.val = []tree.StringOrPlaceholderOptList{$1.stringOrPlaceholderOptList()}
-  }
-| list_of_string_or_placeholder_opt_list ',' string_or_placeholder_opt_list
-  {
-    $$.val = append($1.listOfStringOrPlaceholderOptList(), $3.stringOrPlaceholderOptList())
   }
 
 // Optional restore options.

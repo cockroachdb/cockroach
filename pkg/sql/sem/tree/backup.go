@@ -137,20 +137,16 @@ type Restore struct {
 	Targets            BackupTargetList
 	DescriptorCoverage DescriptorCoverage
 
-	// From contains the URIs for the backup(s) we seek to restore.
-	//   - len(From)>1 implies the user explicitly passed incremental backup paths,
-	//     which is only allowed using the old syntax, `RESTORE <targets> FROM <destination>.
-	//     In this case, From[0] contains the URI(s) for the full backup.
-	//   - len(From)==1 implies we'll have to look for incremental backups in planning
-	//   - len(From[0]) > 1 implies the backups are locality aware
-	//   - From[i][0] must be the default locality.
-	From    []StringOrPlaceholderOptList
+	// From contains the URIs for the backup we seek to restore.
+	//   - len(From) > 1 implies the backups are locality aware
+	//   - From[0] must be the default locality.
+	From    StringOrPlaceholderOptList
 	AsOf    AsOfClause
 	Options RestoreOptions
 
 	// Subdir may be set by the parser when the SQL query is of the form `RESTORE
-	// ... FROM 'from' IN 'subdir'...`. Alternatively, restore_planning.go will set
-	// it for the query `RESTORE ... FROM 'from' IN LATEST...`
+	// ... FROM 'subdir' IN 'from'...`. Alternatively, restore_planning.go will set
+	// it for the query `RESTORE ... FROM LATEST IN 'from'...`
 	Subdir Expr
 }
 
@@ -168,12 +164,7 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Subdir)
 		ctx.WriteString(" IN ")
 	}
-	for i := range node.From {
-		if i > 0 {
-			ctx.WriteString(", ")
-		}
-		ctx.FormatURIs(node.From[i])
-	}
+	ctx.FormatURIs(node.From)
 	if node.AsOf.Expr != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(&node.AsOf)

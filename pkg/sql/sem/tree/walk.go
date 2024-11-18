@@ -1549,7 +1549,6 @@ func (stmt *ParenSelect) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Restore) copyNode() *Restore {
 	stmtCopy := *stmt
-	stmtCopy.From = append([]StringOrPlaceholderOptList(nil), stmt.From...)
 	return &stmtCopy
 }
 
@@ -1565,15 +1564,13 @@ func (stmt *Restore) walkStmt(v Visitor) Statement {
 			ret.AsOf.Expr = e
 		}
 	}
-	for i, backup := range stmt.From {
-		for j, expr := range backup {
-			e, changed := WalkExpr(v, expr)
-			if changed {
-				if ret == stmt {
-					ret = stmt.copyNode()
-				}
-				ret.From[i][j] = e
+	for i, expr := range stmt.From {
+		e, changed := WalkExpr(v, expr)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
 			}
+			ret.From[i] = e
 		}
 	}
 
