@@ -133,15 +133,15 @@ SELECT * from t3
 ----
 3 2
 
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement error pgcode 23514 failed to satisfy CHECK constraint
 UPDATE t3 SET b = 3 WHERE a = 3
 
-onlyif config weak-iso-level-configs 112488
+onlyif config #112488 weak-iso-level-configs
 statement error multi-column-family check constraints are not yet supported under read committed isolation
 UPDATE t3 SET b = 3 WHERE a = 3
 
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement ok
 UPDATE t3 SET b = 1 WHERE a = 3
 
@@ -328,23 +328,23 @@ INSERT INTO t9 VALUES (5, 3)
 statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
 INSERT INTO t9 VALUES (6, 7)
 
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement ok
 UPDATE t9 SET b = 4 WHERE a = 5
 
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
 UPDATE t9 SET b = 6 WHERE a = 5
 
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement ok
 UPDATE t9 SET a = 7 WHERE a = 4
 
-skipif config weak-iso-level-configs 112488
+skipif config #112488 weak-iso-level-configs
 statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
 UPDATE t9 SET a = 2 WHERE a = 5
 
-onlyif config weak-iso-level-configs 112488
+onlyif config #112488 weak-iso-level-configs
 statement error multi-column-family check constraints are not yet supported under read committed isolation
 UPDATE t9 SET b = 4 WHERE a = 5
 
