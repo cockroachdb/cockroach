@@ -237,8 +237,8 @@ func TestLDAPRolesAreGranted(t *testing.T) {
 	require.True(t, foundSession)
 
 	// Add a group that does not have a corresponding CRDB role, and verify that
-	// the user cannot login.
+	// the user can still login via partial groups mapping.
 	mockLDAP.SetGroups("cn=foo", []string{"cn=foo_parent_2", "cn=nonexistent_role"})
 	_, err = fooDB.Conn(ctx)
-	require.ErrorContains(t, err, "LDAP authorization: error assigning roles to user foo: EnsureUserOnlyBelongsToRoles-grant: role/user \"nonexistent_role\" does not exist")
+	require.NoError(t, err)
 }
