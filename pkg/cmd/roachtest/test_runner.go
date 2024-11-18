@@ -1316,7 +1316,7 @@ func (r *testRunner) runTest(
 				if event.Err == nil {
 					t.L().Printf("task finished: %s", event.Name)
 					continue
-				} else if event.ExpectedCancel {
+				} else if event.TriggeredByTest {
 					t.L().Printf("task canceled by test: %s", event.Name)
 					continue
 				}

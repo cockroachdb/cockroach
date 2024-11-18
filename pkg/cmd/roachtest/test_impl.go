@@ -12,7 +12,6 @@ import (
 	"math/rand"
 	"os"
 	"regexp"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -679,8 +678,7 @@ func (t *testImpl) IsBuildVersion(minVersion string) bool {
 }
 
 func panicHandler(_ context.Context, name string, l *logger.Logger, r interface{}) error {
-	l.Printf("panic stack trace in task %s:\n%s", name, string(debug.Stack()))
-	return fmt.Errorf("panic (stack trace above): %v", r)
+	return fmt.Errorf("test task %s panicked: %v", name, r)
 }
 
 // GoWithCancel runs the given function in a goroutine and returns a

@@ -187,7 +187,7 @@ func (tr *testRunner) run() (retErr error) {
 			if event.Err == nil {
 				tr.logger.Printf("background step finished: %s", event.Name)
 				continue
-			} else if event.ExpectedCancel {
+			} else if event.TriggeredByTest {
 				tr.logger.Printf("background step canceled by test: %s", event.Name)
 				continue
 			}
