@@ -79,7 +79,7 @@ func GetWorkloadHistogramArgs(t test.Test, c cluster.Cluster, labels map[string]
 			t.PerfArtifactsDir(), GetBenchmarkMetricsFileName(t), clusterstats.GetOpenmetricsLabelString(t, c, labels))
 	} else {
 		// Since default is json, no need to add --histogram-export-format flag in this case and also the labels
-		histogramArgs = fmt.Sprintf(" --histograms=%s/%s", GetBenchmarkMetricsFileName(t), t.PerfArtifactsDir())
+		histogramArgs = fmt.Sprintf(" --histograms=%s/%s", t.PerfArtifactsDir(), GetBenchmarkMetricsFileName(t))
 	}
 
 	return histogramArgs

@@ -23,21 +23,12 @@ source  $root/build/teamcity/util/roachtest_arch_util.sh
 # date at the time of the start of the run (which identifies the version of the
 # code run best).
 stats_dir="$(date +"%Y%m%d")-${TC_BUILD_ID}"
-stats_file_name="stats.json"
-
-if [[ "${EXPORT_OPENMETRICS}" == "true"]]; then
-  stats_file_name="stats.om"
-fi
 
 # Set up a function we'll invoke at the end.
 function upload_stats {
   if tc_release_branch; then
       bucket="${ROACHTEST_BUCKET:-cockroach-nightly-${CLOUD}}"
-      if [[ "${EXPORT_OPENMETRICS}" == "true"]]; then
-          bucket="${ROACHTEST_BUCKET:-cockroach-roachperf-nightly/metrics-loader/incoming/${CLOUD}}"
-      fi
-
-      if [[ "${CLOUD}" == "gce" && "${EXPORT_OPENMETRICS}" == "false" ]]; then
+      if [[ "${CLOUD}" == "gce" ]]; then
           # GCE, having been there first, gets an exemption.
           bucket="cockroach-nightly"
       fi
@@ -55,12 +46,12 @@ function upload_stats {
         remote_artifacts_dir="${remote_artifacts_dir}-fips"
       fi
 
-      # The ${stats_file_name} files need some path translation:
-      #     ${artifacts}/path/to/test/${stats_file_name}
+      # The stats.json files need some path translation:
+      #     ${artifacts}/path/to/test/stats.json
       # to
-      #     gs://${bucket}/artifacts/${stats_dir}/path/to/test/${stats_file_name}
+      #     gs://${bucket}/artifacts/${stats_dir}/path/to/test/stats.json
       #
-      # `find` below will expand "{}" as ./path/to/test/${stats_file_name}. We need
+      # `find` below will expand "{}" as ./path/to/test/stats.json. We need
       # to bend over backwards to remove the `./` prefix or gsutil will have
       # a `.` folder in ${stats_dir}, which we don't want.
       (cd "${artifacts}" && \
@@ -75,7 +66,7 @@ function upload_stats {
             fi
             gsutil cp "${f}" "gs://${bucket}/${artifacts_dir}/${stats_dir}/${f}"
           fi
-        done <<< "$(find . -name ${stats_file_name} | sed 's/^\.\///')")
+        done <<< "$(find . -name stats.json | sed 's/^\.\///')")
   fi
 }
 
@@ -97,17 +88,11 @@ function upload_binaries {
 }
 
 function upload_all {
-  
-  if [[ "${EXPORT_OPENMETRICS}" == "true"]]; then
-      echo "$ROACHPERF_OPENMETRICS_CREDENTIALS" > roachperf.json
-      gcloud auth activate-service-account --key-file=roachperf.json
-  fi
-  
   upload_stats
   upload_binaries
 }
 
-# Upload any ${stats_file_name} we can find, and some binaries, no matter what happens.
+# Upload any stats.json we can find, and some binaries, no matter what happens.
 trap upload_all EXIT
 
 # Set up the parameters for the roachtest invocation.
