@@ -1045,6 +1045,18 @@ func constructRaftEventForReplica(
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e RaftEvent) error {
+	// NB: e.Term can be empty when the RaftEvent was not constructed using a
+	// MsgStorageAppend. Hence, the assertion is gated on the conditions that
+	// ensure e.Term was initialized.
+	//
+	// The e.Term is the leader term with which the log is consistent, and since
+	// this is the leader (at rangeController.term), the terms must match. Note
+	// that it is the responsibility of the caller to create a new
+	// rangeController on the leader when the term changes.
+	if (len(e.Entries) != 0 || e.Snap != nil) && e.Term != rc.term {
+		panic(errors.AssertionFailedf("term mismatch: RaftEvent.Term %d != rangeController.Term %d",
+			e.Term, rc.term))
+	}
 	rc.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	// Compute the flow control state for each new entry. We do this once
 	// here, instead of decoding each entry multiple times for all replicas.
