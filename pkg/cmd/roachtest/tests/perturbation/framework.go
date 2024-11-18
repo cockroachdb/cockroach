@@ -186,15 +186,28 @@ func (a admissionControlMode) getSettings() map[string]string {
 	}
 }
 
-func (v variations) String() string {
-	return fmt.Sprintf("seed: %d, fillDuration: %s, blockSize: %d, perturbationDuration: %s, "+
-		"validationDuration: %s, ratioOfMax: %f, splits: %d, numNodes: %d, numWorkloadNodes: %d, "+
-		"vcpu: %d, disks: %d, memory: %s, leaseType: %s, cloud: %v, acMode: %s, diskBandwidthLimit %s, "+
-		"perturbation: %+v",
-		v.seed, v.fillDuration, v.blockSize,
-		v.perturbationDuration, v.validationDuration, v.ratioOfMax, v.splits, v.numNodes, v.numWorkloadNodes,
-		v.vcpu, v.disks, v.mem, v.leaseType, v.cloud, v.acMode, v.diskBandwidthLimit,
-		v.perturbation)
+// getParameterMap returns a map of the parameters used for the test in
+// stringified format. They can be used in logging to more easily identify the
+// test reproduction.
+func (v variations) getParameterMap() map[string]string {
+	params := map[string]string{}
+	params["seed"] = strconv.FormatInt(v.seed, 10)
+	params["fillDuration"] = v.fillDuration.String()
+	params["blockSize"] = strconv.Itoa(v.blockSize)
+	params["perturbationDuration"] = v.perturbationDuration.String()
+	params["validationDuration"] = v.validationDuration.String()
+	params["ratioOfMax"] = strconv.FormatFloat(v.ratioOfMax, 'f', -1, 64)
+	params["splits"] = strconv.Itoa(v.splits)
+	params["numNodes"] = strconv.Itoa(v.numNodes)
+	params["numWorkloadNodes"] = strconv.Itoa(v.numWorkloadNodes)
+	params["vcpu"] = strconv.Itoa(v.vcpu)
+	params["disks"] = strconv.Itoa(v.disks)
+	params["mem"] = v.mem.String()
+	params["leaseType"] = v.leaseType.String()
+	params["cloud"] = v.cloud.String()
+	params["acMode"] = v.acMode.String()
+	params["diskBandwidthLimit"] = v.diskBandwidthLimit
+	return params
 }
 
 // Normally a single worker can handle 20-40 nodes. If we find this is
@@ -563,7 +576,11 @@ func (w workloadData) worstStats(i interval) map[string]trackedStat {
 // runTest is the main entry point for all the tests. Its ste
 func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster) {
 	v.Cluster = c
-	t.L().Printf("test variations are: %+v", v)
+	params := v.getParameterMap()
+	for k, val := range params {
+		t.AddParam(k, val)
+		t.L().Printf("%s: %s", k, val)
+	}
 	t.Status("T0: starting nodes")
 
 	// Track the three operations that we are sending in this test.
