@@ -356,7 +356,7 @@ func (rh *RowHelper) encodePrimaryIndexValuesToBuf(
 		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
 		lastColID = col.GetID()
 		var err error
-		buf, err = valueside.Encode(buf, colIDDelta, vals[idx], nil)
+		buf, err = valueside.Encode(buf, colIDDelta, vals[idx])
 		if err != nil {
 			return nil, err
 		}

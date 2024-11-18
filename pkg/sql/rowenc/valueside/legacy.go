@@ -187,7 +187,7 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 		}
 	case types.TupleFamily:
 		if v, ok := val.(*tree.DTuple); ok {
-			b, err := encodeUntaggedTuple(v, nil /* appendTo */, 0 /* colID */, nil /* scratch */)
+			b, _, err := encodeUntaggedTuple(v, nil /* appendTo */, nil /* scratch */)
 			if err != nil {
 				return r, err
 			}
