@@ -39,6 +39,8 @@ if [ -z "${WORKLOAD_NODES}" ]; then
   exit 1
 fi
 
+absolute_path=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
+pwd=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
 # Prepare PGURLS
 PGURLS=$(roachprod pgurl $CLUSTER | sed s/\'//g)
 
@@ -72,5 +74,7 @@ EOF
   roachprod ssh $WORKLOAD_CLUSTER:$NODE -- "chmod +x tpcc_run_${suffix}.sh"
   if [ "$execute_script" = "true" ]; then
     roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_run_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_run_${suffix}.sh"
+  else
+    echo "Run --> roachprod run "${WORKLOAD_CLUSTER}":1 -- \"sudo systemd-run --unit tpcc_run_${suffix} --same-dir --uid \\\$(id -u) --gid \\\$(id -g) bash ${pwd}/tpcc_run_${suffix}.sh\""
   fi
 done
