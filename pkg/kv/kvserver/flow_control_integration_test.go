@@ -4917,6 +4917,83 @@ ORDER BY streams DESC;
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 }
 
+func TestFlowControlRepeatedlySwitchMode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			RaftConfig: base.RaftConfig{
+				// Suppress timeout-based elections. This test doesn't want to
+				// deal with leadership changing hands.
+				RaftElectionTimeoutTicks: 1000000,
+			},
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
+						UseOnlyForScratchRanges: true,
+						OverrideTokenDeduction: func(_ kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+							// This test makes use of (small) increment requests, but
+							// wants to see large token deductions/returns.
+							return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
+						},
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Setup the test state with 3 voters, one on each of the three
+	// node/stores.
+	k := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+	h := newFlowControlTestHelperV2(t, tc, kvflowcontrol.V2EnabledWhenLeaderV2Encoding)
+	mode := kvflowcontrol.ApplyToElastic
+	h.init(mode)
+
+	desc, err := tc.LookupRange(k)
+	require.NoError(t, err)
+	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
+	h.resetV2TokenMetrics(ctx)
+
+	finishedCh := make(chan struct{})
+	go func() {
+		defer close(finishedCh)
+		// Switch the mode 10 times, with 100ms of sleep in between.
+		for i := 0; i < 10; i++ {
+			time.Sleep(100 * time.Millisecond)
+			switch mode {
+			case kvflowcontrol.ApplyToElastic:
+				mode = kvflowcontrol.ApplyToAll
+			case kvflowcontrol.ApplyToAll:
+				mode = kvflowcontrol.ApplyToElastic
+			}
+			kvflowcontrol.Mode.Override(ctx, &tc.Server(0).ClusterSettings().SV, mode)
+		}
+	}()
+	// Loop until finishedCh is signaled.
+	for done := false; !done; {
+		// Randomly put NormalPri or BulkLowPri.
+		pri := admissionpb.NormalPri
+		if h.rng.Intn(2) == 0 {
+			pri = admissionpb.BulkLowPri
+		}
+		h.put(contextWithTestGeneratedPut(ctx), k, 1, pri)
+		select {
+		case <-finishedCh:
+			done = true
+		default:
+		}
+	}
+	// All tokens must be returned.
+	h.waitForAllTokensReturnedForStreamsV2(ctx, 0 /* serverIdx */)
+}
+
 type flowControlTestHelper struct {
 	t             testing.TB
 	tc            *testcluster.TestCluster
