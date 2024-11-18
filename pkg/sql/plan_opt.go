@@ -974,6 +974,10 @@ func (p *planner) DecodeGist(ctx context.Context, gist string, external bool) ([
 func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	ctx context.Context,
 ) (_ []indexrec.Rec, err error) {
+	origCtx := ctx
+	ctx, sp := tracing.EnsureChildSpan(ctx, opc.p.execCfg.AmbientCtx.Tracer, "index recommendation")
+	defer sp.Finish()
+
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate internal errors without having to add
@@ -1039,8 +1043,11 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	// Re-initialize the optimizer (which also re-initializes the factory) and
 	// update the saved memo's metadata with the original table information.
 	// Prepare to re-optimize and create an executable plan.
-	opc.optimizer.Init(ctx, f.EvalContext(), opc.catalog)
-	savedMemo.Metadata().UpdateTableMeta(ctx, f.EvalContext(), optTables)
+	// Use the origCtx instead of ctx since the optimizer will hold onto this
+	// context after this function ends, and we don't want "use of Span after
+	// Finish" errors.
+	opc.optimizer.Init(origCtx, f.EvalContext(), opc.catalog)
+	savedMemo.Metadata().UpdateTableMeta(origCtx, f.EvalContext(), optTables)
 	f.CopyAndReplace(
 		savedMemo.RootExpr().(memo.RelExpr),
 		savedMemo.RootProps(),
