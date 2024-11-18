@@ -136,11 +136,17 @@ func AfterTest(t T) func() {
 		// to see if the leak detector should be disabled for future tests.
 		if f, ok := t.(interface {
 			Failed() bool
-		}); ok && f.Failed() {
-			if err := diffGoroutines(orig); err != nil {
-				atomic.StoreUint32(&leakDetectorDisabled, 1)
+			Skipped() bool
+		}); ok {
+			switch {
+			case f.Failed():
+				if err := diffGoroutines(orig); err != nil {
+					atomic.StoreUint32(&leakDetectorDisabled, 1)
+				}
+				fallthrough
+			case f.Skipped():
+				return
 			}
-			return
 		}
 
 		if tb, ok := t.(testing.TB); ok {
