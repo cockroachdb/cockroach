@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
 )
@@ -326,8 +327,8 @@ func TestAntagonisticGCSRead(t *testing.T) {
 	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)
 }
 
-// TestFileDoesNotExist ensures that the ReadFile method of google cloud
-// storage returns a sentinel error when the `Object` being read does not
+// TestFileDoesNotExist ensures that the ReadFile method of google cloud storage
+// returns a sentinel error when the `Bucket` or `Object` being read do not
 // exist.
 func TestFileDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -340,20 +341,41 @@ func TestFileDoesNotExist(t *testing.T) {
 
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	// Invalid gsFile.
-	gsFile := "gs://cockroach-fixtures-us-east1/tpch-csv/sf-1/invalid_region.tbl?AUTH=implicit"
-	conf, err := cloud.ExternalStorageConfFromURI(gsFile, user)
-	require.NoError(t, err)
+	{
+		// Invalid gsFile.
+		gsFile := "gs://cockroach-fixtures-us-east1/tpch-csv/sf-1/invalid_region.tbl?AUTH=implicit"
+		conf, err := cloud.ExternalStorageConfFromURI(gsFile, user)
+		require.NoError(t, err)
 
-	s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
-		nil, /* blobClientFactory */
-		nil, /* db */
-		nil, /* limiters */
-		cloud.NilMetrics,
-	)
-	require.NoError(t, err)
-	_, _, err = s.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
-	require.ErrorIs(t, err, cloud.ErrFileDoesNotExist)
+		s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
+			nil, /* blobClientFactory */
+			nil, /* db */
+			nil, /* limiters */
+			cloud.NilMetrics,
+		)
+		require.NoError(t, err)
+		_, _, err = s.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
+		require.Error(t, err, "")
+		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
+	}
+
+	{
+		// Invalid gsBucket.
+		gsFile := "gs://cockroach-fixtures-us-east1-invalid/tpch-csv/sf-1/region.tbl?AUTH=implicit"
+		conf, err := cloud.ExternalStorageConfFromURI(gsFile, user)
+		require.NoError(t, err)
+
+		s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
+			nil, /* blobClientFactory */
+			nil, /* db */
+			nil, /* limiters */
+			cloud.NilMetrics,
+		)
+		require.NoError(t, err)
+		_, _, err = s.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
+		require.Error(t, err, "")
+		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
+	}
 }
 
 func TestCompressedGCS(t *testing.T) {
