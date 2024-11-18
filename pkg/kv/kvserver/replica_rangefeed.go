@@ -294,7 +294,9 @@ func (r *Replica) RangeFeed(
 			perConsumerRelease = perConsumerAlloc.Release
 		}
 
+		startTime := timeutil.Now()
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(streamCtx)
+		r.store.metrics.RangeFeedMetrics.RangefeedCatchUpBlockedNanos.Inc(int64(timeutil.Since(startTime)))
 		if err != nil {
 			perConsumerRelease()
 			return nil, err
