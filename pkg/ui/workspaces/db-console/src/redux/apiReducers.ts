@@ -23,6 +23,7 @@ import { createSelector, ParametricSelector } from "reselect";
 import { VersionList } from "src/interfaces/cockroachlabs";
 import * as protos from "src/js/protos";
 import * as api from "src/util/api";
+import { NodeResponse } from "src/util/api";
 import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
 
@@ -91,6 +92,17 @@ export const nodesReducerObj = new CachedDataReducer(
   moment.duration(10, "s"),
 );
 export const refreshNodes = nodesReducerObj.refresh;
+
+export const nodeReducerObj = new CachedDataReducer(
+  (req: api.NodesRequestMessage, timeout?: moment.Duration) =>
+    api.getNodeUI(req, timeout).then(nr => {
+      RollupStoreMetrics(nr);
+      return nr;
+    }),
+  "node",
+);
+
+export const refreshNode = nodeReducerObj.refresh;
 
 const raftReducerObj = new CachedDataReducer(
   api.raftDebug,
@@ -546,6 +558,7 @@ export interface APIReducersState {
   >;
   health: HealthState;
   nodes: CachedDataReducerState<INodeStatus[]>;
+  node: CachedDataReducerState<NodeResponse>;
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
   version: CachedDataReducerState<VersionList>;
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
@@ -606,6 +619,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [eventsReducerObj.actionNamespace]: eventsReducerObj.reducer,
   [healthReducerObj.actionNamespace]: healthReducerObj.reducer,
   [nodesReducerObj.actionNamespace]: nodesReducerObj.reducer,
+  [nodeReducerObj.actionNamespace]: nodeReducerObj.reducer,
   [raftReducerObj.actionNamespace]: raftReducerObj.reducer,
   [versionReducerObj.actionNamespace]: versionReducerObj.reducer,
   [locationsReducerObj.actionNamespace]: locationsReducerObj.reducer,

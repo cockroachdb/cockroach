@@ -53,7 +53,7 @@ func TestNodeStatusToResp(t *testing.T) {
 		Args: []string{"args"},
 		Env:  []string{"env"},
 	}
-	resp := nodeStatusToResp(nodeStatus, false)
+	resp := nodeStatusToResp(nodeStatus, false, false)
 	require.Empty(t, resp.Args)
 	require.Empty(t, resp.Env)
 	require.Empty(t, resp.Desc.Address)
@@ -65,7 +65,7 @@ func TestNodeStatusToResp(t *testing.T) {
 	require.Empty(t, resp.StoreStatuses[0].Desc.Properties.FileStoreProperties.Path)
 
 	// Now fetch all the node statuses as admin.
-	resp = nodeStatusToResp(nodeStatus, true)
+	resp = nodeStatusToResp(nodeStatus, true, false)
 	require.NotEmpty(t, resp.Args)
 	require.NotEmpty(t, resp.Env)
 	require.NotEmpty(t, resp.Desc.Address)

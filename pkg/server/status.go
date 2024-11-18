@@ -1933,7 +1933,7 @@ func (s *statusServer) NodesUI(
 		LivenessByNodeID: internalResp.LivenessByNodeID,
 	}
 	for i, nodeStatus := range internalResp.Nodes {
-		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, hasViewClusterMetadata)
+		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, hasViewClusterMetadata, false)
 	}
 
 	return resp, nil
@@ -1964,7 +1964,7 @@ func (s *systemStatusServer) NodesUI(
 		LivenessByNodeID: internalResp.LivenessByNodeID,
 	}
 	for i, nodeStatus := range internalResp.Nodes {
-		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, hasViewClusterMetadata)
+		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, hasViewClusterMetadata, false)
 	}
 
 	return resp, nil
@@ -2115,7 +2115,7 @@ func (s *statusServer) NodeUI(
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
-	resp := nodeStatusToResp(nodeStatus, isAdmin)
+	resp := nodeStatusToResp(nodeStatus, isAdmin, true)
 	return &resp, nil
 }
 

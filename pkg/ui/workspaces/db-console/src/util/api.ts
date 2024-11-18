@@ -13,6 +13,7 @@ import map from "lodash/map";
 import moment from "moment-timezone";
 
 import * as protos from "src/js/protos";
+import { getDataFromServer } from "src/util/dataFromServer";
 import { FixLong } from "src/util/fixLong";
 import { propsToQueryString } from "src/util/query";
 
@@ -24,6 +25,8 @@ export type LocationsResponseMessage =
 export type NodesRequestMessage = protos.cockroach.server.serverpb.NodesRequest;
 export type NodesResponseExternalMessage =
   protos.cockroach.server.serverpb.NodesResponseExternal;
+
+export type NodeResponse = protos.cockroach.server.serverpb.NodeResponse;
 
 export type GetUIDataRequestMessage =
   protos.cockroach.server.serverpb.GetUIDataRequest;
@@ -167,7 +170,10 @@ export type MetricMetadataRequestMessage =
   protos.cockroach.server.serverpb.MetricMetadataRequest;
 export type MetricMetadataResponseMessage =
   protos.cockroach.server.serverpb.MetricMetadataResponse;
-
+export type MetricMetadata = {
+  metadata: protos.cockroach.util.metric.IMetadata;
+  tsDbName: string;
+};
 export type StatementDetailsRequestMessage =
   protos.cockroach.server.serverpb.StatementDetailsRequest;
 
@@ -396,6 +402,20 @@ export function getNodesUI(
   return timeoutFetch(
     serverpb.NodesResponseExternal,
     `${STATUS_PREFIX}/nodes_ui`,
+    null,
+    timeout,
+  );
+}
+
+// getNodeUI gets node data for a specific node
+export function getNodeUI(
+  _req: NodesRequestMessage,
+  timeout?: moment.Duration,
+): Promise<NodeResponse> {
+  const nodeId = getDataFromServer().NodeID;
+  return timeoutFetch(
+    serverpb.NodeResponse,
+    `${STATUS_PREFIX}/nodes_ui/${nodeId}`,
     null,
     timeout,
   );

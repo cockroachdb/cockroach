@@ -55,7 +55,9 @@ var uiStoreMetrics = []string{
 	"syscount",
 }
 
-func nodeStatusToResp(n *statuspb.NodeStatus, hasViewClusterMetadata bool) serverpb.NodeResponse {
+func nodeStatusToResp(
+	n *statuspb.NodeStatus, hasViewClusterMetadata bool, includeAllMetrics bool,
+) serverpb.NodeResponse {
 	tiers := make([]serverpb.Tier, len(n.Desc.Locality.Tiers))
 	for j, t := range n.Desc.Locality.Tiers {
 		tiers[j] = serverpb.Tier{
@@ -93,10 +95,15 @@ func nodeStatusToResp(n *statuspb.NodeStatus, hasViewClusterMetadata bool) serve
 
 	statuses := make([]serverpb.StoreStatus, len(n.StoreStatuses))
 	for i, ss := range n.StoreStatuses {
-		storeMetrics := make(map[string]float64, len(uiStoreMetrics))
-		for _, m := range uiStoreMetrics {
-			if d, ok := ss.Metrics[m]; ok {
-				storeMetrics[m] = d
+		var storeMetrics map[string]float64
+		if includeAllMetrics {
+			storeMetrics = ss.Metrics
+		} else {
+			storeMetrics = make(map[string]float64, len(uiStoreMetrics))
+			for _, m := range uiStoreMetrics {
+				if d, ok := ss.Metrics[m]; ok {
+					storeMetrics[m] = d
+				}
 			}
 		}
 		statuses[i] = serverpb.StoreStatus{
@@ -127,10 +134,15 @@ func nodeStatusToResp(n *statuspb.NodeStatus, hasViewClusterMetadata bool) serve
 		}
 	}
 
-	metrics := make(map[string]float64, len(uiNodeMetrics))
-	for _, m := range uiNodeMetrics {
-		if d, ok := n.Metrics[m]; ok {
-			metrics[m] = d
+	var metrics map[string]float64
+	if includeAllMetrics {
+		metrics = n.Metrics
+	} else {
+		metrics = make(map[string]float64, len(uiNodeMetrics))
+		for _, m := range uiNodeMetrics {
+			if d, ok := n.Metrics[m]; ok {
+				metrics[m] = d
+			}
 		}
 	}
 

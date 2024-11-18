@@ -73,9 +73,16 @@ const livenessesSelector = (state: AdminUIState) =>
 /*
  * nodeStatusesSelector returns the current status for each node in the cluster.
  */
-type NodeStatusState = Pick<AdminUIState, "cachedData", "nodes">;
-export const nodeStatusesSelector = (state: NodeStatusState) =>
+type NodeStatusesState = Pick<AdminUIState, "cachedData", "nodes">;
+export const nodeStatusesSelector = (state: NodeStatusesState) =>
   state.cachedData.nodes.data;
+
+/*
+ * nodeStatusesSelector returns the current status for each node in the cluster.
+ */
+type NodeStatusState = Pick<AdminUIState, "cachedData", "node">;
+export const nodeStatusSelector = (state: NodeStatusState) =>
+  state.cachedData.node.data;
 
 // partialNodeStatusesSelector returns NodeStatus items without fields that constantly change
 // and causes selectors to recompute.
