@@ -1377,7 +1377,7 @@ func (r *raft) hup(t CampaignType) {
 	}
 
 	// We shouldn't campaign if we don't have quorum support in store liveness.
-	if r.fortificationTracker.RequireQuorumSupportOnCampaign() &&
+	if t != campaignTransfer && r.fortificationTracker.RequireQuorumSupportOnCampaign() &&
 		!r.fortificationTracker.QuorumSupported() {
 		r.logger.Debugf("%x cannot campaign since it's not supported by a quorum in store liveness", r.id)
 		return
