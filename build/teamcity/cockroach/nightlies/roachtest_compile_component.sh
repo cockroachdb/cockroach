@@ -70,9 +70,9 @@ case "$component" in
     artifacts=("pkg/cmd/cockroach/cockroach_/cockroach:bin/cockroach.$os-$arch")
     ;;
   cockroach-ea)
-    # Cockroach-short with enabled assertions (EA).
-    bazel_args=(--config force_build_cdeps //pkg/cmd/cockroach-short --crdb_test $crdb_extra_flags)
-    artifacts=("pkg/cmd/cockroach-short/cockroach-short_/cockroach-short:bin/cockroach-ea.$os-$arch")
+    # Cockroach binary with enabled assertions (EA).
+    bazel_args=(--config force_build_cdeps //pkg/cmd/cockroach --crdb_test $crdb_extra_flags)
+    artifacts=("pkg/cmd/cockroach/cockroach_/cockroach:bin/cockroach-ea.$os-$arch")
     ;;
   workload)
     # Workload binary.
