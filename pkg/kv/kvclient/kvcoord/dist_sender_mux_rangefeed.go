@@ -251,10 +251,12 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error {
 	streamID := atomic.AddInt64(&m.seqID, 1)
 
+	startTime := timeutil.Now()
 	// Before starting single rangefeed, acquire catchup scan quota.
 	if err := s.acquireCatchupScanQuota(ctx, m.catchupSem, m.metrics); err != nil {
 		return err
 	}
+	m.metrics.RangefeedCatchUpBlockedNanos.Inc(timeutil.Since(startTime).Nanoseconds())
 
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, m.ds.rpcRetryOptions); r.Next(); {
