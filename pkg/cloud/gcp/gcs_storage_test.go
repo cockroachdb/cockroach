@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
 )
@@ -355,13 +355,13 @@ func TestFileDoesNotExist(t *testing.T) {
 		)
 		require.NoError(t, err)
 		_, _, err = s.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
-		require.Error(t, err, "")
-		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
+		require.ErrorIs(t, err, cloud.ErrFileDoesNotExist)
 	}
 
 	{
-		// Invalid gsBucket.
-		gsFile := "gs://cockroach-fixtures-us-east1-invalid/tpch-csv/sf-1/region.tbl?AUTH=implicit"
+		// Use a random UUID as the name of the bucket that does not exist in order
+		// to avoid name squating.
+		gsFile := fmt.Sprintf("gs://%s/tpch-csv/sf-1/region.tbl?AUTH=implicit", uuid.NewV4())
 		conf, err := cloud.ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
@@ -373,8 +373,7 @@ func TestFileDoesNotExist(t *testing.T) {
 		)
 		require.NoError(t, err)
 		_, _, err = s.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
-		require.Error(t, err, "")
-		require.True(t, errors.Is(err, cloud.ErrFileDoesNotExist))
+		require.ErrorIs(t, err, cloud.ErrFileDoesNotExist)
 	}
 }
 
