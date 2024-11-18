@@ -185,6 +185,9 @@ func checkIfDescriptorIsWithoutData(id descpb.ID, md *opGenContext) bool {
 				doesDescriptorHaveData = true
 			}
 		}
+		if doesDescriptorHaveData {
+			break
+		}
 	}
 	return !doesDescriptorHaveData
 }
