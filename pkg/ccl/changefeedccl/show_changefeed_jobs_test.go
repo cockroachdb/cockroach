@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"sort"
@@ -24,11 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,6 +117,43 @@ func TestShowChangefeedJobsBasic(t *testing.T) {
 	// TODO: Webhook disabled since the query parameters on the sinkURI are
 	// correct but out of order
 	cdcTest(t, testFn, feedTestOmitSinks("webhook", "sinkless"), feedTestNoExternalConnection)
+}
+
+func TestShowChangefeedJobsShowsHighWaterTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		valRange := []int{1, 1000}
+		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='0s',min_checkpoint_frequency='0s'`)
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo (a) SELECT * FROM generate_series(%d, %d)`, valRange[0], valRange[1]))
+
+		defer func() {
+			closeFeed(t, foo)
+		}()
+
+		var highWaterTimestamp gosql.NullFloat64
+		var readableHighWaterTimestamp gosql.NullTime
+
+		// Wait for the high water timestamp to be non-null.
+		testutils.SucceedsSoon(t, func() error {
+			sqlDB.QueryRow(t, "SELECT high_water_timestamp, readable_high_water_timestamp from [SHOW CHANGEFEED JOBS]").Scan(&highWaterTimestamp, &readableHighWaterTimestamp)
+
+			if !highWaterTimestamp.Valid {
+				return errors.Errorf("high water timestamp not populated: %v", highWaterTimestamp)
+			}
+
+			return nil
+		})
+
+		// Timestamps in CockroachDB have microsecond precision by default
+		highWaterTimestampTime := time.Unix(0, int64(highWaterTimestamp.Float64)).UTC().Round(time.Microsecond)
+		require.Equal(t, highWaterTimestampTime, readableHighWaterTimestamp.Time)
+	}
+
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
 }
 
 // TestShowChangefeedJobsRedacted verifies that SHOW CHANGEFEED JOB, SHOW
