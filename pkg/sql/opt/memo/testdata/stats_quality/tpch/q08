@@ -215,17 +215,17 @@ sort
       │    │    │    │    └── filters
       │    │    │    │         └── s_nationkey:15 = n2.n_nationkey:66 [type=bool, outer=(15,66), constraints=(/15: (/NULL - ]; /66: (/NULL - ]), fd=(15)==(66), (66)==(15)]
       │    │    │    └── projections
-      │    │    │         ├── extract('year', o_orderdate:43) [as=o_year:77, type=float, outer=(43), immutable]
-      │    │    │         └── l_extendedprice:26 * (1.0 - l_discount:27) [as=volume:78, type=float, outer=(26,27), immutable]
+      │    │    │         ├── extract('year', o_orderdate:43) [as=o_year:77, type=float8, outer=(43), immutable]
+      │    │    │         └── l_extendedprice:26 * (1.0 - l_discount:27) [as=volume:78, type=float8, outer=(26,27), immutable]
       │    │    └── projections
-      │    │         └── CASE WHEN n2.n_name:67 = 'BRAZIL' THEN volume:78 ELSE 0.0 END [as=column79:79, type=float, outer=(67,78)]
+      │    │         └── CASE WHEN n2.n_name:67 = 'BRAZIL' THEN volume:78 ELSE 0.0 END [as=column79:79, type=float8, outer=(67,78)]
       │    └── aggregations
-      │         ├── sum [as=sum:80, type=float, outer=(79)]
-      │         │    └── column79:79 [type=float]
-      │         └── sum [as=sum:81, type=float, outer=(78)]
-      │              └── volume:78 [type=float]
+      │         ├── sum [as=sum:80, type=float8, outer=(79)]
+      │         │    └── column79:79 [type=float8]
+      │         └── sum [as=sum:81, type=float8, outer=(78)]
+      │              └── volume:78 [type=float8]
       └── projections
-           └── sum:80 / sum:81 [as=mkt_share:82, type=float, outer=(80,81), immutable]
+           └── sum:80 / sum:81 [as=mkt_share:82, type=float8, outer=(80,81), immutable]
 
 ----Stats for q8_sort_1----
 column_names  row_count  distinct_count  null_count

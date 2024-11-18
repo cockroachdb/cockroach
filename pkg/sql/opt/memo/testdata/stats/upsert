@@ -154,19 +154,19 @@ with &1
  │         │    │    │    │    │         │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
  │         │    │    │    │    │         │    ├── computed column expressions
  │         │    │    │    │    │         │    │    └── c:8
- │         │    │    │    │    │         │    │         └── a:6::FLOAT8 [type=float]
+ │         │    │    │    │    │         │    │         └── a:6::FLOAT8 [type=float8]
  │         │    │    │    │    │         │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=200, null(8)=20, distinct(9)=2000, null(9)=0]
  │         │    │    │    │    │         │    ├── key: (9)
  │         │    │    │    │    │         │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
  │         │    │    │    │    │         └── filters
  │         │    │    │    │    │              └── c:8 = 1.0 [type=bool, outer=(8), constraints=(/8: [/1.0 - /1.0]; tight), fd=()-->(8)]
  │         │    │    │    │    └── projections
- │         │    │    │    │         └── NULL::FLOAT8 [as=z_default:12, type=float, immutable]
+ │         │    │    │    │         └── NULL::FLOAT8 [as=z_default:12, type=float8, immutable]
  │         │    │    │    └── aggregations
- │         │    │    │         ├── first-agg [as=a:6, type=int, outer=(6)]
- │         │    │    │         │    └── a:6 [type=int]
- │         │    │    │         └── first-agg [as=z_default:12, type=float, outer=(12)]
- │         │    │    │              └── z_default:12 [type=float]
+ │         │    │    │         ├── first-agg [as=a:6, type=int8, outer=(6)]
+ │         │    │    │         │    └── a:6 [type=int8]
+ │         │    │    │         └── first-agg [as=z_default:12, type=float8, outer=(12)]
+ │         │    │    │              └── z_default:12 [type=float8]
  │         │    │    ├── scan xyz
  │         │    │    │    ├── columns: xyz.x:13(string!null) xyz.y:14(int!null) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid)
  │         │    │    │    ├── stats: [rows=1000, distinct(13)=1000, null(13)=0]
@@ -175,11 +175,11 @@ with &1
  │         │    │    └── filters
  │         │    │         └── b:7 = xyz.x:13 [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ]), fd=(7)==(13), (13)==(7)]
  │         │    └── projections
- │         │         └── 5 [as=y_new:18, type=int]
+ │         │         └── 5 [as=y_new:18, type=int8]
  │         └── projections
  │              ├── CASE WHEN xyz.x:13 IS NULL THEN b:7 ELSE xyz.x:13 END [as=upsert_x:19, type=string, outer=(7,13)]
- │              ├── CASE WHEN xyz.x:13 IS NULL THEN a:6 ELSE y_new:18 END [as=upsert_y:20, type=int, outer=(6,13,18)]
- │              └── CASE WHEN xyz.x:13 IS NULL THEN z_default:12 ELSE xyz.z:15 END [as=upsert_z:21, type=float, outer=(12,13,15)]
+ │              ├── CASE WHEN xyz.x:13 IS NULL THEN a:6 ELSE y_new:18 END [as=upsert_y:20, type=int8, outer=(6,13,18)]
+ │              └── CASE WHEN xyz.x:13 IS NULL THEN z_default:12 ELSE xyz.z:15 END [as=upsert_z:21, type=float8, outer=(12,13,15)]
  └── select
       ├── columns: x:22(string!null) y:23(int!null) z:24(float)
       ├── stats: [rows=1, distinct(23)=1, null(23)=0]
@@ -228,14 +228,14 @@ upsert xyz
       │         │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
       │         │    ├── computed column expressions
       │         │    │    └── c:8
-      │         │    │         └── a:6::FLOAT8 [type=float]
+      │         │    │         └── a:6::FLOAT8 [type=float8]
       │         │    ├── stats: [rows=2000]
       │         │    ├── key: (9)
       │         │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
       │         └── filters
       │              └── false [type=bool, constraints=(contradiction; tight)]
       └── projections
-           └── NULL::FLOAT8 [as=z_default:12, type=float, immutable]
+           └── NULL::FLOAT8 [as=z_default:12, type=float8, immutable]
 
 # Nullable conflict column. Ensure that ensure-upsert-distinct-on passes through
 # the input's null count.
@@ -298,12 +298,12 @@ upsert uv
       │    │    │    │    │    │    ├── key: (5)
       │    │    │    │    │    │    └── fd: (5)-->(6-9)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── xyz.z:7::INT8 [as=z:10, type=int, outer=(7), immutable]
+      │    │    │    │    │         └── xyz.z:7::INT8 [as=z:10, type=int8, outer=(7), immutable]
       │    │    │    │    └── projections
-      │    │    │    │         └── unique_rowid() [as=u_default:11, type=int, volatile]
+      │    │    │    │         └── unique_rowid() [as=u_default:11, type=int8, volatile]
       │    │    │    └── aggregations
-      │    │    │         └── first-agg [as=u_default:11, type=int, outer=(11)]
-      │    │    │              └── u_default:11 [type=int]
+      │    │    │         └── first-agg [as=u_default:11, type=int8, outer=(11)]
+      │    │    │              └── u_default:11 [type=int8]
       │    │    ├── scan uv
       │    │    │    ├── columns: u:12(int!null) v:13(int) uv.crdb_internal_mvcc_timestamp:14(decimal) uv.tableoid:15(oid)
       │    │    │    ├── stats: [rows=1000, distinct(13)=991, null(13)=10]
@@ -312,10 +312,10 @@ upsert uv
       │    │    └── filters
       │    │         └── z:10 = v:13 [type=bool, outer=(10,13), constraints=(/10: (/NULL - ]; /13: (/NULL - ]), fd=(10)==(13), (13)==(10)]
       │    └── projections
-      │         └── 1 [as=v_new:16, type=int]
+      │         └── 1 [as=v_new:16, type=int8]
       └── projections
-           ├── CASE WHEN u:12 IS NULL THEN u_default:11 ELSE u:12 END [as=upsert_u:17, type=int, outer=(11,12)]
-           └── CASE WHEN u:12 IS NULL THEN z:10 ELSE v_new:16 END [as=upsert_v:18, type=int, outer=(10,12,16)]
+           ├── CASE WHEN u:12 IS NULL THEN u_default:11 ELSE u:12 END [as=upsert_u:17, type=int8, outer=(11,12)]
+           └── CASE WHEN u:12 IS NULL THEN z:10 ELSE v_new:16 END [as=upsert_v:18, type=int8, outer=(10,12,16)]
 
 # Multiple conflict columns.
 # TODO(andyk): The null counts for the left join are surprisingly high. It's due
@@ -376,8 +376,8 @@ upsert mno
       │    │    │    │         ├── key: (6)
       │    │    │    │         └── fd: (6)-->(7-10), (7,8)~~>(6,9,10)
       │    │    │    └── aggregations
-      │    │    │         └── first-agg [as=m:6, type=int, outer=(6)]
-      │    │    │              └── m:6 [type=int]
+      │    │    │         └── first-agg [as=m:6, type=int8, outer=(6)]
+      │    │    │              └── m:6 [type=int8]
       │    │    ├── scan mno
       │    │    │    ├── columns: m:11(int!null) n:12(int) o:13(int) crdb_internal_mvcc_timestamp:14(decimal) tableoid:15(oid)
       │    │    │    ├── stats: [rows=2000, distinct(12)=100, null(12)=10, distinct(13)=1900, null(13)=100]
@@ -387,8 +387,8 @@ upsert mno
       │    │         ├── n:7 = n:12 [type=bool, outer=(7,12), constraints=(/7: (/NULL - ]; /12: (/NULL - ]), fd=(7)==(12), (12)==(7)]
       │    │         └── o:8 = o:13 [type=bool, outer=(8,13), constraints=(/8: (/NULL - ]; /13: (/NULL - ]), fd=(8)==(13), (13)==(8)]
       │    └── projections
-      │         └── 5 [as=o_new:16, type=int]
+      │         └── 5 [as=o_new:16, type=int8]
       └── projections
-           ├── CASE WHEN m:11 IS NULL THEN m:6 ELSE m:11 END [as=upsert_m:17, type=int, outer=(6,11)]
-           ├── CASE WHEN m:11 IS NULL THEN n:7 ELSE n:12 END [as=upsert_n:18, type=int, outer=(7,11,12)]
-           └── CASE WHEN m:11 IS NULL THEN o:8 ELSE o_new:16 END [as=upsert_o:19, type=int, outer=(8,11,16)]
+           ├── CASE WHEN m:11 IS NULL THEN m:6 ELSE m:11 END [as=upsert_m:17, type=int8, outer=(6,11)]
+           ├── CASE WHEN m:11 IS NULL THEN n:7 ELSE n:12 END [as=upsert_n:18, type=int8, outer=(7,11,12)]
+           └── CASE WHEN m:11 IS NULL THEN o:8 ELSE o_new:16 END [as=upsert_o:19, type=int8, outer=(8,11,16)]

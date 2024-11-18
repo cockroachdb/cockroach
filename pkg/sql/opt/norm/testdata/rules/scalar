@@ -1231,14 +1231,14 @@ values
  ├── fd: ()-->(1)
  ├── prune: (1)
  └── tuple [type=tuple{int}]
-      └── case [type=int]
+      └── case [type=int8]
            ├── true [type=bool]
-           ├── when [type=int]
+           ├── when [type=int8]
            │    ├── gt [type=bool]
-           │    │    ├── function: random [type=float]
-           │    │    └── const: 0.5 [type=float]
-           │    └── null [type=int]
-           └── null [type=int]
+           │    │    ├── function: random [type=float8]
+           │    │    └── const: 0.5 [type=float8]
+           │    └── null [type=int8]
+           └── null [type=int8]
 
 # --------------------------------------------------
 # UnifyComparisonTypes

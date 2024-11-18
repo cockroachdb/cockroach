@@ -119,8 +119,8 @@ project
            │    └── interesting orderings: (+2,+1)
            └── filters
                 └── eq [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-                     ├── variable: y:2 [type=int]
-                     └── const: 1 [type=int]
+                     ├── variable: y:2 [type=int8]
+                     └── const: 1 [type=int8]
 
 exec-ddl
 DROP INDEX i
@@ -266,11 +266,11 @@ select
  │    └── interesting orderings: (+1) (+2,+1)
  └── filters
       ├── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
-      │    ├── variable: unique_value:2 [type=int]
+      │    ├── variable: unique_value:2 [type=int8]
       │    └── null [type=unknown]
       └── eq [type=bool, outer=(3), constraints=(/3: [/2000 - /2000]; tight), fd=()-->(3)]
-           ├── variable: notnull_value:3 [type=int]
-           └── const: 2000 [type=int]
+           ├── variable: notnull_value:3 [type=int8]
+           └── const: 2000 [type=int8]
 
 # The scan should be marked as side-effecting if FOR UPDATE is used.
 build
@@ -316,8 +316,8 @@ project
       ├── columns: k:1(int!null) a:2(int!null) b:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
       ├── check constraint expressions
       │    └── eq [type=bool, outer=(3), constraints=(/3: [/0 - /0]; tight), fd=()-->(3)]
-      │         ├── variable: b:3 [type=int]
-      │         └── const: 0 [type=int]
+      │         ├── variable: b:3 [type=int8]
+      │         └── const: 0 [type=int8]
       ├── key: (1)
       ├── fd: ()-->(3), (1)-->(2,4,5)
       ├── prune: (1-5)
@@ -439,8 +439,8 @@ project
       │    │    │         ├── true [type=bool]
       │    │    │         ├── when [type=string]
       │    │    │         │    ├── lt [type=bool]
-      │    │    │         │    │    ├── variable: i:1 [type=int]
-      │    │    │         │    │    └── const: 0 [type=int]
+      │    │    │         │    │    ├── variable: i:1 [type=int8]
+      │    │    │         │    │    └── const: 0 [type=int8]
       │    │    │         │    └── const: 'foo' [type=string]
       │    │    │         └── const: 'bar' [type=string]
       │    │    ├── c_s:5

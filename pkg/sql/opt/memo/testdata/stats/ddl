@@ -21,7 +21,7 @@ alter-table-split a
  │    │    ├── key: ()
  │    │    └── () [type=tuple]
  │    └── projections
- │         └── 1 [as="?column?":1, type=int]
+ │         └── 1 [as="?column?":1, type=int8]
  └── CAST(NULL AS STRING) [type=string]
 
 build colstat=1
@@ -43,7 +43,7 @@ alter-table-unsplit a
       │    ├── key: ()
       │    └── () [type=tuple]
       └── projections
-           └── 1 [as="?column?":6, type=int]
+           └── 1 [as="?column?":6, type=int8]
 
 build colstat=1
 ALTER TABLE a UNSPLIT ALL
@@ -152,7 +152,7 @@ cancel-sessions
       │    │    └── () [type=tuple]
       │    └── projections
       │         └── 'a' [as="?column?":1, type=string]
-      └── 0 [type=int]
+      └── 0 [type=int8]
 
 build colstat=1
 EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM a

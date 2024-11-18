@@ -33,8 +33,8 @@ project
       │    └── interesting orderings: (+1)
       └── filters
            └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
-                ├── variable: x:1 [type=int]
-                └── const: 5 [type=int]
+                ├── variable: x:1 [type=int8]
+                └── const: 5 [type=int8]
 
 build
 SELECT xy.x + 1 = length('foo') + xy.y AS a, uv.rowid * xy.x AS b FROM xy, uv
@@ -66,16 +66,16 @@ project
  │    └── filters (true)
  └── projections
       ├── eq [as=a:10, type=bool, outer=(1,2), immutable]
-      │    ├── plus [type=int]
-      │    │    ├── variable: x:1 [type=int]
-      │    │    └── const: 1 [type=int]
-      │    └── plus [type=int]
-      │         ├── function: length [type=int]
+      │    ├── plus [type=int8]
+      │    │    ├── variable: x:1 [type=int8]
+      │    │    └── const: 1 [type=int8]
+      │    └── plus [type=int8]
+      │         ├── function: length [type=int8]
       │         │    └── const: 'foo' [type=string]
-      │         └── variable: y:2 [type=int]
-      └── mult [as=b:11, type=int, outer=(1,7), immutable]
-           ├── variable: rowid:7 [type=int]
-           └── variable: x:1 [type=int]
+      │         └── variable: y:2 [type=int8]
+      └── mult [as=b:11, type=int8, outer=(1,7), immutable]
+           ├── variable: rowid:7 [type=int8]
+           └── variable: x:1 [type=int8]
 
 build
 SELECT * FROM xy WHERE EXISTS(SELECT * FROM uv WHERE u=x)
@@ -120,8 +120,8 @@ project
                           │    └── interesting orderings: (+7)
                           └── filters
                                └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-                                    ├── variable: u:5 [type=int]
-                                    └── variable: x:1 [type=int]
+                                    ├── variable: u:5 [type=int8]
+                                    └── variable: x:1 [type=int8]
 
 build
 SELECT * FROM xy WHERE y IN (SELECT v FROM uv WHERE u=x)
@@ -165,9 +165,9 @@ project
                 │         │    └── interesting orderings: (+7)
                 │         └── filters
                 │              └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-                │                   ├── variable: u:5 [type=int]
-                │                   └── variable: x:1 [type=int]
-                └── variable: y:2 [type=int]
+                │                   ├── variable: u:5 [type=int8]
+                │                   └── variable: x:1 [type=int8]
+                └── variable: y:2 [type=int8]
 
 # Regression for 36137: need to detect correlation in 2nd Any operator argument.
 build
@@ -194,8 +194,8 @@ project
       └── filters
            └── or [type=bool, outer=(1,2), correlated-subquery]
                 ├── eq [type=bool]
-                │    ├── variable: x:1 [type=int]
-                │    └── const: 1 [type=int]
+                │    ├── variable: x:1 [type=int8]
+                │    └── const: 1 [type=int8]
                 └── any: eq [type=bool]
                      ├── project
                      │    ├── columns: v:6(int!null)
@@ -206,7 +206,7 @@ project
                      │         ├── fd: (7)-->(5,6,8,9)
                      │         ├── prune: (5-9)
                      │         └── interesting orderings: (+7)
-                     └── variable: y:2 [type=int]
+                     └── variable: y:2 [type=int8]
 
 # Side-effects: test DivOp and impure FuncOp.
 build
@@ -253,8 +253,8 @@ group-by (hash)
  │         │    │    └── unfiltered-cols: (1-4)
  │         │    └── projections
  │         │         └── div [as=div:5, type=decimal, outer=(1,2), immutable]
- │         │              ├── variable: x:1 [type=int]
- │         │              └── variable: y:2 [type=int]
+ │         │              ├── variable: x:1 [type=int8]
+ │         │              └── variable: y:2 [type=int8]
  │         ├── project
  │         │    ├── columns: u:6(int) v:7(int!null)
  │         │    ├── stable
@@ -279,11 +279,11 @@ group-by (hash)
  │         │                        └── const: '2018-01-01' [type=string]
  │         └── filters
  │              └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │                   ├── variable: x:1 [type=int]
- │                   └── variable: u:6 [type=int]
+ │                   ├── variable: x:1 [type=int8]
+ │                   └── variable: u:6 [type=int8]
  └── aggregations
       └── sum [as=sum:11, type=decimal, outer=(1)]
-           └── variable: x:1 [type=int]
+           └── variable: x:1 [type=int8]
 
 # Verify that we don't mark the division as side-effecting when the right-hand
 # side is a constant.
@@ -302,15 +302,15 @@ project
  │    └── interesting orderings: (+1)
  └── projections
       ├── div [as="?column?":5, type=decimal, outer=(1)]
-      │    ├── variable: x:1 [type=int]
-      │    └── const: 1 [type=int]
-      ├── div [as="?column?":6, type=float, outer=(1), immutable]
-      │    ├── cast: FLOAT8 [type=float]
-      │    │    └── variable: x:1 [type=int]
-      │    └── const: 2.0 [type=float]
+      │    ├── variable: x:1 [type=int8]
+      │    └── const: 1 [type=int8]
+      ├── div [as="?column?":6, type=float8, outer=(1), immutable]
+      │    ├── cast: FLOAT8 [type=float8]
+      │    │    └── variable: x:1 [type=int8]
+      │    └── const: 2.0 [type=float8]
       └── div [as="?column?":7, type=decimal, outer=(1), immutable]
            ├── cast: DECIMAL [type=decimal]
-           │    └── variable: x:1 [type=int]
+           │    └── variable: x:1 [type=int8]
            └── const: 3.0 [type=decimal]
 
 # Verify that we take into account the volatility of casts.
@@ -346,7 +346,7 @@ project
  │    └── interesting orderings: (+3)
  └── projections
       └── cast: STRING [as=f:6, type=string, outer=(2), stable]
-           └── variable: sf.f:2 [type=float]
+           └── variable: sf.f:2 [type=float8]
 
 build
 SELECT ARRAY(SELECT f FROM sf)::STRING[]
@@ -364,7 +364,7 @@ project
  │    └── tuple [type=tuple]
  └── projections
       └── cast: STRING[] [as=array:6, type=string[], stable, subquery]
-           └── array-flatten [type=float[]]
+           └── array-flatten [type=float8[]]
                 └── project
                      ├── columns: f:2(float)
                      ├── prune: (2)

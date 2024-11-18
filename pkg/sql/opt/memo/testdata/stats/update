@@ -75,7 +75,7 @@ with &1
  │         │    └── filters
  │         │         └── xyz.z:8 = 5.5 [type=bool, outer=(8), constraints=(/8: [/5.5 - /5.5]; tight), fd=()-->(8)]
  │         └── projections
- │              └── 5 [as=y_new:11, type=int]
+ │              └── 5 [as=y_new:11, type=int8]
  └── select
       ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
       ├── stats: [rows=3.333333, distinct(12)=3.33333, null(12)=0]
@@ -201,16 +201,16 @@ with &2 (q)
  │         │    │    └── filters
  │         │    │         └── parent.p:11 = 1 [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
  │         │    └── aggregations
- │         │         ├── first-agg [as=x:6, type=int, outer=(6)]
- │         │         │    └── x:6 [type=int]
- │         │         ├── first-agg [as=child.c:7, type=int, outer=(7)]
- │         │         │    └── child.c:7 [type=int]
+ │         │         ├── first-agg [as=x:6, type=int8, outer=(6)]
+ │         │         │    └── x:6 [type=int8]
+ │         │         ├── first-agg [as=child.c:7, type=int8, outer=(7)]
+ │         │         │    └── child.c:7 [type=int8]
  │         │         ├── first-agg [as=child.crdb_internal_mvcc_timestamp:9, type=decimal, outer=(9)]
  │         │         │    └── child.crdb_internal_mvcc_timestamp:9 [type=decimal]
  │         │         ├── first-agg [as=child.tableoid:10, type=oid, outer=(10)]
  │         │         │    └── child.tableoid:10 [type=oid]
- │         │         ├── first-agg [as=parent.p:11, type=int, outer=(11)]
- │         │         │    └── parent.p:11 [type=int]
+ │         │         ├── first-agg [as=parent.p:11, type=int8, outer=(11)]
+ │         │         │    └── parent.p:11 [type=int8]
  │         │         ├── first-agg [as=parent.crdb_internal_mvcc_timestamp:12, type=decimal, outer=(12)]
  │         │         │    └── parent.crdb_internal_mvcc_timestamp:12 [type=decimal]
  │         │         └── first-agg [as=parent.tableoid:13, type=oid, outer=(13)]

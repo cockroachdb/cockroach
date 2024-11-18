@@ -166,7 +166,7 @@ project
       │         └── (x:1 > 1000) AND (x:1 <= 2000) [type=bool, outer=(1), constraints=(/1: [/1001 - /2000]; tight)]
       └── aggregations
            └── sum [as=sum:6, type=decimal, outer=(1)]
-                └── x:1 [type=int]
+                └── x:1 [type=int8]
 
 # Regression: statistics builder panics when end key is NULL when it's trying
 # to compute start/end int boundaries.
@@ -252,7 +252,7 @@ project
       │    └── filters
       │         └── col3:5 = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
       └── aggregations
-           └── count-rows [as=count_rows:10, type=int]
+           └── count-rows [as=count_rows:10, type=int8]
 
 
 exec-ddl
@@ -1382,7 +1382,7 @@ project
  │    └── filters
  │         └── min:4 [type=bool, outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
  └── projections
-      └── 1 [as="?column?":5, type=int]
+      └── 1 [as="?column?":5, type=int8]
 
 # Test that distinct count estimates are correct for date ranges.
 exec-ddl
@@ -1790,7 +1790,7 @@ select
  │    │    ├── key: (2)
  │    │    └── fd: (2)-->(1)
  │    └── projections
- │         └── CASE WHEN c0:1 > 0 THEN 1 ELSE t0.rowid:2 END [as=rowid:5, type=int, outer=(1,2)]
+ │         └── CASE WHEN c0:1 > 0 THEN 1 ELSE t0.rowid:2 END [as=rowid:5, type=int8, outer=(1,2)]
  └── filters
       └── rowid:5 > 0 [type=bool, outer=(5), constraints=(/5: [/1 - ]; tight)]
 
@@ -2617,7 +2617,7 @@ limit
  │         │    └── b:3 [type=string]
  │         └── const-agg [as=c:4, type=string, outer=(4)]
  │              └── c:4 [type=string]
- └── 5 [type=int]
+ └── 5 [type=int8]
 
 # Multiple disjunctions without histograms.
 opt
@@ -2709,7 +2709,7 @@ limit
  │         │    └── b:3 [type=string]
  │         └── const-agg [as=c:4, type=string, outer=(4)]
  │              └── c:4 [type=string]
- └── 5 [type=int]
+ └── 5 [type=int8]
 
 opt
 SELECT * FROM disjunction WHERE (a = 'foo' OR b = 'foo') AND c = 'foo' LIMIT 5
@@ -2739,7 +2739,7 @@ limit
  │    │         └── fd: ()-->(4)
  │    └── filters
  │         └── (a:2 = 'foo') OR (b:3 = 'foo') [type=bool, outer=(2,3)]
- └── 5 [type=int]
+ └── 5 [type=int8]
 
 exec-ddl
 ALTER TABLE disjunction INJECT STATISTICS '[
@@ -2849,7 +2849,7 @@ limit
  │         │    └── b:3 [type=string]
  │         └── const-agg [as=c:4, type=string, outer=(4)]
  │              └── c:4 [type=string]
- └── 5 [type=int]
+ └── 5 [type=int8]
 
 
 # Multiple disjunctions with histograms.
@@ -2953,7 +2953,7 @@ limit
  │         │    └── b:3 [type=string]
  │         └── const-agg [as=c:4, type=string, outer=(4)]
  │              └── c:4 [type=string]
- └── 5 [type=int]
+ └── 5 [type=int8]
 
 # One disjunction filter and one simple filter.
 opt
@@ -2988,7 +2988,7 @@ limit
  │    │         └── fd: (1)-->(4)
  │    └── filters
  │         └── (a:2 LIKE 'foo%') OR (b:3 LIKE 'foo%') [type=bool, outer=(2,3)]
- └── 5 [type=int]
+ └── 5 [type=int8]
 
 # The row count should not exceed the number of rows in the table when
 # disjunctions have high selectivity values.
@@ -3021,7 +3021,7 @@ limit
  │    │    └── limit hint: 5.04
  │    └── filters
  │         └── ((a:2 > 'fop') OR (b:3 > 'fop')) OR (c:4 > 'fop') [type=bool, outer=(2-4)]
- └── 5 [type=int]
+ └── 5 [type=int8]
 
 # Regression test for #67573. Do not over-estimate row counts when columns
 # are highly correlated and selected values are very common according to the
@@ -3278,7 +3278,7 @@ project
  │         ├── scan t84478
  │         │    ├── computed column expressions
  │         │    │    └── col4:29
- │         │    │         └── CAST(NULL AS FLOAT8) [type=float]
+ │         │    │         └── CAST(NULL AS FLOAT8) [type=float8]
  │         │    └── stats: [rows=1000]
  │         ├── select
  │         │    ├── columns: col2:3(box2d!null) crdb_internal_mvcc_timestamp:7(decimal!null)
@@ -3298,7 +3298,7 @@ project
  │         └── filters (true)
  └── projections
       ├── NULL [as="?column?":33, type=unknown]
-      └── 1 [as="?column?":34, type=int]
+      └── 1 [as="?column?":34, type=int8]
 
 # Regression test for #85499. Avoid overflow when calculating distinct count.
 exec-ddl
@@ -3482,7 +3482,7 @@ scalar-group-by
  │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  └── aggregations
-      └── count-rows [as=count_rows:7, type=int]
+      └── count-rows [as=count_rows:7, type=int8]
 
 # Zig-zag join plus index join should not be picked due to high selectivity.
 opt
@@ -3513,7 +3513,7 @@ scalar-group-by
  │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  └── aggregations
-      └── count [as=count:7, type=int, outer=(4)]
+      └── count [as=count:7, type=int8, outer=(4)]
            └── c:4 [type=string]
 
 # When the zig-zag join is covering, stats come from the Select group.
@@ -3539,7 +3539,7 @@ project
  │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
  │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  └── projections
-      └── 1 [as="?column?":7, type=int]
+      └── 1 [as="?column?":7, type=int8]
 
 # When the zig-zag join is not covering and the stats come from memoizing the
 # zig-zag join, verify that the row count is the same as above.

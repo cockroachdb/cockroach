@@ -35,9 +35,9 @@ project
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1)
  └── projections
-      └── plus [as="?column?":6, type=int, outer=(1), volatile, udf]
-           ├── variable: a:1 [type=int]
-           └── udf: fn_volatile [type=int]
+      └── plus [as="?column?":6, type=int8, outer=(1), volatile, udf]
+           ├── variable: a:1 [type=int8]
+           └── udf: fn_volatile [type=int8]
                 └── body
                      └── limit
                           ├── columns: "?column?":5(int!null)
@@ -54,8 +54,8 @@ project
                           │    │    ├── key: ()
                           │    │    └── tuple [type=tuple]
                           │    └── projections
-                          │         └── const: 1 [as="?column?":5, type=int]
-                          └── const: 1 [type=int]
+                          │         └── const: 1 [as="?column?":5, type=int8]
+                          └── const: 1 [type=int8]
 
 build
 SELECT a FROM ab WHERE b = fn_immutable()
@@ -81,8 +81,8 @@ project
       │    └── interesting orderings: (+1)
       └── filters
            └── eq [type=bool, outer=(2), immutable, udf, constraints=(/2: (/NULL - ]), fd=()-->(2)]
-                ├── variable: b:2 [type=int]
-                └── udf: fn_immutable [type=int]
+                ├── variable: b:2 [type=int8]
+                └── udf: fn_immutable [type=int8]
                      └── body
                           └── limit
                                ├── columns: "?column?":5(int!null)
@@ -99,8 +99,8 @@ project
                                │    │    ├── key: ()
                                │    │    └── tuple [type=tuple]
                                │    └── projections
-                               │         └── const: 1 [as="?column?":5, type=int]
-                               └── const: 1 [type=int]
+                               │         └── const: 1 [as="?column?":5, type=int8]
+                               └── const: 1 [type=int8]
 
 build
 SELECT a FROM ab WHERE b = fn_immutable() + fn_stable()
@@ -126,9 +126,9 @@ project
       │    └── interesting orderings: (+1)
       └── filters
            └── eq [type=bool, outer=(2), stable, udf, constraints=(/2: (/NULL - ]), fd=()-->(2)]
-                ├── variable: b:2 [type=int]
-                └── plus [type=int]
-                     ├── udf: fn_immutable [type=int]
+                ├── variable: b:2 [type=int8]
+                └── plus [type=int8]
+                     ├── udf: fn_immutable [type=int8]
                      │    └── body
                      │         └── limit
                      │              ├── columns: "?column?":5(int!null)
@@ -145,9 +145,9 @@ project
                      │              │    │    ├── key: ()
                      │              │    │    └── tuple [type=tuple]
                      │              │    └── projections
-                     │              │         └── const: 1 [as="?column?":5, type=int]
-                     │              └── const: 1 [type=int]
-                     └── udf: fn_stable [type=int]
+                     │              │         └── const: 1 [as="?column?":5, type=int8]
+                     │              └── const: 1 [type=int8]
+                     └── udf: fn_stable [type=int8]
                           └── body
                                └── limit
                                     ├── columns: "?column?":6(int!null)
@@ -164,8 +164,8 @@ project
                                     │    │    ├── key: ()
                                     │    │    └── tuple [type=tuple]
                                     │    └── projections
-                                    │         └── const: 1 [as="?column?":6, type=int]
-                                    └── const: 1 [type=int]
+                                    │         └── const: 1 [as="?column?":6, type=int8]
+                                    └── const: 1 [type=int8]
 
 build
 SELECT a FROM ab WHERE b = fn_leakproof()
@@ -189,8 +189,8 @@ project
       │    └── interesting orderings: (+1)
       └── filters
            └── eq [type=bool, outer=(2), udf, constraints=(/2: (/NULL - ]), fd=()-->(2)]
-                ├── variable: b:2 [type=int]
-                └── udf: fn_leakproof [type=int]
+                ├── variable: b:2 [type=int8]
+                └── udf: fn_leakproof [type=int8]
                      └── body
                           └── limit
                                ├── columns: "?column?":5(int!null)
@@ -207,8 +207,8 @@ project
                                │    │    ├── key: ()
                                │    │    └── tuple [type=tuple]
                                │    └── projections
-                               │         └── const: 1 [as="?column?":5, type=int]
-                               └── const: 1 [type=int]
+                               │         └── const: 1 [as="?column?":5, type=int8]
+                               └── const: 1 [type=int8]
 
 # The "udf" property should propagate to the top-most filter.
 build
@@ -222,13 +222,13 @@ select
  │    ├── cardinality: [2 - 2]
  │    ├── prune: (1)
  │    ├── tuple [type=tuple{int}]
- │    │    └── const: 1 [type=int]
+ │    │    └── const: 1 [type=int8]
  │    └── tuple [type=tuple{int}]
- │         └── const: 2 [type=int]
+ │         └── const: 2 [type=int8]
  └── filters
       └── eq [type=bool, outer=(1), subquery, udf, constraints=(/1: (/NULL - ])]
-           ├── variable: column1:1 [type=int]
-           └── subquery [type=int]
+           ├── variable: column1:1 [type=int8]
+           └── subquery [type=int8]
                 └── max1-row
                      ├── columns: a:2(int!null)
                      ├── error: "more than one row returned by a subquery used as an expression"
@@ -254,8 +254,8 @@ select
                                │    └── interesting orderings: (+2)
                                └── filters
                                     └── eq [type=bool, outer=(3), udf, constraints=(/3: (/NULL - ]), fd=()-->(3)]
-                                         ├── variable: b:3 [type=int]
-                                         └── udf: fn_leakproof [type=int]
+                                         ├── variable: b:3 [type=int8]
+                                         └── udf: fn_leakproof [type=int8]
                                               └── body
                                                    └── limit
                                                         ├── columns: "?column?":6(int!null)
@@ -272,5 +272,5 @@ select
                                                         │    │    ├── key: ()
                                                         │    │    └── tuple [type=tuple]
                                                         │    └── projections
-                                                        │         └── const: 1 [as="?column?":6, type=int]
-                                                        └── const: 1 [type=int]
+                                                        │         └── const: 1 [as="?column?":6, type=int8]
+                                                        └── const: 1 [type=int8]

@@ -448,7 +448,7 @@ project
       │    │    │    │    └── ('foo',) [type=tuple{string}]
       │    │    │    └── filters (true)
       │    │    └── projections
-      │    │         └── 10 [as="inverted_join_const_col_@4":15, type=int]
+      │    │         └── 10 [as="inverted_join_const_col_@4":15, type=int8]
       │    └── filters (true)
       └── filters
            └── t1.j:2 @> t2.j:10 [type=bool, outer=(2,10), immutable]

@@ -86,7 +86,7 @@ project
       │    │         └── stats: [rows=2000, distinct(2)=7, null(2)=0]
       │    └── filters
       │         └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
-      └── 1 [type=int]
+      └── 1 [type=int8]
 
 memo
 SELECT i FROM t WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) ORDER BY i LIMIT 1
@@ -190,7 +190,7 @@ project
       │    │                   └── fd: (3)-->(6)
       │    └── filters
       │         └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
-      └── 1 [type=int]
+      └── 1 [type=int8]
 
 memo
 SELECT i FROM t WHERE st_intersects('LINESTRING(100 100, 150 150)', g) ORDER BY i LIMIT 1
@@ -356,7 +356,7 @@ project
       │    │         └── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
       │    └── filters
       │         └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
-      └── 1 [type=int]
+      └── 1 [type=int8]
 
 
 opt colstat=1 colstat=2
@@ -410,7 +410,7 @@ project
       │    │                   └── fd: (3)-->(6)
       │    └── filters
       │         └── st_intersects('010200000002000000000000000000594000000000000059400000000000C062400000000000C06240', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
-      └── 1 [type=int]
+      └── 1 [type=int8]
 
 # Set a high null count.
 exec-ddl
@@ -769,4 +769,4 @@ project
       │    └── filters
       │         └── _st_dwithinexclusive(b:2, b:2, -0.38) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── aggregations
-           └── count-rows [as=count_rows:21, type=int]
+           └── count-rows [as=count_rows:21, type=int8]

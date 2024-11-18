@@ -44,7 +44,7 @@ call
                 │                   │    │    ├── key: ()
                 │                   │    │    └── tuple [type=tuple]
                 │                   │    └── projections
-                │                   │         └── const: 1 [as="?column?":1, type=int]
+                │                   │         └── const: 1 [as="?column?":1, type=int8]
                 │                   └── project
                 │                        ├── columns: "_implicit_return":2(void)
                 │                        ├── cardinality: [1 - 1]
@@ -58,7 +58,7 @@ call
                 │                        └── projections
                 │                             └── cast: VOID [as="_implicit_return":2, type=void, immutable]
                 │                                  └── null [type=unknown]
-                └── const: 1 [type=int]
+                └── const: 1 [type=int8]
 
 # Properties with OUT parameters.
 exec-ddl
@@ -119,18 +119,18 @@ call
                 │    │    │    │    │    ├── key: ()
                 │    │    │    │    │    └── tuple [type=tuple]
                 │    │    │    │    └── projections
-                │    │    │    │         └── cast: INT8 [as=a:3, type=int, immutable]
+                │    │    │    │         └── cast: INT8 [as=a:3, type=int8, immutable]
                 │    │    │    │              └── null [type=unknown]
                 │    │    │    └── projections
-                │    │    │         └── cast: INT8 [as=b:4, type=int, immutable]
+                │    │    │         └── cast: INT8 [as=b:4, type=int8, immutable]
                 │    │    │              └── null [type=unknown]
                 │    │    └── projections
-                │    │         └── const: 5 [as=a:5, type=int]
+                │    │         └── const: 5 [as=a:5, type=int8]
                 │    └── projections
                 │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":10, type=tuple{int AS a, int AS b}, outer=(4,5), immutable, udf]
                 │              ├── args
-                │              │    ├── variable: a:5 [type=int]
-                │              │    └── variable: b:4 [type=int]
+                │              │    ├── variable: a:5 [type=int8]
+                │              │    └── variable: b:4 [type=int8]
                 │              ├── params: a:6(int) b:7(int)
                 │              └── body
                 │                   ├── project
@@ -143,7 +143,7 @@ call
                 │                   │    │    ├── key: ()
                 │                   │    │    └── tuple [type=tuple]
                 │                   │    └── projections
-                │                   │         └── const: 1 [as="?column?":8, type=int]
+                │                   │         └── const: 1 [as="?column?":8, type=int8]
                 │                   └── project
                 │                        ├── columns: "_implicit_return":9(tuple{int AS a, int AS b})
                 │                        ├── outer: (6,7)
@@ -158,6 +158,6 @@ call
                 │                        └── projections
                 │                             └── cast: RECORD [as="_implicit_return":9, type=tuple{int AS a, int AS b}, outer=(6,7), immutable]
                 │                                  └── tuple [type=tuple{int, int}]
-                │                                       ├── variable: a:6 [type=int]
-                │                                       └── variable: b:7 [type=int]
-                └── const: 1 [type=int]
+                │                                       ├── variable: a:6 [type=int8]
+                │                                       └── variable: b:7 [type=int8]
+                └── const: 1 [type=int8]

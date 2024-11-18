@@ -92,8 +92,8 @@ select
  │                     <--- 'hello' --- 'howdy' --- 'hi'
  └── filters
       ├── gt [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
-      │    ├── variable: x:1 [type=int]
-      │    └── const: 0 [type=int]
+      │    ├── variable: x:1 [type=int8]
+      │    └── const: 0 [type=int8]
       └── eq [type=bool, outer=(2), immutable, constraints=(/2: [/'howdy' - /'howdy']; tight), fd=()-->(2)]
            ├── variable: g:2 [type=greeting]
            └── const: 'howdy' [type=greeting]

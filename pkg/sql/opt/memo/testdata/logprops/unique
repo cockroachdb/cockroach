@@ -56,8 +56,8 @@ project
       │    └── interesting orderings: (+1)
       └── filters
            └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-                ├── variable: y:2 [type=int]
-                └── const: 5 [type=int]
+                ├── variable: y:2 [type=int8]
+                └── const: 5 [type=int8]
 
 # Because we're constraining a key to a constant, the resulting FDs should
 # show that all columns are now constant, and cardinality is at most 1.
@@ -85,8 +85,8 @@ project
       └── filters
            └── and [type=bool, outer=(4,5), constraints=(/4: [/1 - /1]; /5: [/1 - /1]; tight), fd=()-->(4,5)]
                 ├── eq [type=bool]
-                │    ├── variable: a:4 [type=int]
-                │    └── const: 1 [type=int]
+                │    ├── variable: a:4 [type=int8]
+                │    └── const: 1 [type=int8]
                 └── eq [type=bool]
-                     ├── variable: b:5 [type=int]
-                     └── const: 1 [type=int]
+                     ├── variable: b:5 [type=int8]
+                     └── const: 1 [type=int8]

@@ -241,7 +241,7 @@ scan abc
  ├── columns: a:1(int!null)
  ├── computed column expressions
  │    └── b:2
- │         └── a:1 % 10 [type=int]
+ │         └── a:1 % 10 [type=int8]
  ├── stats: [rows=20, distinct(2)=10, null(2)=0]
  │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
  │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
@@ -261,14 +261,14 @@ project
  │    ├── columns: a:1(int!null)
  │    ├── computed column expressions
  │    │    └── b:2
- │    │         └── a:1 % 10 [type=int]
+ │    │         └── a:1 % 10 [type=int8]
  │    ├── stats: [rows=20, distinct(2)=10, null(2)=0]
  │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
  │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
  │    │   virtcolstats: (2)
  │    └── key: (1)
  └── projections
-      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+      └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Push a select below the project.
 norm colstat=1 colstat=2 expect=PushSelectIntoProject
@@ -289,7 +289,7 @@ project
  │    │    ├── columns: a:1(int!null)
  │    │    ├── computed column expressions
  │    │    │    └── b:2
- │    │    │         └── a:1 % 10 [type=int]
+ │    │    │         └── a:1 % 10 [type=int8]
  │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
  │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -300,7 +300,7 @@ project
  │    └── filters
  │         └── (a:1 % 2) = 0 [type=bool, outer=(1), immutable]
  └── projections
-      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+      └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Push a select on the virtual column below the project.
 norm colstat=1 colstat=2
@@ -326,7 +326,7 @@ project
  │    │    ├── columns: a:1(int!null) c:3(int)
  │    │    ├── computed column expressions
  │    │    │    └── b:2
- │    │    │         └── a:1 % 10 [type=int]
+ │    │    │         └── a:1 % 10 [type=int8]
  │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
  │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -338,7 +338,7 @@ project
  │    └── filters
  │         └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
  └── projections
-      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+      └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Again, with placeholders.
 assign-placeholders-norm query-args=(3)
@@ -364,7 +364,7 @@ project
  │    │    ├── columns: a:1(int!null) c:3(int)
  │    │    ├── computed column expressions
  │    │    │    └── b:2
- │    │    │         └── a:1 % 10 [type=int]
+ │    │    │         └── a:1 % 10 [type=int8]
  │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
  │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -376,7 +376,7 @@ project
  │    └── filters
  │         └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
  └── projections
-      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+      └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Push a select on the virtual column expression below the project.
 norm colstat=1 colstat=2
@@ -402,7 +402,7 @@ project
  │    │    ├── columns: a:1(int!null) c:3(int)
  │    │    ├── computed column expressions
  │    │    │    └── b:2
- │    │    │         └── a:1 % 10 [type=int]
+ │    │    │         └── a:1 % 10 [type=int8]
  │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
  │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -414,7 +414,7 @@ project
  │    └── filters
  │         └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
  └── projections
-      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+      └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Again, with placeholders.
 assign-placeholders-norm query-args=(3)
@@ -440,7 +440,7 @@ project
  │    │    ├── columns: a:1(int!null) c:3(int)
  │    │    ├── computed column expressions
  │    │    │    └── b:2
- │    │    │         └── a:1 % 10 [type=int]
+ │    │    │         └── a:1 % 10 [type=int8]
  │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
  │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -452,7 +452,7 @@ project
  │    └── filters
  │         └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
  └── projections
-      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+      └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Push a select on the virtual column expression below the project.
 norm colstat=1 colstat=2
@@ -470,7 +470,7 @@ select
  │    ├── columns: a:1(int!null)
  │    ├── computed column expressions
  │    │    └── b:2
- │    │         └── a:1 % 10 [type=int]
+ │    │         └── a:1 % 10 [type=int8]
  │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
  │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -497,7 +497,7 @@ select
  │    ├── columns: a:1(int!null)
  │    ├── computed column expressions
  │    │    └── b:2
- │    │         └── a:1 % 10 [type=int]
+ │    │         └── a:1 % 10 [type=int8]
  │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
  │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -532,7 +532,7 @@ project
  │    │    ├── columns: a:1(int!null) c:3(int)
  │    │    ├── computed column expressions
  │    │    │    └── b:2
- │    │    │         └── a:1 % 10 [type=int]
+ │    │    │         └── a:1 % 10 [type=int8]
  │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
  │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -544,7 +544,7 @@ project
  │    └── filters
  │         └── (a:1 % 10) IN (2, 4, 6) [type=bool, outer=(1), immutable]
  └── projections
-      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+      └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Again, with placeholders.
 assign-placeholders-norm query-args=(2, 4, 6)
@@ -570,7 +570,7 @@ project
  │    │    ├── columns: a:1(int!null) c:3(int)
  │    │    ├── computed column expressions
  │    │    │    └── b:2
- │    │    │         └── a:1 % 10 [type=int]
+ │    │    │         └── a:1 % 10 [type=int8]
  │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
  │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -582,7 +582,7 @@ project
  │    └── filters
  │         └── (a:1 % 10) IN (2, 4, 6) [type=bool, outer=(1), immutable]
  └── projections
-      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+      └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Distinct on top of the project.
 norm
@@ -604,14 +604,14 @@ distinct-on
       │    ├── columns: a:1(int!null)
       │    ├── computed column expressions
       │    │    └── b:2
-      │    │         └── a:1 % 10 [type=int]
+      │    │         └── a:1 % 10 [type=int8]
       │    ├── stats: [rows=20, distinct(2)=10, null(2)=0]
       │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
       │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
       │    │   virtcolstats: (2)
       │    └── key: (1)
       └── projections
-           └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+           └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Distinct on top of the project using just the virtual column expression.
 norm
@@ -633,14 +633,14 @@ distinct-on
       │    ├── columns: a:1(int!null)
       │    ├── computed column expressions
       │    │    └── b:2
-      │    │         └── a:1 % 10 [type=int]
+      │    │         └── a:1 % 10 [type=int8]
       │    ├── stats: [rows=20, distinct(2)=10, null(2)=0]
       │    │   histogram(2)=  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2  0  2
       │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9
       │    │   virtcolstats: (2)
       │    └── key: (1)
       └── projections
-           └── a:1 % 10 [as="?column?":6, type=int, outer=(1), immutable]
+           └── a:1 % 10 [as="?column?":6, type=int8, outer=(1), immutable]
 
 # Distinct on top of the project using just the virtual column expression.
 norm
@@ -670,7 +670,7 @@ distinct-on
       │    │    ├── columns: a:1(int!null)
       │    │    ├── computed column expressions
       │    │    │    └── b:2
-      │    │    │         └── a:1 % 10 [type=int]
+      │    │    │         └── a:1 % 10 [type=int8]
       │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
       │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
       │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -681,7 +681,7 @@ distinct-on
       │    └── filters
       │         └── (a:1 % 10) > 3 [type=bool, outer=(1), immutable]
       └── projections
-           └── a:1 % 10 [as="?column?":6, type=int, outer=(1), immutable]
+           └── a:1 % 10 [as="?column?":6, type=int8, outer=(1), immutable]
 
 # Push a join below the project.
 opt colstat=1 colstat=2 colstat=6 colstat=7
@@ -720,10 +720,10 @@ project
       │    │    │    │   virtcolstats: (7)
       │    │    │    └── key: (6)
       │    │    └── projections
-      │    │         └── a:6 + 1 [as=column11:11, type=int, outer=(6), immutable]
+      │    │         └── a:6 + 1 [as=column11:11, type=int8, outer=(6), immutable]
       │    └── filters (true)
       └── projections
-           └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+           └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Push an index join below the project.
 opt colstat=1 colstat=2 colstat=3
@@ -753,7 +753,7 @@ project
  │         │   virtcolstats: (2)
  │         └── key: (1)
  └── projections
-      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+      └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Push a limit below the project.
 norm colstat=1 colstat=2
@@ -780,7 +780,7 @@ project
  │    │    ├── columns: a:1(int!null)
  │    │    ├── computed column expressions
  │    │    │    └── b:2
- │    │    │         └── a:1 % 10 [type=int]
+ │    │    │         └── a:1 % 10 [type=int8]
  │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0, distinct(2)=10, null(2)=0]
  │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -790,9 +790,9 @@ project
  │    │    ├── key: (1)
  │    │    ├── ordering: +1
  │    │    └── limit hint: 5.00
- │    └── 5 [type=int]
+ │    └── 5 [type=int8]
  └── projections
-      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+      └── a:1 % 10 [as=b:2, type=int8, outer=(1), immutable]
 
 # Set operations currently act as barriers for virtual column stats. Make sure
 # we don't panic, though stats will be less accurate. (Only columns 11 and 12
@@ -813,7 +813,7 @@ project
  │    │    ├── columns: abc.a:1(int!null)
  │    │    ├── computed column expressions
  │    │    │    └── b:2
- │    │    │         └── abc.a:1 % 10 [type=int]
+ │    │    │         └── abc.a:1 % 10 [type=int8]
  │    │    ├── stats: [rows=20, distinct(1)=20, null(1)=0]
  │    │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -823,14 +823,14 @@ project
  │         ├── columns: abc.a:6(int!null)
  │         ├── computed column expressions
  │         │    └── b:7
- │         │         └── abc.a:6 % 10 [type=int]
+ │         │         └── abc.a:6 % 10 [type=int8]
  │         ├── stats: [rows=20, distinct(6)=20, null(6)=0]
  │         │   histogram(6)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │         │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
  │         │   virtcolstats: (7)
  │         └── key: (6)
  └── projections
-      └── a:11 % 10 [as="?column?":12, type=int, outer=(11), immutable]
+      └── a:11 % 10 [as="?column?":12, type=int8, outer=(11), immutable]
 
 # With-scans currently act as barriers for virtual column stats. Make sure we
 # don't panic, though stats will be less accurate. (Only columns 6 and 7 matter
@@ -847,7 +847,7 @@ with &1 (w)
  │    ├── columns: abc.a:1(int!null)
  │    ├── computed column expressions
  │    │    └── b:2
- │    │         └── abc.a:1 % 10 [type=int]
+ │    │         └── abc.a:1 % 10 [type=int8]
  │    ├── stats: [rows=20, distinct(1)=20, null(1)=0]
  │    │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1   0  1
  │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17 --- 18 --- 19
@@ -864,4 +864,4 @@ with &1 (w)
       │    ├── stats: [rows=20, distinct(6)=20, null(6)=0]
       │    └── key: (6)
       └── projections
-           └── a:6 % 10 [as="?column?":7, type=int, outer=(6), immutable]
+           └── a:6 % 10 [as="?column?":7, type=int8, outer=(6), immutable]

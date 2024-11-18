@@ -1543,10 +1543,10 @@ root
  │         │    │    └── prune: (4-6)
  │         │    └── filters
  │         │         └── eq [type=bool, outer=(4), constraints=(/4: [/0 - /0]; tight), fd=()-->(4)]
- │         │              ├── variable: t.public.parent_diff_type.p:4 [type=int]
- │         │              └── const: 0 [type=int]
+ │         │              ├── variable: t.public.parent_diff_type.p:4 [type=int8]
+ │         │              └── const: 0 [type=int8]
  │         └── projections
- │              └── const: 1 [as=p_new:7, type=int]
+ │              └── const: 1 [as=p_new:7, type=int8]
  └── cascade
       └── update t.public.child_diff_type
            ├── columns: <none>
@@ -1596,15 +1596,15 @@ root
            │    │    │    │    └── prune: (16,17)
            │    │    │    └── filters
            │    │    │         └── is-not [type=bool, outer=(16,17)]
-           │    │    │              ├── variable: p_old:16 [type=int]
-           │    │    │              └── variable: p_new:17 [type=int]
+           │    │    │              ├── variable: p_old:16 [type=int8]
+           │    │    │              └── variable: p_new:17 [type=int8]
            │    │    └── filters
            │    │         └── eq [type=bool, outer=(13,16), constraints=(/13: (/NULL - ]; /16: (/NULL - ]), fd=(13)==(16), (16)==(13)]
            │    │              ├── variable: t.public.child_diff_type.p:13 [type=int2]
-           │    │              └── variable: p_old:16 [type=int]
+           │    │              └── variable: p_old:16 [type=int8]
            │    └── projections
            │         └── assignment-cast: INT2 [as=p_cast:18, type=int2, outer=(17), immutable]
-           │              └── variable: p_new:17 [type=int]
+           │              └── variable: p_new:17 [type=int8]
            └── f-k-checks
                 └── f-k-checks-item: child_diff_type(p) -> parent_diff_type(p)
                      └── anti-join (hash)
@@ -1630,7 +1630,7 @@ root
                           └── filters
                                └── eq [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ]), fd=(19)==(20), (20)==(19)]
                                     ├── variable: p:19 [type=int2]
-                                    └── variable: t.public.parent_diff_type.p:20 [type=int]
+                                    └── variable: t.public.parent_diff_type.p:20 [type=int8]
 
 build-post-queries
 UPSERT INTO parent_diff_type VALUES (0)

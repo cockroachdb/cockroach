@@ -69,7 +69,7 @@ with &1
  │              │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
  │              │    ├── computed column expressions
  │              │    │    └── c:8
- │              │    │         └── a:6::FLOAT8 [type=float]
+ │              │    │         └── a:6::FLOAT8 [type=float8]
  │              │    ├── stats: [rows=2000, distinct(6)=2000, null(6)=0, distinct(7)=10, null(7)=0, distinct(8)=200, null(8)=20, distinct(9)=2000, null(9)=0]
  │              │    ├── key: (9)
  │              │    └── fd: (9)-->(6-8,10,11), (6)-->(8)
@@ -123,7 +123,7 @@ insert xyz
            │    ├── columns: a:6(int!null) b:7(string) c:8(float) rowid:9(int!null) abc.crdb_internal_mvcc_timestamp:10(decimal) abc.tableoid:11(oid)
            │    ├── computed column expressions
            │    │    └── c:8
-           │    │         └── a:6::FLOAT8 [type=float]
+           │    │         └── a:6::FLOAT8 [type=float8]
            │    ├── stats: [rows=2000]
            │    ├── key: (9)
            │    └── fd: (9)-->(6-8,10,11), (6)-->(8)

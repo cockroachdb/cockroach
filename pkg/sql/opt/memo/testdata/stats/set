@@ -923,7 +923,7 @@ limit
  │    └── filters
  │         ├── column1:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
  │         └── column2:2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
- └── 1 [type=int]
+ └── 1 [type=int8]
 
 # Regression test for #36147 and #36157.
 opt
@@ -953,8 +953,8 @@ distinct-on
  │    └── filters
  │         └── column1:1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
  └── aggregations
-      └── const-agg [as=column1:1, type=int, outer=(1)]
-           └── column1:1 [type=int]
+      └── const-agg [as=column1:1, type=int8, outer=(1)]
+           └── column1:1 [type=int8]
 
 # Make sure that we estimate at least 1 row for the intersect.
 opt disable=SimplifyIntersectRight

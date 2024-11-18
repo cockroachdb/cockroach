@@ -81,7 +81,7 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
-           └── count-rows [as=count_rows:7, type=int]
+           └── count-rows [as=count_rows:7, type=int8]
 
 # Test that the stats are calculated correctly for synthesized columns.
 build
@@ -149,7 +149,7 @@ select
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │    └── projections
- │         └── y:2 + 3 [as=v:7, type=int, outer=(2), immutable]
+ │         └── y:2 + 3 [as=v:7, type=int8, outer=(2), immutable]
  └── filters
       └── (v:7 >= 1) AND (v:7 <= 100) [type=bool, outer=(7), constraints=(/7: [/1 - /100]; tight)]
 
@@ -294,7 +294,7 @@ project
  │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  └── projections
       ├── NULL [as="?column?":7, type=unknown]
-      └── CASE x:1 WHEN y:2 THEN CAST(NULL AS INT8) ELSE x:1 END [as=nullif:8, type=int, outer=(1,2)]
+      └── CASE x:1 WHEN y:2 THEN CAST(NULL AS INT8) ELSE x:1 END [as=nullif:8, type=int8, outer=(1,2)]
 
 # Regression test for #124831 - don't panic due to statistics assertion with
 # optimizer rules disabled.
@@ -329,6 +329,6 @@ project
       │    │    ├── stats: [rows=1]
       │    │    ├── key: ()
       │    │    └── () [type=tuple]
-      │    └── b:2 [type=int]
+      │    └── b:2 [type=int8]
       └── filters
            └── false [type=bool, constraints=(contradiction; tight)]

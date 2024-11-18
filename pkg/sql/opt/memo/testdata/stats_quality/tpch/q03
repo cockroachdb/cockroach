@@ -128,14 +128,14 @@ top-k
       │    │    └── filters
       │    │         └── l_shipdate:32 > '1995-03-15' [type=bool, outer=(32), constraints=(/32: [/'1995-03-16' - ]; tight)]
       │    └── projections
-      │         └── l_extendedprice:27 * (1.0 - l_discount:28) [as=column40:40, type=float, outer=(27,28), immutable]
+      │         └── l_extendedprice:27 * (1.0 - l_discount:28) [as=column40:40, type=float8, outer=(27,28), immutable]
       └── aggregations
-           ├── sum [as=sum:41, type=float, outer=(40)]
-           │    └── column40:40 [type=float]
+           ├── sum [as=sum:41, type=float8, outer=(40)]
+           │    └── column40:40 [type=float8]
            ├── const-agg [as=o_orderdate:15, type=date, outer=(15)]
            │    └── o_orderdate:15 [type=date]
-           └── const-agg [as=o_shippriority:18, type=int, outer=(18)]
-                └── o_shippriority:18 [type=int]
+           └── const-agg [as=o_shippriority:18, type=int8, outer=(18)]
+                └── o_shippriority:18 [type=int8]
 
 ----Stats for q3_top_k_1----
 column_names      row_count  distinct_count  null_count

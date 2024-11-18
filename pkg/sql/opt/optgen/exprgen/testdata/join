@@ -36,8 +36,8 @@ inner-join (hash)
  │    └── unfiltered-cols: (7-12)
  └── filters
       └── eq [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-           ├── variable: t.public.abc.a:1 [type=int]
-           └── variable: t.public.def.d:7 [type=int]
+           ├── variable: t.public.abc.a:1 [type=int8]
+           └── variable: t.public.def.d:7 [type=int8]
 
 expr
 (MakeLookupJoin
@@ -58,8 +58,8 @@ left-join (lookup t.public.abc@ab)
  │    └── prune: (1,2)
  └── filters
       └── gt [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-           ├── variable: t.public.abc.a:7 [type=int]
-           └── variable: t.public.def.e:2 [type=int]
+           ├── variable: t.public.abc.a:7 [type=int8]
+           └── variable: t.public.def.e:2 [type=int8]
 
 expr
 (MergeJoin
@@ -150,10 +150,10 @@ inner-join-apply
  │    │    └── prune: (7-9)
  │    └── filters
  │         └── eq [type=bool, outer=(1,7,8), immutable, constraints=(/1: (/NULL - ]), fd=(7,8)-->(1)]
- │              ├── variable: t.public.abc.a:1 [type=int]
- │              └── plus [type=int]
- │                   ├── variable: t.public.def.d:7 [type=int]
- │                   └── variable: t.public.def.e:8 [type=int]
+ │              ├── variable: t.public.abc.a:1 [type=int8]
+ │              └── plus [type=int8]
+ │                   ├── variable: t.public.def.d:7 [type=int8]
+ │                   └── variable: t.public.def.e:8 [type=int8]
  └── filters (true)
 
 expr

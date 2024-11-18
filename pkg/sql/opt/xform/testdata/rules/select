@@ -7904,7 +7904,7 @@ select
  │         │    └── function: st_dwithin [type=bool]
  │         │         ├── const: '0101000020E610000000000000000000000000000000000000' [type=geography]
  │         │         ├── variable: geog:2 [type=geography]
- │         │         └── const: 5.0 [type=float]
+ │         │         └── const: 5.0 [type=float8]
  │         ├── key: (4)
  │         └── scan geom_geog@geom_geog_geog_idx,inverted
  │              ├── columns: rowid:4(int!null) geog_inverted_key:8(encodedkey!null)
@@ -7941,10 +7941,10 @@ select
  │                        └── ["B\xfd\xbe\x00\x00\x00\x00\x00\x00\x01", "B\xfd\xc0\x00\x00\x00\x00\x00\x00\x00")
  └── filters
       └── lt [type=bool, outer=(2), immutable]
-           ├── function: st_distance [type=float]
+           ├── function: st_distance [type=float8]
            │    ├── variable: geog:2 [type=geography]
            │    └── const: '0101000020E610000000000000000000000000000000000000' [type=geography]
-           └── const: 5 [type=int]
+           └── const: 5 [type=int8]
 
 # Inverted index scan not expected because `st_distance` result compared
 # with column.
@@ -7958,11 +7958,11 @@ select
  │    └── columns: geom:1(geometry) geog:2(geography) val:3(float)
  └── filters
       └── lt [type=bool, outer=(2,3), immutable]
-           ├── function: st_distance [type=float]
+           ├── function: st_distance [type=float8]
            │    ├── variable: geog:2 [type=geography]
            │    └── const: '0101000020E610000000000000000000000000000000000000' [type=geography]
-           └── cast: INT8 [type=int]
-                └── variable: val:3 [type=float]
+           └── cast: INT8 [type=int8]
+                └── variable: val:3 [type=float8]
 
 # Regression test for #55675. Handle use_spheroid param.
 opt expect=GenerateInvertedIndexScans

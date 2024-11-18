@@ -50,15 +50,15 @@ project
  │    │    │              └── null [type=unknown]
  │    │    └── projections
  │    │         ├── gt [as=column8:8, type=bool, outer=(3)]
- │    │         │    ├── variable: z:3 [type=float]
- │    │         │    └── const: 0.0 [type=float]
+ │    │         │    ├── variable: z:3 [type=float8]
+ │    │         │    └── const: 0.0 [type=float8]
  │    │         └── const: ',' [as=column10:10, type=string]
  │    └── aggregations
- │         ├── sum [as=sum:7, type=float, outer=(3)]
- │         │    └── variable: z:3 [type=float]
- │         ├── agg-filter [as=avg:9, type=float, outer=(3,8)]
- │         │    ├── avg [type=float]
- │         │    │    └── variable: z:3 [type=float]
+ │         ├── sum [as=sum:7, type=float8, outer=(3)]
+ │         │    └── variable: z:3 [type=float8]
+ │         ├── agg-filter [as=avg:9, type=float8, outer=(3,8)]
+ │         │    ├── avg [type=float8]
+ │         │    │    └── variable: z:3 [type=float8]
  │         │    └── variable: column8:8 [type=bool]
  │         └── agg-distinct [as=string_agg:11, type=string, outer=(4,10)]
  │              └── string-agg [type=string]
@@ -91,11 +91,11 @@ scalar-group-by
  │         └── interesting orderings: (+1) (-4,+3,+1)
  └── aggregations
       ├── sum [as=sum:7, type=decimal, outer=(1)]
-      │    └── variable: x:1 [type=int]
-      ├── max [as=max:8, type=int, outer=(2)]
-      │    └── variable: y:2 [type=int]
-      └── count [as=count:9, type=int, outer=(1)]
-           └── variable: x:1 [type=int]
+      │    └── variable: x:1 [type=int8]
+      ├── max [as=max:8, type=int8, outer=(2)]
+      │    └── variable: y:2 [type=int8]
+      └── count [as=count:9, type=int8, outer=(1)]
+           └── variable: x:1 [type=int8]
 
 # Group by unique index columns.
 build
@@ -145,8 +145,8 @@ project
       │         ├── prune: (1-6)
       │         └── interesting orderings: (+1) (-4,+3,+1)
       └── aggregations
-           └── sum [as=sum:7, type=float, outer=(3)]
-                └── variable: z:3 [type=float]
+           └── sum [as=sum:7, type=float8, outer=(3)]
+                └── variable: z:3 [type=float8]
 
 # Group by column that is subset of unique index.
 build
@@ -226,10 +226,10 @@ project
  │    │    │    ├── prune: (1-6)
  │    │    │    └── interesting orderings: (+1) (-4,+3,+1)
  │    │    └── projections
- │    │         └── variable: xyzs.x:1 [as=x:13, type=int, outer=(1)]
+ │    │         └── variable: xyzs.x:1 [as=x:13, type=int8, outer=(1)]
  │    └── aggregations
  │         └── sum [as=sum:14, type=decimal, outer=(13)]
- │              └── variable: x:13 [type=int]
+ │              └── variable: x:13 [type=int8]
  └── projections
       └── subquery [as=sum:16, type=decimal, outer=(2,14), correlated-subquery]
            └── max1-row
@@ -265,7 +265,7 @@ project
                      │              │    ├── prune: (7-11)
                      │              │    └── interesting orderings: (+7)
                      │              └── projections
-                     │                   └── variable: xyzs.y:2 [as=y:12, type=int, outer=(2)]
+                     │                   └── variable: xyzs.y:2 [as=y:12, type=int8, outer=(2)]
                      └── projections
                           └── variable: sum:14 [as=sum:15, type=decimal, outer=(14)]
 
@@ -285,13 +285,13 @@ group-by (hash)
       ├── immutable
       ├── prune: (1)
       ├── tuple [type=tuple{int}]
-      │    └── const: 1 [type=int]
+      │    └── const: 1 [type=int8]
       ├── tuple [type=tuple{int}]
-      │    └── const: 2 [type=int]
+      │    └── const: 2 [type=int8]
       ├── tuple [type=tuple{int}]
-      │    └── const: 1 [type=int]
+      │    └── const: 1 [type=int8]
       └── tuple [type=tuple{int}]
-           └── cast: INT8 [type=int]
+           └── cast: INT8 [type=int8]
                 └── null [type=unknown]
 
 # GroupBy with empty grouping columns.
@@ -312,10 +312,10 @@ group-by (streaming)
  │    ├── fd: ()-->(1,2)
  │    └── prune: (2)
  └── aggregations
-      ├── count [as=count:7, type=int, outer=(2)]
-      │    └── variable: y:2 [type=int]
-      └── const-agg [as=x:1, type=int, outer=(1)]
-           └── variable: x:1 [type=int]
+      ├── count [as=count:7, type=int8, outer=(2)]
+      │    └── variable: y:2 [type=int8]
+      └── const-agg [as=x:1, type=int8, outer=(1)]
+           └── variable: x:1 [type=int8]
 
 
 # Even with non-NULL input, some aggregates can still be NULL.
@@ -348,12 +348,12 @@ project
       │         └── interesting orderings: (+1) (-4,+3,+1)
       └── aggregations
            ├── variance [as=variance:7, type=decimal, outer=(1)]
-           │    └── variable: x:1 [type=int]
+           │    └── variable: x:1 [type=int8]
            ├── std-dev [as=stddev:8, type=decimal, outer=(1)]
-           │    └── variable: x:1 [type=int]
-           └── corr [as=corr:9, type=float, outer=(1,2)]
-                ├── variable: x:1 [type=int]
-                └── variable: y:2 [type=int]
+           │    └── variable: x:1 [type=int8]
+           └── corr [as=corr:9, type=float8, outer=(1,2)]
+                ├── variable: x:1 [type=int8]
+                └── variable: y:2 [type=int8]
 
 # Regression test for #84957 - the aggregation output columns should not be
 # marked as non-null.
@@ -387,9 +387,9 @@ project
       │    │    │    ├── key: ()
       │    │    │    └── tuple [type=tuple]
       │    │    └── zip
-      │    │         └── function: generate_series [type=int, immutable]
-      │    │              ├── const: 1 [type=int]
-      │    │              └── const: 5 [type=int]
+      │    │         └── function: generate_series [type=int8, immutable]
+      │    │              ├── const: 1 [type=int8]
+      │    │              └── const: 5 [type=int8]
       │    └── projections
       │         └── const: '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000' [as=column2:2, type=geometry]
       └── aggregations
@@ -424,9 +424,9 @@ project
       │    │    │    ├── key: ()
       │    │    │    └── tuple [type=tuple]
       │    │    └── zip
-      │    │         └── function: generate_series [type=int, immutable]
-      │    │              ├── const: 1 [type=int]
-      │    │              └── const: 5 [type=int]
+      │    │         └── function: generate_series [type=int8, immutable]
+      │    │              ├── const: 1 [type=int8]
+      │    │              └── const: 5 [type=int8]
       │    └── projections
       │         └── const: '0101000000000000000000F87F000000000000F87F' [as=column2:2, type=geometry]
       └── aggregations

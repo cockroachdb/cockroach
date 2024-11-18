@@ -75,10 +75,10 @@ scalar-group-by
  │    │         ├── (l_discount:7 >= 0.05) AND (l_discount:7 <= 0.07) [type=bool, outer=(7), constraints=(/7: [/0.05 - /0.07]; tight)]
  │    │         └── l_quantity:5 < 24.0 [type=bool, outer=(5), constraints=(/5: (/NULL - /23.999999999999996]; tight)]
  │    └── projections
- │         └── l_extendedprice:6 * l_discount:7 [as=column19:19, type=float, outer=(6,7), immutable]
+ │         └── l_extendedprice:6 * l_discount:7 [as=column19:19, type=float8, outer=(6,7), immutable]
  └── aggregations
-      └── sum [as=sum:20, type=float, outer=(19)]
-           └── column19:19 [type=float]
+      └── sum [as=sum:20, type=float8, outer=(19)]
+           └── column19:19 [type=float8]
 
 ----Stats for q6_scalar_group_by_1----
 column_names  row_count  distinct_count  null_count

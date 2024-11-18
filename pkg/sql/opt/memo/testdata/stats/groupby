@@ -84,8 +84,8 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
-           └── max [as=max:7, type=int, outer=(2)]
-                └── y:2 [type=int]
+           └── max [as=max:7, type=int8, outer=(2)]
+                └── y:2 [type=int8]
 
 # Group by non-key.
 build
@@ -106,8 +106,8 @@ group-by (hash)
  │         ├── key: (1)
  │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  └── aggregations
-      └── sum [as=sum:7, type=float, outer=(3)]
-           └── z:3 [type=float]
+      └── sum [as=sum:7, type=float8, outer=(3)]
+           └── z:3 [type=float8]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s
@@ -132,8 +132,8 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
-           └── max [as=max:7, type=int, outer=(1)]
-                └── x:1 [type=int]
+           └── max [as=max:7, type=int8, outer=(1)]
+                └── x:1 [type=int8]
 
 build
 SELECT min(x) FROM a GROUP BY y, z
@@ -158,8 +158,8 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
-           └── min [as=min:7, type=int, outer=(1)]
-                └── x:1 [type=int]
+           └── min [as=min:7, type=int8, outer=(1)]
+                └── x:1 [type=int8]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
@@ -189,8 +189,8 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       │    └── aggregations
-      │         └── max [as=max:7, type=int, outer=(1)]
-      │              └── x:1 [type=int]
+      │         └── max [as=max:7, type=int8, outer=(1)]
+      │              └── x:1 [type=int8]
       └── filters
            └── s:4 IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
 
@@ -222,7 +222,7 @@ select
  │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │    └── aggregations
  │         └── sum [as=sum:7, type=decimal, outer=(1)]
- │              └── x:1 [type=int]
+ │              └── x:1 [type=int8]
  └── filters
       └── sum:7 = 5 [type=bool, outer=(7), immutable, constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
 
@@ -251,10 +251,10 @@ select
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │    └── aggregations
- │         ├── max [as=max:7, type=int, outer=(2)]
- │         │    └── y:2 [type=int]
- │         └── sum [as=sum:8, type=float, outer=(3)]
- │              └── z:3 [type=float]
+ │         ├── max [as=max:7, type=int8, outer=(2)]
+ │         │    └── y:2 [type=int8]
+ │         └── sum [as=sum:8, type=float8, outer=(3)]
+ │              └── z:3 [type=float8]
  └── filters
       └── sum:8 = 5.0 [type=bool, outer=(8), constraints=(/8: [/5.0 - /5.0]; tight), fd=()-->(8)]
 
@@ -343,8 +343,8 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
-           └── max [as=max:7, type=int, outer=(2)]
-                └── y:2 [type=int]
+           └── max [as=max:7, type=int8, outer=(2)]
+                └── y:2 [type=int8]
 
 # Group by non-key.
 build
@@ -365,8 +365,8 @@ group-by (hash)
  │         ├── key: (1)
  │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  └── aggregations
-      └── sum [as=sum:7, type=float, outer=(3)]
-           └── z:3 [type=float]
+      └── sum [as=sum:7, type=float8, outer=(3)]
+           └── z:3 [type=float8]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s
@@ -391,8 +391,8 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
-           └── max [as=max:7, type=int, outer=(1)]
-                └── x:1 [type=int]
+           └── max [as=max:7, type=int8, outer=(1)]
+                └── x:1 [type=int8]
 
 build
 SELECT min(x) FROM a GROUP BY y, z
@@ -417,8 +417,8 @@ project
       │         ├── key: (1)
       │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       └── aggregations
-           └── min [as=min:7, type=int, outer=(1)]
-                └── x:1 [type=int]
+           └── min [as=min:7, type=int8, outer=(1)]
+                └── x:1 [type=int8]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
@@ -448,8 +448,8 @@ project
       │    │         ├── key: (1)
       │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       │    └── aggregations
-      │         └── max [as=max:7, type=int, outer=(1)]
-      │              └── x:1 [type=int]
+      │         └── max [as=max:7, type=int8, outer=(1)]
+      │              └── x:1 [type=int8]
       └── filters
            └── s:4 IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
 
@@ -481,7 +481,7 @@ select
  │    │         └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │    └── aggregations
  │         └── sum [as=sum:7, type=decimal, outer=(1)]
- │              └── x:1 [type=int]
+ │              └── x:1 [type=int8]
  └── filters
       └── sum:7 = 5 [type=bool, outer=(7), immutable, constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
 
@@ -532,7 +532,7 @@ project
  │    └── filters
  │         └── bool_or:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
  └── projections
-      └── 1 [as="?column?":6, type=int]
+      └── 1 [as="?column?":6, type=int8]
 
 # Regression test for #74667.
 exec-ddl
@@ -605,4 +605,4 @@ project
       │    └── filters
       │         └── col:1 < '03:33:05.598931+07:11' [type=bool, outer=(1), constraints=(/1: (/NULL - /'03:33:06.598931+07:11:01']; tight)]
       └── aggregations
-           └── count-rows [as=count_rows:4, type=int]
+           └── count-rows [as=count_rows:4, type=int8]

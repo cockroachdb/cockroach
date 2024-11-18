@@ -58,29 +58,29 @@ update abcde
       │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
       │    │    │    │    ├── computed column expressions
       │    │    │    │    │    └── d:12
-      │    │    │    │    │         └── plus [type=int]
-      │    │    │    │    │              ├── plus [type=int]
-      │    │    │    │    │              │    ├── variable: b:10 [type=int]
-      │    │    │    │    │              │    └── variable: c:11 [type=int]
-      │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    │         └── plus [type=int8]
+      │    │    │    │    │              ├── plus [type=int8]
+      │    │    │    │    │              │    ├── variable: b:10 [type=int8]
+      │    │    │    │    │              │    └── variable: c:11 [type=int8]
+      │    │    │    │    │              └── const: 1 [type=int8]
       │    │    │    │    ├── key: (13)
       │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
       │    │    │    │    ├── prune: (9-16)
       │    │    │    │    └── interesting orderings: (+13)
       │    │    │    └── filters
       │    │    │         └── eq [type=bool, outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
-      │    │    │              ├── variable: a:9 [type=int]
-      │    │    │              └── const: 1 [type=int]
+      │    │    │              ├── variable: a:9 [type=int8]
+      │    │    │              └── const: 1 [type=int8]
       │    │    └── projections
-      │    │         └── const: 10 [as=b_new:17, type=int]
+      │    │         └── const: 10 [as=b_new:17, type=int8]
       │    └── projections
-      │         └── const: 0 [as=e_default:18, type=int]
+      │         └── const: 0 [as=e_default:18, type=int8]
       └── projections
-           └── plus [as=d_comp:19, type=int, outer=(11,17), immutable]
-                ├── plus [type=int]
-                │    ├── variable: b_new:17 [type=int]
-                │    └── variable: c:11 [type=int]
-                └── const: 1 [type=int]
+           └── plus [as=d_comp:19, type=int8, outer=(11,17), immutable]
+                ├── plus [type=int8]
+                │    ├── variable: b_new:17 [type=int8]
+                │    └── variable: c:11 [type=int8]
+                └── const: 1 [type=int8]
 
 # Properties with RETURNING clause.
 build
@@ -136,29 +136,29 @@ project
            │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
            │    │    │    │    ├── computed column expressions
            │    │    │    │    │    └── d:12
-           │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │              ├── plus [type=int]
-           │    │    │    │    │              │    ├── variable: b:10 [type=int]
-           │    │    │    │    │              │    └── variable: c:11 [type=int]
-           │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │         └── plus [type=int8]
+           │    │    │    │    │              ├── plus [type=int8]
+           │    │    │    │    │              │    ├── variable: b:10 [type=int8]
+           │    │    │    │    │              │    └── variable: c:11 [type=int8]
+           │    │    │    │    │              └── const: 1 [type=int8]
            │    │    │    │    ├── key: (13)
            │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
            │    │    │    │    ├── prune: (9-16)
            │    │    │    │    └── interesting orderings: (+13)
            │    │    │    └── filters
            │    │    │         └── eq [type=bool, outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
-           │    │    │              ├── variable: a:9 [type=int]
-           │    │    │              └── const: 1 [type=int]
+           │    │    │              ├── variable: a:9 [type=int8]
+           │    │    │              └── const: 1 [type=int8]
            │    │    └── projections
-           │    │         └── const: 10 [as=b_new:17, type=int]
+           │    │         └── const: 10 [as=b_new:17, type=int8]
            │    └── projections
-           │         └── const: 0 [as=e_default:18, type=int]
+           │         └── const: 0 [as=e_default:18, type=int8]
            └── projections
-                └── plus [as=d_comp:19, type=int, outer=(11,17), immutable]
-                     ├── plus [type=int]
-                     │    ├── variable: b_new:17 [type=int]
-                     │    └── variable: c:11 [type=int]
-                     └── const: 1 [type=int]
+                └── plus [as=d_comp:19, type=int8, outer=(11,17), immutable]
+                     ├── plus [type=int8]
+                     │    ├── variable: b_new:17 [type=int8]
+                     │    └── variable: c:11 [type=int8]
+                     └── const: 1 [type=int8]
 
 # Input is cardinality 0-1 expression.
 build
@@ -217,29 +217,29 @@ project
            │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
            │    │    │    │    ├── computed column expressions
            │    │    │    │    │    └── d:12
-           │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │              ├── plus [type=int]
-           │    │    │    │    │              │    ├── variable: b:10 [type=int]
-           │    │    │    │    │              │    └── variable: c:11 [type=int]
-           │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │         └── plus [type=int8]
+           │    │    │    │    │              ├── plus [type=int8]
+           │    │    │    │    │              │    ├── variable: b:10 [type=int8]
+           │    │    │    │    │              │    └── variable: c:11 [type=int8]
+           │    │    │    │    │              └── const: 1 [type=int8]
            │    │    │    │    ├── key: (13)
            │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
            │    │    │    │    ├── prune: (9-16)
            │    │    │    │    └── interesting orderings: (+13)
            │    │    │    └── filters
            │    │    │         └── eq [type=bool, outer=(13), constraints=(/13: [/1 - /1]; tight), fd=()-->(13)]
-           │    │    │              ├── variable: rowid:13 [type=int]
-           │    │    │              └── const: 1 [type=int]
+           │    │    │              ├── variable: rowid:13 [type=int8]
+           │    │    │              └── const: 1 [type=int8]
            │    │    └── projections
-           │    │         └── const: 10 [as=b_new:17, type=int]
+           │    │         └── const: 10 [as=b_new:17, type=int8]
            │    └── projections
-           │         └── const: 0 [as=e_default:18, type=int]
+           │         └── const: 0 [as=e_default:18, type=int8]
            └── projections
-                └── plus [as=d_comp:19, type=int, outer=(11,17), immutable]
-                     ├── plus [type=int]
-                     │    ├── variable: b_new:17 [type=int]
-                     │    └── variable: c:11 [type=int]
-                     └── const: 1 [type=int]
+                └── plus [as=d_comp:19, type=int8, outer=(11,17), immutable]
+                     ├── plus [type=int8]
+                     │    ├── variable: b_new:17 [type=int8]
+                     │    └── variable: c:11 [type=int8]
+                     └── const: 1 [type=int8]
 
 # Filter FD set.
 build
@@ -294,26 +294,26 @@ project
            │    │    │    │    ├── columns: a:9(int!null) b:10(int) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid)
            │    │    │    │    ├── computed column expressions
            │    │    │    │    │    └── d:12
-           │    │    │    │    │         └── plus [type=int]
-           │    │    │    │    │              ├── plus [type=int]
-           │    │    │    │    │              │    ├── variable: b:10 [type=int]
-           │    │    │    │    │              │    └── variable: c:11 [type=int]
-           │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │         └── plus [type=int8]
+           │    │    │    │    │              ├── plus [type=int8]
+           │    │    │    │    │              │    ├── variable: b:10 [type=int8]
+           │    │    │    │    │              │    └── variable: c:11 [type=int8]
+           │    │    │    │    │              └── const: 1 [type=int8]
            │    │    │    │    ├── key: (13)
            │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
            │    │    │    │    ├── prune: (9-16)
            │    │    │    │    └── interesting orderings: (+13)
            │    │    │    └── filters
            │    │    │         └── eq [type=bool, outer=(10,11), constraints=(/10: (/NULL - ]; /11: (/NULL - ]), fd=(10)==(11), (11)==(10)]
-           │    │    │              ├── variable: b:10 [type=int]
-           │    │    │              └── variable: c:11 [type=int]
+           │    │    │              ├── variable: b:10 [type=int8]
+           │    │    │              └── variable: c:11 [type=int8]
            │    │    └── projections
-           │    │         └── const: 1 [as=a_new:17, type=int]
+           │    │         └── const: 1 [as=a_new:17, type=int8]
            │    └── projections
-           │         └── const: 0 [as=e_default:18, type=int]
+           │         └── const: 0 [as=e_default:18, type=int8]
            └── projections
-                └── plus [as=d_comp:19, type=int, outer=(10,11), immutable]
-                     ├── plus [type=int]
-                     │    ├── variable: b:10 [type=int]
-                     │    └── variable: c:11 [type=int]
-                     └── const: 1 [type=int]
+                └── plus [as=d_comp:19, type=int8, outer=(10,11), immutable]
+                     ├── plus [type=int8]
+                     │    ├── variable: b:10 [type=int8]
+                     │    └── variable: c:11 [type=int8]
+                     └── const: 1 [type=int8]

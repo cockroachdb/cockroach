@@ -500,8 +500,8 @@ values
  ├── fd: ()-->(1)
  ├── prune: (1)
  └── tuple [type=tuple{int}]
-      └── unary-minus [type=int]
-           └── const: -9223372036854775808 [type=int]
+      └── unary-minus [type=int8]
+           └── const: -9223372036854775808 [type=int8]
 
 norm expect=FoldUnary format=show-all
 SELECT -(1:::decimal)
@@ -1334,7 +1334,7 @@ project
  ├── fd: ()-->(9)
  ├── scan a
  └── projections
-      └── CAST(NULL AS INT8) [as=bar:9, type=int]
+      └── CAST(NULL AS INT8) [as=bar:9, type=int8]
 
 # --------------------------------------------------
 # FoldEqualsAnyNull

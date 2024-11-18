@@ -1462,12 +1462,12 @@ project
       │    ├── columns: k:1(int) rowid:4(int!null) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
       │    └── computed column expressions
       │         ├── v:2
-      │         │    └── cast: INT8 [type=int]
+      │         │    └── cast: INT8 [type=int8]
       │         │         └── null [type=unknown]
       │         └── w:3
       │              └── case [type=string]
       │                   ├── is [type=bool]
-      │                   │    ├── variable: k:1 [type=int]
+      │                   │    ├── variable: k:1 [type=int8]
       │                   │    └── null [type=unknown]
       │                   ├── when [type=string]
       │                   │    ├── true [type=bool]
@@ -1476,11 +1476,11 @@ project
       │                   └── cast: STRING [type=string]
       │                        └── null [type=unknown]
       └── projections
-           ├── cast: INT8 [as=v:2, type=int]
+           ├── cast: INT8 [as=v:2, type=int8]
            │    └── null [type=unknown]
            └── case [as=w:3, type=string]
                 ├── is [type=bool]
-                │    ├── variable: k:1 [type=int]
+                │    ├── variable: k:1 [type=int8]
                 │    └── null [type=unknown]
                 ├── when [type=string]
                 │    ├── true [type=bool]

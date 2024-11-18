@@ -11,7 +11,7 @@ with &1 (cte)
  │    ├── values
  │    │    └── () [type=tuple]
  │    └── projections
- │         └── 1 [as=int8:13, type=int]
+ │         └── 1 [as=int8:13, type=int8]
  └── update t
       ├── columns: <none>
       ├── fetch columns: a:7(int2) b:8(int2) t.c:9(int2) rowid:10(int)
@@ -49,9 +49,9 @@ with &1 (cte)
            │    │                        │    │    └── limit hint: 1.00
            │    │                        │    └── projections
            │    │                        │         └── t.c:9 [as=c:15, type=int2]
-           │    │                        └── 1 [type=int]
+           │    │                        └── 1 [type=int8]
            │    └── projections
-           │         └── a_new:16 + b:8 [as=c_comp:17, type=int]
+           │         └── a_new:16 + b:8 [as=c_comp:17, type=int8]
            └── projections
                 └── assignment-cast: INT2 [as=c_cast:18, type=int2]
-                     └── c_comp:17 [type=int]
+                     └── c_comp:17 [type=int8]

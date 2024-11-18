@@ -60,7 +60,7 @@ limit
  │         │    └── limit hint: 50.00
  │         └── filters
  │              └── s:3 = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
- └── 5 [type=int]
+ └── 5 [type=int8]
 
 build
 SELECT * FROM a WHERE s = 'foo' LIMIT (SELECT 5 AS c)
@@ -88,7 +88,7 @@ limit
  │         │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │         └── filters
  │              └── s:3 = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
- └── subquery [type=int]
+ └── subquery [type=int8]
       └── max1-row
            ├── columns: c:7(int!null)
            ├── error: "more than one row returned by a subquery used as an expression"
@@ -108,7 +108,7 @@ limit
                 │    ├── key: ()
                 │    └── () [type=tuple]
                 └── projections
-                     └── 5 [as=c:7, type=int]
+                     └── 5 [as=c:7, type=int8]
 
 build
 SELECT * FROM (SELECT * FROM a ORDER BY s LIMIT 5) WHERE s = 'foo'
@@ -143,7 +143,7 @@ select
  │    │              ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=200, null(4)=0]
  │    │              ├── key: (1)
  │    │              └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
- │    └── 5 [type=int]
+ │    └── 5 [type=int8]
  └── filters
       └── s:3 = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
 
@@ -201,7 +201,7 @@ limit
  │         ├── key: (1)
  │         ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
  │         └── limit hint: 5.00
- └── 5 [type=int]
+ └── 5 [type=int8]
 
 build colstat=2 colstat=3 colstat=(2,3)
 SELECT * FROM a WHERE s = 'foo' LIMIT 5
@@ -232,7 +232,7 @@ limit
  │         │    └── limit hint: 100.00
  │         └── filters
  │              └── s:3 = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
- └── 5 [type=int]
+ └── 5 [type=int8]
 
 exec-ddl
 CREATE TABLE b (x int)
@@ -259,7 +259,7 @@ offset
  │    └── scan b
  │         ├── columns: x:1(int)
  │         └── stats: [rows=1000, distinct(1)=100, null(1)=10]
- └── 9999 [type=int]
+ └── 9999 [type=int8]
 
 # TopK
 opt colstat=1

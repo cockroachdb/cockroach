@@ -5322,7 +5322,7 @@ project
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── projections
-      └── udf: f [as=f:12, type=int, volatile, udf]
+      └── udf: f [as=f:12, type=int8, volatile, udf]
            └── body
                 └── limit
                      ├── columns: "_gen_cursor_name_5":11(int)
@@ -5358,7 +5358,7 @@ project
                      │    │         └── projections
                      │    │              └── const: 'foo' [as=curs:1, type=refcursor]
                      │    └── projections
-                     │         └── udf: _gen_cursor_name_5 [as="_gen_cursor_name_5":11, type=int, outer=(1), volatile, udf]
+                     │         └── udf: _gen_cursor_name_5 [as="_gen_cursor_name_5":11, type=int8, outer=(1), volatile, udf]
                      │              ├── args
                      │              │    └── variable: curs:1 [type=refcursor]
                      │              ├── params: curs:8(refcursor)
@@ -5396,7 +5396,7 @@ project
                      │                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:9, type=refcursor, outer=(8), volatile]
                      │                        │                   └── variable: curs:8 [type=refcursor]
                      │                        └── projections
-                     │                             └── udf: _stmt_open_1 [as="_stmt_open_1":10, type=int, outer=(9), volatile, udf]
+                     │                             └── udf: _stmt_open_1 [as="_stmt_open_1":10, type=int8, outer=(9), volatile, udf]
                      │                                  ├── tail-call
                      │                                  ├── args
                      │                                  │    └── variable: curs:9 [type=refcursor]
@@ -5415,7 +5415,7 @@ project
                      │                                       │         │    ├── key: ()
                      │                                       │         │    └── tuple [type=tuple]
                      │                                       │         └── projections
-                     │                                       │              └── const: 1 [as="?column?":3, type=int]
+                     │                                       │              └── const: 1 [as="?column?":3, type=int8]
                      │                                       └── project
                      │                                            ├── columns: "_stmt_close_2":7(int)
                      │                                            ├── outer: (2)
@@ -5430,7 +5430,7 @@ project
                      │                                            │    ├── key: ()
                      │                                            │    └── tuple [type=tuple]
                      │                                            └── projections
-                     │                                                 └── udf: _stmt_close_2 [as="_stmt_close_2":7, type=int, outer=(2), volatile, udf]
+                     │                                                 └── udf: _stmt_close_2 [as="_stmt_close_2":7, type=int8, outer=(2), volatile, udf]
                      │                                                      ├── tail-call
                      │                                                      ├── args
                      │                                                      │    └── variable: curs:2 [type=refcursor]
@@ -5450,7 +5450,7 @@ project
                      │                                                           │    │    ├── key: ()
                      │                                                           │    │    └── tuple [type=tuple]
                      │                                                           │    └── projections
-                     │                                                           │         └── function: crdb_internal.plpgsql_close [as=stmt_close_3:5, type=int, outer=(4), volatile]
+                     │                                                           │         └── function: crdb_internal.plpgsql_close [as=stmt_close_3:5, type=int8, outer=(4), volatile]
                      │                                                           │              └── variable: curs:4 [type=refcursor]
                      │                                                           └── project
                      │                                                                ├── columns: stmt_return_4:6(int!null)
@@ -5464,8 +5464,8 @@ project
                      │                                                                │    ├── key: ()
                      │                                                                │    └── tuple [type=tuple]
                      │                                                                └── projections
-                     │                                                                     └── const: 0 [as=stmt_return_4:6, type=int]
-                     └── const: 1 [type=int]
+                     │                                                                     └── const: 0 [as=stmt_return_4:6, type=int8]
+                     └── const: 1 [type=int8]
 
 # Combined exception block and cursors.
 exec-ddl
@@ -5633,7 +5633,7 @@ project
  │    ├── key: ()
  │    └── tuple [type=tuple]
  └── projections
-      └── udf: f [as=f:24, type=int, volatile, udf]
+      └── udf: f [as=f:24, type=int8, volatile, udf]
            └── body
                 └── limit
                      ├── columns: "_gen_cursor_name_6":23(int)
@@ -5678,13 +5678,13 @@ project
                      │    │         │    └── projections
                      │    │         │         └── const: 'foo' [as=curs:1, type=refcursor]
                      │    │         └── projections
-                     │    │              └── cast: INT8 [as=x:2, type=int, immutable]
+                     │    │              └── cast: INT8 [as=x:2, type=int8, immutable]
                      │    │                   └── null [type=unknown]
                      │    └── projections
-                     │         └── udf: _gen_cursor_name_6 [as="_gen_cursor_name_6":23, type=int, outer=(1,2), volatile, udf]
+                     │         └── udf: _gen_cursor_name_6 [as="_gen_cursor_name_6":23, type=int8, outer=(1,2), volatile, udf]
                      │              ├── args
                      │              │    ├── variable: curs:1 [type=refcursor]
-                     │              │    └── variable: x:2 [type=int]
+                     │              │    └── variable: x:2 [type=int8]
                      │              ├── params: curs:19(refcursor) x:20(int)
                      │              └── body
                      │                   └── project
@@ -5720,11 +5720,11 @@ project
                      │                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:21, type=refcursor, outer=(19), volatile]
                      │                        │                   └── variable: curs:19 [type=refcursor]
                      │                        └── projections
-                     │                             └── udf: _stmt_open_1 [as="_stmt_open_1":22, type=int, outer=(20,21), volatile, udf]
+                     │                             └── udf: _stmt_open_1 [as="_stmt_open_1":22, type=int8, outer=(20,21), volatile, udf]
                      │                                  ├── tail-call
                      │                                  ├── args
                      │                                  │    ├── variable: curs:21 [type=refcursor]
-                     │                                  │    └── variable: x:20 [type=int]
+                     │                                  │    └── variable: x:20 [type=int8]
                      │                                  ├── params: curs:3(refcursor) x:4(int)
                      │                                  └── body
                      │                                       ├── open-cursor
@@ -5751,11 +5751,11 @@ project
                      │                                            │    ├── key: ()
                      │                                            │    └── tuple [type=tuple]
                      │                                            └── projections
-                     │                                                 └── udf: _stmt_fetch_2 [as="_stmt_fetch_2":18, type=int, outer=(3,4), volatile, udf]
+                     │                                                 └── udf: _stmt_fetch_2 [as="_stmt_fetch_2":18, type=int8, outer=(3,4), volatile, udf]
                      │                                                      ├── tail-call
                      │                                                      ├── args
                      │                                                      │    ├── variable: curs:3 [type=refcursor]
-                     │                                                      │    └── variable: x:4 [type=int]
+                     │                                                      │    └── variable: x:4 [type=int8]
                      │                                                      ├── params: curs:10(refcursor) x:11(int)
                      │                                                      └── body
                      │                                                           └── project
@@ -5799,19 +5799,19 @@ project
                      │                                                                │         │    └── projections
                      │                                                                │         │         └── function: crdb_internal.plpgsql_fetch [as=stmt_fetch_3:12, type=tuple{int}, outer=(10), volatile]
                      │                                                                │         │              ├── variable: curs:10 [type=refcursor]
-                     │                                                                │         │              ├── const: 0 [type=int]
-                     │                                                                │         │              ├── const: 1 [type=int]
+                     │                                                                │         │              ├── const: 0 [type=int8]
+                     │                                                                │         │              ├── const: 1 [type=int8]
                      │                                                                │         │              └── tuple [type=tuple{int}]
-                     │                                                                │         │                   └── null [type=int]
+                     │                                                                │         │                   └── null [type=int8]
                      │                                                                │         └── projections
-                     │                                                                │              └── column-access: 0 [as=x:13, type=int, outer=(12)]
+                     │                                                                │              └── column-access: 0 [as=x:13, type=int8, outer=(12)]
                      │                                                                │                   └── variable: stmt_fetch_3:12 [type=tuple{int}]
                      │                                                                └── projections
-                     │                                                                     └── udf: _stmt_fetch_ret_4 [as="_stmt_fetch_ret_4":17, type=int, outer=(10,13), udf]
+                     │                                                                     └── udf: _stmt_fetch_ret_4 [as="_stmt_fetch_ret_4":17, type=int8, outer=(10,13), udf]
                      │                                                                          ├── tail-call
                      │                                                                          ├── args
                      │                                                                          │    ├── variable: curs:10 [type=refcursor]
-                     │                                                                          │    └── variable: x:13 [type=int]
+                     │                                                                          │    └── variable: x:13 [type=int8]
                      │                                                                          ├── params: curs:14(refcursor) x:15(int)
                      │                                                                          └── body
                      │                                                                               └── project
@@ -5827,8 +5827,8 @@ project
                      │                                                                                    │    ├── key: ()
                      │                                                                                    │    └── tuple [type=tuple]
                      │                                                                                    └── projections
-                     │                                                                                         └── variable: x:15 [as=stmt_return_5:16, type=int, outer=(15)]
-                     └── const: 1 [type=int]
+                     │                                                                                         └── variable: x:15 [as=stmt_return_5:16, type=int8, outer=(15)]
+                     └── const: 1 [type=int8]
 
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
@@ -6005,7 +6005,7 @@ project
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── udf: f [as=f:4, type=int]
+      └── udf: f [as=f:4, type=int8]
            └── body
                 └── limit
                      ├── columns: "_end_of_function_1":3(int)
@@ -6014,14 +6014,14 @@ project
                      │    ├── values
                      │    │    └── tuple [type=tuple]
                      │    └── projections
-                     │         └── udf: _end_of_function_1 [as="_end_of_function_1":3, type=int]
+                     │         └── udf: _end_of_function_1 [as="_end_of_function_1":3, type=int8]
                      │              └── body
                      │                   ├── project
                      │                   │    ├── columns: stmt_raise_2:1(int)
                      │                   │    ├── values
                      │                   │    │    └── tuple [type=tuple]
                      │                   │    └── projections
-                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1, type=int]
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:1, type=int8]
                      │                   │              ├── const: 'ERROR' [type=string]
                      │                   │              ├── const: 'control reached end of function without RETURN' [type=string]
                      │                   │              ├── const: '' [type=string]
@@ -6032,8 +6032,8 @@ project
                      │                        ├── values
                      │                        │    └── tuple [type=tuple]
                      │                        └── projections
-                     │                             └── null [as=end_of_function_3:2, type=int]
-                     └── const: 1 [type=int]
+                     │                             └── null [as=end_of_function_3:2, type=int8]
+                     └── const: 1 [type=int8]
 
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
@@ -6055,7 +6055,7 @@ project
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── udf: f [as=f:15, type=int]
+      └── udf: f [as=f:15, type=int8]
            └── body
                 └── limit
                      ├── columns: stmt_loop_5:14(int)
@@ -6068,11 +6068,11 @@ project
                      │    │         ├── values
                      │    │         │    └── tuple [type=tuple]
                      │    │         └── projections
-                     │    │              └── const: 0 [as=i:1, type=int]
+                     │    │              └── const: 0 [as=i:1, type=int8]
                      │    └── projections
-                     │         └── udf: stmt_loop_5 [as=stmt_loop_5:14, type=int]
+                     │         └── udf: stmt_loop_5 [as=stmt_loop_5:14, type=int8]
                      │              ├── args
-                     │              │    └── variable: i:1 [type=int]
+                     │              │    └── variable: i:1 [type=int8]
                      │              ├── params: i:7(int)
                      │              └── body
                      │                   └── project
@@ -6080,13 +6080,13 @@ project
                      │                        ├── values
                      │                        │    └── tuple [type=tuple]
                      │                        └── projections
-                     │                             └── case [as=stmt_if_7:13, type=int]
+                     │                             └── case [as=stmt_if_7:13, type=int8]
                      │                                  ├── true [type=bool]
-                     │                                  ├── when [type=int]
+                     │                                  ├── when [type=int8]
                      │                                  │    ├── lt [type=bool]
-                     │                                  │    │    ├── variable: i:7 [type=int]
-                     │                                  │    │    └── const: 10 [type=int]
-                     │                                  │    └── subquery [type=int]
+                     │                                  │    │    ├── variable: i:7 [type=int8]
+                     │                                  │    │    └── const: 10 [type=int8]
+                     │                                  │    └── subquery [type=int8]
                      │                                  │         └── project
                      │                                  │              ├── columns: stmt_if_6:11(int)
                      │                                  │              ├── project
@@ -6094,14 +6094,14 @@ project
                      │                                  │              │    ├── values
                      │                                  │              │    │    └── tuple [type=tuple]
                      │                                  │              │    └── projections
-                     │                                  │              │         └── plus [as=i:10, type=int]
-                     │                                  │              │              ├── variable: i:7 [type=int]
-                     │                                  │              │              └── const: 1 [type=int]
+                     │                                  │              │         └── plus [as=i:10, type=int8]
+                     │                                  │              │              ├── variable: i:7 [type=int8]
+                     │                                  │              │              └── const: 1 [type=int8]
                      │                                  │              └── projections
-                     │                                  │                   └── udf: stmt_if_6 [as=stmt_if_6:11, type=int]
+                     │                                  │                   └── udf: stmt_if_6 [as=stmt_if_6:11, type=int8]
                      │                                  │                        ├── tail-call
                      │                                  │                        ├── args
-                     │                                  │                        │    └── variable: i:10 [type=int]
+                     │                                  │                        │    └── variable: i:10 [type=int8]
                      │                                  │                        ├── params: i:8(int)
                      │                                  │                        └── body
                      │                                  │                             └── project
@@ -6109,21 +6109,21 @@ project
                      │                                  │                                  ├── values
                      │                                  │                                  │    └── tuple [type=tuple]
                      │                                  │                                  └── projections
-                     │                                  │                                       └── udf: stmt_loop_5 [as=stmt_loop_5:9, type=int]
+                     │                                  │                                       └── udf: stmt_loop_5 [as=stmt_loop_5:9, type=int8]
                      │                                  │                                            ├── tail-call
                      │                                  │                                            ├── args
-                     │                                  │                                            │    └── variable: i:8 [type=int]
+                     │                                  │                                            │    └── variable: i:8 [type=int8]
                      │                                  │                                            └── recursive-call
-                     │                                  └── subquery [type=int]
+                     │                                  └── subquery [type=int8]
                      │                                       └── project
                      │                                            ├── columns: loop_exit_1:12(int)
                      │                                            ├── values
                      │                                            │    └── tuple [type=tuple]
                      │                                            └── projections
-                     │                                                 └── udf: loop_exit_1 [as=loop_exit_1:12, type=int]
+                     │                                                 └── udf: loop_exit_1 [as=loop_exit_1:12, type=int8]
                      │                                                      ├── tail-call
                      │                                                      ├── args
-                     │                                                      │    └── variable: i:7 [type=int]
+                     │                                                      │    └── variable: i:7 [type=int8]
                      │                                                      ├── params: i:2(int)
                      │                                                      └── body
                      │                                                           └── project
@@ -6131,10 +6131,10 @@ project
                      │                                                                ├── values
                      │                                                                │    └── tuple [type=tuple]
                      │                                                                └── projections
-                     │                                                                     └── udf: _end_of_function_2 [as="_end_of_function_2":6, type=int]
+                     │                                                                     └── udf: _end_of_function_2 [as="_end_of_function_2":6, type=int8]
                      │                                                                          ├── tail-call
                      │                                                                          ├── args
-                     │                                                                          │    └── variable: i:2 [type=int]
+                     │                                                                          │    └── variable: i:2 [type=int8]
                      │                                                                          ├── params: i:3(int)
                      │                                                                          └── body
                      │                                                                               ├── project
@@ -6142,7 +6142,7 @@ project
                      │                                                                               │    ├── values
                      │                                                                               │    │    └── tuple [type=tuple]
                      │                                                                               │    └── projections
-                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_3:4, type=int]
+                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_3:4, type=int8]
                      │                                                                               │              ├── const: 'ERROR' [type=string]
                      │                                                                               │              ├── const: 'control reached end of function without RETURN' [type=string]
                      │                                                                               │              ├── const: '' [type=string]
@@ -6153,8 +6153,8 @@ project
                      │                                                                                    ├── values
                      │                                                                                    │    └── tuple [type=tuple]
                      │                                                                                    └── projections
-                     │                                                                                         └── null [as=end_of_function_4:5, type=int]
-                     └── const: 1 [type=int]
+                     │                                                                                         └── null [as=end_of_function_4:5, type=int8]
+                     └── const: 1 [type=int8]
 
 # Infer return type for a RECORD-returning routine.
 exec-ddl
@@ -6184,7 +6184,7 @@ project
                      │    └── projections
                      │         └── tuple [as=stmt_return_1:1, type=tuple{bool}]
                      │              └── false [type=bool]
-                     └── const: 1 [type=int]
+                     └── const: 1 [type=int8]
 
 # Regression test for #114826 - ensure that SQL statements return at least one
 # row.
@@ -6740,7 +6740,7 @@ project
                      │              │              │    └── tuple [type=tuple]
                      │              │              └── projections
                      │              │                   └── tuple [as=stmt_return_5:4, type=tuple{int, unknown, decimal}]
-                     │              │                        ├── const: 1 [type=int]
+                     │              │                        ├── const: 1 [type=int8]
                      │              │                        ├── null [type=unknown]
                      │              │                        └── unary-minus [type=decimal]
                      │              │                             └── const: 1.0 [type=decimal]
@@ -6755,7 +6755,7 @@ project
                      │              │                   └── cast: RECORD [as=stmt_return_7:6, type=tuple{int, unknown, decimal}]
                      │              │                        └── cast: STRING [type=string]
                      │              │                             └── tuple [type=tuple{int, decimal, unknown}]
-                     │              │                                  ├── const: 1 [type=int]
+                     │              │                                  ├── const: 1 [type=int8]
                      │              │                                  ├── const: 1.0 [type=decimal]
                      │              │                                  └── null [type=unknown]
                      │              └── subquery [type=tuple{int, unknown, decimal}]
@@ -6779,7 +6779,7 @@ project
                      │                                                           │    ├── values
                      │                                                           │    │    └── tuple [type=tuple]
                      │                                                           │    └── projections
-                     │                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_3:1, type=int]
+                     │                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_3:1, type=int8]
                      │                                                           │              ├── const: 'ERROR' [type=string]
                      │                                                           │              ├── const: 'control reached end of function without RETURN' [type=string]
                      │                                                           │              ├── const: '' [type=string]
@@ -6791,7 +6791,7 @@ project
                      │                                                                │    └── tuple [type=tuple]
                      │                                                                └── projections
                      │                                                                     └── null [as=end_of_function_4:2, type=tuple{int, unknown, decimal}]
-                     └── const: 1 [type=int]
+                     └── const: 1 [type=int8]
 
 # Regression test for #120916 - the nested call should not have the "tail-call"
 # property, because it isn't a terminal statement.

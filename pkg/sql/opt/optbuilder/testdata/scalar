@@ -1,14 +1,14 @@
 build-scalar
 1
 ----
-const: 1 [type=int]
+const: 1 [type=int8]
 
 build-scalar
 1 + 2
 ----
-plus [type=int]
- ├── const: 1 [type=int]
- └── const: 2 [type=int]
+plus [type=int8]
+ ├── const: 1 [type=int8]
+ └── const: 2 [type=int8]
 
 build-scalar vars=(a string)
 a
@@ -18,9 +18,9 @@ variable: a:1 [type=string]
 build-scalar vars=(a int)
 a + 2
 ----
-plus [type=int]
- ├── variable: a:1 [type=int]
- └── const: 2 [type=int]
+plus [type=int8]
+ ├── variable: a:1 [type=int8]
+ └── const: 2 [type=int8]
 
 build-scalar vars=(a int, b int)
 a >= 5 AND a <= 10 AND b < 4
@@ -28,72 +28,72 @@ a >= 5 AND a <= 10 AND b < 4
 and [type=bool]
  ├── and [type=bool]
  │    ├── ge [type=bool]
- │    │    ├── variable: a:1 [type=int]
- │    │    └── const: 5 [type=int]
+ │    │    ├── variable: a:1 [type=int8]
+ │    │    └── const: 5 [type=int8]
  │    └── le [type=bool]
- │         ├── variable: a:1 [type=int]
- │         └── const: 10 [type=int]
+ │         ├── variable: a:1 [type=int8]
+ │         └── const: 10 [type=int8]
  └── lt [type=bool]
-      ├── variable: b:2 [type=int]
-      └── const: 4 [type=int]
+      ├── variable: b:2 [type=int8]
+      └── const: 4 [type=int8]
 
 build-scalar vars=(a int, b int)
 (a, b) = (1, 2)
 ----
 eq [type=bool]
  ├── tuple [type=tuple{int, int}]
- │    ├── variable: a:1 [type=int]
- │    └── variable: b:2 [type=int]
+ │    ├── variable: a:1 [type=int8]
+ │    └── variable: b:2 [type=int8]
  └── tuple [type=tuple{int, int}]
-      ├── const: 1 [type=int]
-      └── const: 2 [type=int]
+      ├── const: 1 [type=int8]
+      └── const: 2 [type=int8]
 
 build-scalar vars=(a int)
 a IN (1, 2)
 ----
 in [type=bool]
- ├── variable: a:1 [type=int]
+ ├── variable: a:1 [type=int8]
  └── tuple [type=tuple{int, int}]
-      ├── const: 1 [type=int]
-      └── const: 2 [type=int]
+      ├── const: 1 [type=int8]
+      └── const: 2 [type=int8]
 
 build-scalar vars=(a int, b int)
 (a, b) IN ((1, 2), (3, 4))
 ----
 in [type=bool]
  ├── tuple [type=tuple{int, int}]
- │    ├── variable: a:1 [type=int]
- │    └── variable: b:2 [type=int]
+ │    ├── variable: a:1 [type=int8]
+ │    └── variable: b:2 [type=int8]
  └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
       ├── tuple [type=tuple{int, int}]
-      │    ├── const: 1 [type=int]
-      │    └── const: 2 [type=int]
+      │    ├── const: 1 [type=int8]
+      │    └── const: 2 [type=int8]
       └── tuple [type=tuple{int, int}]
-           ├── const: 3 [type=int]
-           └── const: 4 [type=int]
+           ├── const: 3 [type=int8]
+           └── const: 4 [type=int8]
 
 build-scalar vars=(a int, b int, c int, d int)
 (a, b + c, 5 + d * 2) = (b + c, 8, a - d)
 ----
 eq [type=bool]
  ├── tuple [type=tuple{int, int, int}]
- │    ├── variable: a:1 [type=int]
- │    ├── plus [type=int]
- │    │    ├── variable: b:2 [type=int]
- │    │    └── variable: c:3 [type=int]
- │    └── plus [type=int]
- │         ├── const: 5 [type=int]
- │         └── mult [type=int]
- │              ├── variable: d:4 [type=int]
- │              └── const: 2 [type=int]
+ │    ├── variable: a:1 [type=int8]
+ │    ├── plus [type=int8]
+ │    │    ├── variable: b:2 [type=int8]
+ │    │    └── variable: c:3 [type=int8]
+ │    └── plus [type=int8]
+ │         ├── const: 5 [type=int8]
+ │         └── mult [type=int8]
+ │              ├── variable: d:4 [type=int8]
+ │              └── const: 2 [type=int8]
  └── tuple [type=tuple{int, int, int}]
-      ├── plus [type=int]
-      │    ├── variable: b:2 [type=int]
-      │    └── variable: c:3 [type=int]
-      ├── const: 8 [type=int]
-      └── minus [type=int]
-           ├── variable: a:1 [type=int]
-           └── variable: d:4 [type=int]
+      ├── plus [type=int8]
+      │    ├── variable: b:2 [type=int8]
+      │    └── variable: c:3 [type=int8]
+      ├── const: 8 [type=int8]
+      └── minus [type=int8]
+           ├── variable: a:1 [type=int8]
+           └── variable: d:4 [type=int8]
 
 build-scalar vars=(a int, b int, c int, d int)
 ((a, b), (c, d)) = ((1, 2), (3, 4))
@@ -101,204 +101,204 @@ build-scalar vars=(a int, b int, c int, d int)
 eq [type=bool]
  ├── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
  │    ├── tuple [type=tuple{int, int}]
- │    │    ├── variable: a:1 [type=int]
- │    │    └── variable: b:2 [type=int]
+ │    │    ├── variable: a:1 [type=int8]
+ │    │    └── variable: b:2 [type=int8]
  │    └── tuple [type=tuple{int, int}]
- │         ├── variable: c:3 [type=int]
- │         └── variable: d:4 [type=int]
+ │         ├── variable: c:3 [type=int8]
+ │         └── variable: d:4 [type=int8]
  └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
       ├── tuple [type=tuple{int, int}]
-      │    ├── const: 1 [type=int]
-      │    └── const: 2 [type=int]
+      │    ├── const: 1 [type=int8]
+      │    └── const: 2 [type=int8]
       └── tuple [type=tuple{int, int}]
-           ├── const: 3 [type=int]
-           └── const: 4 [type=int]
+           ├── const: 3 [type=int8]
+           └── const: 4 [type=int8]
 
 build-scalar vars=(a int, b int, c int, d string)
 (a, (b, 'a'), (c, 'b', 5)) = (9, (a + c, d), (5, d, a))
 ----
 eq [type=bool]
  ├── tuple [type=tuple{int, tuple{int, string}, tuple{int, string, int}}]
- │    ├── variable: a:1 [type=int]
+ │    ├── variable: a:1 [type=int8]
  │    ├── tuple [type=tuple{int, string}]
- │    │    ├── variable: b:2 [type=int]
+ │    │    ├── variable: b:2 [type=int8]
  │    │    └── const: 'a' [type=string]
  │    └── tuple [type=tuple{int, string, int}]
- │         ├── variable: c:3 [type=int]
+ │         ├── variable: c:3 [type=int8]
  │         ├── const: 'b' [type=string]
- │         └── const: 5 [type=int]
+ │         └── const: 5 [type=int8]
  └── tuple [type=tuple{int, tuple{int, string}, tuple{int, string, int}}]
-      ├── const: 9 [type=int]
+      ├── const: 9 [type=int8]
       ├── tuple [type=tuple{int, string}]
-      │    ├── plus [type=int]
-      │    │    ├── variable: a:1 [type=int]
-      │    │    └── variable: c:3 [type=int]
+      │    ├── plus [type=int8]
+      │    │    ├── variable: a:1 [type=int8]
+      │    │    └── variable: c:3 [type=int8]
       │    └── variable: d:4 [type=string]
       └── tuple [type=tuple{int, string, int}]
-           ├── const: 5 [type=int]
+           ├── const: 5 [type=int8]
            ├── variable: d:4 [type=string]
-           └── variable: a:1 [type=int]
+           └── variable: a:1 [type=int8]
 
 build-scalar vars=(a int, b int)
 a IS NULL
 ----
 is [type=bool]
- ├── variable: a:1 [type=int]
+ ├── variable: a:1 [type=int8]
  └── null [type=unknown]
 
 build-scalar vars=(a int, b int)
 a IS NOT DISTINCT FROM NULL
 ----
 is [type=bool]
- ├── variable: a:1 [type=int]
+ ├── variable: a:1 [type=int8]
  └── null [type=unknown]
 
 build-scalar vars=(a int, b int)
 a IS NOT DISTINCT FROM b
 ----
 is [type=bool]
- ├── variable: a:1 [type=int]
- └── variable: b:2 [type=int]
+ ├── variable: a:1 [type=int8]
+ └── variable: b:2 [type=int8]
 
 build-scalar vars=(a int, b int)
 a IS NOT NULL
 ----
 is-not [type=bool]
- ├── variable: a:1 [type=int]
+ ├── variable: a:1 [type=int8]
  └── null [type=unknown]
 
 build-scalar vars=(a int, b int)
 a IS DISTINCT FROM NULL
 ----
 is-not [type=bool]
- ├── variable: a:1 [type=int]
+ ├── variable: a:1 [type=int8]
  └── null [type=unknown]
 
 build-scalar vars=(a int, b int)
 a IS DISTINCT FROM b
 ----
 is-not [type=bool]
- ├── variable: a:1 [type=int]
- └── variable: b:2 [type=int]
+ ├── variable: a:1 [type=int8]
+ └── variable: b:2 [type=int8]
 
 build-scalar vars=(a int, b int)
 (a, b) IS NULL
 ----
 is-tuple-null [type=bool]
  └── tuple [type=tuple{int, int}]
-      ├── variable: a:1 [type=int]
-      └── variable: b:2 [type=int]
+      ├── variable: a:1 [type=int8]
+      └── variable: b:2 [type=int8]
 
 build-scalar vars=(a int, b int)
 (a, b) IS NOT NULL
 ----
 is-tuple-not-null [type=bool]
  └── tuple [type=tuple{int, int}]
-      ├── variable: a:1 [type=int]
-      └── variable: b:2 [type=int]
+      ├── variable: a:1 [type=int8]
+      └── variable: b:2 [type=int8]
 
 build-scalar vars=(a int, b int)
 + a + (- b)
 ----
-plus [type=int]
- ├── variable: a:1 [type=int]
- └── unary-minus [type=int]
-      └── variable: b:2 [type=int]
+plus [type=int8]
+ ├── variable: a:1 [type=int8]
+ └── unary-minus [type=int8]
+      └── variable: b:2 [type=int8]
 
 build-scalar vars=(a int, b int)
 CASE WHEN a = 2 THEN 1 ELSE 2 END
 ----
-case [type=int]
+case [type=int8]
  ├── true [type=bool]
- ├── when [type=int]
+ ├── when [type=int8]
  │    ├── eq [type=bool]
- │    │    ├── variable: a:1 [type=int]
- │    │    └── const: 2 [type=int]
- │    └── const: 1 [type=int]
- └── const: 2 [type=int]
+ │    │    ├── variable: a:1 [type=int8]
+ │    │    └── const: 2 [type=int8]
+ │    └── const: 1 [type=int8]
+ └── const: 2 [type=int8]
 
 build-scalar
 if(true, 1, 2)
 ----
-case [type=int]
+case [type=int8]
  ├── true [type=bool]
- ├── when [type=int]
+ ├── when [type=int8]
  │    ├── true [type=bool]
- │    └── const: 1 [type=int]
- └── const: 2 [type=int]
+ │    └── const: 1 [type=int8]
+ └── const: 2 [type=int8]
 
 build-scalar
 if(false, NULL, 1)
 ----
-case [type=int]
+case [type=int8]
  ├── false [type=bool]
- ├── when [type=int]
+ ├── when [type=int8]
  │    ├── true [type=bool]
- │    └── cast: INT8 [type=int]
+ │    └── cast: INT8 [type=int8]
  │         └── null [type=unknown]
- └── const: 1 [type=int]
+ └── const: 1 [type=int8]
 
 build-scalar
 if(true, NULL, 1)
 ----
-case [type=int]
+case [type=int8]
  ├── true [type=bool]
- ├── when [type=int]
+ ├── when [type=int8]
  │    ├── true [type=bool]
- │    └── cast: INT8 [type=int]
+ │    └── cast: INT8 [type=int8]
  │         └── null [type=unknown]
- └── const: 1 [type=int]
+ └── const: 1 [type=int8]
 
 build-scalar
 if(false, 1, NULL)
 ----
-case [type=int]
+case [type=int8]
  ├── false [type=bool]
- ├── when [type=int]
+ ├── when [type=int8]
  │    ├── true [type=bool]
- │    └── const: 1 [type=int]
- └── cast: INT8 [type=int]
+ │    └── const: 1 [type=int8]
+ └── cast: INT8 [type=int8]
       └── null [type=unknown]
 
 build-scalar
 nullif(1, 2)
 ----
-case [type=int]
- ├── const: 1 [type=int]
- ├── when [type=int]
- │    ├── const: 2 [type=int]
- │    └── null [type=int]
- └── const: 1 [type=int]
+case [type=int8]
+ ├── const: 1 [type=int8]
+ ├── when [type=int8]
+ │    ├── const: 2 [type=int8]
+ │    └── null [type=int8]
+ └── const: 1 [type=int8]
 
 build-scalar
 nullif(NULL, 0)
 ----
-case [type=int]
- ├── cast: INT8 [type=int]
+case [type=int8]
+ ├── cast: INT8 [type=int8]
  │    └── null [type=unknown]
- ├── when [type=int]
- │    ├── const: 0 [type=int]
- │    └── null [type=int]
- └── cast: INT8 [type=int]
+ ├── when [type=int8]
+ │    ├── const: 0 [type=int8]
+ │    └── null [type=int8]
+ └── cast: INT8 [type=int8]
       └── null [type=unknown]
 
 build-scalar
 nullif(0, NULL)
 ----
-case [type=int]
- ├── const: 0 [type=int]
- ├── when [type=int]
+case [type=int8]
+ ├── const: 0 [type=int8]
+ ├── when [type=int8]
  │    ├── null [type=unknown]
- │    └── null [type=int]
- └── const: 0 [type=int]
+ │    └── null [type=int8]
+ └── const: 0 [type=int8]
 
 build-scalar vars=(a string)
 length(a) = 2
 ----
 eq [type=bool]
- ├── function: length [type=int]
+ ├── function: length [type=int8]
  │    └── variable: a:1 [type=string]
- └── const: 2 [type=int]
+ └── const: 2 [type=int8]
 
 build-scalar vars=(a jsonb)
 a @> '{"a":1}'
@@ -360,12 +360,12 @@ const: 1 [type=decimal]
 build-scalar
 1::float
 ----
-const: 1.0 [type=float]
+const: 1.0 [type=float8]
 
 build-scalar
 1.1::int
 ----
-cast: INT8 [type=int]
+cast: INT8 [type=int8]
  └── const: 1.1 [type=decimal]
 
 build-scalar
@@ -390,114 +390,114 @@ minus [type=interval]
 build-scalar
 '123'::int
 ----
-const: 123 [type=int]
+const: 123 [type=int8]
 
 build-scalar vars=(a int, b int)
 IFNULL(a, b)
 ----
-coalesce [type=int]
- ├── variable: a:1 [type=int]
- └── variable: b:2 [type=int]
+coalesce [type=int8]
+ ├── variable: a:1 [type=int8]
+ └── variable: b:2 [type=int8]
 
 build-scalar vars=(a int, b int, c int)
 COALESCE(a, b, c)
 ----
-coalesce [type=int]
- ├── variable: a:1 [type=int]
- ├── variable: b:2 [type=int]
- └── variable: c:3 [type=int]
+coalesce [type=int8]
+ ├── variable: a:1 [type=int8]
+ ├── variable: b:2 [type=int8]
+ └── variable: c:3 [type=int8]
 
 build-scalar vars=(a int)
 CASE WHEN a > 5 THEN 1 ELSE -1 END
 ----
-case [type=int]
+case [type=int8]
  ├── true [type=bool]
- ├── when [type=int]
+ ├── when [type=int8]
  │    ├── gt [type=bool]
- │    │    ├── variable: a:1 [type=int]
- │    │    └── const: 5 [type=int]
- │    └── const: 1 [type=int]
- └── const: -1 [type=int]
+ │    │    ├── variable: a:1 [type=int8]
+ │    │    └── const: 5 [type=int8]
+ │    └── const: 1 [type=int8]
+ └── const: -1 [type=int8]
 
 build-scalar vars=(a int)
 CASE WHEN a > 5 THEN 1 WHEN a < 0 THEN 2 ELSE -1 END
 ----
-case [type=int]
+case [type=int8]
  ├── true [type=bool]
- ├── when [type=int]
+ ├── when [type=int8]
  │    ├── gt [type=bool]
- │    │    ├── variable: a:1 [type=int]
- │    │    └── const: 5 [type=int]
- │    └── const: 1 [type=int]
- ├── when [type=int]
+ │    │    ├── variable: a:1 [type=int8]
+ │    │    └── const: 5 [type=int8]
+ │    └── const: 1 [type=int8]
+ ├── when [type=int8]
  │    ├── lt [type=bool]
- │    │    ├── variable: a:1 [type=int]
- │    │    └── const: 0 [type=int]
- │    └── const: 2 [type=int]
- └── const: -1 [type=int]
+ │    │    ├── variable: a:1 [type=int8]
+ │    │    └── const: 0 [type=int8]
+ │    └── const: 2 [type=int8]
+ └── const: -1 [type=int8]
 
 build-scalar vars=(a int)
 CASE a WHEN 5 THEN 1 ELSE -1 END
 ----
-case [type=int]
- ├── variable: a:1 [type=int]
- ├── when [type=int]
- │    ├── const: 5 [type=int]
- │    └── const: 1 [type=int]
- └── const: -1 [type=int]
+case [type=int8]
+ ├── variable: a:1 [type=int8]
+ ├── when [type=int8]
+ │    ├── const: 5 [type=int8]
+ │    └── const: 1 [type=int8]
+ └── const: -1 [type=int8]
 
 build-scalar vars=(a int, b int)
 CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END
 ----
-case [type=int]
- ├── plus [type=int]
- │    ├── variable: a:1 [type=int]
- │    └── const: 3 [type=int]
- ├── when [type=int]
- │    ├── mult [type=int]
- │    │    ├── const: 5 [type=int]
- │    │    └── variable: b:2 [type=int]
- │    └── mod [type=int]
- │         ├── const: 1 [type=int]
- │         └── variable: b:2 [type=int]
- ├── when [type=int]
- │    ├── const: 6 [type=int]
- │    └── const: 2 [type=int]
- └── const: -1 [type=int]
+case [type=int8]
+ ├── plus [type=int8]
+ │    ├── variable: a:1 [type=int8]
+ │    └── const: 3 [type=int8]
+ ├── when [type=int8]
+ │    ├── mult [type=int8]
+ │    │    ├── const: 5 [type=int8]
+ │    │    └── variable: b:2 [type=int8]
+ │    └── mod [type=int8]
+ │         ├── const: 1 [type=int8]
+ │         └── variable: b:2 [type=int8]
+ ├── when [type=int8]
+ │    ├── const: 6 [type=int8]
+ │    └── const: 2 [type=int8]
+ └── const: -1 [type=int8]
 
 # Tests for CASE with no ELSE statement
 build-scalar vars=(a int)
 CASE WHEN a > 5 THEN 1 END
 ----
-case [type=int]
+case [type=int8]
  ├── true [type=bool]
- ├── when [type=int]
+ ├── when [type=int8]
  │    ├── gt [type=bool]
- │    │    ├── variable: a:1 [type=int]
- │    │    └── const: 5 [type=int]
- │    └── const: 1 [type=int]
- └── null [type=int]
+ │    │    ├── variable: a:1 [type=int8]
+ │    │    └── const: 5 [type=int8]
+ │    └── const: 1 [type=int8]
+ └── null [type=int8]
 
 build-scalar vars=(a int)
 CASE a WHEN 5 THEN 1 END
 ----
-case [type=int]
- ├── variable: a:1 [type=int]
- ├── when [type=int]
- │    ├── const: 5 [type=int]
- │    └── const: 1 [type=int]
- └── null [type=int]
+case [type=int8]
+ ├── variable: a:1 [type=int8]
+ ├── when [type=int8]
+ │    ├── const: 5 [type=int8]
+ │    └── const: 1 [type=int8]
+ └── null [type=int8]
 
 build-scalar vars=(a int)
 a BETWEEN 1 AND 4
 ----
 and [type=bool]
  ├── ge [type=bool]
- │    ├── variable: a:1 [type=int]
- │    └── const: 1 [type=int]
+ │    ├── variable: a:1 [type=int8]
+ │    └── const: 1 [type=int8]
  └── le [type=bool]
-      ├── variable: a:1 [type=int]
-      └── const: 4 [type=int]
+      ├── variable: a:1 [type=int8]
+      └── const: 4 [type=int8]
 
 build-scalar vars=(a int)
 a NOT BETWEEN 1 AND 4
@@ -505,11 +505,11 @@ a NOT BETWEEN 1 AND 4
 not [type=bool]
  └── and [type=bool]
       ├── ge [type=bool]
-      │    ├── variable: a:1 [type=int]
-      │    └── const: 1 [type=int]
+      │    ├── variable: a:1 [type=int8]
+      │    └── const: 1 [type=int8]
       └── le [type=bool]
-           ├── variable: a:1 [type=int]
-           └── const: 4 [type=int]
+           ├── variable: a:1 [type=int8]
+           └── const: 4 [type=int8]
 
 build-scalar vars=(a int)
 a BETWEEN SYMMETRIC 1 AND 4
@@ -517,18 +517,18 @@ a BETWEEN SYMMETRIC 1 AND 4
 or [type=bool]
  ├── and [type=bool]
  │    ├── ge [type=bool]
- │    │    ├── variable: a:1 [type=int]
- │    │    └── const: 1 [type=int]
+ │    │    ├── variable: a:1 [type=int8]
+ │    │    └── const: 1 [type=int8]
  │    └── le [type=bool]
- │         ├── variable: a:1 [type=int]
- │         └── const: 4 [type=int]
+ │         ├── variable: a:1 [type=int8]
+ │         └── const: 4 [type=int8]
  └── and [type=bool]
       ├── ge [type=bool]
-      │    ├── variable: a:1 [type=int]
-      │    └── const: 4 [type=int]
+      │    ├── variable: a:1 [type=int8]
+      │    └── const: 4 [type=int8]
       └── le [type=bool]
-           ├── variable: a:1 [type=int]
-           └── const: 1 [type=int]
+           ├── variable: a:1 [type=int8]
+           └── const: 1 [type=int8]
 
 build-scalar vars=(a int)
 a NOT BETWEEN SYMMETRIC 1 AND 4
@@ -537,48 +537,48 @@ not [type=bool]
  └── or [type=bool]
       ├── and [type=bool]
       │    ├── ge [type=bool]
-      │    │    ├── variable: a:1 [type=int]
-      │    │    └── const: 1 [type=int]
+      │    │    ├── variable: a:1 [type=int8]
+      │    │    └── const: 1 [type=int8]
       │    └── le [type=bool]
-      │         ├── variable: a:1 [type=int]
-      │         └── const: 4 [type=int]
+      │         ├── variable: a:1 [type=int8]
+      │         └── const: 4 [type=int8]
       └── and [type=bool]
            ├── ge [type=bool]
-           │    ├── variable: a:1 [type=int]
-           │    └── const: 4 [type=int]
+           │    ├── variable: a:1 [type=int8]
+           │    └── const: 4 [type=int8]
            └── le [type=bool]
-                ├── variable: a:1 [type=int]
-                └── const: 1 [type=int]
+                ├── variable: a:1 [type=int8]
+                └── const: 1 [type=int8]
 
 build-scalar vars=(a int, b int, c int)
 a BETWEEN b AND c
 ----
 and [type=bool]
  ├── ge [type=bool]
- │    ├── variable: a:1 [type=int]
- │    └── variable: b:2 [type=int]
+ │    ├── variable: a:1 [type=int8]
+ │    └── variable: b:2 [type=int8]
  └── le [type=bool]
-      ├── variable: a:1 [type=int]
-      └── variable: c:3 [type=int]
+      ├── variable: a:1 [type=int8]
+      └── variable: c:3 [type=int8]
 
 build-scalar vars=(a int, b int, c int)
 (a + b) BETWEEN (b + c) AND (c + a)
 ----
 and [type=bool]
  ├── ge [type=bool]
- │    ├── plus [type=int]
- │    │    ├── variable: a:1 [type=int]
- │    │    └── variable: b:2 [type=int]
- │    └── plus [type=int]
- │         ├── variable: b:2 [type=int]
- │         └── variable: c:3 [type=int]
+ │    ├── plus [type=int8]
+ │    │    ├── variable: a:1 [type=int8]
+ │    │    └── variable: b:2 [type=int8]
+ │    └── plus [type=int8]
+ │         ├── variable: b:2 [type=int8]
+ │         └── variable: c:3 [type=int8]
  └── le [type=bool]
-      ├── plus [type=int]
-      │    ├── variable: a:1 [type=int]
-      │    └── variable: b:2 [type=int]
-      └── plus [type=int]
-           ├── variable: c:3 [type=int]
-           └── variable: a:1 [type=int]
+      ├── plus [type=int8]
+      │    ├── variable: a:1 [type=int8]
+      │    └── variable: b:2 [type=int8]
+      └── plus [type=int8]
+           ├── variable: c:3 [type=int8]
+           └── variable: a:1 [type=int8]
 
 build-scalar vars=(a int, b int, c int)
 (a + b) BETWEEN SYMMETRIC (b + c) AND (c + a)
@@ -586,34 +586,34 @@ build-scalar vars=(a int, b int, c int)
 or [type=bool]
  ├── and [type=bool]
  │    ├── ge [type=bool]
- │    │    ├── plus [type=int]
- │    │    │    ├── variable: a:1 [type=int]
- │    │    │    └── variable: b:2 [type=int]
- │    │    └── plus [type=int]
- │    │         ├── variable: b:2 [type=int]
- │    │         └── variable: c:3 [type=int]
+ │    │    ├── plus [type=int8]
+ │    │    │    ├── variable: a:1 [type=int8]
+ │    │    │    └── variable: b:2 [type=int8]
+ │    │    └── plus [type=int8]
+ │    │         ├── variable: b:2 [type=int8]
+ │    │         └── variable: c:3 [type=int8]
  │    └── le [type=bool]
- │         ├── plus [type=int]
- │         │    ├── variable: a:1 [type=int]
- │         │    └── variable: b:2 [type=int]
- │         └── plus [type=int]
- │              ├── variable: c:3 [type=int]
- │              └── variable: a:1 [type=int]
+ │         ├── plus [type=int8]
+ │         │    ├── variable: a:1 [type=int8]
+ │         │    └── variable: b:2 [type=int8]
+ │         └── plus [type=int8]
+ │              ├── variable: c:3 [type=int8]
+ │              └── variable: a:1 [type=int8]
  └── and [type=bool]
       ├── ge [type=bool]
-      │    ├── plus [type=int]
-      │    │    ├── variable: a:1 [type=int]
-      │    │    └── variable: b:2 [type=int]
-      │    └── plus [type=int]
-      │         ├── variable: c:3 [type=int]
-      │         └── variable: a:1 [type=int]
+      │    ├── plus [type=int8]
+      │    │    ├── variable: a:1 [type=int8]
+      │    │    └── variable: b:2 [type=int8]
+      │    └── plus [type=int8]
+      │         ├── variable: c:3 [type=int8]
+      │         └── variable: a:1 [type=int8]
       └── le [type=bool]
-           ├── plus [type=int]
-           │    ├── variable: a:1 [type=int]
-           │    └── variable: b:2 [type=int]
-           └── plus [type=int]
-                ├── variable: b:2 [type=int]
-                └── variable: c:3 [type=int]
+           ├── plus [type=int8]
+           │    ├── variable: a:1 [type=int8]
+           │    └── variable: b:2 [type=int8]
+           └── plus [type=int8]
+                ├── variable: b:2 [type=int8]
+                └── variable: c:3 [type=int8]
 
 build-scalar vars=(a int, b int, c int)
 (a, b) BETWEEN (1, 2) AND (3, 4)
@@ -621,18 +621,18 @@ build-scalar vars=(a int, b int, c int)
 and [type=bool]
  ├── ge [type=bool]
  │    ├── tuple [type=tuple{int, int}]
- │    │    ├── variable: a:1 [type=int]
- │    │    └── variable: b:2 [type=int]
+ │    │    ├── variable: a:1 [type=int8]
+ │    │    └── variable: b:2 [type=int8]
  │    └── tuple [type=tuple{int, int}]
- │         ├── const: 1 [type=int]
- │         └── const: 2 [type=int]
+ │         ├── const: 1 [type=int8]
+ │         └── const: 2 [type=int8]
  └── le [type=bool]
       ├── tuple [type=tuple{int, int}]
-      │    ├── variable: a:1 [type=int]
-      │    └── variable: b:2 [type=int]
+      │    ├── variable: a:1 [type=int8]
+      │    └── variable: b:2 [type=int8]
       └── tuple [type=tuple{int, int}]
-           ├── const: 3 [type=int]
-           └── const: 4 [type=int]
+           ├── const: 3 [type=int8]
+           └── const: 4 [type=int8]
 
 build-scalar vars=(a int, b int, c int)
 (a, b) NOT BETWEEN SYMMETRIC (1, 2) AND (3, 4)
@@ -642,33 +642,33 @@ not [type=bool]
       ├── and [type=bool]
       │    ├── ge [type=bool]
       │    │    ├── tuple [type=tuple{int, int}]
-      │    │    │    ├── variable: a:1 [type=int]
-      │    │    │    └── variable: b:2 [type=int]
+      │    │    │    ├── variable: a:1 [type=int8]
+      │    │    │    └── variable: b:2 [type=int8]
       │    │    └── tuple [type=tuple{int, int}]
-      │    │         ├── const: 1 [type=int]
-      │    │         └── const: 2 [type=int]
+      │    │         ├── const: 1 [type=int8]
+      │    │         └── const: 2 [type=int8]
       │    └── le [type=bool]
       │         ├── tuple [type=tuple{int, int}]
-      │         │    ├── variable: a:1 [type=int]
-      │         │    └── variable: b:2 [type=int]
+      │         │    ├── variable: a:1 [type=int8]
+      │         │    └── variable: b:2 [type=int8]
       │         └── tuple [type=tuple{int, int}]
-      │              ├── const: 3 [type=int]
-      │              └── const: 4 [type=int]
+      │              ├── const: 3 [type=int8]
+      │              └── const: 4 [type=int8]
       └── and [type=bool]
            ├── ge [type=bool]
            │    ├── tuple [type=tuple{int, int}]
-           │    │    ├── variable: a:1 [type=int]
-           │    │    └── variable: b:2 [type=int]
+           │    │    ├── variable: a:1 [type=int8]
+           │    │    └── variable: b:2 [type=int8]
            │    └── tuple [type=tuple{int, int}]
-           │         ├── const: 3 [type=int]
-           │         └── const: 4 [type=int]
+           │         ├── const: 3 [type=int8]
+           │         └── const: 4 [type=int8]
            └── le [type=bool]
                 ├── tuple [type=tuple{int, int}]
-                │    ├── variable: a:1 [type=int]
-                │    └── variable: b:2 [type=int]
+                │    ├── variable: a:1 [type=int8]
+                │    └── variable: b:2 [type=int8]
                 └── tuple [type=tuple{int, int}]
-                     ├── const: 1 [type=int]
-                     └── const: 2 [type=int]
+                     ├── const: 1 [type=int8]
+                     └── const: 2 [type=int8]
 
 # The left side of BETWEEN is typed differently in the two comparisons.
 build-scalar
@@ -709,45 +709,45 @@ null [type=unknown]
 build-scalar
 NULL::int
 ----
-cast: INT8 [type=int]
+cast: INT8 [type=int8]
  └── null [type=unknown]
 
 build-scalar vars=(a int[])
 a = ARRAY[1, 2, 3]
 ----
 eq [type=bool]
- ├── variable: a:1 [type=int[]]
- └── array: [type=int[]]
-      ├── const: 1 [type=int]
-      ├── const: 2 [type=int]
-      └── const: 3 [type=int]
+ ├── variable: a:1 [type=int8[]]
+ └── array: [type=int8[]]
+      ├── const: 1 [type=int8]
+      ├── const: 2 [type=int8]
+      └── const: 3 [type=int8]
 
 build-scalar vars=(a int[])
 a = ARRAY[1, 1.0, '1']
 ----
 eq [type=bool]
- ├── variable: a:1 [type=int[]]
- └── array: [type=int[]]
-      ├── const: 1 [type=int]
-      ├── const: 1 [type=int]
-      └── const: 1 [type=int]
+ ├── variable: a:1 [type=int8[]]
+ └── array: [type=int8[]]
+      ├── const: 1 [type=int8]
+      ├── const: 1 [type=int8]
+      └── const: 1 [type=int8]
 
 build-scalar vars=(a float[])
 a = ARRAY[1, 1.1, '1.123']
 ----
 eq [type=bool]
- ├── variable: a:1 [type=float[]]
- └── array: [type=float[]]
-      ├── const: 1.0 [type=float]
-      ├── const: 1.1 [type=float]
-      └── const: 1.123 [type=float]
+ ├── variable: a:1 [type=float8[]]
+ └── array: [type=float8[]]
+      ├── const: 1.0 [type=float8]
+      ├── const: 1.1 [type=float8]
+      └── const: 1.123 [type=float8]
 
 build-scalar vars=(a int[])
 a = ARRAY[]
 ----
 eq [type=bool]
- ├── variable: a:1 [type=int[]]
- └── array: [type=int[]]
+ ├── variable: a:1 [type=int8[]]
+ └── array: [type=int8[]]
 
 build-scalar vars=(a string[])
 a = ARRAY['foo', 'bar', 'baz']
@@ -821,25 +821,25 @@ concat [type=jsonb]
 build-scalar
 'hello' COLLATE en
 ----
-collate locale='en' [type=collatedstring{en}]
+collate locale='en' [type=string collate en]
  └── const: 'hello' [type=string]
 
 build-scalar
 'hello' COLLATE en_US
 ----
-collate locale='en_US' [type=collatedstring{en_US}]
+collate locale='en_US' [type=string collate en_us]
  └── const: 'hello' [type=string]
 
 build-scalar
 'hello' COLLATE "en_US"
 ----
-collate locale='en_US' [type=collatedstring{en_US}]
+collate locale='en_US' [type=string collate en_us]
  └── const: 'hello' [type=string]
 
 build-scalar
 'hello' COLLATE "en-US"
 ----
-collate locale='en_US' [type=collatedstring{en_US}]
+collate locale='en_US' [type=string collate en_us]
  └── const: 'hello' [type=string]
 
 build-scalar
@@ -850,47 +850,47 @@ error: invalid locale foo: language: subtag "foo" is well-formed but unknown
 build-scalar
 random()
 ----
-function: random [type=float]
+function: random [type=float8]
 
 build-scalar
 ARRAY[1, 2] || NULL
 ----
-concat [type=int[]]
- ├── array: [type=int[]]
- │    ├── const: 1 [type=int]
- │    └── const: 2 [type=int]
- └── cast: INT8[] [type=int[]]
+concat [type=int8[]]
+ ├── array: [type=int8[]]
+ │    ├── const: 1 [type=int8]
+ │    └── const: 2 [type=int8]
+ └── cast: INT8[] [type=int8[]]
       └── null [type=unknown]
 
 build-scalar
 NULL || ARRAY[1, 2]
 ----
-concat [type=int[]]
- ├── cast: INT8[] [type=int[]]
+concat [type=int8[]]
+ ├── cast: INT8[] [type=int8[]]
  │    └── null [type=unknown]
- └── array: [type=int[]]
-      ├── const: 1 [type=int]
-      └── const: 2 [type=int]
+ └── array: [type=int8[]]
+      ├── const: 1 [type=int8]
+      └── const: 2 [type=int8]
 
 build-scalar
 ARRAY[1, 2] || NULL::smallint
 ----
-concat [type=int[]]
- ├── array: [type=int[]]
- │    ├── const: 1 [type=int]
- │    └── const: 2 [type=int]
+concat [type=int8[]]
+ ├── array: [type=int8[]]
+ │    ├── const: 1 [type=int8]
+ │    └── const: 2 [type=int8]
  └── cast: INT2 [type=int2]
       └── null [type=unknown]
 
 build-scalar
 NULL::bigint || ARRAY[1, 2]
 ----
-concat [type=int[]]
- ├── cast: INT8 [type=int]
+concat [type=int8[]]
+ ├── cast: INT8 [type=int8]
  │    └── null [type=unknown]
- └── array: [type=int[]]
-      ├── const: 1 [type=int]
-      └── const: 2 [type=int]
+ └── array: [type=int8[]]
+      ├── const: 1 [type=int8]
+      └── const: 2 [type=int8]
 
 build-scalar
 ARRAY['"foo"'::jsonb]
@@ -1069,53 +1069,53 @@ build-scalar
 1 = ANY ARRAY[1, 2, 3]
 ----
 any-scalar: eq [type=bool]
- ├── const: 1 [type=int]
- └── array: [type=int[]]
-      ├── const: 1 [type=int]
-      ├── const: 2 [type=int]
-      └── const: 3 [type=int]
+ ├── const: 1 [type=int8]
+ └── array: [type=int8[]]
+      ├── const: 1 [type=int8]
+      ├── const: 2 [type=int8]
+      └── const: 3 [type=int8]
 
 build-scalar
 1 > ANY ARRAY[1, 2, 3]
 ----
 any-scalar: gt [type=bool]
- ├── const: 1 [type=int]
- └── array: [type=int[]]
-      ├── const: 1 [type=int]
-      ├── const: 2 [type=int]
-      └── const: 3 [type=int]
+ ├── const: 1 [type=int8]
+ └── array: [type=int8[]]
+      ├── const: 1 [type=int8]
+      ├── const: 2 [type=int8]
+      └── const: 3 [type=int8]
 
 build-scalar
 1 = ALL ARRAY[1, 2, 3]
 ----
 not [type=bool]
  └── any-scalar: ne [type=bool]
-      ├── const: 1 [type=int]
-      └── array: [type=int[]]
-           ├── const: 1 [type=int]
-           ├── const: 2 [type=int]
-           └── const: 3 [type=int]
+      ├── const: 1 [type=int8]
+      └── array: [type=int8[]]
+           ├── const: 1 [type=int8]
+           ├── const: 2 [type=int8]
+           └── const: 3 [type=int8]
 
 build-scalar
 1 > ALL ARRAY[1, 2, 3]
 ----
 not [type=bool]
  └── any-scalar: le [type=bool]
-      ├── const: 1 [type=int]
-      └── array: [type=int[]]
-           ├── const: 1 [type=int]
-           ├── const: 2 [type=int]
-           └── const: 3 [type=int]
+      ├── const: 1 [type=int8]
+      └── array: [type=int8[]]
+           ├── const: 1 [type=int8]
+           ├── const: 2 [type=int8]
+           └── const: 3 [type=int8]
 
 build-scalar
 1 = ANY (1, 2, 3)
 ----
 any-scalar: eq [type=bool]
- ├── const: 1 [type=int]
+ ├── const: 1 [type=int8]
  └── tuple [type=tuple{int, int, int}]
-      ├── const: 1 [type=int]
-      ├── const: 2 [type=int]
-      └── const: 3 [type=int]
+      ├── const: 1 [type=int8]
+      ├── const: 2 [type=int8]
+      └── const: 3 [type=int8]
 
 build-scalar
 'foo' = ANY ('foo', 'bar', 'baz')
@@ -1132,7 +1132,7 @@ build-scalar
 1 = ANY ()
 ----
 any-scalar: eq [type=bool]
- ├── const: 1 [type=int]
+ ├── const: 1 [type=int8]
  └── tuple [type=tuple]
 
 build
@@ -1144,17 +1144,17 @@ build-scalar vars=(a int[], b string[], c float[], d int)
 (a[1], b[1+1], c[d])
 ----
 tuple [type=tuple{int, string, float}]
- ├── indirection [type=int]
- │    ├── variable: a:1 [type=int[]]
- │    └── const: 1 [type=int]
+ ├── indirection [type=int8]
+ │    ├── variable: a:1 [type=int8[]]
+ │    └── const: 1 [type=int8]
  ├── indirection [type=string]
  │    ├── variable: b:2 [type=string[]]
- │    └── plus [type=int]
- │         ├── const: 1 [type=int]
- │         └── const: 1 [type=int]
- └── indirection [type=float]
-      ├── variable: c:3 [type=float[]]
-      └── variable: d:4 [type=int]
+ │    └── plus [type=int8]
+ │         ├── const: 1 [type=int8]
+ │         └── const: 1 [type=int8]
+ └── indirection [type=float8]
+      ├── variable: c:3 [type=float8[]]
+      └── variable: d:4 [type=int8]
 
 build-scalar vars=(a int, b string, c int[])
 (
@@ -1185,25 +1185,25 @@ tuple [type=tuple{tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, 
 build-scalar vars=(a string)
 a COLLATE en
 ----
-collate locale='en' [type=collatedstring{en}]
+collate locale='en' [type=string collate en]
  └── variable: a:1 [type=string]
 
 build-scalar vars=(a string)
 a COLLATE en_US
 ----
-collate locale='en_US' [type=collatedstring{en_US}]
+collate locale='en_US' [type=string collate en_us]
  └── variable: a:1 [type=string]
 
 build-scalar vars=(a string)
 a COLLATE "en_US"
 ----
-collate locale='en_US' [type=collatedstring{en_US}]
+collate locale='en_US' [type=string collate en_us]
  └── variable: a:1 [type=string]
 
 build-scalar vars=(a string)
 a COLLATE "en-US"
 ----
-collate locale='en_US' [type=collatedstring{en_US}]
+collate locale='en_US' [type=string collate en_us]
  └── variable: a:1 [type=string]
 
 build-scalar vars=(a string)
@@ -1300,16 +1300,16 @@ ISERROR(1/0)
 ----
 if-err [type=bool]
  └── div [type=decimal]
-      ├── const: 1 [type=int]
-      └── const: 0 [type=int]
+      ├── const: 1 [type=int8]
+      └── const: 0 [type=int8]
 
 build-scalar
 ISERROR(1/0, '22012')
 ----
 if-err [type=bool]
  ├── div [type=decimal]
- │    ├── const: 1 [type=int]
- │    └── const: 0 [type=int]
+ │    ├── const: 1 [type=int8]
+ │    └── const: 0 [type=int8]
  └── err-code
       └── const: '22012' [type=string]
 
@@ -1318,8 +1318,8 @@ IFERROR(1/0, a)
 ----
 if-err [type=decimal]
  ├── div [type=decimal]
- │    ├── const: 1 [type=int]
- │    └── const: 0 [type=int]
+ │    ├── const: 1 [type=int8]
+ │    └── const: 0 [type=int8]
  └── else
       └── variable: a:1 [type=decimal]
 
@@ -1328,8 +1328,8 @@ IFERROR(1/0, a, b)
 ----
 if-err [type=decimal]
  ├── div [type=decimal]
- │    ├── const: 1 [type=int]
- │    └── const: 0 [type=int]
+ │    ├── const: 1 [type=int8]
+ │    └── const: 0 [type=int8]
  ├── else
  │    └── variable: a:1 [type=decimal]
  └── err-code
@@ -1340,8 +1340,8 @@ IFERROR(1/0, a, '10000')
 ----
 if-err [type=decimal]
  ├── div [type=decimal]
- │    ├── const: 1 [type=int]
- │    └── const: 0 [type=int]
+ │    ├── const: 1 [type=int8]
+ │    └── const: 0 [type=int8]
  ├── else
  │    └── variable: a:1 [type=decimal]
  └── err-code
@@ -1460,8 +1460,8 @@ build-scalar vars=(a int[], b int[])
 a && b
 ----
 overlaps [type=bool]
- ├── variable: a:1 [type=int[]]
- └── variable: b:2 [type=int[]]
+ ├── variable: a:1 [type=int8[]]
+ └── variable: b:2 [type=int8[]]
 
 build-scalar vars=(a geometry[], b geometry[])
 a && b

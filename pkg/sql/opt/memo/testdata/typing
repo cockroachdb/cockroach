@@ -28,7 +28,7 @@ project
  ├── values
  │    └── () [type=tuple]
  └── projections
-      ├── 1 [as=a:1, type=int]
+      ├── 1 [as=a:1, type=int8]
       ├── true [as=b:2, type=bool]
       ├── false [as=c:3, type=bool]
       └── NULL [as=d:4, type=unknown]
@@ -170,9 +170,9 @@ project
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
  └── projections
-      ├── x:1 & y:2 [as=r:5, type=int]
-      ├── x:1 | y:2 [as=s:6, type=int]
-      └── x:1 # y:2 [as=t:7, type=int]
+      ├── x:1 & y:2 [as=r:5, type=int8]
+      ├── x:1 | y:2 [as=s:6, type=int8]
+      └── x:1 # y:2 [as=t:7, type=int8]
 
 # Plus, Minus, Mult, Div, FloorDiv
 build
@@ -209,8 +209,8 @@ project
  └── projections
       ├── 100.1 % x:1 [as=r:5, type=decimal]
       ├── x:1 ^ 2.5 [as=s:6, type=decimal]
-      ├── x:1 << 3 [as=t:7, type=int]
-      └── y:2 >> 2 [as=u:8, type=int]
+      ├── x:1 << 3 [as=t:7, type=int8]
+      └── y:2 >> 2 [as=u:8, type=int8]
 
 # FetchVal, FetchText, FetchValPath, FetchTextPath
 build
@@ -250,8 +250,8 @@ project
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
  └── projections
-      ├── -y:2 [as=r:5, type=int]
-      └── ~x:1 [as=s:6, type=int]
+      ├── -y:2 [as=r:5, type=int8]
+      └── ~x:1 [as=s:6, type=int8]
 
 # Array Concat
 build
@@ -262,9 +262,9 @@ project
  ├── scan unusual
  │    └── columns: x:1(int!null) arr:2(int[]) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
  └── projections
-      ├── arr:2 || arr:2 [as=r:5, type=int[]]
-      ├── arr:2 || NULL::INT8[] [as=s:6, type=int[]]
-      └── NULL::INT8[] || arr:2 [as=t:7, type=int[]]
+      ├── arr:2 || arr:2 [as=r:5, type=int8[]]
+      ├── arr:2 || NULL::INT8[] [as=s:6, type=int8[]]
+      └── NULL::INT8[] || arr:2 [as=t:7, type=int8[]]
 
 # Array Element Concat
 build
@@ -275,10 +275,10 @@ project
  ├── scan unusual
  │    └── columns: x:1(int!null) arr:2(int[]) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
  └── projections
-      ├── x:1 || arr:2 [as=r:5, type=int[]]
-      ├── arr:2 || x:1 [as=s:6, type=int[]]
-      ├── x:1 || NULL::INT8[] [as=t:7, type=int[]]
-      └── NULL::INT8[] || x:1 [as=u:8, type=int[]]
+      ├── x:1 || arr:2 [as=r:5, type=int8[]]
+      ├── arr:2 || x:1 [as=s:6, type=int8[]]
+      ├── x:1 || NULL::INT8[] [as=t:7, type=int8[]]
+      └── NULL::INT8[] || x:1 [as=u:8, type=int8[]]
 
 # Function with fixed return type.
 build
@@ -289,7 +289,7 @@ project
  ├── values
  │    └── () [type=tuple]
  └── projections
-      └── length('text') [as=length:1, type=int]
+      └── length('text') [as=length:1, type=int8]
 
 # Function with return type dependent on arg types.
 build
@@ -322,7 +322,7 @@ project
  ├── values
  │    └── () [type=tuple]
  └── projections
-      └── greatest(1, 2, 3, 4) [as=greatest:1, type=int]
+      └── greatest(1, 2, 3, 4) [as=greatest:1, type=int8]
 
 # Aggregate functions.
 build
@@ -340,7 +340,7 @@ scalar-group-by
  │    │    └── columns: x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
  │    └── projections
  │         ├── z:2 = 0 [as=column9:9, type=bool]
- │         ├── x:1::INT8 [as=column17:17, type=int]
+ │         ├── x:1::INT8 [as=column17:17, type=int8]
  │         └── x:1::JSONB [as=column24:24, type=jsonb]
  └── aggregations
       ├── array-agg [as=array_agg:6, type=decimal[]]
@@ -355,25 +355,25 @@ scalar-group-by
       │    └── column9:9 [type=bool]
       ├── concat-agg [as=concat_agg:12, type=string]
       │    └── x:1 [type=string]
-      ├── count [as=count:13, type=int]
+      ├── count [as=count:13, type=int8]
       │    └── z:2 [type=decimal]
-      ├── count-rows [as=count_rows:14, type=int]
+      ├── count-rows [as=count_rows:14, type=int8]
       ├── max [as=max:15, type=string]
       │    └── x:1 [type=string]
       ├── max [as=max:16, type=decimal]
       │    └── z:2 [type=decimal]
-      ├── sum-int [as=sum_int:18, type=int]
-      │    └── column17:17 [type=int]
+      ├── sum-int [as=sum_int:18, type=int8]
+      │    └── column17:17 [type=int8]
       ├── sum [as=sum:19, type=decimal]
       │    └── z:2 [type=decimal]
       ├── sqr-diff [as=sqrdiff:20, type=decimal]
       │    └── z:2 [type=decimal]
       ├── variance [as=variance:21, type=decimal]
-      │    └── column17:17 [type=int]
+      │    └── column17:17 [type=int8]
       ├── std-dev [as=stddev:22, type=decimal]
       │    └── z:2 [type=decimal]
-      ├── xor-agg [as=xor_agg:23, type=int]
-      │    └── column17:17 [type=int]
+      ├── xor-agg [as=xor_agg:23, type=int8]
+      │    └── column17:17 [type=int8]
       ├── json-agg [as=json_agg:25, type=jsonb]
       │    └── column24:24 [type=jsonb]
       └── jsonb-agg [as=jsonb_agg:26, type=jsonb]
@@ -399,14 +399,14 @@ project
  │    │    │    │    ├── scan b
  │    │    │    │    │    └── columns: b.x:6(string!null) z:7(decimal!null)
  │    │    │    │    └── projections
- │    │    │    │         └── z:7::INT8 [as=column12:12, type=int]
+ │    │    │    │         └── z:7::INT8 [as=column12:12, type=int8]
  │    │    │    └── filters
  │    │    │         └── y:2 = column12:12 [type=bool]
  │    │    └── aggregations
  │    │         ├── max [as=max:11, type=string]
  │    │         │    └── b.x:6 [type=string]
- │    │         └── const-agg [as=y:2, type=int]
- │    │              └── y:2 [type=int]
+ │    │         └── const-agg [as=y:2, type=int8]
+ │    │              └── y:2 [type=int8]
  │    └── filters
  │         └── max:11 > 'foo' [type=bool]
  └── projections
@@ -428,14 +428,14 @@ project
  │    │    │    ├── scan a
  │    │    │    │    └── columns: x:1(int!null)
  │    │    │    └── projections
- │    │    │         └── x:1 + 1 [as=expr:5, type=int]
+ │    │    │         └── x:1 + 1 [as=expr:5, type=int8]
  │    │    ├── scan a
  │    │    │    └── columns: x:6(int!null)
  │    │    └── filters
  │    │         └── expr:5 < 0 [type=bool]
  │    └── aggregations
- │         └── const-not-null-agg [as=canary_agg:12, type=int]
- │              └── x:6 [type=int]
+ │         └── const-not-null-agg [as=canary_agg:12, type=int8]
+ │              └── x:6 [type=int8]
  └── projections
       └── canary_agg:12 IS NOT NULL [as=exists:11, type=bool]
 
@@ -448,7 +448,7 @@ project
  ├── scan b
  │    └── columns: b.x:1(string!null) z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
  └── projections
-      └── b.x:1::VARCHAR(2) [as=x:6, type=varchar]
+      └── b.x:1::VARCHAR(2) [as=x:6, type=varchar(2)]
 
 # Cast same type with different precisions.
 # See #42571.
@@ -460,9 +460,9 @@ project
  ├── scan b
  │    └── columns: x:1(string!null) b.z:2(decimal!null) arr:3(string[]) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
  └── projections
-      ├── b.z:2::DECIMAL(10,3) [as=z:6, type=decimal]
-      ├── b.z:2::DECIMAL(10,1) [as=z:7, type=decimal]
-      └── b.z:2::DECIMAL(10,4) [as=z:8, type=decimal]
+      ├── b.z:2::DECIMAL(10,3) [as=z:6, type=decimal(10,3)]
+      ├── b.z:2::DECIMAL(10,1) [as=z:7, type=decimal(10,1)]
+      └── b.z:2::DECIMAL(10,4) [as=z:8, type=decimal(10,4)]
 
 build
 SELECT ARRAY[1,2] IS NULL

@@ -4722,20 +4722,20 @@ project
       │    │    ├── scan t0
       │    │    │    └── columns: c0:1(int) rowid:2(int!null) crdb_internal_mvcc_timestamp:3(decimal) tableoid:4(oid)
       │    │    └── projections
-      │    │         └── case [as=column5:5, type=float]
+      │    │         └── case [as=column5:5, type=float8]
       │    │              ├── true [type=bool]
-      │    │              ├── when [type=float]
+      │    │              ├── when [type=float8]
       │    │              │    ├── false [type=bool]
-      │    │              │    └── cast: FLOAT8 [type=float]
+      │    │              │    └── cast: FLOAT8 [type=float8]
       │    │              │         └── null [type=unknown]
-      │    │              └── null [type=float]
+      │    │              └── null [type=float8]
       │    └── aggregations
-      │         └── min [as=min:6, type=float]
-      │              └── variable: column5:5 [type=float]
+      │         └── min [as=min:6, type=float8]
+      │              └── variable: column5:5 [type=float8]
       └── filters
            └── ne [type=bool]
-                ├── variable: min:6 [type=float]
-                └── const: NaN [type=float]
+                ├── variable: min:6 [type=float8]
+                └── const: NaN [type=float8]
 
 # Regression test for #51877.
 build

@@ -170,10 +170,10 @@ sort
       │    │         ├── s_nationkey:43 = n_nationkey:49 [type=bool, outer=(43,49), constraints=(/43: (/NULL - ]; /49: (/NULL - ]), fd=(43)==(49), (49)==(43)]
       │    │         └── l_suppkey:24 = s_suppkey:40 [type=bool, outer=(24,40), constraints=(/24: (/NULL - ]; /40: (/NULL - ]), fd=(24)==(40), (40)==(24)]
       │    └── projections
-      │         └── l_extendedprice:27 * (1.0 - l_discount:28) [as=column60:60, type=float, outer=(27,28), immutable]
+      │         └── l_extendedprice:27 * (1.0 - l_discount:28) [as=column60:60, type=float8, outer=(27,28), immutable]
       └── aggregations
-           └── sum [as=sum:61, type=float, outer=(60)]
-                └── column60:60 [type=float]
+           └── sum [as=sum:61, type=float8, outer=(60)]
+                └── column60:60 [type=float8]
 
 ----Stats for q5_sort_1----
 column_names  row_count  distinct_count  null_count

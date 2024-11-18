@@ -37,8 +37,8 @@ project
       │    └── interesting orderings: (+1)
       └── filters
            └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-                ├── variable: x:1 [type=int]
-                └── const: 1 [type=int]
+                ├── variable: x:1 [type=int8]
+                └── const: 1 [type=int8]
 
 build
 SELECT * FROM xy,kuv WHERE xy.x=kuv.k
@@ -78,8 +78,8 @@ project
       │    └── filters (true)
       └── filters
            └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-                ├── variable: x:1 [type=int]
-                └── variable: k:5 [type=int]
+                ├── variable: x:1 [type=int8]
+                └── variable: k:5 [type=int8]
 
 # Propagate outer columns.
 build
@@ -134,12 +134,12 @@ project
                      │         │    └── interesting orderings: (+5)
                      │         └── filters
                      │              └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
-                     │                   ├── variable: k:5 [type=int]
-                     │                   └── variable: y:2 [type=int]
+                     │                   ├── variable: k:5 [type=int8]
+                     │                   └── variable: y:2 [type=int8]
                      └── filters
                           └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-                               ├── variable: k:5 [type=int]
-                               └── variable: x:1 [type=int]
+                               ├── variable: k:5 [type=int8]
+                               └── variable: x:1 [type=int8]
 
 # Reduce min cardinality.
 build
@@ -164,11 +164,11 @@ select
  │    │         ├── prune: (1-4)
  │    │         └── interesting orderings: (+1)
  │    └── aggregations
- │         └── count-rows [as=count_rows:5, type=int]
+ │         └── count-rows [as=count_rows:5, type=int8]
  └── filters
       └── eq [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
-           ├── variable: count_rows:5 [type=int]
-           └── const: 5 [type=int]
+           ├── variable: count_rows:5 [type=int8]
+           └── const: 5 [type=int8]
 
 build
 SELECT * FROM xy WITH ORDINALITY
@@ -236,7 +236,7 @@ project
       │    └── interesting orderings: (+5)
       └── filters
            └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
-                ├── variable: c:3 [type=int]
+                ├── variable: c:3 [type=int8]
                 └── null [type=unknown]
 
 build
@@ -260,8 +260,8 @@ project
       │    └── interesting orderings: (+5)
       └── filters
            └── eq [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
-                ├── variable: c:3 [type=int]
-                └── variable: d:4 [type=int]
+                ├── variable: c:3 [type=int8]
+                └── variable: d:4 [type=int8]
 
 build
 SELECT * FROM abcd WHERE a > c
@@ -283,8 +283,8 @@ project
       │    └── interesting orderings: (+5)
       └── filters
            └── gt [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-                ├── variable: a:1 [type=int]
-                └── variable: c:3 [type=int]
+                ├── variable: a:1 [type=int8]
+                └── variable: c:3 [type=int8]
 
 build
 SELECT * FROM (SELECT * FROM abcd WHERE a = c) WHERE b < d
@@ -311,12 +311,12 @@ select
  │         │    └── interesting orderings: (+5)
  │         └── filters
  │              └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │                   ├── variable: a:1 [type=int]
- │                   └── variable: c:3 [type=int]
+ │                   ├── variable: a:1 [type=int8]
+ │                   └── variable: c:3 [type=int8]
  └── filters
       └── lt [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
-           ├── variable: b:2 [type=int]
-           └── variable: d:4 [type=int]
+           ├── variable: b:2 [type=int8]
+           └── variable: d:4 [type=int8]
 
 # Test outer column in select filter that is part of a not-null constraint.
 build
@@ -339,7 +339,7 @@ project
       │    └── interesting orderings: (+5)
       └── filters
            └── gt [type=bool, outer=(2), correlated-subquery]
-                ├── subquery [type=int]
+                ├── subquery [type=int8]
                 │    └── max1-row
                 │         ├── columns: count_rows:12(int!null)
                 │         ├── error: "more than one row returned by a subquery used as an expression"
@@ -371,11 +371,11 @@ project
                 │              │         │    └── interesting orderings: (+8)
                 │              │         └── filters
                 │              │              └── eq [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
-                │              │                   ├── variable: y:9 [type=int]
-                │              │                   └── variable: b:2 [type=int]
+                │              │                   ├── variable: y:9 [type=int8]
+                │              │                   └── variable: b:2 [type=int8]
                 │              └── aggregations
-                │                   └── count-rows [as=count_rows:12, type=int]
-                └── const: 0 [type=int]
+                │                   └── count-rows [as=count_rows:12, type=int8]
+                └── const: 0 [type=int8]
 
 # Sequences always have a single row when selected from.
 exec-ddl
@@ -410,14 +410,14 @@ select
  │    └── interesting orderings: (+1)
  └── filters
       └── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/4 - /4] [/6 - /6] [/7 - /7] [/9 - /9]; tight)]
-           ├── variable: x:1 [type=int]
+           ├── variable: x:1 [type=int8]
            └── tuple [type=tuple{int, int, int, int, int, int}]
-                ├── const: 1 [type=int]
-                ├── const: 2 [type=int]
-                ├── const: 4 [type=int]
-                ├── const: 6 [type=int]
-                ├── const: 7 [type=int]
-                └── const: 9 [type=int]
+                ├── const: 1 [type=int8]
+                ├── const: 2 [type=int8]
+                ├── const: 4 [type=int8]
+                ├── const: 6 [type=int8]
+                ├── const: 7 [type=int8]
+                └── const: 9 [type=int8]
 
 norm
 SELECT * FROM xy WHERE x > 0 AND x <= 10
@@ -439,11 +439,11 @@ select
       └── range [type=bool, outer=(1), constraints=(/1: [/1 - /10]; tight)]
            └── and [type=bool]
                 ├── gt [type=bool]
-                │    ├── variable: x:1 [type=int]
-                │    └── const: 0 [type=int]
+                │    ├── variable: x:1 [type=int8]
+                │    └── const: 0 [type=int8]
                 └── le [type=bool]
-                     ├── variable: x:1 [type=int]
-                     └── const: 10 [type=int]
+                     ├── variable: x:1 [type=int8]
+                     └── const: 10 [type=int8]
 
 norm
 SELECT * FROM xy WHERE y > 0 AND y <= 10
@@ -464,11 +464,11 @@ select
       └── range [type=bool, outer=(2), constraints=(/2: [/1 - /10]; tight)]
            └── and [type=bool]
                 ├── gt [type=bool]
-                │    ├── variable: y:2 [type=int]
-                │    └── const: 0 [type=int]
+                │    ├── variable: y:2 [type=int8]
+                │    └── const: 0 [type=int8]
                 └── le [type=bool]
-                     ├── variable: y:2 [type=int]
-                     └── const: 10 [type=int]
+                     ├── variable: y:2 [type=int8]
+                     └── const: 10 [type=int8]
 
 # Verify that a and b are determined to be not null.
 norm
@@ -482,8 +482,8 @@ select
  │    └── prune: (1,2)
  └── filters
       └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
-           ├── variable: a:1 [type=int]
-           └── variable: b:2 [type=int]
+           ├── variable: a:1 [type=int8]
+           └── variable: b:2 [type=int8]
 
 # Here we have the FD (b,c)==>(a).
 build
@@ -509,10 +509,10 @@ project
       │    └── interesting orderings: (+6)
       └── filters
            └── eq [type=bool, outer=(1-3), immutable, constraints=(/1: (/NULL - ]), fd=(2,3)-->(1)]
-                ├── variable: a:1 [type=int]
-                └── plus [type=int]
-                     ├── variable: b:2 [type=int]
-                     └── variable: c:3 [type=int]
+                ├── variable: a:1 [type=int8]
+                └── plus [type=int8]
+                     ├── variable: b:2 [type=int8]
+                     └── variable: c:3 [type=int8]
 
 # No FD from the equality.
 build
@@ -537,12 +537,12 @@ project
       │    └── interesting orderings: (+6)
       └── filters
            └── eq [type=bool, outer=(1,2), immutable, constraints=(/1: (/NULL - ])]
-                ├── variable: a:1 [type=int]
+                ├── variable: a:1 [type=int8]
                 └── plus [type=decimal]
                      ├── div [type=decimal]
-                     │    ├── variable: a:1 [type=int]
-                     │    └── const: 2 [type=int]
-                     └── variable: b:2 [type=int]
+                     │    ├── variable: a:1 [type=int8]
+                     │    └── const: 2 [type=int8]
+                     └── variable: b:2 [type=int8]
 
 # (b)==>(e).
 build
@@ -570,7 +570,7 @@ project
            └── eq [type=bool, outer=(2,5), immutable, constraints=(/5: (/NULL - ]), fd=(2)-->(5)]
                 ├── variable: e:5 [type=string]
                 └── cast: STRING [type=string]
-                     └── variable: b:2 [type=int]
+                     └── variable: b:2 [type=int8]
 
 # We don't want (d)==>(e), it would not be correct (consider 1.0 and 1.00).
 build

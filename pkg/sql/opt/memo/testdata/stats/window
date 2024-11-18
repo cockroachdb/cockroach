@@ -46,6 +46,6 @@ project
       │    │         ├── key: (1)
       │    │         ├── fd: (1)-->(2-9)
       │    │         └── limit hint: 10.00
-      │    └── 10 [type=int]
+      │    └── 10 [type=int8]
       └── windows
-           └── rank [as=rank:10, type=int]
+           └── rank [as=rank:10, type=int8]

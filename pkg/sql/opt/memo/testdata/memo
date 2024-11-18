@@ -51,17 +51,17 @@ limit
  │         │    └── filters
  │         │         └── and [type=bool, outer=(1,2,6), immutable, constraints=(/2: [/2 - ])]
  │         │              ├── gt [type=bool]
- │         │              │    ├── variable: y:2 [type=int]
- │         │              │    └── const: 1 [type=int]
+ │         │              │    ├── variable: y:2 [type=int8]
+ │         │              │    └── const: 1 [type=int8]
  │         │              └── eq [type=bool]
  │         │                   ├── cast: STRING [type=string]
- │         │                   │    └── variable: a.x:1 [type=int]
+ │         │                   │    └── variable: a.x:1 [type=int8]
  │         │                   └── variable: b.x:6 [type=string]
  │         └── projections
- │              └── plus [as=c:10, type=int, outer=(2), immutable]
- │                   ├── variable: y:2 [type=int]
- │                   └── const: 1 [type=int]
- └── const: 10 [type=int]
+ │              └── plus [as=c:10, type=int8, outer=(2), immutable]
+ │                   ├── variable: y:2 [type=int8]
+ │                   └── const: 1 [type=int8]
+ └── const: 10 [type=int8]
 
 opt
 SELECT y, b.x, y+1 AS c
@@ -109,17 +109,17 @@ project
  │    │    │         │    │    └── fd: (1)-->(2)
  │    │    │         │    └── filters
  │    │    │         │         └── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
- │    │    │         │              ├── variable: y:2 [type=int]
- │    │    │         │              └── const: 1 [type=int]
+ │    │    │         │              ├── variable: y:2 [type=int8]
+ │    │    │         │              └── const: 1 [type=int8]
  │    │    │         └── projections
  │    │    │              └── cast: STRING [as=column10:10, type=string, outer=(1), immutable]
- │    │    │                   └── variable: a.x:1 [type=int]
+ │    │    │                   └── variable: a.x:1 [type=int8]
  │    │    └── filters (true)
- │    └── const: 10 [type=int]
+ │    └── const: 10 [type=int8]
  └── projections
-      └── plus [as=c:11, type=int, outer=(2), immutable]
-           ├── variable: y:2 [type=int]
-           └── const: 1 [type=int]
+      └── plus [as=c:11, type=int8, outer=(2), immutable]
+           ├── variable: y:2 [type=int8]
+           └── const: 1 [type=int8]
 
 memo
 SELECT y, b.x, y+1 AS c

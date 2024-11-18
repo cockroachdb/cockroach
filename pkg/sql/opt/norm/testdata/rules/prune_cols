@@ -1850,8 +1850,8 @@ project
       │    ├── cost: 1078.52
       │    └── prune: (2)
       └── windows
-           └── ntile [as=ntile:7, type=int, outer=(2)]
-                └── variable: t.public.a.i:2 [type=int]
+           └── ntile [as=ntile:7, type=int8, outer=(2)]
+                └── variable: t.public.a.i:2 [type=int8]
 
 # Ensure filter cols don't get pruned.
 norm
@@ -1968,8 +1968,8 @@ project
       │    ├── cost: 1078.52
       │    └── prune: (2)
       └── windows
-           └── ntile [as=ntile:7, type=int, outer=(2)]
-                └── variable: t.public.a.i:2 [type=int]
+           └── ntile [as=ntile:7, type=int8, outer=(2)]
+                └── variable: t.public.a.i:2 [type=int8]
 
 
 # --------------------------------------------------
