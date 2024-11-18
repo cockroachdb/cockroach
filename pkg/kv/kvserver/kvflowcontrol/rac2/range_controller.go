@@ -1045,6 +1045,10 @@ func constructRaftEventForReplica(
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e RaftEvent) error {
+	if (len(e.Entries) != 0 || e.Snap != nil) && e.Term != rc.term {
+		panic(errors.AssertionFailedf("term mismatch: RaftEvent.Term %d != rangeController.Term %d",
+			e.Term, rc.term))
+	}
 	rc.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	// Compute the flow control state for each new entry. We do this once
 	// here, instead of decoding each entry multiple times for all replicas.
