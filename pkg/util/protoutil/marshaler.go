@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 )
 
 var _ gwruntime.Marshaler = (*ProtoPb)(nil)
@@ -19,7 +19,7 @@ var _ gwruntime.Marshaler = (*ProtoPb)(nil)
 type ProtoPb struct{}
 
 // ContentType implements gwruntime.Marshaler.
-func (*ProtoPb) ContentType() string {
+func (*ProtoPb) ContentType(_ interface{}) string {
 	// NB: This is the same as httputil.ProtoContentType which we can't use due
 	// to an import cycle.
 	const ProtoContentType = "application/x-protobuf"

@@ -7,7 +7,6 @@ syntax = "proto3";
 package cockroach.inspectz.inspectzpb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb";
 
-import "google/api/annotations.proto";
 import "kv/kvserver/kvflowcontrol/kvflowinspectpb/kvflowinspect.proto";
 import "kv/kvserver/storeliveness/storelivenesspb/service.proto";
 

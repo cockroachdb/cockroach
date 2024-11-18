@@ -11,7 +11,6 @@ proto_library(
         "//pkg/roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:timestamp_proto",
-        "@go_googleapis//google/api:annotations_proto",
     ],
 )
 
@@ -24,7 +23,6 @@ go_proto_library(
     deps = [
         "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
-        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],
 )
 
