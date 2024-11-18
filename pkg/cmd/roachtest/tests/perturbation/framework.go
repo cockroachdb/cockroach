@@ -634,9 +634,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 	t.Status("T5: validating results")
 	require.NoError(t, roachtestutil.DownloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
-
-	require.NoError(t, v.writePerfArtifacts(ctx, t, c, baselineStats, perturbationStats,
-		afterStats))
+	require.NoError(t, v.writePerfArtifacts(ctx, t, baselineStats, perturbationStats, afterStats))
 
 	t.L().Printf("validating stats during the perturbation")
 	failures := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.acceptableChange)
@@ -840,13 +838,10 @@ func sortedStringKeys(m map[string]trackedStat) []string {
 // can be picked up by roachperf. Currently it only writes the write stats since
 // there would be too many lines on the graph otherwise.
 func (v variations) writePerfArtifacts(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	baseline, perturbation, recovery map[string]trackedStat,
+	ctx context.Context, t test.Test, baseline, perturbation, recovery map[string]trackedStat,
 ) error {
 
-	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, v)
 
 	reg := histogram.NewRegistryWithExporter(
 		time.Second,
@@ -857,7 +852,7 @@ func (v variations) writePerfArtifacts(
 	bytesBuf := bytes.NewBuffer([]byte{})
 	writer := io.Writer(bytesBuf)
 	exporter.Init(&writer)
-	defer roachtestutil.CloseExporter(ctx, exporter, t, c, bytesBuf, v.Node(1), "")
+	defer roachtestutil.CloseExporter(ctx, exporter, t, v, bytesBuf, v.Node(1), "")
 
 	reg.GetHandle().Get("baseline").Record(baseline["write"].score)
 	reg.GetHandle().Get("perturbation").Record(perturbation["write"].score)
