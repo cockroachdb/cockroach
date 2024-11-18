@@ -41,6 +41,7 @@ SELECT
   finished,
   modified,
   high_water_timestamp,
+  hlc_to_timestamp(high_water_timestamp) as readable_high_water_timestamptz,
   error,
   replace(
     changefeed_details->>'sink_uri',
