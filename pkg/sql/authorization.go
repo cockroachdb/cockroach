@@ -758,10 +758,12 @@ func EnsureUserOnlyBelongsToRoles(
 			grantStmt := strings.Builder{}
 			grantStmt.WriteString("GRANT ")
 			for i, role := range rolesToGrant {
-				if i > 0 {
-					grantStmt.WriteString(", ")
+				if roleExists, _ := RoleExists(ctx, txn, role); roleExists {
+					if i > 0 {
+						grantStmt.WriteString(", ")
+					}
+					grantStmt.WriteString(role.SQLIdentifier())
 				}
-				grantStmt.WriteString(role.SQLIdentifier())
 			}
 			grantStmt.WriteString(" TO ")
 			grantStmt.WriteString(user.SQLIdentifier())
