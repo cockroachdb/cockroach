@@ -169,7 +169,7 @@ type ExprFmtCtx struct {
 
 	// tailCalls allows for quick lookup of all the routines in tail-call position
 	// when the last body statement of a routine is formatted.
-	tailCalls map[*UDFCallExpr]struct{}
+	tailCalls map[opt.ScalarExpr]struct{}
 }
 
 // makeExprFmtCtxForString creates an expression formatting context from a new
@@ -985,7 +985,7 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 				}
 				prevTailCalls := f.tailCalls
 				if i == len(def.Body)-1 {
-					f.tailCalls = make(map[*UDFCallExpr]struct{})
+					f.tailCalls = make(map[opt.ScalarExpr]struct{})
 					ExtractTailCalls(def.Body[i], f.tailCalls)
 				}
 				f.formatExpr(def.Body[i], stmtNode)
@@ -1189,6 +1189,19 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		case *TxnControlExpr:
 			formatRoutineArgs(t.Args, tp)
 			formatUDFDefinition(t.Def, tp)
+		case *SubqueryExpr:
+			if _, tailCall := f.tailCalls[t]; tailCall {
+				// Subqueries nested within routines are themselves planned as nested
+				// routines. This subquery is in tail-call position in the parent
+				// routine.
+				tp.Child("tail-call")
+			}
+			prevTailCalls := f.tailCalls
+			f.tailCalls = make(map[opt.ScalarExpr]struct{})
+			ExtractTailCalls(t.Input, f.tailCalls)
+			f.formatExpr(t.Input, tp)
+			f.tailCalls = prevTailCalls
+			intercepted = true
 		}
 	}
 

@@ -115,7 +115,11 @@ type Builder struct {
 	// tailCalls is used when building the last body statement of a routine. It
 	// identifies nested routines that are in tail-call position. This information
 	// is used to determine whether tail-call optimization is applicable.
-	tailCalls map[*memo.UDFCallExpr]struct{}
+	//
+	// tailCalls uses opt.ScalarExpr as the key to allow both UDFCall and Subquery
+	// expressions to be considered. Note that subqueries within a routine's body
+	// are planned as nested routines, and therefore it is useful to apply TCO.
+	tailCalls map[opt.ScalarExpr]struct{}
 
 	// -- output --
 

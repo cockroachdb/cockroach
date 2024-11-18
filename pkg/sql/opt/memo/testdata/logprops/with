@@ -287,3 +287,16 @@ with &2 (cte)
       ├── prune: (10-12)
       └── cte-uses
            └── &2: count=1 used-columns=(3-5)
+
+# Regression test for #133221: if a column with an equivalency is remapped more
+# than once, create a new equivalency for each remapping.
+norm
+WITH foo AS (SELECT x, x, COALESCE(NULL, x) FROM xy) SELECT 1 FROM foo;
+----
+project
+ ├── columns: "?column?":9(int!null)
+ ├── fd: ()-->(9)
+ ├── prune: (9)
+ ├── scan xy
+ └── projections
+      └── const: 1 [as="?column?":9, type=int]

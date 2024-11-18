@@ -253,6 +253,7 @@ project
                      │              │              │         └── variable: a:1 [as=c:8]
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:9]
+                     │              │                        ├── tail-call
                      │              │                        ├── args
                      │              │                        │    ├── variable: a:1
                      │              │                        │    ├── variable: b:2
@@ -272,6 +273,7 @@ project
                      │                        │    └── tuple
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:10]
+                     │                                  ├── tail-call
                      │                                  ├── args
                      │                                  │    ├── variable: a:1
                      │                                  │    ├── variable: b:2
@@ -344,6 +346,7 @@ project
                      │              │              │         └── variable: a:1 [as=c:8]
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:9]
+                     │              │                        ├── tail-call
                      │              │                        ├── args
                      │              │                        │    ├── variable: a:1
                      │              │                        │    ├── variable: b:2
@@ -367,6 +370,7 @@ project
                      │                        │         └── variable: b:2 [as=c:10]
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:11]
+                     │                                  ├── tail-call
                      │                                  ├── args
                      │                                  │    ├── variable: a:1
                      │                                  │    ├── variable: b:2
@@ -439,6 +443,7 @@ project
                      │              │              │         └── variable: a:1 [as=c:8]
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:9]
+                     │              │                        ├── tail-call
                      │              │                        ├── args
                      │              │                        │    ├── variable: a:1
                      │              │                        │    ├── variable: b:2
@@ -525,6 +530,7 @@ project
                      │                        │         └── variable: b:2 [as=c:9]
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:10]
+                     │                                  ├── tail-call
                      │                                  ├── args
                      │                                  │    ├── variable: a:1
                      │                                  │    ├── variable: b:2
@@ -712,6 +718,7 @@ project
                      │                                  │    │    ├── variable: a:13
                      │                                  │    │    └── variable: b:14
                      │                                  │    └── subquery
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: stmt_return_8:20!null
                      │                                  │              ├── values
@@ -719,6 +726,7 @@ project
                      │                                  │              └── projections
                      │                                  │                   └── const: 0 [as=stmt_return_8:20]
                      │                                  └── subquery
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: stmt_if_6:21
                      │                                            ├── values
@@ -799,6 +807,7 @@ project
                      │                                  │    │    ├── variable: i:10
                      │                                  │    │    └── variable: b:9
                      │                                  │    └── subquery
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:22
                      │                                  │              ├── values
@@ -819,6 +828,7 @@ project
                      │                                  │                                  └── projections
                      │                                  │                                       └── variable: i:6 [as=stmt_return_2:7]
                      │                                  └── subquery
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: stmt_if_4:23
                      │                                            ├── values
@@ -844,6 +854,7 @@ project
                      │                                                                          │    │    ├── variable: i:13
                      │                                                                          │    │    └── const: 8
                      │                                                                          │    └── subquery
+                     │                                                                          │         ├── tail-call
                      │                                                                          │         └── project
                      │                                                                          │              ├── columns: stmt_return_6:19!null
                      │                                                                          │              ├── values
@@ -851,6 +862,7 @@ project
                      │                                                                          │              └── projections
                      │                                                                          │                   └── const: 100 [as=stmt_return_6:19]
                      │                                                                          └── subquery
+                     │                                                                               ├── tail-call
                      │                                                                               └── project
                      │                                                                                    ├── columns: stmt_if_5:20
                      │                                                                                    ├── values
@@ -942,6 +954,7 @@ project
                      │                                  │    │    ├── variable: i:10
                      │                                  │    │    └── variable: b:9
                      │                                  │    └── subquery
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:16
                      │                                  │              ├── values
@@ -962,6 +975,7 @@ project
                      │                                  │                                  └── projections
                      │                                  │                                       └── variable: i:6 [as=stmt_return_2:7]
                      │                                  └── subquery
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: stmt_if_4:17
                      │                                            ├── values
@@ -1059,6 +1073,7 @@ project
                      │              │              │    └── tuple
                      │              │              └── projections
                      │              │                   └── udf: stmt_loop_4 [as=stmt_loop_4:29]
+                     │              │                        ├── tail-call
                      │              │                        ├── args
                      │              │                        │    ├── variable: a:1
                      │              │                        │    ├── variable: b:2
@@ -1078,6 +1093,7 @@ project
                      │              │                                            │    │    ├── variable: i:18
                      │              │                                            │    │    └── variable: b:16
                      │              │                                            │    └── subquery
+                     │              │                                            │         ├── tail-call
                      │              │                                            │         └── project
                      │              │                                            │              ├── columns: loop_exit_3:26
                      │              │                                            │              ├── values
@@ -1113,6 +1129,7 @@ project
                      │              │                                            │                                                      └── projections
                      │              │                                            │                                                           └── variable: sum:7 [as=stmt_return_2:9]
                      │              │                                            └── subquery
+                     │              │                                                 ├── tail-call
                      │              │                                                 └── project
                      │              │                                                      ├── columns: stmt_if_5:27
                      │              │                                                      ├── values
@@ -1159,6 +1176,7 @@ project
                      │                        │    └── tuple
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:30]
+                     │                                  ├── tail-call
                      │                                  ├── args
                      │                                  │    ├── variable: a:1
                      │                                  │    ├── variable: b:2
@@ -1243,6 +1261,7 @@ project
                      │                                  │    │    ├── variable: i:13
                      │                                  │    │    └── variable: b:11
                      │                                  │    └── subquery
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:29
                      │                                  │              ├── values
@@ -1264,6 +1283,7 @@ project
                      │                                  │                                  └── projections
                      │                                  │                                       └── variable: sum:7 [as=stmt_return_2:9]
                      │                                  └── subquery
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: stmt_if_4:30
                      │                                            ├── values
@@ -1290,6 +1310,7 @@ project
                      │                                                                          │    │    ├── variable: i:17
                      │                                                                          │    │    └── const: 2
                      │                                                                          │    └── subquery
+                     │                                                                          │         ├── tail-call
                      │                                                                          │         └── project
                      │                                                                          │              ├── columns: stmt_loop_3:26
                      │                                                                          │              ├── project
@@ -1310,6 +1331,7 @@ project
                      │                                                                          │                        │    └── variable: i:25
                      │                                                                          │                        └── recursive-call
                      │                                                                          └── subquery
+                     │                                                                               ├── tail-call
                      │                                                                               └── project
                      │                                                                                    ├── columns: stmt_if_5:27
                      │                                                                                    ├── values
@@ -1428,6 +1450,7 @@ project
                      │                                  │    │    ├── variable: i:15
                      │                                  │    │    └── variable: b:13
                      │                                  │    └── subquery
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:47
                      │                                  │              ├── values
@@ -1450,6 +1473,7 @@ project
                      │                                  │                                  └── projections
                      │                                  │                                       └── variable: sum:8 [as=stmt_return_2:11]
                      │                                  └── subquery
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: stmt_if_4:48
                      │                                            ├── values
@@ -1496,6 +1520,7 @@ project
                      │                                                                                              │    │    ├── variable: j:34
                      │                                                                                              │    │    └── variable: i:33
                      │                                                                                              │    └── subquery
+                     │                                                                                              │         ├── tail-call
                      │                                                                                              │         └── project
                      │                                                                                              │              ├── columns: loop_exit_5:43
                      │                                                                                              │              ├── values
@@ -1532,6 +1557,7 @@ project
                      │                                                                                              │                                            │    └── variable: j:27
                      │                                                                                              │                                            └── recursive-call
                      │                                                                                              └── subquery
+                     │                                                                                                   ├── tail-call
                      │                                                                                                   └── project
                      │                                                                                                        ├── columns: stmt_if_7:44
                      │                                                                                                        ├── values
@@ -1637,6 +1663,7 @@ project
                      │                                  │    │    ├── variable: i:10
                      │                                  │    │    └── variable: n:8
                      │                                  │    └── subquery
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: stmt_if_4:17
                      │                                  │              ├── project
@@ -1675,6 +1702,7 @@ project
                      │                                  │                                            │    └── variable: i:13
                      │                                  │                                            └── recursive-call
                      │                                  └── subquery
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: loop_exit_1:18
                      │                                            ├── values
@@ -1759,6 +1787,7 @@ project
                      │                                  │    │    ├── variable: i:10
                      │                                  │    │    └── variable: n:8
                      │                                  │    └── subquery
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:17
                      │                                  │              ├── values
@@ -1779,6 +1808,7 @@ project
                      │                                  │                                  └── projections
                      │                                  │                                       └── variable: sum:5 [as=stmt_return_2:7]
                      │                                  └── subquery
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: stmt_if_4:18
                      │                                            ├── values
@@ -1883,6 +1913,7 @@ project
                      │                                  │    │    │    └── const: 2
                      │                                  │    │    └── const: 0
                      │                                  │    └── subquery
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: stmt_loop_3:17
                      │                                  │              ├── values
@@ -1896,6 +1927,7 @@ project
                      │                                  │                        │    └── variable: i:10
                      │                                  │                        └── recursive-call
                      │                                  └── subquery
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: stmt_if_4:18
                      │                                            ├── values
@@ -2865,6 +2897,7 @@ project
                      │                                  │    │    ├── variable: i:7
                      │                                  │    │    └── const: 5
                      │                                  │    └── subquery
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:14
                      │                                  │              ├── values
@@ -2912,6 +2945,7 @@ project
                      │                                  │                                                      └── projections
                      │                                  │                                                           └── const: 0 [as=stmt_return_4:5]
                      │                                  └── subquery
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: stmt_if_6:15
                      │                                            ├── values
@@ -3171,6 +3205,7 @@ project
                      │                                  │    │    ├── variable: i:7
                      │                                  │    │    └── const: 5
                      │                                  │    └── subquery
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: loop_exit_1:21
                      │                                  │              ├── values
@@ -3218,6 +3253,7 @@ project
                      │                                  │                                                      └── projections
                      │                                  │                                                           └── const: 0 [as=stmt_return_4:5]
                      │                                  └── subquery
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: stmt_if_6:22
                      │                                            ├── values
@@ -3241,6 +3277,7 @@ project
                      │                                                                          │    │    ├── variable: i:8
                      │                                                                          │    │    └── const: 3
                      │                                                                          │    └── subquery
+                     │                                                                          │         ├── tail-call
                      │                                                                          │         └── project
                      │                                                                          │              ├── columns: "_stmt_raise_10":18
                      │                                                                          │              ├── values
@@ -3327,6 +3364,7 @@ project
                      │                                                                          │                                                                                    │    └── variable: i:12
                      │                                                                          │                                                                                    └── recursive-call
                      │                                                                          └── subquery
+                     │                                                                               ├── tail-call
                      │                                                                               └── project
                      │                                                                                    ├── columns: stmt_if_7:19
                      │                                                                                    ├── values
@@ -3644,6 +3682,7 @@ project
                      │              │              │         └── const: 100 [as=i:7]
                      │              │              └── projections
                      │              │                   └── udf: stmt_if_1 [as=stmt_if_1:8]
+                     │              │                        ├── tail-call
                      │              │                        ├── args
                      │              │                        │    ├── variable: n:1
                      │              │                        │    └── variable: i:7
@@ -3677,6 +3716,7 @@ project
                      │                        │    └── tuple
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:11]
+                     │                                  ├── tail-call
                      │                                  ├── args
                      │                                  │    ├── variable: n:1
                      │                                  │    └── variable: i:2
@@ -3809,6 +3849,7 @@ project
                      │              │                   │    │    ├── variable: i:4
                      │              │                   │    │    └── const: 0
                      │              │                   │    └── subquery
+                     │              │                   │         ├── tail-call
                      │              │                   │         └── project
                      │              │                   │              ├── columns: stmt_return_8:10!null
                      │              │                   │              ├── values
@@ -3818,6 +3859,7 @@ project
                      │              │                   │                        ├── const: 1
                      │              │                   │                        └── const: 0
                      │              │                   └── subquery
+                     │              │                        ├── tail-call
                      │              │                        └── project
                      │              │                             ├── columns: stmt_return_9:11
                      │              │                             ├── values
@@ -3898,6 +3940,7 @@ project
                      │              │                   │    │    ├── variable: i:6
                      │              │                   │    │    └── const: 0
                      │              │                   │    └── subquery
+                     │              │                   │         ├── tail-call
                      │              │                   │         └── project
                      │              │                   │              ├── columns: stmt_return_10:12!null
                      │              │                   │              ├── values
@@ -3907,6 +3950,7 @@ project
                      │              │                   │                        ├── const: 1
                      │              │                   │                        └── const: 0
                      │              │                   └── subquery
+                     │              │                        ├── tail-call
                      │              │                        └── project
                      │              │                             ├── columns: stmt_return_11:13
                      │              │                             ├── values
@@ -4281,6 +4325,7 @@ project
                      │              │                   │    │    ├── variable: i:6
                      │              │                   │    │    └── const: 0
                      │              │                   │    └── subquery
+                     │              │                   │         ├── tail-call
                      │              │                   │         └── project
                      │              │                   │              ├── columns: assign_exception_block_6:19
                      │              │                   │              ├── barrier
@@ -4341,6 +4386,7 @@ project
                      │              │                   │                                                                          └── projections
                      │              │                   │                                                                               └── const: 0 [as=stmt_return_5:10]
                      │              │                   └── subquery
+                     │              │                        ├── tail-call
                      │              │                        └── project
                      │              │                             ├── columns: assign_exception_block_9:28
                      │              │                             ├── barrier
@@ -4494,6 +4540,7 @@ project
                      │              │                                       │    │    ├── variable: i:22
                      │              │                                       │    │    └── variable: n:19
                      │              │                                       │    └── subquery
+                     │              │                                       │         ├── tail-call
                      │              │                                       │         └── project
                      │              │                                       │              ├── columns: loop_exit_4:40
                      │              │                                       │              ├── values
@@ -4515,6 +4562,7 @@ project
                      │              │                                       │                                  └── projections
                      │              │                                       │                                       └── const: -1 [as=stmt_return_5:18]
                      │              │                                       └── subquery
+                     │              │                                            ├── tail-call
                      │              │                                            └── project
                      │              │                                                 ├── columns: stmt_if_7:41
                      │              │                                                 ├── values
@@ -4684,6 +4732,7 @@ project
                      │                                                                │    └── tuple
                      │                                                                └── projections
                      │                                                                     └── subquery [as=stmt_return_4:25]
+                     │                                                                          ├── tail-call
                      │                                                                          └── max1-row
                      │                                                                               ├── columns: v:22
                      │                                                                               └── project
@@ -6087,6 +6136,7 @@ project
                      │                                  │    │    ├── variable: i:7 [type=int]
                      │                                  │    │    └── const: 10 [type=int]
                      │                                  │    └── subquery [type=int]
+                     │                                  │         ├── tail-call
                      │                                  │         └── project
                      │                                  │              ├── columns: stmt_if_6:11(int)
                      │                                  │              ├── project
@@ -6115,6 +6165,7 @@ project
                      │                                  │                                            │    └── variable: i:8 [type=int]
                      │                                  │                                            └── recursive-call
                      │                                  └── subquery [type=int]
+                     │                                       ├── tail-call
                      │                                       └── project
                      │                                            ├── columns: loop_exit_1:12(int)
                      │                                            ├── values
@@ -6765,6 +6816,7 @@ project
                      │                        │    └── tuple [type=tuple]
                      │                        └── projections
                      │                             └── udf: stmt_if_1 [as=stmt_if_1:7, type=tuple{int, unknown, decimal}]
+                     │                                  ├── tail-call
                      │                                  └── body
                      │                                       └── project
                      │                                            ├── columns: "_end_of_function_2":3(tuple{int, unknown, decimal})
@@ -6961,6 +7013,7 @@ values
                                                    │    │    ├── variable: "_loop_counter":14
                                                    │    │    └── variable: "_loop_upper":12
                                                    │    └── subquery
+                                                   │         ├── tail-call
                                                    │         └── values
                                                    │              ├── columns: "_stmt_raise_9":33
                                                    │              └── tuple
@@ -6994,6 +7047,7 @@ values
                                                    │                                  ├── columns: stmt_if_8:32
                                                    │                                  └── tuple
                                                    │                                       └── subquery
+                                                   │                                            ├── tail-call
                                                    │                                            └── values
                                                    │                                                 ├── columns: stmt_loop_inc_7:25
                                                    │                                                 └── tuple
@@ -7032,6 +7086,7 @@ values
                                                    │                                                                               │    └── variable: "_loop_counter":36
                                                    │                                                                               └── recursive-call
                                                    └── subquery
+                                                        ├── tail-call
                                                         └── values
                                                              ├── columns: loop_exit_1:34
                                                              └── tuple
