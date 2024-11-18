@@ -1281,7 +1281,10 @@ func TestRangeController(t *testing.T) {
 					require.NoError(t, testRC.raftLog.Append(entries))
 
 					raftEvent := RaftEvent{
-						MsgAppMode:        mode,
+						MsgAppMode: mode,
+						// Term is set to 1, to be consistent with what we use when
+						// calling NewRangeController in this test.
+						Term:              1,
 						Entries:           entries,
 						MsgApps:           map[roachpb.ReplicaID][]raftpb.Message{},
 						LogSnapshot:       testRC.logSnapshot(),
