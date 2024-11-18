@@ -41,6 +41,7 @@ SELECT
   finished,
   modified,
   high_water_timestamp,
+  to_timestamp((high_water_timestamp / 1000000000)::float) as readable_high_water_timestamp,
   error,
   replace(
     changefeed_details->>'sink_uri',
