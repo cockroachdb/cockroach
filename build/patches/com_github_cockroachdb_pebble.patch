@@ -1,18 +1,18 @@
-diff -urN a/internal/invariants/BUILD.bazel b/internal/invariants/BUILD.bazel
---- a/internal/invariants/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
-+++ b/internal/invariants/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
-@@ -5,6 +5,7 @@
-     srcs = [
-         "finalizer_off.go",
-         "finalizer_on.go",
-+        "off.go",
-         "on.go",
+diff --git a/internal/buildtags/BUILD.bazel b/internal/buildtags/BUILD.bazel
+--- a/internal/buildtags/BUILD.bazel
++++ b/internal/buildtags/BUILD.bazel
+@@ -6,6 +6,7 @@ go_library(
+         "cgo_off.go",
+         "cgo_on.go",
+         "invariants_off.go",
++        "invariants_on.go",
          "race_off.go",
          "race_on.go",
-diff -urN a/objstorage/objstorageprovider/objiotracing/BUILD.bazel b/objstorage/objstorageprovider/objiotracing/BUILD.bazel
---- a/objstorage/objstorageprovider/objiotracing/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
-+++ b/objstorage/objstorageprovider/objiotracing/BUILD.bazel	2023-03-29 09:59:04.529504100 -0700
-@@ -5,6 +5,7 @@
+         "tracing_off.go",
+diff --git a/objstorage/objstorageprovider/objiotracing/BUILD.bazel b/objstorage/objstorageprovider/objiotracing/BUILD.bazel
+--- a/objstorage/objstorageprovider/objiotracing/BUILD.bazel
++++ b/objstorage/objstorageprovider/objiotracing/BUILD.bazel
+@@ -5,6 +5,7 @@ go_library(
      srcs = [
          "obj_io_tracing.go",
          "obj_io_tracing_off.go",
