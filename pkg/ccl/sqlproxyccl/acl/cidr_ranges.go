@@ -50,11 +50,6 @@ func (p *CIDRRanges) CheckConnection(ctx context.Context, conn ConnectionTags) e
 		}
 	}
 
-	// By default, connections are rejected if no ranges match the connection's
-	// IP.
-	return errors.Newf(
-		"connection to '%s' denied: cluster does not allow public connections from IP %s",
-		conn.TenantID.String(),
-		conn.IP,
-	)
+	// By default, connections are rejected if no ranges match the connection's IP.
+	return errors.Newf("cluster does not allow public connections from IP %s", conn.IP)
 }
