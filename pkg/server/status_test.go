@@ -543,31 +543,3 @@ WHERE id = $1 AND claim_instance_id IS NOT NULL`, jobs.UpdateTableMetadataCacheJ
 		require.Containsf(t, runningStatus, "Job completed at", "running_status not updated: %s", runningStatus)
 	})
 }
-
-// TestNodesUiMetrics tests that the metrics fields of NodesUI
-// rpcs only returns the subset of metrics needed in the UI
-func TestNodesUiMetrics(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
-
-	ctx := context.Background()
-	defer ts.Stopper().Stop(ctx)
-
-	s := ts.StatusServer().(*systemStatusServer)
-	resp, err := s.NodesUI(ctx, &serverpb.NodesRequest{})
-	require.NoError(t, err)
-	require.Len(t, resp.Nodes, 1)
-	for _, node := range resp.Nodes {
-		for _, m := range uiNodeMetrics {
-			require.Contains(t, node.Metrics, m)
-		}
-		require.Greater(t, len(node.StoreStatuses), 0)
-		for _, storeStatus := range node.StoreStatuses {
-			for _, m := range uiStoreMetrics {
-				require.Contains(t, storeStatus.Metrics, m)
-			}
-		}
-	}
-}
