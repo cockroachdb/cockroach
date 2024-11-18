@@ -34,7 +34,8 @@ type OpEdge struct {
 
 	// revertible indicates that no operation which destroys information
 	// permanently or publishes new information externally has yet been
-	// run for this target.
+	// run for this target. A non-revertible edge can only exist if
+	// either operations are generated or no operation function is provided.
 	revertible bool
 }
 

@@ -273,7 +273,7 @@ func (g *Graph) GetOpEdgeTo(n *screl.Node) (*OpEdge, bool) {
 
 // AddOpEdges adds an op edges connecting the nodes for two statuses of a target.
 func (g *Graph) AddOpEdges(
-	t *scpb.Target, from, to scpb.Status, revertible, canFail bool, ops ...scop.Op,
+	t *scpb.Target, from, to scpb.Status, revertible bool, canFail bool, ops ...scop.Op,
 ) (err error) {
 	oe := &OpEdge{
 		op:         ops,

@@ -9,9 +9,7 @@ EXPLAIN (DDL) rollback at post-commit stage 7 of 7;
 Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ADD COLUMN ‹j› INT8 DEFAULT nextval(‹'sq1'›); following CREATE SEQUENCE ‹defaultdb›.public.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 12 elements transitioning toward ABSENT
-      │    │    ├── DESCRIPTOR_ADDED      → PUBLIC      Sequence:{DescID: 105 (sq1-)}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 105 (sq1-), ColumnID: 1 (value-)}
+      │    ├── 10 elements transitioning toward ABSENT
       │    │    ├── PUBLIC                → ABSENT      ColumnNotNull:{DescID: 105 (sq1-), ColumnID: 1 (value-), IndexID: 0}
       │    │    ├── PUBLIC                → DELETE_ONLY PrimaryIndex:{DescID: 105 (sq1-), IndexID: 1 (primary-)}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 2 (j-)}
@@ -22,8 +20,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 3}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-), IndexID: 2 (t_pkey-)}
       │    │    └── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j-), IndexID: 3}
-      │    └── 16 Mutation operations
-      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":105}
+      │    └── 15 Mutation operations
       │         ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":105}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":105}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
@@ -48,7 +45,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │    │    ├── PUBLIC      → DROPPED Sequence:{DescID: 105 (sq1-)}
       │    │    ├── PUBLIC      → ABSENT  SequenceOption:{DescID: 105 (sq1-), Name: "START"}
       │    │    ├── PUBLIC      → ABSENT  SchemaChild:{DescID: 105 (sq1-), ReferencedDescID: 101 (#101)}
-      │    │    ├── DELETE_ONLY → ABSENT  Column:{DescID: 105 (sq1-), ColumnID: 1 (value-)}
+      │    │    ├── PUBLIC      → ABSENT  Column:{DescID: 105 (sq1-), ColumnID: 1 (value-)}
       │    │    ├── PUBLIC      → ABSENT  ColumnType:{DescID: 105 (sq1-), ColumnFamilyID: 0, ColumnID: 1 (value-), TypeName: "INT8"}
       │    │    ├── PUBLIC      → ABSENT  ColumnName:{DescID: 105 (sq1-), Name: "value", ColumnID: 1 (value-)}
       │    │    ├── DELETE_ONLY → ABSENT  PrimaryIndex:{DescID: 105 (sq1-), IndexID: 1 (primary-)}
@@ -60,10 +57,11 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │    │    ├── DELETE_ONLY → ABSENT  PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC      → ABSENT  IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey-)}
       │    │    └── PUBLIC      → ABSENT  IndexData:{DescID: 104 (t), IndexID: 3}
-      │    └── 21 Mutation operations
+      │    └── 23 Mutation operations
       │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
       │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.SequenceOpt..."}
       │         ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
+      │         ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":105}
       │         ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":105}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":105}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":105}
@@ -76,16 +74,19 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
-      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":105}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":105}
       │         ├── MakeIndexAbsent {"IndexID":1,"TableID":105}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":105}
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward ABSENT
-           │    └── DROPPED → ABSENT Sequence:{DescID: 105 (sq1-)}
-           └── 3 Mutation operations
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── DROPPED → ABSENT Sequence:{DescID: 105 (sq1-)}
+           │    └── PUBLIC  → ABSENT TableData:{DescID: 105 (sq1-), ReferencedDescID: 100 (#100)}
+           └── 4 Mutation operations
+                ├── CreateGCJobForTable {"DatabaseID":100,"TableID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

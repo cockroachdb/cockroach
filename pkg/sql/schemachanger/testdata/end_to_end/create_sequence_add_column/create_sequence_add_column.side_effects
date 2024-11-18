@@ -209,12 +209,20 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 37 MutationType ops
+## PreCommitPhase stage 2 of 2 with 40 MutationType ops
+initializing sequence 105 with starting value of 31
 add object namespace entry {100 101 sq1} -> 105
 upsert descriptor #105
   -
   +table:
   +  checks: []
+  +  columns:
+  +  - id: 1
+  +    name: value
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
   +  createAsOfTime: {}
   +  declarativeSchemaChangerState:
   +    authorization:
@@ -244,16 +252,7 @@ upsert descriptor #105
   +  formatVersion: 3
   +  id: 105
   +  modificationTime: {}
-  +  mutations:
-  +  - column:
-  +      id: 1
-  +      name: value
-  +      type:
-  +        family: IntFamily
-  +        oid: 20
-  +        width: 64
-  +    direction: ADD
-  +    state: WRITE_ONLY
+  +  mutations: []
   +  name: sq1
   +  nextColumnId: 2
   +  nextConstraintId: 1
@@ -297,7 +296,6 @@ upsert descriptor #105
   +    minValue: "1"
   +    sequenceOwner: {}
   +    start: "32"
-  +  state: ADD
   +  unexposedParentSchemaId: 101
   +  version: "1"
 upsert descriptor #104
@@ -464,7 +462,7 @@ upsert descriptor #104
   +  version: "3"
 upsert descriptor #105
   ...
-     state: ADD
+       start: "32"
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -492,7 +490,7 @@ upsert descriptor #104
   +  version: "4"
 upsert descriptor #105
   ...
-     state: ADD
+       start: "32"
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
@@ -516,7 +514,7 @@ upsert descriptor #104
   +  version: "5"
 upsert descriptor #105
   ...
-     state: ADD
+       start: "32"
      unexposedParentSchemaId: 101
   -  version: "3"
   +  version: "4"
@@ -553,7 +551,7 @@ upsert descriptor #104
   +  version: "6"
 upsert descriptor #105
   ...
-     state: ADD
+       start: "32"
      unexposedParentSchemaId: 101
   -  version: "4"
   +  version: "5"
@@ -565,8 +563,7 @@ begin transaction #9
 validate forward indexes [2] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 15 MutationType ops
-initializing sequence 105 with starting value of 31
+## PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -693,17 +690,6 @@ upsert descriptor #104
   -  version: "6"
   +  version: "7"
 upsert descriptor #105
-   table:
-     checks: []
-  +  columns:
-  +  - id: 1
-  +    name: value
-  +    type:
-  +      family: IntFamily
-  +      oid: 20
-  +      width: 64
-     createAsOfTime: {}
-     declarativeSchemaChangerState:
   ...
            statement: CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
            statementTag: CREATE SEQUENCE
@@ -711,25 +697,7 @@ upsert descriptor #105
        targetRanks: <redacted>
        targets: <redacted>
   ...
-     id: 105
-     modificationTime: {}
-  -  mutations:
-  -  - column:
-  -      id: 1
-  -      name: value
-  -      type:
-  -        family: IntFamily
-  -        oid: 20
-  -        width: 64
-  -    direction: ADD
-  -    state: WRITE_ONLY
-  +  mutations: []
-     name: sq1
-     nextColumnId: 2
-  ...
-       sequenceOwner: {}
        start: "32"
-  -  state: ADD
      unexposedParentSchemaId: 101
   -  version: "5"
   +  version: "6"
