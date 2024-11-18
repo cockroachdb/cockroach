@@ -247,11 +247,16 @@ type ioLoadListenerState struct {
 	totalNumElasticByteTokens  int64
 	elasticByteTokensAllocated int64
 
-	// elasticDiskBWTokens represents the tokens to give out until the next call
-	// to adjustTokens. They are parceled out in small intervals.
-	// elasticDiskTokensAllocated represents what has been given out.
-	elasticDiskWriteTokens          int64
-	elasticDiskWriteTokensAllocated int64
+	// diskWriteTokens represents the tokens to give out until the next
+	// call to adjustTokens. They are parceled out in small intervals.
+	// diskWriteTokensAllocated represents what has been given out.
+	diskWriteTokens          int64
+	diskWriteTokensAllocated int64
+	// diskReadTokens are tokens that were already deducted during token
+	// estimation. These tokens are used for read error accounting
+	// adjustDiskTokenErrorLocked.
+	diskReadTokens          int64
+	diskReadTokensAllocated int64
 }
 
 type cumStoreCompactionStats struct {
@@ -391,6 +396,12 @@ func (t tickDuration) ticksInAdjustmentInterval() int64 {
 const unloadedDuration = tickDuration(250 * time.Millisecond)
 const loadedDuration = tickDuration(1 * time.Millisecond)
 
+// TODO(aaditya): Consider lowering this threshold. It was picked arbitrarily
+// and seems to work well enough. Would it be better to do error accounting at
+// an even higher frequency?
+const errorAdjustmentInterval = 1
+const errorTicksInAdjustmentInterval = int64(adjustmentInterval / errorAdjustmentInterval)
+
 // tokenAllocationTicker wraps a time.Ticker, and also computes the remaining
 // ticks in the adjustment interval, given an expected tick rate. If every tick
 // from the ticker was always equal to the expected tick rate, then we could
@@ -399,6 +410,7 @@ const loadedDuration = tickDuration(1 * time.Millisecond)
 type tokenAllocationTicker struct {
 	expectedTickDuration        time.Duration
 	adjustmentIntervalStartTime time.Time
+	lastErrorAdjustmentTick     uint64
 	ticker                      *time.Ticker
 }
 
@@ -411,11 +423,11 @@ func (t *tokenAllocationTicker) adjustmentStart(loaded bool) {
 	// load. If the system is unloaded, we tick at a 250ms rate, and if the system
 	// is loaded, we tick at a 1ms rate. See the comment above the
 	// adjustmentInterval definition to see why we tick at different rates.
-	tickDuration := unloadedDuration
+	tickDur := unloadedDuration
 	if loaded {
-		tickDuration = loadedDuration
+		tickDur = loadedDuration
 	}
-	t.expectedTickDuration = time.Duration(tickDuration)
+	t.expectedTickDuration = time.Duration(tickDur)
 	if t.ticker == nil {
 		t.ticker = time.NewTicker(t.expectedTickDuration)
 	} else {
@@ -439,6 +451,35 @@ func (t *tokenAllocationTicker) remainingTicks() uint64 {
 	}
 	remainingTime := adjustmentInterval*time.Second - timePassed
 	return uint64((remainingTime + t.expectedTickDuration - 1) / t.expectedTickDuration)
+}
+
+// shouldAdjustForError returns true if we should additionally adjust for read
+// and write error based on the number of remainingTicks and
+// errorAdjustmentInterval.
+func (t *tokenAllocationTicker) shouldAdjustForError(remainingTicks uint64, loaded bool) bool {
+	tickDur := unloadedDuration
+	if loaded {
+		tickDur = loadedDuration
+	}
+	if t.lastErrorAdjustmentTick == 0 {
+		// If this is the first tick of a new adjustment period, reset the 0 value
+		// to the total number of ticks (equivalent values for the purpose of error
+		// accounting).
+		t.lastErrorAdjustmentTick = uint64(tickDur.ticksInAdjustmentInterval())
+	}
+	// We calculate the number of ticks in the errorAdjustmentDuration.
+	errorTickThreshold := uint64(tickDur.ticksInAdjustmentInterval() / errorTicksInAdjustmentInterval)
+	// We adjust for error when either we have passed the errorAdjustmentInterval
+	// threshold or it is the last tick before the new adjustment interval.
+	shouldAdjust := t.lastErrorAdjustmentTick-remainingTicks >= errorTickThreshold || remainingTicks == 0
+	if !shouldAdjust {
+		return false
+	}
+	// Since lastErrorAdjustmentTick uses the remainingTicks in the previous
+	// iteration, it is expected to be a decreasing value over time. The expected
+	// range is [ticksInAdjustmentInterval, 0].
+	t.lastErrorAdjustmentTick = remainingTicks
+	return true
 }
 
 func (t *tokenAllocationTicker) stop() {
@@ -481,7 +522,11 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 				// No initial limit, i.e, the first interval is unlimited.
 				totalNumByteTokens:        unlimitedTokens,
 				totalNumElasticByteTokens: unlimitedTokens,
-				elasticDiskWriteTokens:    unlimitedTokens,
+				diskWriteTokens:           unlimitedTokens,
+				// Currently, disk read tokens are only used to assess how many tokens
+				// were deducted from the writes bucket to account for future reads. A 0
+				// value here represents that.
+				diskReadTokens: 0,
 			},
 			aux: adjustTokensAuxComputations{},
 			ioThreshold: &admissionpb.IOThreshold{
@@ -551,16 +596,30 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		panic(errors.AssertionFailedf("toAllocateElasticByteTokens is negative %d",
 			toAllocateElasticByteTokens))
 	}
-	toAllocateElasticDiskWriteTokens :=
+	toAllocateDiskWriteTokens :=
 		allocateFunc(
-			io.elasticDiskWriteTokens,
-			io.elasticDiskWriteTokensAllocated,
+			io.diskWriteTokens,
+			io.diskWriteTokensAllocated,
 			remainingTicks,
 		)
-	if toAllocateElasticDiskWriteTokens < 0 {
-		panic(errors.AssertionFailedf("toAllocateElasticDiskBWTokens is negative %d",
-			toAllocateElasticDiskWriteTokens))
+	if toAllocateDiskWriteTokens < 0 {
+		panic(errors.AssertionFailedf("toAllocateDiskWriteTokens is negative %d",
+			toAllocateDiskWriteTokens))
 	}
+	io.diskWriteTokensAllocated += toAllocateDiskWriteTokens
+
+	toAllocateDiskReadTokens :=
+		allocateFunc(
+			io.diskReadTokens,
+			io.diskReadTokensAllocated,
+			remainingTicks,
+		)
+	if toAllocateDiskReadTokens < 0 {
+		panic(errors.AssertionFailedf("toAllocateDiskReadTokens is negative %d",
+			toAllocateDiskReadTokens))
+	}
+	io.diskReadTokensAllocated += toAllocateDiskReadTokens
+
 	// INVARIANT: toAllocate >= 0.
 	io.byteTokensAllocated += toAllocateByteTokens
 	if io.byteTokensAllocated < 0 {
@@ -571,23 +630,25 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		panic(errors.AssertionFailedf(
 			"tokens allocated is negative %d", io.elasticByteTokensAllocated))
 	}
-	io.elasticDiskWriteTokensAllocated += toAllocateElasticDiskWriteTokens
 
 	tokensMaxCapacity := allocateFunc(
 		io.totalNumByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
 	elasticTokensMaxCapacity := allocateFunc(
-		io.totalNumElasticByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval())
-	diskBWTokenMaxCapacity := allocateFunc(
-		io.elasticDiskWriteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
+		io.totalNumElasticByteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
+	diskWriteTokenMaxCapacity := allocateFunc(
+		io.diskWriteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
+	)
+
 	tokensUsed, tokensUsedByElasticWork := io.kvGranter.setAvailableTokens(
 		toAllocateByteTokens,
 		toAllocateElasticByteTokens,
-		toAllocateElasticDiskWriteTokens,
+		toAllocateDiskWriteTokens,
+		toAllocateDiskReadTokens,
 		tokensMaxCapacity,
 		elasticTokensMaxCapacity,
-		diskBWTokenMaxCapacity,
+		diskWriteTokenMaxCapacity,
 		remainingTicks == 1,
 	)
 	io.byteTokensUsed += tokensUsed
@@ -645,12 +706,18 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	if metrics.DiskStats.ProvisionedBandwidth > 0 {
 		tokens := io.diskBandwidthLimiter.computeElasticTokens(
 			intDiskLoadInfo, diskTokensUsed)
-		io.elasticDiskWriteTokens = tokens.writeByteTokens
-		io.elasticDiskWriteTokensAllocated = 0
+		io.diskWriteTokens = tokens.writeByteTokens
+		io.diskWriteTokensAllocated = 0
+		io.diskReadTokens = tokens.readByteTokens
+		io.diskWriteTokensAllocated = 0
 	}
 	if metrics.DiskStats.ProvisionedBandwidth == 0 ||
 		!DiskBandwidthTokensForElasticEnabled.Get(&io.settings.SV) {
-		io.elasticDiskWriteTokens = unlimitedTokens
+		io.diskWriteTokens = unlimitedTokens
+		// Currently, disk read tokens are only used to assess how many tokens were
+		// deducted from the writes bucket to account for future reads. A 0 value
+		// here represents that.
+		io.diskReadTokens = 0
 	}
 	io.diskBW.bytesRead = metrics.DiskStats.BytesRead
 	io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
