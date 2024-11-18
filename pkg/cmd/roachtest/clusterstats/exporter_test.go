@@ -324,7 +324,7 @@ func TestExport(t *testing.T) {
 		mockCluster := NewMockCluster(ctrl)
 		mockTest.EXPECT().Name().Return("mock_name")
 		mockCluster.EXPECT().Cloud().Times(1).Return(spec.GCE)
-		mockTest.EXPECT().Spec().Times(2).Return(&registry.TestSpec{
+		mockTest.EXPECT().Spec().Times(1).Return(&registry.TestSpec{
 			Owner: "roachtest_mock", Suites: registry.Suites(registry.Nightly),
 		})
 		statsWriter = func(ctx context.Context, tt test.Test, c cluster.Cluster, buffer *bytes.Buffer, dest string) error {

@@ -1683,18 +1683,15 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					extraFlags += " --method=simple"
 				}
 				t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
-				histogramsPath := fmt.Sprintf("%s/warehouses=%d/%s", t.PerfArtifactsDir(), warehouses, roachtestutil.GetBenchmarkMetricsFileName(t))
+				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", t.PerfArtifactsDir(), warehouses)
 				var tenantSuffix string
 				if b.SharedProcessMT {
 					tenantSuffix = fmt.Sprintf(":%s", appTenantName)
 				}
-
-				labels := getTpccLabels(warehouses, rampDur, loadDur, nil)
-
 				cmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --active-warehouses=%d "+
-					"--tolerate-errors --ramp=%s --duration=%s%s %s {pgurl%s%s}",
+					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s%s}",
 					b.LoadWarehouses(c.Cloud()), warehouses, rampDur,
-					loadDur, extraFlags, roachtestutil.GetWorkloadHistogramArgs(t, c, labels), sqlGateways, tenantSuffix)
+					loadDur, extraFlags, histogramsPath, sqlGateways, tenantSuffix)
 				err := c.RunE(ctx, option.WithNodes(group.LoadNodes), cmd)
 				loadDone <- timeutil.Now()
 				if err != nil {
@@ -1702,27 +1699,26 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					// count.
 					return errors.Wrapf(err, "error running tpcc load generator")
 				}
-				if !t.ExportOpenmetrics() {
-					roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
-					if err := c.Get(
-						ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.LoadNodes,
-					); err != nil {
-						// NB: this will let the line search continue. The reason we do this
-						// is because it's conceivable that we made it here, but a VM just
-						// froze up on us. The next search iteration will handle this state.
-						return err
-					}
-					snapshots, err := histogram.DecodeSnapshots(roachtestHistogramsPath)
-					if err != nil {
-						// If we got this far, and can't decode data, it's not a case of
-						// overload but something that deserves failing the whole test.
-						t.Fatal(err)
-					}
-					result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
-					resultChan <- result
-					return nil
+
+				roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
+				if err := c.Get(
+					ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.LoadNodes,
+				); err != nil {
+					// NB: this will let the line search continue. The reason we do this
+					// is because it's conceivable that we made it here, but a VM just
+					// froze up on us. The next search iteration will handle this state.
+					return err
 				}
+				snapshots, err := histogram.DecodeSnapshots(roachtestHistogramsPath)
+				if err != nil {
+					// If we got this far, and can't decode data, it's not a case of
+					// overload but something that deserves failing the whole test.
+					t.Fatal(err)
+				}
+				result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
+				resultChan <- result
 				return nil
+
 			})
 		}
 		failErr := m.WaitE()
