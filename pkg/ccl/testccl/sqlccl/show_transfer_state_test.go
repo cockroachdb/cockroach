@@ -51,6 +51,20 @@ func TestShowTransferState(t *testing.T) {
 	_, err = tenantDB.Exec("GRANT SELECT ON tab TO testuser")
 	require.NoError(t, err)
 
+	testutils.SucceedsSoon(t, func() error {
+		// Waiting for the cluster setting to propagate to the tenant.
+		var enabled bool
+		if err := tenantDB.QueryRow(
+			`SHOW CLUSTER SETTING server.user_login.session_revival_token.enabled`,
+		).Scan(&enabled); err != nil {
+			return err
+		}
+		if !enabled {
+			return errors.New("cluster setting not yet propagated")
+		}
+		return nil
+	})
+
 	testUserConn := tenant.SQLConn(t, serverutils.User(username.TestUser))
 
 	t.Run("without_transfer_key", func(t *testing.T) {
@@ -211,19 +225,7 @@ func TestShowTransferState(t *testing.T) {
 		t.Run("root_user", func(t *testing.T) {
 			var key string
 			var errVal, sessionState, sessionRevivalToken gosql.NullString
-			testutils.SucceedsSoon(t, func() error {
-				// Waiting for the cluster setting to propagate to the tenant.
-				var enabled bool
-				if err := tenantDB.QueryRow(
-					`SHOW CLUSTER SETTING server.user_login.session_revival_token.enabled`,
-				).Scan(&enabled); err != nil {
-					return err
-				}
-				if !enabled {
-					return errors.New("cluster setting not yet propagated")
-				}
-				return nil
-			})
+
 			err := tenantDB.QueryRow(`SHOW TRANSFER STATE WITH 'bar'`).Scan(&errVal, &sessionState, &sessionRevivalToken, &key)
 			require.NoError(t, err)
 			require.True(t, errVal.Valid)
