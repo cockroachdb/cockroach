@@ -485,7 +485,9 @@ func ListFullBackupsInCollection(
 // manifests and metadata required to RESTORE. If only one layer is explicitly
 // provided, it is inspected to see if it contains "appended" layers internally
 // that are then expanded into the result layers returned, similar to if those
-// layers had been specified in `from` explicitly.
+// layers had been specified in `from` explicitly. If `includeSkipped` is true,
+// layers that do not actually contribute to the path from the base to the end
+// timestamp are included in the result, otherwise they are elided.
 func ResolveBackupManifests(
 	ctx context.Context,
 	mem *mon.BoundAccount,
@@ -498,6 +500,7 @@ func ResolveBackupManifests(
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 	user username.SQLUsername,
+	includeSkipped bool,
 ) (
 	defaultURIs []string,
 	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
@@ -608,7 +611,7 @@ func ResolveBackupManifests(
 	ownedMemSize = 0
 
 	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := backupinfo.ValidateEndTimeAndTruncate(
-		defaultURIs, mainBackupManifests, localityInfo, endTime)
+		defaultURIs, mainBackupManifests, localityInfo, endTime, includeSkipped)
 
 	if err != nil {
 		return nil, nil, nil, 0, err
