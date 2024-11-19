@@ -142,7 +142,16 @@ func StreamServerInterceptor(tracer *tracing.Tracer) grpc.StreamServerIntercepto
 		if err != nil {
 			return err
 		}
-		if !tracing.SpanInclusionFuncForServer(tracer, spanMeta) {
+		sp := tracing.SpanFromContext(ss.Context())
+		// NB: when this method is called through the local internal client optimization,
+		// we also invoke this interceptor, but don't have spanMeta available. If we then
+		// call straight into the handler below without making a child span, we hit various
+		// use-after-finish conditions. So we also check whether we have a nontrivial `sp`
+		// and if so make sure to go through `StartSpanCtx` below. This can be seen as a
+		// workaround for the following issue:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/135686
+		if (sp == nil || sp.IsNoop()) && !tracing.SpanInclusionFuncForServer(tracer, spanMeta) {
 			return handler(srv, ss)
 		}
 
