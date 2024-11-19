@@ -138,6 +138,9 @@ func CreateStatsFileInClusterFromExporterWithPrefix(
 	prefix string,
 ) (string, error) {
 
+	if perfBuf == nil {
+		return "", errors.New("perf buffer is nil")
+	}
 	// Close and flush any existing data in the buffer
 	if err := exporter.Close(nil); err != nil {
 		return "", err

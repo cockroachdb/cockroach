@@ -1727,10 +1727,11 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				if t.ExportOpenmetrics() {
 					// Creating a prefix
 					statsFilePrefix := fmt.Sprintf("warehouses=%d/", warehouses)
-					exporter := roachtestutil.CreateWorkloadHistogramExporterWithLabels(t, c, map[string]string{"warehouses": fmt.Sprintf("%d", warehouses)})
-					perfBuf, err := getHistogramOpenmetrics(exporter, snapshots)
 
-					// Since the exporter got initialized in getHistogramOpenmetrics, calling defer now
+					perfBuf := bytes.NewBuffer([]byte{})
+					exporter := roachtestutil.CreateWorkloadHistogramExporterWithLabels(t, c, map[string]string{"warehouses": fmt.Sprintf("%d", warehouses)})
+					writer := io.Writer(perfBuf)
+					exporter.Init(&writer)
 					defer func() {
 						if err := exporter.Close(func() error {
 							if _, err = roachtestutil.CreateStatsFileInClusterFromExporterWithPrefix(ctx, t, c, perfBuf, exporter, group.LoadNodes, statsFilePrefix); err != nil {
@@ -1742,13 +1743,12 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 						}
 					}()
 
-					if err != nil {
-						errors.Wrapf(err, "error converting histogram to openmetrics")
+					if err := getHistogramOpenmetrics(exporter, snapshots, perfBuf); err != nil {
+						return errors.Wrapf(err, "error converting histogram to openmetrics")
 					}
-					resultChan <- result
-					return nil
 				}
-
+				resultChan <- result
+				return nil
 			})
 		}
 		failErr := m.WaitE()
@@ -1899,20 +1899,16 @@ func getTpccLabels(
 
 // This function converts exporter.SnapshotTick to openmetrics into a buffer
 func getHistogramOpenmetrics(
-	exporter exporter.Exporter, snapshots map[string][]exporter.SnapshotTick,
-) (*bytes.Buffer, error) {
-	perfBuf := bytes.NewBuffer([]byte{})
-	writer := io.Writer(perfBuf)
-
-	exporter.Init(&writer)
+	exporter exporter.Exporter, snapshots map[string][]exporter.SnapshotTick, perfBuf *bytes.Buffer,
+) error {
 	for _, snaps := range snapshots {
 		for _, s := range snaps {
 			h := hdrhistogram.Import(s.Hist)
 			if err := exporter.SnapshotAndWrite(h, s.Now, s.Elapsed, &s.Name); err != nil {
-				return nil, errors.Wrapf(err, "failed to write snapshot for histogram %q", s.Name)
+				return errors.Wrapf(err, "failed to write snapshot for histogram %q", s.Name)
 			}
 		}
 	}
 
-	return perfBuf, nil
+	return nil
 }
