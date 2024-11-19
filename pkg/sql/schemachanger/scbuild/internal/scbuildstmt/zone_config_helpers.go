@@ -59,12 +59,14 @@ type zoneConfigObjBuilder interface {
 	// elements around.
 	getZoneConfigElemForAdd(b BuildCtx) (scpb.Element, []scpb.Element)
 
-	// getZoneConfigElemForDrop retrieves (scpb.Element, []scpb.Element) needed
-	// for dropping the zone config object. The slice of multiple elements
+	// getZoneConfigElemForDrop retrieves ([]scpb.Element, []scpb.Element) needed
+	// for dropping the zone config object. The second slice of multiple elements
 	// to be modified becomes more relevant for subzone configs -- as configuring
 	// the zone on indexes and partitions can shift the subzone spans for other
-	// elements around.
-	getZoneConfigElemForDrop(b BuildCtx) (scpb.Element, []scpb.Element)
+	// elements around. The first slice is used to ensure all references with
+	// varying `seqNum`s for the element are dropped (relevant only in explicit
+	// transactions).
+	getZoneConfigElemForDrop(b BuildCtx) ([]scpb.Element, []scpb.Element)
 
 	// getTargetID returns the target ID of the zone config object. This is either
 	// a database or a table ID.
@@ -1132,7 +1134,6 @@ func prepareZoneConfig(
 	}
 
 	if n.Discard {
-		partialZone.DeleteTableConfig()
 		return nil, partialZone, nil
 	}
 

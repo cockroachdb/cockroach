@@ -42,14 +42,14 @@ func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForAdd(
 }
 
 func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForDrop(
-	_ BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	elem := &scpb.NamedRangeZoneConfig{
-		RangeID:    rzo.rangeID,
-		ZoneConfig: rzo.zoneConfig,
-		SeqNum:     rzo.seqNum,
-	}
-	return elem, nil
+	b BuildCtx,
+) ([]scpb.Element, []scpb.Element) {
+	var elems []scpb.Element
+	b.QueryByID(rzo.getTargetID()).FilterNamedRangeZoneConfig().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.NamedRangeZoneConfig) {
+			elems = append(elems, e)
+		})
+	return elems, nil
 }
 
 func (rzo *namedRangeZoneConfigObj) checkPrivilegeForSetZoneConfig(

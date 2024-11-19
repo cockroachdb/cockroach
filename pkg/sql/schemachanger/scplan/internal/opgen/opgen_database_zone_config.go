@@ -26,10 +26,15 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.DatabaseZoneConfig) *scop.DiscardZoneConfig {
+				emit(func(this *scpb.DatabaseZoneConfig, md *opGenContext) *scop.DiscardZoneConfig {
+					// If we are dropping a database with table dependencies, let the GC
+					// job take care of dropping this zone config -- as its table
+					// dependencies need this zone config.
+					if checkIfDescriptorHasGCDependents(this.DatabaseID, md) {
+						return nil
+					}
 					return &scop.DiscardZoneConfig{
-						DescID:     this.DatabaseID,
-						ZoneConfig: this.ZoneConfig,
+						DescID: this.DatabaseID,
 					}
 				}),
 			),
