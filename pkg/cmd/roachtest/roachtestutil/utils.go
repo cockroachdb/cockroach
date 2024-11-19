@@ -118,10 +118,22 @@ func CreateStatsFileInClusterFromExporter(
 	exporter exporter.Exporter,
 	node option.NodeListOption,
 ) (string, error) {
+	return CreateStatsFileInClusterFromExporterWithPrefix(ctx, t, c, perfBuf, exporter, node, "")
+}
+
+func CreateStatsFileInClusterFromExporterWithPrefix(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	perfBuf *bytes.Buffer,
+	exporter exporter.Exporter,
+	node option.NodeListOption,
+	prefix string,
+) (string, error) {
 	if err := exporter.Close(nil); err != nil {
 		return "", err
 	}
-	destinationFileName := GetBenchmarkMetricsFileName(t)
+	destinationFileName := fmt.Sprintf("%s%s", prefix, GetBenchmarkMetricsFileName(t))
 	// Upload the perf artifacts to any one of the nodes so that the test
 	// runner copies it into an appropriate directory path.
 	dest := filepath.Join(t.PerfArtifactsDir(), destinationFileName)
