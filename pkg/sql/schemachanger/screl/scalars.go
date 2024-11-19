@@ -121,7 +121,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 	case *scpb.SequenceOption:
 		return true
 	case *scpb.TypeComment, *scpb.DatabaseZoneConfig:
-		return version.IsActive(clusterversion.V24_2)
+		return true
 	case *scpb.ColumnComputeExpression, *scpb.FunctionSecurity, *scpb.LDRJobIDs,
 		*scpb.PartitionZoneConfig, *scpb.Trigger, *scpb.TriggerName,
 		*scpb.TriggerEnabled, *scpb.TriggerTiming, *scpb.TriggerEvents, *scpb.TriggerTransition,

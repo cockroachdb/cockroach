@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -49,17 +48,12 @@ func (s *instance) TokenBucketRequest(
 	metrics.mutex.Lock()
 	defer metrics.mutex.Unlock()
 
-	// Check whether the consumption rates migration has run. If not, then do not
-	// attempt to read/write the new rates columns.
-	// TODO(andyk): Remove this after 24.3.
-	ratesAvailable := s.settings.Version.IsActive(ctx, clusterversion.V24_2_TenantRates)
-
 	result := &kvpb.TokenBucketResponse{}
 	var consumption kvpb.TenantConsumption
 	if err := s.ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		*result = kvpb.TokenBucketResponse{}
 
-		h := makeSysTableHelper(ctx, tenantID, ratesAvailable)
+		h := makeSysTableHelper(ctx, tenantID)
 		tenant, instance, err := h.readTenantAndInstanceState(txn, instanceID)
 		if err != nil {
 			return err
