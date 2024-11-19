@@ -491,6 +491,30 @@ func (p *replicationFlowPlanner) getSrcTenantID() (roachpb.TenantID, error) {
 	return p.srcTenantID, nil
 }
 
+func repartitionTopology(in streamclient.Topology, targetPartCount int) streamclient.Topology {
+	growth := targetPartCount / len(in.Partitions)
+	if growth <= 1 {
+		return in
+	}
+
+	// Copy the topology and allocate a new partition slice.
+	out := in
+	out.Partitions = make([]streamclient.PartitionInfo, 0, targetPartCount)
+	// For each partition in the input, put some number of copies of it into the
+	// output each containing some fraction of its spans.
+	for _, p := range in.Partitions {
+		chunk := len(p.Spans)/growth + 1
+		for len(p.Spans) > 0 {
+			c := p
+			c.Spans = p.Spans[:min(chunk, len(p.Spans))]
+			out.Partitions = append(out.Partitions, c)
+			p.Spans = p.Spans[len(c.Spans):]
+		}
+	}
+
+	return out
+}
+
 func (p *replicationFlowPlanner) constructPlanGenerator(
 	execCtx sql.JobExecContext,
 	ingestionJobID jobspb.JobID,
@@ -515,12 +539,18 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 		if err != nil {
 			return nil, nil, err
 		}
+
+		// If we have fewer partitions than we have nodes, try to repartition the
+		// topology to have more partitions.
+		topology = repartitionTopology(topology, len(sqlInstanceIDs)*8)
+
 		if !p.createdInitialPlan() {
 			p.initialTopology = topology
 			p.initialStreamAddresses = topology.StreamAddresses()
 			p.initialDestinationNodes = sqlInstanceIDs
 
 		}
+
 		destNodeLocalities, err := GetDestNodeLocalities(ctx, dsp, sqlInstanceIDs)
 		if err != nil {
 			return nil, nil, err

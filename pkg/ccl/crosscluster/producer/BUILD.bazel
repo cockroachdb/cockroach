@@ -84,7 +84,6 @@ go_test(
         "replication_manager_test.go",
         "replication_stream_test.go",
         "stream_event_batcher_test.go",
-        "stream_lifetime_test.go",
     ],
     embed = [":producer"],
     deps = [
