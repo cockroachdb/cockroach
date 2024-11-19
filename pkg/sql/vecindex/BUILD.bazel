@@ -1,0 +1,58 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//pkg/sql/vecindex:__subpackages__"],
+)
+
+go_library(
+    name = "vecindex",
+    srcs = [
+        "fixup_processor.go",
+        "kmeans.go",
+        "split_data.go",
+        "vector_index.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/vecindex/internal",
+        "//pkg/sql/vecindex/quantize",
+        "//pkg/sql/vecindex/vecstore",
+        "//pkg/util/log",
+        "//pkg/util/num32",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/vector",
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_exp//slices",
+    ],
+)
+
+go_test(
+    name = "vecindex_test",
+    srcs = [
+        "fixup_processor_test.go",
+        "kmeans_test.go",
+        "vector_index_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":vecindex"],
+    deps = [
+        "//pkg/sql/vecindex/internal",
+        "//pkg/sql/vecindex/quantize",
+        "//pkg/sql/vecindex/testutils",
+        "//pkg/sql/vecindex/vecstore",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/num32",
+        "//pkg/util/stop",
+        "//pkg/util/vector",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+        "@org_gonum_v1_gonum//floats/scalar",
+        "@org_gonum_v1_gonum//stat",
+    ],
+)

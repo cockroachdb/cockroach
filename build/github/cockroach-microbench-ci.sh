@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 set -euxo pipefail
 
 # Directories and file names
@@ -33,7 +39,7 @@ mkdir -p "$output_dir"
 # Run benchmarks and clean output
 # running count=4 here because that's the minimum required for a comparison
 bazel test //pkg/sql/tests:tests_test \
-  --config=use_ci_timeouts \
+  --test_timeout=1800 \
   --strategy=TestRunner=sandboxed \
   --jobs 100 \
   --config=crosslinux \
@@ -44,7 +50,7 @@ bazel test //pkg/sql/tests:tests_test \
   --test_sharding_strategy=disabled \
   --test_arg=-test.cpu --test_arg=1 \
   --test_arg=-test.v \
-  --test_arg=-test.count=4 \
+  --test_arg=-test.count=10 \
   --test_arg=-test.benchmem \
   --crdb_test_off \
   --test_output=all > "$log_output_file_path"
@@ -64,7 +70,7 @@ if ! gcloud storage cp "$storage_bucket_url/$GITHUB_BASE_REF/$BASE_SHA.log" "$cl
   exit $success_exit_status
 fi
 
-if ! $roachprod_microbench_dir/roachprod-microbench compare "$cleaned_current_dir" "$cleaned_base_dir" --threshold="$threshold" --publish-sheets=false; then
+if ! $roachprod_microbench_dir/roachprod-microbench compare "$cleaned_current_dir" "$cleaned_base_dir" --threshold="$threshold"; then
   echo "There is an error during comparison. If it's a perf regression, please try to fix it. This won't block your change for merging currently."
   exit $error_exit_status
 fi

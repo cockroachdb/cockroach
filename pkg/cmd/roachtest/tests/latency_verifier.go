@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -16,9 +11,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
@@ -46,10 +41,10 @@ type latencyVerifier struct {
 	initialScanHighwater time.Time
 	initialScanLatency   time.Duration
 
-	catchupScanEveryN log.EveryN
+	catchupScanEveryN roachtestutil.EveryN
 
 	maxSeenSteadyLatency time.Duration
-	maxSeenSteadyEveryN  log.EveryN
+	maxSeenSteadyEveryN  roachtestutil.EveryN
 	latencyBecameSteady  bool
 
 	latencyHist *hdrhistogram.Histogram
@@ -79,8 +74,8 @@ func makeLatencyVerifier(
 		setTestStatus:            setTestStatus,
 		latencyHist:              hist,
 		tolerateErrors:           tolerateErrors,
-		maxSeenSteadyEveryN:      log.Every(10 * time.Second),
-		catchupScanEveryN:        log.Every(2 * time.Second),
+		maxSeenSteadyEveryN:      roachtestutil.Every(10 * time.Second),
+		catchupScanEveryN:        roachtestutil.Every(2 * time.Second),
 	}
 }
 
@@ -129,9 +124,10 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		// that's less than the max allowed. Verify at the end
 		// of the test that this happens at some point.
 		if lv.maxSeenSteadyEveryN.ShouldLog() {
-			lv.setTestStatus(fmt.Sprintf(
+			update := fmt.Sprintf(
 				"%s: end-to-end latency %s not yet below target steady latency %s",
-				lv.name, latency.Truncate(time.Millisecond), lv.targetSteadyLatency.Truncate(time.Millisecond)))
+				lv.name, latency.Truncate(time.Millisecond), lv.targetSteadyLatency.Truncate(time.Millisecond))
+			lv.setTestStatus(update)
 		}
 		return
 	}
@@ -142,9 +138,10 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		lv.maxSeenSteadyLatency = latency
 	}
 	if lv.maxSeenSteadyEveryN.ShouldLog() {
-		lv.setTestStatus(fmt.Sprintf(
+		update := fmt.Sprintf(
 			"%s: end-to-end steady latency %s; max steady latency so far %s; highwater %s",
-			lv.name, latency.Truncate(time.Millisecond), lv.maxSeenSteadyLatency.Truncate(time.Millisecond), highwaterTime))
+			lv.name, latency.Truncate(time.Millisecond), lv.maxSeenSteadyLatency.Truncate(time.Millisecond), highwaterTime)
+		lv.setTestStatus(update)
 	}
 }
 

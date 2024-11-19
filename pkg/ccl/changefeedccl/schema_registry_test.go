@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -20,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -172,7 +170,7 @@ func TestConfluentSchemaRegistryRetryMetrics(t *testing.T) {
 	regServer := cdctest.StartErrorTestSchemaRegistry(409)
 	defer regServer.Close()
 
-	sliMetrics, err := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics).AggMetrics.getOrCreateScope("")
+	sliMetrics, err := MakeMetrics(base.DefaultHistogramWindowInterval(), cidr.NewTestLookup()).(*Metrics).AggMetrics.getOrCreateScope("")
 	require.NoError(t, err)
 
 	t.Run("ping works when all is well", func(t *testing.T) {

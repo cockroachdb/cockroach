@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package current
 
@@ -36,6 +31,7 @@ func TestRuleAssertions(t *testing.T) {
 		checkIsIndexDependent,
 		checkIsConstraintDependent,
 		checkConstraintPartitions,
+		checkIsTriggerDependent,
 	} {
 		var fni interface{} = fn
 		fullName := runtime.FuncForPC(reflect.ValueOf(fni).Pointer()).Name()
@@ -207,6 +203,25 @@ func checkConstraintPartitions(e scpb.Element) error {
 	}
 	if !isNonIndexBackedConstraint(e) && !isIndex(e) {
 		return errors.New("verifies isConstraint but does not verify isNonIndexBackedConstraint nor isIndex")
+	}
+	return nil
+}
+
+// Assert that checkIsTriggerDependent covers all elements of a trigger element.
+func checkIsTriggerDependent(e scpb.Element) error {
+	// Exclude triggers themselves.
+	switch e.(type) {
+	case *scpb.Trigger:
+		return nil
+	}
+	// A trigger dependent should have a TriggerID attribute.
+	_, err := screl.Schema.GetAttribute(screl.TriggerID, e)
+	if isTriggerDependent(e) {
+		if err != nil {
+			return errors.New("verifies isTriggerDependent but doesn't have TriggerID attr")
+		}
+	} else if err == nil {
+		return errors.New("has TriggerID attr but doesn't verify isTriggerDependent")
 	}
 	return nil
 }

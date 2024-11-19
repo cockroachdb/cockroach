@@ -1,18 +1,14 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuildstmt
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -48,6 +44,7 @@ type BuildCtx interface {
 	Telemetry
 	NodeStatusInfo
 	RegionProvider
+	ZoneConfigProvider
 
 	// Add adds an absent element to the BuilderState, targeting PUBLIC.
 	Add(element scpb.Element)
@@ -65,9 +62,6 @@ type BuildCtx interface {
 
 	// Codec returns the codec for the current tenant.
 	Codec() keys.SQLCodec
-
-	// ZoneConfigGetter returns the zone config getter.
-	ZoneConfigGetter() scdecomp.ZoneConfigGetter
 }
 
 // ClusterAndSessionInfo provides general cluster and session info.
@@ -280,6 +274,10 @@ type TableHelpers interface {
 	// added to this table.
 	NextTableConstraintID(tableID catid.DescID) catid.ConstraintID
 
+	// NextTableTriggerID returns the ID that should be used for any new trigger
+	// added to this table.
+	NextTableTriggerID(tableID catid.DescID) catid.TriggerID
+
 	// NextTableTentativeIndexID returns the tentative ID, starting from
 	// scbuild.TABLE_TENTATIVE_IDS_START, that should be used for any new index added to
 	// this table.
@@ -319,7 +317,9 @@ type TableHelpers interface {
 
 type FunctionHelpers interface {
 	BuildReferenceProvider(stmt tree.Statement) ReferenceProvider
-	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language, provider ReferenceProvider) *scpb.FunctionBody
+	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language,
+		returnType tree.ResolvableTypeReference, provider ReferenceProvider) *scpb.FunctionBody
+	ReplaceSeqTypeNamesInStatements(queryStr string, lang catpb.Function_Language) string
 }
 
 type SchemaHelpers interface {
@@ -428,6 +428,9 @@ type NameResolver interface {
 
 	// ResolveConstraint retrieves a constraint by name and returns its elements.
 	ResolveConstraint(relationID catid.DescID, constraintName tree.Name, p ResolveParams) ElementResultSet
+
+	// ResolveTrigger retrieves a trigger by name and returns its elements.
+	ResolveTrigger(relationID catid.DescID, triggerName tree.Name, p ResolveParams) ElementResultSet
 }
 
 // ReferenceProvider provides all referenced objects with in current DDL
@@ -450,6 +453,8 @@ type ReferenceProvider interface {
 	ReferencedTypes() catalog.DescriptorIDSet
 	// ReferencedRelationIDs Returns all referenced relation IDs.
 	ReferencedRelationIDs() catalog.DescriptorIDSet
+	// ReferencedRoutines returns all referenced routine IDs.
+	ReferencedRoutines() catalog.DescriptorIDSet
 }
 
 // TemporarySchemaProvider provides functions needed to help support
@@ -475,4 +480,13 @@ type RegionProvider interface {
 	// GetRegions provides access to the set of regions available to the
 	// current tenant.
 	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
+}
+
+type ZoneConfigProvider interface {
+	// ZoneConfigGetter returns the zone config getter.
+	ZoneConfigGetter() scdecomp.ZoneConfigGetter
+
+	// GetDefaultZoneConfig is used to get the default zone config inside the
+	// server.
+	GetDefaultZoneConfig() *zonepb.ZoneConfig
 }

@@ -1,0 +1,93 @@
+# Demonstrate the effects of a stream being added part way through the process.
+init
+handle=h
+----
+
+# Set up a doubly connected handle (to s1, s2) that later connects to s3 at
+# t=5s. We issue writes at 1MiB/s and return tokens for each stream at the rate
+# of deduction, only 200ms later.
+timeline
+t=0s             handle=h op=connect    stream=t1/s1
+t=0s             handle=h op=connect    stream=t1/s2
+t=5s             handle=h op=connect    stream=t1/s3
+t=[0s,10s)       handle=h class=regular adjust=-1MiB/s   rate=10/s
+t=[0.2s,10.2s)   handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s1
+t=[0.2s,10.2s)   handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s2
+t=[5.2s,10.2s)   handle=h class=regular adjust=+1MiB/s   rate=10/s stream=t1/s3
+----
+
+simulate t=[0s,11s)
+----
+
+# We observe:
+# - Increase in regular stream count once s3 is added.
+# - Regular available tokens increasing by 16MiB, corresponding to the
+#   newly created stream
+# - Token deductions increasing from 2MiB/s (for two connected connected
+#   streams) to 3MiB/s.
+plot
+
+kvflowcontrol.streams.eval.regular.total_count        unit=streams
+kvflowcontrol.tokens.eval.regular.available           unit=MiB
+kvflowcontrol.tokens.eval.regular.{deducted,returned} unit=MiB/s rate=true
+----
+----
+ 3.0 ┤                 ╭─────────────────────
+ 2.9 ┤                 │
+ 2.9 ┤                 │
+ 2.8 ┤                 │
+ 2.7 ┤                 │
+ 2.7 ┤                 │
+ 2.6 ┤                 │
+ 2.5 ┤                 │
+ 2.5 ┤                 │
+ 2.4 ┤                 │
+ 2.3 ┤                 │
+ 2.3 ┤                 │
+ 2.2 ┤                 │
+ 2.1 ┤                 │
+ 2.1 ┤                 │
+ 2.0 ┼─────────────────╯
+      streams.eval.regular.total_count (streams)
+
+
+ 48.0 ┤                                   ╭───
+ 46.9 ┤                 ╭─────────────────╯
+ 45.8 ┤                 │
+ 44.7 ┤                 │
+ 43.6 ┤                 │
+ 42.5 ┤                 │
+ 41.4 ┤                 │
+ 40.3 ┤                 │
+ 39.3 ┤                 │
+ 38.2 ┤                 │
+ 37.1 ┤                 │
+ 36.0 ┤                 │
+ 34.9 ┤                 │
+ 33.8 ┤                 │
+ 32.7 ┤                 │
+ 31.6 ┼─────────────────╯
+         tokens.eval.regular.available (MiB)
+
+
+ 3.0 ┤                    ╭╭──────────────╮
+ 2.8 ┤                    ╭╯             ││
+ 2.6 ┤                   ╭│              ╰│
+ 2.4 ┤                  ╭╭╯               │
+ 2.2 ┤                 ╭╭╯                ╰╮
+ 2.0 ┤   ╭──────────────╯                 ││
+ 1.8 ┤   │                                ││
+ 1.6 ┤   │                                ╰│
+ 1.4 ┤   │                                 ╰╮
+ 1.2 ┤   │                                 ││
+ 1.0 ┤   │                                 ││
+ 0.8 ┤   │                                 ╰│
+ 0.6 ┤   │                                  ╰
+ 0.4 ┤   │                                  │
+ 0.2 ┤   │                                  │
+ 0.0 ┼───╯                                  ╰
+      rate(tokens.eval.regular.{deducted,returned}) (MiB/s)
+----
+----
+
+# vim:ft=conf

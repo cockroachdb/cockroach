@@ -532,7 +532,7 @@ SELECT to_timestamp(1646906263.123456), to_timestamp(1646906263), to_timestamp('
 query TT
 SELECT to_timestamp('infinity'), to_timestamp('-infinity')
 ----
-294276-12-31 23:59:59.999999 +0000 UTC  -4713-11-24 00:00:00 +0000 UTC
+infinity  -infinity
 
 ## Test for to_timestamp with NULL
 query T
@@ -783,3 +783,48 @@ SET timezone = '04:15';
 SELECT to_char(now(), 'of') as of_t, to_char(now(), 'tzh:tzm') as "tzh:tzm";
 ----
 -04:15  -04:15
+
+# Test for issue #41564, the behavior of infinity should be consistent with PostgreSQL.
+subtest infinity_41564
+
+query T
+SELECT 'infinity':::TIMESTAMP
+----
+infinity
+
+query T
+SELECT '-infinity':::TIMESTAMP
+----
+-infinity
+
+# infinity is greater than any timestamp, including '294276-12-31 23:59:59.999999' (MaxSupportedTime)
+query B
+SELECT 'infinity'::timestamp > '294276-12-31 23:59:59.999999'::timestamp;
+----
+true
+
+# -infinity is less than any timestamp, including '4714-11-24 00:00:00+00 BC' (MinSupportedTime)
+query B
+SELECT '-infinity'::timestamp < '4714-11-24 00:00:00+00 BC'::timestamp;
+----
+true
+
+# infinity and -infinity should be equal to themselves
+query BB
+SELECT 'infinity'::timestamp = 'infinity'::timestamp, '-infinity'::timestamp = '-infinity'::timestamp;
+----
+true true
+
+# infinity add/subtract any interval results in itself
+query TT
+SELECT 'infinity'::timestamp + '1 second'::interval, 'infinity'::timestamp - '1 second'::interval;
+----
+infinity infinity
+
+# -infinity add/subtract any interval results in itself
+query TT
+SELECT '-infinity'::timestamp + '1 second'::interval, '-infinity'::timestamp - '1 second'::interval;
+----
+-infinity -infinity
+
+subtest end

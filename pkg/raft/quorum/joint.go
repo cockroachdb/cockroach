@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2019 The etcd Authors
 //
@@ -17,7 +17,10 @@
 
 package quorum
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 // JointConfig is a configuration of two groups of (possibly overlapping)
 // majority configurations. Decisions require the support of both majorities.
@@ -33,13 +36,27 @@ func (c JointConfig) String() string {
 // IDs returns a newly initialized map representing the set of voters present
 // in the joint configuration.
 func (c JointConfig) IDs() map[pb.PeerID]struct{} {
-	m := map[pb.PeerID]struct{}{}
+	m := make(map[pb.PeerID]struct{}, len(c[0])+len(c[1]))
 	for _, cc := range c {
 		for id := range cc {
 			m[id] = struct{}{}
 		}
 	}
 	return m
+}
+
+// Visit calls the given function for each unique voter ID in the joint
+// configuration.
+func (c JointConfig) Visit(f func(pb.PeerID)) {
+	for id := range c[0] {
+		f(id)
+	}
+	for id := range c[1] {
+		if _, ok := c[0][id]; ok {
+			continue // skip duplicate
+		}
+		f(id)
+	}
 }
 
 // Describe returns a (multi-line) representation of the commit indexes for the
@@ -52,12 +69,7 @@ func (c JointConfig) Describe(l AckedIndexer) string {
 // quorum. An index is jointly committed if it is committed in both constituent
 // majorities.
 func (c JointConfig) CommittedIndex(l AckedIndexer) Index {
-	idx0 := c[0].CommittedIndex(l)
-	idx1 := c[1].CommittedIndex(l)
-	if idx0 < idx1 {
-		return idx0
-	}
-	return idx1
+	return min(c[0].CommittedIndex(l), c[1].CommittedIndex(l))
 }
 
 // VoteResult takes a mapping of voters to yes/no (true/false) votes and returns
@@ -77,4 +89,13 @@ func (c JointConfig) VoteResult(votes map[pb.PeerID]bool) VoteResult {
 	}
 	// One side won, the other one is pending, so the whole outcome is.
 	return VotePending
+}
+
+// LeadSupportExpiration takes a mapping of timestamps peers have promised a
+// leader support until and returns the timestamp until which the leader is
+// guaranteed support until.
+func (c JointConfig) LeadSupportExpiration(supported map[pb.PeerID]hlc.Timestamp) hlc.Timestamp {
+	qse := c[0].LeadSupportExpiration(supported)
+	qse.Backward(c[1].LeadSupportExpiration(supported))
+	return qse
 }

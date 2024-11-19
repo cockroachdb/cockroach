@@ -1,0 +1,111 @@
+# Demonstrate the behavior when a single stream is shared across two handles h1
+# and h2.
+init
+handle=h1
+handle=h2
+----
+
+# Set up two handles that connect only to s1, and issue writes at 2MiB/s each.
+# Set up token returns for the stream at 1MiB/s. 
+timeline
+t=0s         handle=h1    op=connect    stream=t1/s1
+t=0s         handle=h2    op=connect    stream=t1/s1
+t=[0s,10s)   handle=h1    class=regular adjust=-2MiB/s rate=10/s
+t=[0s,10s)   handle=h2    class=regular adjust=-2MiB/s rate=10/s
+t=[0s,10s)   stream=t1/s1 class=regular adjust=+1MiB/s rate=200/s
+----
+
+simulate t=[0,10s)
+----
+
+# We expect the tokens to get depleted and then eventually observe that the
+# aggregate bandwidth of token deductions across the two handles match the
+# token return rate. The admission rate goes from 2*10 = 20reqs/s (unthrottled)
+# to 5 reqs/s, which is 1/4th of 20. The 1/4th comes from 1MiB/s return rate
+# being 1/4th of -4MiB/s demand.
+plot 
+
+kvflowcontrol.streams.eval.regular.{blocked,total}_count    unit=streams
+kvflowcontrol.tokens.eval.regular.available                 unit=MiB
+kvflowcontrol.tokens.eval.regular.{deducted,returned}       unit=MiB/s rate=true
+kvflowcontrol.eval_wait.regular.requests.{admitted,waiting} unit=reqs/s rate=true
+----
+----
+ 1.0 ┼───────────────────────────────────────
+ 0.9 ┤                       ╭╮  ╭╮         │
+ 0.9 ┤                       ││  ││     ╭╮  │
+ 0.8 ┤                       ││  ││  ╭╮ ││  │
+ 0.7 ┤                       ││  ││  ││ ││  │
+ 0.7 ┤                    ╭╮ ││  ││ ╭╯│ ││  │
+ 0.6 ┤                    ││ ││  ││ │ │ │╰╮ │
+ 0.5 ┤                    ││ │╰╮╭╯│ │ │ │ │ │
+ 0.5 ┤                    ││ │ ││ │ │ │ │ │╭╯
+ 0.4 ┤                    ││╭╯ ││ ╰╮│ │ │ ││
+ 0.3 ┤                    │││  ││  ││ │╭╯ ││
+ 0.3 ┤                    │││  ││  ││ ││  ││
+ 0.2 ┤                    │││  ││  ││ ╰╯  ││
+ 0.1 ┤                    │╰╯  ││  ╰╯     ││
+ 0.1 ┤                    │    ││         ╰╯
+ 0.0 ┼────────────────────╯    ╰╯
+      streams.eval.regular.{blocked,total}_count (streams)
+
+
+ 15.6 ┼╮
+ 14.6 ┤╰╮
+ 13.5 ┤ ╰─╮
+ 12.5 ┤   ╰╮
+ 11.4 ┤    ╰─╮
+ 10.4 ┤      ╰╮
+  9.3 ┤       ╰╮
+  8.3 ┤        ╰─╮
+  7.2 ┤          ╰╮
+  6.2 ┤           ╰╮
+  5.1 ┤            ╰─╮
+  4.1 ┤              ╰╮
+  3.0 ┤               ╰─╮
+  2.0 ┤                 ╰╮
+  1.0 ┤                  ╰╮
+ -0.1 ┤                   ╰───────────────────
+         tokens.eval.regular.available (MiB)
+
+
+ 4.0 ┤   ╭────────────────╮
+ 3.7 ┤   │                ╰╮
+ 3.5 ┤   │                 │
+ 3.2 ┤   │                 │
+ 2.9 ┤   │                 ╰╮
+ 2.7 ┤   │                  │
+ 2.4 ┤   │                  │
+ 2.1 ┤   │                  ╰╮
+ 1.9 ┤   │                   │
+ 1.6 ┤   │                   │
+ 1.3 ┤   │                   ╰╮
+ 1.1 ┤   ╭───────────────────────────────────
+ 0.8 ┤   │
+ 0.5 ┤   │
+ 0.3 ┤   │
+ 0.0 ┼───╯
+      rate(tokens.eval.regular.{deducted,returned}) (MiB/s)
+
+
+ 20.0 ┤   ╭────────────────╮
+ 18.7 ┤   │                ╰╮
+ 17.3 ┤   │                 │
+ 16.0 ┤   │                 │
+ 14.7 ┤   │                 ╰╮ ╭──────────────
+ 13.3 ┤   │                  │╭╯
+ 12.0 ┤   │                  ││
+ 10.7 ┤   │                  ╰│
+  9.3 ┤   │                  ╭╯
+  8.0 ┤   │                  ││
+  6.7 ┤   │                  │╰╮
+  5.3 ┤   │                 ╭╯ ╰──────────────
+  4.0 ┤   │                 │
+  2.7 ┤   │                 │
+  1.3 ┤   │                ╭╯
+  0.0 ┼────────────────────╯
+       rate(eval_wait.regular.requests.{admitted,waiting}) (reqs/s)
+----
+----
+
+# vim:ft=conf

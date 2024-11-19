@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -356,17 +351,18 @@ CREATE TABLE schema.test_table (
 
 	for _, tc := range testCases {
 		tableName := fmt.Sprintf("%s.%s", tc.schema, tc.table)
-		tableID, err := getTableIDFromDatabaseAndTableName(ctx, tc.database, tableName, s.InternalExecutor().(*sql.InternalExecutor), userName)
+		tableID, databaseID, err := getIDFromDatabaseAndTableName(ctx, tc.database, tableName, s.InternalExecutor().(*sql.InternalExecutor), userName)
 		require.NoError(t, err)
 
 		// Get actual Table ID.
 		actualTableID := db.QueryStr(t, `
-SELECT table_id 
+SELECT table_id, parent_id
 FROM crdb_internal.tables 
 WHERE database_name=$1 AND schema_name=$2 AND name=$3`,
 			tc.database, tc.schema, tc.table)
 
 		// Assert Table ID is correct.
 		require.Equal(t, fmt.Sprint(tableID), actualTableID[0][0])
+		require.Equal(t, fmt.Sprint(databaseID), actualTableID[0][1])
 	}
 }

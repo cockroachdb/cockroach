@@ -1,6 +1,10 @@
 # This tests ensures that transactions to perform grants on entities created
 # inside of a transaction do not get blocked and take a very long time.
 
+# We've seen this test fail under race due to a timeout, which is likely
+# to happen in slower builds since the transaction is a large operation.
+skip under race
+
 statement ok
 SET statement_timeout = '10s';
 

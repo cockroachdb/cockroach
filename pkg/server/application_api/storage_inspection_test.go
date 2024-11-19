@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package application_api_test
 
@@ -197,11 +192,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109501),
-		},
-	})
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	firstServer := tc.Server(0).ApplicationLayer()

@@ -150,14 +150,14 @@ SELECT * from pg_temp.view_on_temp
 2
 
 # A "permanent" view on a temporary table gets upgraded to temporary.
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 CREATE VIEW upgrade_temp_view AS SELECT a FROM temp_table
 ----
 NOTICE: view "upgrade_temp_view" will be a temporary view
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 statement ok
 CREATE VIEW upgrade_temp_view AS SELECT a FROM temp_table
 

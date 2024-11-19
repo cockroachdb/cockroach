@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuild
 
@@ -64,8 +59,12 @@ func Build(
 	n tree.Statement,
 	memAcc *mon.BoundAccount,
 ) (_ scpb.CurrentState, eventLogCallBack LogSchemaChangerEventsFn, err error) {
+	// This message is logged at level=1 since this is called during the planning
+	// phase to check if the statement is supported by the declarative schema
+	// changer, which makes this quite verbose.
 	defer scerrors.StartEventf(
 		ctx,
+		1, /* level */
 		"building declarative schema change targets for %s",
 		redact.Safe(n.StatementTag()),
 	).HandlePanicAndLogError(ctx, &err)
@@ -283,10 +282,11 @@ type cachedDesc struct {
 func newBuilderState(
 	ctx context.Context, d Dependencies, incumbent scpb.CurrentState, localMemAcc *mon.BoundAccount,
 ) *builderState {
+
 	bs := builderState{
 		ctx:                      ctx,
 		clusterSettings:          d.ClusterSettings(),
-		evalCtx:                  newEvalCtx(d),
+		evalCtx:                  d.EvalCtx(),
 		semaCtx:                  d.SemaCtx(),
 		cr:                       d.CatalogReader(),
 		tr:                       d.TableReader(),

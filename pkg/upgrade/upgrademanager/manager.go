@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package upgrademanager provides an implementation of upgrade.Manager
 // for use on kv nodes.
@@ -26,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -61,6 +57,7 @@ type Manager struct {
 	settings  *cluster.Settings
 	knobs     upgradebase.TestingKnobs
 	clusterID *base.ClusterIDContainer
+	le        *license.Enforcer
 }
 
 // GetUpgrade returns the upgrade associated with this key.
@@ -92,6 +89,7 @@ func NewManager(
 	settings *cluster.Settings,
 	clusterID *base.ClusterIDContainer,
 	testingKnobs *upgradebase.TestingKnobs,
+	le *license.Enforcer,
 ) *Manager {
 	var knobs upgradebase.TestingKnobs
 	if testingKnobs != nil {
@@ -105,6 +103,7 @@ func NewManager(
 		codec:     codec,
 		settings:  settings,
 		clusterID: clusterID,
+		le:        le,
 		knobs:     knobs,
 	}
 }
@@ -466,7 +465,7 @@ func (m *Manager) Migrate(
 
 		cv := clusterversion.ClusterVersion{Version: clusterVersion}
 
-		fenceVersion := upgrade.FenceVersionFor(ctx, cv)
+		fenceVersion := cv.FenceVersion()
 		if err := bumpClusterVersion(ctx, m.deps.Cluster, fenceVersion); err != nil {
 			return err
 		}
@@ -666,15 +665,17 @@ func (m *Manager) runMigration(
 			// The TenantDeps used here are incomplete, but enough for the "permanent
 			// upgrades" that run under this testing knob.
 			if err := upg.Run(ctx, v, upgrade.TenantDeps{
-				KVDB:             m.deps.DB.KV(),
-				DB:               m.deps.DB,
-				Codec:            m.codec,
-				Settings:         m.settings,
-				LeaseManager:     m.lm,
-				InternalExecutor: m.ie,
-				JobRegistry:      m.jr,
-				TestingKnobs:     &m.knobs,
-				ClusterID:        m.clusterID.Get(),
+				KVDB:               m.deps.DB.KV(),
+				DB:                 m.deps.DB,
+				Codec:              m.codec,
+				Settings:           m.settings,
+				LeaseManager:       m.lm,
+				InternalExecutor:   m.ie,
+				JobRegistry:        m.jr,
+				TestingKnobs:       &m.knobs,
+				ClusterID:          m.clusterID.Get(),
+				LicenseEnforcer:    m.le,
+				TenantInfoAccessor: m.deps.TenantInfoAccessor,
 			}); err != nil {
 				return err
 			}
@@ -845,13 +846,16 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 			continue
 		}
 		if err := tm.Precondition(ctx, clusterversion.ClusterVersion{Version: v}, upgrade.TenantDeps{
-			DB:               m.deps.DB,
-			Codec:            m.codec,
-			Settings:         m.settings,
-			LeaseManager:     m.lm,
-			InternalExecutor: m.ie,
-			JobRegistry:      m.jr,
-			ClusterID:        m.clusterID.Get(),
+			DB:                 m.deps.DB,
+			Codec:              m.codec,
+			Settings:           m.settings,
+			LeaseManager:       m.lm,
+			InternalExecutor:   m.ie,
+			JobRegistry:        m.jr,
+			TestingKnobs:       &m.knobs,
+			ClusterID:          m.clusterID.Get(),
+			LicenseEnforcer:    m.le,
+			TenantInfoAccessor: m.deps.TenantInfoAccessor,
 		}); err != nil {
 			return errors.Wrapf(
 				err,

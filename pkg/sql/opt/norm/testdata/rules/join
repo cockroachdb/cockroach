@@ -1436,51 +1436,46 @@ SELECT (SELECT i_name FROM item LIMIT 1)
     OR (SELECT ol_i_id FROM order_line LIMIT 1) IS NOT NULL;
 ----
 project
- ├── columns: i_name:58
+ ├── columns: i_name:57
  ├── inner-join (hash)
- │    ├── columns: h_data:9!null ol_dist_info:21!null ol_i_id:39 exists:50!null
+ │    ├── columns: h_data:9!null ol_dist_info:21!null ol_i_id:39 exists:49!null
  │    ├── fd: (9)==(21), (21)==(9)
  │    ├── scan history
  │    │    └── columns: h_data:9
  │    ├── select
- │    │    ├── columns: ol_dist_info:21 ol_i_id:39 exists:50!null
+ │    │    ├── columns: ol_dist_info:21 ol_i_id:39 exists:49!null
  │    │    ├── left-join (cross)
- │    │    │    ├── columns: ol_dist_info:21 ol_i_id:39 exists:50!null
+ │    │    │    ├── columns: ol_dist_info:21 ol_i_id:39 exists:49!null
  │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    │    │    ├── project
- │    │    │    │    ├── columns: exists:50!null ol_dist_info:21
+ │    │    │    │    ├── columns: exists:49!null ol_dist_info:21
  │    │    │    │    ├── group-by (hash)
- │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true_agg:49
+ │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 canary_agg:48
  │    │    │    │    │    ├── grouping columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null
  │    │    │    │    │    ├── key: (12-15)
- │    │    │    │    │    ├── fd: (12-15)-->(21,49)
+ │    │    │    │    │    ├── fd: (12-15)-->(21,48)
  │    │    │    │    │    ├── left-join (cross)
- │    │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 true:48
+ │    │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21 rowid:24 h_data:32
  │    │    │    │    │    │    ├── fd: (12-15)-->(21)
  │    │    │    │    │    │    ├── scan order_line
  │    │    │    │    │    │    │    ├── columns: ol_o_id:12!null ol_d_id:13!null ol_w_id:14!null ol_number:15!null ol_dist_info:21
  │    │    │    │    │    │    │    ├── key: (12-15)
  │    │    │    │    │    │    │    └── fd: (12-15)-->(21)
- │    │    │    │    │    │    ├── project
- │    │    │    │    │    │    │    ├── columns: true:48!null
- │    │    │    │    │    │    │    ├── fd: ()-->(48)
- │    │    │    │    │    │    │    ├── select
- │    │    │    │    │    │    │    │    ├── columns: h_data:32!null
- │    │    │    │    │    │    │    │    ├── scan history
- │    │    │    │    │    │    │    │    │    └── columns: h_data:32
- │    │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │    │         └── h_data:32 IS NOT NULL [outer=(32), constraints=(/32: (/NULL - ]; tight)]
- │    │    │    │    │    │    │    └── projections
- │    │    │    │    │    │    │         └── true [as=true:48]
+ │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    ├── columns: rowid:24!null h_data:32!null
+ │    │    │    │    │    │    │    ├── scan history
+ │    │    │    │    │    │    │    │    └── columns: rowid:24!null h_data:32
+ │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │         └── h_data:32 IS NOT NULL [outer=(32), constraints=(/32: (/NULL - ]; tight)]
  │    │    │    │    │    │    └── filters
  │    │    │    │    │    │         └── ol_dist_info:21 IS NOT NULL [outer=(21), constraints=(/21: (/NULL - ]; tight)]
  │    │    │    │    │    └── aggregations
- │    │    │    │    │         ├── const-not-null-agg [as=true_agg:49, outer=(48)]
- │    │    │    │    │         │    └── true:48
+ │    │    │    │    │         ├── const-not-null-agg [as=canary_agg:48, outer=(24)]
+ │    │    │    │    │         │    └── rowid:24
  │    │    │    │    │         └── const-agg [as=ol_dist_info:21, outer=(21)]
  │    │    │    │    │              └── ol_dist_info:21
  │    │    │    │    └── projections
- │    │    │    │         └── true_agg:49 IS NOT NULL [as=exists:50, outer=(49)]
+ │    │    │    │         └── canary_agg:48 IS NOT NULL [as=exists:49, outer=(48)]
  │    │    │    ├── limit
  │    │    │    │    ├── columns: ol_i_id:39!null
  │    │    │    │    ├── cardinality: [0 - 1]
@@ -1492,18 +1487,18 @@ project
  │    │    │    │    └── 1
  │    │    │    └── filters (true)
  │    │    └── filters
- │    │         └── exists:50 OR (ol_i_id:39 IS NOT NULL) [outer=(39,50)]
+ │    │         └── exists:49 OR (ol_i_id:39 IS NOT NULL) [outer=(39,49)]
  │    └── filters
  │         └── h_data:9 = ol_dist_info:21 [outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ]), fd=(9)==(21), (21)==(9)]
  └── projections
-      └── subquery [as=i_name:58, subquery]
+      └── subquery [as=i_name:57, subquery]
            └── limit
-                ├── columns: item.i_name:53
+                ├── columns: item.i_name:52
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(53)
+                ├── fd: ()-->(52)
                 ├── scan item
-                │    ├── columns: item.i_name:53
+                │    ├── columns: item.i_name:52
                 │    └── limit hint: 1.00
                 └── 1
 

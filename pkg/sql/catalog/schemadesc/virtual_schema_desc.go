@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package schemadesc
 
@@ -55,11 +50,12 @@ type virtual struct {
 var _ catalog.SchemaDescriptor = virtual{}
 var _ privilege.Object = virtual{}
 
-func (p virtual) GetID() descpb.ID                     { return p.id }
-func (p virtual) GetName() string                      { return p.name }
-func (p virtual) GetParentID() descpb.ID               { return descpb.InvalidID }
-func (p virtual) SchemaDesc() *descpb.SchemaDescriptor { return makeSyntheticSchemaDesc(p) }
-func (p virtual) DescriptorProto() *descpb.Descriptor  { return makeSyntheticDesc(p) }
+func (p virtual) GetID() descpb.ID                                  { return p.id }
+func (p virtual) GetName() string                                   { return p.name }
+func (p virtual) GetParentID() descpb.ID                            { return descpb.InvalidID }
+func (p virtual) SchemaDesc() *descpb.SchemaDescriptor              { return makeSyntheticSchemaDesc(p) }
+func (p virtual) DescriptorProto() *descpb.Descriptor               { return makeSyntheticDesc(p) }
+func (p virtual) GetReplicatedPCRVersion() descpb.DescriptorVersion { return 0 }
 
 type virtualBase struct{}
 

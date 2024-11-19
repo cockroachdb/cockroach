@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package roachpb
 
@@ -29,6 +24,11 @@ func TestParseVersion(t *testing.T) {
 		{s: "1000023.1-upgrading-to-1000023.2-step-004", v: Version{Major: 1000023, Minor: 1, Internal: 4}, roundtrip: true},
 		{s: "23.1-4", v: Version{Major: 23, Minor: 1, Internal: 4}},
 		{s: "23.1-upgrading-step-004", v: Version{Major: 23, Minor: 1, Internal: 4}},
+		// NB: The fence version for a final version will have Internal=-1.
+		{s: "23.2-upgrading-final-step", v: Version{Major: 23, Minor: 2, Internal: -1}, roundtrip: true},
+		// We used to have unintuitive formatting logic for the -1 internal version.
+		// See https://github.com/cockroachdb/cockroach/issues/129460.
+		{s: "23.2-upgrading-step--01", v: Version{Major: 23, Minor: 2, Internal: -1}},
 	}
 	for _, tc := range testData {
 		t.Run("", func(t *testing.T) {
@@ -93,7 +93,7 @@ func TestReleaseSeriesSuccessor(t *testing.T) {
 	for ok := true; ok; r, ok = r.Successor() {
 		seq = append(seq, r.String())
 	}
-	expected := "20.1, 20.2, 21.1, 21.2, 22.1, 22.2, 23.1, 23.2, 24.1, 24.2, 24.3"
+	expected := "20.1, 20.2, 21.1, 21.2, 22.1, 22.2, 23.1, 23.2, 24.1, 24.2, 24.3, 25.1"
 	require.Equal(t, expected, strings.Join(seq, ", "))
 }
 

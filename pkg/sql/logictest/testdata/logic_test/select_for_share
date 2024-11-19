@@ -40,7 +40,7 @@ user testuser2
 statement async writeReq count 1
 UPDATE t SET a = 2 WHERE a = 1
 
-skipif config local-read-committed
+skipif config weak-iso-level-configs
 query TTTTTTTBB colnames,retry,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
 ----
@@ -57,6 +57,15 @@ database_name  schema_name  table_name  lock_key_pretty   lock_strength  durabil
 test           public       t           /Table/106/1/1/0  Shared         Replicated  READ_COMMITTED   true     true
 test           public       t           /Table/106/1/1/0  Exclusive      Replicated  READ_COMMITTED   false    true
 test           public       t           /Table/106/1/1/0  Shared         Replicated  READ_COMMITTED   true     true
+
+onlyif config local-repeatable-read
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, replace(isolation_level, ' ', '_') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability  isolation_level  granted  contended
+test           public       t           /Table/106/1/1/0  Shared         Replicated  REPEATABLE_READ  true     true
+test           public       t           /Table/106/1/1/0  Exclusive      Replicated  REPEATABLE_READ  false    true
+test           public       t           /Table/106/1/1/0  Shared         Replicated  REPEATABLE_READ  true     true
 
 # Commit the first transaction and rollback the second.
 
@@ -128,14 +137,14 @@ user testuser2
 statement ok
 SET enable_shared_locking_for_serializable = true
 
-skipif config local-read-committed
+skipif config weak-iso-level-configs
 query TTTTTTTBB colnames,retry,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
 test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 query TTTTTTTBB colnames,retry,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
 ----
@@ -151,7 +160,7 @@ SELECT * FROM t FOR SHARE SKIP LOCKED
 
 user root
 
-skipif config local-read-committed
+skipif config weak-iso-level-configs
 query TTTTTTTBB colnames,retry,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
 ----
@@ -159,7 +168,7 @@ database_name  schema_name  table_name  lock_key_pretty   lock_strength  durabil
 test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
 test           public       t           /Table/106/1/2/0  Shared         Unreplicated  SERIALIZABLE     true     false
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 query TTTTTTTBB colnames,retry,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
 ----
@@ -206,11 +215,6 @@ SELECT * FROM t WHERE a = 1 FOR SHARE;
 1
 
 user root
-
-query TTTTTTTBB colnames,retry,rowsort
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
-----
-database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  isolation_level  granted  contended
 
 # Locks:
 # 1: Shared

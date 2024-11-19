@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 @import "../core/index.module.scss";
 
 .box-highlight {
@@ -71,12 +66,12 @@
   margin: 15px 0;
 }
 
-:global(.ant-tooltip) {
+:global(.crl-ant-tooltip) {
   &:global(.hljs) {
-    &:global(.ant-tooltip-content) {
+    &:global(.crl-ant-tooltip-content) {
       width: 535px;
     }
-    &:global(.ant-tooltip-inner) {
+    &:global(.crl-ant-tooltip-inner) {
       background-color: $colors--neutral-8;
       padding: 8px;
     }

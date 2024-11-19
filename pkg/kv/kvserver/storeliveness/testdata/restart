@@ -3,8 +3,9 @@
 # records, but keeps all metadata and supportFor records.
 # -------------------------------------------------------------
 
-add-store node-id=2 store-id=2
+support-from node-id=2 store-id=2
 ----
+epoch: 0, expiration: 0,0
 
 # -------------------------------------------------------------
 # Store (n1, s1) establishes support for and from (n2, s2).
@@ -49,9 +50,14 @@ support for:
 
 # -------------------------------------------------------------
 # Store (n1, s1) restarts.
+# When restarting, the clock should be at least MaxRequested;
+# otherwise, the test will hang while trying to sleep until
+# MaxRequested. This test uses a manual clock, so it will never
+# progress on its own. Clock-related properties are tested in
+# TestSupportManagerRestart.
 # -------------------------------------------------------------
 
-restart
+restart now=300 grace-period=10s
 ----
 
 debug-requester-state
@@ -67,23 +73,83 @@ meta:
 support for:
 {Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0}
 
+debug-metrics
+----
+HeartbeatSuccess: 0, HeartbeatFailure: 0
+MessageHandleSuccess: 0, MessageHandleFailure: 0
+SupportWithdrawSuccess: 0, SupportWithdrawFailure: 0
+SupportFromStores: 0, SupportForStores: 1
+
+# -------------------------------------------------------------
+# Store (n1, s1) receives an old heartbeat response from store
+# (n2, s2) after restarting. It's ignored
+# -------------------------------------------------------------
+
+handle-messages
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=2 epoch=4 expiration=200
+----
+
+debug-requester-state
+----
+meta:
+{MaxEpoch:3 MaxRequested:110.000000000,0}
+support from:
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) attempts to withdraw support before the grace
+# period has elapsed.
+# -------------------------------------------------------------
+
+withdraw-support now=310
+----
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:201.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0}
+
+# -------------------------------------------------------------
+# Store (n1, s1) withdraws support after the grace period.
+# -------------------------------------------------------------
+
+withdraw-support now=311
+----
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:311.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:4 Expiration:0,0}
+
 # -------------------------------------------------------------
 # Store (n1, s1) sends heartbeats but it forgot about support
 # from (n2, s2), so it doesn't send any heartbeats.
 # -------------------------------------------------------------
 
-send-heartbeats now=200 liveness-interval=10s
+send-heartbeats now=400 liveness-interval=10s
 ----
 heartbeats:
 
-add-store node-id=2 store-id=2
+support-from node-id=2 store-id=2
 ----
+epoch: 0, expiration: 0,0
 
 # -------------------------------------------------------------
 # Store (n1, s1) sends heartbeats with an incremented epoch.
 # -------------------------------------------------------------
 
-send-heartbeats now=200 liveness-interval=10s
+send-heartbeats now=500 liveness-interval=10s
 ----
 heartbeats:
-{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:3 Expiration:210.000000000,0}
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:3 Expiration:510.000000000,0}
+
+debug-metrics
+----
+HeartbeatSuccess: 1, HeartbeatFailure: 0
+MessageHandleSuccess: 1, MessageHandleFailure: 0
+SupportWithdrawSuccess: 1, SupportWithdrawFailure: 0
+SupportFromStores: 1, SupportForStores: 1

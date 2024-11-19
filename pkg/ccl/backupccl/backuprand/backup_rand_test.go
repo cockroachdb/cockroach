@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backuprand
 
@@ -166,9 +163,7 @@ database_name = 'rand' AND schema_name = 'public'`)
 	withOnlineRestore := func() string {
 		onlineRestoreExtension := ""
 		if rng.Intn(2) != 0 {
-			// TODO(msbutler): once this test is deflaked, add back the online restore
-			// variant of this test.
-			onlineRestoreExtension = ""
+			onlineRestoreExtension = ", experimental deferred copy"
 		}
 		return onlineRestoreExtension
 	}

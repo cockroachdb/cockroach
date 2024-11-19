@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2023 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # This script is the second step of the "Publish Coverage" build.
 #
 # It takes some of the lcov files produced by the previous step and generates

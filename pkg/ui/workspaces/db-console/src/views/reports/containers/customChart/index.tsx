@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 import flatMap from "lodash/flatMap";
@@ -121,15 +116,16 @@ export class CustomChart extends React.Component<
       const base = [{ value: "", label: "Cluster" }];
       return base.concat(
         flow(
-          (statuses: INodeStatus[]) => map(
-            statuses,
-            ns => ({
+          (statuses: INodeStatus[]) =>
+            map(statuses, ns => ({
               value: ns.desc.node_id.toString(),
               label: nodeDisplayNameByID[ns.desc.node_id],
-            })
-          ),
-          values => sortBy(values, value => startsWith(value.label, "[decommissioned]"))
-        )(nodeStatuses)
+            })),
+          values =>
+            sortBy(values, value =>
+              startsWith(value.label, "[decommissioned]"),
+            ),
+        )(nodeStatuses),
       );
     },
   );
@@ -381,8 +377,8 @@ export class CustomChart extends React.Component<
     // TODO(radu): remove this when we upgrade to a better component.
     return (
       <>
-        <Helmet title="Custom Chart | Debug"/>
-        <BackToAdvanceDebug history={this.props.history}/>
+        <Helmet title="Custom Chart | Debug" />
+        <BackToAdvanceDebug history={this.props.history} />
         <section className="section">
           <h1 className="base-heading">Custom Chart</h1>
         </section>
@@ -405,11 +401,22 @@ export class CustomChart extends React.Component<
             <div className="chart-group l-columns__left">
               {this.renderCharts()}
             </div>
-            <div className="l-columns__right"/>
+            <div className="l-columns__right" />
           </div>
         </section>
         <section className="section">{this.renderChartTables()}</section>
-        <br/><br/><br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>
+        <br />
+        <br />
+        <br />
+        <br />
+        <br />
+        <br />
+        <br />
+        <br />
+        <br />
+        <br />
+        <br />
+        <br />
       </>
     );
   }

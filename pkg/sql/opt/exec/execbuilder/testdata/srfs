@@ -347,13 +347,13 @@ vectorized: true
             │ columns: (id, data, "?column?")
             │
             └── • hash join (left outer)
-                │ columns: (column12, id, data, column13, "?column?")
+                │ columns: (column16, id, data, column17, "?column?")
                 │ estimated row count: 10,000 (missing stats)
-                │ equality: (column12) = (column13)
+                │ equality: (column16) = (column17)
                 │
                 ├── • render
-                │   │ columns: (column12, id, data)
-                │   │ render column12: data->>'name'
+                │   │ columns: (column16, id, data)
+                │   │ render column16: data->>'name'
                 │   │ render id: id
                 │   │ render data: data
                 │   │
@@ -364,8 +364,8 @@ vectorized: true
                 │         spans: FULL SCAN
                 │
                 └── • render
-                    │ columns: (column13, "?column?")
-                    │ render column13: data->>'name'
+                    │ columns: (column17, "?column?")
+                    │ render column17: data->>'name'
                     │ render ?column?: data->'members'
                     │
                     └── • scan

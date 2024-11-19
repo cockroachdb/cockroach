@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 /*
 Each node attempts to contact peer nodes to gather all Infos in
@@ -90,7 +85,7 @@ const (
 	// defaultStallInterval is the default interval for checking whether
 	// the incoming and outgoing connections to the gossip network are
 	// insufficient to keep the network connected.
-	defaultStallInterval = 2 * time.Second
+	defaultStallInterval = 1 * time.Second
 
 	// defaultBootstrapInterval is the minimum time between successive
 	// bootstrapping attempts to avoid busy-looping trying to find the

@@ -870,7 +870,7 @@ project
  └── scan inv@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
-      │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
+      │    └── spans: ["x"/"y", "x"/"y"]
       ├── flags: force-index=partial
       ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
       └── key: (1)
@@ -887,7 +887,7 @@ index-join inv
  └── scan inv@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
-      │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
+      │    └── spans: ["x"/"y", "x"/"y"]
       ├── flags: force-index=partial
       ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
       └── key: (1)
@@ -914,7 +914,7 @@ project
       │    └── scan inv@partial,inverted,partial
       │         ├── columns: k:1(int!null)
       │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
+      │         │    └── spans: ["x"/"y", "x"/"y"]
       │         ├── flags: force-index=partial
       │         ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
       │         └── key: (1)
@@ -938,7 +938,7 @@ select
  │    └── scan inv@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
+ │         │    └── spans: ["x"/"y", "x"/"y"]
  │         ├── flags: force-index=partial
  │         ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
  │         └── key: (1)
@@ -962,7 +962,7 @@ select
  │    └── scan inv@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7x\x00\x01\x12y\x00\x01", "7x\x00\x01\x12y\x00\x01"]
+ │         │    └── spans: ["x"/"y", "x"/"y"]
  │         ├── flags: force-index=partial
  │         ├── stats: [rows=2.204409, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
  │         └── key: (1)
@@ -1047,7 +1047,7 @@ project
  └── scan inv_hist@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
-      │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
+      │    └── spans: ["g"/7, "g"/7]
       ├── flags: force-index=partial
       ├── stats: [rows=20, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
       │   histogram(4)=  0     10     0     10
@@ -1070,7 +1070,7 @@ index-join inv_hist
  └── scan inv_hist@partial,inverted,partial
       ├── columns: k:1(int!null)
       ├── inverted constraint: /7/1
-      │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
+      │    └── spans: ["g"/7, "g"/7]
       ├── flags: force-index=partial
       ├── stats: [rows=20, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
       │   histogram(4)=  0     10     0     10
@@ -1103,7 +1103,7 @@ project
       │    └── scan inv_hist@partial,inverted,partial
       │         ├── columns: k:1(int!null)
       │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
+      │         │    └── spans: ["g"/7, "g"/7]
       │         ├── flags: force-index=partial
       │         ├── stats: [rows=20, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
       │         │   histogram(4)=  0     10     0     10
@@ -1133,7 +1133,7 @@ select
  │    └── scan inv_hist@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
+ │         │    └── spans: ["g"/7, "g"/7]
  │         ├── flags: force-index=partial
  │         ├── stats: [rows=20, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
  │         │   histogram(4)=  0     10     0     10
@@ -1165,7 +1165,7 @@ select
  │    └── scan inv_hist@partial,inverted,partial
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /7/1
- │         │    └── spans: ["7g\x00\x01*\x0e\x00", "7g\x00\x01*\x0e\x00"]
+ │         │    └── spans: ["g"/7, "g"/7]
  │         ├── flags: force-index=partial
  │         ├── stats: [rows=20, distinct(4)=2, null(4)=0, distinct(7)=1, null(7)=0, distinct(4,7)=2, null(4,7)=0]
  │         │   histogram(4)=  0     10     0     10
@@ -1252,8 +1252,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── stats: [rows=16.66667, distinct(1)=16.6667, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=16.6667, null(7)=0]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── key: (1,7)
       └── filters
            └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
@@ -1298,8 +1297,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── stats: [rows=16.66667, distinct(1)=16.6667, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=16.6667, null(7)=0]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── key: (1,7)
       └── filters
            ├── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
            └── s:3 = 'banana' [type=bool, outer=(3), constraints=(/3: [/'banana' - /'banana']; tight), fd=()-->(3)]
@@ -1365,8 +1363,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── stats: [rows=8.547009, distinct(1)=8.54701, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=8.54701, null(7)=0]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── key: (1,7)
       └── filters
            └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
@@ -1409,8 +1406,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── stats: [rows=8.547009, distinct(1)=8.54701, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=8.54701, null(7)=0]
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── key: (1,7)
       └── filters
            ├── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
            └── s:3 = 'banana' [type=bool, outer=(3), constraints=(/3: [/'banana' - /'banana']; tight), fd=()-->(3)]
@@ -1503,8 +1499,7 @@ project
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(7)=  0             0              1.8225e-10            100             18.757             0              0             0
       │              │                <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── key: (1,7)
       └── filters
            └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
@@ -1555,8 +1550,7 @@ project
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(7)=  0             0              1.8225e-10            100             18.757             0              0             0
       │              │                <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── key: (1,7)
       └── filters
            ├── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
            └── s:3 = 'banana' [type=bool, outer=(3), constraints=(/3: [/'banana' - /'banana']; tight), fd=()-->(3)]
@@ -1643,8 +1637,7 @@ project
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(7)=  0             0              1.8657e-10           102.37           19.201             0              0             0
       │              │                <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── key: (1,7)
       └── filters
            └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
@@ -1693,8 +1686,7 @@ project
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(7)=  0             0              1.8657e-10           102.37           19.201             0              0             0
       │              │                <--- '\x42fd1000000000000001' ------------ '\x42fd1000000100000000' -------- '\x42fd1200000000000000' --- '\x42fd1400000000000001'
-      │              ├── key: (1)
-      │              └── fd: (1)-->(7)
+      │              └── key: (1,7)
       └── filters
            ├── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
            └── s:3 = 'banana' [type=bool, outer=(3), constraints=(/3: [/'banana' - /'banana']; tight), fd=()-->(3)]

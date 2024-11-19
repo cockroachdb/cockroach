@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colexecbase_test
 
@@ -82,7 +77,7 @@ func TestRandomizedCast(t *testing.T) {
 		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(t, testAllocator,
 			[]colexectestutils.Tuples{input}, [][]*types.T{{from}}, output, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return colexecbase.GetCastOperator(testAllocator, input[0], 0, 1, from, to, &evalCtx)
+				return colexecbase.GetCastOperator(ctx, testAllocator, input[0], 0, 1, from, to, &evalCtx)
 			}, func(err error) {
 				if !errorExpected {
 					t.Fatal(err)
@@ -123,7 +118,7 @@ func BenchmarkCastOp(b *testing.B) {
 							coldata.BatchSize(), nullProbability, selectivity,
 						)
 						source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-						op, err := colexecbase.GetCastOperator(testAllocator, source, 0, 1, typePair[0], typePair[1], &evalCtx)
+						op, err := colexecbase.GetCastOperator(ctx, testAllocator, source, 0, 1, typePair[0], typePair[1], &evalCtx)
 						require.NoError(b, err)
 						b.SetBytes(int64(8 * coldata.BatchSize()))
 						b.ResetTimer()

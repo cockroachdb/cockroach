@@ -2218,6 +2218,7 @@ Session represents one SQL session.
 | pg_backend_pid | [uint32](#cockroach.server.serverpb.ListSessionsResponse-uint32) |  | The numerical ID attached to the session which is used to mimic a Postgres backend PID for compatibility with the query cancellation protocol. Unlike in Postgres, this value does not correspond to a real process ID. | [reserved](#support-status) |
 | trace_id | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | The ID of the session's active trace. It will be 0 if tracing is off. | [reserved](#support-status) |
 | goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
+| authentication_method | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 
 
 
@@ -2367,6 +2368,7 @@ Session represents one SQL session.
 | pg_backend_pid | [uint32](#cockroach.server.serverpb.ListSessionsResponse-uint32) |  | The numerical ID attached to the session which is used to mimic a Postgres backend PID for compatibility with the query cancellation protocol. Unlike in Postgres, this value does not correspond to a real process ID. | [reserved](#support-status) |
 | trace_id | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) |  | The ID of the session's active trace. It will be 0 if tracing is off. | [reserved](#support-status) |
 | goroutine_id | [int64](#cockroach.server.serverpb.ListSessionsResponse-int64) |  | The ID of the session's goroutine. | [reserved](#support-status) |
+| authentication_method | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 
 
 
@@ -3651,9 +3653,9 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | range_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | range_id indicates Range ID that's identified as hot range. | [reserved](#support-status) |
 | node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | node_id indicates the node that contains the current hot range. | [reserved](#support-status) |
 | qps | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | qps (queries per second) shows the amount of queries that interact with current range. | [reserved](#support-status) |
-| table_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | table_name indicates the SQL table that the range belongs to. | [reserved](#support-status) |
-| database_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | database_name indicates on database that has current hot range. | [reserved](#support-status) |
-| index_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | index_name indicates the index name for current range. | [reserved](#support-status) |
+| table_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | table_name has been deprecated in favor of tables = 16; | [reserved](#support-status) |
+| database_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | database_name has been deprecated in favor of databases = 17; | [reserved](#support-status) |
+| index_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | index_name has been deprecated in favor of indexes = 17; | [reserved](#support-status) |
 | replica_node_ids | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) | repeated | replica_node_ids specifies the list of node ids that contain replicas with current hot range. | [reserved](#support-status) |
 | leaseholder_node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | leaseholder_node_id indicates the Node ID that is the current leaseholder for the given range. | [reserved](#support-status) |
 | schema_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | schema_name provides the name of schema (if exists) for table in current range. | [reserved](#support-status) |
@@ -3663,6 +3665,9 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | write_bytes_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | write_bytes_per_second is the recent number of bytes written per second on this range. | [reserved](#support-status) |
 | read_bytes_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | read_bytes_per_second is the recent number of bytes read per second on this range. | [reserved](#support-status) |
 | cpu_time_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | CPU time (ns) per second is the recent cpu usage per second on this range. | [reserved](#support-status) |
+| databases | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Databases for the range. | [reserved](#support-status) |
+| tables | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Tables for the range | [reserved](#support-status) |
+| indexes | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) | repeated | Indexes for the range | [reserved](#support-status) |
 
 
 
@@ -4949,6 +4954,7 @@ Response object returned by TableIndexStatsResponse.
 | statistics | [TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.server.serverpb.TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics) | repeated |  | [reserved](#support-status) |
 | last_reset | [google.protobuf.Timestamp](#cockroach.server.serverpb.TableIndexStatsResponse-google.protobuf.Timestamp) |  | Timestamp of the latest reset index usage statistics request. | [reserved](#support-status) |
 | index_recommendations | [cockroach.sql.IndexRecommendation](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.sql.IndexRecommendation) | repeated |  | [reserved](#support-status) |
+| database_id | [int32](#cockroach.server.serverpb.TableIndexStatsResponse-int32) |  | database_id is the ID of the database that contains the table. | [reserved](#support-status) |
 
 
 
@@ -5403,6 +5409,100 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | files | [string](#cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse-string) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+## UpdateTableMetadataCache
+
+
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| local | [bool](#cockroach.server.serverpb.UpdateTableMetadataCacheRequest-bool) |  | If true, the server will attempt to send a signal to the table metadata job by notifying the channel set on the status server. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+## GetThrottlingMetadata
+
+`GET /_status/throttling`
+
+GetThrottlingMetadata is used by the DB Console to retrieve
+information regarding current or upcoming throttling the cluster
+may experience.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.GetThrottlingMetadataRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+GetThrottlingMetadataResponse contains all information necessary to
+show throttling warnings and alerts in DB Console.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| throttled | [bool](#cockroach.server.serverpb.GetThrottlingMetadataResponse-bool) |  | throttled is true if at least one node in the cluster is actively being throttled. | [reserved](#support-status) |
+| throttleExplanation | [string](#cockroach.server.serverpb.GetThrottlingMetadataResponse-string) |  | if throttled is true, this will contain a string explaning why, generated from the SQL enforcer. | [reserved](#support-status) |
+| hasGracePeriod | [bool](#cockroach.server.serverpb.GetThrottlingMetadataResponse-bool) |  | hasGracePeriod is true if the cluster has an active grace period before throttling kicks in after license expiry. Enterprise licenses do not have grace periods when they expire. | [reserved](#support-status) |
+| gracePeriodEndSeconds | [int64](#cockroach.server.serverpb.GetThrottlingMetadataResponse-int64) |  | gracePeriodEndSeconds is the unix timestamp when the grace period ends. | [reserved](#support-status) |
+| hasTelemetryDeadline | [bool](#cockroach.server.serverpb.GetThrottlingMetadataResponse-bool) |  | hasTelemetryDeadline is true if this cluster requires telemetry to be delivered. | [reserved](#support-status) |
+| telemetryDeadlineSeconds | [int64](#cockroach.server.serverpb.GetThrottlingMetadataResponse-int64) |  | telemetryDeadlineSeconds is the unix timestamp when the telemetry deadline must be met. After this the cluster will be throttled. | [reserved](#support-status) |
+| lastTelemetryReceivedSeconds | [int64](#cockroach.server.serverpb.GetThrottlingMetadataResponse-int64) |  | lastTelemetryReceivedSeconds is the unix timestamp when we last delivered telemetry. | [reserved](#support-status) |
+| nodeIdsWithTelemetryProblems | [string](#cockroach.server.serverpb.GetThrottlingMetadataResponse-string) | repeated | nodeIdsWithTelemetryProblems collects a list of nodes that are delinquent with telemetry. This is useful for reporting because the cluster could have partial telemetry delivery failure and it's helpful to surface this in DB Console. | [reserved](#support-status) |
 
 
 
@@ -7088,7 +7188,6 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | replica_count_by_node_id | [DataDistributionResponse.TableInfo.ReplicaCountByNodeIdEntry](#cockroach.server.serverpb.DataDistributionResponse-cockroach.server.serverpb.DataDistributionResponse.TableInfo.ReplicaCountByNodeIdEntry) | repeated |  | [reserved](#support-status) |
-| zone_config_id | [int64](#cockroach.server.serverpb.DataDistributionResponse-int64) |  |  | [reserved](#support-status) |
 | dropped_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.DataDistributionResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 
 
@@ -8023,6 +8122,55 @@ Support status: [reserved](#support-status)
 | tenant_name | [string](#cockroach.server.serverpb.ListTenantsResponse-string) |  |  | [reserved](#support-status) |
 | sql_addr | [string](#cockroach.server.serverpb.ListTenantsResponse-string) |  |  | [reserved](#support-status) |
 | rpc_addr | [string](#cockroach.server.serverpb.ListTenantsResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+## ReadFromTenantInfo
+
+
+
+ReadFromTenantInfo returns the tenant from which the requesting tenant
+should read, if any.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+ReadFromTenantInfoRequest requests info, if any, on which tenant the caller
+should read from.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| tenant_id | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ReadFromTenantInfoRequest-cockroach.roachpb.TenantID) |  | TenantID should always be the ID of the tenant making the request. This duplicates the ID in the auth context that is added implicitly, and must always match that ID when that ID is present, however that ID is absent in insecure test clusters which is why we also specify it explicitly here. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+ReadFromTenantInfoResponse instructs a tenant as to which tenant, if any, it
+should configure itself to read from and the timestamp at which it should do
+so.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| read_from | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ReadFromTenantInfoResponse-cockroach.roachpb.TenantID) |  |  | [reserved](#support-status) |
+| read_at | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.ReadFromTenantInfoResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+
 
 
 

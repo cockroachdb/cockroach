@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package asciitsdb
 
@@ -15,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -185,6 +181,23 @@ func (t *TSDB) read(metric string) ([]float64, bool) {
 
 	points, ok := t.mu.points[metric]
 	return points, ok
+}
+
+// RegisteredMetricNames returns a list of all metric names that have been
+// registerd with TSDB via Register(..).
+func (t *TSDB) RegisteredMetricNames() []string {
+	var names []string
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	for metric := range t.mu.points {
+		names = append(names, metric)
+	}
+
+	// For deterministic output.
+	sort.Strings(names)
+
+	return names
 }
 
 func (t *TSDB) registerMetricValue(val reflect.Value, name string, skipNil bool) {

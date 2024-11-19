@@ -81,6 +81,21 @@ func (mr *MockTenantStatusServerMockRecorder) Nodes(arg0, arg1 interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nodes", reflect.TypeOf((*MockTenantStatusServer)(nil).Nodes), arg0, arg1)
 }
 
+// Ranges mocks base method.
+func (m *MockTenantStatusServer) Ranges(arg0 context.Context, arg1 *serverpb.RangesRequest) (*serverpb.RangesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Ranges", arg0, arg1)
+	ret0, _ := ret[0].(*serverpb.RangesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Ranges indicates an expected call of Ranges.
+func (mr *MockTenantStatusServerMockRecorder) Ranges(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ranges", reflect.TypeOf((*MockTenantStatusServer)(nil).Ranges), arg0, arg1)
+}
+
 // Regions mocks base method.
 func (m *MockTenantStatusServer) Regions(arg0 context.Context, arg1 *serverpb.RegionsRequest) (*serverpb.RegionsResponse, error) {
 	m.ctrl.T.Helper()

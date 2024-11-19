@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -35,6 +30,7 @@ func main() {
 	var gcsBucket string
 	var outputDirectory string
 	var buildTagOverride string
+	var thirdPartyNoticesFileOverride string
 	var doProvisional bool
 	var isRelease bool
 	var doBless bool
@@ -44,6 +40,7 @@ func main() {
 	flag.StringVar(&outputDirectory, "output-directory", "",
 		"Save local copies of uploaded release archives in this directory")
 	flag.StringVar(&buildTagOverride, "build-tag-override", "", "override the version from version.txt")
+	flag.StringVar(&thirdPartyNoticesFileOverride, "third-party-notices-file", "", "override the file with third party notices")
 	flag.BoolVar(&doProvisional, "provisional", false, "publish provisional binaries")
 	flag.BoolVar(&doBless, "bless", false, "bless provisional binaries")
 
@@ -89,26 +86,28 @@ func main() {
 	}
 
 	run(providers, platforms, runFlags{
-		doProvisional:    doProvisional,
-		doBless:          doBless,
-		isRelease:        isRelease,
-		buildTagOverride: buildTagOverride,
-		branch:           branch,
-		pkgDir:           pkg,
-		sha:              string(bytes.TrimSpace(shaOut)),
-		outputDirectory:  outputDirectory,
+		doProvisional:                 doProvisional,
+		doBless:                       doBless,
+		isRelease:                     isRelease,
+		buildTagOverride:              buildTagOverride,
+		branch:                        branch,
+		pkgDir:                        pkg,
+		sha:                           string(bytes.TrimSpace(shaOut)),
+		outputDirectory:               outputDirectory,
+		thirdPartyNoticesFileOverride: thirdPartyNoticesFileOverride,
 	}, release.ExecFn{})
 }
 
 type runFlags struct {
-	doProvisional    bool
-	doBless          bool
-	isRelease        bool
-	buildTagOverride string
-	branch           string
-	sha              string
-	pkgDir           string
-	outputDirectory  string
+	doProvisional                 bool
+	doBless                       bool
+	isRelease                     bool
+	buildTagOverride              string
+	branch                        string
+	sha                           string
+	pkgDir                        string
+	outputDirectory               string
+	thirdPartyNoticesFileOverride string
 }
 
 func run(
@@ -187,13 +186,17 @@ func run(
 					)
 				}
 			} else {
+				thirdPartyNoticesFile := filepath.Join(o.PkgDir, "licenses", "THIRD-PARTY-NOTICES.txt")
+				if flags.thirdPartyNoticesFileOverride != "" {
+					thirdPartyNoticesFile = flags.thirdPartyNoticesFileOverride
+				}
 				licenseFiles := []release.ArchiveFile{
 					{
-						LocalAbsolutePath: filepath.Join(o.PkgDir, "licenses", "LICENSE.txt"),
-						ArchiveFilePath:   "LICENSE.txt",
+						LocalAbsolutePath: filepath.Join(o.PkgDir, "LICENSE"),
+						ArchiveFilePath:   "LICENSE",
 					},
 					{
-						LocalAbsolutePath: filepath.Join(o.PkgDir, "licenses", "THIRD-PARTY-NOTICES.txt"),
+						LocalAbsolutePath: thirdPartyNoticesFile,
 						ArchiveFilePath:   "THIRD-PARTY-NOTICES.txt",
 					},
 				}

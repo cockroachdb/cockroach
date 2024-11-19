@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -57,6 +52,11 @@ func runMultiStoreRemove(ctx context.Context, t test.Test, c cluster.Cluster) {
 	t.Status("starting cluster")
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.StoreCount = multiStoreStoresPerNode
+	// TODO(jackson): Allow WAL failover to be enabled once it's able to
+	// tolerate the removal of a store. Today, the mapping of failover
+	// secondaries is fixed, making WAL failover incompatible with the removal
+	// of a store.
+	startOpts.RoachprodOpts.WALFailover = ""
 	startSettings := install.MakeClusterSettings()
 	// Speed up the replicate queue.
 	startSettings.Env = append(startSettings.Env, "COCKROACH_SCAN_INTERVAL=30s")

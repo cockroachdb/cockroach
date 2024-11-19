@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package randclient
 
@@ -38,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -299,7 +297,10 @@ func (r *randomEventGenerator) generateNewEvent() (crosscluster.Event, error) {
 		hlcResolvedTime := hlc.Timestamp{WallTime: resolvedTime.UnixNano()}
 		resolvedSpan := jobspb.ResolvedSpan{Span: sp, Timestamp: hlcResolvedTime}
 		r.numEventsSinceLastResolved = 0
-		return crosscluster.MakeCheckpointEvent([]jobspb.ResolvedSpan{resolvedSpan}), nil
+		checkpoint := &streampb.StreamEvent_StreamCheckpoint{
+			ResolvedSpans: []jobspb.ResolvedSpan{resolvedSpan},
+		}
+		return crosscluster.MakeCheckpointEvent(checkpoint), nil
 	}
 
 	// If there are system KVs to emit, prioritize those.
@@ -706,12 +707,8 @@ func randDatumsForTable(rng *rand.Rand, td catalog.TableDescriptor) ([]tree.Datu
 		if c.IsComputed() {
 			return nil, errors.Errorf("unable to generate random datums for table with computed column %q", c.GetName())
 		}
-		if c.GetName() == "crdb_replication_origin_timestamp" {
-			datums = append(datums, tree.DNull)
-		} else {
-			datums = append(datums,
-				randgen.RandDatum(rng, c.GetType(), c.IsNullable()))
-		}
+		datums = append(datums,
+			randgen.RandDatum(rng, c.GetType(), c.IsNullable()))
 	}
 	return datums, nil
 }
@@ -720,9 +717,8 @@ func duplicateEvent(event crosscluster.Event) crosscluster.Event {
 	var dup crosscluster.Event
 	switch event.Type() {
 	case crosscluster.CheckpointEvent:
-		resolvedSpans := make([]jobspb.ResolvedSpan, len(event.GetResolvedSpans()))
-		copy(resolvedSpans, event.GetResolvedSpans())
-		dup = crosscluster.MakeCheckpointEvent(resolvedSpans)
+		checkpointClone := protoutil.Clone(event.GetCheckpoint()).(*streampb.StreamEvent_StreamCheckpoint)
+		dup = crosscluster.MakeCheckpointEvent(checkpointClone)
 	case crosscluster.KVEvent:
 		kvs := event.GetKVs()
 		res := make([]roachpb.KeyValue, len(kvs))

@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package batcheval
 
@@ -22,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -58,28 +54,44 @@ func ConditionalPut(
 		ts = h.Timestamp
 	}
 
-	handleMissing := storage.CPutMissingBehavior(args.AllowIfDoesNotExist)
+	if err := args.Validate(); err != nil {
+		return result.Result{}, err
+	}
 
-	opts := storage.MVCCWriteOptions{
-		Txn:                            h.Txn,
-		LocalTimestamp:                 cArgs.Now,
-		Stats:                          cArgs.Stats,
-		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
-		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
-		OriginID:                       h.WriteOptions.GetOriginID(),
-		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		Category:                       fs.BatchEvalReadCategory,
+	originTimestampForValueHeader := h.WriteOptions.GetOriginTimestamp()
+	if args.OriginTimestamp.IsSet() {
+		originTimestampForValueHeader = args.OriginTimestamp
+	}
+	if args.OriginTimestamp.IsSet() && h.WriteOptions.GetOriginTimestamp().IsSet() {
+		return result.Result{}, errors.AssertionFailedf("OriginTimestamp cannot be passed via CPut arg and in request header")
+	}
+
+	opts := storage.ConditionalPutWriteOptions{
+		MVCCWriteOptions: storage.MVCCWriteOptions{
+			Txn:                            h.Txn,
+			LocalTimestamp:                 cArgs.Now,
+			Stats:                          cArgs.Stats,
+			ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+			OmitInRangefeeds:               cArgs.OmitInRangefeeds,
+			OriginID:                       h.WriteOptions.GetOriginID(),
+			OriginTimestamp:                originTimestampForValueHeader,
+			MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+			TargetLockConflictBytes:        storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+			Category:                       fs.BatchEvalReadCategory,
+		},
+		AllowIfDoesNotExist:         storage.CPutMissingBehavior(args.AllowIfDoesNotExist),
+		OriginTimestamp:             args.OriginTimestamp,
+		ShouldWinOriginTimestampTie: args.ShouldWinOriginTimestampTie,
 	}
 
 	var err error
 	var acq roachpb.LockAcquisition
 	if args.Blind {
 		acq, err = storage.MVCCBlindConditionalPut(
-			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, opts)
+			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, opts)
 	} else {
 		acq, err = storage.MVCCConditionalPut(
-			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, opts)
+			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, opts)
 	}
 	if err != nil {
 		return result.Result{}, err

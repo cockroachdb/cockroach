@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 //
 // Processor definitions for distributed SQL APIs. See
 // docs/RFCS/distributed_sql.md.
@@ -443,8 +438,7 @@ message GenerativeSplitAndScatterSpec {
   // Spans is the required spans in the restore.
   repeated roachpb.Span spans = 10 [(gogoproto.nullable) = false];
   repeated jobs.jobspb.RestoreDetails.BackupLocalityInfo backup_locality_info = 11 [(gogoproto.nullable) = false];
-  // HighWater is the high watermark of the previous run of restore.
-  optional bytes high_water = 12;
+  reserved 12;
   // User who initiated the restore.
   optional string user_proto = 13 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
   // ChunkSize is the number of import spans per chunk.
@@ -456,7 +450,7 @@ message GenerativeSplitAndScatterSpec {
   // NumNodes is the number of nodes available for dist restore.
   optional int64 num_nodes = 17[(gogoproto.nullable) = false];
   optional int64 job_id = 18 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
-  optional bool use_frontier_checkpointing = 20 [(gogoproto.nullable) = false];
+  reserved 20 ;
   repeated jobs.jobspb.RestoreProgress.FrontierEntry checkpointed_spans = 21 [(gogoproto.nullable) = false];
   // ExclusiveFileSpanComparison is true if the backup can safely use
   // exclusive file span comparison.
@@ -527,15 +521,19 @@ message LogicalReplicationWriterSpec {
     // Checkpoint stores a set of resolved spans denoting completed progress.
     optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 7 [(gogoproto.nullable) = false];
 
-    // TableReplicationMetadata is a map from destination table IDs to metadata
-    // containing source table descriptors and fully qualified destination table names.
-    map<int32, TableReplicationMetadata> table_metadata = 8 [(gogoproto.nullable) = false];
+    // TableMetadataByDestID is a map from destination table IDs to metadata
+    // containing source table descriptors and fully qualified destination table
+    // names.
+    map<int32, TableReplicationMetadata> table_metadata_by_dest_id = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableMetadataByDestID"];
 
-    // FilterRangefeeed is an option on whether to filter out 'OmitinRangefeed' events
-    // when processing changes in LDR
-    optional bool filter_rangefeed = 9 [(gogoproto.nullable) = false];
+    reserved 9;
+
+    // Discard is an option on whether to filter some events.
+    optional jobs.jobspb.LogicalReplicationDetails.Discard discard  = 12 [(gogoproto.nullable) = false];
 
     optional jobs.jobspb.LogicalReplicationDetails.ApplyMode mode = 10 [(gogoproto.nullable) = false];
 
-    // Next ID: 11.
+    optional string metrics_label = 11 [(gogoproto.nullable) = false];
+
+    // Next ID: 13.
 }

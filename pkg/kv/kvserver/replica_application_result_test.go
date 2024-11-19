@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -42,8 +37,7 @@ func makeProposalData() *ProposalData {
 		AdmissionOriginNode:   1,
 	}
 
-	return &ProposalData{
-		ctx:                     context.WithValue(context.Background(), struct{}{}, "nonempty-ctx"),
+	prop := ProposalData{
 		sp:                      &tracing.Span{},
 		idKey:                   "deadbeef",
 		proposedAtTicks:         1,
@@ -63,6 +57,9 @@ func makeProposalData() *ProposalData {
 		seedProposal:            nil,
 		lastReproposal:          nil,
 	}
+	ctx := context.WithValue(context.Background(), struct{}{}, "nonempty-ctx")
+	prop.ctx.Store(&ctx)
+	return &prop
 }
 
 func TestProposalDataAndRaftCommandAreConsideredWhenAddingFields(t *testing.T) {
@@ -71,15 +68,15 @@ func TestProposalDataAndRaftCommandAreConsideredWhenAddingFields(t *testing.T) {
 
 	prop := makeProposalData()
 	// If you are adding a field to ProposalData or RaftCommand, please consider the
-	// desired semantics of that field in `tryReproposeWithNewLeaseIndex{,v2}`. Once
+	// desired semantics of that field in `tryReproposeWithNewLeaseIndexRaftMuLocked{,v2}`. Once
 	// this has been done, adjust the expected number of fields below, and populate
 	// the field above, to let this test pass.
 	//
 	// NB: we can't use zerofields for two reasons: First, we have unexported fields
 	// here, and second, we don't want to check for recursively populated structs (but
 	// only for the top level fields).
-	require.Equal(t, 10, reflect.TypeOf(*prop.command).NumField())
-	require.Equal(t, 19, reflect.TypeOf(*prop).NumField())
+	require.Equal(t, 10, reflect.Indirect(reflect.ValueOf(prop.command)).NumField())
+	require.Equal(t, 19, reflect.Indirect(reflect.ValueOf(prop)).NumField())
 }
 
 func TestReplicaMakeReproposalChaininig(t *testing.T) {
@@ -89,7 +86,7 @@ func TestReplicaMakeReproposalChaininig(t *testing.T) {
 	var r Replica
 	proposals := make([]*ProposalData, 1, 4)
 	proposals[0] = makeProposalData()
-	sharedCtx := proposals[0].ctx
+	sharedCtx := proposals[0].Context()
 
 	verify := func() {
 		seed := proposals[0]
@@ -107,9 +104,9 @@ func TestReplicaMakeReproposalChaininig(t *testing.T) {
 		}
 		// Only the latest reproposal must use the seed context.
 		for _, prop := range proposals[:len(proposals)-1] {
-			require.NotEqual(t, sharedCtx, prop.ctx)
+			require.NotEqual(t, sharedCtx, prop.Context())
 		}
-		require.Equal(t, sharedCtx, proposals[len(proposals)-1].ctx)
+		require.Equal(t, sharedCtx, proposals[len(proposals)-1].Context())
 	}
 
 	verify()

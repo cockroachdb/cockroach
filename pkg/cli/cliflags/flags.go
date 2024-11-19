@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cliflags
 
@@ -694,6 +689,21 @@ apply. This flag is experimental.
 `,
 	}
 
+	AcceptProxyProtocolHeaders = FlagInfo{
+		Name: "accept-proxy-protocol-headers",
+		Description: `
+Allows CockroachDB to parse proxy protocol headers. Proxy protocol is used by
+some proxies to retain the original client IP information after the proxy has
+rewritten the source IP address of forwarded packets.
+<PRE>
+
+</PRE>
+When using this flag, ensure all traffic to CockroachDB flows through a proxy
+which adds proxy protocol headers, to prevent spoofing of client IP address
+information.
+`,
+	}
+
 	LocalityAdvertiseAddr = FlagInfo{
 		Name: "locality-advertise-addr",
 		Description: `
@@ -838,6 +848,14 @@ Note: that --external-io-disable-http or --external-io-disable-implicit-credenti
 	TenantScope = FlagInfo{
 		Name: "tenant-scope",
 		Description: `Assign a tenant scope to the certificate.
+This will restrict the certificate to only be valid for the specified tenants.
+This flag is optional. When omitted, the certificate is not scoped; i.e.
+it can be used with all tenants.`,
+	}
+
+	TenantScopeByNames = FlagInfo{
+		Name: "tenant-name-scope",
+		Description: `Assign a tenant scope using tenant names to the certificate.
 This will restrict the certificate to only be valid for the specified tenants.
 This flag is optional. When omitted, the certificate is not scoped; i.e.
 it can be used with all tenants.`,
@@ -1892,15 +1910,6 @@ commands, WARNING for client commands.`,
 	SQLAuditLogDirOverride = FlagInfo{
 		Name:        "sql-audit-dir",
 		Description: `--sql-audit-dir=XXX is an alias for --log='sinks: {file-groups: {sql-audit: {channels: SENSITIVE_ACCESS, dir: ...}}}'.`,
-	}
-
-	ObsServiceAddr = FlagInfo{
-		Name:   "obsservice-addr",
-		EnvVar: "",
-		Description: `Address of an OpenTelemetry OTLP sink such as the
-Observability Service or the OpenTelemetry Collector. If set, telemetry
-events are exported to this address. The special value "embed" causes
-the Cockroach node to run the Observability Service internally.`,
 	}
 
 	BuildTag = FlagInfo{

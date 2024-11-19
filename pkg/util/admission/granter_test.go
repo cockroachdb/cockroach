@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package admission
 
@@ -43,7 +38,7 @@ import (
 // continue-grant-chain work=<kind>
 // cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
 // init-store-grant-coordinator
-// set-tokens io-tokens=<int> elastic-disk-bw-tokens=<int>
+// set-tokens io-tokens=<int> disk-write-tokens=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -51,7 +46,9 @@ func TestGranterBasic(t *testing.T) {
 	var ambientCtx log.AmbientContext
 	// requesters[numWorkKinds] is used for kv elastic work, when working with a
 	// store grant coordinator.
-	var requesters [numWorkKinds + 1]*testRequester
+	// requesters[numWorkKinds + 1] is used for snapshot ingest, when working with a
+	// store grant coordinator.
+	var requesters [numWorkKinds + 2]*testRequester
 	var coord *GrantCoordinator
 	clearRequesterAndCoord := func() {
 		coord = nil
@@ -107,6 +104,7 @@ func TestGranterBasic(t *testing.T) {
 			metrics := makeGrantCoordinatorMetrics()
 			regularWorkQueueMetrics := makeWorkQueueMetrics("regular", registry)
 			elasticWorkQUeueMetrics := makeWorkQueueMetrics("elastic", registry)
+			snapshotQueueMetrics := makeSnapshotQueueMetrics(registry)
 			workQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
 				regularWorkQueueMetrics, elasticWorkQUeueMetrics,
 			}
@@ -148,6 +146,7 @@ func TestGranterBasic(t *testing.T) {
 				l0CompactedBytes:            metrics.L0CompactedBytes,
 				l0TokensProduced:            metrics.L0TokensProduced,
 				workQueueMetrics:            workQueueMetrics,
+				snapshotQueueMetrics:        snapshotQueueMetrics,
 				disableTickerForTesting:     true,
 				knobs:                       &TestingKnobs{},
 			}
@@ -158,9 +157,27 @@ func TestGranterBasic(t *testing.T) {
 			coord, ok = storeCoordinators.gcMap.Load(1)
 			require.True(t, ok)
 			kvStoreGranter := coord.granters[KVWork].(*kvStoreTokenGranter)
-			// Use the same model for all 3 kinds of models.
+			// Defensive check: `SetPebbleMetricsProvider` should initialize the SnapshotQueue.
+			require.NotNil(t, kvStoreGranter.snapshotRequester)
+			snapshotGranter := kvStoreGranter.snapshotRequester.(*SnapshotQueue).snapshotGranter
+			require.NotNil(t, snapshotGranter)
+			snapshotReq := &testRequester{
+				workKind:               KVWork,
+				granter:                snapshotGranter,
+				additionalID:           "-snapshot",
+				usesTokens:             true,
+				buf:                    &buf,
+				returnValueFromGranted: 0,
+			}
+			kvStoreGranter.snapshotRequester = snapshotReq
+			snapshotQueue := storeCoordinators.TryGetSnapshotQueueForStore(1)
+			require.NotNil(t, snapshotQueue)
+			requesters[numWorkKinds+1] = snapshotReq
+			// Use the same model for the IO linear models.
 			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
-			kvStoreGranter.setLinearModels(tlm, tlm, tlm)
+			// Use w-amp of 1 for the purpose of this test.
+			wamplm := tokensLinearModel{multiplier: 1, constant: 0}
+			kvStoreGranter.setLinearModels(tlm, tlm, tlm, wamplm)
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -231,10 +248,10 @@ func TestGranterBasic(t *testing.T) {
 
 		case "set-tokens-loop":
 			var ioTokens int
-			var elasticTokens int
+			var elasticDiskWriteTokens int
 			var loop int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
-			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
+			d.ScanArgs(t, "disk-write-tokens", &elasticDiskWriteTokens)
 			d.ScanArgs(t, "loop", &loop)
 
 			for loop > 0 {
@@ -242,8 +259,13 @@ func TestGranterBasic(t *testing.T) {
 				// We are not using a real ioLoadListener, and simply setting the
 				// tokens (the ioLoadListener has its own test).
 				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-					int64(ioTokens), int64(ioTokens), int64(elasticTokens),
-					int64(ioTokens*250), int64(ioTokens*250), int64(elasticTokens*250), false,
+					int64(ioTokens),
+					int64(ioTokens),
+					int64(elasticDiskWriteTokens),
+					int64(ioTokens*250),
+					int64(ioTokens*250),
+					int64(elasticDiskWriteTokens*250),
+					false, // lastTick
 				)
 			}
 			coord.testingTryGrant()
@@ -251,10 +273,10 @@ func TestGranterBasic(t *testing.T) {
 
 		case "set-tokens":
 			var ioTokens int
-			var elasticTokens int
+			var elasticDiskWriteTokens int
 			var tickInterval int
 			d.ScanArgs(t, "io-tokens", &ioTokens)
-			d.ScanArgs(t, "elastic-disk-bw-tokens", &elasticTokens)
+			d.ScanArgs(t, "disk-write-tokens", &elasticDiskWriteTokens)
 			elasticIOTokens := ioTokens
 			if d.HasArg("elastic-io-tokens") {
 				d.ScanArgs(t, "elastic-io-tokens", &elasticIOTokens)
@@ -273,9 +295,13 @@ func TestGranterBasic(t *testing.T) {
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
 			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
-				int64(ioTokens), int64(elasticIOTokens), int64(elasticTokens),
-				int64(ioTokens*burstMultiplier), int64(elasticIOTokens*burstMultiplier),
-				int64(elasticTokens*burstMultiplier), false,
+				int64(ioTokens),
+				int64(elasticIOTokens),
+				int64(elasticDiskWriteTokens),
+				int64(ioTokens*burstMultiplier),
+				int64(elasticIOTokens*burstMultiplier),
+				int64(elasticDiskWriteTokens*burstMultiplier),
+				false, // lastTick
 			)
 			coord.testingTryGrant()
 			return flushAndReset()
@@ -471,6 +497,8 @@ func scanWorkKind(t *testing.T, d *datadriven.TestData) int8 {
 		return int8(SQLStatementRootStartWork)
 	case "kv-elastic":
 		return int8(numWorkKinds)
+	case "kv-snapshot":
+		return int8(numWorkKinds + 1)
 	}
 	panic("unknown WorkKind")
 }
@@ -486,6 +514,8 @@ type testMetricsProvider struct {
 func (m *testMetricsProvider) GetPebbleMetrics() []StoreMetrics {
 	return m.metrics
 }
+
+func (m *testMetricsProvider) Close() {}
 
 func (m *testMetricsProvider) UpdateIOThreshold(
 	id roachpb.StoreID, threshold *admissionpb.IOThreshold,

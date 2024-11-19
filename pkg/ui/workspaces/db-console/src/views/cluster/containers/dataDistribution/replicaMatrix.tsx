@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { util } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames";
@@ -62,9 +57,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   expandRow = (path: TreePath) => {
     this.setState({
-      collapsedRows: this.state.collapsedRows.filter(
-        tp => !isEqual(tp, path),
-      ),
+      collapsedRows: this.state.collapsedRows.filter(tp => !isEqual(tp, path)),
     });
   };
 
@@ -76,9 +69,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
 
   expandCol = (path: TreePath) => {
     this.setState({
-      collapsedCols: this.state.collapsedCols.filter(
-        tp => !isEqual(tp, path),
-      ),
+      collapsedCols: this.state.collapsedCols.filter(tp => !isEqual(tp, path)),
     });
   };
 

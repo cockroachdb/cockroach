@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -451,6 +446,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.NodeID = execCfg.NodeInfo.NodeID
 	p.extendedEvalCtx.Locality = execCfg.Locality
 	p.extendedEvalCtx.OriginalLocality = execCfg.Locality
+	p.extendedEvalCtx.DescIDGenerator = execCfg.DescIDGenerator
 
 	p.sessionDataMutatorIterator = smi
 
@@ -818,7 +814,7 @@ func (p *planner) IsActive(ctx context.Context, key clusterversion.Key) bool {
 // they have previously been set through SetSessionData().
 func (p *planner) QueryRowEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
@@ -830,7 +826,7 @@ func (p *planner) QueryRowEx(
 // fields (e.g. the user).
 func (p *planner) ExecEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
@@ -846,7 +842,7 @@ func (p *planner) ExecEx(
 // have previously been set through SetSessionData().
 func (p *planner) QueryIteratorEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
@@ -860,7 +856,7 @@ func (p *planner) QueryIteratorEx(
 // have previously been set through SetSessionData().
 func (p *planner) QueryBufferedEx(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
@@ -872,7 +868,7 @@ func (p *planner) QueryBufferedEx(
 // ResultColumns of the input query.
 func (p *planner) QueryRowExWithCols(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
@@ -884,7 +880,7 @@ func (p *planner) QueryRowExWithCols(
 // computed ResultColumns of the input query.
 func (p *planner) QueryBufferedExWithCols(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	session sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},

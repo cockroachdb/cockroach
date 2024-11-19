@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tabledesc
 
@@ -30,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -142,6 +138,11 @@ var validationMap = []struct {
 			"ImportType":                    {status: thisFieldReferencesNoObjects},
 			"External": {status: todoIAmKnowinglyAddingTechDebt,
 				reason: "TODO(features): add validation that TableID is sane within the same tenant"},
+			// LDRJobIDs is checked in StripDanglingBackreferences.
+			"LDRJobIDs":            {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedPCRVersion": {status: thisFieldReferencesNoObjects},
+			"Triggers":             {status: iSolemnlySwearThisFieldIsValidated},
+			"NextTriggerID":        {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -261,6 +262,7 @@ var validationMap = []struct {
 			"RegionConfig":                  {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"Composite":                     {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedPCRVersion":          {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -278,6 +280,7 @@ var validationMap = []struct {
 			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"SystemDatabaseSchemaVersion":   {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedPCRVersion":          {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -295,6 +298,7 @@ var validationMap = []struct {
 			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"Functions":                     {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedPCRVersion":          {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -334,6 +338,27 @@ var validationMap = []struct {
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"IsProcedure":                   {status: thisFieldReferencesNoObjects},
 			"Security":                      {status: thisFieldReferencesNoObjects},
+			"ReplicatedPCRVersion":          {status: thisFieldReferencesNoObjects},
+		},
+	},
+	{
+		obj: descpb.TriggerDescriptor{},
+		fieldMap: map[string]validationStatusInfo{
+			"ID":                 {status: iSolemnlySwearThisFieldIsValidated},
+			"Name":               {status: iSolemnlySwearThisFieldIsValidated},
+			"ActionTime":         {status: thisFieldReferencesNoObjects},
+			"Events":             {status: iSolemnlySwearThisFieldIsValidated},
+			"NewTransitionAlias": {status: thisFieldReferencesNoObjects},
+			"OldTransitionAlias": {status: thisFieldReferencesNoObjects},
+			"ForEachRow":         {status: thisFieldReferencesNoObjects},
+			"WhenExpr":           {status: iSolemnlySwearThisFieldIsValidated},
+			"FuncID":             {status: iSolemnlySwearThisFieldIsValidated},
+			"FuncArgs":           {status: thisFieldReferencesNoObjects},
+			"FuncBody":           {status: iSolemnlySwearThisFieldIsValidated},
+			"Enabled":            {status: thisFieldReferencesNoObjects},
+			"DependsOn":          {status: iSolemnlySwearThisFieldIsValidated},
+			"DependsOnTypes":     {status: iSolemnlySwearThisFieldIsValidated},
+			"DependsOnRoutines":  {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 }
@@ -2971,6 +2996,73 @@ func TestValidateTableDesc(t *testing.T) {
 		{err: `invalid inbound foreign key "from_this_table" to table "bar" (4): missing referenced column=13`,
 			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
 				desc.InboundFKs[0].ReferencedColumnIDs = []descpb.ColumnID{13}
+			})},
+		{err: `trigger "blah" has ID 0 not less than NextTrigger value 0 for table`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.Triggers = []descpb.TriggerDescriptor{
+					{
+						ID:         0,
+						Name:       "blah",
+						ActionTime: semenumpb.TriggerActionTime_BEFORE,
+						Events: []*descpb.TriggerDescriptor_Event{
+							{Type: semenumpb.TriggerEventType_INSERT},
+						},
+						FuncID:   5,
+						FuncBody: "BEGIN RETURN NULL; END",
+					},
+				}
+			})},
+		{err: `duplicate trigger name: "blah"`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.NextTriggerID = 2
+				desc.Triggers = []descpb.TriggerDescriptor{
+					{
+						ID:         0,
+						Name:       "blah",
+						ActionTime: semenumpb.TriggerActionTime_BEFORE,
+						Events: []*descpb.TriggerDescriptor_Event{
+							{Type: semenumpb.TriggerEventType_INSERT},
+						},
+						FuncID:            5,
+						FuncBody:          "BEGIN RETURN NULL; END",
+						DependsOnRoutines: []descpb.ID{5},
+					},
+					{
+						ID:   1,
+						Name: "blah",
+					},
+				}
+			})},
+		{err: `trigger "blah" contains unknown column "baz"`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.NextTriggerID = 1
+				desc.Triggers = []descpb.TriggerDescriptor{
+					{
+						ID:         0,
+						Name:       "blah",
+						ActionTime: semenumpb.TriggerActionTime_BEFORE,
+						Events: []*descpb.TriggerDescriptor_Event{
+							{Type: semenumpb.TriggerEventType_INSERT},
+							{Type: semenumpb.TriggerEventType_UPDATE, ColumnNames: []string{"bar", "baz"}},
+						},
+					},
+				}
+			})},
+		{err: `at or near "abc": syntax error`,
+			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
+				desc.NextTriggerID = 1
+				desc.Triggers = []descpb.TriggerDescriptor{
+					{
+						ID:         0,
+						Name:       "blah",
+						ActionTime: semenumpb.TriggerActionTime_BEFORE,
+						Events: []*descpb.TriggerDescriptor_Event{
+							{Type: semenumpb.TriggerEventType_INSERT},
+						},
+						FuncID:   5,
+						FuncBody: "abc",
+					},
+				}
 			})},
 	}
 

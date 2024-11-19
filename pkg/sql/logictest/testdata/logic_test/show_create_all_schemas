@@ -41,6 +41,17 @@ create_statement
 CREATE SCHEMA public;
 CREATE SCHEMA test2;
 
+statement ok
+COMMENT ON SCHEMA public IS 'test comment';
+
+query T colnames,nosort
+SHOW CREATE ALL SCHEMAS
+----
+create_statement
+CREATE SCHEMA public;
+COMMENT ON SCHEMA public IS 'test comment';
+CREATE SCHEMA test2;
+
 # Make sure database names with hyphens work well.
 statement ok
 CREATE DATABASE "d-d";

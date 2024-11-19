@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package instancestorage
 
@@ -58,7 +53,7 @@ type rowCodec struct {
 
 type valueColumnIdx int
 
-const numValueColumns = 5
+const numValueColumns = 6
 
 const (
 	addrColumnIdx valueColumnIdx = iota
@@ -66,6 +61,7 @@ const (
 	localityColumnIdx
 	sqlAddrColumnIdx
 	binaryVersionColumnIdx
+	isDrainingColumnIdx
 
 	// Ensure we have the right number of value columns.
 	_ uint = iota - numValueColumns
@@ -78,6 +74,7 @@ var valueColumnNames = [numValueColumns]string{
 	localityColumnIdx:      "locality",
 	sqlAddrColumnIdx:       "sql_addr",
 	binaryVersionColumnIdx: "binary_version",
+	isDrainingColumnIdx:    "is_draining",
 }
 
 // rbrKeyCodec is used by the regional by row compatible sql_instances index format.
@@ -200,7 +197,7 @@ func (d *rowCodec) decodeRow(key roachpb.Key, value *roachpb.Value) (instancerow
 		return r, nil
 	}
 
-	r.rpcAddr, r.sqlAddr, r.sessionID, r.locality, r.binaryVersion, r.timestamp, err = d.decodeValue(*value)
+	r.rpcAddr, r.sqlAddr, r.sessionID, r.locality, r.binaryVersion, r.isDraining, r.timestamp, err = d.decodeValue(*value)
 	if err != nil {
 		return instancerow{}, errors.Wrapf(err, "failed to decode value for: %v", key)
 	}
@@ -215,9 +212,11 @@ func (d *rowCodec) encodeValue(
 	sessionID sqlliveness.SessionID,
 	locality roachpb.Locality,
 	binaryVersion roachpb.Version,
+	encodeIsDraining bool,
+	isDraining bool,
 ) (*roachpb.Value, error) {
 	var valueBuf []byte
-	columnsToEncode := [numValueColumns]func() tree.Datum{
+	columnsToEncode := []func() tree.Datum{
 		addrColumnIdx: func() tree.Datum {
 			if rpcAddr == "" {
 				return tree.DNull
@@ -248,6 +247,13 @@ func (d *rowCodec) encodeValue(
 			return tree.NewDString(clusterversion.StringForPersistence(binaryVersion))
 		},
 	}
+
+	if encodeIsDraining {
+		columnsToEncode = append(columnsToEncode, func() tree.Datum {
+			return tree.MakeDBool(tree.DBool(isDraining))
+		})
+	}
+
 	for i, f := range columnsToEncode {
 		var err error
 		var prev descpb.ColumnID
@@ -265,8 +271,9 @@ func (d *rowCodec) encodeValue(
 	return v, nil
 }
 
-func (d *rowCodec) encodeAvailableValue() (*roachpb.Value, error) {
-	value, err := d.encodeValue("", "", sqlliveness.SessionID([]byte{}), roachpb.Locality{}, roachpb.Version{})
+func (d *rowCodec) encodeAvailableValue(encodeIsDraining bool) (*roachpb.Value, error) {
+	value, err := d.encodeValue("", "", sqlliveness.SessionID([]byte{}),
+		roachpb.Locality{}, roachpb.Version{}, encodeIsDraining, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode available sql_instances value")
 	}
@@ -282,17 +289,18 @@ func (d *rowCodec) decodeValue(
 	sessionID sqlliveness.SessionID,
 	locality roachpb.Locality,
 	binaryVersion roachpb.Version,
+	isDraining bool,
 	timestamp hlc.Timestamp,
 	_ error,
 ) {
 	// The rest of the columns are stored as a single family.
 	bytes, err := value.GetTuple()
 	if err != nil {
-		return "", "", "", roachpb.Locality{}, roachpb.Version{}, hlc.Timestamp{}, err
+		return "", "", "", roachpb.Locality{}, roachpb.Version{}, false, hlc.Timestamp{}, err
 	}
 	datums, err := d.decoder.Decode(&tree.DatumAlloc{}, bytes)
 	if err != nil {
-		return "", "", "", roachpb.Locality{}, roachpb.Version{}, hlc.Timestamp{}, err
+		return "", "", "", roachpb.Locality{}, roachpb.Version{}, false, hlc.Timestamp{}, err
 	}
 	for i, f := range [numValueColumns]func(datum tree.Datum) error{
 		addrColumnIdx: func(datum tree.Datum) error {
@@ -345,6 +353,14 @@ func (d *rowCodec) decodeValue(
 			}
 			return nil
 		},
+		isDrainingColumnIdx: func(datum tree.Datum) error {
+			if datum == tree.DNull {
+				isDraining = false
+			} else {
+				isDraining = bool(tree.MustBeDBool(datum))
+			}
+			return nil
+		},
 	} {
 		ord := d.valueColumnOrdinals[i]
 		// Deal with the fact that new columns may not yet have been added.
@@ -353,8 +369,8 @@ func (d *rowCodec) decodeValue(
 			datum = datums[ord]
 		}
 		if err := f(datum); err != nil {
-			return "", "", "", roachpb.Locality{}, roachpb.Version{}, hlc.Timestamp{}, err
+			return "", "", "", roachpb.Locality{}, roachpb.Version{}, false, hlc.Timestamp{}, err
 		}
 	}
-	return rpcAddr, sqlAddr, sessionID, locality, binaryVersion, value.Timestamp, nil
+	return rpcAddr, sqlAddr, sessionID, locality, binaryVersion, isDraining, value.Timestamp, nil
 }

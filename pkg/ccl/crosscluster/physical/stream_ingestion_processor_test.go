@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package physical
 
@@ -99,8 +96,10 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		v.Timestamp = hlc.Timestamp{WallTime: 1}
 		return []roachpb.KeyValue{{Key: key, Value: v}}
 	}
-	sampleCheckpoint := func(span roachpb.Span, ts int64) []jobspb.ResolvedSpan {
-		return []jobspb.ResolvedSpan{{Span: span, Timestamp: hlc.Timestamp{WallTime: ts}}}
+	sampleCheckpoint := func(span roachpb.Span, ts int64) *streampb.StreamEvent_StreamCheckpoint {
+		return &streampb.StreamEvent_StreamCheckpoint{
+			ResolvedSpans: []jobspb.ResolvedSpan{{Span: span, Timestamp: hlc.Timestamp{WallTime: ts}}},
+		}
 	}
 
 	readRow := func(streamOut execinfra.RowSource) []string {
@@ -781,7 +780,7 @@ func validateFnWithValidator(
 	return func(event crosscluster.Event, spec streamclient.SubscriptionToken) {
 		switch event.Type() {
 		case crosscluster.CheckpointEvent:
-			resolvedTS := resolvedSpansMinTS(event.GetResolvedSpans())
+			resolvedTS := resolvedSpansMinTS(event.GetCheckpoint().ResolvedSpans)
 			err := validator.noteResolved(string(spec), resolvedTS)
 			if err != nil {
 				panic(err.Error())

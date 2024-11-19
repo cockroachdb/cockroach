@@ -9,16 +9,13 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [cluster] requesting data for debug/rangelog... received response... writing JSON output: debug/rangelog.json... done
 [cluster] requesting data for debug/settings... received response... writing JSON output: debug/settings.json... done
 [cluster] requesting data for debug/reports/problemranges... received response... writing JSON output: debug/reports/problemranges.json... done
-[cluster] retrieving SQL data for "".crdb_internal.cluster_replication_node_stream_checkpoints... writing output: debug/crdb_internal.cluster_replication_node_stream_checkpoints.txt... done
-[cluster] retrieving SQL data for "".crdb_internal.cluster_replication_node_stream_spans... writing output: debug/crdb_internal.cluster_replication_node_stream_spans.txt... done
-[cluster] retrieving SQL data for "".crdb_internal.cluster_replication_node_streams... writing output: debug/crdb_internal.cluster_replication_node_streams.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.cluster_replication_spans... writing output: debug/crdb_internal.cluster_replication_spans.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_function_statements... writing output: debug/crdb_internal.create_function_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_procedure_statements... writing output: debug/crdb_internal.create_procedure_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_schema_statements... writing output: debug/crdb_internal.create_schema_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_statements... writing output: debug/crdb_internal.create_statements.txt... done
 [cluster] retrieving SQL data for "".crdb_internal.create_type_statements... writing output: debug/crdb_internal.create_type_statements.txt... done
-[cluster] retrieving SQL data for "".crdb_internal.logical_replication_node_processors... writing output: debug/crdb_internal.logical_replication_node_processors.txt... done
+[cluster] retrieving SQL data for "".crdb_internal.logical_replication_spans... writing output: debug/crdb_internal.logical_replication_spans.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/crdb_internal.cluster_contention_events.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
 [cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/crdb_internal.cluster_distsql_flows.txt... done
@@ -90,12 +87,16 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node 1] node status... writing JSON output: debug/nodes/1/status.json... done
 [node 1] using SQL connection URL: postgresql://...
 [node 1] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/1/crdb_internal.active_range_feeds.txt... done
+[node 1] retrieving SQL data for crdb_internal.cluster_replication_node_stream_checkpoints... writing output: debug/nodes/1/crdb_internal.cluster_replication_node_stream_checkpoints.txt... done
+[node 1] retrieving SQL data for crdb_internal.cluster_replication_node_stream_spans... writing output: debug/nodes/1/crdb_internal.cluster_replication_node_stream_spans.txt... done
+[node 1] retrieving SQL data for crdb_internal.cluster_replication_node_streams... writing output: debug/nodes/1/crdb_internal.cluster_replication_node_streams.txt... done
 [node 1] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/1/crdb_internal.feature_usage.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/1/crdb_internal.gossip_alerts.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/1/crdb_internal.gossip_liveness.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/1/crdb_internal.gossip_nodes.txt... done
 [node 1] retrieving SQL data for crdb_internal.kv_session_based_leases... writing output: debug/nodes/1/crdb_internal.kv_session_based_leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
+[node 1] retrieving SQL data for crdb_internal.logical_replication_node_processors... writing output: debug/nodes/1/crdb_internal.logical_replication_node_processors.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/1/crdb_internal.node_contention_events.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_distsql_flows... writing output: debug/nodes/1/crdb_internal.node_distsql_flows.txt... done
@@ -131,16 +132,20 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [node ?] ? log files found
 [node 1] requesting ranges... received response... done
 [node 1] writing ranges... writing JSON output: debug/nodes/1/ranges.json... done
-[node 2] skipping node... writing binary output: debug/nodes/2.skipped... done
+[node 2] skipping excluded node
 [node 3] node status... writing JSON output: debug/nodes/3/status.json... done
 [node 3] using SQL connection URL: postgresql://...
 [node 3] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/3/crdb_internal.active_range_feeds.txt... done
+[node 3] retrieving SQL data for crdb_internal.cluster_replication_node_stream_checkpoints... writing output: debug/nodes/3/crdb_internal.cluster_replication_node_stream_checkpoints.txt... done
+[node 3] retrieving SQL data for crdb_internal.cluster_replication_node_stream_spans... writing output: debug/nodes/3/crdb_internal.cluster_replication_node_stream_spans.txt... done
+[node 3] retrieving SQL data for crdb_internal.cluster_replication_node_streams... writing output: debug/nodes/3/crdb_internal.cluster_replication_node_streams.txt... done
 [node 3] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/3/crdb_internal.feature_usage.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/3/crdb_internal.gossip_alerts.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/3/crdb_internal.gossip_liveness.txt... done
 [node 3] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/3/crdb_internal.gossip_nodes.txt... done
 [node 3] retrieving SQL data for crdb_internal.kv_session_based_leases... writing output: debug/nodes/3/crdb_internal.kv_session_based_leases.txt... done
 [node 3] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/3/crdb_internal.leases.txt... done
+[node 3] retrieving SQL data for crdb_internal.logical_replication_node_processors... writing output: debug/nodes/3/crdb_internal.logical_replication_node_processors.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/3/crdb_internal.node_build_info.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/3/crdb_internal.node_contention_events.txt... done
 [node 3] retrieving SQL data for crdb_internal.node_distsql_flows... writing output: debug/nodes/3/crdb_internal.node_distsql_flows.txt... done
@@ -179,3 +184,4 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0
 [cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
 [cluster] hot range summary script... writing binary output: debug/hot-ranges.sh... done
 [cluster] tenant hot range summary script... writing binary output: debug/hot-ranges-tenant.sh... done
+[cluster] capture debug zip flags... writing binary output: debug/debug_zip_command_flags.txt... done

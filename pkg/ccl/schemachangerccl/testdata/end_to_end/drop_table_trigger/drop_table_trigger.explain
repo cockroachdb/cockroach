@@ -1,0 +1,259 @@
+/* setup */
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f();
+
+/* test */
+EXPLAIN (DDL) DROP TABLE defaultdb.t;
+----
+Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 41 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (t-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (t-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (t-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Table:{DescID: 104 (t-)}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 104 (t-), ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 104 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 1 (id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "id", ColumnID: 1 (id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (id-), TypeName: "INT8"}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 104 (t-), ColumnID: 1 (id-), IndexID: 0}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 2 (name-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "name", ColumnID: 2 (name-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (name-), TypeName: "VARCHAR(256)"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 3 (money-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "money", ColumnID: 3 (money-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 3 (money-), TypeName: "INT8"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 104 (t-), ColumnID: 1 (id-), IndexID: 1 (t_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 104 (t-), ColumnID: 2 (name-), IndexID: 1 (t_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 104 (t-), ColumnID: 3 (money-), IndexID: 1 (t_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 104 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 104 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  Trigger:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerName:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerEnabled:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerTiming:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerEvents:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
+ │         │    └── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
+ │         └── 51 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
+ │              ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967293,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":4294967293,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967292,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
+ │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName"}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEnab..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc..."}
+ │              ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":101}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
+ │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967293,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967292,"TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967293,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967292,"TableID":104}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":104}
+ │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":104}
+ │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":104}
+ │              ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":104}
+ │              ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":104}
+ │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 41 elements transitioning toward ABSENT
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
+ │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 104 (t-)}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 104 (t-), Name: "admin"}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 104 (t-), Name: "root"}
+ │    │    │    ├── DROPPED → PUBLIC Table:{DescID: 104 (t-)}
+ │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 104 (t-), ReferencedDescID: 101 (public)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnFamily:{DescID: 104 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 104 (t-), ColumnID: 1 (id-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 104 (t-), Name: "id", ColumnID: 1 (id-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (id-), TypeName: "INT8"}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnNotNull:{DescID: 104 (t-), ColumnID: 1 (id-), IndexID: 0}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 104 (t-), ColumnID: 2 (name-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 104 (t-), Name: "name", ColumnID: 2 (name-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (name-), TypeName: "VARCHAR(256)"}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 104 (t-), ColumnID: 3 (money-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 104 (t-), Name: "money", ColumnID: 3 (money-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 3 (money-), TypeName: "INT8"}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 104 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 104 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 104 (t-), ColumnID: 4294967294 (tableoid-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 104 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 104 (t-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 104 (t-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 104 (t-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 104 (t-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
+ │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 104 (t-), ColumnID: 1 (id-), IndexID: 1 (t_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 104 (t-), ColumnID: 2 (name-), IndexID: 1 (t_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 104 (t-), ColumnID: 3 (money-), IndexID: 1 (t_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 104 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC IndexName:{DescID: 104 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC Trigger:{DescID: 104 (t-), TriggerID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC TriggerName:{DescID: 104 (t-), TriggerID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC TriggerEnabled:{DescID: 104 (t-), TriggerID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC TriggerTiming:{DescID: 104 (t-), TriggerID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC TriggerEvents:{DescID: 104 (t-), TriggerID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
+ │    │    │    └── ABSENT  → PUBLIC TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 41 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 104 (t-), Name: "t", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 104 (t-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (t-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 104 (t-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED Table:{DescID: 104 (t-)}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 104 (t-), ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 104 (t-), Name: "primary", ColumnFamilyID: 0 (primary-)}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 1 (id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "id", ColumnID: 1 (id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 1 (id-), TypeName: "INT8"}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 104 (t-), ColumnID: 1 (id-), IndexID: 0}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 2 (name-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "name", ColumnID: 2 (name-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (name-), TypeName: "VARCHAR(256)"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 3 (money-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "money", ColumnID: 3 (money-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 3 (money-), TypeName: "INT8"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 104 (t-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 104 (t-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 104 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 104 (t-), ColumnID: 1 (id-), IndexID: 1 (t_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 104 (t-), ColumnID: 2 (name-), IndexID: 1 (t_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 104 (t-), ColumnID: 3 (money-), IndexID: 1 (t_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 104 (t-), IndexID: 1 (t_pkey-), ConstraintID: 1}
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 104 (t-), Name: "t_pkey", IndexID: 1 (t_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  Trigger:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerName:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerEnabled:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerTiming:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerEvents:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
+ │         │    └── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
+ │         └── 54 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
+ │              ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967293,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":4294967293,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967292,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
+ │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
+ │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName"}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEnab..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven..."}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc..."}
+ │              ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":101}}
+ │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
+ │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967293,"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967292,"TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967293,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967292,"TableID":104}
+ │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
+ │              ├── AssertColumnFamilyIsRemoved {"TableID":104}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":104}
+ │              ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":104}
+ │              ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":104}
+ │              ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":104}
+ │              ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":104}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 3 elements transitioning toward ABSENT
+           │    ├── DROPPED → ABSENT Table:{DescID: 104 (t-)}
+           │    ├── PUBLIC  → ABSENT IndexData:{DescID: 104 (t-), IndexID: 1 (t_pkey-)}
+           │    └── PUBLIC  → ABSENT TableData:{DescID: 104 (t-), ReferencedDescID: 100 (defaultdb)}
+           └── 5 Mutation operations
+                ├── CreateGCJobForTable {"DatabaseID":100,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

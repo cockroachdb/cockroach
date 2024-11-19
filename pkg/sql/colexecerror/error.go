@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colexecerror
 
@@ -22,7 +17,11 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-const panicLineSubstring = "runtime/panic.go"
+const (
+	panicLineSubstring            = "runtime/panic.go"
+	runtimePanicFileSubstring     = "runtime"
+	runtimePanicFunctionSubstring = "runtime."
+)
 
 var testingKnobShouldCatchPanic bool
 
@@ -100,9 +99,13 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 		// panic frame.
 		var panicLineFound bool
 		var panicEmittedFrom string
-		// We should be able to find it within 3 program counters, starting with the
-		// caller of this deferred function (2 above the runtime.Callers frame).
-		pc := make([]uintptr, 3)
+		// Usually, we'll find the offending frame within 3 program counters,
+		// starting with the caller of this deferred function (2 above the
+		// runtime.Callers frame). However, we also want to catch panics
+		// originating in the Go runtime with the runtime frames being returned
+		// by CallersFrames, so we allow for 5 more program counters for that
+		// case (e.g. invalid interface conversions use 2 counters).
+		pc := make([]uintptr, 8)
 		n := runtime.Callers(2, pc)
 		if n >= 1 {
 			frames := runtime.CallersFrames(pc[:n])
@@ -112,6 +115,13 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 				if strings.Contains(frame.File, panicLineSubstring) {
 					panicLineFound = true
 				} else if panicLineFound {
+					if strings.HasPrefix(frame.Function, runtimePanicFunctionSubstring) &&
+						strings.Contains(frame.File, runtimePanicFileSubstring) {
+						// This frame is from the Go runtime, so we simply
+						// ignore it to get to the offending one within the
+						// CRDB.
+						continue
+					}
 					panicEmittedFrom = frame.Function
 					break
 				}

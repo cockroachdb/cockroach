@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -247,33 +242,35 @@ func (sq *splitQueue) processAttemptWithTracing(
 	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, _ error) {
 	processStart := r.Clock().PhysicalTime()
-	ctx, sp := tracing.EnsureChildSpan(ctx, sq.Tracer, "split",
-		tracing.WithRecording(tracingpb.RecordingVerbose))
+	startTracing := log.ExpensiveLogEnabled(ctx, 1)
+	var opts []tracing.SpanOption
+	if startTracing {
+		opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
+	}
+	ctx, sp := tracing.EnsureChildSpan(ctx, sq.Tracer, "split", opts...)
 	defer sp.Finish()
 
 	processed, err := sq.processAttempt(ctx, r, confReader)
+	processDuration := r.Clock().PhysicalTime().Sub(processStart)
+	exceededDuration := sq.logTracesThreshold > time.Duration(0) && processDuration > sq.logTracesThreshold
+	var traceOutput redact.RedactableString
+	if startTracing {
+		// Utilize a new background context (properly annotated) to avoid writing
+		// traces from a child context into its parent.
+		ctx = r.AnnotateCtx(sq.AnnotateCtx(context.Background()))
 
-	// Utilize a new background context (properly annotated) to avoid writing
-	// traces from a child context into its parent.
-	{
-		ctx := r.AnnotateCtx(sq.AnnotateCtx(context.Background()))
-		processDuration := r.Clock().PhysicalTime().Sub(processStart)
-		exceededDuration := sq.logTracesThreshold > time.Duration(0) && processDuration > sq.logTracesThreshold
-
-		var traceOutput redact.RedactableString
-		traceLoggingNeeded := (err != nil || exceededDuration) && log.ExpensiveLogEnabled(ctx, 1)
+		traceLoggingNeeded := (err != nil || exceededDuration)
 		if traceLoggingNeeded {
 			// Add any trace filtering here if the output is too verbose.
 			rec := sp.GetConfiguredRecording()
 			traceOutput = redact.Sprintf("\ntrace:\n%s", rec)
 		}
-
-		if err != nil {
-			log.Infof(ctx, "error during range split: %v%s", err, traceOutput)
-		} else if exceededDuration {
-			log.Infof(ctx, "range split took %s, exceeding threshold of %s%s",
-				processDuration, sq.logTracesThreshold, traceOutput)
-		}
+	}
+	if err != nil {
+		log.Infof(ctx, "error during range split: %v%s", err, traceOutput)
+	} else if exceededDuration {
+		log.Infof(ctx, "range split took %s, exceeding threshold of %s%s",
+			processDuration, sq.logTracesThreshold, traceOutput)
 	}
 
 	return processed, err

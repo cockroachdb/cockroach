@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2019 The etcd Authors
 //
@@ -18,14 +18,19 @@
 package rafttest
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) error {
@@ -54,6 +59,8 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 				arg.Scan(t, i, &snap.Data)
 			case "async-storage-writes":
 				arg.Scan(t, i, &cfg.AsyncStorageWrites)
+			case "lazy-replication":
+				arg.Scan(t, i, &cfg.LazyReplication)
 			case "prevote":
 				arg.Scan(t, i, &cfg.PreVote)
 			case "checkquorum":
@@ -62,8 +69,17 @@ func (env *InteractionEnv) handleAddNodes(t *testing.T, d datadriven.TestData) e
 				arg.Scan(t, i, &cfg.MaxCommittedSizePerReady)
 			case "disable-conf-change-validation":
 				arg.Scan(t, i, &cfg.DisableConfChangeValidation)
-			case "step-down-on-removal":
-				arg.Scan(t, i, &cfg.StepDownOnRemoval)
+			case "crdb-version":
+				var key string
+				arg.Scan(t, i, &key)
+				version, err := roachpb.ParseVersion(key)
+				if err != nil {
+					return err
+				}
+				settings := cluster.MakeTestingClusterSettingsWithVersions(version,
+					clusterversion.RemoveDevOffset(clusterversion.MinSupported.Version()),
+					true /* initializeVersion */)
+				cfg.CRDBVersion = settings.Version
 			}
 		}
 	}
@@ -113,10 +129,7 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			if err := s.ApplySnapshot(snap); err != nil {
 				return err
 			}
-			fi, err := s.FirstIndex()
-			if err != nil {
-				return err
-			}
+			fi := s.FirstIndex()
 			// At the time of writing and for *MemoryStorage, applying a
 			// snapshot also truncates appropriately, but this would change with
 			// other storage engines potentially.
@@ -127,8 +140,18 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 		cfg := cfg // fork the config stub
 		cfg.ID, cfg.Storage = id, s
 
-		env.Fabric.addNode()
-		cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
+		// If the node creating command hasn't specified the CRDBVersion, use the
+		// latest one.
+		if cfg.CRDBVersion == nil {
+			cfg.CRDBVersion = cluster.MakeTestingClusterSettings().Version
+		}
+
+		// Disable store liveness if the CRDB version is less than 24.3.
+		if cfg.CRDBVersion.IsActive(context.TODO(), clusterversion.V24_3_StoreLivenessEnabled) {
+			cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
+		} else {
+			cfg.StoreLiveness = raftstoreliveness.Disabled{}
+		}
 
 		if env.Options.OnConfig != nil {
 			env.Options.OnConfig(&cfg)
@@ -157,6 +180,16 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			History: []pb.Snapshot{snap},
 		}
 		env.Nodes = append(env.Nodes, node)
+	}
+
+	// The potential store nodes is the max between the number of nodes in the env
+	// and the sum of voters and learners. Add the difference between the
+	// potential nodes and the current store nodes.
+	allPotential := max(len(env.Nodes),
+		len(snap.Metadata.ConfState.Voters)+len(snap.Metadata.ConfState.Learners))
+	curNodesCount := len(env.Fabric.state) - 1 // 1-indexed stores
+	for rem := allPotential - curNodesCount; rem > 0; rem-- {
+		env.Fabric.addNode()
 	}
 	return nil
 }

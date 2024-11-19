@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package schemachange
 
@@ -16,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -337,20 +333,62 @@ func (og *operationGenerator) columnIsDependedOn(
 func (og *operationGenerator) colIsRefByComputed(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
 ) (bool, error) {
-	return og.scanBool(ctx, tx, `SELECT EXISTS(
-    SELECT
-       attrelid::REGCLASS AS table_name,
-       attname AS column_name,
-       pg_get_expr(adbin, adrelid) AS computed_formula
-    FROM
-       pg_attribute
-    JOIN
-       pg_attrdef ON attrelid = adrelid AND attnum = adnum
-    WHERE
-       atthasdef
-       AND attrelid = $1::REGCLASS
-       AND pg_get_expr(adbin, adrelid) ILIKE '%%' || $2 || '%%'
-)`, tableName.String(), columnName)
+	colIsRefByGeneratedExpr := false
+
+	query := `WITH tab_json AS (
+		SELECT crdb_internal.pb_to_json(
+		'desc',
+		descriptor
+	)->'table' AS t
+	FROM system.descriptor
+	WHERE id = $1::REGCLASS
+	),
+	columns_json AS (
+		SELECT json_array_elements(t->'columns') AS c FROM tab_json
+	),
+	columns AS (
+		SELECT c->>'computeExpr' AS generation_expression,
+		c->>'name' AS column_name,
+		c->>'id' AS ordinal
+	FROM columns_json
+	)
+	SELECT generation_expression FROM columns WHERE generation_expression IS NOT NULL
+	`
+	generatedExpressions, err := Collect[string](ctx, og, tx, pgx.RowTo[string], query, tableName.String())
+	if err != nil {
+		return false, err
+	}
+	for _, generatedExpression := range generatedExpressions {
+		expr, err := parser.ParseExpr(generatedExpression)
+		if err != nil {
+			return false, err
+		}
+
+		if _, err := tree.SimpleVisit(expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+			vBase, ok := expr.(tree.VarName)
+			if !ok {
+				return true, expr, nil
+			}
+
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+
+			c, ok := v.(*tree.ColumnItem)
+			if !ok {
+				return true, expr, nil
+			}
+			if c.ColumnName == columnName {
+				colIsRefByGeneratedExpr = true
+				return false, expr, nil
+			}
+			return true, expr, nil
+		}); err != nil {
+			return false, err
+		}
+	}
+	return colIsRefByGeneratedExpr, nil
 }
 
 func (og *operationGenerator) columnIsDependedOnByView(
@@ -884,7 +922,7 @@ func (og *operationGenerator) columnHasSingleUniqueConstraint(
 	           AND table_name = $2
 	           AND column_name = $3
 	           AND (contype = 'u' OR contype = 'p')
-	           AND array_length(conkey, 1) = 1
+	           AND array_length(conkey, 1) >= 1 -- unique index has to have this a prefix
 					   AND conkey[1] = ordinal_position
 	       )
 	`, tableName.Schema(), tableName.Object(), columnName)
@@ -987,15 +1025,22 @@ SELECT count(*) FROM %s
 			WHERE t2.%s IS NOT NULL
 `, childTable.String(), parentTable.String(), childColumn.name.String(), parentColumn.name.String(), parentColumn.name.String())
 
-	numJoinRows, err := og.scanInt(ctx, tx, q)
+	joinTx, err := tx.Begin(ctx)
 	if err != nil {
-		// UndefinedFunction errors mean that the column type is not comparable.
-		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction {
-			return false, nil
-		}
 		return false, err
 	}
-	return numJoinRows == childRows, err
+	numJoinRows, err := og.scanInt(ctx, joinTx, q)
+	if err != nil {
+		rbkErr := joinTx.Rollback(ctx)
+		// UndefinedFunction errors mean that the column type is not comparable.
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
+			((pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction) ||
+				(pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedColumn)) {
+			return false, rbkErr
+		}
+		return false, errors.WithSecondaryError(err, rbkErr)
+	}
+	return numJoinRows == childRows, joinTx.Commit(ctx)
 }
 
 var (
@@ -1153,7 +1198,7 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 				for name, idx := range columnNameToIndexMap {
 					columnsToValues[name] = rowToInsert[idx]
 				}
-				parentValueInSameInsert, err = og.generateColumn(ctx, tx, colsInfo[parentColInfo.ordinal], columnsToValues)
+				parentValueInSameInsert, err = og.generateColumn(ctx, tx, *parentColInfo, columnsToValues)
 				if err != nil {
 					return false, err
 				}
@@ -1175,7 +1220,10 @@ func (og *operationGenerator) violatesFkConstraintsHelper(
 	}
 	checkSharedParentChildRows := ""
 	if len(parentAndChildSameQueryColumns) > 0 {
-		checkSharedParentChildRows = fmt.Sprintf("false = ANY (ARRAY [%s]) AND",
+		// Check if none of the rows being inserted satisfy the foreign key constraint,
+		// since the foreign key constraints refers to the same table. So, anything in
+		// the insert batch can satisfy the constraint.
+		checkSharedParentChildRows = fmt.Sprintf("NOT (true = ANY (ARRAY [%s])) AND",
 			strings.Join(parentAndChildSameQueryColumns, ","))
 	}
 	q := fmt.Sprintf(`

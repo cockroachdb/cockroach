@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -71,10 +66,6 @@ func (s destroyStatus) Removed() bool {
 const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
-	// NB: we need the nil check below because it's possible that we're GC'ing a
-	// Replica without a replicaID, in which case it does not have a sideloaded
-	// storage.
-	//
 	// TODO(tschottdorf): at node startup, we should remove all on-disk
 	// directories belonging to replicas which aren't present. A crash before a
 	// call to postDestroyRaftMuLocked will currently leave the files around
@@ -88,10 +79,8 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	// TODO(pavelkalinnikov): coming back in 2023, the above may still happen if:
 	// (1) state machine syncs, (2) OS crashes before (3) sideloaded was able to
 	// sync the files removal. The files should be cleaned up on restart.
-	if r.raftMu.sideloaded != nil {
-		if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
-			return err
-		}
+	if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
+		return err
 	}
 
 	// Release the reference to this tenant in metrics, we know the tenant ID is
@@ -192,4 +181,5 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		log.Fatalf(ctx, "removing raft group before destroying replica %s", r)
 	}
 	r.mu.internalRaftGroup = nil
+	r.mu.raftTracer.Close()
 }

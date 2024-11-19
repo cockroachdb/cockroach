@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Copyright 2020 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 set -e
 
 echo "Available certs:"
@@ -26,5 +32,4 @@ unset PGSSLKEY
 unset PGSSLCERT
 export PGUSER=tester
 
-# Exit with error unless we find the expected error message.
-python manage.py inspectdb 2>&1 | grep 'use of GSS authentication requires an enterprise license'
+python manage.py inspectdb

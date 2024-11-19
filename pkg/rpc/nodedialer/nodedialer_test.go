@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package nodedialer
 
@@ -168,9 +163,12 @@ func TestConnHealth(t *testing.T) {
 	// Closing the remote connection should fail ConnHealth.
 	require.NoError(t, ln.popConn().Close())
 	hbDecommission.Store(true)
-	require.Eventually(t, func() bool {
-		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) != nil
-	}, time.Second, 10*time.Millisecond)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NotNil(c, nd.ConnHealth(staticNodeID, rpc.DefaultClass),
+			"expected nd.ConnHealth(%v,rpc.DefaultClass) == nil", staticNodeID)
+	}, 5*time.Second, 20*time.Millisecond,
+		"expected closing the remote connection to n%v to fail ConnHealth, "+
+			"but remained healthy for last 5 seconds", staticNodeID)
 }
 
 func TestConnHealthTryDial(t *testing.T) {

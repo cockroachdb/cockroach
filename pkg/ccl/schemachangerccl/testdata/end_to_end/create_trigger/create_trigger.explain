@@ -1,0 +1,62 @@
+/* setup */
+CREATE TABLE defaultdb.t (id INT PRIMARY KEY, name VARCHAR(256), money INT);
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: % -> %', TG_OP, OLD, NEW;
+    RETURN COALESCE(OLD, NEW);
+  END;
+$$;
+
+/* test */
+EXPLAIN (DDL) CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f();
+----
+Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON ‹defaultdb›.‹t› FOR EACH ROW EXECUTE FUNCTION ‹f›();
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 7 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Trigger:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── ABSENT → PUBLIC TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── ABSENT → PUBLIC TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── ABSENT → PUBLIC TriggerTiming:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── ABSENT → PUBLIC TriggerEvents:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── ABSENT → PUBLIC TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
+ │         │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1}
+ │         └── 8 Mutation operations
+ │              ├── AddTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerName {"Name":{"Name":"tr","TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerEnabled {"Enabled":{"Enabled":true,"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerTiming {"Timing":{"ActionTime":1,"ForEachRow":true,"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerForwardReferences {"Deps":{"TableID":104,"TriggerID":1}}
+ │              └── AddTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 7 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT Trigger:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── PUBLIC → ABSENT TriggerName:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── PUBLIC → ABSENT TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── PUBLIC → ABSENT TriggerTiming:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── PUBLIC → ABSENT TriggerEvents:{DescID: 104 (t), TriggerID: 1}
+      │    │    ├── PUBLIC → ABSENT TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
+      │    │    └── PUBLIC → ABSENT TriggerDeps:{DescID: 104 (t), TriggerID: 1}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 7 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC Trigger:{DescID: 104 (t), TriggerID: 1}
+           │    ├── ABSENT → PUBLIC TriggerName:{DescID: 104 (t), TriggerID: 1}
+           │    ├── ABSENT → PUBLIC TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
+           │    ├── ABSENT → PUBLIC TriggerTiming:{DescID: 104 (t), TriggerID: 1}
+           │    ├── ABSENT → PUBLIC TriggerEvents:{DescID: 104 (t), TriggerID: 1}
+           │    ├── ABSENT → PUBLIC TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
+           │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1}
+           └── 8 Mutation operations
+                ├── AddTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+                ├── SetTriggerName {"Name":{"Name":"tr","TableID":104,"TriggerID":1}}
+                ├── SetTriggerEnabled {"Enabled":{"Enabled":true,"TableID":104,"TriggerID":1}}
+                ├── SetTriggerTiming {"Timing":{"ActionTime":1,"ForEachRow":true,"TableID":104,"TriggerID":1}}
+                ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
+                ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
+                ├── SetTriggerForwardReferences {"Deps":{"TableID":104,"TriggerID":1}}
+                └── AddTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}

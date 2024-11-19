@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -87,6 +82,22 @@ var EnqueueInReplicateQueueOnSpanConfigUpdateEnabled = settings.RegisterBoolSett
 	"controls whether replicas are enqueued into the replicate queue for "+
 		"processing, when a span config update occurs, which affects the replica",
 	true,
+)
+
+// EnqueueProblemRangeInReplicateQueueInterval controls the interval at which
+// problem ranges are enqueued into the replicate queue for processing, outside
+// of the normal scanner interval. A problem range is one which is
+// underreplicated or has a replica on a decommissioning store. The setting is
+// disabled when set to 0. By default, the setting is disabled.
+var EnqueueProblemRangeInReplicateQueueInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.enqueue_in_replicate_queue_on_problem.interval",
+	"interval at which problem ranges are enqueued into the replicate queue for "+
+		"processing, outside of the normal scanner interval; a problem range is "+
+		"one which is underreplicated or has a replica on a decommissioning store, "+
+		"disabled when set to 0",
+	0,
+	settings.NonNegativeDuration,
 )
 
 var (
@@ -734,25 +745,31 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
 ) (requeue bool, _ error) {
 	processStart := timeutil.Now()
-	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica",
-		tracing.WithRecording(tracingpb.RecordingVerbose))
+	startTracing := log.ExpensiveLogEnabled(ctx, 1)
+	var opts []tracing.SpanOption
+	if startTracing {
+		// If we enable expensive logging, we also want to record the traces for
+		// the entire operation. We only log the trace below if we both exceed
+		// the timeout and expensive logging is enabled.
+		opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
+	}
+	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica", opts...)
 	defer sp.Finish()
 
 	requeue, err := rq.processOneChange(ctx, repl, desc, conf,
 		false /* scatter */, false, /* dryRun */
 	)
+	processDuration := timeutil.Since(processStart)
+	loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
+	exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
 
-	// Utilize a new background context (properly annotated) to avoid writing
-	// traces from a child context into its parent.
-	{
-		ctx := repl.AnnotateCtx(rq.AnnotateCtx(context.Background()))
+	var traceOutput redact.RedactableString
+	if startTracing {
+		// Utilize a new background context (properly annotated) to avoid writing
+		// traces from a child context into its parent.
+		ctx = repl.AnnotateCtx(rq.AnnotateCtx(context.Background()))
 		var rec tracingpb.Recording
-		processDuration := timeutil.Since(processStart)
-		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
-		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
-
-		var traceOutput redact.RedactableString
-		traceLoggingNeeded := (err != nil || exceededDuration) && log.ExpensiveLogEnabled(ctx, 1)
+		traceLoggingNeeded := (err != nil || exceededDuration)
 		if traceLoggingNeeded {
 			// If we have tracing spans from execChangeReplicasTxn, filter it from
 			// the recording so that we can render the traces to the log without it,
@@ -762,13 +779,12 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 			)
 			traceOutput = redact.Sprintf("\ntrace:\n%s", rec)
 		}
-
-		if err != nil {
-			log.KvDistribution.Infof(ctx, "error processing replica: %v%s", err, traceOutput)
-		} else if exceededDuration {
-			log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
-				processDuration, loggingThreshold, traceOutput)
-		}
+	}
+	if err != nil {
+		log.KvDistribution.Infof(ctx, "error processing replica: %v%s", err, traceOutput)
+	} else if exceededDuration {
+		log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
+			processDuration, loggingThreshold, traceOutput)
 	}
 
 	return requeue, err

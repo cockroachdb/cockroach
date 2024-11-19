@@ -1,24 +1,23 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package metric
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -55,9 +54,7 @@ type Iterable interface {
 	Inspect(func(interface{}))
 }
 
-// PrometheusExportable is the standard interface for an individual metric
-// that can be exported to prometheus.
-type PrometheusExportable interface {
+type PrometheusCompatible interface {
 	// GetName is a method on Metadata
 	GetName() string
 	// GetHelp is a method on Metadata
@@ -66,12 +63,23 @@ type PrometheusExportable interface {
 	GetType() *prometheusgo.MetricType
 	// GetLabels is a method on Metadata
 	GetLabels() []*prometheusgo.LabelPair
+}
+
+// PrometheusExportable is the standard interface for an individual metric
+// that can be exported to prometheus.
+type PrometheusExportable interface {
+	PrometheusCompatible
 	// ToPrometheusMetric returns a filled-in prometheus metric of the right type
 	// for the given metric. It does not fill in labels.
 	// The implementation must return thread-safe data to the caller, i.e.
 	// usually a copy of internal state.
 	// NB: For histogram metrics, ToPrometheusMetric should return the cumulative histogram.
 	ToPrometheusMetric() *prometheusgo.Metric
+}
+
+type PrometheusVector interface {
+	PrometheusCompatible
+	ToPrometheusMetrics() []*prometheusgo.Metric
 }
 
 // PrometheusIterable is an extension of PrometheusExportable to indicate that
@@ -171,17 +179,27 @@ var _ Iterable = &Gauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &CounterFloat64{}
+var _ Iterable = &GaugeVec{}
+var _ Iterable = &CounterVec{}
+var _ Iterable = &HistogramVec{}
 
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
+var _ json.Marshaler = &GaugeVec{}
+var _ json.Marshaler = &CounterVec{}
+var _ json.Marshaler = &HistogramVec{}
 
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
 var _ PrometheusExportable = &CounterFloat64{}
+
+var _ PrometheusVector = &GaugeVec{}
+var _ PrometheusVector = &CounterVec{}
+var _ PrometheusVector = &HistogramVec{}
 
 var now = timeutil.Now
 
@@ -1050,4 +1068,311 @@ var RecordHistogramQuantiles = []Quantile{
 	{"-p90", 90},
 	{"-p75", 75},
 	{"-p50", 50},
+}
+
+// vector holds the base vector implementation. This is meant to be embedded
+// by metric types that require a variable set of labels. Implements
+// PrometheusVector.
+type vector struct {
+	*syncutil.RWMutex
+	encounteredLabelsLookup map[string]struct{}
+	encounteredLabelValues  [][]string
+	orderedLabelNames       []string
+}
+
+func newVector(labelNames []string) vector {
+	sort.Strings(labelNames)
+
+	return vector{
+		RWMutex:                 &syncutil.RWMutex{},
+		encounteredLabelsLookup: make(map[string]struct{}),
+		encounteredLabelValues:  [][]string{},
+		orderedLabelNames:       labelNames,
+	}
+}
+
+func (v *vector) getOrderedValues(labels map[string]string) []string {
+	labelValues := make([]string, 0, len(labels))
+	for _, labelName := range v.orderedLabelNames {
+		labelValues = append(labelValues, labels[labelName])
+	}
+
+	return labelValues
+}
+
+// recordLabels records the given combination of label values if they haven't
+// been seen before. This is used to iterate over all the counters created
+// based on unique label combinations.
+func (v *vector) recordLabels(labelValues []string) {
+	v.RLock()
+	lookupKey := strings.Join(labelValues, "_")
+	if _, ok := v.encounteredLabelsLookup[lookupKey]; ok {
+		v.RUnlock()
+		return
+	}
+	v.RUnlock()
+
+	v.Lock()
+	defer v.Unlock()
+	v.encounteredLabelsLookup[lookupKey] = struct{}{}
+	v.encounteredLabelValues = append(v.encounteredLabelValues, labelValues)
+}
+
+// GaugeVec is a collector for gauges that have a variable set of labels.
+// This uses the prometheus.GaugeVec under the hood. The contained gauges are
+// not persisted by the internal TSDB, nor are they aggregated; see aggmetric
+// for a metric that allows keeping labeled submetrics while recording their
+// aggregation in the tsdb.
+type GaugeVec struct {
+	Metadata
+	vector
+	promVec *prometheus.GaugeVec
+}
+
+// NewExportedGaugeVec creates a new GaugeVec containing labeled gauges to be
+// exported to an external collector, but is not persisted by the internal TSDB,
+// nor are the metrics in the vector aggregated in any way.
+func NewExportedGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
+	vec := newVector(labelSchema)
+
+	promVec := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: metadata.Name,
+		Help: metadata.Help,
+	}, vec.orderedLabelNames)
+
+	return &GaugeVec{
+		Metadata: metadata,
+		vector:   vec,
+		promVec:  promVec,
+	}
+}
+
+// Update updates the gauge value for the given combination of labels.
+func (gv *GaugeVec) Update(labels map[string]string, v int64) {
+	labelValues := gv.getOrderedValues(labels)
+	gv.recordLabels(labelValues)
+	gv.promVec.WithLabelValues(labelValues...).Set(float64(v))
+}
+
+// Inc increments the gauge value for the given combination of labels.
+func (gv *GaugeVec) Inc(labels map[string]string, v int64) {
+	labelValues := gv.getOrderedValues(labels)
+	gv.recordLabels(labelValues)
+	gv.promVec.WithLabelValues(labelValues...).Add(float64(v))
+}
+
+// Dec decrements the gauge value for the given combination of labels.
+func (gv *GaugeVec) Dec(labels map[string]string, v int64) {
+	labelValues := gv.getOrderedValues(labels)
+	gv.recordLabels(labelValues)
+	gv.promVec.WithLabelValues(labelValues...).Sub(float64(v))
+}
+
+// GetMetadata implements Iterable.
+func (gv *GaugeVec) GetMetadata() Metadata {
+	return gv.Metadata
+}
+
+// Inspect implements Iterable.
+func (gv *GaugeVec) Inspect(f func(interface{})) { f(gv) }
+
+// MarshalJSON implements JSONMarshaler.
+func (gv *GaugeVec) MarshalJSON() ([]byte, error) {
+	return json.Marshal(gv)
+}
+
+// GetType implements PrometheusExportable.
+func (gv *GaugeVec) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_GAUGE.Enum()
+}
+
+// ToPrometheusMetrics implements PrometheusExportable.
+func (gv *GaugeVec) ToPrometheusMetrics() []*prometheusgo.Metric {
+	metrics := make([]*prometheusgo.Metric, 0, len(gv.encounteredLabelValues))
+
+	for _, labels := range gv.encounteredLabelValues {
+		m := &prometheusgo.Metric{}
+		g := gv.promVec.WithLabelValues(labels...)
+
+		if err := g.Write(m); err != nil {
+			panic(err)
+		}
+
+		metrics = append(metrics, m)
+	}
+
+	return metrics
+}
+
+// CounterVec wraps a prometheus.CounterVec; it is not aggregated or persisted.
+type CounterVec struct {
+	Metadata
+	vector
+	promVec *prometheus.CounterVec
+}
+
+// NewExportedCounterVec creates a new CounterVec containing labeled counters to
+// be exported to an external collector; the contained counters are not
+// aggregated or persisted to the tsdb (see aggmetric.Counter for a counter that
+// persists the aggregation of n labeled child metrics).
+func NewExportedCounterVec(metadata Metadata, labelNames []string) *CounterVec {
+	vec := newVector(labelNames)
+
+	promVec := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: metadata.Name,
+		Help: metadata.Help,
+	}, vec.orderedLabelNames)
+
+	return &CounterVec{
+		Metadata: metadata,
+		vector:   vec,
+		promVec:  promVec,
+	}
+}
+
+// Update updates the counter value for the given combination of labels.
+// prometheus.CounterVec does not support an Update method, so we have to
+// implement it ourselves by getting the current counter value and adding the
+// difference. This panics if the current value is greater than the new value.
+func (cv *CounterVec) Update(labels map[string]string, v int64) {
+	labelValues := cv.getOrderedValues(labels)
+	cv.recordLabels(labelValues)
+
+	currentValue := cv.Count(labels)
+	if currentValue > v {
+		panic(fmt.Sprintf("Counters should not decrease, prev: %d, new: %d.", currentValue, v))
+	}
+
+	cv.promVec.WithLabelValues(labelValues...).Add(float64(v - currentValue))
+}
+
+// Inc increments the value for the given combination of labels.
+func (cv *CounterVec) Inc(labels map[string]string, v int64) {
+	labelValues := cv.getOrderedValues(labels)
+	cv.recordLabels(labelValues)
+	cv.promVec.WithLabelValues(labelValues...).Add(float64(v))
+}
+
+// Count returns the current value of the counter for the given combination of
+// labels.
+func (cv *CounterVec) Count(labels map[string]string) int64 {
+	m := prometheusgo.Metric{}
+	labelValues := cv.getOrderedValues(labels)
+	if err := cv.promVec.WithLabelValues(labelValues...).Write(&m); err != nil {
+		panic(err)
+	}
+
+	return int64(m.Counter.GetValue())
+}
+
+// GetMetadata implements Iterable.
+func (cv *CounterVec) GetMetadata() Metadata {
+	return cv.Metadata
+}
+
+// Inspect implements Iterable.
+func (cv *CounterVec) Inspect(f func(interface{})) { f(cv) }
+
+// MarshalJSON implements JSONMarshaler.
+func (cv *CounterVec) MarshalJSON() ([]byte, error) {
+	return json.Marshal(cv)
+}
+
+// GetType implements PrometheusExportable.
+func (cv *CounterVec) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_COUNTER.Enum()
+}
+
+// ToPrometheusMetrics implements PrometheusExportable.
+func (cv *CounterVec) ToPrometheusMetrics() []*prometheusgo.Metric {
+	metrics := make([]*prometheusgo.Metric, 0, len(cv.encounteredLabelValues))
+
+	for _, labels := range cv.encounteredLabelValues {
+		m := &prometheusgo.Metric{}
+		c := cv.promVec.WithLabelValues(labels...)
+
+		if err := c.Write(m); err != nil {
+			panic(err)
+		}
+
+		metrics = append(metrics, m)
+	}
+
+	return metrics
+}
+
+// HistogramVec wraps a prometheus.HistogramVec; it is not aggregated or persisted.
+type HistogramVec struct {
+	Metadata
+	vector
+	promVec *prometheus.HistogramVec
+}
+
+// NewExportedHistogramVec creates a new HistogramVec containing labeled counters to
+// be exported to an external collector; the contained histograms are not
+// aggregated or persisted to the tsdb (see aggmetric.Histogram for a counter that
+// persists the aggregation of n labeled child metrics).
+func NewExportedHistogramVec(
+	metadata Metadata, bucketConfig staticBucketConfig, labelNames []string,
+) *HistogramVec {
+	vec := newVector(labelNames)
+	opts := prometheus.HistogramOpts{
+		Buckets: bucketConfig.GetBucketsFromBucketConfig(),
+		Name:    metadata.Name,
+		Help:    metadata.Help,
+	}
+	promVec := prometheus.NewHistogramVec(opts, vec.orderedLabelNames)
+	return &HistogramVec{
+		Metadata: metadata,
+		vector:   vec,
+		promVec:  promVec,
+	}
+}
+
+// Observe adds invokes prometheus.Observer Observe function for the given
+// combination of labels.
+func (hv *HistogramVec) Observe(labels map[string]string, v float64) {
+	labelValues := hv.getOrderedValues(labels)
+	hv.recordLabels(labelValues)
+	hv.promVec.WithLabelValues(labelValues...).Observe(v)
+}
+
+// GetMetadata implements Iterable.
+func (hv *HistogramVec) GetMetadata() Metadata {
+	return hv.Metadata
+}
+
+// Inspect implements Iterable.
+func (hv *HistogramVec) Inspect(f func(interface{})) { f(hv) }
+
+// MarshalJSON implements JSONMarshaler.
+func (hv *HistogramVec) MarshalJSON() ([]byte, error) {
+	return json.Marshal(hv)
+}
+
+// GetType implements PrometheusExportable.
+func (hv *HistogramVec) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_HISTOGRAM.Enum()
+}
+
+// ToPrometheusMetrics implements PrometheusExportable.
+func (hv *HistogramVec) ToPrometheusMetrics() []*prometheusgo.Metric {
+	metrics := make([]*prometheusgo.Metric, 0, len(hv.encounteredLabelValues))
+
+	for _, labels := range hv.encounteredLabelValues {
+		m := &prometheusgo.Metric{}
+		o := hv.promVec.WithLabelValues(labels...)
+		histogram, ok := o.(prometheus.Histogram)
+		if !ok {
+			log.Errorf(context.TODO(), "Unable to convert Observer to prometheus.Histogram. Metric name=%s", hv.Name)
+			continue
+		}
+		if err := histogram.Write(m); err != nil {
+			panic(err)
+		}
+
+		metrics = append(metrics, m)
+	}
+
+	return metrics
 }

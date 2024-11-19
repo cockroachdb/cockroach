@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package execbuilder
 
@@ -712,6 +707,7 @@ func (b *Builder) buildExistsSubquery(
 				false, /* generator */
 				false, /* tailCall */
 				false, /* procedure */
+				false, /* triggerFunc */
 				false, /* blockStart */
 				nil,   /* blockState */
 				nil,   /* cursorDeclaration */
@@ -833,6 +829,7 @@ func (b *Builder) buildSubquery(
 			false, /* generator */
 			false, /* tailCall */
 			false, /* procedure */
+			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
@@ -870,8 +867,8 @@ func (b *Builder) buildSubquery(
 				return expectedLazyRoutineError("check")
 			}
 			plan, err := b.factory.ConstructPlan(
-				ePlan.root, nil /* subqueries */, nil /* cascades */, nil /* checks */, inputRowCount,
-				eb.flags,
+				ePlan.root, nil /* subqueries */, nil /* cascades */, nil /* checks */, nil, /* triggers */
+				inputRowCount, eb.flags,
 			)
 			if err != nil {
 				return err
@@ -893,6 +890,7 @@ func (b *Builder) buildSubquery(
 			false, /* generator */
 			false, /* tailCall */
 			false, /* procedure */
+			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
@@ -1005,6 +1003,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.SetReturning,
 		tailCall,
 		false, /* procedure */
+		udf.Def.TriggerFunc,
 		udf.Def.BlockStart,
 		blockState,
 		udf.Def.CursorDeclaration,
@@ -1061,6 +1060,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.SetReturning,
 			false, /* tailCall */
 			false, /* procedure */
+			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */

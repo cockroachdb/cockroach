@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { Loading } from "@cockroachlabs/cluster-ui";
 import filter from "lodash/filter";
@@ -61,12 +56,14 @@ function ProblemRangeList(props: {
   description?: string;
 }) {
   const ids = flow(
-    (problems: NodeProblems$Properties[]) => filter(problems, problem => isEmpty(problem.error_message)),
-    (problems: NodeProblems$Properties[]) => flatMap(problems, problem => props.extract(problem)),
+    (problems: NodeProblems$Properties[]) =>
+      filter(problems, problem => isEmpty(problem.error_message)),
+    (problems: NodeProblems$Properties[]) =>
+      flatMap(problems, problem => props.extract(problem)),
     ids => map(ids, id => FixLong(id)),
     ids => sortBy(ids, id => id.toNumber()),
     ids => map(ids, id => id.toString()),
-    sortedUniq
+    sortedUniq,
   )(props.problems);
   if (isEmpty(ids)) {
     return null;

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package schemachange implements the schemachange workload.
 package schemachange
@@ -20,6 +15,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -405,15 +401,23 @@ var (
 	errRunInTxnRbkSentinel   = errors.New("txn needs to rollback")
 )
 
-// LogEntry and its fields must be public so that the json package can encode this struct.
+// LogEntry is used to log information about the operations performed, expected errors,
+// the worker ID, the corresponding timestamp, and any additional messages or error states.
+// Note: LogEntry and its fields must be public so that the json package can encode this struct.
 type LogEntry struct {
-	WorkerID             int           `json:"workerId"`
-	ClientTimestamp      string        `json:"clientTimestamp"`
-	Ops                  []interface{} `json:"ops"`
-	ExpectedExecErrors   string        `json:"expectedExecErrors"`
-	ExpectedCommitErrors string        `json:"expectedCommitErrors"`
+	// WorkerID identifies the worker executing the operations.
+	WorkerID int `json:"workerId"`
+	// ClientTimestamp tracks when the operation was executed.
+	ClientTimestamp string `json:"clientTimestamp"`
+	// Ops a collection of the various types of operations performed.
+	Ops []interface{} `json:"ops"`
+	// ExpectedExecErrors errors which occur as soon as you run the statement.
+	ExpectedExecErrors string `json:"expectedExecErrors"`
+	// ExpectedCommitErrors errors which occur only during commit.
+	ExpectedCommitErrors string `json:"expectedCommitErrors"`
 	// Optional message for errors or if a hook was called.
-	Message    string      `json:"message"`
+	Message string `json:"message"`
+	// ErrorState holds information on the error's state when an error occurs.
 	ErrorState *ErrorState `json:"errorState,omitempty"`
 }
 
@@ -508,6 +512,15 @@ func (w *schemaChangeWorker) runInTxn(
 				// to rollback.
 				if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 					w.recordInHist(timeutil.Since(start), txnRollback)
+					return errors.Mark(
+						err,
+						errRunInTxnRbkSentinel,
+					)
+				}
+				// Command is too large errors are allowed on DML operations since,
+				// some of the tables can be pretty wide in this test.
+				if op.queryType == OpStmtDML && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
+					strings.Contains(pgErr.Error(), "command is too large") {
 					return errors.Mark(
 						err,
 						errRunInTxnRbkSentinel,

@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package metric
 
@@ -128,6 +123,8 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 	}
 	t := v.Type()
 
+	const allowNil = true
+	const disallowNil = false
 	for i := 0; i < v.NumField(); i++ {
 		vfield, tfield := v.Field(i), t.Field(i)
 		tname := tfield.Name
@@ -142,14 +139,18 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 			for i := 0; i < vfield.Len(); i++ {
 				velem := vfield.Index(i)
 				telemName := fmt.Sprintf("%s[%d]", tname, i)
-				// Permit elements in the array to be nil.
-				const skipNil = true
-				r.addMetricValue(ctx, velem, telemName, skipNil, t)
+				r.addMetricValue(ctx, velem, telemName, allowNil, t)
+			}
+		case reflect.Map:
+			iter := vfield.MapRange()
+			for iter.Next() {
+				// telemName is only used for assertion errors.
+				telemName := iter.Key().String()
+				r.addMetricValue(ctx, iter.Value(), telemName, allowNil, t)
 			}
 		default:
 			// No metric fields should be nil.
-			const skipNil = false
-			r.addMetricValue(ctx, vfield, tname, skipNil, t)
+			r.addMetricValue(ctx, vfield, tname, disallowNil, t)
 		}
 	}
 }
@@ -279,7 +280,7 @@ func checkFieldCanBeSkipped(
 	}
 
 	switch fieldType.Kind() {
-	case reflect.Array, reflect.Slice:
+	case reflect.Array, reflect.Slice, reflect.Map:
 		checkFieldCanBeSkipped(skipReason, fieldName, fieldType.Elem(), parentType)
 	case reflect.Struct:
 		containsMetrics := false
@@ -322,7 +323,7 @@ func containsMetricType(ft reflect.Type) bool {
 	}
 
 	switch ft.Kind() {
-	case reflect.Slice, reflect.Array:
+	case reflect.Slice, reflect.Array, reflect.Map:
 		return containsMetricType(ft.Elem())
 	case reflect.Struct:
 		for i := 0; i < ft.NumField(); i++ {

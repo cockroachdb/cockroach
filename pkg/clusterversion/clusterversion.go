@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package clusterversion defines the interfaces to interact with cluster
 // versions in order to accommodate backward incompatible behaviors. It handles
@@ -268,6 +263,24 @@ func (cv ClusterVersion) Encode() []byte {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "error marshalling version"))
 	}
 	return encoded
+}
+
+// FenceVersion is the fence version -- the internal immediately prior -- for
+// the given version.
+//
+// Fence versions allow the upgrades infrastructure to safely step through
+// consecutive cluster versions in the presence of Nodes (running any binary
+// version) being added to the cluster. See the upgrademanager package for
+// intended usage.
+//
+// Fence versions (and the upgrades infrastructure entirely) were introduced in
+// the 21.1 release cycle. In the same release cycle, we introduced the
+// invariant that new user-defined versions (users being crdb engineers) must
+// always have even-numbered Internal versions, thus reserving the odd numbers
+// to slot in fence versions for each cluster version. See top-level
+// documentation in the clusterversion package for more details.
+func (cv ClusterVersion) FenceVersion() ClusterVersion {
+	return ClusterVersion{Version: cv.Version.FenceVersion()}
 }
 
 var _ settings.ClusterVersionImpl = ClusterVersion{}

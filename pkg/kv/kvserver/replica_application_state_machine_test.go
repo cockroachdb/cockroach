@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -94,17 +89,17 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		// Stage a command with the ChangeReplicas trigger.
 		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
-				Index: uint64(r.mu.state.RaftAppliedIndex + 1),
+				Index: uint64(r.shMu.state.RaftAppliedIndex + 1),
 				Type:  raftpb.EntryConfChange,
 			},
 			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
-				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
-				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+				ProposerLeaseSequence: r.shMu.state.Lease.Sequence,
+				MaxLeaseIndex:         r.shMu.state.LeaseAppliedIndex + 1,
 				ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 					State:          &kvserverpb.ReplicaState{Desc: &newDesc},
 					ChangeReplicas: &kvserverpb.ChangeReplicas{ChangeReplicasTrigger: trigger},
-					WriteTimestamp: r.mu.state.GCThreshold.Add(1, 0),
+					WriteTimestamp: r.shMu.state.GCThreshold.Add(1, 0),
 				},
 			},
 			ConfChangeV1: &confChange,
@@ -182,12 +177,12 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		defer b.Close()
 
 		r.mu.Lock()
-		raftAppliedIndex := r.mu.state.RaftAppliedIndex
-		truncatedIndex := r.mu.state.TruncatedState.Index
-		raftLogSize := r.mu.raftLogSize
+		raftAppliedIndex := r.shMu.state.RaftAppliedIndex
+		truncatedIndex := r.shMu.state.TruncatedState.Index
+		raftLogSize := r.shMu.raftLogSize
 		// Overwrite to be trusted, since we want to check if transitions to false
 		// or not.
-		r.mu.raftLogSizeTrusted = true
+		r.shMu.raftLogSizeTrusted = true
 		r.mu.Unlock()
 
 		expectedFirstIndex := truncatedIndex + 1
@@ -203,8 +198,8 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			},
 			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
-				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
-				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+				ProposerLeaseSequence: r.shMu.state.Lease.Sequence,
+				MaxLeaseIndex:         r.shMu.state.LeaseAppliedIndex + 1,
 				ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 					State: &kvserverpb.ReplicaState{
 						TruncatedState: &kvserverpb.RaftTruncatedState{
@@ -213,7 +208,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 					},
 					RaftLogDelta:           -1,
 					RaftExpectedFirstIndex: expectedFirstIndex,
-					WriteTimestamp:         r.mu.state.GCThreshold.Add(1, 0),
+					WriteTimestamp:         r.shMu.state.GCThreshold.Add(1, 0),
 				},
 			},
 		}
@@ -242,19 +237,19 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			// log index that we pulled out of thin air above.
 			r.mu.destroyStatus.Set(errors.New("test done"), destroyReasonRemoved)
 
-			require.Equal(t, raftAppliedIndex+1, r.mu.state.RaftAppliedIndex)
-			require.Equal(t, truncatedIndex+1, r.mu.state.TruncatedState.Index)
+			require.Equal(t, raftAppliedIndex+1, r.shMu.state.RaftAppliedIndex)
+			require.Equal(t, truncatedIndex+1, r.shMu.state.TruncatedState.Index)
 			expectedSize := raftLogSize - 1
 			// We typically have a raftLogSize > 0 (based on inspecting some test
 			// runs), but we can't be sure.
 			if expectedSize < 0 {
 				expectedSize = 0
 			}
-			require.Equal(t, expectedSize, r.mu.raftLogSize)
-			require.Equal(t, accurate, r.mu.raftLogSizeTrusted)
+			require.Equal(t, expectedSize, r.shMu.raftLogSize)
+			require.Equal(t, accurate, r.shMu.raftLogSizeTrusted)
 			truncState, err := r.mu.stateLoader.LoadRaftTruncatedState(context.Background(), tc.engine)
 			require.NoError(t, err)
-			require.Equal(t, r.mu.state.TruncatedState.Index, truncState.Index)
+			require.Equal(t, r.shMu.state.TruncatedState.Index, truncState.Index)
 		}()
 	})
 }
@@ -295,12 +290,12 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			r.raftMu.Lock()
 			defer r.raftMu.Unlock()
 			r.mu.Lock()
-			raftAppliedIndex := r.mu.state.RaftAppliedIndex
-			truncatedIndex := r.mu.state.TruncatedState.Index
-			raftLogSize := r.mu.raftLogSize
+			raftAppliedIndex := r.shMu.state.RaftAppliedIndex
+			truncatedIndex := r.shMu.state.TruncatedState.Index
+			raftLogSize := r.shMu.raftLogSize
 			// Overwrite to be trusted, since we want to check if transitions to false
 			// or not.
-			r.mu.raftLogSizeTrusted = true
+			r.shMu.raftLogSizeTrusted = true
 			r.mu.Unlock()
 			expectedFirstIndex := truncatedIndex + 1
 			if !accurate {
@@ -322,8 +317,8 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 				},
 				ID: raftlog.MakeCmdIDKey(),
 				Cmd: kvserverpb.RaftCommand{
-					ProposerLeaseSequence: r.mu.state.Lease.Sequence,
-					MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+					ProposerLeaseSequence: r.shMu.state.Lease.Sequence,
+					MaxLeaseIndex:         r.shMu.state.LeaseAppliedIndex + 1,
 					ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
 						State: &kvserverpb.ReplicaState{
 							TruncatedState: &kvserverpb.RaftTruncatedState{
@@ -332,7 +327,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 						},
 						RaftLogDelta:           -1,
 						RaftExpectedFirstIndex: expectedFirstIndex,
-						WriteTimestamp:         r.mu.state.GCThreshold.Add(1, 0),
+						WriteTimestamp:         r.shMu.state.GCThreshold.Add(1, 0),
 					},
 				},
 			}
@@ -352,12 +347,12 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			_, err = sm.ApplySideEffects(checkedCmd.Ctx(), checkedCmd)
 			require.NoError(t, err)
 			func() {
-				r.mu.Lock()
+				r.mu.Lock() // TODO(pav-kv): don't need these
 				defer r.mu.Unlock()
-				require.Equal(t, raftAppliedIndex+1, r.mu.state.RaftAppliedIndex)
+				require.Equal(t, raftAppliedIndex+1, r.shMu.state.RaftAppliedIndex)
 				// No truncation.
-				require.Equal(t, truncatedIndex, r.mu.state.TruncatedState.Index)
-				require.True(t, r.mu.raftLogSizeTrusted)
+				require.Equal(t, truncatedIndex, r.shMu.state.TruncatedState.Index)
+				require.True(t, r.shMu.raftLogSizeTrusted)
 			}()
 			require.False(t, r.pendingLogTruncations.isEmptyLocked())
 			trunc := r.pendingLogTruncations.frontLocked()
@@ -380,13 +375,13 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			r.mu.Lock()
 			defer r.mu.Unlock()
-			if r.mu.state.TruncatedState.Index != truncatedIndex+1 {
+			if r.shMu.state.TruncatedState.Index != truncatedIndex+1 {
 				return errors.Errorf("not truncated")
 			}
-			if r.mu.raftLogSize != expectedSize {
+			if r.shMu.raftLogSize != expectedSize {
 				return errors.Errorf("not truncated")
 			}
-			if accurate != r.mu.raftLogSizeTrusted {
+			if accurate != r.shMu.raftLogSizeTrusted {
 				return errors.Errorf("not truncated")
 			}
 			r.pendingLogTruncations.mu.Lock()
@@ -422,9 +417,9 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 
 	sm := r.getStateMachine()
 
-	r.mu.Lock()
-	raftAppliedIndex := r.mu.state.RaftAppliedIndex
-	r.mu.Unlock()
+	r.mu.RLock()
+	raftAppliedIndex := r.shMu.state.RaftAppliedIndex
+	r.mu.RUnlock()
 
 	descWriteRepr := func(v string) (kvpb.Request, []byte) {
 		b := tc.store.TODOEngine().NewBatch()
@@ -453,8 +448,8 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 			},
 			ID: raftlog.MakeCmdIDKey(),
 			Cmd: kvserverpb.RaftCommand{
-				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
-				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+				ProposerLeaseSequence: r.shMu.state.Lease.Sequence,
+				MaxLeaseIndex:         r.shMu.state.LeaseAppliedIndex + 1,
 				WriteBatch:            &kvserverpb.WriteBatch{Data: repr},
 			},
 		}

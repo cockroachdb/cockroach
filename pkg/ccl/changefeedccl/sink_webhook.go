@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -25,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -76,15 +74,17 @@ type webhookSinkPayload struct {
 }
 
 type encodedPayload struct {
-	data     []byte
-	alloc    kvevent.Alloc
-	emitTime time.Time
-	mvcc     hlc.Timestamp
+	data        []byte
+	alloc       kvevent.Alloc
+	emitTime    time.Time
+	mvcc        hlc.Timestamp
+	recordCount int
 }
 
 func encodePayloadJSONWebhook(messages []deprecatedMessagePayload) (encodedPayload, error) {
 	result := encodedPayload{
-		emitTime: timeutil.Now(),
+		emitTime:    timeutil.Now(),
+		recordCount: len(messages),
 	}
 
 	payload := make([]json.RawMessage, len(messages))
@@ -232,6 +232,7 @@ func makeDeprecatedWebhookSink(
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
+	m := mb(requiresResourceAccounting)
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeWebhookHTTPS)
 	}
@@ -271,7 +272,7 @@ func makeDeprecatedWebhookSink(
 		exitWorkers: cancel,
 		parallelism: parallelism,
 		ts:          source,
-		metrics:     mb(requiresResourceAccounting),
+		metrics:     m,
 		format:      encodingOpts.Format,
 	}
 
@@ -282,7 +283,7 @@ func makeDeprecatedWebhookSink(
 	}
 
 	// TODO(yevgeniy): Establish HTTP connection in Dial().
-	sink.client, err = deprecatedMakeWebhookClient(u, connTimeout)
+	sink.client, err = deprecatedMakeWebhookClient(u, connTimeout, m.netMetrics())
 	if err != nil {
 		return nil, err
 	}
@@ -303,12 +304,14 @@ func makeDeprecatedWebhookSink(
 	return sink, nil
 }
 
-func deprecatedMakeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, error) {
+func deprecatedMakeWebhookClient(
+	u sinkURL, timeout time.Duration, nm *cidr.NetMetrics,
+) (*httputil.Client, error) {
 	client := &httputil.Client{
 		Client: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				DialContext: (&net.Dialer{Timeout: timeout}).DialContext,
+				DialContext: nm.Wrap((&net.Dialer{Timeout: timeout}).DialContext, "webhook"),
 			},
 		},
 	}
@@ -545,7 +548,7 @@ func (s *deprecatedWebhookSink) workerLoop(workerIndex int) {
 				s.exitWorkersWithError(err)
 				return
 			}
-			if err := s.sendMessageWithRetries(s.workerCtx, encoded.data); err != nil {
+			if err := s.sendMessageWithRetries(s.workerCtx, encoded.data, encoded.recordCount); err != nil {
 				s.exitWorkersWithError(err)
 				return
 			}
@@ -556,14 +559,26 @@ func (s *deprecatedWebhookSink) workerLoop(workerIndex int) {
 	}
 }
 
-func (s *deprecatedWebhookSink) sendMessageWithRetries(ctx context.Context, reqBody []byte) error {
+func (s *deprecatedWebhookSink) sendMessageWithRetries(
+	ctx context.Context, reqBody []byte, recordCount int,
+) error {
+	firstTry := true
 	requestFunc := func() error {
+		if firstTry {
+			firstTry = false
+		} else {
+			s.metrics.recordInternalRetry(int64(recordCount), false)
+		}
+
 		return s.sendMessage(ctx, reqBody)
+
 	}
 	return retry.WithMaxAttempts(ctx, s.retryCfg, s.retryCfg.MaxRetries+1, requestFunc)
 }
 
-func (s *deprecatedWebhookSink) sendMessage(ctx context.Context, reqBody []byte) error {
+func (s *deprecatedWebhookSink) sendMessage(ctx context.Context, reqBody []byte) (retErr error) {
+	defer s.metrics.timers().DownstreamClientSend.Start()()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.url.String(), bytes.NewReader(reqBody))
 	if err != nil {
 		return err
@@ -681,7 +696,7 @@ func (s *deprecatedWebhookSink) EmitResolvedTimestamp(
 	// do worker logic directly here instead (there's no point using workers for
 	// resolved timestamps since there are no keys and everything must be
 	// in order)
-	if err := s.sendMessageWithRetries(ctx, payload); err != nil {
+	if err := s.sendMessageWithRetries(ctx, payload, 1); err != nil {
 		s.exitWorkersWithError(err)
 		return err
 	}

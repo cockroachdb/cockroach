@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import * as React from "react";
 
@@ -19,6 +14,12 @@ export interface IconProps {
 CockroachLabsLockupIcon.defaultProps = {
   height: 49,
 };
+
+// The lint rule below is disabled in order to avoid the eslint error over
+// the `mask-type` attribute in the `mask` element in the SVG below. If
+// you remove that attribute, the CRL logo will render incorrectly in the
+// top left corner of every page.
+/* eslint react/no-unknown-property: "off" */
 
 export function CockroachLabsLockupIcon(props: IconProps) {
   const { height } = props;

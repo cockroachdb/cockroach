@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -25,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -115,7 +111,7 @@ func registerDecommission(r registry.Registry) {
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runDecommissionMixedVersions(ctx, t, c, t.BuildVersion())
+				runDecommissionMixedVersions(ctx, t, c)
 			},
 		})
 	}
@@ -179,7 +175,7 @@ func runDrainAndDecommission(
 		run(`SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
-		err := WaitForReplication(ctx, t, t.L(), db, defaultReplicationFactor, atLeastReplicationFactor)
+		err := roachtestutil.WaitForReplication(ctx, t.L(), db, defaultReplicationFactor, roachtestutil.AtLeastReplicationFactor)
 		require.NoError(t, err)
 	}
 
@@ -1021,7 +1017,7 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		require.NoError(t, err)
 
 		// Wait for initial up-replication.
-		err = WaitFor3XReplication(ctx, t, t.L(), db)
+		err = roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 		require.NoError(t, err)
 	}
 
@@ -1060,10 +1056,11 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 			return err
 		}
 
-		// Check to see if the node has been drained.
+		// Check to see if the node has been drained or decomissioned.
 		// If not, queries should not fail.
 		if err = run(decommNodeDB, `SHOW DATABASES`); err != nil {
-			if strings.Contains(err.Error(), "not accepting clients") { // drained
+			if strings.Contains(err.Error(), "not accepting clients") || // drained
+				strings.Contains(err.Error(), "node is decommissioned") { // decommissioned
 				return nil
 			}
 			t.Fatal(err)
@@ -1112,7 +1109,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 		run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 
 		// Wait for initial up-replication.
-		err := WaitForReplication(ctx, t, t.L(), db, replicationFactor, atLeastReplicationFactor)
+		err := roachtestutil.WaitForReplication(ctx, t.L(), db, replicationFactor, roachtestutil.AtLeastReplicationFactor)
 		require.NoError(t, err)
 	}
 

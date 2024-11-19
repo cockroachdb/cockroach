@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package compengine
 
@@ -16,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/redact"
 )
 
 // Engine is the common interface between the
@@ -127,7 +123,7 @@ type Method interface {
 
 // QueryIterFn is an interface through which the completion engine can
 // run SQL queries. Typically initialized using an InternalExecutor.
-type QueryIterFn func(ctx context.Context, opName string, query string, args ...interface{}) (Rows, error)
+type QueryIterFn func(ctx context.Context, opName redact.RedactableString, query string, args ...interface{}) (Rows, error)
 
 // New creates a completion engine.
 func New(queryIter QueryIterFn, methods []Method, offset int, input string) Engine {

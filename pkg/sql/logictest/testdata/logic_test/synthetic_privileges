@@ -289,35 +289,36 @@ statement ok
 CREATE USER testuser4
 
 statement ok
-REVOKE SELECT ON crdb_internal.tables FROM public
+REVOKE SELECT ON crdb_internal.feature_usage FROM public
 
-query B
-SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')
+query B retry
+SELECT has_table_privilege('testuser4', 'crdb_internal.feature_usage', 'SELECT')
 ----
 false
 
+# Use a high priority transaction to avoid this transaction being aborted.
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN TRANSACTION PRIORITY HIGH ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
-GRANT SELECT ON crdb_internal.tables TO testuser4
+GRANT SELECT ON crdb_internal.feature_usage TO testuser4
 
 query TTTT
 SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1,2
 ----
-public     /vtable/crdb_internal/tables  {}                                         {}
-root       /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser   /externalconn/foo             {USAGE}                                    {}
-testuser   /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser   /vtable/crdb_internal/tables  {SELECT}                                   {}
-testuser2  /externalconn/foo             {USAGE}                                    {}
-testuser2  /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser3  /global/                      {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
-testuser4  /vtable/crdb_internal/tables  {SELECT}                                   {}
+public     /vtable/crdb_internal/feature_usage  {}                                         {}
+root       /global/                             {MODIFYCLUSTERSETTING}                     {}
+testuser   /externalconn/foo                    {USAGE}                                    {}
+testuser   /global/                             {MODIFYCLUSTERSETTING}                     {}
+testuser   /vtable/crdb_internal/tables         {SELECT}                                   {}
+testuser2  /externalconn/foo                    {USAGE}                                    {}
+testuser2  /global/                             {MODIFYCLUSTERSETTING}                     {}
+testuser3  /global/                             {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
+testuser4  /vtable/crdb_internal/feature_usage  {SELECT}                                   {}
 
 # This should not cache the uncommitted privilege.
 query B
-SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')
+SELECT has_table_privilege('testuser4', 'crdb_internal.feature_usage', 'SELECT')
 ----
 true
 
@@ -327,17 +328,17 @@ ROLLBACK
 query TTTT
 SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1,2
 ----
-public     /vtable/crdb_internal/tables  {}                                         {}
-root       /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser   /externalconn/foo             {USAGE}                                    {}
-testuser   /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser   /vtable/crdb_internal/tables  {SELECT}                                   {}
-testuser2  /externalconn/foo             {USAGE}                                    {}
-testuser2  /global/                      {MODIFYCLUSTERSETTING}                     {}
-testuser3  /global/                      {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
+public     /vtable/crdb_internal/feature_usage  {}                                         {}
+root       /global/                             {MODIFYCLUSTERSETTING}                     {}
+testuser   /externalconn/foo                    {USAGE}                                    {}
+testuser   /global/                             {MODIFYCLUSTERSETTING}                     {}
+testuser   /vtable/crdb_internal/tables         {SELECT}                                   {}
+testuser2  /externalconn/foo                    {USAGE}                                    {}
+testuser2  /global/                             {MODIFYCLUSTERSETTING}                     {}
+testuser3  /global/                             {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
 
 query B
-SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')
+SELECT has_table_privilege('testuser4', 'crdb_internal.feature_usage', 'SELECT')
 ----
 false
 

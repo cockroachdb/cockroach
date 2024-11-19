@@ -85,7 +85,7 @@ key cols:
   x = a
   y = lookup_join_const_col_@8
 input projections:
-  lookup_join_const_col_@8 = 1
+  lookup_join_const_col_@8 = 1 [type=INT8]
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 y = b AND z = c
@@ -99,7 +99,7 @@ key cols:
   x = lookup_join_const_col_@7
   y = b
 input projections:
-  lookup_join_const_col_@7 = 1
+  lookup_join_const_col_@7 = 1 [type=INT8]
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 x = 1 AND y = 2 AND z = c
@@ -109,8 +109,8 @@ key cols:
   y = lookup_join_const_col_@8
   z = c
 input projections:
-  lookup_join_const_col_@7 = 1
-  lookup_join_const_col_@8 = 2
+  lookup_join_const_col_@7 = 1 [type=INT8]
+  lookup_join_const_col_@8 = 2 [type=INT8]
 
 lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
 x = 1 AND y = b AND z = 3
@@ -120,8 +120,8 @@ key cols:
   y = b
   z = lookup_join_const_col_@9
 input projections:
-  lookup_join_const_col_@7 = 1
-  lookup_join_const_col_@9 = 3
+  lookup_join_const_col_@7 = 1 [type=INT8]
+  lookup_join_const_col_@9 = 3 [type=INT8]
 
 lookup-constraints left=(a int, b int, c int, d int) right=(x int, y int, z int) index=(x, y, z)
 d > 4 AND x = 1 AND y = b AND z = 3
@@ -131,8 +131,8 @@ key cols:
   y = b
   z = lookup_join_const_col_@10
 input projections:
-  lookup_join_const_col_@8 = 1
-  lookup_join_const_col_@10 = 3
+  lookup_join_const_col_@8 = 1 [type=INT8]
+  lookup_join_const_col_@10 = 3 [type=INT8]
 remaining filters:
   d > 4
 
@@ -143,7 +143,7 @@ key cols:
   x = lookup_join_const_col_@7
   y = b
 input projections:
-  lookup_join_const_col_@7 = 1
+  lookup_join_const_col_@7 = 1 [type=INT8]
 remaining filters:
   z = 3
 
@@ -155,7 +155,7 @@ key cols:
   x = lookup_join_const_col_@7
   y = b
 input projections:
-  lookup_join_const_col_@7 = 1
+  lookup_join_const_col_@7 = 1 [type=INT8]
 
 lookup-constraints left=(a int) right=(x int, y int, z int) index=(x, z)
 a = z AND (x = 0 OR y IN (0) AND y > 0)
@@ -164,4 +164,103 @@ key cols:
   x = lookup_join_const_col_@5
   z = a
 input projections:
-  lookup_join_const_col_@5 = 0
+  lookup_join_const_col_@5 = 0 [type=INT8]
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y, z)
+x = a AND y = b
+optional: z IN (3, 4)
+----
+key cols:
+  x = a
+  y = b
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y, z)
+x = 1 AND y = b
+optional: z IN (3, 4)
+----
+key cols:
+  x = lookup_join_const_col_@6
+  y = b
+input projections:
+  lookup_join_const_col_@6 = 1 [type=INT8]
+
+lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
+x = a
+optional: z IN (3, 4) AND y IN (10, 20)
+----
+key cols:
+  x = a
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y, z)
+x = a AND y = b
+optional: z > 10
+----
+key cols:
+  x = a
+  y = b
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int) index=(x, y, z)
+x = 1 AND y = b
+optional: z > 10
+----
+key cols:
+  x = lookup_join_const_col_@6
+  y = b
+input projections:
+  lookup_join_const_col_@6 = 1 [type=INT8]
+
+lookup-constraints left=(a int, b int) right=(x int, y int, z int, zz int) index=(x, y, z, zz)
+x = 1 AND y = b
+optional: z > 10 AND zz > 0
+----
+key cols:
+  x = lookup_join_const_col_@6
+  y = b
+input projections:
+  lookup_join_const_col_@6 = 1 [type=INT8]
+
+# The projected constant should not have type modifiers of the indexed column.
+lookup-constraints left=(a int) right=(x int, y CHAR(2)) index=(x, y)
+x = a AND y = 'foo'
+----
+key cols:
+  x = a
+  y = lookup_join_const_col_@6
+input projections:
+  lookup_join_const_col_@6 = 'foo' [type=STRING]
+
+lookup-constraints left=(a int) right=(x int, y VARCHAR(2)) index=(x, y)
+x = a AND y = 'foo'
+----
+key cols:
+  x = a
+  y = lookup_join_const_col_@6
+input projections:
+  lookup_join_const_col_@6 = 'foo' [type=STRING]
+
+lookup-constraints left=(a int) right=(x int, y BIT(2)) index=(x, y)
+x = a AND y = '111'
+----
+key cols:
+  x = a
+  y = lookup_join_const_col_@6
+input projections:
+  lookup_join_const_col_@6 = B'111' [type=VARBIT]
+
+lookup-constraints left=(a int) right=(x int, y VARBIT(2)) index=(x, y)
+x = a AND y = '111'
+----
+key cols:
+  x = a
+  y = lookup_join_const_col_@6
+input projections:
+  lookup_join_const_col_@6 = B'111' [type=VARBIT]
+
+lookup-constraints left=(a int) right=(x int, y DECIMAL(6,2)) index=(x, y)
+x = a AND y = 1234.1234::DECIMAL(8, 4)
+----
+key cols:
+  x = a
+  y = lookup_join_const_col_@6
+input projections:
+  lookup_join_const_col_@6 = 1234.1234 [type=DECIMAL]

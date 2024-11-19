@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package physical
 
@@ -13,6 +10,7 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 )
@@ -47,7 +45,7 @@ func init() {
 			connectionpb.ConnectionProvider_sql,
 			externalconn.SimpleURIFactory,
 		)
-
+		cloud.RegisterRedactedParams(cloud.RedactedParams(streamclient.SslInlineURLParam))
 		externalconn.RegisterDefaultValidation(scheme, validatePostgresConnectionURI)
 	}
 

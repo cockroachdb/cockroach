@@ -1,10 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.ccl.utilccl.licenseccl;
@@ -17,16 +14,18 @@ message License {
     int64 valid_until_unix_sec = 2;
 
     enum Type {
-      NonCommercial = 0;
+      NonCommercial = 0 [deprecated = true];
       Enterprise = 1;
       Evaluation = 2;
+      Free = 3;
+      Trial = 4;
     }
 
     Type type = 3;
 
     string organization_name = 4;
 
-    enum Usage {
+    enum Environment {
       option (gogoproto.goproto_enum_prefix) = false;
       option (gogoproto.goproto_enum_stringer) = false;
 
@@ -36,5 +35,12 @@ message License {
       Development = 3;
     }
 
-    Usage usage = 5;
+    Environment environment = 5;
+
+    // Two UUIDs uniquely identify this license and the associated organization.
+    // They are stored as bytes to align with the server's typical usage. We
+    // avoided using the custom UUID type normally used in protobufs to minimize
+    // dependencies, as the generated code is also used in other repositories.
+    bytes license_id = 6;
+    bytes organization_id = 7;
 }

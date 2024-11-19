@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.roachpb;
@@ -70,7 +65,15 @@ message SpanStats {
   // stale.
   cockroach.storage.enginepb.MVCCStats approximate_total_stats = 7 [(gogoproto.nullable) = false];
 
-  // NEXT ID: 8.
+
+  // Unique store ids for the requested span.
+  repeated int32 store_ids = 8 [(gogoproto.customname) = "StoreIDs", (gogoproto.casttype) = "StoreID"];
+
+  // ReplicaCount is the total number of `voting_replicas` and `non_voting_replicas`
+  // for the span's ranges. It does not include `learner_replicas`.
+  int32 replica_count = 9;
+
+  // NEXT ID: 10.
 }
 
 message SpanStatsResponse {

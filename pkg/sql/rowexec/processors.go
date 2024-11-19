@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rowexec
 
@@ -93,7 +88,7 @@ func emitHelper(
 
 func checkNumIn(inputs []execinfra.RowSource, numIn int) error {
 	if len(inputs) != numIn {
-		return errors.Errorf("expected %d input(s), got %d", numIn, len(inputs))
+		return errors.AssertionFailedf("expected %d input(s), got %d", numIn, len(inputs))
 	}
 	return nil
 }
@@ -320,7 +315,7 @@ func NewProcessor(
 				return nil, err
 			}
 		} else if numInputs > 1 {
-			return nil, errors.Errorf("invalid localPlanNode core with multiple inputs %+v", core.LocalPlanNode)
+			return nil, errors.AssertionFailedf("invalid localPlanNode core with multiple inputs %+v", core.LocalPlanNode)
 		}
 		return processor, nil
 	}

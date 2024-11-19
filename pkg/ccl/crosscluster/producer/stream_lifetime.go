@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package producer
 
@@ -286,7 +283,7 @@ func getPhysicalReplicationStreamSpec(
 	if j.Status() != jobs.StatusRunning {
 		return nil, jobIsNotRunningError(jobID, j.Status(), "create stream spec")
 	}
-	return buildReplicationStreamSpec(ctx, evalCtx, details.TenantID, false, details.Spans)
+	return buildReplicationStreamSpec(ctx, evalCtx, details.TenantID, false, details.Spans, 0, true)
 
 }
 
@@ -296,16 +293,22 @@ func buildReplicationStreamSpec(
 	tenantID roachpb.TenantID,
 	forSpanConfigs bool,
 	targetSpans roachpb.Spans,
+	targetPartitionCount int,
+	useStreaks bool,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 
 	// Partition the spans with SQLPlanner
 	dsp := jobExecCtx.DistSQLPlanner()
 	noLoc := roachpb.Locality{}
-	oracle := kvfollowerreadsccl.NewBulkOracle(
-		dsp.ReplicaOracleConfig(evalCtx.Locality), noLoc, kvfollowerreadsccl.StreakConfig{
+	var streaks kvfollowerreadsccl.StreakConfig
+	if useStreaks {
+		streaks = kvfollowerreadsccl.StreakConfig{
 			Min: 10, SmallPlanMin: 3, SmallPlanThreshold: 3, MaxSkew: 0.95,
-		},
+		}
+	}
+	oracle := kvfollowerreadsccl.NewBulkOracle(
+		dsp.ReplicaOracleConfig(evalCtx.Locality), noLoc, streaks,
 	)
 
 	planCtx := dsp.NewPlanningCtxWithOracle(
@@ -317,7 +320,13 @@ func buildReplicationStreamSpec(
 		return nil, err
 	}
 
-	spanPartitions = repartitionSpans(spanPartitions, int(streamMaxProcsPerPartition.Get(&evalCtx.Settings.SV)))
+	// If more partitions were requested, try to repartition the spans.
+	if targetPartitionCount > len(spanPartitions) {
+		spanPartitions = repartitionSpans(spanPartitions, max(1, targetPartitionCount/len(spanPartitions)))
+	} else if targetPartitionCount < 1 {
+		// No explicit target requested, so fallback to 8x controlled via setting.
+		spanPartitions = repartitionSpans(spanPartitions, int(streamMaxProcsPerPartition.Get(&evalCtx.Settings.SV)))
+	}
 
 	var spanConfigsStreamID streampb.StreamID
 	if forSpanConfigs {

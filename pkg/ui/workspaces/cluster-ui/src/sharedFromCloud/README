@@ -1,0 +1,12 @@
+## Temporary Shared Component Library
+This folder contains base components lifted from the cloud UI repository, which will eventually
+be published as a package. Until then, we're copying components over to this directory to minimize
+repeated UI work.
+
+The files in this directory should not be edited. In the circumstance where a component must be
+modified slightly we should make note of it to make the corresponding change in the published
+package once it exists.
+
+### List of modified components requiring upstream changes:
+- `search.tsx` - removed "Search" label - we should make label a prop.
+

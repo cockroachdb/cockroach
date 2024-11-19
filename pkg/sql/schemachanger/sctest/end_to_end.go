@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package sctest contains tools to run end-to-end datadriven tests in both
 // ccl and non-ccl settings.
@@ -144,6 +139,7 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 						sd.TempTablesEnabled = true
 						sd.ApplicationName = ""
 						sd.EnableUniqueWithoutIndexConstraints = true // this allows `ADD UNIQUE WITHOUT INDEX` in the testing suite.
+						sd.AlterColumnTypeGeneralEnabled = true
 					})),
 					sctestdeps.WithTestingKnobs(&scexec.TestingKnobs{
 						BeforeStage: func(p scplan.Plan, stageIdx int) error {

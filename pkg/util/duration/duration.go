@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package duration
 
@@ -24,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 )
 
@@ -736,6 +732,11 @@ func Decode(sortNanos int64, months int64, days int64) (Duration, error) {
 
 // Add returns the time t+d, using a configurable mode.
 func Add(t time.Time, d Duration) time.Time {
+	if t == pgdate.TimeInfinity || t == pgdate.TimeNegativeInfinity {
+		// "infinity"/"-infinity" add/subtract any duration results in itself.
+		return t
+	}
+
 	// Fast path adding units < 1 day.
 	// Avoiding AddDate(0,0,0) is required to prevent changing times
 	// on DST boundaries.

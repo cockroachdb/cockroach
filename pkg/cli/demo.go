@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
@@ -43,10 +38,6 @@ subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 
 By default, the 'movr' dataset is pre-loaded. You can also use --no-example-database
 to avoid pre-loading a dataset.
-
-cockroach demo attempts to connect to a Cockroach Labs server to send
-telemetry back to Cockroach Labs. In order to disable this behavior, set the
-environment variable "COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING" to true.
 `,
 	Example: `  cockroach demo`,
 	Args:    cobra.NoArgs,

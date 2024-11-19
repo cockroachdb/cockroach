@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -29,10 +24,10 @@ func (r *raftTruncatorReplica) getRangeID() roachpb.RangeID {
 }
 
 func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState {
-	r.mu.Lock()
+	r.mu.Lock() // TODO(pav-kv): not needed if raftMu is held.
 	defer r.mu.Unlock()
 	// TruncatedState is guaranteed to be non-nil.
-	return *r.mu.state.TruncatedState
+	return *r.shMu.state.TruncatedState
 }
 
 func (r *raftTruncatorReplica) setTruncatedStateAndSideEffects(
@@ -46,20 +41,21 @@ func (r *raftTruncatorReplica) setTruncatedStateAndSideEffects(
 }
 
 func (r *raftTruncatorReplica) setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool) {
+	r.raftMu.AssertHeld()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.mu.raftLogSize += deltaBytes
-	r.mu.raftLogLastCheckSize += deltaBytes
+	r.shMu.raftLogSize += deltaBytes
+	r.shMu.raftLogLastCheckSize += deltaBytes
 	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
 	// between server restarts.
-	if r.mu.raftLogSize < 0 {
-		r.mu.raftLogSize = 0
+	if r.shMu.raftLogSize < 0 {
+		r.shMu.raftLogSize = 0
 	}
-	if r.mu.raftLogLastCheckSize < 0 {
-		r.mu.raftLogLastCheckSize = 0
+	if r.shMu.raftLogLastCheckSize < 0 {
+		r.shMu.raftLogLastCheckSize = 0
 	}
 	if !isDeltaTrusted {
-		r.mu.raftLogSizeTrusted = false
+		r.shMu.raftLogSizeTrusted = false
 	}
 }
 

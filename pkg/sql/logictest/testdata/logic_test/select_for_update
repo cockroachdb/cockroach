@@ -1,4 +1,4 @@
-# LogicTest: !local-read-committed
+# LogicTest: !weak-iso-level-configs
 # This test assumes that SERIALIZABLE isolation is being used. See
 # select_for_update_read_committed for READ COMMITTED testing.
 
@@ -471,6 +471,27 @@ BEGIN; SELECT * FROM t FOR UPDATE NOWAIT
 statement ok
 ROLLBACK
 
+statement ok
+SET optimizer_use_lock_op_for_serializable = on
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t FOR UPDATE NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t FOR SHARE FOR UPDATE OF t NOWAIT
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
+SELECT * FROM t FOR SHARE NOWAIT FOR UPDATE OF t
+
+query error pgcode 55P03 could not obtain lock on row \(k\)=\(1\) in t@t_pkey
+BEGIN; SELECT * FROM t FOR UPDATE NOWAIT
+
+statement ok
+ROLLBACK
+
+statement ok
+RESET optimizer_use_lock_op_for_serializable
+
 user root
 
 statement ok
@@ -676,3 +697,56 @@ user testuser
 
 statement ok
 COMMIT
+
+user root
+
+# Regression test for #121917 and #129145: ensure SKIP LOCKED and NOWAIT both
+# work when locking comes after the initial scan, due to
+# optimizer_use_lock_op_for_serializable.
+
+statement ok
+CREATE TABLE t129145 (a INT NOT NULL PRIMARY KEY, b INT NOT NULL, FAMILY (a, b))
+
+statement ok
+INSERT INTO t129145 VALUES (1, 1)
+
+statement ok
+GRANT SELECT ON t129145 TO testuser
+
+statement ok
+GRANT UPDATE ON t129145 TO testuser
+
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+statement ok
+BEGIN; SELECT * FROM t129145 WHERE a = 1 FOR UPDATE
+
+user testuser
+
+statement ok
+SET optimizer_use_lock_op_for_serializable = on
+
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+query II
+SELECT * FROM t129145 WHERE b = 1 FOR UPDATE SKIP LOCKED
+----
+
+query error pgcode 55P03 could not obtain lock on row \(a\)=\(1\) in t129145@t129145_pkey
+SELECT * FROM t129145 WHERE b = 1 FOR UPDATE NOWAIT
+
+statement ok
+RESET optimizer_use_lock_op_for_serializable
+
+statement ok
+RESET enable_durable_locking_for_serializable
+
+user root
+
+statement ok
+ROLLBACK
+
+statement ok
+RESET enable_durable_locking_for_serializable

@@ -1,17 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 @require '~src/components/core/index.styl'
 
 .tooltip-wrapper
-  :global(.ant-tooltip-arrow)
+  :global(.crl-ant-tooltip-arrow)
     width 20px
     height 20px
     &::before
@@ -21,9 +16,9 @@
       border: solid 1px #e7ecf3;
       box-shadow: none;
 
-:global(.ant-tooltip).tooltip__preset--white
+:global(.crl-ant-tooltip).tooltip__preset--white
   max-width 500px
-  :global(.ant-tooltip-inner)
+  :global(.crl-ant-tooltip-inner)
     padding 10px
     border-radius 3px
     border solid 1px $colors--neutral-2

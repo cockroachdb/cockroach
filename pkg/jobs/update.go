@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package jobs
 
@@ -39,12 +34,17 @@ import (
 type UpdateFn func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error
 
 type Updater struct {
-	j   *Job
-	txn isql.Txn
+	j            *Job
+	txn          isql.Txn
+	txnDebugName string
 }
 
 func (j *Job) NoTxn() Updater {
 	return Updater{j: j}
+}
+
+func (j *Job) DebugNameNoTxn(txnDebugName string) Updater {
+	return Updater{j: j, txnDebugName: txnDebugName}
 }
 
 func (j *Job) WithTxn(txn isql.Txn) Updater {
@@ -56,6 +56,9 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 		return u.j.registry.db.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
 		) error {
+			if u.txnDebugName != "" {
+				txn.KV().SetDebugName(u.txnDebugName)
+			}
 			u.txn = txn
 			return u.update(ctx, updateFn)
 		})

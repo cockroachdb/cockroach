@@ -1,0 +1,75 @@
+# Yaml for creating and configuring the drt-scale-pcr cluster. This also configures Datadog.
+# Build the roachprod and roachtest binaries (using --cross) before running this script
+environment:
+  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
+  ROACHPROD_DNS: drt.crdb.io
+  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
+  ROACHPROD_GCE_DNS_ZONE: drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  CLUSTER: drt-scale-pcr
+  CLUSTER_NODES: 150
+  COCKROACH_VERSION: v24.3.0-beta.2
+
+targets:
+  # crdb cluster specs
+  - target_name: $CLUSTER
+    steps:
+      - command: create
+        args:
+          - $CLUSTER
+        flags:
+          clouds: gce
+          gce-managed: true
+          gce-enable-multiple-stores: true
+          gce-zones: "us-central1-a"
+          nodes: $CLUSTER_NODES
+          gce-machine-type: n2-standard-16
+          local-ssd: false
+          gce-pd-volume-size: 375
+          gce-pd-volume-type: pd-ssd
+          gce-pd-volume-count: 4
+          os-volume-size: 100
+          username: drt
+          lifetime: 8760h
+          gce-image: "ubuntu-2204-jammy-v20240319"
+      - command: sync
+        flags:
+          clouds: gce
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - wget https://binaries.cockroachdb.com/cockroach-${COCKROACH_VERSION}.linux-amd64.tgz
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - tar -xvzf cockroach-${COCKROACH_VERSION}.linux-amd64.tgz
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - mv cockroach-${COCKROACH_VERSION}.linux-amd64/* .
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - rm -rf cockroach-${COCKROACH_VERSION}.linux-amd64*
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
+      - command: start
+        args:
+          - $CLUSTER
+          - "--binary"
+          - "./cockroach"
+        flags:
+          # add flag to set provisioned throughput on each store according to their cloud provider limits
+          enable-fluent-sink: true
+          store-count: 4
+          args: --wal-failover=among-stores
+          restart: false
+          sql-port: 26257
+      - command: run
+        args:
+          - $CLUSTER
+          - --
+          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"

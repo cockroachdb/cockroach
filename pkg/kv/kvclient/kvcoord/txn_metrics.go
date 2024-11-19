@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvcoord
 
@@ -46,7 +41,6 @@ type TxnMetrics struct {
 
 	// Counts of restart types.
 	RestartsWriteTooOld            telemetry.CounterWithMetric
-	RestartsWriteTooOldMulti       telemetry.CounterWithMetric
 	RestartsSerializable           telemetry.CounterWithMetric
 	RestartsAsyncWriteFailure      telemetry.CounterWithMetric
 	RestartsCommitDeadlineExceeded telemetry.CounterWithMetric
@@ -201,23 +195,9 @@ var (
 	// the WriteTooOld flag is set on the Transaction, which causes EndTxn to
 	// return a/ TransactionRetryError with RETRY_WRITE_TOO_OLD. These are
 	// captured as txn.restarts.writetooold.
-	//
-	// If the Store's retried operation generates a second WriteTooOldError
-	// (indicating a conflict with a third transaction with a higher timestamp
-	// than the one that caused the first WriteTooOldError), the store doesn't
-	// retry again, and the WriteTooOldError will be returned up the stack to be
-	// retried at this level. These are captured as
-	// txn.restarts.writetoooldmulti. This path is inefficient, and if it turns
-	// out to be common we may want to do something about it.
 	metaRestartsWriteTooOld = metric.Metadata{
 		Name:        "txn.restarts.writetooold",
 		Help:        "Number of restarts due to a concurrent writer committing first",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaRestartsWriteTooOldMulti = metric.Metadata{
-		Name:        "txn.restarts.writetoooldmulti",
-		Help:        "Number of restarts due to multiple concurrent writers committing first",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -318,7 +298,6 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 			BucketConfig: metric.Count1KBuckets,
 		}),
 		RestartsWriteTooOld:            telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
-		RestartsWriteTooOldMulti:       telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),
 		RestartsSerializable:           telemetry.NewCounterWithMetric(metaRestartsSerializable),
 		RestartsAsyncWriteFailure:      telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
 		RestartsCommitDeadlineExceeded: telemetry.NewCounterWithMetric(metaRestartsCommitDeadlineExceeded),

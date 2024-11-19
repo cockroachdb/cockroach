@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -23,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	roachprodErrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -65,6 +60,7 @@ func (w sysbenchWorkload) String() string {
 
 type sysbenchOptions struct {
 	workload     sysbenchWorkload
+	distribution string // default `uniform`
 	duration     time.Duration
 	concurrency  int
 	tables       int
@@ -79,6 +75,10 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		pghost = "127.0.0.1"
 		pgport = "26257"
 	}
+	distribution := "uniform"
+	if o.distribution != "" {
+		distribution = o.distribution
+	}
 	return fmt.Sprintf(`sysbench \
 		--db-driver=pgsql \
 		--pgsql-host=%s \
@@ -87,6 +87,7 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		--pgsql-password=%s \
 		--pgsql-db=sysbench \
 		--report-interval=1 \
+		--rand-type=%s \
 		--time=%d \
 		--threads=%d \
 		--tables=%d \
@@ -97,6 +98,7 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		pgport,
 		install.DefaultUser,
 		install.DefaultPassword,
+		distribution,
 		int(o.duration.Seconds()),
 		o.concurrency,
 		o.tables,
@@ -140,7 +142,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		t.Status("installing cockroach")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 		if len(c.CRDBNodes()) >= 3 {
-			err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), 1))
+			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), c.Conn(ctx, t.L(), 1))
 			require.NoError(t, err)
 		}
 		c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach sql --url={pgurl:1} -e "CREATE DATABASE sysbench"`)
@@ -152,16 +154,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		if err := c.Install(ctx, t.L(), c.WorkloadNode(), "haproxy"); err != nil {
 			t.Fatal(err)
 		}
-		// cockroach gen haproxy does not support specifying a non root user
-		pgurl, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
-			External: true,
-			Auth:     install.AuthRootCert,
-			Secure:   c.IsSecure(),
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach gen haproxy --url {pgurl:1}")
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), "haproxy -f haproxy.cfg -D")
 	}
 
@@ -214,11 +207,27 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 }
 
 func registerSysbench(r registry.Registry) {
-	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
-		for _, n := range []int{1, 3} {
-			const cpus = 32
-			concPerCPU := n*3 - 1
-			conc := cpus * concPerCPU
+	for _, d := range []struct {
+		n, cpus int
+		pick    func(sysbenchWorkload) bool // nil means true for all
+	}{
+		{n: 1, cpus: 32},
+		{n: 3, cpus: 32},
+		{n: 3, cpus: 8, pick: func(w sysbenchWorkload) bool {
+			switch w {
+			case oltpReadOnly, oltpReadWrite, oltpWriteOnly:
+				return true
+			default:
+				return false
+			}
+		}},
+	} {
+		for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
+			if d.pick != nil && !d.pick(w) {
+				continue
+			}
+			concPerCPU := d.n*3 - 1
+			conc := d.cpus * concPerCPU
 			opts := sysbenchOptions{
 				workload:     w,
 				duration:     10 * time.Minute,
@@ -228,10 +237,10 @@ func registerSysbench(r registry.Registry) {
 			}
 
 			r.Add(registry.TestSpec{
-				Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
+				Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, d.n, d.cpus, conc),
 				Benchmark:        true,
 				Owner:            registry.OwnerTestEng,
-				Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
+				Cluster:          r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
 				CompatibleClouds: registry.OnlyGCE,
 				Suites:           registry.Suites(registry.Nightly),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -240,14 +249,14 @@ func registerSysbench(r registry.Registry) {
 			})
 
 			// Add a variant of each test that uses PostgreSQL instead of CockroachDB.
-			if n == 1 {
+			if d.n == 1 {
 				pgOpts := opts
 				pgOpts.usePostgres = true
 				r.Add(registry.TestSpec{
-					Name:             fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, cpus, conc),
+					Name:             fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, d.cpus, conc),
 					Benchmark:        true,
 					Owner:            registry.OwnerTestEng,
-					Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
+					Cluster:          r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
 					CompatibleClouds: registry.OnlyGCE,
 					Suites:           registry.ManualOnly,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

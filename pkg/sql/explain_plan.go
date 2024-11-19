@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -112,7 +107,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			if e.options.Mode == tree.ExplainDistSQL {
 				flags := execinfrapb.DiagramFlags{
 					ShowInputTypes:    e.options.Flags[tree.ExplainFlagTypes],
-					MakeDeterministic: e.flags.Deflake.Has(explain.DeflakeAll) || params.p.execCfg.TestingKnobs.DeterministicExplain,
+					MakeDeterministic: e.flags.Deflake.HasAny(explain.DeflakeAll) || params.p.execCfg.TestingKnobs.DeterministicExplain,
 				}
 				diagram, err := execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, flags)
 				if err != nil {
@@ -230,7 +225,7 @@ func emitExplain(
 		return catalogkeys.PrettySpans(idx, spans, skip)
 	}
 
-	return explain.Emit(ctx, explainPlan, ob, spanFormatFn)
+	return explain.Emit(ctx, evalCtx, explainPlan, ob, spanFormatFn)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }

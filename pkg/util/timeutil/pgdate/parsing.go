@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package pgdate
 
@@ -66,20 +61,36 @@ var (
 // https://www.postgresql.org/docs/10/static/datatype-datetime.html#DATATYPE-DATETIME-SPECIAL-TABLE
 var (
 	TimeEpoch = timeutil.Unix(0, 0)
-	// TimeInfinity represents the "highest" possible time.
-	// TODO (#41564): this should actually behave as infinity, i.e. any operator
-	// leaves this as infinity. This time should always be greater than any other time.
-	// We should probably use the next microsecond after this value, i.e. timeutil.Unix(9224318016000, 0).
-	// Postgres uses math.MaxInt64 microseconds as the infinity value.
-	// See: https://github.com/postgres/postgres/blob/42aa1f0ab321fd43cbfdd875dd9e13940b485900/src/include/datatype/timestamp.h#L107.
-	TimeInfinity = timeutil.Unix(9224318016000-1, 999999000)
-	// TimeNegativeInfinity represents the "lowest" possible time.
-	// TODO (#41564): this should actually behave as -infinity, i.e. any operator
-	// leaves this as -infinity. This time should always be less than any other time.
-	// We should probably use the next microsecond before this value, i.e. timeutil.Unix(9224318016000-1, 999999000).
-	// Postgres uses math.MinInt64 microseconds as the -infinity value.
-	// See: https://github.com/postgres/postgres/blob/42aa1f0ab321fd43cbfdd875dd9e13940b485900/src/include/datatype/timestamp.h#L107.
-	TimeNegativeInfinity = timeutil.Unix(-210866803200, 0)
+	// TimeInfinity represents the "highest" possible time. Its value is
+	// "294277-01-01 23:59:59.999999 +0000 UTC", which is 24 hours after "MaxSupportedTime"
+	// (294276-12-31 23:59:59.999999 +0000 UTC).
+	//
+	// The "date" of TimeInfinity is one day after "MaxSupportedTime", it's choiced for no
+	// particular reason.
+	//
+	// The "time" of TimeInfinity is set to "23:59:59.999999" to maintain the behavior of
+	// 'Infinity'::time as it was before PR #127141. (Prior to PR #127141, 'Infinity'::time
+	// resulted in '23:59:59.999999'.) This behavior may change in the future, see issue #129148
+	// for more details.
+	//
+	// Refer to the doc comments of the function "timeutil.Unix" for the process of
+	// deriving the arguments to construct a specific time.Time.
+	TimeInfinity = timeutil.Unix(9224318102399 /* sec */, 999999000 /* nsec */)
+	// TimeNegativeInfinity represents the "lowest" possible time. Its value is
+	// "-4714-11-23 00:00:00 +0000 UTC", which is 24 hours before "MinSupportedTime"
+	// ("-4714-11-24 00:00:00 +0000 UTC").
+	//
+	// The "date" of TimeNegativeInfinity is one day before "MinSupportedTime", it's choiced for no
+	// particular reason.
+	//
+	// The "time" of TimeNegativeInfinity is set to "00:00:00" to maintain the behavior of
+	// '-Infinity'::time as it was before PR #127141. (Prior to PR #127141, '-Infinity'::time
+	// resulted in '00:00:00'.) This behavior may change in the future, see issue #129148
+	// for more details.
+	//
+	// Refer to the doc comments of the function "timeutil.Unix" for the process of
+	// deriving the arguments to construct a specific time.Time.
+	TimeNegativeInfinity = timeutil.Unix(-210898425600 /* sec */, 0 /* nsec */)
 )
 
 type ParseHelper struct {

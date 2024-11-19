@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package mixedversion
 
@@ -19,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
@@ -165,7 +161,7 @@ func testTestRunner() *testRunner {
 		cancel:         cancel,
 		logger:         nilLogger,
 		systemService:  newServiceRuntime(systemDescriptor),
-		background:     newBackgroundRunner(runnerCtx, nilLogger),
+		background:     task.NewManager(runnerCtx, nilLogger),
 		ranUserHooks:   &ranUserHooks,
 		plan:           &TestPlan{seed: seed},
 		_addAnnotation: testAddAnnotation,

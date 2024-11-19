@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -29,7 +24,7 @@ func constructPlan(
 	planner *planner,
 	root exec.Node,
 	subqueries []exec.Subquery,
-	cascades []exec.Cascade,
+	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
 	rootRowCount int64,
 	flags exec.PlanFlags,
@@ -71,15 +66,21 @@ func constructPlan(
 		}
 	}
 	if len(cascades) > 0 {
-		res.cascades = make([]cascadeMetadata, len(cascades))
+		res.cascades = make([]postQueryMetadata, len(cascades))
 		for i := range cascades {
-			res.cascades[i].Cascade = cascades[i]
+			res.cascades[i].PostQuery = cascades[i]
 		}
 	}
 	if len(checks) > 0 {
 		res.checkPlans = make([]checkPlan, len(checks))
 		for i := range checks {
 			assignPlan(&res.checkPlans[i].plan, checks[i])
+		}
+	}
+	if len(triggers) > 0 {
+		res.triggers = make([]postQueryMetadata, len(triggers))
+		for i := range triggers {
+			res.triggers[i].PostQuery = triggers[i]
 		}
 	}
 	if flags.IsSet(exec.PlanFlagIsDDL) {
@@ -258,9 +259,8 @@ func constructVirtualScan(
 	)
 
 	n, err := delayedNodeCallback(&delayedNode{
-		name:            fmt.Sprintf("%s@%s", table.Name(), index.Name()),
-		columns:         columns,
-		indexConstraint: params.IndexConstraint,
+		name:    fmt.Sprintf("%s@%s", table.Name(), index.Name()),
+		columns: columns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			return constructor(ctx, p, tn.Catalog())
 		},

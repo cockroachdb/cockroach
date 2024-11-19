@@ -21,6 +21,85 @@ provided the `redactable` functionality is enabled on the logging sink.
 
 Events not documented on this page will have an unstructured format in log messages.
 
+## Changefeed telemetry events
+
+Events in this category pertain to changefeed usage and metrics.
+
+Events in this category are logged to the `TELEMETRY` channel.
+
+
+### `changefeed_emitted_bytes`
+
+An event of type `changefeed_emitted_bytes` is an event representing the bytes emitted by a changefeed over an interval.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `EmittedBytes` | The number of bytes emitted. | no |
+| `EmittedMessages` | The number of messages emitted. | no |
+| `LoggingInterval` | The time period in nanoseconds between emitting telemetry events of this type (per-aggregator). | no |
+| `Closing` | Flag to indicate that the changefeed is closing. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Description` | The description of that would show up in the job's description field, redacted | yes |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
+| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
+| `JobId` | The job id for enterprise changefeeds. | no |
+
+### `changefeed_failed`
+
+An event of type `changefeed_failed` is an event for any changefeed failure since the plan hook
+was triggered.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `FailureType` | The reason / environment with which the changefeed failed (ex: connection_closed, changefeed_behind). | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Description` | The description of that would show up in the job's description field, redacted | yes |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
+| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
+| `JobId` | The job id for enterprise changefeeds. | no |
+
+### `create_changefeed`
+
+An event of type `create_changefeed` is an event for any CREATE CHANGEFEED query that
+successfully starts running. Failed CREATE statements will show up as
+ChangefeedFailed events.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Transformation` | Flag representing whether the changefeed is using CDC queries. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Description` | The description of that would show up in the job's description field, redacted | yes |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
+| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
+| `JobId` | The job id for enterprise changefeeds. | no |
+
 ## Cluster-level events
 
 Events in this category pertain to an entire cluster and are
@@ -1314,6 +1393,30 @@ An event of type `create_table` is recorded when a table is created.
 | `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
 | `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
 
+### `create_trigger`
+
+An event of type `create_trigger` is recorded when a trigger is created.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `TableName` | Name of the trigger's table. | yes |
+| `TriggerName` | Name of the created trigger. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
 ### `create_type`
 
 An event of type `create_type` is recorded when a user-defined type is created.
@@ -1394,7 +1497,7 @@ An event of type `drop_function` is recorded when a user-defined function is dro
 
 | Field | Description | Sensitive |
 |--|--|--|
-| `FunctionName` | Name of the created function. | yes |
+| `FunctionName` | Name of the dropped function. | yes |
 
 
 #### Common fields
@@ -1491,6 +1594,30 @@ An event of type `drop_table` is recorded when a table is dropped.
 |--|--|--|
 | `TableName` | The name of the affected table. | yes |
 | `CascadeDroppedViews` | The names of the views dropped as a result of a cascade operation. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+
+### `drop_trigger`
+
+An event of type `drop_trigger` is recorded when a trigger is dropped.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `TableName` | Name of the trigger's table. | yes |
+| `TriggerName` | Name of the dropped trigger. | yes |
 
 
 #### Common fields
@@ -2891,76 +3018,6 @@ An event of type `captured_index_usage_stats`
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
-### `changefeed_emitted_bytes`
-
-An event of type `changefeed_emitted_bytes` is an event representing the bytes emitted by a changefeed over an interval.
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `JobId` | The job id for enterprise changefeeds. | no |
-| `EmittedBytes` | The number of bytes emitted. | no |
-| `EmittedMessages` | The number of messages emitted. | no |
-| `LoggingInterval` | The time period in nanoseconds between emitting telemetry events of this type (per-aggregator). | no |
-| `Closing` | Flag to indicate that the changefeed is closing. | no |
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Description` | The description of that would show up in the job's description field, redacted | yes |
-| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
-| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
-| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
-| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
-| `Format` | The data format being emitted (ex: JSON, Avro). | no |
-
-### `changefeed_failed`
-
-An event of type `changefeed_failed` is an event for any Changefeed failure since the plan hook
-was triggered.
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `FailureType` | The reason / environment with which the changefeed failed (ex: connection_closed, changefeed_behind) | no |
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Description` | The description of that would show up in the job's description field, redacted | yes |
-| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
-| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
-| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
-| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
-| `Format` | The data format being emitted (ex: JSON, Avro). | no |
-
-### `create_changefeed`
-
-An event of type `create_changefeed` is an event for any CREATE CHANGEFEED query that
-successfully starts running.  Failed CREATE statements will show up as
-ChangefeedFailed events.
-
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Transformation` |  | no |
-
-
-#### Common fields
-
-| Field | Description | Sensitive |
-|--|--|--|
-| `Description` | The description of that would show up in the job's description field, redacted | yes |
-| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
-| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
-| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
-| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
-| `Format` | The data format being emitted (ex: JSON, Avro). | no |
-
 ### `hot_ranges_stats`
 
 An event of type `hot_ranges_stats`
@@ -3323,6 +3380,9 @@ An event of type `remove_zone_config` is recorded when a zone config is removed.
 An event of type `set_zone_config` is recorded when a zone config is changed.
 
 
+| Field | Description | Sensitive |
+|--|--|--|
+| `ResolvedOldConfig` | The string representation of the resolved old zone config. This is not necessarily the same as the zone config that was previously set -- as it includes the resolved values of the zone config options. In other words, a zone config that hasn't been properly "set" yet (and inherits from its parent) will have a resolved_old_config that has details of the values it inherits from its parent. This is particularly useful to get a proper diff between the old and new zone config. | yes |
 
 
 #### Common fields
@@ -3363,6 +3423,7 @@ authentication failure.
 | 6 | CREDENTIALS_INVALID | occurs when the client-provided credentials were invalid. |
 | 7 | CREDENTIALS_EXPIRED | occur when the credentials provided by the client are expired. |
 | 8 | NO_REPLICATION_ROLEOPTION | occurs when the connection requires a replication role option, but the user does not have it. |
+| 9 | AUTHORIZATION_ERROR | is used for errors during the authorization phase. For example, this would include issues with mapping LDAP groups to SQL roles and granting those roles to the user. |
 
 
 

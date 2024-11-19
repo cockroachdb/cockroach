@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -18,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -75,10 +71,15 @@ func runConnectionLatencyTest(
 
 		t.L().Printf("running workload in %q against urls:\n%s", locality, strings.Join(urls, "\n"))
 
+		labels := map[string]string{
+			"duration": "30000",
+			"locality": locality,
+		}
+
 		workloadCmd := fmt.Sprintf(
-			`./workload run connectionlatency %s --secure --duration 30s --histograms=%s/stats.json --locality %s`,
+			`./workload run connectionlatency %s --secure --duration 30s %s --locality %s`,
 			urlString,
-			t.PerfArtifactsDir(),
+			roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
 			locality,
 		)
 		err = c.RunE(ctx, option.WithNodes(loadNode), workloadCmd)
@@ -87,14 +88,14 @@ func runConnectionLatencyTest(
 
 	if numZones > 1 {
 		numLoadNodes := numZones
-		loadGroups := makeLoadGroups(c, numZones, numNodes, numLoadNodes)
-		cockroachUsEast := loadGroups[0].loadNodes
-		cockroachUsWest := loadGroups[1].loadNodes
-		cockroachEuWest := loadGroups[2].loadNodes
+		loadGroups := roachtestutil.MakeLoadGroups(c, numZones, numNodes, numLoadNodes)
+		cockroachUsEast := loadGroups[0].LoadNodes
+		cockroachUsWest := loadGroups[1].LoadNodes
+		cockroachEuWest := loadGroups[2].LoadNodes
 
-		runWorkload(loadGroups[0].roachNodes, cockroachUsEast, regionUsEast)
-		runWorkload(loadGroups[1].roachNodes, cockroachUsWest, regionUsWest)
-		runWorkload(loadGroups[2].roachNodes, cockroachEuWest, regionEuWest)
+		runWorkload(loadGroups[0].RoachNodes, cockroachUsEast, regionUsEast)
+		runWorkload(loadGroups[1].RoachNodes, cockroachUsWest, regionUsWest)
+		runWorkload(loadGroups[2].RoachNodes, cockroachEuWest, regionEuWest)
 	} else {
 		// Run only on the load node.
 		runWorkload(c.Range(1, numNodes), c.Node(numNodes+1), regionUsCentral)

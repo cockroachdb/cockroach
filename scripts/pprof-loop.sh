@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# Copyright 2022 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 set -eu
 
 if [ "$#" -ne 1 ]; then
@@ -7,6 +13,12 @@ Takes profiles or runtime traces in a loop. For endpoints that don't
 block, fetches at 1s intervals.
 
 See https://pkg.go.dev/runtime/pprof for details.
+
+For secure clusters, invoke this script with an auth cookie in the
+PPROF_LOOP_COOKIE env var. A cookie can be obtained via:
+
+  cockroach auth-session login root \
+    --certs-dir=certs --only-cookie --expire-after 24h
 
 Usage:
 
@@ -48,7 +60,7 @@ while true; do
 	# Be resilient to spurious pprof failures but make sure
 	# to bail eagerly on first time since probably the URL
 	# is just wrong etc.
-	if ! curl --no-progress-meter "${1}" > "${f}"; then
+	if ! curl -k --cookie "${PPROF_LOOP_COOKIE-}" --no-progress-meter "${1}" > "${f}"; then
 		if [ $first -eq 1 ]; then
 			exit 1
 		fi

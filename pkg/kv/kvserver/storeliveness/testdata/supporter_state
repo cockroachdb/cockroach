@@ -15,8 +15,15 @@ responses:
 
 support-for node-id=2 store-id=2
 ----
-supporter state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:100.000000000,0}
+epoch: 1, support provided: true
 
+# -------------------------------------------------------------
+# Store (n1, s1) does not provide support for an unknown store.
+# -------------------------------------------------------------
+
+support-for node-id=3 store-id=3
+----
+epoch: 0, support provided: false
 
 # -------------------------------------------------------------
 # Store (n1, s1) extends support.
@@ -30,7 +37,7 @@ responses:
 
 support-for node-id=2 store-id=2
 ----
-supporter state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:200.000000000,0}
+epoch: 1, support provided: true
 
 
 # -------------------------------------------------------------
@@ -42,7 +49,7 @@ withdraw-support now=199
 
 support-for node-id=2 store-id=2
 ----
-supporter state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:200.000000000,0}
+epoch: 1, support provided: true
 
 
 # -------------------------------------------------------------
@@ -54,7 +61,7 @@ withdraw-support now=201
 
 support-for node-id=2 store-id=2
 ----
-supporter state: {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:0,0}
+epoch: 2, support provided: false
 
 debug-supporter-state
 ----
@@ -66,9 +73,6 @@ support for:
 
 # -------------------------------------------------------------
 # Store (n1, s1) provides support at a higher epoch.
-# TODO(mira): the expiration can regress here wrt the previous
-# supported expiration but it won't be possible after clocks are
-# integrated into this test.
 # -------------------------------------------------------------
 
 handle-messages
@@ -79,7 +83,7 @@ responses:
 
 support-for node-id=2 store-id=2
 ----
-supporter state: {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+epoch: 2, support provided: true
 
 
 # -------------------------------------------------------------
@@ -94,7 +98,7 @@ responses:
 
 support-for node-id=2 store-id=2
 ----
-supporter state: {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+epoch: 2, support provided: true
 
 handle-messages
   msg type=MsgHeartbeat from-node-id=2 from-store-id=2 epoch=2 expiration=299
@@ -104,4 +108,57 @@ responses:
 
 support-for node-id=2 store-id=2
 ----
-supporter state: {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+epoch: 2, support provided: true
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) provides support even if the expiration is in
+# the past.
+# -------------------------------------------------------------
+
+send-heartbeats now=301 liveness-interval=10s # just to forward the clock
+----
+heartbeats:
+
+support-for node-id=2 store-id=2
+----
+epoch: 2, support provided: true
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:201.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) fails to write the support state.
+# -------------------------------------------------------------
+
+error-on-write on=true
+----
+
+handle-messages
+  msg type=MsgHeartbeat from-node-id=2 from-store-id=2 epoch=3 expiration=400
+----
+
+withdraw-support now=400
+----
+
+error-on-write on=false
+----
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:201.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:300.000000000,0}
+
+debug-metrics
+----
+HeartbeatSuccess: 0, HeartbeatFailure: 0
+MessageHandleSuccess: 5, MessageHandleFailure: 1
+SupportWithdrawSuccess: 1, SupportWithdrawFailure: 1
+SupportFromStores: 0, SupportForStores: 1

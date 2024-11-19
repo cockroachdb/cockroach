@@ -24,7 +24,7 @@ changefeed.node_throttle_config	string		specifies node level throttling configur
 changefeed.protect_timestamp.max_age	duration	96h0m0s	fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration	application
 changefeed.protect_timestamp_interval	duration	10m0s	controls how often the changefeed forwards its protected timestamp to the resolved timestamp	application
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables	application
-changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value	application
+changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently the batching versions of webhook, pubsub, and kafka sinks that are enabled by changefeed.new_<sink type>_sink_enabled only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value	application
 cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload	application
 cloudstorage.azure.read.node_burst_limit	byte size	0 B	burst limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
 cloudstorage.azure.read.node_rate_limit	byte size	0 B	limit on number of bytes per second per node across operations writing to the designated cloud storage provider if non-zero	application
@@ -63,7 +63,7 @@ debug.zip.redact_addresses.enabled	boolean	false	enables the redaction of hostna
 diagnostics.active_query_dumps.enabled	boolean	true	experimental: enable dumping of anonymized active queries to disk when node is under memory pressure	system-visible
 diagnostics.forced_sql_stat_reset.interval	duration	2h0m0s	interval after which the reported SQL Stats are reset even if not collected by telemetry reporter. It has a max value of 24H.	application
 diagnostics.memory_monitoring_dumps.enabled	boolean	true	enable dumping of memory monitoring state at the same time as heap profiles are taken	system-visible
-diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs	application
+diagnostics.reporting.enabled	boolean	true	enable reporting diagnostic metrics to cockroach labs, but is ignored for Trial or Free licenses	application
 diagnostics.reporting.interval	duration	1h0m0s	interval at which diagnostics data should be reported	application
 enterprise.license	string		the encoded cluster license	system-visible
 external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port	application
@@ -99,6 +99,8 @@ kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, t
 kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.enabled (alias: kv.transaction.write_pipelining_enabled)	boolean	true	if enabled, transactional writes are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.max_batch_size (alias: kv.transaction.write_pipelining_max_batch_size)	integer	128	if non-zero, defines that maximum size batch that will be pipelined through Raft consensus	application
+obs.tablemetadata.automatic_updates.enabled	boolean	false	enables automatic updates of the table metadata cache system.table_metadata	application
+obs.tablemetadata.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
 security.client_cert.subject_required.enabled	boolean	false	mandates a requirement for subject role to be set for db user	system-visible
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application
@@ -146,7 +148,6 @@ server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with
 server.redact_sensitive_settings.enabled	boolean	false	enables or disables the redaction of sensitive settings in the output of SHOW CLUSTER SETTINGS and SHOW ALL CLUSTER SETTINGS for users without the MODIFYCLUSTERSETTING privilege	application
 server.shutdown.connections.timeout (alias: server.shutdown.connection_wait)	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
 server.shutdown.initial_wait (alias: server.shutdown.drain_wait)	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.initial_wait is to set the wait time for health probes to notice that the node is not ready.)	application
-server.shutdown.jobs.timeout (alias: server.shutdown.jobs_wait)	duration	10s	the maximum amount of time a server waits for all currently executing jobs to notice drain request and to perform orderly shutdown	application
 server.shutdown.transactions.timeout (alias: server.shutdown.query_wait)	duration	10s	the timeout for waiting for active transactions to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
 server.sql_tcp_keep_alive.count	integer	3	maximum number of probes that will be sent out before a connection is dropped because it's unresponsive (Linux and Darwin only)	application
 server.sql_tcp_keep_alive.interval	duration	10s	time between keep alive probes and idle time before probes are sent out	application
@@ -189,7 +190,7 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.default_int_size	integer	8	"the size, in bytes, of an INT type
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
-sql.defaults.disallow_full_table_scans.enabled	boolean	false	"setting to true rejects queries that have planned a full table scan
+sql.defaults.disallow_full_table_scans.enabled	boolean	false	"setting to true rejects queries that have planned a full table scan; set large_full_scan_rows > 0 to allow small full table scans estimated to read fewer than large_full_scan_rows
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.distsql	enumeration	auto	"default distributed SQL execution mode [off = 0, auto = 1, on = 2, always = 3]
@@ -228,7 +229,7 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.intervalstyle	enumeration	postgres	"default value for IntervalStyle session setting [postgres = 0, iso_8601 = 1, sql_standard = 2]
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
-sql.defaults.large_full_scan_rows	float	1000	"default value for large_full_scan_rows session setting which determines the maximum table size allowed for a full scan when disallow_full_table_scans is set to true
+sql.defaults.large_full_scan_rows	float	0	"default value for large_full_scan_rows session variable which determines the table size at which full scans are considered large and disallowed when disallow_full_table_scans is set to true; set to 0 to reject all full table or full index scans when disallow_full_table_scans is true
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.locality_optimized_partitioned_index_scan.enabled	boolean	true	"default value for locality_optimized_partitioned_index_scan session setting; enables searching for rows in the current region before searching remote regions
@@ -294,7 +295,7 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.use_declarative_schema_changer	enumeration	on	"default value for use_declarative_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe = 2, unsafe_always = 3]
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
-sql.defaults.vectorize	enumeration	on	"default vectorize mode [on = 0, on = 2, experimental_always = 3, off = 4]
+sql.defaults.vectorize	enumeration	on	"default vectorize mode [on = 0, on = 1, on = 2, experimental_always = 3, off = 4]
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.zigzag_join.enabled	boolean	false	"default value for enable_zigzag_join session setting; disallows use of zig-zag join by default
@@ -341,7 +342,7 @@ sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of s
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	application
 sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh	application
 sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh	application
-sql.stats.automatic_partial_collection.enabled	boolean	false	automatic partial statistics collection mode	application
+sql.stats.automatic_partial_collection.enabled	boolean	true	automatic partial statistics collection mode	application
 sql.stats.automatic_partial_collection.fraction_stale_rows	float	0.05	target fraction of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.automatic_partial_collection.min_stale_rows	integer	100	target minimum number of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	application
@@ -352,6 +353,8 @@ sql.stats.forecasts.max_decrease	float	0.3333333333333333	the most a prediction 
 sql.stats.forecasts.min_goodness_of_fit	float	0.95	the minimum R² (goodness of fit) measurement required from all predictive models to use a forecast	application
 sql.stats.forecasts.min_observations	integer	3	the mimimum number of observed statistics required to produce a statistics forecast	application
 sql.stats.histogram_buckets.count	integer	200	maximum number of histogram buckets to build during table statistics collection	application
+sql.stats.histogram_buckets.include_most_common_values.enabled	boolean	true	whether to include most common values as histogram buckets	application
+sql.stats.histogram_buckets.max_fraction_most_common_values	float	0.1	maximum fraction of histogram buckets to use for most common values	application
 sql.stats.histogram_collection.enabled	boolean	true	histogram collection mode	application
 sql.stats.histogram_samples.count	integer	0	number of rows sampled for histogram construction during table statistics collection. Not setting this or setting a value of 0 means that a reasonable sample size will be automatically picked based on the table size.	application
 sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics collection mode	application
@@ -381,7 +384,10 @@ sql.ttl.default_select_batch_size	integer	500	default amount of rows to select i
 sql.ttl.default_select_rate_limit	integer	0	default select rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.	application
 sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled	application
 sql.txn.read_committed_isolation.enabled	boolean	true	set to true to allow transactions to use the READ COMMITTED isolation level if specified by BEGIN/SET commands	application
+sql.txn.repeatable_read_isolation.enabled (alias: sql.txn.snapshot_isolation.enabled)	boolean	false	set to true to allow transactions to use the REPEATABLE READ isolation level if specified by BEGIN/SET commands	application
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
+storage.columnar_blocks.enabled	boolean	true	set to true to enable columnar-blocks to store KVs in a columnar format	system-visible
+storage.delete_compaction_excise.enabled	boolean	true	set to false to direct Pebble to not partially excise sstables in delete-only compactions	system-visible
 storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
 storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
@@ -395,5 +401,6 @@ trace.opentelemetry.collector	string		address of an OpenTelemetry trace collecto
 trace.snapshot.rate	duration	0s	if non-zero, interval at which background trace snapshots are captured	application
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez	application
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
+ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
-version	version	1000024.3-upgrading-step-010	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000025.1	set the active cluster version in the format '<major>.<minor>'	application

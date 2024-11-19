@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package schemachanger_test
 
@@ -22,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -121,6 +117,9 @@ type testCase struct {
 	schemaChange string
 	expectedErr  string
 	skipIssue    int
+	// Optional: If you want a query to run at each stage, you can include it here.
+	// We don't evaluate the results; we simply assert that the query executes without errors.
+	query string
 }
 
 // Captures testCase before t.Parallel is called.
@@ -171,9 +170,33 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
 		},
 		{
-			desc:         "alter column type",
+			desc:         "alter column type trivial",
 			setup:        []string{"ALTER TABLE tbl ADD COLUMN new_col SMALLINT NOT NULL DEFAULT 100"},
 			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE BIGINT",
+		},
+		{
+			desc:         "alter column type validate",
+			setup:        []string{"ALTER TABLE tbl ADD COLUMN new_col BIGINT NOT NULL DEFAULT 100"},
+			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE SMALLINT",
+		},
+		{
+			desc: "alter column type general",
+			setup: []string{
+				"SET enable_experimental_alter_column_type_general=TRUE",
+				"ALTER TABLE tbl ADD COLUMN new_col BIGINT NOT NULL DEFAULT 100",
+			},
+			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE TEXT",
+			query:        "SELECT new_col FROM tbl LIMIT 1",
+		},
+		{
+			desc: "alter column type general compute",
+			setup: []string{
+				"SET enable_experimental_alter_column_type_general=TRUE",
+				"ALTER TABLE tbl ADD COLUMN new_col DATE NOT NULL DEFAULT '2013-05-06', " +
+					"ADD COLUMN new_comp DATE AS (new_col) STORED",
+			},
+			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_comp SET DATA TYPE DATE USING '2021-05-06'",
+			query:        "SELECT new_comp FROM tbl LIMIT 1",
 		},
 		{
 			desc:         "add column default udf",
@@ -303,6 +326,17 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"ALTER TABLE tbl ADD PRIMARY KEY (id)",
 			},
 			schemaChange: "ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (insert_phase_ordinal, operation_phase_ordinal, operation)",
+		},
+		{
+			desc:        "alter primary key and replace rowid in PK",
+			createTable: createTableNoPK,
+			setup: []string{
+				"CREATE INDEX i1 ON tbl (val)",
+			},
+			// Run a query against the secondary index at each stage.
+			query:        "SELECT operation FROM tbl@i1",
+			schemaChange: "ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (insert_phase_ordinal, operation_phase_ordinal, operation)",
+			skipIssue:    133129,
 		},
 		{
 			desc:        "alter primary key using columns using hash",
@@ -448,6 +482,11 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
+						SQLEvalContext: &eval.TestingKnobs{
+							// We disable the randomization of some batch sizes because with
+							// some low values the test takes much longer.
+							ForceProductionValues: true,
+						},
 						SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 							BeforeStage: func(p scplan.Plan, stageIdx int) error {
 								if !clusterCreated.Load() {
@@ -527,6 +566,12 @@ func TestAlterTableDMLInjection(t *testing.T) {
 								// Use subset instead of equals for better error output.
 								require.Subset(t, expectedResults, actualResults, errorMessage)
 								require.Subset(t, actualResults, expectedResults, errorMessage)
+
+								// If a query is provided, run it without checking the results—just
+								// ensure it doesn't fail.
+								if tc.query != "" {
+									sqlDB.Exec(t, tc.query)
+								}
 
 								for i := 0; i < poIdx; i++ {
 									insertPO := poSlice[i]

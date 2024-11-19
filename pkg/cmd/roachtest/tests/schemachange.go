@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -38,7 +33,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			const fixturePath = `gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=10/backup?AUTH=implicit`
+			const fixturePath = `gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=10?AUTH=implicit`
 
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 			db := c.Conn(ctx, t.L(), 1)
@@ -48,7 +43,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			m.Go(func(ctx context.Context) error {
 				t.Status("loading fixture")
 				if _, err := db.Exec(
-					`RESTORE DATABASE tpch FROM $1 WITH unsafe_restore_incompatible_version`, fixturePath); err != nil {
+					`RESTORE DATABASE tpch FROM 'backup' IN $1 WITH unsafe_restore_incompatible_version`, fixturePath); err != nil {
 					t.Fatal(err)
 				}
 				return nil

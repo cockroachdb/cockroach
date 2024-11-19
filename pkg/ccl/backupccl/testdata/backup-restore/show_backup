@@ -64,12 +64,6 @@ SELECT * FROM [SHOW BACKUP VALIDATE FROM 'valid-22.2-with-job' IN 'nodelocal://1
 ----
 true
 
-# Validates the same backup with the old syntax.
-query-sql regex=No\sproblems\sfound!
-SELECT * FROM [SHOW BACKUP VALIDATE 'nodelocal://1/valid-22.2-with-job'];
-----
-true
-
 query-sql
 SELECT node, locality, ok, error, can_delete FROM [SHOW BACKUP CONNECTION 'nodelocal://1/conn-test' WITH TRANSFER='1'] ORDER BY node;
 ----

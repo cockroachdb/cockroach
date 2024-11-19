@@ -1642,7 +1642,7 @@ project
       │    │    └── columns: c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
       │    └── filters (true)
       └── filters
-           └── NOT ((t:1 >= t:1) AND (t:1 <= CASE WHEN NULL THEN t:1::CHAR ELSE c:5 END))
+           └── NOT ((t:1 >= t:1) AND (t:1 <= CASE WHEN NULL THEN t:1::BPCHAR ELSE c:5::BPCHAR END))
 
 # IF is typed differently (Postgres does not support IF).
 build
@@ -1662,9 +1662,8 @@ project
       │    │    └── columns: c:5 t102110_2.rowid:6!null t102110_2.crdb_internal_mvcc_timestamp:7 t102110_2.tableoid:8
       │    └── filters (true)
       └── filters
-           └── NOT ((t:1 >= t:1) AND (t:1 <= CASE NULL WHEN true THEN c:5 ELSE t:1::CHAR END))
+           └── NOT ((t:1 >= t:1) AND (t:1 <= CASE NULL WHEN true THEN c:5 ELSE t:1::BPCHAR END))
 
-# TODO(#108360): implicit casts from STRING to CHAR should use bpchar.
 exec-ddl
 CREATE TABLE t108360_1 (t TEXT)
 ----
@@ -1690,6 +1689,6 @@ project
  │    │    │    └── columns: t108360_2.c:5 t108360_2.rowid:6!null t108360_2.crdb_internal_mvcc_timestamp:7 t108360_2.tableoid:8
  │    │    └── filters (true)
  │    └── filters
- │         └── t:1 = CASE WHEN t:1 > t108360_2.c:5 THEN t:1::CHAR ELSE t108360_2.c:5 END
+ │         └── t:1 = CASE WHEN t:1 > t108360_2.c:5 THEN t:1::BPCHAR ELSE t108360_2.c:5::BPCHAR END
  └── projections
-      └── CASE WHEN t:1 > t108360_2.c:5 THEN t:1::CHAR ELSE t108360_2.c:5 END [as=c:9]
+      └── CASE WHEN t:1 > t108360_2.c:5 THEN t:1::BPCHAR ELSE t108360_2.c:5::BPCHAR END [as=c:9]

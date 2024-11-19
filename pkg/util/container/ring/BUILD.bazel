@@ -2,16 +2,32 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "ring",
-    srcs = ["ring.go"],
+    srcs = [
+        "buffer.go",
+        "ring.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/container/ring",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/buildutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 go_test(
     name = "ring_test",
     srcs = [
+        "buffer_test.go",
         "example_test.go",
         "ring_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":ring"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
 )

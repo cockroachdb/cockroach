@@ -31,9 +31,11 @@ allow_ordinal_column_references                            off
 allow_role_memberships_to_change_during_transaction        off
 alter_primary_region_super_region_override                 off
 application_name                                           ·
+authentication_method                                      cert-password
 autocommit_before_ddl                                      off
 avoid_buffering                                            off
 backslash_quote                                            safe_encoding
+bypass_pcr_reader_catalog_aost                             off
 bytea_output                                               hex
 check_function_bodies                                      on
 client_encoding                                            UTF8
@@ -64,6 +66,7 @@ disable_changefeed_replication                             off
 disable_hoist_projection_in_join_limitation                off
 disable_partially_distributed_plans                        off
 disable_plan_gists                                         off
+disable_vec_union_eager_cancellation                       off
 disallow_full_table_scans                                  off
 distsql                                                    off
 distsql_plan_gateway_bias                                  2
@@ -105,7 +108,7 @@ is_superuser                                               on
 join_reader_index_join_strategy_batch_size                 4.0 MiB
 join_reader_no_ordering_strategy_batch_size                2.0 MiB
 join_reader_ordering_strategy_batch_size                   100 KiB
-large_full_scan_rows                                       1000
+large_full_scan_rows                                       0
 lc_collate                                                 C.UTF-8
 lc_ctype                                                   C.UTF-8
 lc_messages                                                C.UTF-8
@@ -128,6 +131,7 @@ optimizer_always_use_histograms                            on
 optimizer_hoist_uncorrelated_equality_subqueries           on
 optimizer_merge_joins_enabled                              on
 optimizer_prove_implication_with_virtual_computed_columns  on
+optimizer_push_limit_into_project_filtered_scan            on
 optimizer_push_offset_into_index_join                      on
 optimizer_use_conditional_hoist_fix                        on
 optimizer_use_forecasts                                    on
@@ -158,6 +162,7 @@ plpgsql_use_strict_into                                    off
 prefer_lookup_joins_for_fks                                off
 prepared_statements_cache_size                             0 B
 propagate_input_ordering                                   off
+recursion_depth_limit                                      1000
 reorder_joins_limit                                        8
 require_explicit_primary_keys                              off
 results_buffer_size                                        524288
@@ -202,6 +207,7 @@ transaction_timeout                                        0
 troubleshooting_mode                                       off
 unbounded_parallel_scans                                   off
 unconstrained_non_covering_index_scan_enabled              off
+unsafe_allow_triggers_modifying_cascades                   off
 use_declarative_schema_changer                             on
 variable_inequality_lookup_join_enabled                    on
 vectorize                                                  on

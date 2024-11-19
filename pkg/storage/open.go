@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -22,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -447,7 +441,6 @@ func WALFailover(
 func makePebbleWALFailoverOptsForDir(
 	settings *cluster.Settings, dir wal.Dir,
 ) *pebble.WALFailoverOptions {
-	cclWALFailoverLogEvery := log.Every(10 * time.Minute)
 	return &pebble.WALFailoverOptions{
 		Secondary: dir,
 		FailoverOptions: wal.FailoverOptions{
@@ -455,12 +448,7 @@ func makePebbleWALFailoverOptsForDir(
 			// UnhealthyOperationLatencyThreshold should be pulled from the
 			// cluster setting.
 			UnhealthyOperationLatencyThreshold: func() (time.Duration, bool) {
-				// WAL failover is a licensed feature.
-				licenseOK := base.CCLDistributionAndEnterpriseEnabled(settings)
-				if !licenseOK && cclWALFailoverLogEvery.ShouldLog() {
-					log.Warningf(context.Background(), "Ignoring WAL failover configuration because it requires an enterprise license.")
-				}
-				return walFailoverUnhealthyOpThreshold.Get(&settings.SV), licenseOK
+				return walFailoverUnhealthyOpThreshold.Get(&settings.SV), true
 			},
 		},
 	}

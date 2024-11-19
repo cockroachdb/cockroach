@@ -1,10 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -17,6 +14,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
+	"net"
 	"net/url"
 	"strings"
 	"sync"
@@ -31,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -371,11 +370,21 @@ func (s *kafkaSink) EmitRow(
 		return err
 	}
 
+	// Since we cannot distinguish between time spent buffering vs emitting
+	// inside sarama, set the DownstreamClientSend timer to the same value as
+	// BatchHistNanos.
+	recordOneMessageCb := s.metrics.recordOneMessage()
+	downstreamClientSendCb := s.metrics.timers().DownstreamClientSend.Start()
+	updateMetrics := func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
+		recordOneMessageCb(mvcc, bytes, compressedBytes)
+		downstreamClientSendCb()
+	}
+
 	msg := &sarama.ProducerMessage{
 		Topic:    topic,
 		Key:      sarama.ByteEncoder(key),
 		Value:    sarama.ByteEncoder(value),
-		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordOneMessage()},
+		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: updateMetrics},
 	}
 	s.stats.startMessage(int64(msg.Key.Length() + msg.Value.Length()))
 	return s.emitMessage(ctx, msg)
@@ -1227,6 +1236,7 @@ func buildKafkaConfig(
 	u sinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	kafkaThrottlingMetrics metrics.Histogram,
+	netMetrics *cidr.NetMetrics,
 ) (*sarama.Config, error) {
 	dialConfig, err := buildDialConfig(u)
 	if err != nil {
@@ -1313,6 +1323,16 @@ func buildKafkaConfig(
 			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
 	}
 
+	// Leverage sarama's proxy support to slip in our net metrics
+	config.Net.Proxy.Enable = true
+	// This is how sarama constructs its Dialer. See (*Config).getDialer() in sarama.
+	dialer := &net.Dialer{
+		Timeout:   config.Net.DialTimeout,
+		KeepAlive: config.Net.KeepAlive,
+		LocalAddr: config.Net.LocalAddr,
+	}
+	config.Net.Proxy.Dialer = netMetrics.WrapDialer(dialer, "kafka")
+
 	// Note that the sarama.Config.Validate() below only logs an error in some
 	// cases, so we explicitly validate sarama config from our side.
 	if err := saramaCfg.Validate(); err != nil {
@@ -1347,7 +1367,7 @@ func makeKafkaSink(
 	}
 
 	m := mb(requiresResourceAccounting)
-	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings))
+	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings), m.netMetrics())
 	if err != nil {
 		return nil, err
 	}

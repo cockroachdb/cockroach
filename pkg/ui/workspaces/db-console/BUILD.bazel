@@ -89,7 +89,6 @@ webpack_bin.webpack_cli(
         "db-console-ccl/assets/login-background.png",
         "db-console-ccl/assets/not-found.svg",
         "db-console-ccl/assets/questionMap.svg",
-        "db-console-ccl/assets/spinner.gif",
     ],
     args = [
         "--config webpack.config.js",
@@ -140,7 +139,6 @@ webpack_bin.webpack_cli(
         "db-console-oss/assets/heroBannerLp.png",
         "db-console-oss/assets/login-background.png",
         "db-console-oss/assets/not-found.svg",
-        "db-console-oss/assets/spinner.gif",
     ],
     args = [
         "--config webpack.config.js",
@@ -193,6 +191,7 @@ eslint_bin.eslint_test(
         "eslint-local-rules.js",
         "prettier.config.js",
         "tsconfig.json",
+        ":node_modules/@cockroachlabs/eslint-config",
         ":node_modules/@typescript-eslint/eslint-plugin",
         ":node_modules/@typescript-eslint/parser",
         ":node_modules/eslint-config-prettier",

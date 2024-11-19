@@ -1009,8 +1009,21 @@ statement ok
 SET enable_experimental_alter_column_type_general = true;
 
 statement ok
-CREATE TABLE enum_data_type (x STRING);
+CREATE TABLE enum_data_type (x STRING, y INT);
 INSERT INTO enum_data_type VALUES ('hello'), ('howdy');
+
+# The legacy schema changed doesn't hydrate the type name in the message.
+skipif config local-legacy-schema-changer
+statement error pq: column "y" cannot be cast automatically to type public.greeting\nHINT: You might need to specify "USING y::public.greeting".
+ALTER TABLE enum_data_type ALTER COLUMN y SET DATA TYPE greeting;
+
+statement error pq: invalid cast: int -> greeting
+ALTER TABLE enum_data_type ALTER COLUMN y SET DATA TYPE greeting USING y::greeting;
+
+# The legacy schema changed doesn't hydrate the type name in the message.
+skipif config local-legacy-schema-changer
+statement error pq: column "x" cannot be cast automatically to type public.greeting\nHINT: You might need to specify "USING x::public.greeting".
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting;
 
 statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting USING x::greeting;
@@ -1019,7 +1032,7 @@ statement ok
 INSERT INTO enum_data_type VALUES ('hi')
 
 query T rowsort
-SELECT * FROM enum_data_type
+SELECT x FROM enum_data_type
 ----
 hello
 howdy
@@ -1090,7 +1103,7 @@ statement ok
 CREATE TABLE enum_data_type (x STRING);
 INSERT INTO enum_data_type VALUES ('notagreeting')
 
-statement error pq: invalid input value for enum greeting: "notagreeting"
+statement error pq: .*invalid input value for enum greeting: "notagreeting"
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting USING x::greeting
 
 statement ok

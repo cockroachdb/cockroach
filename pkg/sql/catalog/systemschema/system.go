@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package systemschema
 
@@ -854,8 +849,18 @@ CREATE TABLE system.sql_instances (
     sql_addr       STRING,
     crdb_region    BYTES NOT NULL,
     binary_version STRING,
+    is_draining    BOOL NULL,
     CONSTRAINT "primary" PRIMARY KEY (crdb_region, id),
-    FAMILY "primary" (id, addr, session_id, locality, sql_addr, crdb_region, binary_version)
+    FAMILY "primary" (
+      id, 
+      addr, 
+      session_id, 
+      locality, 
+      sql_addr, 
+      crdb_region, 
+      binary_version, 
+      is_draining
+    )
 )`
 
 	SpanConfigurationsTableSchema = `
@@ -1200,6 +1205,8 @@ CREATE TABLE system.mvcc_statistics (
     perc_live_data FLOAT NOT NULL,
     last_update_error string,
     last_updated TIMESTAMPTZ NOT NULL DEFAULT now(),
+    table_type string NOT NULL,
+		details JSONB NOT NULL,
 		crdb_internal_last_updated_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (` + crdbInternalTableIdLastUpdatedShard + `) VIRTUAL,
     CONSTRAINT "primary" PRIMARY KEY (db_id, table_id),
 		INDEX "replication_size_bytes_table_id_idx" (replication_size_bytes desc, table_id),
@@ -1227,7 +1234,9 @@ CREATE TABLE system.mvcc_statistics (
 			total_data_bytes,
 			perc_live_data,
 			last_update_error,
-			last_updated
+			last_updated,
+			table_type,
+			details
     )
 	);`
 )
@@ -1282,7 +1291,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V24_3_TableMetadata.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_1_Start.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -3901,13 +3910,14 @@ var (
 					{Name: "sql_addr", ID: 5, Type: types.String, Nullable: true},
 					{Name: "crdb_region", ID: 6, Type: types.Bytes, Nullable: false},
 					{Name: "binary_version", ID: 7, Type: types.String, Nullable: true},
+					{Name: "is_draining", ID: 8, Type: types.Bool, Nullable: true},
 				},
 				[]descpb.ColumnFamilyDescriptor{
 					{
 						Name:            "primary",
 						ID:              0,
-						ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr", "crdb_region", "binary_version"},
-						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7},
+						ColumnNames:     []string{"id", "addr", "session_id", "locality", "sql_addr", "crdb_region", "binary_version", "is_draining"},
+						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
 						DefaultColumnID: 0,
 					},
 				},
@@ -4818,9 +4828,11 @@ var (
 				{Name: "perc_live_data", ID: 13, Type: types.Float, Nullable: false},
 				{Name: "last_update_error", ID: 14, Type: types.String, Nullable: true},
 				{Name: "last_updated", ID: 15, Type: types.TimestampTZ, Nullable: false, DefaultExpr: &nowTZString},
+				{Name: "table_type", ID: 16, Type: types.String, Nullable: false},
+				{Name: "details", ID: 17, Type: types.Jsonb, Nullable: false},
 				{
 					Name:        "crdb_internal_last_updated_table_id_shard_16",
-					ID:          16,
+					ID:          18,
 					Type:        types.Int4,
 					Nullable:    false,
 					ComputeExpr: &crdbInternalTableIdLastUpdatedShardStr,
@@ -4848,8 +4860,10 @@ var (
 						"perc_live_data",
 						"last_update_error",
 						"last_updated",
+						"table_type",
+						"details",
 					},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -4941,7 +4955,7 @@ var (
 					catenumpb.IndexColumn_DESC,
 					catenumpb.IndexColumn_ASC,
 				},
-				KeyColumnIDs:       []descpb.ColumnID{16, 15, 2},
+				KeyColumnIDs:       []descpb.ColumnID{18, 15, 2},
 				KeySuffixColumnIDs: []descpb.ColumnID{1},
 				Sharded: catpb.ShardedDescriptor{
 					IsSharded:    true,
@@ -5003,7 +5017,7 @@ var (
 				Expr:                  "crdb_internal_last_updated_table_id_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)",
 				Name:                  "check_crdb_internal_last_updated_table_id_shard_16",
 				Validity:              descpb.ConstraintValidity_Validated,
-				ColumnIDs:             []descpb.ColumnID{16},
+				ColumnIDs:             []descpb.ColumnID{18},
 				IsNonNullConstraint:   false,
 				FromHashShardedColumn: true,
 				ConstraintID:          tbl.NextConstraintID,

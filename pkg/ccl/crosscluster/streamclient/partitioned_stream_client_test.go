@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package streamclient_test
 
@@ -207,6 +204,48 @@ func TestPartitionStreamReplicationClientWithNonRunningJobs(t *testing.T) {
 			require.NoError(t, err)
 		})
 	})
+}
+
+func TestHeartbeatRecoversFromClosedConn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	h, cleanup := replicationtestutils.NewReplicationHelper(t,
+		base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	)
+	defer cleanup()
+
+	testTenantName := roachpb.TenantName("test-tenant")
+	_, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
+	defer cleanupTenant()
+
+	ctx := context.Background()
+	client, err := streamclient.NewPartitionedStreamClient(ctx, h.MaybeGenerateInlineURL(t))
+	defer func() {
+		require.NoError(t, client.Close(ctx))
+	}()
+	require.NoError(t, err)
+
+	rps, err := client.CreateForTenant(ctx, testTenantName, streampb.ReplicationProducerRequest{})
+	require.NoError(t, err)
+	targetStreamID := rps.StreamID
+
+	_, err = client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.NoError(t, err)
+
+	// Closing the client closes the underlying connection, so heartbeating after
+	// close will assert that the Heartbeat call can reopen the connection.
+	//
+	// Perhaps all commands on a closed client should fail, but that's a
+	// problem for another day.
+	require.NoError(t, client.Close(ctx))
+	_, err = client.Heartbeat(ctx, targetStreamID, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	require.NoError(t, err)
 }
 
 func TestPartitionedStreamReplicationClient(t *testing.T) {

@@ -1,17 +1,14 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package row_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -20,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -105,7 +103,90 @@ func TestExternalRowData(t *testing.T) {
 				expected: [][]string{{"2", "2", "-2"}},
 			},
 		} {
-			require.Equal(t, tc.expected, r.QueryStr(t, tc.query))
+
+			require.Equal(t, tc.expected, r.QueryStrMeta(
+				t, fmt.Sprintf("vectorize=%v", vectorize), tc.query,
+			))
 		}
+	}
+}
+
+// TestExternalRowDataDistSQL tests that the DistSQL physical planner can
+// correctly place flows reading from external row data.
+func TestExternalRowDataDistSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "slow test")
+
+	ctx := context.Background()
+
+	// Start a 5-node cluster.
+	tc := serverutils.StartCluster(t, 5, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "defaultdb",
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	r0 := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
+	r0.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v1 INT, v2 INT)`)
+	r0.Exec(t, `CREATE TABLE t_copy (k INT PRIMARY KEY, v1 INT, v2 INT)`)
+	r0.Exec(t, `INSERT INTO t VALUES (1), (3), (5)`)
+
+	if tc.StartedDefaultTestTenant() {
+		// Grant capability to run RELOCATE to secondary (test) tenant.
+		systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+		systemDB.Exec(t,
+			`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`,
+			serverutils.TestTenantID().ToUint64())
+	}
+
+	// Place leaseholders on nodes 3, 4, 5.
+	r0.Exec(t, `ALTER TABLE t SPLIT AT VALUES (2), (4)`)
+	r0.ExecSucceedsSoon(
+		t, `ALTER TABLE t RELOCATE VALUES (ARRAY[3], 1), (ARRAY[4], 3), (ARRAY[5], 5)`,
+	)
+
+	asOf := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	// Modify the table descriptor for 't_copy' to have external row data from
+	// table 't'.
+	var tableID int
+	row := r0.QueryRow(t, `SELECT 't'::REGCLASS::OID`)
+	row.Scan(&tableID)
+	execCfg0 := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
+	require.NoError(t, execCfg0.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		descriptors := txn.Descriptors()
+		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t_copy")
+		_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), &tn)
+		if err != nil {
+			return err
+		}
+		require.NotNil(t, mut)
+		mut.External = &descpb.ExternalRowData{
+			AsOf:     asOf,
+			TenantID: execCfg0.Codec.TenantID,
+			TableID:  descpb.ID(tableID),
+		}
+		return descriptors.WriteDesc(ctx, false /* kvtrace */, mut, txn.KV())
+	}))
+
+	// Now check that DistSQL plans against both tables correctly place
+	// flows on nodes 1, 3, 4, 5.
+	r0.Exec(t, `SET distsql = always`)
+
+	exp := `"nodeNames":["1","3","4","5"]`
+	var info string
+	row = r0.QueryRow(t, `EXPLAIN (DISTSQL, JSON) SELECT count(*) FROM t`)
+	row.Scan(&info)
+	if !strings.Contains(info, exp) {
+		t.Fatalf("expected DistSQL plan to contain %s: was %s", exp, info)
+	}
+	row = r0.QueryRow(t, `EXPLAIN (DISTSQL, JSON) SELECT count(*) FROM t_copy`)
+	row.Scan(&info)
+	if !strings.Contains(info, exp) {
+		t.Fatalf("expected DistSQL plan to contain %s: was %s", exp, info)
 	}
 }

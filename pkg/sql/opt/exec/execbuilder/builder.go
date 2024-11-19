@@ -1,17 +1,14 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package execbuilder
 
 import (
 	"context"
+	"slices"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -71,7 +68,11 @@ type Builder struct {
 
 	// cascades accumulates cascades that run after the main query but before
 	// checks.
-	cascades []exec.Cascade
+	cascades []exec.PostQuery
+
+	// triggers accumulates triggers that run after the main query and after
+	// checks and cascades.
+	triggers []exec.PostQuery
 
 	// checks accumulates check queries that are run after the main query and
 	// any cascades.
@@ -173,7 +174,41 @@ type Builder struct {
 	IsANSIDML bool
 
 	// IndexesUsed list the indexes used in query with the format tableID@indexID.
-	IndexesUsed []string
+	IndexesUsed
+}
+
+// IndexesUsed is a list of indexes used in a query.
+type IndexesUsed struct {
+	indexes []struct {
+		tableID cat.StableID
+		indexID cat.StableID
+	}
+}
+
+// add adds the given index to the list, if it is not already present.
+func (iu *IndexesUsed) add(tableID, indexID cat.StableID) {
+	s := struct {
+		tableID cat.StableID
+		indexID cat.StableID
+	}{tableID, indexID}
+	if !slices.Contains(iu.indexes, s) {
+		iu.indexes = append(iu.indexes, s)
+	}
+}
+
+// Strings returns a slice of strings with the format tableID@indexID for each
+// index in the list.
+//
+// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of converting
+// to strings.
+func (iu *IndexesUsed) Strings() []string {
+	res := make([]string, len(iu.indexes))
+	const base = 10
+	for i, u := range iu.indexes {
+		res[i] = strconv.FormatUint(uint64(u.tableID), base) + "@" +
+			strconv.FormatUint(uint64(u.indexID), base)
+	}
+	return res
 }
 
 // New constructs an instance of the execution node builder using the
@@ -244,7 +279,7 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 
 	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Statistics().RowCountIfAvailable())
 	return b.factory.ConstructPlan(
-		plan.root, b.subqueries, b.cascades, b.checks, rootRowCount, b.flags,
+		plan.root, b.subqueries, b.cascades, b.triggers, b.checks, rootRowCount, b.flags,
 	)
 }
 

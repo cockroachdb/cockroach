@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2022 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 set -xeuo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
@@ -75,7 +81,7 @@ if [ $exit_status = 0 ]; then
 fi
 
 # Generate a corpus for all mixed version variants
-for config in local-mixed-24.1; do
+for config in local-mixed-24.2; do
   $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
       //pkg/sql/logictest/tests/$config/... \
       --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed \

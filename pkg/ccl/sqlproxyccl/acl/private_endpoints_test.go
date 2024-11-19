@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package acl_test
 
@@ -15,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/acl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -25,6 +23,7 @@ import (
 
 func TestPrivateEndpoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 	ctx := context.Background()
 
 	makeConn := func(endpoint string) acl.ConnectionTags {
@@ -67,7 +66,7 @@ func TestPrivateEndpoints(t *testing.T) {
 			},
 		}
 		err := p.CheckConnection(ctx, makeConn("bar"))
-		require.EqualError(t, err, "connection to '42' denied: cluster does not allow private connections from endpoint 'bar'")
+		require.EqualError(t, err, "cluster does not allow private connections from endpoint 'bar'")
 	})
 
 	t.Run("default behavior if no entries", func(t *testing.T) {
@@ -79,7 +78,7 @@ func TestPrivateEndpoints(t *testing.T) {
 			},
 		}
 		err := p.CheckConnection(ctx, makeConn("bar"))
-		require.EqualError(t, err, "connection to '42' denied: cluster does not allow private connections from endpoint 'bar'")
+		require.EqualError(t, err, "cluster does not allow private connections from endpoint 'bar'")
 	})
 
 	t.Run("good private connection", func(t *testing.T) {
@@ -97,6 +96,7 @@ func TestPrivateEndpoints(t *testing.T) {
 
 func TestFindPrivateEndpointID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	newHeader := func(t *testing.T, tlvs []proxyproto.TLV) *proxyproto.Header {
 		t.Helper()

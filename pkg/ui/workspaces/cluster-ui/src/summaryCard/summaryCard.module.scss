@@ -1,3 +1,8 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
 @import "../core/index.module";
 
 .summary--card {
@@ -70,7 +75,7 @@
     &--value {
       font-family: $font-family--base;
       font-size: 14px;
-      font-weight: $font-weight--bold;
+      font-weight: $font-weight--medium;
       line-height: 1.71;
       letter-spacing: 0.1px;
       color: $popover-color;

@@ -1,0 +1,134 @@
+# This test verifies that the RangeController correctly returns whether a
+# replica's send queue bytes and whether the send stream is closed.
+#
+# s2 is in StateSnapshot so its send stream should be closed.
+# s3 has a send queue via sending only a prefix of entries [1,2).
+init
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateSnapshot next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
+raft_event
+range_id=1
+  entries
+    term=1 index=1 pri=NormalPri size=1MiB 
+    term=1 index=2 pri=NormalPri size=1MiB
+    term=1 index=3 pri=NormalPri size=1MiB
+  sending
+    replica_id=1 [1,4)
+    replica_id=2 [1,4)
+    replica_id=3 [1,2)
+----
+t1/s1: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,2) send_queue=[2,4) precise_q_size=+2.0 MiB
+eval deducted: reg=+3.0 MiB ela=+0 B
+eval original in send-q: reg=+2.0 MiB ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
+
+# Print out the send stream stats:
+#   (1) not refreshing ehe stats
+#   (2) refreshing ehe stats
+# Expect to not see the send queue size for s2 in the first case but we will
+# see that it has a send queue (has_send_queue). In (2), we will see the send
+# queue size for s2.
+send_stream_stats range_id=1 refresh=false
+----
+(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+0 B / 0 entries
+
+send_stream_stats range_id=1 refresh=true
+----
+(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+2.0 MiB / 2 entries
+
+# Next, add another entry, which will also be queued. We want to see the stats
+# tick over and update by themselves (refresh=false) by ticking the clock the
+# sendQueueStatRefreshInterval (5s).
+raft_event
+range_id=1
+  entries
+    term=1 index=4 pri=NormalPri size=12MiB
+  sending
+    replica_id=1 [4,5)
+    replica_id=2 [4,5)
+    replica_id=3 [2,2)
+----
+t1/s1: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
+       send reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
+t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+
+# The stats shouldn't have changed, as we haven't refreshed them via ticking.
+send_stream_stats range_id=1 refresh=false
+----
+(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+2.0 MiB / 2 entries
+
+tick duration=7s
+----
+now=7s
+
+# Then pass in another RaftEvent in order to update the stats, noticing the
+# stats are now older than the refresh interval.
+raft_event
+range_id=1
+----
+t1/s1: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
+       send reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
+t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+
+
+# The stats now should have been populated.
+send_stream_stats range_id=1 refresh=false
+----
+(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+14 MiB / 3 entries
+
+# Sanity check they are the same when refreshing.
+send_stream_stats range_id=1 refresh=true
+----
+(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+14 MiB / 3 entries
+
+close_rcs
+----
+range_id=1 tenant_id={1} local_replica_id=1

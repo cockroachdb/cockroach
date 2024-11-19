@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvstreamer
 
@@ -340,15 +335,20 @@ type streamerStatistics struct {
 	enqueuedSingleRangeRequests int
 }
 
+const (
+	// The default scaling factor for the number of asynchronous requests per
+	// Streamer per vCPU. The value for this setting is chosen arbitrarily as
+	// 1/4th of the default value for the DefaultSenderStreamsPerVCPU.
+	defaultStreamerStreamsPerVCPU = kvcoord.DefaultSenderStreamsPerVCPU / 4
+)
+
 // streamerConcurrencyLimit is an upper bound on the number of asynchronous
-// requests that a single Streamer can have in flight. The default value for
-// this setting is chosen arbitrarily as 1/8th of the default value for the
-// senderConcurrencyLimit.
+// requests that a single Streamer can have in flight.
 var streamerConcurrencyLimit = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"kv.streamer.concurrency_limit",
 	"maximum number of asynchronous requests by a single streamer",
-	max(128, int64(8*runtime.GOMAXPROCS(0))),
+	defaultStreamerStreamsPerVCPU*max(kvcoord.MinViableProcs, int64(runtime.GOMAXPROCS(0))),
 	settings.PositiveInt,
 )
 
@@ -583,9 +583,11 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 		// ranges.
 		if s.truncationHelper == nil {
 			// The streamer can process the responses in an arbitrary order, so
-			// we don't require the helper to preserve the order of requests and
-			// allow it to reorder the reqs slice too.
-			const mustPreserveOrder = false
+			// we don't require the helper to preserve the order of requests,
+			// unless we're in the InOrder mode when we must maintain increasing
+			// positions. We unconditionally allow reordering of the reqs slice
+			// though.
+			var mustPreserveOrder = s.mode == InOrder
 			const canReorderRequestsSlice = true
 			s.truncationHelper, err = kvcoord.NewBatchTruncationHelper(
 				scanDir, reqs, mustPreserveOrder, canReorderRequestsSlice,
@@ -1370,6 +1372,20 @@ func (w *workerCoordinator) performRequestAsync(
 			ba.AdmissionHeader.NoMemoryReservedAtSource = false
 			ba.Requests = req.reqs
 
+			if buildutil.CrdbTestBuild {
+				if w.s.mode == InOrder {
+					for i := range req.positions[:len(req.positions)-1] {
+						if req.positions[i] >= req.positions[i+1] {
+							w.s.results.setError(errors.AssertionFailedf(
+								"positions aren't ascending: %d before %d at index %d",
+								req.positions[i], req.positions[i+1], i,
+							))
+							return
+						}
+					}
+				}
+			}
+
 			// TODO(yuzefovich): in Enqueue we split all requests into
 			// single-range batches, so ideally ba touches a single range in
 			// which case we hit the fast path in the DistSender. However, if
@@ -1810,6 +1826,9 @@ func buildResumeSingleRangeBatch(
 	// We've already reconciled the budget with the actual reservation for the
 	// requests with the ResumeSpans.
 	resumeReq.reqsReservedBytes = fp.resumeReqsMemUsage
+	// TODO(yuzefovich): add heuristic for making fresh allocation of slices
+	// whenever only a fraction of them will be used by the resume batch. This
+	// will allow us to return most of overheadAccountedFor to the budget.
 	resumeReq.overheadAccountedFor = req.overheadAccountedFor
 	// Note that due to limitations of the KV layer (#75452) we cannot reuse
 	// original requests because the KV doesn't allow mutability (and all

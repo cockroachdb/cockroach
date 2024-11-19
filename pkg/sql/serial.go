@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -19,8 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -132,14 +125,13 @@ func (p *planner) generateSerialInColumnDef(
 	error,
 ) {
 
-	if err := assertValidSerialColumnDef(d, tableName); err != nil {
+	if err := catalog.AssertValidSerialColumnDef(d, tableName); err != nil {
 		return nil, nil, nil, nil, err
 	}
 
 	newSpec := *d
 
-	// Make the column non-nullable in all cases. PostgreSQL requires
-	// this.
+	// Column is non-nullable in all cases. PostgreSQL requires this.
 	newSpec.Nullable.Nullability = tree.NotNull
 
 	// Clear the IsSerial bit now that it's been remapped.
@@ -356,7 +348,7 @@ func SimplifySerialInColumnDefWithRowID(
 		return nil
 	}
 
-	if err := assertValidSerialColumnDef(d, tableName); err != nil {
+	if err := catalog.AssertValidSerialColumnDef(d, tableName); err != nil {
 		return err
 	}
 
@@ -371,33 +363,6 @@ func SimplifySerialInColumnDefWithRowID(
 
 	// Clear the IsSerial bit now that it's been remapped.
 	d.IsSerial = false
-
-	return nil
-}
-
-func assertValidSerialColumnDef(d *tree.ColumnTableDef, tableName *tree.TableName) error {
-	if d.HasDefaultExpr() {
-		// SERIAL implies a new default expression, we can't have one to
-		// start with. This is the error produced by pg in such case.
-		return pgerror.Newf(pgcode.Syntax,
-			"multiple default values specified for column %q of table %q",
-			tree.ErrString(&d.Name), tree.ErrString(tableName))
-	}
-
-	if d.Nullable.Nullability == tree.Null {
-		// SERIAL implies a non-NULL column, we can't accept a nullability
-		// spec. This is the error produced by pg in such case.
-		return pgerror.Newf(pgcode.Syntax,
-			"conflicting NULL/NOT NULL declarations for column %q of table %q",
-			tree.ErrString(&d.Name), tree.ErrString(tableName))
-	}
-
-	if d.Computed.Expr != nil {
-		// SERIAL cannot be a computed column.
-		return pgerror.Newf(pgcode.Syntax,
-			"SERIAL column %q of table %q cannot be computed",
-			tree.ErrString(&d.Name), tree.ErrString(tableName))
-	}
 
 	return nil
 }

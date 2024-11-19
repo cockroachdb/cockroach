@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -16,6 +11,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -293,4 +289,162 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		require.Contains(t, err.Error(), "memory budget exceeded")
 		cleanup()
 	}
+}
+
+// TestMVCCScanWithMVCCValueHeaders tests that when the rawMVCCValues
+// option is given to pebbleMVCCScanner, the returned values can be
+// parsed using the extended encoding and the value header is
+// preserved.
+func TestMVCCScanWithMVCCValueHeaders(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	eng, err := Open(context.Background(), InMemory(),
+		cluster.MakeClusterSettings(),
+		CacheSize(1<<20))
+	require.NoError(t, err)
+	defer eng.Close()
+
+	// We write
+	//
+	// a@1                       with ValueHeader
+	// d@1                       without ValueHeader
+	//
+	// d-e@2 (DelRange)          with ValueHeader
+	//
+	// c1@3                      with ValueHeader
+	// c2@3                      with ValueHeader
+	// c2@4                      without ValueHeader
+	//
+	// b@3 Seq = 0 (provisional) with ValueHeader
+	// b@3 Seq = 1 (provisional) without ValueHeader
+	//
+	// We then read with tombstones at ts3,seq=0 and expect to see
+	// 5 values all with value headers:
+	//
+	// a@1
+	// b@3 Seq = 0
+	// c1@3
+	// c2@3
+	// d@2 (synthesized from range key)
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC1 := roachpb.Key("c1")
+	keyC2 := roachpb.Key("c2")
+	keyD := roachpb.Key("d")
+	keyE := roachpb.Key("e")
+	ts1 := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+	ts3 := hlc.Timestamp{WallTime: 3}
+	ts4 := hlc.Timestamp{WallTime: 4}
+	expectedOriginID := uint32(42)
+
+	writeValue := func(key roachpb.Key, ts hlc.Timestamp, txn *roachpb.Transaction, originID uint32) {
+		_, err := MVCCPut(ctx, eng, key, ts,
+			roachpb.MakeValueFromString(fmt.Sprintf("%s-val", key)),
+			MVCCWriteOptions{
+				Txn:      txn,
+				OriginID: originID,
+			},
+		)
+		require.NoError(t, err)
+	}
+
+	writeValue(keyA, ts1, nil, expectedOriginID)
+	writeValue(keyD, ts1, nil, 0)
+
+	require.NoError(t, eng.PutMVCCRangeKey(MVCCRangeKey{StartKey: keyD, EndKey: keyE, Timestamp: ts2}, MVCCValue{
+		MVCCValueHeader: enginepb.MVCCValueHeader{OriginID: expectedOriginID},
+	}))
+
+	txn1 := roachpb.MakeTransaction("test", nil, isolation.Serializable, roachpb.NormalUserPriority,
+		ts3, 1, 1, 0, false /* omitInRangefeeds */)
+	writeValue(keyB, ts3, &txn1, expectedOriginID)
+	txn1.Sequence++
+	writeValue(keyB, ts3, &txn1, 0)
+	txn1.Sequence--
+
+	writeValue(keyC1, ts3, nil, expectedOriginID)
+	writeValue(keyC2, ts3, nil, expectedOriginID)
+	writeValue(keyC2, ts4, nil, 0)
+
+	reader := eng.NewReader(StandardDurability)
+	defer reader.Close()
+
+	createScanner := func(startKey roachpb.Key) (*pebbleMVCCScanner, func()) {
+		iter, err := reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
+			KeyTypes:   IterKeyTypePointsAndRanges,
+			LowerBound: startKey,
+			UpperBound: keyE})
+		require.NoError(t, err)
+		return &pebbleMVCCScanner{
+			parent:        iter,
+			memAccount:    mon.NewStandaloneUnlimitedAccount(),
+			start:         keyA,
+			end:           keyE,
+			ts:            ts3,
+			tombstones:    true,
+			rawMVCCValues: true,
+		}, iter.Close
+	}
+	checkKVData := func(kvData [][]byte) {
+		require.NoError(t, MVCCScanDecodeKeyValues(kvData, func(k MVCCKey, v []byte) error {
+			mvccValue, err := DecodeMVCCValue(v)
+			require.NoError(t, err)
+			require.Equal(t, expectedOriginID, mvccValue.OriginID)
+			return nil
+		}))
+	}
+
+	t.Run("scan", func(t *testing.T) {
+		t.Run("maxIterBeforeSeek=0", func(t *testing.T) {
+			oldMaxItersBeforeSeek := maxItersBeforeSeek
+			defer func() { maxItersBeforeSeek = oldMaxItersBeforeSeek }()
+			maxItersBeforeSeek = 0
+
+			mvccScanner, cleanup := createScanner(keyA)
+			defer cleanup()
+
+			var results pebbleResults
+			mvccScanner.init(&txn1, uncertainty.Interval{}, &results)
+			_, _, _, err = mvccScanner.scan(ctx)
+			require.NoError(t, err)
+			kvData := results.finish()
+			require.Equal(t, int64(5), results.count)
+			checkKVData(kvData)
+		})
+		t.Run("maxIterBeforeSeek=default", func(t *testing.T) {
+			mvccScanner, cleanup := createScanner(keyA)
+			defer cleanup()
+
+			var results pebbleResults
+			mvccScanner.init(&txn1, uncertainty.Interval{}, &results)
+			_, _, _, err = mvccScanner.scan(ctx)
+			require.NoError(t, err)
+			kvData := results.finish()
+			require.Equal(t, int64(5), results.count)
+			checkKVData(kvData)
+		})
+	})
+	t.Run("get", func(t *testing.T) {
+		getKeyWithScanner := func(key roachpb.Key) {
+			mvccScanner, cleanup := createScanner(key)
+			defer cleanup()
+
+			var results pebbleResults
+			mvccScanner.init(&txn1, uncertainty.Interval{}, &results)
+			mvccScanner.get(ctx)
+			kvData := results.finish()
+			require.Equal(t, int64(1), results.count)
+			checkKVData(kvData)
+		}
+		getKeyWithScanner(keyA)
+		getKeyWithScanner(keyB)
+		getKeyWithScanner(keyC1)
+		getKeyWithScanner(keyC2)
+		getKeyWithScanner(keyD)
+		// This is a key covered by a range tombstone but not
+		// otherwise written to. In this case, get() will
+		// still synthesize a tombstone.
+		getKeyWithScanner(roachpb.Key("dd"))
+	})
 }

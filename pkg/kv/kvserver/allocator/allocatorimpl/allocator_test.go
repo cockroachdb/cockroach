@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package allocatorimpl
 
@@ -29,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
@@ -1910,16 +1906,18 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 // mockRepl satisfies the interface for the `leaseRepl` passed into
 // `Allocator.TransferLeaseTarget()` for these tests.
 type mockRepl struct {
-	replicationFactor     int32
-	storeID               roachpb.StoreID
-	replsInNeedOfSnapshot map[roachpb.ReplicaID]struct{}
+	replicationFactor        int32
+	storeID                  roachpb.StoreID
+	replsInNeedOfSnapshot    map[roachpb.ReplicaID]struct{}
+	replsWithSendQueue       map[roachpb.ReplicaID]struct{}
+	replsNotInStateReplicate map[roachpb.ReplicaID]struct{}
 }
 
 func (r *mockRepl) RaftStatus() *raft.Status {
 	raftStatus := &raft.Status{
 		Progress: make(map[raftpb.PeerID]tracker.Progress),
 	}
-	raftStatus.RaftState = raft.StateLeader
+	raftStatus.RaftState = raftpb.StateLeader
 	for i := int32(1); i <= r.replicationFactor; i++ {
 		state := tracker.StateReplicate
 		if _, ok := r.replsInNeedOfSnapshot[roachpb.ReplicaID(i)]; ok {
@@ -1945,11 +1943,43 @@ func (r *mockRepl) GetRangeID() roachpb.RangeID {
 	return roachpb.RangeID(0)
 }
 
+func (r *mockRepl) SendStreamStats(stats *rac2.RangeSendStreamStats) {
+	for i := int32(1); i <= r.replicationFactor; i++ {
+		replicaID := roachpb.ReplicaID(i)
+		replStats := rac2.ReplicaSendStreamStats{
+			ReplicaSendQueueStats: rac2.ReplicaSendQueueStats{
+				ReplicaID: replicaID,
+			},
+		}
+		if _, ok := r.replsWithSendQueue[replicaID]; ok {
+			replStats.HasSendQueue = true
+		}
+		if _, ok := r.replsNotInStateReplicate[replicaID]; !ok {
+			replStats.IsStateReplicate = true
+		}
+		stats.SetReplicaSendStreamStats(replStats)
+	}
+}
+
 func (r *mockRepl) markReplAsNeedingSnapshot(id roachpb.ReplicaID) {
 	if r.replsInNeedOfSnapshot == nil {
 		r.replsInNeedOfSnapshot = make(map[roachpb.ReplicaID]struct{})
 	}
 	r.replsInNeedOfSnapshot[id] = struct{}{}
+}
+
+func (r *mockRepl) markReplAsHavingSendQueue(id roachpb.ReplicaID) {
+	if r.replsWithSendQueue == nil {
+		r.replsWithSendQueue = make(map[roachpb.ReplicaID]struct{})
+	}
+	r.replsWithSendQueue[id] = struct{}{}
+}
+
+func (r *mockRepl) markReplAsNotInStateReplicate(id roachpb.ReplicaID) {
+	if r.replsNotInStateReplicate == nil {
+		r.replsNotInStateReplicate = make(map[roachpb.ReplicaID]struct{})
+	}
+	r.replsNotInStateReplicate[id] = struct{}{}
 }
 
 func TestAllocatorTransferLeaseTarget(t *testing.T) {
@@ -2245,6 +2275,150 @@ func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 		}
 		for _, r := range c.replsNeedingSnaps {
 			repl.markReplAsNeedingSnapshot(r)
+		}
+		t.Run("", func(t *testing.T) {
+			target := a.TransferLeaseTarget(
+				ctx,
+				sp,
+				&roachpb.RangeDescriptor{},
+				emptySpanConfig(),
+				c.existing,
+				repl,
+				allocator.RangeUsageInfo{},
+				false, /* alwaysAllowDecisionWithoutStats */
+				allocator.TransferLeaseOptions{
+					ExcludeLeaseRepl:       c.excludeLeaseRepl,
+					CheckCandidateFullness: true,
+				},
+			)
+			if c.transferTarget != target.StoreID {
+				t.Fatalf("expected %d, but found %d", c.transferTarget, target.StoreID)
+			}
+		})
+	}
+}
+
+func rIDs(replicaIDs ...int) []roachpb.ReplicaID {
+	repls := make([]roachpb.ReplicaID, len(replicaIDs))
+	for i, id := range replicaIDs {
+		repls[i] = roachpb.ReplicaID(id)
+	}
+	return repls
+}
+
+func TestAllocatorTransferLeaseToReplicasNeedingCatchup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	existing := []roachpb.ReplicaDescriptor{
+		{StoreID: 1, NodeID: 1, ReplicaID: 1},
+		{StoreID: 2, NodeID: 2, ReplicaID: 2},
+		{StoreID: 3, NodeID: 3, ReplicaID: 3},
+		{StoreID: 4, NodeID: 4, ReplicaID: 4},
+	}
+	ctx := context.Background()
+	stopper, g, sp, a, _ := CreateTestAllocator(ctx, 10, true /* deterministic */)
+	defer stopper.Stop(ctx)
+
+	// 4 stores where the lease count for each store is equal to 10x the store
+	// ID.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 4; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(10 * i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	testCases := []struct {
+		existing                                     []roachpb.ReplicaDescriptor
+		replsWithSendQueue, replsNotInStateReplicate []roachpb.ReplicaID
+		leaseholder                                  roachpb.StoreID
+		excludeLeaseRepl                             bool
+		transferTarget                               roachpb.StoreID
+	}{
+		{
+			existing:                 existing,
+			replsWithSendQueue:       rIDs(1),
+			replsNotInStateReplicate: rIDs(1),
+			leaseholder:              3,
+			excludeLeaseRepl:         false,
+			transferTarget:           0,
+		},
+		{
+			existing:           existing,
+			replsWithSendQueue: rIDs(1),
+			leaseholder:        3,
+			excludeLeaseRepl:   false,
+			transferTarget:     0,
+		},
+		{
+			existing:           existing,
+			replsWithSendQueue: rIDs(1),
+			leaseholder:        3,
+			excludeLeaseRepl:   true,
+			transferTarget:     2,
+		},
+		{
+			existing:                 existing,
+			replsNotInStateReplicate: rIDs(1),
+			leaseholder:              3,
+			excludeLeaseRepl:         true,
+			transferTarget:           2,
+		},
+		{
+			existing:           existing,
+			replsWithSendQueue: rIDs(1),
+			leaseholder:        4,
+			excludeLeaseRepl:   false,
+			transferTarget:     2,
+		},
+		{
+			existing:           existing,
+			replsWithSendQueue: rIDs(1),
+			leaseholder:        4,
+			excludeLeaseRepl:   true,
+			transferTarget:     2,
+		},
+		{
+			existing:                 existing,
+			replsWithSendQueue:       rIDs(1),
+			replsNotInStateReplicate: rIDs(2),
+			leaseholder:              4,
+			excludeLeaseRepl:         true,
+			transferTarget:           3,
+		},
+		{
+			existing:                 existing,
+			replsWithSendQueue:       rIDs(1),
+			replsNotInStateReplicate: rIDs(2),
+			leaseholder:              4,
+			excludeLeaseRepl:         false,
+			transferTarget:           0,
+		},
+		{
+			existing:                 existing,
+			replsWithSendQueue:       rIDs(1),
+			replsNotInStateReplicate: rIDs(2, 3),
+			leaseholder:              4,
+			excludeLeaseRepl:         false,
+			transferTarget:           0,
+		},
+	}
+
+	for _, c := range testCases {
+		repl := &mockRepl{
+			replicationFactor: 4,
+			storeID:           c.leaseholder,
+		}
+		for _, r := range c.replsWithSendQueue {
+			repl.markReplAsHavingSendQueue(r)
+		}
+		for _, r := range c.replsNotInStateReplicate {
+			repl.markReplAsNotInStateReplicate(r)
 		}
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
@@ -8116,7 +8290,7 @@ func TestFilterBehindReplicas(t *testing.T) {
 				Progress: make(map[raftpb.PeerID]tracker.Progress),
 			}
 			status.Lead = c.leader
-			status.RaftState = raft.StateLeader
+			status.RaftState = raftpb.StateLeader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {
@@ -8189,7 +8363,7 @@ func TestFilterUnremovableReplicas(t *testing.T) {
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
 			// valid replica IDs.
 			status.Lead = 99
-			status.RaftState = raft.StateLeader
+			status.RaftState = raftpb.StateLeader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {
@@ -8247,7 +8421,7 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 			// Use an invalid replica ID for the leader. TestFilterBehindReplicas covers
 			// valid replica IDs.
 			status.Lead = 99
-			status.RaftState = raft.StateLeader
+			status.RaftState = raftpb.StateLeader
 			status.Commit = c.commit
 			var replicas []roachpb.ReplicaDescriptor
 			for j, v := range c.progress {

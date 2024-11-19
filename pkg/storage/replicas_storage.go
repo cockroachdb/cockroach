@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -28,7 +23,7 @@ import (
 //   we can lift.
 // - Implement interface.
 // - Unit tests and randomized tests, including engine restarts that lose
-//   state (using vfs.NewStrictMem).
+//   state (using vfs.NewCrashableMem).
 // - Benchmarks comparing single and two engine implementations.
 // - Race-build dynamically asserts that SSTs or MutationBatches that are
 //   passed through this interface only touch the keys they are allowed to
@@ -194,8 +189,8 @@ import (
 //   of this range (for a range that has never been the LHS of a merge, this
 //   is the initial snapshot when the range came into being, followed by all
 //   subsequent raft log entries).
-// - RaftAppliedIndex >= raftInitialLogIndex
-// - RaftAppliedIndexTerm >= raftInitialLogTerm
+// - RaftAppliedIndex >= RaftInitialLogIndex
+// - RaftAppliedIndexTerm >= RaftInitialLogTerm
 // - Has at least 1 non-provisional RangeDescriptor.
 // - Regression of the HardState.Commit and RaftAppliedIndex is permitted due
 //   to a crash except for the following:
@@ -237,7 +232,7 @@ import (
 // Raft invariant is upheld externally by a combination of mostly external
 // invariants:
 // A new Range is initialized with all Replicas at truncated index equal to
-// raftInitialLogIndex (10) (so they are in InitializedStateMachine state),
+// RaftInitialLogIndex (10) (so they are in InitializedStateMachine state),
 // and any future Replicas will be initialized via a snapshot reflecting a
 // nonzero applied index >= 10. In particular, prior to receiving the
 // snapshot, no log entries can be sent to the Replica. And etcd/raft only
@@ -256,7 +251,7 @@ import (
 // has been deleted and RangeTombstoneKey updated and before the raft state
 // has been deleted. This is distinguishable from UninitializedStateMachine
 // since RaftTruncatedState.{Index,Term} are guaranteed to exist and have
-// values >= raftInitialLogIndex, raftInitialLogTerm. ReplicasStorage.Init
+// values >= RaftInitialLogIndex, RaftInitialLogTerm. ReplicasStorage.Init
 // will transition out of this state into DeletedReplica state.
 //
 // DEFINITION (RecoveryInconsistentReplica): This is a Replica that mostly
@@ -706,7 +701,7 @@ type RangeStorage interface {
 	// split, merge, or remove this replica (due to rebalancing) -- see the
 	// methods in ReplicasStorage that accomplish that.
 	// REQUIRES: replica is in state InitializedStateMachine (this is because we
-	// create a new range with the first log entry at raftInitialLogIndex (10),
+	// create a new range with the first log entry at RaftInitialLogIndex (10),
 	// so a range always requires an initial state "snapshot" before it can
 	// apply raft entries).
 	ApplyCommittedBatch(smBatch MutationBatch) error

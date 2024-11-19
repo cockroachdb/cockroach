@@ -1,6 +1,11 @@
-# TODO(#126356): remove this case when trigger functions are supported.
-statement error pgcode 0A000 pq: unimplemented: trigger functions are not yet supported
-CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+# LogicTest: !local-mixed-24.2 !local-legacy-schema-changer
+
+# Include some hidden columns that won't be visible to triggers.
+statement ok
+CREATE TABLE xy (x INT PRIMARY KEY, foo INT NOT VISIBLE, y INT, bar INT NOT VISIBLE);
+
+statement ok
+CREATE TABLE ab (a INT, foo INT NOT VISIBLE, b INT);
 
 # ==============================================================================
 # Trigger functions cannot be directly invoked.
@@ -8,21 +13,20 @@ CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; EN
 
 subtest direct_invocation
 
-# TODO(#126356): uncomment these cases when trigger functions are supported.
-#statement ok
-#CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
-#
-#statement error pgcode 0A000 pq: trigger functions can only be called as triggers
-#SELECT f();
-#
-#statement error pgcode 0A000 pq: trigger functions can only be called as triggers
-#CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS $$ SELECT f(); SELECT 1; $$;
-#
-#statement error pgcode 0A000 pq: trigger functions can only be called as triggers
-#CREATE FUNCTION foo() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN SELECT f(); RETURN 1; END $$;
-#
-#statement ok
-#DROP FUNCTION f;
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement error pgcode 0A000 pq: trigger functions can only be called as triggers
+SELECT f();
+
+statement error pgcode 0A000 pq: trigger functions can only be called as triggers
+CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS $$ SELECT f(); SELECT 1; $$;
+
+statement error pgcode 0A000 pq: trigger functions can only be called as triggers
+CREATE FUNCTION foo() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN SELECT f(); RETURN 1; END $$;
+
+statement ok
+DROP FUNCTION f;
 
 # ==============================================================================
 # Test invalid usage of parameters in trigger functions.
@@ -156,5 +160,3334 @@ CREATE TYPE udt AS (x INT, y TRIGGER, z TEXT);
 # Trigger array UDT field.
 statement error pgcode 42601 pq: at or near "\[": syntax error
 CREATE TYPE udt AS (x INT, y TRIGGER[], z TEXT);
+
+# ==============================================================================
+# Trigger functions support basic PL/pgSQL statements.
+# ==============================================================================
+
+subtest basic_plpgsql
+
+# RETURN statement.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(1, 2); END $$;
+
+statement ok
+DROP FUNCTION f;
+
+# Variable declaration and assignment.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 1;
+    y INT;
+  BEGIN
+    y := 2;
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# RAISE statement.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE 'hello'; RETURN NULL; END $$;
+
+statement ok
+DROP FUNCTION f;
+
+# IF statement.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    IF now() > '2021-07-12 09:02:10-08:00'::TIMESTAMPTZ THEN
+      RETURN NULL;
+    ELSE
+      RETURN ROW(1, 2, 3);
+    END IF;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# WHILE statement.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 0;
+  BEGIN
+    WHILE x < 10 LOOP
+      x := x + 1;
+    END LOOP;
+    RETURN ROW(x);
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# OPEN and FETCH statements.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    c CURSOR FOR SELECT 1;
+    x INT;
+  BEGIN
+    OPEN c;
+    FETCH c INTO x;
+    CLOSE c;
+    RETURN ROW(x);
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# Combination of statements.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 1;
+    y INT := 2;
+  BEGIN
+    RAISE NOTICE 'x: %, y: %', x, y;
+    IF x = 1 THEN
+      RETURN ROW(1, 2);
+    ELSE
+      RETURN ROW(3, 4);
+    END IF;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# ==============================================================================
+# Correct usage of PL/pgSQL statements is enforced at function creation.
+# ==============================================================================
+
+subtest invalid_plpgsql
+
+# RETURN statement must return a row.
+statement error pgcode 42601 pq: missing expression at or near "RETURN;"
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN; END $$;
+
+# Assigning to a nonexistent variable is not allowed.
+statement error pgcode 42601 pq: "nonexistent" is not a known variable
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    nonexistent := 'foo';
+    RAISE NOTICE '%', nonexistent;
+    RETURN NULL;
+  END
+$$;
+
+# Cannot assign to a constant variable.
+statement error pgcode 22005 pq: variable "x" is declared CONSTANT
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x CONSTANT INT := 1;
+  BEGIN
+    x := 2;
+    RETURN NULL;
+  END
+$$;
+
+# Cursor cannot be opened with an INSERT statement.
+statement error pgcode 42P11 pq: cannot open INSERT query as cursor
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    c CURSOR FOR INSERT INTO t VALUES (1);
+  BEGIN
+    OPEN c;
+    RETURN NULL;
+  END
+$$;
+
+# Transaction control statements are not allowed.
+statement error pgcode 2D000 pq: invalid transaction termination
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN COMMIT; RETURN NULL; END $$;
+
+# ==============================================================================
+# Trigger functions have a set of implicitly-defined variables.
+# ==============================================================================
+
+# It is possible to assign to the implicit variables, including OLD and NEW.
+# TODO(#126727) The tg_op assignment is lower-cased because the INTO clause is
+# currently case-sensitive.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    TG_NAME := 'foo';
+    SELECT t INTO tg_op FROM ops_table;
+    OLD := ROW(1, 2, 3);
+    NEW := (SELECT * FROM xyz LIMIT 1);
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# Shadowing the implicit variables is not allowed (tracked in #117508).
+statement error pgcode 0A000 pq: unimplemented: variable shadowing is not yet implemented
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    tg_op TEXT := 'foo';
+  BEGIN
+    RETURN NEW;
+  END
+$$;
+
+# ==============================================================================
+# SQL expressions are not analyzed during function creation.
+# ==============================================================================
+
+subtest lazy_analysis
+
+# Arbitrary variables/columns (and fields of those variables) may be referenced
+# in an unbound PL/pgSQL trigger function, even if they do not exist.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo INT := NEW.x;
+  BEGIN
+    RAISE NOTICE '%', NEW.this_field_may_not_exist;
+    RAISE NOTICE '%', OLD.we_do_not_now_until_trigger_creation;
+    RETURN OLD.y + foo;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# Arbitrary relations may be referenced in an unbound PL/pgSQL trigger function,
+# even if they do not exist.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo INT := (SELECT x FROM new_rows LIMIT 1);
+  BEGIN
+    RAISE NOTICE 'bar: %', (SELECT one, two FROM non_existent_table);
+    RETURN (SELECT y FROM old_rows LIMIT 1) + foo;
+  END
+$$;
+
+statement ok
+DROP FUNCTION f;
+
+# SQL statements must still have correct syntax.
+statement error pgcode 42601 pq: at or near ";": at or near "sel": syntax error
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SEL y FROM old_rows LIMIT 1;
+    RETURN foo;
+  END
+$$;
+
+# ==============================================================================
+# Test CREATE OR REPLACE behavior for trigger functions.
+# ==============================================================================
+
+subtest create_or_replace
+
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+# The first function should have been replaced.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f];
+----
+CREATE FUNCTION public.f()
+  RETURNS TRIGGER
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  BEGIN
+  RETURN NULL;
+  END;
+$$
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN ROW(1, 2); END $$;
+
+# The replacement function should have a different body.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f];
+----
+CREATE FUNCTION public.f()
+  RETURNS TRIGGER
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  BEGIN
+  RETURN (1, 2);
+  END;
+$$
+
+statement ok
+DROP FUNCTION f;
+
+# CREATE OR REPLACE should succeed when there is no existing function.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f];
+----
+CREATE FUNCTION public.f()
+  RETURNS TRIGGER
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  BEGIN
+  RETURN NULL;
+  END;
+$$
+
+statement ok
+DROP FUNCTION f;
+
+# ==============================================================================
+# Test invalid target tables, views, and functions.
+# ==============================================================================
+
+subtest invalid_targets
+
+statement ok
+CREATE VIEW v AS SELECT * FROM xy;
+
+statement ok
+CREATE MATERIALIZED VIEW mv AS SELECT * FROM xy;
+
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'foo!';
+    RETURN NULL;
+  END;
+$$;
+
+# Nonexistent table.
+statement error pgcode 42P01 pq: relation "nonexistent" does not exist
+CREATE TRIGGER foo AFTER INSERT ON nonexistent FOR EACH ROW EXECUTE FUNCTION f();
+
+# System tables cannot have triggers.
+statement error pgcode 42501 pq: user root does not have TRIGGER privilege on relation jobs
+CREATE TRIGGER foo BEFORE UPDATE ON system.jobs EXECUTE FUNCTION f();
+
+# Virtual tables cannot have triggers.
+statement error pgcode 42501 pq: user root does not have TRIGGER privilege on relation pg_roles
+CREATE TRIGGER foo BEFORE UPDATE ON pg_catalog.pg_roles EXECUTE FUNCTION f();
+
+# Materialized views cannot have triggers.
+statement error pgcode 42809 pq: relation "mv" cannot have triggers\nDETAIL: This operation is not supported for materialized views.
+CREATE TRIGGER foo AFTER DELETE ON mv FOR EACH ROW EXECUTE FUNCTION f();
+
+# Nonexistent function.
+statement error pgcode 42883 pq: unknown function: nonexistent()
+CREATE TRIGGER foo BEFORE UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION nonexistent();
+
+statement ok
+CREATE FUNCTION not_trigger() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+# The function must be a trigger function.
+statement error pgcode 42P17 pq: function not_trigger must return type trigger
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION not_trigger();
+
+# ==============================================================================
+# Test invalid trigger options.
+# ==============================================================================
+
+subtest options
+
+statement error pgcode 42809 pq: "xy" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER foo INSTEAD OF INSERT ON xy EXECUTE FUNCTION f();
+
+statement error pgcode 42809 pq: "xy" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER foo INSTEAD OF UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 42809 pq: "v" is a view\nDETAIL: Views cannot have row-level BEFORE or AFTER triggers.
+CREATE TRIGGER foo BEFORE UPDATE ON v FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 42809 pq: "v" is a view\nDETAIL: Views cannot have row-level BEFORE or AFTER triggers.
+CREATE TRIGGER foo AFTER INSERT ON v FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 42809 pq: "v" is a view\nDETAIL: Views cannot have TRUNCATE triggers.
+CREATE TRIGGER foo INSTEAD OF TRUNCATE ON v EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: INSTEAD OF triggers must be FOR EACH ROW
+CREATE TRIGGER foo INSTEAD OF INSERT ON v FOR EACH STATEMENT EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: INSTEAD OF triggers cannot have WHEN conditions
+CREATE TRIGGER foo INSTEAD OF INSERT ON v FOR EACH ROW WHEN (1 = 1) EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: INSTEAD OF triggers cannot have column lists
+CREATE TRIGGER foo INSTEAD OF UPDATE OF x, y ON v FOR EACH ROW EXECUTE FUNCTION f();
+
+# Only UPDATE triggers can have column lists.
+statement error pgcode 42601 pq: at or near "of": syntax error
+CREATE TRIGGER foo BEFORE INSERT OF x, y ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: NEW TABLE can only be specified for an INSERT or UPDATE trigger
+CREATE TRIGGER foo AFTER DELETE ON xy REFERENCING NEW TABLE AS nt EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: OLD TABLE can only be specified for a DELETE or UPDATE trigger
+CREATE TRIGGER foo AFTER INSERT ON xy REFERENCING OLD TABLE AS ot EXECUTE FUNCTION f();
+
+statement error pgcode 42601 pq: cannot specify NEW more than once
+CREATE TRIGGER foo AFTER UPDATE ON xy REFERENCING NEW TABLE AS nt NEW TABLE AS nt2 EXECUTE FUNCTION f();
+
+statement error pgcode 42601 pq: cannot specify OLD more than once
+CREATE TRIGGER foo AFTER UPDATE ON xy REFERENCING OLD TABLE AS ot OLD TABLE AS ot2 EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: ROW variable naming in the REFERENCING clause is not supported
+CREATE TRIGGER foo AFTER UPDATE ON xy REFERENCING OLD ROW AS ot EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: OLD TABLE name and NEW TABLE name cannot be the same
+CREATE TRIGGER foo AFTER UPDATE ON xy REFERENCING OLD TABLE AS nt NEW TABLE AS nt EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: transition table name can only be specified for an AFTER trigger
+CREATE TRIGGER foo BEFORE UPDATE ON xy REFERENCING NEW TABLE AS nt EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: TRUNCATE triggers cannot specify transition tables
+CREATE TRIGGER foo AFTER TRUNCATE ON xy REFERENCING NEW TABLE AS nt EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: transition tables cannot be specified for triggers with more than one event
+CREATE TRIGGER foo AFTER INSERT OR UPDATE ON xy REFERENCING NEW TABLE AS nt EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: transition tables cannot be specified for triggers with column lists
+CREATE TRIGGER foo AFTER UPDATE OF x ON xy REFERENCING NEW TABLE AS nt EXECUTE FUNCTION f();
+
+# ==============================================================================
+# Test invalid trigger WHEN clause.
+# ==============================================================================
+
+subtest when_clause
+
+# The WHEN clause must be of type BOOL.
+statement error pgcode 42804 pq: argument of WHEN must be type bool, not type int
+CREATE TRIGGER foo AFTER INSERT ON xy WHEN (1) EXECUTE FUNCTION f();
+
+# The WHEN clause cannot reference table columns.
+statement error pgcode 42703 pq: column "x" does not exist\nHINT: column references in a trigger WHEN clause must be prefixed with NEW or OLD
+CREATE TRIGGER foo AFTER INSERT ON xy WHEN (x = 1) EXECUTE FUNCTION f();
+
+# The WHEN clause cannot contain a subquery.
+statement error pgcode 0A000 pq: subqueries are not allowed in WHEN
+CREATE TRIGGER foo AFTER INSERT ON xy WHEN (SELECT 1) EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: statement trigger's WHEN condition cannot reference column values
+CREATE TRIGGER foo AFTER INSERT ON xy WHEN (NEW IS NULL) EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: statement trigger's WHEN condition cannot reference column values
+CREATE TRIGGER foo AFTER INSERT ON xy WHEN (OLD IS NULL) EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: DELETE trigger's WHEN condition cannot reference NEW values
+CREATE TRIGGER foo AFTER DELETE ON xy FOR EACH ROW WHEN (NEW IS NULL) EXECUTE FUNCTION f();
+
+statement error pgcode 42P17 pq: INSERT trigger's WHEN condition cannot reference OLD values
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW WHEN (OLD IS NULL) EXECUTE FUNCTION f();
+
+# ==============================================================================
+# Test early binding/validation on trigger creation.
+# ==============================================================================
+
+subtest early_binding
+
+# SQL statements and expressions within a trigger function are lazily validated.
+# This means that trigger function creation will catch syntax errors in SQL, but
+# not other types of errors.
+#
+# Case with a nonexistent table.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    INSERT INTO nonexistent VALUES (1, 2);
+    RETURN NULL;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P01 pq: relation "nonexistent" does not exist
+CREATE TRIGGER foo BEFORE INSERT ON xy EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    IF (SELECT count(*) FROM nonexistent) > 0 THEN
+      RETURN NULL;
+    ELSE
+      RETURN NEW;
+    END IF;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42P01 pq: relation "nonexistent" does not exist
+CREATE TRIGGER foo AFTER UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# Case with a nonexistent function reference.
+statement ok
+DROP FUNCTION g;
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE NOTICE '%', f_nonexistent();
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42883 pq: unknown function: f_nonexistent()
+CREATE TRIGGER foo AFTER DELETE ON xy EXECUTE FUNCTION g();
+
+# Case with a nonexistent type reference.
+statement ok
+DROP FUNCTION g;
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    RETURN ROW(1, 2)::typ_nonexistent;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 42704 pq: type "typ_nonexistent" does not exist
+CREATE TRIGGER foo BEFORE INSERT ON xy EXECUTE FUNCTION g();
+
+# Incorrect type in a SQL expression.
+statement ok
+DROP FUNCTION g;
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    IF 'not a bool' THEN
+      RETURN NEW;
+    ELSE
+      RETURN NULL;
+    END IF;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 22P02 pq: could not parse "not a bool" as type bool: invalid bool value
+CREATE TRIGGER foo AFTER UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# Disallowed SQL statement.
+statement ok
+DROP FUNCTION g;
+CREATE FUNCTION g() RETURNS TRIGGER AS $$
+  BEGIN
+    CREATE TABLE foo (x INT, y INT);
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode 0A000 pq: unimplemented: CREATE TABLE usage inside a function definition
+CREATE TRIGGER foo AFTER DELETE ON xy EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+
+# Incorrect function volatility.
+statement ok
+CREATE TABLE t (a INT, b INT);
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL IMMUTABLE AS $$
+  BEGIN
+    SELECT count(*) FROM t;
+    RETURN NEW;
+  END;
+$$;
+
+statement error pgcode 22023 pq: referencing relations is not allowed in immutable function
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g();
+DROP TABLE t;
+
+# ==============================================================================
+# Test duplicate and nonexistent triggers as CREATE/DROP targets.
+# ==============================================================================
+
+subtest duplicate_nonexistent
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 42710 pq: trigger "foo" for relation "xy" already exists
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+# It is possible to create another trigger with a different name.
+statement ok
+CREATE TRIGGER bar AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+# Dropping a nonexistent trigger is an error.
+statement error pgcode 42704 pq: trigger "foo" of relation "xy" does not exist
+DROP TRIGGER foo ON xy;
+
+# The IF EXISTS syntax allows dropping a nonexistent trigger without error.
+statement ok
+DROP TRIGGER IF EXISTS foo ON xy;
+
+# ==============================================================================
+# Test dependency tracking for a relation reference.
+# ==============================================================================
+
+subtest relation_dependency
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO t VALUES (1, 2);
+    RETURN NULL;
+  END;
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement error pgcode 2BP01 pq: cannot drop table t because other objects depend on it
+DROP TABLE t;
+
+statement error pgcode 2BP01 pq: cannot drop function "g" because other objects \(\[test.public.xy\]\) still depend on it
+DROP FUNCTION g;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TABLE t;
+
+# Now, the trigger function refers to a nonexistent relation, so the trigger
+# cannot be created.
+statement error pgcode 42P01 pq: relation "t" does not exist
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+
+subtest regression_134630
+
+statement ok
+CREATE TABLE t1 (a INT, b INT);
+CREATE TABLE t2 (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO t2 VALUES ((NEW).a, (NEW).b);
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON t1 FOR EACH ROW EXECUTE FUNCTION g();
+
+# Make sure the legacy schema-changer correctly removes the backreference from
+# t2 to t1.
+statement ok
+DROP TABLE t1;
+DROP TABLE t2;
+DROP FUNCTION g;
+
+# ==============================================================================
+# Test dependency tracking for a user-defined type reference.
+# ==============================================================================
+
+subtest type_dependency
+
+statement ok
+CREATE TYPE typ AS (x INT, y INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    a typ;
+  BEGIN
+    RETURN a;
+  END;
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement error pgcode 2BP01 pq: cannot drop type "typ" because other objects \(\[test.public.xy\]\) still depend on it
+DROP TYPE typ;
+
+statement error pgcode 2BP01 pq: cannot drop function "g" because other objects \(\[test.public.xy\]\) still depend on it
+DROP FUNCTION g;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TYPE typ;
+
+# Now, the trigger function refers to a nonexistent type, so the trigger
+# cannot be created.
+statement error pgcode 42704 pq: type "typ" does not exist
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+
+# ==============================================================================
+# Test dependency tracking for a routine reference.
+# ==============================================================================
+
+subtest routine_dependency
+
+statement ok
+CREATE FUNCTION g() RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CREATE FUNCTION g2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', g();
+    RETURN NULL;
+  END;
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g2();
+
+statement error pgcode 2BP01 pq: cannot drop function "g" because other objects \(\[test.public.xy\]\) still depend on it
+DROP FUNCTION g;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# Now, the trigger function refers to a nonexistent routine, so the trigger
+# cannot be created.
+statement error pgcode 42883 pq: unknown function: g()
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g2();
+
+statement ok
+DROP FUNCTION g2;
+
+# ==============================================================================
+# Test renaming referenced objects.
+# ==============================================================================
+
+subtest renaming
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE SEQUENCE s;
+
+statement ok
+CREATE TYPE typ AS (x INT, y INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS INT LANGUAGE SQL AS $$ SELECT 1; $$;
+
+statement ok
+CREATE FUNCTION trigger_func() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    a typ;
+  BEGIN
+    RAISE NOTICE '%, %', g(), nextval('s');
+    INSERT INTO t VALUES (1, 2);
+    RETURN a;
+  END;
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
+
+# Relations are referenced by name, so renaming the table is not allowed.
+statement error pgcode 2BP01 cannot rename relation "t" because view "xy" depends on it
+ALTER TABLE t RENAME TO t2;
+
+# Sequences are remapped to their IDs, so renaming is allowed.
+statement ok
+ALTER SEQUENCE s RENAME TO s2;
+
+# Types are remapped to their IDs, so renaming is allowed.
+statement ok
+ALTER TYPE typ RENAME TO typ2;
+
+# Routines are referenced by name, so renaming is not allowed.
+statement ok
+ALTER FUNCTION g RENAME TO g2;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION trigger_func;
+DROP FUNCTION g2;
+DROP TYPE typ2;
+DROP SEQUENCE s2;
+DROP TABLE t;
+
+# ==============================================================================
+# Test privilege checks.
+# ==============================================================================
+
+subtest privileges
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END $$;
+
+statement ok
+REVOKE EXECUTE ON FUNCTION g() FROM PUBLIC;
+
+user testuser
+
+# Trigger creation requires the TRIGGER privilege on the target table.
+statement error pgcode 42501 pq: user testuser does not have TRIGGER privilege on relation t
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+user root
+
+statement ok
+GRANT TRIGGER ON TABLE t TO testuser;
+
+user testuser
+
+# Trigger creation requires the EXECUTE privilege on the trigger function.
+statement error pgcode 42501 pq: user testuser does not have EXECUTE privilege on function g
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+user root
+
+statement ok
+GRANT EXECUTE ON FUNCTION g TO testuser;
+
+user testuser
+
+# With TRIGGER on the table and EXECUTE on the function, the user can create
+# a trigger. The user does not have to own the table or function.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+# The user can only drop the trigger if they own the table.
+statement error pgcode 42501 pq: must be owner of relation t
+DROP TRIGGER foo ON t;
+
+user root
+
+statement ok
+ALTER TABLE t OWNER TO testuser;
+
+statement ok
+REVOKE ALL ON TABLE t FROM testuser;
+REVOKE ALL ON FUNCTION g FROM testuser;
+
+user testuser
+
+# Now the user can drop the trigger, despite having no privileges on either the
+# function or the table.
+statement ok
+DROP TRIGGER foo ON t;
+
+user root
+
+statement ok
+DROP FUNCTION g;
+DROP TABLE t;
+
+# ==============================================================================
+# Test cascading drops with a trigger.
+# ==============================================================================
+
+subtest cascade
+
+statement ok
+CREATE DATABASE db;
+
+statement ok
+USE db;
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END; $$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+USE test;
+
+statement ok
+DROP DATABASE db CASCADE;
+
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE TABLE s.t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION s.g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NULL; END; $$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON s.t FOR EACH ROW EXECUTE FUNCTION s.g();
+
+statement ok
+DROP SCHEMA s CASCADE;
+
+# ==============================================================================
+# Test references across schemas and databases.
+# ==============================================================================
+
+subtest cross_schema_database
+
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE DATABASE db;
+
+statement ok
+CREATE TABLE s.xy (x INT, y INT);
+
+statement ok
+CREATE FUNCTION s.f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'bar!';
+    RETURN NULL;
+  END;
+$$;
+
+statement ok
+CREATE TYPE s.typ AS (x INT, y INT);
+
+statement ok
+USE db;
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'baz!';
+    RETURN NULL;
+  END;
+$$;
+
+statement ok
+CREATE TYPE typ AS (x INT, y INT);
+
+statement ok
+USE test;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON s.xy FOR EACH ROW EXECUTE FUNCTION s.f();
+
+statement ok
+DROP TRIGGER foo ON s.xy;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION s.f();
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON s.xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+DROP TRIGGER foo ON s.xy;
+
+statement error pgcode 0A000 pq: cross-database function references not allowed
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION db.public.f();
+
+statement error pgcode 0A000 pq: unimplemented: cross-db references not supported
+CREATE TRIGGER foo AFTER INSERT ON db.public.xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: unimplemented: cross-db references not supported
+CREATE TRIGGER foo AFTER INSERT ON db.public.xy FOR EACH ROW EXECUTE FUNCTION db.public.f();
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO db.xy VALUES (1, 2);
+    RETURN NULL;
+  END;
+$$;
+
+statement error pgcode 0A000 pq: dependent relation xy cannot be from another database
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', pg_typeof(ROW(1, 2)::db.typ);
+    RETURN NULL;
+  END;
+$$;
+
+statement error pgcode 0A000 pq: cross database type references are not supported: db.public.typ
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DROP SCHEMA s CASCADE;
+
+statement ok
+DROP DATABASE db CASCADE;
+
+# ==============================================================================
+# Test cyclical table references.
+# ==============================================================================
+
+subtest cyclical
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    cnt INT := 0;
+  BEGIN
+    SELECT count(*) INTO cnt FROM t;
+    IF cnt < 10 THEN
+      INSERT INTO t VALUES (1, 2);
+    END IF;
+    RAISE NOTICE 'HERE';
+    RETURN NULL;
+  END;
+$$;
+
+# NOTE: the trigger is both attached to table "t", and references it via the
+# trigger function. This should not prevent dropping the trigger or table.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP TRIGGER foo ON t;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+DROP TABLE t;
+
+statement ok
+DROP FUNCTION g;
+
+# ==============================================================================
+# Test changing search path.
+# ==============================================================================
+
+subtest search_path
+
+let $xy_oid
+SELECT oid FROM pg_class WHERE relname = 'xy';
+
+statement ok
+CREATE PROCEDURE show_triggers() LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo JSON;
+    name JSON;
+    body JSON;
+    curs REFCURSOR;
+  BEGIN
+    SELECT
+      crdb_internal.pb_to_json(
+        'cockroach.sql.sqlbase.Descriptor',
+        descriptor,
+        false
+      ) INTO foo
+    FROM
+      system.descriptor
+    WHERE id = $xy_oid;
+    foo := foo->'table'->'triggers';
+    OPEN curs FOR SELECT value->'name', value->'funcBody' FROM jsonb_array_elements(foo);
+    LOOP
+      FETCH curs INTO name, body;
+      IF name IS NULL THEN
+        EXIT;
+      END IF;
+      RAISE NOTICE '%->%', name, split_part(split_part(body::TEXT, ' ', 7), ')', 1);
+    END LOOP;
+  END;
+$$;
+
+statement ok
+CREATE SCHEMA s;
+
+statement ok
+CREATE TABLE t (a INT, b INT);
+
+statement ok
+CREATE TABLE s.t (a INT, b INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', (SELECT max(a) FROM t);
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# The trigger function body stored with the trigger should reference the table
+# on the public schema.
+query T noticetrace
+CALL show_triggers();
+----
+NOTICE: "foo"->test.public.t
+
+statement ok
+SET search_path = s,public;
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# The first trigger should still reference the table on the public schema, but
+# the second should reference the table on schema "s".
+query T noticetrace
+CALL show_triggers();
+----
+NOTICE: "foo"->test.public.t
+NOTICE: "bar"->test.s.t
+
+# The trigger function is still unqualified.
+query TT
+SHOW CREATE FUNCTION g;
+----
+g  CREATE FUNCTION public.g()
+     RETURNS TRIGGER
+     VOLATILE
+     NOT LEAKPROOF
+     CALLED ON NULL INPUT
+     LANGUAGE plpgsql
+     SECURITY INVOKER
+     AS $$
+     BEGIN
+     RAISE NOTICE '%', (SELECT max(a) FROM t);
+     RETURN NULL;
+     END;
+   $$
+
+statement ok
+RESET search_path;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+statement ok
+DROP SCHEMA s CASCADE;
+DROP TABLE t;
+DROP FUNCTION g;
+
+# ==============================================================================
+# Test row-level BEFORE triggers.
+# ==============================================================================
+
+# Use the row engine to prevent batching from interfering with execution order
+# between triggers on different rows.
+statement ok
+SET vectorize=off;
+
+subtest before_row_basic
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# Test a basic INSERT trigger.
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Test a basic UPDATE trigger.
+statement ok
+CREATE TRIGGER foo BEFORE UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+UPDATE xy SET x = 3 WHERE x = 1;
+----
+NOTICE: UPDATE: old: (1,2), new: (3,2)
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Test a basic DELETE trigger.
+statement ok
+CREATE TRIGGER foo BEFORE DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+DELETE FROM xy WHERE x = 3;
+----
+NOTICE: DELETE: old: (3,2), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Triggers can be defined to operate on multiple events.
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+
+query T noticetrace
+UPDATE xy SET x = 3 WHERE x = 1;
+----
+NOTICE: UPDATE: old: (1,2), new: (3,2)
+
+query T noticetrace
+DELETE FROM xy WHERE x = 3;
+----
+NOTICE: DELETE: old: (3,2), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+# UPSERT operations can fire both INSERT and UPDATE triggers.
+#
+# First, insert some rows without conflicts.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4) ON CONFLICT (x) DO UPDATE SET y = xy.y + 10;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+NOTICE: INSERT: old: <NULL>, new: (3,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# Repeat, but with some conflicting rows.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = xy.y + 10;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+NOTICE: UPDATE: old: (1,2), new: (1,12)
+NOTICE: INSERT: old: <NULL>, new: (3,4)
+NOTICE: UPDATE: old: (3,4), new: (3,14)
+NOTICE: INSERT: old: <NULL>, new: (5,6)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  12
+3  14
+5  6
+
+# Example with the explicit UPSERT syntax.
+query T noticetrace
+UPSERT INTO xy VALUES (1, -2), (3, -4), (5, -6), (7, -8);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,-2)
+NOTICE: UPDATE: old: (1,12), new: (1,-2)
+NOTICE: INSERT: old: <NULL>, new: (3,-4)
+NOTICE: UPDATE: old: (3,14), new: (3,-4)
+NOTICE: INSERT: old: <NULL>, new: (5,-6)
+NOTICE: UPDATE: old: (5,6), new: (5,-6)
+NOTICE: INSERT: old: <NULL>, new: (7,-8)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  -2
+3  -4
+5  -6
+7  -8
+
+statement ok
+DELETE FROM xy WHERE True;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# ==============================================================================
+# Test row-level BEFORE triggers that modify the row.
+# ==============================================================================
+
+subtest before_row_modify
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE new_new xy;
+  BEGIN
+    new_new = ROW((NEW).x, (NEW).y + 10);
+    RAISE NOTICE '%: old: %, new: %, new_new: %', TG_OP, OLD, NEW, new_new;
+    RETURN new_new;
+  END
+$$;
+
+# Test an INSERT trigger that modifies the row.
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+
+# The inserted "y" values should reflect the increment in the trigger function.
+query II rowsort
+SELECT * FROM xy;
+----
+1  12
+3  14
+
+# Test an UPDATE trigger that modifies the row.
+statement ok
+CREATE TRIGGER foo2 BEFORE UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+UPDATE xy SET x = 5 WHERE x = 1;
+----
+NOTICE: UPDATE: old: (1,12), new: (5,12), new_new: (5,22)
+
+# The updated row should have incremented "y" once again.
+query II rowsort
+SELECT * FROM xy;
+----
+3  14
+5  22
+
+# The trigger function updates the row after the update is applied.
+query T noticetrace
+UPDATE xy SET y = xy.y * 10 WHERE x = 5;
+----
+NOTICE: UPDATE: old: (5,22), new: (5,220), new_new: (5,230)
+
+query II rowsort
+SELECT * FROM xy;
+----
+3  14
+5  230
+
+statement ok
+DELETE FROM xy WHERE True;
+INSERT INTO xy VALUES (1, 2), (3, 4);
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  12
+3  14
+
+# When both INSERT and UPDATE triggers fire, modifications from both are applied
+# to the row. First the INSERT trigger's modification will be applied, then the
+# update specified in the ON CONFLICT clause, and finally the UPDATE trigger's
+# modification.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = xy.y * 10;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,12), new: (1,120), new_new: (1,130)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: UPDATE: old: (3,14), new: (3,140), new_new: (3,150)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  130
+3  150
+5  16
+
+# No update is applied for ON CONFLICT DO NOTHING.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO NOTHING;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  130
+3  150
+5  16
+
+statement ok
+DELETE FROM xy WHERE x = 5;
+
+# UPSERT with ON CONFLICT syntax. Note that the effect of the INSERT trigger
+# propagates to the special "excluded" data source.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = excluded.y;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,130), new: (1,12), new_new: (1,22)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: UPDATE: old: (3,150), new: (3,14), new_new: (3,24)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  22
+3  24
+5  16
+
+# Similar to the previous case, but modifying the EXCLUDED row in the DO UPDATE
+# clause.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = excluded.y - 1;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,22), new: (1,11), new_new: (1,21)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: UPDATE: old: (3,24), new: (3,13), new_new: (3,23)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+NOTICE: UPDATE: old: (5,16), new: (5,15), new_new: (5,25)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  21
+3  23
+5  25
+
+statement ok
+DELETE FROM xy WHERE x = 5;
+
+# UPSERT with explicit syntax.
+query T noticetrace
+UPSERT INTO xy VALUES (1, 2), (3, 4), (5, 6);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,21), new: (1,12), new_new: (1,22)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: UPDATE: old: (3,23), new: (3,14), new_new: (3,24)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  22
+3  24
+5  16
+
+statement ok
+DELETE FROM xy WHERE x = 5;
+
+# The old version of conflicting rows can be accessed via the relation's name.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = xy.y + 10;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,22), new: (1,32), new_new: (1,42)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: UPDATE: old: (3,24), new: (3,34), new_new: (3,44)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  42
+3  44
+5  16
+
+# When there is a WHERE clause for the DO UPDATE part of the UPSERT, the UPDATE
+# trigger fires only for the rows that are actually updated. The INSERT trigger
+# fires for every row.
+#
+# Rows that are filtered by this clause are ignored, like for DO NOTHING.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = xy.y + 100 WHERE xy.x <> 3;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2), new_new: (1,12)
+NOTICE: UPDATE: old: (1,42), new: (1,142), new_new: (1,152)
+NOTICE: INSERT: old: <NULL>, new: (3,4), new_new: (3,14)
+NOTICE: INSERT: old: <NULL>, new: (5,6), new_new: (5,16)
+NOTICE: UPDATE: old: (5,16), new: (5,116), new_new: (5,126)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  152
+3  44
+5  126
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER foo2 ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# DELETE triggers cannot modify the row. The custom is to return OLD, although
+# any non-NULL value will have the same effect.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE ret xy;
+  BEGIN
+    ret := ROW((OLD).x + 10, (OLD).y + 10);
+    RAISE NOTICE '%: old: %, new: %, ret: %', TG_OP, OLD, NEW, ret;
+    RETURN ret;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+DELETE FROM xy WHERE x = 3;
+----
+NOTICE: DELETE: old: (3,44), new: <NULL>, ret: (13,54)
+
+# Only the row with x = 3 should be deleted.
+query II rowsort
+SELECT * FROM xy;
+----
+1  152
+5  126
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test row-level BEFORE triggers that filter the row.
+# ==============================================================================
+
+subtest before_row_filter
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE val xy := COALESCE(NEW, OLD);
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    IF (val).x % 2 = 0 THEN
+      RETURN val;
+    ELSE
+      RETURN NULL;
+    END IF;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 1), (2, 2), (3, 3), (4, 4);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,1)
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (3,3)
+NOTICE: INSERT: old: <NULL>, new: (4,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+2  2
+4  4
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Fill in the missing values.
+statement ok
+INSERT INTO xy VALUES (1, 1), (3, 3);
+
+statement ok
+CREATE TRIGGER foo BEFORE UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+UPDATE xy SET y = y + 10;
+----
+NOTICE: UPDATE: old: (1,1), new: (1,11)
+NOTICE: UPDATE: old: (2,2), new: (2,12)
+NOTICE: UPDATE: old: (3,3), new: (3,13)
+NOTICE: UPDATE: old: (4,4), new: (4,14)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+2  12
+3  3
+4  14
+
+query T noticetrace
+DELETE FROM xy WHERE True;
+----
+NOTICE: DELETE: old: (1,1), new: <NULL>
+NOTICE: DELETE: old: (2,12), new: <NULL>
+NOTICE: DELETE: old: (3,3), new: <NULL>
+NOTICE: DELETE: old: (4,14), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+3  3
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# Include hidden columns that won't be visible to triggers.
+statement ok
+CREATE TABLE nullable (a INT, foo INT NOT VISIBLE, b INT, bar INT NOT VISIBLE DEFAULT 1);
+
+# A tuple with only NULL elements does not cause the filter to remove rows.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN ROW(NULL, NULL);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON nullable FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO nullable VALUES (1, 1), (2, 2), (3, 3);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,1)
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (3,3)
+
+# NOTE: the trigger does not modify the default value of "bar".
+query III rowsort
+SELECT *, bar FROM nullable;
+----
+NULL  NULL  1
+NULL  NULL  1
+NULL  NULL  1
+
+query T noticetrace
+UPDATE nullable SET b = 10;
+----
+NOTICE: UPDATE: old: (,), new: (,10)
+NOTICE: UPDATE: old: (,), new: (,10)
+NOTICE: UPDATE: old: (,), new: (,10)
+
+query III rowsort
+SELECT *, bar FROM nullable;
+----
+NULL  NULL  1
+NULL  NULL  1
+NULL  NULL  1
+
+query T noticetrace
+DELETE FROM nullable WHERE a IS NULL LIMIT 2;
+----
+NOTICE: DELETE: old: (,), new: <NULL>
+NOTICE: DELETE: old: (,), new: <NULL>
+
+query III rowsort
+SELECT *, bar FROM nullable;
+----
+NULL  NULL  1
+
+statement ok
+DROP TABLE nullable;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test row-level BEFORE triggers with a WHERE clause.
+# ==============================================================================
+
+subtest before_row_where
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW WHEN ((NEW).x % 2 = 0) EXECUTE FUNCTION g();
+
+# The trigger should not fire for the odd values, but they should still be
+# inserted.
+query T noticetrace
+INSERT INTO xy VALUES (1, 1), (2, 2), (3, 3), (4, 4);
+----
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (4,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+2  2
+3  3
+4  4
+
+statement ok
+CREATE TRIGGER foo2 BEFORE UPDATE OR DELETE ON xy FOR EACH ROW WHEN ((OLD).x % 2 = 0) EXECUTE FUNCTION g();
+
+# The trigger should not fire for the odd values, but they should still be
+# updated.
+query T noticetrace
+UPDATE xy SET y = y + 10;
+----
+NOTICE: UPDATE: old: (2,2), new: (2,12)
+NOTICE: UPDATE: old: (4,4), new: (4,14)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  11
+2  12
+3  13
+4  14
+
+# The trigger should not fire for the odd values, but they should still be
+# deleted.
+query T noticetrace
+DELETE FROM xy WHERE True;
+----
+NOTICE: DELETE: old: (2,12), new: <NULL>
+NOTICE: DELETE: old: (4,14), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER foo2 ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test row-level AFTER triggers.
+# ==============================================================================
+
+subtest after_row
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+# Test a basic INSERT trigger.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Test a basic UPDATE trigger.
+statement ok
+CREATE TRIGGER foo AFTER UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+UPDATE xy SET x = 3 WHERE x = 1;
+----
+NOTICE: UPDATE: old: (1,2), new: (3,2)
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Test a basic DELETE trigger.
+statement ok
+CREATE TRIGGER foo AFTER DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+DELETE FROM xy WHERE x = 3;
+----
+NOTICE: DELETE: old: (3,2), new: <NULL>
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# Triggers can be defined to operate on multiple events.
+statement ok
+CREATE TRIGGER foo AFTER INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+
+query T noticetrace
+UPDATE xy SET x = 3 WHERE x = 1;
+----
+NOTICE: UPDATE: old: (1,2), new: (3,2)
+
+query T noticetrace
+DELETE FROM xy WHERE x = 3;
+----
+NOTICE: DELETE: old: (3,2), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+# UPSERT operations can fire both INSERT and UPDATE triggers.
+#
+# First, insert some rows without conflicts.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4) ON CONFLICT (x) DO UPDATE SET y = xy.y + 10;
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+NOTICE: INSERT: old: <NULL>, new: (3,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+3  4
+
+# Repeat, but with some conflicting rows.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6) ON CONFLICT (x) DO UPDATE SET y = xy.y + 10;
+----
+NOTICE: UPDATE: old: (1,2), new: (1,12)
+NOTICE: UPDATE: old: (3,4), new: (3,14)
+NOTICE: INSERT: old: <NULL>, new: (5,6)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  12
+3  14
+5  6
+
+# Example with the explicit UPSERT syntax.
+query T noticetrace
+UPSERT INTO xy VALUES (1, -2), (3, -4), (5, -6), (7, -8);
+----
+NOTICE: UPDATE: old: (1,12), new: (1,-2)
+NOTICE: UPDATE: old: (3,14), new: (3,-4)
+NOTICE: UPDATE: old: (5,6), new: (5,-6)
+NOTICE: INSERT: old: <NULL>, new: (7,-8)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  -2
+3  -4
+5  -6
+7  -8
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# The return value of an AFTER trigger is ignored.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN ROW(1000, -10000);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: INSERT: old: <NULL>, new: (1,2)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  2
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test row-level AFTER triggers with a WHEN clause.
+# ==============================================================================
+
+subtest after_row_where
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW WHEN ((NEW).x % 2 = 0) EXECUTE FUNCTION g();
+
+# The trigger should not fire for the odd values.
+query T noticetrace
+INSERT INTO xy VALUES (1, 1), (2, 2), (3, 3), (4, 4);
+----
+NOTICE: INSERT: old: <NULL>, new: (2,2)
+NOTICE: INSERT: old: <NULL>, new: (4,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  1
+2  2
+3  3
+4  4
+
+statement ok
+CREATE TRIGGER foo2 AFTER UPDATE OR DELETE ON xy FOR EACH ROW WHEN ((OLD).x % 2 = 0) EXECUTE FUNCTION g();
+
+# The trigger should not fire for the odd values.
+query T noticetrace
+UPDATE xy SET y = y + 10;
+----
+NOTICE: UPDATE: old: (2,2), new: (2,12)
+NOTICE: UPDATE: old: (4,4), new: (4,14)
+
+query II rowsort
+SELECT * FROM xy;
+----
+1  11
+2  12
+3  13
+4  14
+
+# The trigger should not fire for the odd values.
+query T noticetrace
+DELETE FROM xy WHERE True;
+----
+NOTICE: DELETE: old: (2,12), new: <NULL>
+NOTICE: DELETE: old: (4,14), new: <NULL>
+
+query II rowsort
+SELECT * FROM xy;
+----
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER foo2 ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test interaction between row-level BEFORE and AFTER triggers.
+# ==============================================================================
+
+subtest before_after_row
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '% %: % -> %', TG_WHEN, TG_OP, OLD, NEW;
+    IF NEW IS NOT NULL AND TG_WHEN = 'BEFORE' THEN
+      NEW.x := (NEW).x * 10;
+      RAISE NOTICE 'changing the row to %', NEW;
+    END IF;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# The AFTER trigger should observe the effect of the BEFORE trigger.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4);
+----
+NOTICE: BEFORE INSERT: <NULL> -> (1,2)
+NOTICE: changing the row to (10,2)
+NOTICE: BEFORE INSERT: <NULL> -> (3,4)
+NOTICE: changing the row to (30,4)
+NOTICE: AFTER INSERT: <NULL> -> (10,2)
+NOTICE: AFTER INSERT: <NULL> -> (30,4)
+
+query II rowsort
+SELECT * FROM xy;
+----
+10  2
+30  4
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test cyclical triggers.
+# ==============================================================================
+
+statement ok
+CREATE TABLE t1 (a INT, b INT);
+CREATE TABLE t2 (a INT, b INT);
+
+# Test cyclical AFTER triggers.
+subtest cyclical_after_triggers
+
+statement ok
+SET recursion_depth_limit = 10;
+
+statement ok
+CREATE FUNCTION insert_t1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE ' ';
+    RAISE NOTICE '% trigger % with NEW: %', TG_WHEN, TG_NAME, NEW;
+    RAISE NOTICE 'max t1.a: %, max t2.a: %', (SELECT max(a) FROM t1), (SELECT max(a) FROM t2);
+    RAISE NOTICE 'inserting into t1: %', ROW((NEW).a + 1, (NEW).b);
+    INSERT INTO t1 VALUES ((NEW).a + 1, (NEW).b);
+    RETURN NEW;
+  END
+$$;
+CREATE FUNCTION insert_t2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE ' ';
+    RAISE NOTICE '% trigger % with NEW: %', TG_WHEN, TG_NAME, NEW;
+    RAISE NOTICE 'max t1.a: %, max t2.a: %', (SELECT max(a) FROM t1), (SELECT max(a) FROM t2);
+    RAISE NOTICE 'inserting into t2: %', ROW((NEW).a + 1, (NEW).b);
+    INSERT INTO t2 VALUES ((NEW).a + 1, (NEW).b);
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION insert_t2();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT ON t2 FOR EACH ROW EXECUTE FUNCTION insert_t1();
+
+# The triggers should fire until the limit is reached.
+statement error pgcode 09000 pq: trigger reached recursion depth limit: 10
+INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+# Add a WHEN clause to end the cycle after a few iterations.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW WHEN ((NEW).a < 5) EXECUTE FUNCTION insert_t2();
+
+query T noticetrace
+INSERT INTO t1 VALUES (1, 1);
+----
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (1,1)
+NOTICE: max t1.a: 1, max t2.a: <NULL>
+NOTICE: inserting into t2: (2,1)
+NOTICE:
+NOTICE: AFTER trigger bar with NEW: (2,1)
+NOTICE: max t1.a: 1, max t2.a: 2
+NOTICE: inserting into t1: (3,1)
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (3,1)
+NOTICE: max t1.a: 3, max t2.a: 2
+NOTICE: inserting into t2: (4,1)
+NOTICE:
+NOTICE: AFTER trigger bar with NEW: (4,1)
+NOTICE: max t1.a: 3, max t2.a: 4
+NOTICE: inserting into t1: (5,1)
+
+query II rowsort
+SELECT * FROM t1;
+----
+1  1
+3  1
+5  1
+
+query II rowsort
+SELECT * FROM t2;
+----
+2  1
+4  1
+
+statement ok
+DELETE FROM t1 WHERE True;
+DELETE FROM t2 WHERE True;
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+DROP TRIGGER bar ON t2;
+
+# Test cyclical BEFORE triggers.
+subtest cyclical_before_triggers
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION insert_t2();
+
+statement ok
+CREATE TRIGGER bar BEFORE INSERT ON t2 FOR EACH ROW EXECUTE FUNCTION insert_t1();
+
+# The triggers should fire until the limit is reached.
+statement error pgcode 09000 pq: trigger reached recursion depth limit: 10
+INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+# Add a WHEN clause to end the cycle after a few iterations.
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON t1 FOR EACH ROW WHEN ((NEW).a < 5) EXECUTE FUNCTION insert_t2();
+
+query T noticetrace
+INSERT INTO t1 VALUES (1, 1);
+----
+NOTICE:
+NOTICE: BEFORE trigger foo with NEW: (1,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t2: (2,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (2,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (3,1)
+NOTICE:
+NOTICE: BEFORE trigger foo with NEW: (3,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t2: (4,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (4,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (5,1)
+
+query II rowsort
+SELECT * FROM t1;
+----
+1  1
+3  1
+5  1
+
+query II rowsort
+SELECT * FROM t2;
+----
+2  1
+4  1
+
+statement ok
+DELETE FROM t1 WHERE True;
+DELETE FROM t2 WHERE True;
+
+# Test mutually cyclical BEFORE and AFTER triggers.
+subtest cyclical_before_after_triggers
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION insert_t2();
+
+# The triggers should fire until the limit is reached.
+statement error pgcode 09000 pq: trigger reached recursion depth limit: 10
+INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+# Add a WHEN clause to end the cycle after a few iterations.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW WHEN ((NEW).a < 5) EXECUTE FUNCTION insert_t2();
+
+query T noticetrace
+INSERT INTO t1 VALUES (1, 1);
+----
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (1,1)
+NOTICE: max t1.a: 1, max t2.a: <NULL>
+NOTICE: inserting into t2: (2,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (2,1)
+NOTICE: max t1.a: 1, max t2.a: <NULL>
+NOTICE: inserting into t1: (3,1)
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (3,1)
+NOTICE: max t1.a: 3, max t2.a: <NULL>
+NOTICE: inserting into t2: (4,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (4,1)
+NOTICE: max t1.a: 3, max t2.a: <NULL>
+NOTICE: inserting into t1: (5,1)
+
+query II rowsort
+SELECT * FROM t1;
+----
+1  1
+3  1
+5  1
+
+query II rowsort
+SELECT * FROM t2;
+----
+2  1
+4  1
+
+statement ok
+DELETE FROM t1 WHERE True;
+DELETE FROM t2 WHERE True;
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+DROP TRIGGER bar ON t2;
+
+# Test a single cyclical trigger.
+subtest cyclical_trigger_singleton
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION insert_t1();
+
+# The trigger should fire until the limit is reached.
+statement error pgcode 09000 pq: trigger reached recursion depth limit: 10
+INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+# Add a WHEN clause to end the cycle after a few iterations.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON t1 FOR EACH ROW WHEN ((NEW).a < 5) EXECUTE FUNCTION insert_t1();
+
+query T noticetrace
+INSERT INTO t1 VALUES (1, 1);
+----
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (1,1)
+NOTICE: max t1.a: 1, max t2.a: <NULL>
+NOTICE: inserting into t1: (2,1)
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (2,1)
+NOTICE: max t1.a: 2, max t2.a: <NULL>
+NOTICE: inserting into t1: (3,1)
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (3,1)
+NOTICE: max t1.a: 3, max t2.a: <NULL>
+NOTICE: inserting into t1: (4,1)
+NOTICE:
+NOTICE: AFTER trigger foo with NEW: (4,1)
+NOTICE: max t1.a: 4, max t2.a: <NULL>
+NOTICE: inserting into t1: (5,1)
+
+query II rowsort
+SELECT * FROM t1;
+----
+1  1
+2  1
+3  1
+4  1
+5  1
+
+statement ok
+DELETE FROM t1 WHERE True;
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+CREATE TRIGGER bar BEFORE INSERT ON t1 FOR EACH ROW EXECUTE FUNCTION insert_t1();
+
+# The trigger should fire until the limit is reached.
+statement error pgcode 09000 pq: trigger reached recursion depth limit: 10
+INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+DROP TRIGGER bar ON t1;
+
+# Add a WHEN clause to end the cycle after a few iterations.
+statement ok
+CREATE TRIGGER bar BEFORE INSERT ON t1 FOR EACH ROW WHEN ((NEW).a < 5) EXECUTE FUNCTION insert_t1();
+
+query T noticetrace
+INSERT INTO t1 VALUES (1, 1);
+----
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (1,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (2,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (2,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (3,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (3,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (4,1)
+NOTICE:
+NOTICE: BEFORE trigger bar with NEW: (4,1)
+NOTICE: max t1.a: <NULL>, max t2.a: <NULL>
+NOTICE: inserting into t1: (5,1)
+
+query II rowsort
+SELECT * FROM t1;
+----
+1  1
+2  1
+3  1
+4  1
+5  1
+
+statement ok
+DELETE FROM t1 WHERE True;
+
+statement ok
+DROP TRIGGER bar ON t1;
+
+statement ok
+DROP FUNCTION insert_t1;
+DROP FUNCTION insert_t2;
+DROP TABLE t1;
+DROP TABLE t2;
+
+statement ok
+RESET recursion_depth_limit;
+
+# ==============================================================================
+# Test row-level trigger interaction with FK cascades and checks.
+# ==============================================================================
+
+subtest cascades_fire_triggers
+
+statement ok
+CREATE TABLE parent (k INT PRIMARY KEY);
+CREATE TABLE child (k INT PRIMARY KEY, v INT REFERENCES parent(k) ON UPDATE CASCADE ON DELETE CASCADE);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '% % ON %: % -> %', TG_WHEN, TG_OP, TG_TABLE_NAME, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON parent FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON parent FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+query T noticetrace
+UPDATE parent SET k = k * 10 WHERE k = 2 OR k = 3;
+----
+NOTICE: BEFORE UPDATE ON parent: (2) -> (20)
+NOTICE: BEFORE UPDATE ON parent: (3) -> (30)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,20)
+NOTICE: BEFORE UPDATE ON child: (3,2) -> (3,20)
+NOTICE: BEFORE UPDATE ON child: (4,3) -> (4,30)
+NOTICE: AFTER UPDATE ON parent: (2) -> (20)
+NOTICE: AFTER UPDATE ON parent: (3) -> (30)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,20)
+NOTICE: AFTER UPDATE ON child: (3,2) -> (3,20)
+NOTICE: AFTER UPDATE ON child: (4,3) -> (4,30)
+
+query T noticetrace
+DELETE FROM parent WHERE k = 20 OR k = 30;
+----
+NOTICE: BEFORE DELETE ON parent: (20) -> <NULL>
+NOTICE: BEFORE DELETE ON parent: (30) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (2,20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (3,20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (4,30) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (20) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (30) -> <NULL>
+NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (3,20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
+
+statement ok
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+subtest before_trigger_fires_cascades
+
+# Create a trigger function that will map inserts into the "ab" table into
+# updates and delete on the "parent" table.
+statement ok
+CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    from_k INT := (NEW).a;
+    to_k INT := (NEW).b;
+  BEGIN
+    IF to_k IS NULL THEN
+      RAISE NOTICE 'delete from parent in trigger where k = %', from_k;
+      DELETE FROM parent WHERE k = from_k;
+    ELSE
+      RAISE NOTICE 'update parent.k to % in trigger where k = %', to_k, from_k;
+      UPDATE parent SET k = to_k WHERE k = from_k;
+    END IF;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON ab FOR EACH ROW EXECUTE FUNCTION h();
+
+query T noticetrace
+INSERT INTO ab VALUES (2, 20), (3, 30);
+----
+NOTICE: update parent.k to 20 in trigger where k = 2
+NOTICE: BEFORE UPDATE ON parent: (2) -> (20)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,20)
+NOTICE: BEFORE UPDATE ON child: (3,2) -> (3,20)
+NOTICE: AFTER UPDATE ON parent: (2) -> (20)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,20)
+NOTICE: AFTER UPDATE ON child: (3,2) -> (3,20)
+NOTICE: update parent.k to 30 in trigger where k = 3
+NOTICE: BEFORE UPDATE ON parent: (3) -> (30)
+NOTICE: BEFORE UPDATE ON child: (4,3) -> (4,30)
+NOTICE: AFTER UPDATE ON parent: (3) -> (30)
+NOTICE: AFTER UPDATE ON child: (4,3) -> (4,30)
+
+query T noticetrace
+INSERT INTO ab VALUES (20, NULL), (30, NULL);
+----
+NOTICE: delete from parent in trigger where k = 20
+NOTICE: BEFORE DELETE ON parent: (20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (2,20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (3,20) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (3,20) -> <NULL>
+NOTICE: delete from parent in trigger where k = 30
+NOTICE: BEFORE DELETE ON parent: (30) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (4,30) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (30) -> <NULL>
+NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
+
+statement ok
+DROP TRIGGER foo ON ab;
+
+statement ok
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+subtest after_trigger_fires_cascades
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT OR DELETE ON ab FOR EACH ROW EXECUTE FUNCTION h();
+
+query T noticetrace
+INSERT INTO ab VALUES (2, 20), (3, 30);
+----
+NOTICE: update parent.k to 20 in trigger where k = 2
+NOTICE: BEFORE UPDATE ON parent: (2) -> (20)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,20)
+NOTICE: BEFORE UPDATE ON child: (3,2) -> (3,20)
+NOTICE: AFTER UPDATE ON parent: (2) -> (20)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,20)
+NOTICE: AFTER UPDATE ON child: (3,2) -> (3,20)
+NOTICE: update parent.k to 30 in trigger where k = 3
+NOTICE: BEFORE UPDATE ON parent: (3) -> (30)
+NOTICE: BEFORE UPDATE ON child: (4,3) -> (4,30)
+NOTICE: AFTER UPDATE ON parent: (3) -> (30)
+NOTICE: AFTER UPDATE ON child: (4,3) -> (4,30)
+
+query T noticetrace
+INSERT INTO ab VALUES (20, NULL), (30, NULL);
+----
+NOTICE: delete from parent in trigger where k = 20
+NOTICE: BEFORE DELETE ON parent: (20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (2,20) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (3,20) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
+NOTICE: AFTER DELETE ON child: (3,20) -> <NULL>
+NOTICE: delete from parent in trigger where k = 30
+NOTICE: BEFORE DELETE ON parent: (30) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (4,30) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (30) -> <NULL>
+NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
+
+statement ok
+DROP TRIGGER foo ON ab;
+
+statement ok
+DROP FUNCTION h;
+
+statement ok
+DELETE FROM ab WHERE True;
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+
+# FK checks happen before AFTER triggers that were fired by the main query.
+subtest fk_checks_before_triggers
+
+# Create a second child table with no cascade behavior.
+statement ok
+CREATE TABLE child2 (k INT PRIMARY KEY, v INT REFERENCES parent(k));
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+INSERT INTO child2 VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+# Create procedures to print when a FK violation is encountered.
+statement ok
+CREATE PROCEDURE wrap_parent_update(k_old INT, k_new INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    IF k_new IS NULL THEN
+      DELETE FROM parent WHERE k = k_old;
+    ELSE
+      UPDATE parent SET k = k_new WHERE k = k_old;
+    END IF;
+  EXCEPTION WHEN foreign_key_violation THEN
+    RAISE NOTICE 'FK violation updating parent from % to %', k_old, k_new;
+  END
+$$;
+
+statement ok
+CREATE PROCEDURE wrap_child2_insert(k INT, v INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO child2 VALUES (k, v);
+  EXCEPTION WHEN foreign_key_violation THEN
+    RAISE NOTICE 'FK violation inserting (%, %) into child2', k, v;
+  END
+$$;
+
+# Try deleting a referenced row in the parent table.
+query T noticetrace
+CALL wrap_parent_update(2, NULL);
+----
+NOTICE: BEFORE DELETE ON parent: (2) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (2,2) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (3,2) -> <NULL>
+NOTICE: FK violation updating parent from 2 to <NULL>
+
+# Try updating a referenced row in the parent table.
+query T noticetrace
+CALL wrap_parent_update(2, 10);
+----
+NOTICE: BEFORE UPDATE ON parent: (2) -> (10)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,10)
+NOTICE: BEFORE UPDATE ON child: (3,2) -> (3,10)
+NOTICE: FK violation updating parent from 2 to 10
+
+# Try inserting a row with no reference into the child2 table.
+query T noticetrace
+CALL wrap_child2_insert(10, 10);
+----
+NOTICE: BEFORE INSERT ON child2: <NULL> -> (10,10)
+NOTICE: FK violation inserting (10, 10) into child2
+
+statement ok
+DROP PROCEDURE wrap_parent_update;
+DROP PROCEDURE wrap_child2_insert;
+DROP TABLE child2;
+
+# Unless "unsafe_allow_triggers_modifying_cascades" is set, triggers are not
+# allowed to modify or filter rows the mutation for a cascade.
+subtest triggers_modify_fk_cascades
+
+statement ok
+CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    NEW.k := (NEW).k + 100;
+    OLD.k := (OLD).k + 100;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE FUNCTION filter() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN NULL;
+  END
+$$;
+
+statement ok
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+statement ok
+CREATE TRIGGER mod BEFORE INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION h();
+
+statement error pgcode 27000 pq: trigger mod attempted to modify or filter a row in a cascade operation: \(1,11\)
+UPDATE parent SET k = k + 10 WHERE k < 3;
+
+statement error pgcode 27000 pq: trigger mod attempted to modify or filter a row in a cascade operation: \(1,1\)
+DELETE FROM parent WHERE k < 3;
+
+statement ok
+SET unsafe_allow_triggers_modifying_cascades = true;
+
+statement ok
+UPDATE parent SET k = k + 10 WHERE k < 3;
+
+statement ok
+DELETE FROM parent WHERE k < 3;
+
+statement ok
+RESET unsafe_allow_triggers_modifying_cascades;
+
+statement ok
+DROP TRIGGER mod ON child;
+
+statement ok
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+statement ok
+CREATE TRIGGER filter BEFORE INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION filter();
+
+statement error pgcode 27000 pq: trigger filter attempted to modify or filter a row in a cascade operation: \(1,11\)
+UPDATE parent SET k = k + 10 WHERE k < 3;
+
+statement error pgcode 27000 pq: trigger filter attempted to modify or filter a row in a cascade operation: \(1,1\)
+DELETE FROM parent WHERE k < 3;
+
+statement ok
+SET unsafe_allow_triggers_modifying_cascades = true;
+
+statement ok
+UPDATE parent SET k = k + 10 WHERE k < 3;
+
+statement ok
+DELETE FROM parent WHERE k < 3;
+
+statement ok
+RESET unsafe_allow_triggers_modifying_cascades;
+
+statement ok
+DROP TRIGGER filter ON child;
+
+statement ok
+DELETE FROM child WHERE True;
+DELETE FROM parent WHERE True;
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
+
+# Modifications to mutated rows made by BEFORE triggers are visible to cascades.
+subtest before_trigger_modifies_fk_cascades
+
+statement ok
+CREATE TRIGGER mod BEFORE INSERT OR UPDATE OR DELETE ON parent FOR EACH ROW EXECUTE FUNCTION h();
+
+query T noticetrace
+UPDATE parent SET k = k + 10 WHERE k < 3;
+----
+NOTICE: BEFORE UPDATE ON parent: (1) -> (11)
+NOTICE: BEFORE UPDATE ON parent: (2) -> (12)
+NOTICE: BEFORE UPDATE ON child: (1,1) -> (1,111)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,112)
+NOTICE: BEFORE UPDATE ON child: (3,2) -> (3,112)
+NOTICE: AFTER UPDATE ON parent: (1) -> (111)
+NOTICE: AFTER UPDATE ON parent: (2) -> (112)
+NOTICE: AFTER UPDATE ON child: (1,1) -> (1,111)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,112)
+NOTICE: AFTER UPDATE ON child: (3,2) -> (3,112)
+
+query II rowsort
+SELECT * FROM child;
+----
+1  111
+2  112
+3  112
+4  3
+
+query T noticetrace
+DELETE FROM parent WHERE k > 3;
+----
+NOTICE: BEFORE DELETE ON parent: (111) -> <NULL>
+NOTICE: BEFORE DELETE ON parent: (112) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (1,111) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (2,112) -> <NULL>
+NOTICE: BEFORE DELETE ON child: (3,112) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (111) -> <NULL>
+NOTICE: AFTER DELETE ON parent: (112) -> <NULL>
+NOTICE: AFTER DELETE ON child: (1,111) -> <NULL>
+NOTICE: AFTER DELETE ON child: (2,112) -> <NULL>
+NOTICE: AFTER DELETE ON child: (3,112) -> <NULL>
+
+query II rowsort
+SELECT * FROM child;
+----
+4  3
+
+statement ok
+DROP TRIGGER mod ON parent;
+
+subtest cascade_diamond
+
+# Create a diamond cascade structure.
+statement ok
+DROP TABLE child;
+DELETE FROM parent WHERE True;
+
+statement ok
+CREATE TABLE child (k INT PRIMARY KEY, v INT UNIQUE NOT NULL REFERENCES parent(k) ON UPDATE CASCADE ON DELETE CASCADE);
+CREATE TABLE child2 (k INT PRIMARY KEY, v INT UNIQUE NOT NULL REFERENCES parent(k) ON UPDATE CASCADE ON DELETE CASCADE);
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON child2 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TABLE grandchild (
+  k INT PRIMARY KEY,
+  v INT REFERENCES child(v) ON UPDATE CASCADE ON DELETE CASCADE,
+  v2 INT REFERENCES child2(v) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE OR DELETE ON grandchild FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE OR DELETE ON grandchild FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2), (3, 3);
+INSERT INTO child2 VALUES (1, 1), (2, 2), (3, 3);
+INSERT INTO grandchild VALUES (1, 1, 1), (2, 2, 2), (3, 2, 2), (4, 3, 3);
+
+# Update the parent table, which should cascade to the children and grandchild.
+# Note that both child tables cascade to the grandchild.
+#
+# Regression test for #133784 and #133792.
+query T noticetrace
+UPDATE parent SET k = k + 10 WHERE k < 3;
+----
+NOTICE: BEFORE UPDATE ON parent: (1) -> (11)
+NOTICE: BEFORE UPDATE ON parent: (2) -> (12)
+NOTICE: BEFORE UPDATE ON child: (1,1) -> (1,11)
+NOTICE: BEFORE UPDATE ON child: (2,2) -> (2,12)
+NOTICE: BEFORE UPDATE ON child2: (1,1) -> (1,11)
+NOTICE: BEFORE UPDATE ON child2: (2,2) -> (2,12)
+NOTICE: AFTER UPDATE ON parent: (1) -> (11)
+NOTICE: AFTER UPDATE ON parent: (2) -> (12)
+NOTICE: AFTER UPDATE ON child: (1,1) -> (1,11)
+NOTICE: AFTER UPDATE ON child: (2,2) -> (2,12)
+NOTICE: AFTER UPDATE ON child2: (1,1) -> (1,11)
+NOTICE: AFTER UPDATE ON child2: (2,2) -> (2,12)
+NOTICE: BEFORE UPDATE ON grandchild: (1,1,1) -> (1,11,1)
+NOTICE: BEFORE UPDATE ON grandchild: (2,2,2) -> (2,12,2)
+NOTICE: BEFORE UPDATE ON grandchild: (3,2,2) -> (3,12,2)
+NOTICE: BEFORE UPDATE ON grandchild: (1,11,1) -> (1,11,11)
+NOTICE: BEFORE UPDATE ON grandchild: (2,12,2) -> (2,12,12)
+NOTICE: BEFORE UPDATE ON grandchild: (3,12,2) -> (3,12,12)
+NOTICE: AFTER UPDATE ON grandchild: (1,1,1) -> (1,11,1)
+NOTICE: AFTER UPDATE ON grandchild: (2,2,2) -> (2,12,2)
+NOTICE: AFTER UPDATE ON grandchild: (3,2,2) -> (3,12,2)
+NOTICE: AFTER UPDATE ON grandchild: (1,11,1) -> (1,11,11)
+NOTICE: AFTER UPDATE ON grandchild: (2,12,2) -> (2,12,12)
+NOTICE: AFTER UPDATE ON grandchild: (3,12,2) -> (3,12,12)
+
+query II rowsort
+SELECT * FROM child;
+----
+1  11
+2  12
+3  3
+
+query II rowsort
+SELECT * FROM child2;
+----
+1  11
+2  12
+3  3
+
+query III rowsort
+SELECT * FROM grandchild;
+----
+1  11  11
+2  12  12
+3  12  12
+4  3   3
+
+statement ok
+DROP TABLE grandchild;
+DROP TABLE child;
+DROP TABLE child2;
+DROP TABLE parent;
+DROP FUNCTION g;
+DROP FUNCTION h;
+DROP FUNCTION filter;
+
+# Regression test for #134745: fire DELETE triggers for cascading deletes.
+subtest delete_cascade_triggers
+
+statement ok
+CREATE TABLE parent (k INT PRIMARY KEY);
+CREATE TABLE child (v INT NOT NULL REFERENCES parent(k) ON DELETE CASCADE);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', TG_OP;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1), (2), (2);
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+DELETE FROM parent WHERE k = 2;
+----
+NOTICE: DELETE
+NOTICE: DELETE
+
+statement ok
+DROP TRIGGER foo ON child;
+
+statement ok
+DROP FUNCTION g;
+DROP TABLE child;
+DROP TABLE parent;
+
+# ==============================================================================
+# Test order of execution.
+# ==============================================================================
+
+subtest before_row_order
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_NAME, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%: old: %, new: %', TG_NAME, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER c_trig BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER d_trig BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER b_trig BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION h();
+
+statement ok
+CREATE TRIGGER a_trig BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: a_trig: old: <NULL>, new: (1,2)
+NOTICE: b_trig: old: <NULL>, new: (1,2)
+NOTICE: c_trig: old: <NULL>, new: (1,2)
+NOTICE: d_trig: old: <NULL>, new: (1,2)
+
+statement ok
+DROP TRIGGER a_trig ON xy;
+
+statement ok
+DROP TRIGGER b_trig ON xy;
+
+statement ok
+DROP TRIGGER c_trig ON xy;
+
+statement ok
+DROP TRIGGER d_trig ON xy;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+subtest after_row_order
+
+statement ok
+CREATE TRIGGER c_trig AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER d_trig AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER b_trig AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION h();
+
+statement ok
+CREATE TRIGGER a_trig AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO xy VALUES (1, 2);
+----
+NOTICE: a_trig: old: <NULL>, new: (1,2)
+NOTICE: b_trig: old: <NULL>, new: (1,2)
+NOTICE: c_trig: old: <NULL>, new: (1,2)
+NOTICE: d_trig: old: <NULL>, new: (1,2)
+
+statement ok
+DROP TRIGGER a_trig ON xy;
+
+statement ok
+DROP TRIGGER b_trig ON xy;
+
+statement ok
+DROP TRIGGER c_trig ON xy;
+
+statement ok
+DROP TRIGGER d_trig ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DROP FUNCTION h;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+subtest before_after_row_order
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '% %: old: %, new: %', TG_WHEN, TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION g();
+
+# First, all BEFORE triggers are executed. Then, the mutation is executed.
+# Finally, the AFTER triggers are executed using the buffer.
+query T noticetrace
+INSERT INTO xy VALUES (1, 2), (3, 4);
+----
+NOTICE: BEFORE INSERT: old: <NULL>, new: (1,2)
+NOTICE: BEFORE INSERT: old: <NULL>, new: (3,4)
+NOTICE: AFTER INSERT: old: <NULL>, new: (1,2)
+NOTICE: AFTER INSERT: old: <NULL>, new: (3,4)
+
+# Notice that BEFORE INSERT triggers fire for every input row, while
+# AFTER INSERT triggers fire only for those that did not encounter conflicts.
+query T noticetrace
+UPSERT INTO xy VALUES (1, 2), (3, 4), (5, 6);
+----
+NOTICE: BEFORE INSERT: old: <NULL>, new: (1,2)
+NOTICE: BEFORE UPDATE: old: (1,2), new: (1,2)
+NOTICE: BEFORE INSERT: old: <NULL>, new: (3,4)
+NOTICE: BEFORE UPDATE: old: (3,4), new: (3,4)
+NOTICE: BEFORE INSERT: old: <NULL>, new: (5,6)
+NOTICE: AFTER UPDATE: old: (1,2), new: (1,2)
+NOTICE: AFTER UPDATE: old: (3,4), new: (3,4)
+NOTICE: AFTER INSERT: old: <NULL>, new: (5,6)
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP TRIGGER bar ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DELETE FROM xy WHERE True;
+
+# ==============================================================================
+# Test row-level trigger interaction with computed columns.
+# ==============================================================================
+
+# BEFORE triggers do not observe the values of computed columns. Instead, they
+# see NULLs. In addition, while a BEFORE trigger can modify a computed column,
+# the changed value is ignored. In contrast, the computed column *does* show
+# the effect of modifications to the columns it depends on.
+subtest before_computed_columns
+
+statement ok
+CREATE TABLE computed (a INT, b INT, c INT AS (a + b) STORED, d INT AS (a - b) VIRTUAL);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'g()';
+    RAISE NOTICE 'NEW: %', NEW;
+    NEW.c = 12345;
+    NEW.d = 67890;
+    RAISE NOTICE 'NEW after change: %', NEW;
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER b_foo BEFORE INSERT OR UPDATE ON computed FOR EACH ROW EXECUTE FUNCTION g();
+
+# BEFORE triggers do not observe the values of computed columns. Instead, they
+# see NULLs. In addition, while a BEFORE trigger can modify a computed column,
+# the changed value is ignored.
+query T noticetrace
+INSERT INTO computed VALUES (1, 2);
+----
+NOTICE: g()
+NOTICE: NEW: (1,2,,)
+NOTICE: NEW after change: (1,2,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+1  2  3  -1
+
+query T noticetrace
+UPDATE computed SET a = 10, b = 20 WHERE a = 1;
+----
+NOTICE: g()
+NOTICE: NEW: (10,20,,)
+NOTICE: NEW after change: (10,20,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10  20  30  -10
+
+# The computed column *does* show the effect of modifications to the columns it
+# depends on.
+statement ok
+CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'h()';
+    RAISE NOTICE 'NEW: %', NEW;
+    NEW.a = (NEW).a + 100;
+    NEW.b = (NEW).b + 200;
+    RAISE NOTICE 'NEW after change: %', NEW;
+    RETURN NEW;
+  END
+$$;
+
+# Create triggers that fire before and after the previous one.
+statement ok
+CREATE TRIGGER a_foo BEFORE INSERT OR UPDATE ON computed FOR EACH ROW EXECUTE FUNCTION h();
+
+statement ok
+CREATE TRIGGER c_foo BEFORE INSERT OR UPDATE ON computed FOR EACH ROW EXECUTE FUNCTION h();
+
+query T noticetrace
+INSERT INTO computed VALUES (3, 4);
+----
+NOTICE: h()
+NOTICE: NEW: (3,4,,)
+NOTICE: NEW after change: (103,204,,)
+NOTICE: g()
+NOTICE: NEW: (103,204,,)
+NOTICE: NEW after change: (103,204,12345,67890)
+NOTICE: h()
+NOTICE: NEW: (103,204,12345,67890)
+NOTICE: NEW after change: (203,404,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+203  404  607  -201
+
+query T noticetrace
+UPDATE computed SET a = 30, b = 40 WHERE a = 203;
+----
+NOTICE: h()
+NOTICE: NEW: (30,40,,)
+NOTICE: NEW after change: (130,240,,)
+NOTICE: g()
+NOTICE: NEW: (130,240,,)
+NOTICE: NEW after change: (130,240,12345,67890)
+NOTICE: h()
+NOTICE: NEW: (130,240,12345,67890)
+NOTICE: NEW after change: (230,440,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+230  440  670  -210
+
+# AFTER triggers observe the values of computed columns. They can also modify
+# computed columns, but the updated value is ignored (in fact, any modification
+# is ignored for AFTER triggers).
+subtest after_computed_columns
+
+statement ok
+CREATE TRIGGER trig AFTER INSERT OR UPDATE ON computed FOR EACH ROW EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO computed VALUES (5, 6);
+----
+NOTICE: h()
+NOTICE: NEW: (5,6,,)
+NOTICE: NEW after change: (105,206,,)
+NOTICE: g()
+NOTICE: NEW: (105,206,,)
+NOTICE: NEW after change: (105,206,12345,67890)
+NOTICE: h()
+NOTICE: NEW: (105,206,12345,67890)
+NOTICE: NEW after change: (205,406,12345,67890)
+NOTICE: g()
+NOTICE: NEW: (205,406,611,-201)
+NOTICE: NEW after change: (205,406,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+230  440  670  -210
+205  406  611  -201
+
+query T noticetrace
+UPDATE computed SET a = 50, b = 60 WHERE a = 230;
+----
+NOTICE: h()
+NOTICE: NEW: (50,60,,)
+NOTICE: NEW after change: (150,260,,)
+NOTICE: g()
+NOTICE: NEW: (150,260,,)
+NOTICE: NEW after change: (150,260,12345,67890)
+NOTICE: h()
+NOTICE: NEW: (150,260,12345,67890)
+NOTICE: NEW after change: (250,460,12345,67890)
+NOTICE: g()
+NOTICE: NEW: (250,460,710,-210)
+NOTICE: NEW after change: (250,460,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+250  460  710  -210
+205  406  611  -201
+
+statement ok
+DROP TRIGGER trig ON computed;
+
+statement ok
+DROP TRIGGER a_foo ON computed;
+
+statement ok
+DROP TRIGGER b_foo ON computed;
+
+statement ok
+DROP TRIGGER c_foo ON computed;
+
+# The WHEN clause for a BEFORE trigger should observe NULL values for computed
+# columns. For an AFTER trigger, the WHEN clause should observe the computed
+# values.
+subtest when_computed_columns
+
+statement ok
+CREATE TRIGGER trig BEFORE INSERT OR UPDATE ON computed
+FOR EACH ROW WHEN ((NEW).c IS NULL AND (NEW).d IS NULL) EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER trig_after AFTER INSERT OR UPDATE ON computed
+FOR EACH ROW WHEN ((NEW).c IS NOT NULL AND (NEW).d IS NOT NULL) EXECUTE FUNCTION g();
+
+query T noticetrace
+INSERT INTO computed VALUES (7, 8);
+----
+NOTICE: g()
+NOTICE: NEW: (7,8,,)
+NOTICE: NEW after change: (7,8,12345,67890)
+NOTICE: g()
+NOTICE: NEW: (7,8,15,-1)
+NOTICE: NEW after change: (7,8,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+250  460  710  -210
+205  406  611  -201
+7    8    15   -1
+
+query T noticetrace
+UPDATE computed SET a = 70, b = 80 WHERE a = 7;
+----
+NOTICE: g()
+NOTICE: NEW: (70,80,,)
+NOTICE: NEW after change: (70,80,12345,67890)
+NOTICE: g()
+NOTICE: NEW: (70,80,150,-10)
+NOTICE: NEW after change: (70,80,12345,67890)
+
+query IIII rowsort
+SELECT * FROM computed;
+----
+10   20   30   -10
+250  460  710  -210
+205  406  611  -201
+70   80   150  -10
+
+statement ok
+DROP TABLE computed;
+DROP FUNCTION g;
+DROP FUNCTION h;
+
+# ==============================================================================
+# Test unsupported syntax.
+# ==============================================================================
+
+subtest unsupported
+
+statement error pgcode 0A000 pq: unimplemented: CREATE OR REPLACE TRIGGER is not supported
+CREATE OR REPLACE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: unimplemented: cascade dropping triggers
+DROP TRIGGER foo ON xy CASCADE;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: unimplemented: cannot replace a trigger function with an active trigger
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+# CREATE OR REPLACE still works if there are no referencing triggers.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 subtest end

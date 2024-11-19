@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package roachtestflags
 
@@ -92,6 +87,12 @@ var (
 	_              = registerRunFlag(&SelectiveTests, FlagInfo{
 		Name:  "selective-tests",
 		Usage: `Use selective tests to run based on previous test execution. this is considered only if the select-probability is 1.0`,
+	})
+
+	SuccessfulTestsSelectPct = 0.35
+	_                        = registerRunFlag(&SuccessfulTestsSelectPct, FlagInfo{
+		Name:  "successful-test-select-pct",
+		Usage: `The percent of test that should be selected from the tests that have been running successfully as per test selection. Default is 0.35`,
 	})
 
 	Username string = os.Getenv("ROACHPROD_USER")
@@ -312,6 +313,12 @@ var (
 		Usage: `The port on which to serve the HTTP interface`,
 	})
 
+	ExportOpenmetrics bool = false
+	_                      = registerRunFlag(&ExportOpenmetrics, FlagInfo{
+		Name:  "export-openmetrics",
+		Usage: `flag to denote if roachtest should export openmetrics file for performance metrics.`,
+	})
+
 	DatadogSite string = "us5.datadoghq.com"
 	_                  = registerRunOpsFlag(&DatadogSite, FlagInfo{
 		Name:  "datadog-site",
@@ -336,6 +343,19 @@ var (
 		Usage: `A comma-separated list of tags to attach to telemetry data (e.g., key1:val1,key2:val2).`,
 	})
 
+	DBName string = ""
+	_             = registerRunOpsFlag(&DBName, FlagInfo{
+		Name: "db",
+		Usage: "Specify the name of the database to run the operation against (e.g., tpcc, tpch). If the given database " +
+			"does not exist, the operation fails. If not provided, a random database is selected, excluding system-created databases",
+	})
+
+	TableName string = ""
+	_                = registerRunOpsFlag(&TableName, FlagInfo{
+		Name: "db-table",
+		Usage: "Specifies the name of the database table to run the operation against, using the database provided in the --db flag. " +
+			"If the table does not exist, the operation fails. If not provided, a random table is selected.",
+	})
 	SideEyeApiToken string = ""
 	_                      = registerRunFlag(&SideEyeApiToken, FlagInfo{
 		Name: "side-eye-token",
@@ -358,7 +378,7 @@ var (
 			List of <version>=<path to cockroach binary>. If a certain version <ver>
 			is present in the list, the respective binary will be used when a
 			mixed-version test asks for the respective binary, instead of roachprod
-			stage <ver>. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.`,
+			stage <ver>. Example: v20.1.4=cockroach-20.1,v20.2.0=cockroach-20.2.`,
 	})
 
 	SlackToken string
@@ -428,6 +448,14 @@ var (
 						Clear the local cluster cache of missing clusters when syncing resources with
 						providers. Set this to false when running many concurrent Azure tests. Azure
 						can return stale VM information when many PUT calls are made in succession.`,
+	})
+
+	AlwaysCollectArtifacts bool = false
+	_                           = registerRunFlag(&AlwaysCollectArtifacts, FlagInfo{
+		Name: "always-collect-artifacts",
+		Usage: `
+						Always collect artifacts during test teardown, even if the test did not
+						time out or fail.`,
 	})
 )
 

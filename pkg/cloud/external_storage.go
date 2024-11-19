@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cloud
 
@@ -187,12 +182,22 @@ type EarlyBootExternalStorageContext struct {
 	MetricsRecorder *Metrics
 }
 
+// ExternalStorageOptions rolls up the Options into a struct.
+func (e *EarlyBootExternalStorageContext) ExternalStorageOptions() ExternalStorageOptions {
+	var options ExternalStorageOptions
+	for _, option := range e.Options {
+		option(&options)
+	}
+	return options
+}
+
 // ExternalStorageOptions holds dependencies and values that can be
 // overridden by callers of an ExternalStorageFactory via a passed
 // ExternalStorageOption.
 type ExternalStorageOptions struct {
 	ioAccountingInterceptor  ReadWriterInterceptor
 	AzureStorageTestingKnobs base.ModuleTestingKnobs
+	ClientName               string
 }
 
 // ExternalStorageConstructor is a function registered to create instances

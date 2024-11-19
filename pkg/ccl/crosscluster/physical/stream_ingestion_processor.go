@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package physical
 
@@ -87,11 +84,11 @@ var tooSmallRangeKeySize = settings.RegisterByteSizeSetting(
 // signaled to cutover.
 var cutoverSignalPollInterval = settings.RegisterDurationSetting(
 	settings.SystemOnly,
-	"bulkio.stream_ingestion.cutover_signal_poll_interval",
+	"bulkio.stream_ingestion.failover_signal_poll_interval",
 	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
 	10*time.Second,
 	settings.NonNegativeDuration,
-	settings.WithName("physical_replication.consumer.cutover_signal_poll_interval"),
+	settings.WithName("physical_replication.consumer.failover_signal_poll_interval"),
 )
 
 var quantize = settings.RegisterDurationSettingWithExplicitUnit(
@@ -389,6 +386,7 @@ func newStreamIngestionDataProcessor(
 // Start implements the RowSource interface.
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
+	ctx = logtags.AddTag(ctx, "proc", sip.ProcessorID)
 	log.Infof(ctx, "starting ingest proc")
 	sip.agg = bulkutil.TracingAggregatorForContext(ctx)
 
@@ -664,7 +662,6 @@ func (sip *streamIngestionProcessor) flushLoop(_ context.Context) error {
 
 func (sip *streamIngestionProcessor) onFlushUpdateMetricUpdate(batchSummary kvpb.BulkOpSummary) {
 	sip.metrics.IngestedLogicalBytes.Inc(batchSummary.DataSize)
-	sip.metrics.IngestedSSTBytes.Inc(batchSummary.SSTDataSize)
 }
 
 // consumeEvents handles processing events on the merged event queue and returns
@@ -922,7 +919,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) erro
 		}
 	}
 
-	resolvedSpans := event.GetResolvedSpans()
+	resolvedSpans := event.GetCheckpoint().ResolvedSpans
 	if resolvedSpans == nil {
 		return errors.New("checkpoint event expected to have resolved spans")
 	}
@@ -951,9 +948,6 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event PartitionEvent) erro
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
 	}
-
-	sip.metrics.EarliestDataCheckpointSpan.Update(lowestTimestamp.GoTime().UnixNano())
-	sip.metrics.LatestDataCheckpointSpan.Update(highestTimestamp.GoTime().UnixNano())
 	sip.metrics.ResolvedEvents.Inc(1)
 	return nil
 }
@@ -1124,7 +1118,7 @@ func splitRangeKeySSTAtKey(
 		// we'll swap in the RHS writer.
 		leftWriter  = storage.MakeIngestionSSTWriter(ctx, st, left)
 		rightWriter = storage.MakeIngestionSSTWriter(ctx, st, right)
-		writer      = leftWriter
+		writer      = &leftWriter
 	)
 	defer leftWriter.Close()
 	defer rightWriter.Close()
@@ -1138,7 +1132,7 @@ func splitRangeKeySSTAtKey(
 		}
 
 		leftRet = &rangeKeySST{start: first, end: last, data: left.Data()}
-		writer = rightWriter
+		writer = &rightWriter
 		last = nil
 		first = nil
 		reachedSplit = true

@@ -1,4 +1,10 @@
 #!/bin/bash
+
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 #
 # Converts roachtest benchmark results (for kv or ycsb workloads) into Go
 # benchmark format, suitable for use with e.g. benchstat.

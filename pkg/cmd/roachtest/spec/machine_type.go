@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package spec
 
@@ -214,6 +209,7 @@ func SelectGCEMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.
 // N.B. cpus is expected to be an even number; validation is deferred to a specific cloud provider.
 //
 // See ExampleSelectAzureMachineType for an exhaustive list of selected machine types.
+// TODO: Add Ebsv5 machine type to leverage NVMe
 func SelectAzureMachineType(cpus int, mem MemPerCPU, arch vm.CPUArch) (string, vm.CPUArch, error) {
 	series := "Ddsv5" // 4 GB RAM per CPU
 	selectedArch := vm.ArchAMD64

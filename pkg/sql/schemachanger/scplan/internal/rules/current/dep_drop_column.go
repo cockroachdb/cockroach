@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package current
 
@@ -70,7 +65,7 @@ func init() {
 func init() {
 
 	registerDepRule(
-		"column type dependents removed right before column type",
+		"column type dependents removed right before column type, except if part of a column type alteration ",
 		scgraph.SameStagePrecedence,
 		"dependent", "column-type",
 		func(from, to NodeVars) rel.Clauses {
@@ -78,6 +73,25 @@ func init() {
 				from.TypeFilter(rulesVersionKey, isColumnTypeDependent),
 				to.Type((*scpb.ColumnType)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
+				IsNotAlterColumnTypeOp("table-id", "col-id"),
+				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
+			}
+		},
+	)
+
+	// This rule is similar to the previous one but relaxes SameStagePrecedence,
+	// allowing for planning in case the ALTER COLUMN .. TYPE needs to roll back
+	// (particularly when altering columns with DEFAULT or ON UPDATE expressions).
+	registerDepRule(
+		"during a column type alterations, column type dependents removed before column type",
+		scgraph.Precedence,
+		"dependent", "column-type",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isColumnTypeDependent),
+				to.Type((*scpb.ColumnType)(nil)),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+				rel.And(IsAlterColumnTypeOp("table-id", "col-id")...),
 				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
@@ -96,7 +110,7 @@ func init() {
 	// able to express the _absence_ of a target element as a query clause.
 	//
 	// Note that DEFAULT and ON UPDATE expressions are column-dependent elements
-	// which also hold references to other descriptors. The rule prior to this one
+	// which also hold references to other descriptors. The rules prior to this one
 	// ensures that they transition to ABSENT before scpb.ColumnType does.
 	registerDepRule(
 		"column type removed right before column when not dropping relation",
@@ -188,13 +202,16 @@ func init() {
 	// storing all public columns within the table (as the column being dropped is still considered public
 	// before it moves to WRITE_ONLY but the new primary index does not contain it since the schema changer
 	// knows it is transitioning to a target status of ABSENT).
+	//
+	// This rule applies only when the operation is not ALTER COLUMN TYPE. A variant of this rule follows,
+	// allowing added and dropped columns to be swapped in the same stage during ALTER COLUMN TYPE.
 	registerDepRule(
 		"New primary index should go public only after columns being dropped move to WRITE_ONLY",
 		scgraph.Precedence,
 		"column", "new-primary-index",
 		func(from, to NodeVars) rel.Clauses {
 			ic := MkNodeVars("index-column")
-			relationID, columnID, indexID := rel.Var("table-id"), rel.Var("column-id"), rel.Var("index-id")
+			relationID, columnID, indexID := rel.Var("table-id"), rel.Var("old-column-id"), rel.Var("index-id")
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil)),
@@ -204,6 +221,30 @@ func init() {
 				from.CurrentStatus(scpb.Status_WRITE_ONLY),
 				to.TargetStatus(scpb.ToPublic),
 				to.CurrentStatus(scpb.Status_PUBLIC),
+				IsNotDroppedColumnPartOfAlterColumnTypeOp("table-id", "old-column-id"),
+			}
+		},
+	)
+
+	// This rule is similar to the previous one but applies specifically to ALTER COLUMN ... TYPE operations.
+	// It uses SameStagePrecedence to enable the swapping of dropped and added columns within the same stage.
+	registerDepRule(
+		"New primary index for alter column type should go public in the same stage as dropped column",
+		scgraph.SameStagePrecedence,
+		"column", "new-primary-index",
+		func(from, to NodeVars) rel.Clauses {
+			ic := MkNodeVars("index-column")
+			relationID, columnID, indexID := rel.Var("table-id"), rel.Var("old-column-id"), rel.Var("index-id")
+			return rel.Clauses{
+				from.Type((*scpb.Column)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil)),
+				ColumnInSourcePrimaryIndex(ic, to, relationID, columnID, indexID),
+				JoinOnColumnID(ic, from, relationID, columnID),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_WRITE_ONLY),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+				rel.And(IsDroppedColumnPartOfAlterColumnTypeOp("table-id", "old-column-id")...),
 			}
 		},
 	)

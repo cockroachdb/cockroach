@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -134,9 +129,8 @@ func (sm *replicaStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
 	r := sm.r
 	mb := &sm.ephemeralBatch
 	mb.r = r
-	r.mu.RLock()
-	mb.state = r.mu.state
-	r.mu.RUnlock()
+	r.raftMu.AssertHeld()
+	mb.state = r.shMu.state
 	return mb
 }
 
@@ -148,9 +142,9 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b.applyStats = &sm.applyStats
 	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
-	b.state = r.mu.state
+	b.state = r.shMu.state
 	b.state.Stats = &sm.stats
-	*b.state.Stats = *r.mu.state.Stats
+	*b.state.Stats = *r.shMu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
 	r.mu.RUnlock()
 	b.start = timeutil.Now()

@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scexec
 
@@ -72,17 +67,24 @@ type Catalog interface {
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
 
-	// UpdateZoneConfig upserts a zone config for a descriptor.
+	// WriteZoneConfigToBatch adds the new zoneconfig to uncommitted layer and
+	// writes to the kv batch.
+	WriteZoneConfigToBatch(ctx context.Context, id descpb.ID, zc catalog.ZoneConfig) error
+
+	// GetZoneConfig gets the zone config for a descriptor ID.
+	GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.ZoneConfig, error)
+
+	// UpdateZoneConfig upserts a zone config for a descriptor ID.
 	UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig) error
 
-	// UpdateSubzoneConfig upserts a subzone config into the zone config for a
-	// descriptor.
+	// UpdateSubzoneConfig upserts a subzone config into the given zone config
+	// for a descriptor ID.
 	UpdateSubzoneConfig(
 		ctx context.Context,
-		tableID descpb.ID,
-		subzones []zonepb.Subzone,
+		parentZone catalog.ZoneConfig,
+		subzone zonepb.Subzone,
 		subzoneSpans []zonepb.SubzoneSpan,
-	) error
+	) (catalog.ZoneConfig, error)
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error

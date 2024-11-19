@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package acl
 
@@ -53,11 +50,7 @@ func (p *PrivateEndpoints) CheckConnection(ctx context.Context, conn ConnectionT
 
 	// By default, connections are rejected if no endpoints match the
 	// connection's endpoint ID.
-	return errors.Newf(
-		"connection to '%s' denied: cluster does not allow private connections from endpoint '%s'",
-		conn.TenantID.String(),
-		conn.EndpointID,
-	)
+	return errors.Newf("cluster does not allow private connections from endpoint '%s'", conn.EndpointID)
 }
 
 // FindPrivateEndpointID looks for the endpoint identifier within the connection

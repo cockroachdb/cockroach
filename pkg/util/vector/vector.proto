@@ -1,0 +1,27 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.vector;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/vector";
+
+import "gogoproto/gogo.proto";
+
+option (gogoproto.goproto_getters_all) = false;
+
+// Set is a set of float32 vectors of equal dimension. Vectors in the set are
+// stored contiguously in a slice, in row-wise order. They are assumed to be
+// unordered; some methods do not preserve ordering.
+message Set {
+  // Dims is the number of dimensions of each vector in the set.
+  int64 dims = 1 [(gogoproto.casttype) = "int"];
+  // Count is the number of vectors in the set.
+  int64 count = 2 [(gogoproto.casttype) = "int"];
+  // Data is a float32 slice that contains all vectors, laid out contiguously in
+  // row-wise order in memory.
+  // NB: Avoid using this field directly, instead preferring to use the At
+  // function to access individual vectors.
+  repeated float data = 3;
+}

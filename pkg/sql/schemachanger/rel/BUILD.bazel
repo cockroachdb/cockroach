@@ -5,6 +5,7 @@ go_library(
     name = "rel",
     srcs = [
         "attribute.go",
+        "clause_id.go",
         "compare.go",
         "database.go",
         "database_entity_set.go",
@@ -37,6 +38,7 @@ go_library(
         "//pkg/util/intsets",
         "//pkg/util/iterutil",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_btree//:btree",
@@ -50,6 +52,7 @@ go_test(
     size = "small",
     srcs = [
         "bench_test.go",
+        "clause_id_test.go",
         "ordinal_set_test.go",
         "rel_internal_test.go",
         "rel_test.go",

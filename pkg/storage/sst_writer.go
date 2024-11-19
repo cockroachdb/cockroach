@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -264,6 +259,13 @@ func (fw *SSTWriter) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
+	// If the range key holds an encoded timestamp as it was read from storage,
+	// write the tombstone to clear it using the same encoding of the timestamp.
+	// See #129592.
+	if len(rangeKey.EncodedTimestampSuffix) > 0 {
+		return fw.ClearEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey,
+			rangeKey.EncodedTimestampSuffix)
+	}
 	return fw.ClearEngineRangeKey(rangeKey.StartKey, rangeKey.EndKey,
 		EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
@@ -349,7 +351,7 @@ func (fw *SSTWriter) PutInternalPointKey(key *pebble.InternalKey, value []byte) 
 		return errors.New("cannot decode engine key")
 	}
 	fw.DataSize += int64(len(ek.Key)) + int64(len(value))
-	return fw.fw.Raw().Add(*key, value)
+	return fw.fw.Raw().AddWithForceObsolete(*key, value, false /* forceObsolete */)
 }
 
 // clearRange clears all point keys in the given range by dropping a Pebble
@@ -551,6 +553,13 @@ func (fw *SSTWriter) ShouldWriteLocalTimestamps(context.Context) bool {
 // BufferedSize implements the Writer interface.
 func (fw *SSTWriter) BufferedSize() int {
 	return 0
+}
+
+// EstimatedSize returns the underlying RawWriter's estimated size. Note that
+// this size is an estimate as if the writer were to be closed at the time of
+// calling.
+func (fw *SSTWriter) EstimatedSize() uint64 {
+	return fw.fw.Raw().EstimatedSize()
 }
 
 // MemObject is an in-memory implementation of objstorage.Writable, intended

@@ -69,7 +69,7 @@ DROP TABLE t
 subtest disallow_schema_changes_when_schema_is_locked
 
 statement ok
-CREATE TABLE t (i INT PRIMARY KEY, j INT, INDEX idx (j)) WITH (schema_locked = t);
+CREATE TABLE t (i INT PRIMARY KEY, j INT, UNIQUE INDEX idx (j)) WITH (schema_locked = t);
 
 statement ok
 INSERT INTO t SELECT i, i+1 FROM generate_series(1,10) AS tmp(i);
@@ -99,8 +99,19 @@ statement error pgcode 57000 schema changes are disallowed on table "t" because 
 CREATE INDEX idx2 ON t(j);
 
 statement ok
+CREATE TABLE ref (a INT PRIMARY KEY, b INT)
+
+# Locked tables cannot be referenced by foreign keys.
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+ALTER TABLE ref ADD CONSTRAINT fk FOREIGN KEY (b) REFERENCES t(j);
+
+# GRANT statements are allowed on the table, as they only affect the
+# table's privilege descriptor.
+statement ok
 GRANT DELETE ON TABLE t TO testuser WITH GRANT OPTION;
 
+# COMMENT statements are allowed on the table, as they don't actually
+# touch the descriptor.
 statement ok
 COMMENT ON TABLE t IS 't is a table';
 COMMENT ON INDEX t@idx IS 'idx is an index';
@@ -108,3 +119,13 @@ COMMENT ON COLUMN t.i IS 'i is a column';
 
 statement ok
 DROP TABLE t;
+
+subtest zone_config
+
+statement ok
+ALTER TABLE ref SET (schema_locked = true);
+
+statement error pgcode 57000 schema changes are disallowed on table "ref" because it is locked
+ALTER TABLE ref CONFIGURE ZONE USING num_replicas = 11;
+
+subtest end

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -37,10 +32,6 @@ import (
 var AlterColTypeInTxnNotSupportedErr = unimplemented.NewWithIssuef(
 	49351, "ALTER COLUMN TYPE is not supported inside a transaction")
 
-var alterColTypeInCombinationNotSupportedErr = unimplemented.NewWithIssuef(
-	49351, "ALTER COLUMN TYPE cannot be used in combination "+
-		"with other ALTER TABLE commands")
-
 // AlterColumnType takes an AlterTableAlterColumnType, determines
 // which conversion to use and applies the type conversion.
 func AlterColumnType(
@@ -67,10 +58,16 @@ func AlterColumnType(
 			)
 		}
 	}
-	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, tableDesc.GetRowLevelTTL(), col, tn, op); err != nil {
+
+	if err := schemaexpr.ValidateTTLExpression(tableDesc, tableDesc.GetRowLevelTTL(), col, tn, op); err != nil {
 		return err
 	}
+
 	if err := schemaexpr.ValidateComputedColumnExpressionDoesNotDependOnColumn(tableDesc, col, objType, op); err != nil {
+		return err
+	}
+
+	if err := schemaexpr.ValidatePartialIndex(tableDesc, col, objType, op); err != nil {
 		return err
 	}
 
@@ -215,7 +212,7 @@ func alterColumnTypeGeneral(
 	}
 
 	if len(cmds) > 1 {
-		return alterColTypeInCombinationNotSupportedErr
+		return sqlerrors.NewAlterColTypeInCombinationNotSupportedError()
 	}
 
 	// Disallow ALTER COLUMN TYPE general if the table is already undergoing
@@ -227,6 +224,16 @@ func alterColumnTypeGeneral(
 			return unimplemented.NewWithIssuef(
 				47137, "table %s is currently undergoing a schema change", tableDesc.Name)
 		}
+	}
+
+	// The algorithm relies heavily on the computed column expression, so we don’t
+	// support altering a column if it’s also computed. There’s currently no way to
+	// track the original expression in this case. However, this is supported in the
+	// declarative schema changer.
+	if col.IsComputed() {
+		return unimplemented.Newf("ALTER COLUMN ... TYPE",
+			"ALTER COLUMN TYPE requiring an on-disk data rewrite with the legacy schema changer "+
+				"is not supported for computed columns")
 	}
 
 	nameExists := func(name string) bool {

@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuildstmt
 
@@ -14,24 +9,34 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
 func alterTableAlterColumnType(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAlterColumnType,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	t *tree.AlterTableAlterColumnType,
 ) {
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)
@@ -83,6 +88,7 @@ func alterTableAlterColumnType(
 		panic(err)
 	}
 
+	validateNewTypeForComputedColumn(b, tbl.TableID, colID, tn, newColType.Type)
 	validateAutomaticCastForNewType(b, tbl.TableID, colID, t.Column.String(),
 		oldColType.Type, newColType.Type, t.Using != nil)
 
@@ -97,7 +103,7 @@ func alterTableAlterColumnType(
 	case schemachange.ColumnConversionValidate:
 		handleValidationOnlyColumnConversion(b, t, col, oldColType, &newColType)
 	case schemachange.ColumnConversionGeneral:
-		handleGeneralColumnConversion(b, t, col, oldColType, &newColType)
+		handleGeneralColumnConversion(b, stmt, t, tn, tbl, col, oldColType, &newColType)
 	default:
 		panic(scerrors.NotImplementedErrorf(t,
 			"alter type conversion %v not handled", kind))
@@ -122,10 +128,9 @@ func validateAutomaticCastForNewType(
 	// suggested hint to use one.
 	if !hasUsingExpr {
 		// Compute a suggested default computed expression for inclusion in the error hint.
-		hintExpr := tree.CastExpr{
-			Expr:       &tree.ColumnItem{ColumnName: tree.Name(colName)},
-			Type:       toType,
-			SyntaxMode: tree.CastShort,
+		hintExpr, err := parser.ParseExpr(fmt.Sprintf("%s::%s", colName, toType.SQLString()))
+		if err != nil {
+			panic(err)
 		}
 		panic(errors.WithHintf(
 			pgerror.Newf(
@@ -133,7 +138,7 @@ func validateAutomaticCastForNewType(
 				"column %q cannot be cast automatically to type %s",
 				colName,
 				toType.SQLString(),
-			), "You might need to specify \"USING %s\".", tree.Serialize(&hintExpr),
+			), "You might need to specify \"USING %s\".", tree.Serialize(hintExpr),
 		))
 	}
 
@@ -160,6 +165,47 @@ func validateAutomaticCastForNewType(
 			toType.SQLString(),
 		))
 	})
+}
+
+// validateNewTypeForComputedColumn will check if the new type is valid for a
+// computed column.
+func validateNewTypeForComputedColumn(
+	b BuildCtx, tableID catid.DescID, colID catid.ColumnID, tn *tree.TableName, toType *types.T,
+) {
+	colComputeExpression := b.QueryByID(tableID).FilterColumnComputeExpression().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComputeExpression) bool {
+			return e.ColumnID == colID
+		}).MustGetZeroOrOneElement()
+	// Early out if the column isn't computed.
+	if colComputeExpression == nil {
+		return
+	}
+
+	// The use case for type changes on computed columns is quite limited. The new type
+	// generally needs to belong to the same type family (e.g., INT2 -> INT4). This is because
+	// the computed expression itself isn’t changing, so it continues to return the same type.
+	// As a result, the old and new types must be compatible with each other. We use
+	// DequalifyAndValidateExprImpl to enforce this compatibility, and we only check for any
+	// errors returned by that call.
+	//
+	// Now, create a tree.Expr for the computed expression.
+	expr, err := parser.ParseExpr(string(colComputeExpression.Expression.Expr))
+	if err != nil {
+		panic(err)
+	}
+
+	_, _, _, err = schemaexpr.DequalifyAndValidateExprImpl(b, expr, toType,
+		tree.StoredComputedColumnExpr, b.SemaCtx(), volatility.Volatile, tn, b.ClusterSettings().Version.ActiveVersion(b),
+		func() colinfo.ResultColumns {
+			return getNonDropResultColumns(b, tableID)
+		},
+		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+			return columnLookupFn(b, tableID, columnName)
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
 }
 
 // handleTrivialColumnConversion is called to just change the type in-place without
@@ -210,12 +256,19 @@ func handleValidationOnlyColumnConversion(
 // to complete the data type conversion.
 func handleGeneralColumnConversion(
 	b BuildCtx,
+	stmt tree.Statement,
 	t *tree.AlterTableAlterColumnType,
+	tn *tree.TableName,
+	tbl *scpb.Table,
 	col *scpb.Column,
 	oldColType, newColType *scpb.ColumnType,
 ) {
 	failIfExperimentalSettingNotSet(b, oldColType, newColType)
 
+	// To handle the conversion, we remove the old column and add a new one with
+	// the correct type. The new column will temporarily have a computed expression
+	// referring to the old column, used only for the backfill process.
+	//
 	// Because we need to rewrite data to change the data type, there are
 	// additional validation checks required that are incompatible with this
 	// process.
@@ -232,8 +285,138 @@ func handleGeneralColumnConversion(
 		}
 	})
 
-	// TODO(spilchen): Implement the general conversion logic in #127014
-	panic(scerrors.NotImplementedErrorf(t, "general alter type conversion not supported in the declarative schema changer"))
+	if oldColType.IsVirtual {
+		// TODO(#125840): we currently don't support altering the type of a virtual column
+		panic(scerrors.NotImplementedErrorf(t,
+			"backfilling during ALTER COLUMN TYPE for a virtual column is not supported"))
+	}
+
+	// We block any attempt to alter the type of a column that is a key column in
+	// the primary key. We can't use walkColumnDependencies here, as it doesn't
+	// differentiate between key columns and stored columns.
+	pk := mustRetrievePrimaryIndex(b, tbl.TableID)
+	for _, keyCol := range getIndexColumns(b.QueryByID(tbl.TableID), pk.IndexID, scpb.IndexColumn_KEY) {
+		if keyCol.ColumnID == col.ColumnID {
+			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
+		}
+	}
+
+	// TODO(#47137): Only support alter statements that only have a single command.
+	switch s := stmt.(type) {
+	case *tree.AlterTable:
+		if len(s.Cmds) > 1 {
+			panic(sqlerrors.NewAlterColTypeInCombinationNotSupportedError())
+		}
+	}
+
+	// In version 25.1, we introduced the necessary dependency rules to ensure the
+	// general path works. Without these rules, we encounter failures during the
+	// ALTER operation. To avoid this, we revert to legacy handling if not running
+	// on version 25.1.
+	if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_1) {
+		panic(scerrors.NotImplementedErrorf(t,
+			"old active version; ALTER COLUMN TYPE requires backfill. Reverting to legacy handling"))
+	}
+
+	colNotNull := retrieveColumnNotNull(b, tbl.TableID, col.ColumnID)
+
+	// Generate the ID of the new column we are adding.
+	newColID := b.NextTableColumnID(tbl)
+	newColType.ColumnID = newColID
+
+	// Create a computed expression for the new column that references the old column.
+	//
+	// During the backfill process to populate the new column, the old column is still
+	// referenced by its original name, so we use that in the expression.
+	colName := mustRetrieveColumnName(b, tbl.TableID, col.ColumnID)
+	expr, err := getComputeExpressionForBackfill(b, t, tn, tbl.TableID, colName.Name, newColType)
+	if err != nil {
+		panic(err)
+	}
+
+	// Generate DEFAULT or ON UPDATE expressions for the new column, if they
+	// existed on the old column. These expressions are not permitted on columns
+	// with a computed expression. Dependency rules ensure they are added only
+	// after the temporary compute expression for the new column is removed.
+	oldDefExpr, newDefExpr := getColumnDefaultExpressionsForColumnReplacement(b, tbl.TableID, col.ColumnID, newColID)
+	oldOnUpdateExpr, newOnUpdateExpr := getColumnOnUpdateExpressionsForColumnReplacement(b, tbl.TableID, col.ColumnID, newColID)
+
+	oldComputeExpr, newComputeExpr := getColumnComputeExpressionsForColumnReplacement(b, tbl.TableID, col.ColumnID, newColID)
+	oldColComment, newColComment := getColumnCommentForColumnReplacement(b, tbl.TableID, col.ColumnID)
+
+	// First, set the target status of the old column to drop. This column will be
+	// replaced by a new one but remains visible until the new column is ready to be
+	// made public. A dependency rule ensures that the old and new columns are swapped
+	// within the same stage.
+	b.Drop(col)
+	b.Drop(colName)
+	b.Drop(oldColType)
+	if oldComputeExpr != nil {
+		b.Drop(oldComputeExpr)
+	}
+	if oldDefExpr != nil {
+		b.Drop(oldDefExpr)
+	}
+	if oldOnUpdateExpr != nil {
+		b.Drop(oldOnUpdateExpr)
+	}
+	if colNotNull != nil {
+		b.Drop(colNotNull)
+	}
+	if oldColComment != nil {
+		b.Drop(oldColComment)
+	}
+	handleDropColumnPrimaryIndexes(b, tbl, col)
+
+	// Ensure all elements for the column are dropped before proceeding with the add.
+	// This check is run prior to adding any new elements, as it relies on column names,
+	// and we don't want it to include the newly added elements.
+	colElems := b.ResolveColumn(tbl.TableID, t.Column, ResolveParams{
+		RequiredPrivilege: privilege.CREATE,
+	})
+	assertAllColumnElementsAreDropped(colElems)
+
+	// The new column is replacing an existing one, so we want to insert it into the
+	// column family at the same position as the old column. Normally, when adding a new
+	// column, it is appended to the end of the column family.
+	newColType.ColumnFamilyOrderFollowsColumnID = oldColType.ColumnID
+
+	// Add the spec for the new column. It will be identical to the column it is replacing,
+	// except the type will differ, and it will have a transient computed expression.
+	// This expression will reference the original column to facilitate the backfill.
+	// This column becomes visible in the same stage the old column becomes invisible.
+	spec := addColumnSpec{
+		tbl: tbl,
+		col: &scpb.Column{
+			TableID:        tbl.TableID,
+			ColumnID:       newColID,
+			IsHidden:       col.IsHidden,
+			IsInaccessible: col.IsInaccessible,
+			IsSystemColumn: col.IsSystemColumn,
+			PgAttributeNum: getPgAttributeNum(col),
+		},
+		name: &scpb.ColumnName{
+			TableID:  tbl.TableID,
+			ColumnID: newColID,
+			Name:     colName.Name,
+		},
+		def:      newDefExpr,
+		onUpdate: newOnUpdateExpr,
+		comment:  newColComment,
+		colType:  newColType,
+		compute:  newComputeExpr,
+		transientCompute: &scpb.ColumnComputeExpression{
+			TableID:    tbl.TableID,
+			ColumnID:   newColID,
+			Expression: *b.WrapExpression(tbl.TableID, expr),
+			Usage:      scpb.ColumnComputeExpression_ALTER_TYPE_USING,
+		},
+		notNull: retrieveColumnNotNull(b, tbl.TableID, col.ColumnID) != nil,
+		// The new column will be placed in the same column family as the one
+		// it's replacing, so there's no need to specify a family.
+		fam: nil,
+	}
+	addColumn(b, spec, t)
 }
 
 func updateColumnType(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
@@ -295,4 +478,117 @@ func maybeWriteNoticeForFKColTypeMismatch(b BuildCtx, col *scpb.Column, colType 
 			writeNoticeHelper(e.ColumnIDs, e.ReferencedColumnIDs, e.ReferencedTableID)
 		}
 	})
+}
+
+func getComputeExpressionForBackfill(
+	b BuildCtx,
+	t *tree.AlterTableAlterColumnType,
+	tn *tree.TableName,
+	tableID catid.DescID,
+	colName string,
+	newColType *scpb.ColumnType,
+) (expr tree.Expr, err error) {
+	// If a USING clause wasn't specified, the default expression is casting the column to the new type.
+	if t.Using == nil {
+		return parser.ParseExpr(fmt.Sprintf("%s::%s", colName, newColType.Type.SQLString()))
+	}
+
+	expr, err = parser.ParseExpr(t.Using.String())
+	if err != nil {
+		return
+	}
+
+	typedExpr, _, _, err := schemaexpr.DequalifyAndValidateExprImpl(b, expr, newColType.Type,
+		tree.AlterColumnTypeUsingExpr, b.SemaCtx(), volatility.Volatile, tn, b.ClusterSettings().Version.ActiveVersion(b),
+		func() colinfo.ResultColumns {
+			return getNonDropResultColumns(b, tableID)
+		},
+		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+			return columnLookupFn(b, tableID, columnName)
+		},
+	)
+	if err != nil {
+		return
+	}
+
+	// Return the updated expression from DequalifyAndValidateExprImpl. For expressions
+	// involving user-defined types like enums, the types will be resolved to ensure
+	// they can be used during backfill.
+	expr, err = parser.ParseExpr(typedExpr)
+	return
+}
+
+// getPgAttributeNum returns the column's ordering value as stored in the catalog.
+// This ensures the column keeps its position for 'SELECT *' queries when replacing
+// an old column with a new one.
+func getPgAttributeNum(col *scpb.Column) catid.PGAttributeNum {
+	if col.PgAttributeNum != 0 {
+		return col.PgAttributeNum
+	}
+	return catid.PGAttributeNum(col.ColumnID)
+}
+
+// getColumnDefaultExpressionsForColumnReplacement retrieves the
+// scpb.ColumnDefaultExpression objects when altering a column type that
+// requires replacing and backfilling the old column with a new one.
+// If no column default expressions exist, both output parameters will be nil.
+func getColumnDefaultExpressionsForColumnReplacement(
+	b BuildCtx, tableID catid.DescID, oldColID, newColID catid.ColumnID,
+) (oldDefExpr, newDefExpr *scpb.ColumnDefaultExpression) {
+	oldDefExpr = retrieveColumnDefaultExpressionElem(b, tableID, oldColID)
+	if oldDefExpr != nil {
+		newDefExpr = protoutil.Clone(oldDefExpr).(*scpb.ColumnDefaultExpression)
+		newDefExpr.ColumnID = newColID
+	}
+	return
+}
+
+// getColumnOnUpdateExpressionsForColumnReplacement retrieves the
+// scpb.ColumnOnUpdateExpression objects when altering a column type that
+// requires replacing and backfilling the old column with a new one.
+// If no on update expressions exist, both output parameters will be nil.
+func getColumnOnUpdateExpressionsForColumnReplacement(
+	b BuildCtx, tableID catid.DescID, oldColID, newColID catid.ColumnID,
+) (oldOnUpdateExpr, newOnUpdateExpr *scpb.ColumnOnUpdateExpression) {
+	oldOnUpdateExpr = retrieveColumnOnUpdateExpressionElem(b, tableID, oldColID)
+	if oldOnUpdateExpr != nil {
+		newOnUpdateExpr = protoutil.Clone(oldOnUpdateExpr).(*scpb.ColumnOnUpdateExpression)
+		newOnUpdateExpr.ColumnID = newColID
+	}
+	return
+}
+
+// getColumnComputeExpressionsForColumnReplacement returns both old and new ColumnComputeExpressions
+// for a column type conversion needing a backfill.
+func getColumnComputeExpressionsForColumnReplacement(
+	b BuildCtx, tableID catid.DescID, oldColID, newColID catid.ColumnID,
+) (oldComputeExpr, newComputeExpr *scpb.ColumnComputeExpression) {
+	oldComputeExpr = b.QueryByID(tableID).FilterColumnComputeExpression().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComputeExpression) bool {
+			return e.ColumnID == oldColID
+		}).MustGetZeroOrOneElement()
+	if oldComputeExpr != nil {
+		newComputeExpr = protoutil.Clone(oldComputeExpr).(*scpb.ColumnComputeExpression)
+		newComputeExpr.ColumnID = newColID
+	}
+	return
+}
+
+// getColumnCommentForColumnReplacement returns two versions of ColumnComment when
+// replacing a column: one for the old column and one for the new column. If no
+// column comment exists, both output parameters will be nil.
+func getColumnCommentForColumnReplacement(
+	b BuildCtx, tableID catid.DescID, oldColID catid.ColumnID,
+) (oldColumnComment, newColumnComment *scpb.ColumnComment) {
+	oldColumnComment = retrieveColumnComment(b, tableID, oldColID)
+	if oldColumnComment != nil {
+		// We intentionally keep all aspects of the new column comment unchanged.
+		// Technically, the column ID should be updated, but since the comment is stored
+		// using PGAttributeNum rather than the column ID, we want the Add/Drop actions
+		// to cancel each other out; this won't work if the ColumnID is updated, as the
+		// attributes would differ. The drop action on the column comment is only included
+		// to satisfy the call to assertAllColumnElementsAreDropped.
+		newColumnComment = protoutil.Clone(oldColumnComment).(*scpb.ColumnComment)
+	}
+	return
 }

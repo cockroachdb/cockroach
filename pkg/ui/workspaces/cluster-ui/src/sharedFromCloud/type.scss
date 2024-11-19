@@ -1,0 +1,184 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+/**
+  Headings
+*/
+@mixin crl-type-heading-1 {
+  @include source-sans-pro-r;
+  font-size: 28px;
+  line-height: 48px;
+}
+
+@mixin crl-type-heading-2 {
+  @include source-sans-pro-m;
+  font-size: 24px;
+  line-height: 48px;
+}
+
+@mixin crl-type-heading-3 {
+  @include source-sans-pro-m;
+  font-size: 20px;
+  line-height: 32px;
+}
+
+@mixin crl-type-heading-4 {
+  @include source-sans-pro-r;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+@mixin crl-type-heading-5 {
+  @include source-sans-pro-m;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+@mixin crl-type-heading-6 {
+  @include source-sans-pro-m;
+  font-size: 12px;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/**
+ Body copy
+*/
+@mixin crl-type-body {
+  @include source-sans-pro-r;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+@mixin crl-type-body--strong {
+  @include source-sans-pro-m;
+  font-size: 14px;
+  line-height: 24px;
+  letter-spacing: 0.02em;
+}
+
+/**
+ Captions
+*/
+@mixin crl-type-caption {
+  @include source-sans-pro-r;
+  font-size: 12px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+}
+
+@mixin crl-type-caption--strong {
+  @include source-sans-pro-m;
+  font-size: 12px;
+  line-height: 20px;
+  letter-spacing: 0.02em;
+}
+
+/**
+ Links
+*/
+@mixin crl-type-link {
+  @include source-sans-pro-r;
+  font-size: 16px;
+}
+
+@mixin crl-type-link--small {
+  @include source-sans-pro-m;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+@mixin crl-type-link--large {
+  @include source-sans-pro-r;
+  font-size: 20px;
+  line-height: 40px;
+}
+
+@mixin crl-type-tooltip-link {
+  @include crl-type-caption--strong;
+  text-decoration: underline;
+  color: $color-font-inverse-base;
+  cursor: pointer;
+
+  &:hover {
+    color: $color-font-inverse-base;
+    text-decoration: underline;
+  }
+}
+
+/**
+ Buttons
+*/
+@mixin crl-type-button {
+  @include source-sans-pro-m;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+@mixin crl-type-button--large {
+  @include source-sans-pro-r;
+  font-size: 16px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+}
+
+@mixin crl-type-button--action-menu-item {
+  @include source-sans-pro-r;
+  font-size: 14px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+}
+
+/**
+ Input labels
+*/
+@mixin crl-type-input-label {
+  @include source-sans-pro-m;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+/**
+ Error Message
+*/
+@mixin crl-type-error {
+  @include source-sans-pro-m;
+  color: $color-base-red;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+/**
+ Code
+*/
+@mixin crl-type-code {
+  @include monospace;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+@mixin crl-type-code--small {
+  @include monospace;
+  font-size: 12px;
+  line-height: 24px;
+}
+
+/**
+ Text Adjustments
+*/
+@mixin truncate-text {
+  // Used in combination with a defined width
+  // for the text container to add ellipses.
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/**
+  The width for a paragraph of body-typed text to keep each line about
+  15 words long for maximum readability.
+*/
+$body-paragraph-width: 600px;

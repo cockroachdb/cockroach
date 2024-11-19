@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { createReducer } from "@reduxjs/toolkit";
 import { combineReducers, createStore } from "redux";
@@ -20,19 +15,9 @@ import {
   reducer as clusterSettings,
 } from "./clusterSettings/clusterSettings.reducer";
 import {
-  KeyedDatabaseDetailsState,
-  KeyedDatabaseDetailsSpanStatsState,
-  databaseDetailsReducer,
-  databaseDetailsSpanStatsReducer,
-} from "./databaseDetails";
-import {
   DatabasesListState,
   reducer as databasesList,
 } from "./databasesList/databasesList.reducers";
-import {
-  KeyedTableDetailsState,
-  reducer as tableDetails,
-} from "./databaseTableDetails/tableDetails.reducer";
 import {
   IndexStatsReducerState,
   reducer as indexStats,
@@ -101,9 +86,6 @@ export type AdminUiState = {
   executionDetailFiles: JobProfilerExecutionDetailFilesState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
-  databaseDetails: KeyedDatabaseDetailsState;
-  databaseDetailsSpanStats: KeyedDatabaseDetailsSpanStatsState;
-  tableDetails: KeyedTableDetailsState;
   stmtInsights: StmtInsightsState;
   txnInsightDetails: TxnInsightDetailsCachedState;
   txnInsights: TxnInsightsState;
@@ -136,9 +118,6 @@ export const reducers = combineReducers<AdminUiState>({
   executionDetailFiles,
   clusterLocks,
   databasesList,
-  databaseDetails: databaseDetailsReducer.reducer,
-  databaseDetailsSpanStats: databaseDetailsSpanStatsReducer.reducer,
-  tableDetails,
   schemaInsights,
   statementFingerprintInsights,
   clusterSettings,

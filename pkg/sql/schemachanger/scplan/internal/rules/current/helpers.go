@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package current
 
@@ -21,10 +16,12 @@ import (
 
 const (
 	// rulesVersion version of elements that can be appended to rel rule names.
-	rulesVersion = "-24.3"
+	rulesVersion = "-25.1"
 )
 
 // rulesVersionKey version of elements used by this rule set.
+// TODO(annie): Need to update the rulesVersionKey here to point to
+// clusterversion.V25_1 when that is available.
 var rulesVersionKey = clusterversion.V24_3
 
 // descriptorIsNotBeingDropped creates a clause which leads to the outer clause
@@ -216,6 +213,14 @@ func isColumnDependent(e scpb.Element) bool {
 	return isColumnTypeDependent(e)
 }
 
+func isColumnDependentExceptColumnName(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ColumnName:
+		return false
+	}
+	return isColumnDependent(e)
+}
+
 func isColumnNotNull(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ColumnNotNull:
@@ -236,7 +241,7 @@ func isIndexDependent(e scpb.Element) bool {
 	case *scpb.IndexName, *scpb.IndexComment, *scpb.IndexColumn,
 		*scpb.IndexZoneConfig:
 		return true
-	case *scpb.IndexPartitioning, *scpb.SecondaryIndexPartial:
+	case *scpb.IndexPartitioning, *scpb.PartitionZoneConfig, *scpb.SecondaryIndexPartial:
 		return true
 	}
 	return false
@@ -298,6 +303,16 @@ func isConstraintDependent(e scpb.Element) bool {
 func isConstraintWithoutIndexName(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ConstraintWithoutIndexName:
+		return true
+	}
+	return false
+}
+
+func isTriggerDependent(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.TriggerName, *scpb.TriggerEnabled, *scpb.TriggerTiming,
+		*scpb.TriggerEvents, *scpb.TriggerTransition, *scpb.TriggerWhen,
+		*scpb.TriggerFunctionCall, *scpb.TriggerDeps:
 		return true
 	}
 	return false

@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colfetcher
 
@@ -500,7 +495,7 @@ func NewColIndexJoin(
 ) (*ColIndexJoin, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
-		return nil, errors.Errorf("attempting to create a ColIndexJoin with uninitialized NodeID")
+		return nil, errors.AssertionFailedf("attempting to create a ColIndexJoin with uninitialized NodeID")
 	}
 	if !spec.LookupExpr.Empty() {
 		return nil, errors.AssertionFailedf("non-empty lookup expressions are not supported for index joins")
@@ -566,12 +561,14 @@ func NewColIndexJoin(
 			),
 			kvFetcherMemAcc,
 			spec.FetchSpec.External,
+			tableArgs.RequiresRawMVCCValues(),
 		)
 	} else {
 		kvFetcher = row.NewKVFetcher(
 			txn,
 			nil,   /* bsHeader */
 			false, /* reverse */
+			tableArgs.RequiresRawMVCCValues(),
 			spec.LockingStrength,
 			spec.LockingWaitPolicy,
 			spec.LockingDurability,

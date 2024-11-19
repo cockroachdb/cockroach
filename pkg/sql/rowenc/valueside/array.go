@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package valueside
 
@@ -192,6 +187,8 @@ func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 	}, b, nil
 }
 
+var errNestedArraysNotFullySupported = unimplemented.NewWithIssueDetail(32552, "", "nested arrays are not fully supported")
+
 // DatumTypeToArrayElementEncodingType decides an encoding type to
 // place in the array header given a datum type. The element encoding
 // type is then used to encode/decode array elements.
@@ -240,7 +237,7 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 	case types.TupleFamily:
 		return encoding.Tuple, nil
 	case types.ArrayFamily:
-		return 0, unimplemented.NewWithIssueDetail(32552, "", "nested arrays are not fully supported")
+		return 0, errNestedArraysNotFullySupported
 	default:
 		return 0, errors.AssertionFailedf("no known encoding type for %s", t.Family().Name())
 	}

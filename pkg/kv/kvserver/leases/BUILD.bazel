@@ -17,6 +17,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/raftutil",
         "//pkg/raft",
+        "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",

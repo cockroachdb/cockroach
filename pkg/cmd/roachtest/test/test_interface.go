@@ -1,16 +1,14 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package test
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -78,11 +76,21 @@ type Test interface {
 	L() *logger.Logger
 	Progress(float64)
 	Status(args ...interface{})
+	AddParam(string, string)
 	WorkerStatus(args ...interface{})
 	WorkerProgress(float64)
 	IsDebug() bool
 
+	Go(task.Func, ...task.Option)
+	GoWithCancel(task.Func, ...task.Option) context.CancelFunc
+
 	// DeprecatedWorkload returns the path to the workload binary.
 	// Don't use this, invoke `./cockroach workload` instead.
 	DeprecatedWorkload() string
+
+	// ExportOpenmetrics returns a boolean value that decides whether the
+	// metrics should be exported in openmetrics format or JSON format.
+	// If true, the stats exporter will export metrics in openmetrics format,
+	// else, the exporter will export in the JSON format.
+	ExportOpenmetrics() bool
 }

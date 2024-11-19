@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -200,7 +195,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
 	var sb span.Builder
-	sb.Init(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
+	sb.InitAllowingExternalRowData(e.planner.EvalContext(), e.planner.ExecCfg().Codec, tabDesc, idx)
 
 	cols := make([]catalog.Column, 0, params.NeededCols.Len())
 	allCols := tabDesc.AllColumns()
@@ -234,7 +229,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	isFullTableOrIndexScan := len(spans) == 1 && spans[0].EqualValue(
-		tabDesc.IndexSpan(e.planner.ExecCfg().Codec, idx.GetID()),
+		tabDesc.IndexSpanAllowingExternalRowData(e.planner.ExecCfg().Codec, idx.GetID()),
 	)
 	if err = colCfg.assertValidReqOrdering(reqOrdering); err != nil {
 		return nil, err
@@ -873,7 +868,7 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 func (e *distSQLSpecExecFactory) ConstructPlan(
 	root exec.Node,
 	subqueries []exec.Subquery,
-	cascades []exec.Cascade,
+	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
 	rootRowCount int64,
 	flags exec.PlanFlags,
@@ -887,12 +882,15 @@ func (e *distSQLSpecExecFactory) ConstructPlan(
 	if len(checks) != 0 {
 		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: checks")
 	}
+	if len(triggers) != 0 {
+		return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: triggers")
+	}
 	if p, ok := root.(planMaybePhysical); !ok {
 		return nil, errors.AssertionFailedf("unexpected type for root: %T", root)
 	} else {
 		p.physPlan.onClose = e.planCtx.getCleanupFunc()
 	}
-	return constructPlan(e.planner, root, subqueries, cascades, checks, rootRowCount, flags)
+	return constructPlan(e.planner, root, subqueries, cascades, triggers, checks, rootRowCount, flags)
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplainOpt(
@@ -974,6 +972,7 @@ func (e *distSQLSpecExecFactory) ConstructInsert(
 	insertCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checkCols exec.CheckOrdinalSet,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: insert")
@@ -987,6 +986,7 @@ func (e *distSQLSpecExecFactory) ConstructInsertFastPath(
 	checkCols exec.CheckOrdinalSet,
 	fkChecks []exec.InsertFastPathCheck,
 	uniqChecks []exec.InsertFastPathCheck,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: insert fast path")
@@ -1000,6 +1000,7 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
 	passthrough colinfo.ResultColumns,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: update")
@@ -1016,6 +1017,7 @@ func (e *distSQLSpecExecFactory) ConstructUpsert(
 	updateCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checks exec.CheckOrdinalSet,
+	uniqueWithTombstoneIndexes cat.IndexOrdinals,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: upsert")
@@ -1072,6 +1074,10 @@ func (e *distSQLSpecExecFactory) ConstructCreateFunction(
 	functionDeps opt.SchemaFunctionDeps,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create function")
+}
+
+func (e *distSQLSpecExecFactory) ConstructCreateTrigger(_ *tree.CreateTrigger) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create trigger")
 }
 
 func (e *distSQLSpecExecFactory) ConstructSequenceSelect(sequence cat.Sequence) (exec.Node, error) {

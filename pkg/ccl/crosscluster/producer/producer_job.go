@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package producer
 
@@ -86,6 +83,7 @@ func makeProducerJobRecordForLogicalReplication(
 	user username.SQLUsername,
 	ptsID uuid.UUID,
 	spans []roachpb.Span,
+	tableIDs []uint32,
 	desc string,
 ) jobs.Record {
 	expiration := timeutil.Now().Add(expirationWindow)
@@ -98,6 +96,7 @@ func makeProducerJobRecordForLogicalReplication(
 			ProtectedTimestampRecordID: ptsID,
 			Spans:                      spans,
 			ExpirationWindow:           expirationWindow,
+			TableIDs:                   tableIDs,
 		},
 		Progress: jobspb.StreamReplicationProgress{
 			Expiration:            expiration,
@@ -194,6 +193,11 @@ func (p *producerJobResumer) OnFailOrCancel(
 	execCfg := jobExec.ExecCfg()
 
 	if err := p.removeJobFromTenantRecord(ctx, execCfg); err != nil {
+		return err
+	}
+
+	details := p.job.Details().(jobspb.StreamReplicationDetails)
+	if err := replicationutils.UnlockLDRTables(ctx, execCfg, details.TableIDs, p.job.ID()); err != nil {
 		return err
 	}
 

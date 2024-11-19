@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -25,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -77,7 +73,8 @@ var (
 func gcSystemLog(
 	ctx context.Context,
 	sqlServer *SQLServer,
-	opName, table, tsCol string,
+	opName redact.RedactableString,
+	table, tsCol string,
 	timestampLowerBound, timestampUpperBound time.Time,
 	limit int64,
 ) (time.Time, int64, error) {
@@ -178,7 +175,7 @@ func runSystemLogGCForOneTable(
 		return 0, nil
 	}
 
-	opName := gcConfig.table + "-" + gcConfig.timestampCol + "-gc"
+	opName := redact.Sprintf("%s-%s-gc", gcConfig.table, gcConfig.timestampCol)
 	limit := systemLogGCLimit.Get(&st.SV)
 	timestampUpperBound := timeutil.Unix(0, sqlServer.execCfg.Clock.PhysicalNow()-int64(ttl))
 	newTimestampLowerBound, rowsAffected, err := gcSystemLog(

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver_test
 
@@ -77,7 +72,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		rangefeedErrChan := make(chan error, 1)
 		ctxToCancel, cancel := context.WithCancel(ctx)
 		go func() {
-			rangefeedErrChan <- ds.RangeFeed(ctxToCancel, []roachpb.Span{descTableSpan}, startTS, evChan)
+			rangefeedErrChan <- ds.RangeFeed(ctxToCancel, []kvcoord.SpanTimePair{{Span: descTableSpan, StartAfter: startTS}}, evChan)
 		}()
 
 		// Note: 42 is a system descriptor.
@@ -141,7 +136,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		})
 		evChan := make(chan kvcoord.RangeFeedMessage)
 		require.Regexp(t, `rangefeeds require the kv\.rangefeed.enabled setting`,
-			ds.RangeFeed(ctx, []roachpb.Span{scratchSpan}, startTS, evChan))
+			ds.RangeFeed(ctx, []kvcoord.SpanTimePair{{Span: scratchSpan, StartAfter: startTS}}, evChan))
 	})
 }
 
@@ -193,9 +188,9 @@ func TestMergeOfRangeEventTableWhileRunningRangefeed(t *testing.T) {
 	start := db.Clock().Now()
 	go func() {
 		rangefeedErrChan <- ds.RangeFeed(rangefeedCtx,
-			[]roachpb.Span{lhsRepl.Desc().RSpan().AsRawSpanWithNoLocals()},
-			start,
-			eventCh)
+			[]kvcoord.SpanTimePair{{Span: lhsRepl.Desc().RSpan().AsRawSpanWithNoLocals(), StartAfter: start}},
+			eventCh,
+		)
 	}()
 
 	// Wait for an event on the rangefeed to let us know that we're connected.
@@ -259,8 +254,7 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 	go func() {
 		rangefeedErrChan <- ds.RangeFeed(
 			rangefeedCtx,
-			[]roachpb.Span{desc.RSpan().AsRawSpanWithNoLocals()},
-			startTS,
+			[]kvcoord.SpanTimePair{{Span: desc.RSpan().AsRawSpanWithNoLocals(), StartAfter: startTS}},
 			eventCh,
 		)
 	}()
@@ -315,7 +309,7 @@ func TestRangefeedWorksOnLivenessRange(t *testing.T) {
 	eventC := make(chan kvcoord.RangeFeedMessage)
 	errC := make(chan error, 1)
 	go func() {
-		errC <- ds.RangeFeed(ctx, []roachpb.Span{keys.NodeLivenessSpan}, startTS, eventC)
+		errC <- ds.RangeFeed(ctx, []kvcoord.SpanTimePair{{Span: keys.NodeLivenessSpan, StartAfter: startTS}}, eventC)
 	}()
 
 	// Wait for a liveness update.

@@ -24,6 +24,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "@com_github_aws_aws_sdk_go//aws/credentials",
+        "@com_github_aws_aws_sdk_go_v2_config//:config",
+        "@com_github_stretchr_testify//require",
     ],
 )

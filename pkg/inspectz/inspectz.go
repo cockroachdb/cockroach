@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package inspectz
 
@@ -18,8 +13,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/inspectz/inspectzpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -34,9 +31,10 @@ const URLPrefix = "/inspectz/"
 type Server struct {
 	log.AmbientContext
 
-	mux              *http.ServeMux
-	handles          kvflowcontrol.Handles
-	kvflowController kvflowcontrol.Controller
+	mux                                    *http.ServeMux
+	handlesV1, handlesV2                   kvflowcontrol.InspectHandles
+	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController
+	storeLiveness                          kvserver.InspectAllStoreLiveness
 }
 
 var _ inspectzpb.InspectzServer = &Server{}
@@ -44,82 +42,178 @@ var _ inspectzpb.InspectzServer = &Server{}
 // NewServer sets up an inspectz server.
 func NewServer(
 	ambient log.AmbientContext,
-	handles kvflowcontrol.Handles,
-	kvflowController kvflowcontrol.Controller,
+	handlesV1, handlesV2 kvflowcontrol.InspectHandles,
+	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController,
+	storeLiveness kvserver.InspectAllStoreLiveness,
 ) *Server {
 	mux := http.NewServeMux()
 	server := &Server{
 		AmbientContext: ambient,
 
-		mux:              mux,
-		handles:          handles,
-		kvflowController: kvflowController,
+		mux:                mux,
+		handlesV1:          handlesV1,
+		handlesV2:          handlesV2,
+		kvflowControllerV1: kvflowControllerV1,
+		kvflowControllerV2: kvflowControllerV2,
+		storeLiveness:      storeLiveness,
 	}
-	mux.Handle("/inspectz/kvflowhandles", http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
-			ctx := server.AnnotateCtx(context.Background())
-
-			req := &kvflowinspectpb.HandlesRequest{}
-			if rangeIDs, ok := parseRangeIDs(r.URL.Query().Get("ranges"), w); ok {
-				req.RangeIDs = rangeIDs
-			}
-			resp, err := server.KVFlowHandles(ctx, req)
-			if err != nil {
-				log.ErrorfDepth(ctx, 1, "%s", err)
-				http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
-				return
-			}
-			respond(ctx, w, http.StatusOK, resp)
-		},
-	))
-	mux.Handle("/inspectz/kvflowcontroller", http.HandlerFunc(
-		func(w http.ResponseWriter, r *http.Request) {
-			ctx := server.AnnotateCtx(context.Background())
-
-			req := &kvflowinspectpb.ControllerRequest{}
-			resp, err := server.KVFlowController(ctx, req)
-			if err != nil {
-				log.ErrorfDepth(ctx, 1, "%s", err)
-				http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
-				return
-			}
-			respond(ctx, w, http.StatusOK, resp)
-		},
-	))
+	mux.Handle("/inspectz/v1/kvflowhandles", server.makeKVFlowHandlesHandler(server.KVFlowHandles))
+	mux.Handle("/inspectz/v1/kvflowcontroller", server.makeKVFlowControllerHandler(server.KVFlowController))
+	mux.Handle("/inspectz/v2/kvflowhandles", server.makeKVFlowHandlesHandler(server.KVFlowHandlesV2))
+	mux.Handle("/inspectz/v2/kvflowcontroller", server.makeKVFlowControllerHandler(server.KVFlowControllerV2))
+	mux.Handle(
+		"/inspectz/storeliveness/supportFrom",
+		server.makeStoreLivenessHandler(server.StoreLivenessSupportFrom),
+	)
+	mux.Handle(
+		"/inspectz/storeliveness/supportFor",
+		server.makeStoreLivenessHandler(server.StoreLivenessSupportFor),
+	)
 
 	return server
+}
+
+func (s *Server) makeKVFlowHandlesHandler(
+	impl func(
+		ctx context.Context,
+		request *kvflowinspectpb.HandlesRequest,
+	) (*kvflowinspectpb.HandlesResponse, error),
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := s.AnnotateCtx(context.Background())
+
+		req := &kvflowinspectpb.HandlesRequest{}
+		if rangeIDs, ok := parseRangeIDs(r.URL.Query().Get("ranges"), w); ok {
+			req.RangeIDs = rangeIDs
+		}
+		resp, err := impl(ctx, req)
+		if err != nil {
+			log.ErrorfDepth(ctx, 1, "%s", err)
+			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
+			return
+		}
+		respond(ctx, w, http.StatusOK, resp)
+	}
+}
+
+func (s *Server) makeKVFlowControllerHandler(
+	impl func(
+		ctx context.Context,
+		request *kvflowinspectpb.ControllerRequest,
+	) (*kvflowinspectpb.ControllerResponse, error),
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := s.AnnotateCtx(context.Background())
+
+		req := &kvflowinspectpb.ControllerRequest{}
+		resp, err := impl(ctx, req)
+		if err != nil {
+			log.ErrorfDepth(ctx, 1, "%s", err)
+			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
+			return
+		}
+		respond(ctx, w, http.StatusOK, resp)
+	}
+}
+
+func (s *Server) makeStoreLivenessHandler(
+	impl func(ctx context.Context, request *slpb.InspectStoreLivenessRequest) (
+		*slpb.InspectStoreLivenessResponse, error,
+	),
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := s.AnnotateCtx(context.Background())
+		req := &slpb.InspectStoreLivenessRequest{}
+		resp, err := impl(ctx, req)
+		if err != nil {
+			log.ErrorfDepth(ctx, 1, "%s", err)
+			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
+			return
+		}
+		respond(ctx, w, http.StatusOK, resp)
+	}
 }
 
 // KVFlowController implements the InspectzServer interface.
 func (s *Server) KVFlowController(
 	ctx context.Context, request *kvflowinspectpb.ControllerRequest,
 ) (*kvflowinspectpb.ControllerResponse, error) {
-	return &kvflowinspectpb.ControllerResponse{
-		Streams: s.kvflowController.Inspect(ctx),
-	}, nil
+	return kvFlowController(ctx, request, s.kvflowControllerV1)
 }
 
 // KVFlowHandles implements the InspectzServer interface.
 func (s *Server) KVFlowHandles(
 	ctx context.Context, request *kvflowinspectpb.HandlesRequest,
 ) (*kvflowinspectpb.HandlesResponse, error) {
-	resp := &kvflowinspectpb.HandlesResponse{}
-	if len(request.RangeIDs) == 0 {
-		request.RangeIDs = s.handles.Inspect()
-	}
-	for _, rangeID := range request.RangeIDs {
-		handle, found := s.handles.Lookup(rangeID)
-		if !found {
-			continue // nothing to do
-		}
-		resp.Handles = append(resp.Handles, handle.Inspect(ctx))
-	}
-	return resp, nil
+	return kvFlowHandles(ctx, request, s.handlesV1)
+}
+
+// KVFlowControllerV2 implements the InspectzServer interface.
+func (s *Server) KVFlowControllerV2(
+	ctx context.Context, request *kvflowinspectpb.ControllerRequest,
+) (*kvflowinspectpb.ControllerResponse, error) {
+	return kvFlowController(ctx, request, s.kvflowControllerV2)
+}
+
+// KVFlowHandlesV2 implements the InspectzServer interface.
+func (s *Server) KVFlowHandlesV2(
+	ctx context.Context, request *kvflowinspectpb.HandlesRequest,
+) (*kvflowinspectpb.HandlesResponse, error) {
+	return kvFlowHandles(ctx, request, s.handlesV2)
+}
+
+// StoreLivenessSupportFrom implements the InspectzServer interface.
+func (s *Server) StoreLivenessSupportFrom(
+	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
+) (*slpb.InspectStoreLivenessResponse, error) {
+	resp := &slpb.InspectStoreLivenessResponse{}
+	support, err := s.storeLiveness.InspectAllSupportFrom()
+	resp.SupportStatesPerStore = support
+	return resp, err
+}
+
+// StoreLivenessSupportFor implements the InspectzServer interface.
+func (s *Server) StoreLivenessSupportFor(
+	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
+) (*slpb.InspectStoreLivenessResponse, error) {
+	resp := &slpb.InspectStoreLivenessResponse{}
+	support, err := s.storeLiveness.InspectAllSupportFor()
+	resp.SupportStatesPerStore = support
+	return resp, err
 }
 
 // ServeHTTP serves various tools under the /debug endpoint.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
+}
+
+func kvFlowHandles(
+	ctx context.Context,
+	request *kvflowinspectpb.HandlesRequest,
+	handles kvflowcontrol.InspectHandles,
+) (*kvflowinspectpb.HandlesResponse, error) {
+	resp := &kvflowinspectpb.HandlesResponse{}
+	if len(request.RangeIDs) == 0 {
+		request.RangeIDs = handles.Inspect()
+	}
+	for _, rangeID := range request.RangeIDs {
+		handle, found := handles.LookupInspect(rangeID)
+		if !found {
+			continue // nothing to do
+		}
+		resp.Handles = append(resp.Handles, handle)
+	}
+	return resp, nil
+}
+
+func kvFlowController(
+	ctx context.Context,
+	request *kvflowinspectpb.ControllerRequest,
+	controller kvflowcontrol.InspectController,
+) (*kvflowinspectpb.ControllerResponse, error) {
+	return &kvflowinspectpb.ControllerResponse{
+		Streams: controller.Inspect(ctx),
+	}, nil
 }
 
 func respond(ctx context.Context, w http.ResponseWriter, code int, payload interface{}) {

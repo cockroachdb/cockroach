@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package row
 
 import (
+	"bytes"
 	"context"
 	"sort"
 
@@ -21,20 +17,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -65,14 +67,28 @@ var maxRowSizeErr = settings.RegisterByteSizeSetting(
 	settings.WithPublic,
 )
 
+// Per-index data for writing tombstones to enforce a uniqueness constraint.
+type uniqueWithTombstoneEntry struct {
+	// implicitPartitionKeyValues contains the potential values for the
+	// partitioning column.
+	implicitPartitionKeyVals []tree.Datum
+
+	// tmpTombstones contains the tombstones generated for this index by the last
+	// call to encodeTombstonesForIndex.
+	tmpTombstones [][]byte
+}
+
 // RowHelper has the common methods for table row manipulations.
 type RowHelper struct {
 	Codec keys.SQLCodec
 
 	TableDesc catalog.TableDescriptor
 	// Secondary indexes.
-	Indexes      []catalog.Index
-	indexEntries map[catalog.Index][]rowenc.IndexEntry
+	Indexes []catalog.Index
+
+	// Unique indexes that can be enforced with tombstones.
+	UniqueWithTombstoneIndexes intsets.Fast
+	indexEntries               map[catalog.Index][]rowenc.IndexEntry
 
 	// Computed during initialization for pretty-printing.
 	primIndexValDirs []encoding.Direction
@@ -84,6 +100,11 @@ type RowHelper struct {
 	primaryIndexValueCols catalog.TableColSet
 	sortedColumnFamilies  map[descpb.FamilyID][]descpb.ColumnID
 
+	// Used to build tmpTombstones for non-Serializable uniqueness checks.
+	index2UniqueWithTombstoneEntry map[catalog.Index]*uniqueWithTombstoneEntry
+	// Used to hold the row being written while writing tombstones.
+	tmpRow []tree.Datum
+
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
 	internal                     bool
@@ -94,16 +115,22 @@ func NewRowHelper(
 	codec keys.SQLCodec,
 	desc catalog.TableDescriptor,
 	indexes []catalog.Index,
+	uniqueWithTombstoneIndexes []catalog.Index,
 	sv *settings.Values,
 	internal bool,
 	metrics *rowinfra.Metrics,
 ) RowHelper {
+	var uniqueWithTombstoneIndexesSet intsets.Fast
+	for _, index := range uniqueWithTombstoneIndexes {
+		uniqueWithTombstoneIndexesSet.Add(index.Ordinal())
+	}
 	rh := RowHelper{
-		Codec:     codec,
-		TableDesc: desc,
-		Indexes:   indexes,
-		internal:  internal,
-		metrics:   metrics,
+		Codec:                      codec,
+		TableDesc:                  desc,
+		Indexes:                    indexes,
+		UniqueWithTombstoneIndexes: uniqueWithTombstoneIndexesSet,
+		internal:                   internal,
+		metrics:                    metrics,
 	}
 
 	// Pre-compute the encoding directions of the index key values for
@@ -127,7 +154,7 @@ func NewRowHelper(
 // include empty secondary index k/v pairs.
 func (rh *RowHelper) encodeIndexes(
 	ctx context.Context,
-	colIDtoRowIndex catalog.TableColMap,
+	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
@@ -136,11 +163,11 @@ func (rh *RowHelper) encodeIndexes(
 	secondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry,
 	err error,
 ) {
-	primaryIndexKey, err = rh.encodePrimaryIndex(colIDtoRowIndex, values)
+	primaryIndexKey, err = rh.encodePrimaryIndexKey(colIDtoRowPosition, values)
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(ctx, colIDtoRowIndex, values, ignoreIndexes, includeEmpty)
+	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(ctx, colIDtoRowPosition, values, ignoreIndexes, includeEmpty)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -153,21 +180,111 @@ func (rh *RowHelper) Init() {
 	)
 }
 
-// encodePrimaryIndex encodes the primary index key.
-func (rh *RowHelper) encodePrimaryIndex(
-	colIDtoRowIndex catalog.TableColMap, values []tree.Datum,
+// encodePrimaryIndexKey encodes the primary index key.
+func (rh *RowHelper) encodePrimaryIndexKey(
+	colIDtoRowPosition catalog.TableColMap, values []tree.Datum,
 ) (primaryIndexKey []byte, err error) {
 	if rh.PrimaryIndexKeyPrefix == nil {
 		rh.Init()
 	}
 	idx := rh.TableDesc.GetPrimaryIndex()
 	primaryIndexKey, containsNull, err := rowenc.EncodeIndexKey(
-		rh.TableDesc, idx, colIDtoRowIndex, values, rh.PrimaryIndexKeyPrefix,
+		rh.TableDesc, idx, colIDtoRowPosition, values, rh.PrimaryIndexKeyPrefix,
 	)
 	if containsNull {
-		return nil, rowenc.MakeNullPKError(rh.TableDesc, idx, colIDtoRowIndex, values)
+		return nil, rowenc.MakeNullPKError(rh.TableDesc, idx, colIDtoRowPosition, values)
 	}
 	return primaryIndexKey, err
+}
+
+// initRowTmp creates a copy of the row that we can modify while trying to be
+// smart about allocations.
+func (rh *RowHelper) initRowTmp(values []tree.Datum) []tree.Datum {
+	if rh.tmpRow == nil {
+		rh.tmpRow = make([]tree.Datum, len(values))
+	}
+	copy(rh.tmpRow, values)
+	return rh.tmpRow
+}
+
+// getTombstoneTmpForIndex initializes and gets for the index provided.
+func (rh *RowHelper) getTombstoneTmpForIndex(
+	index catalog.Index, partitionColValue *tree.DEnum,
+) *uniqueWithTombstoneEntry {
+	if rh.index2UniqueWithTombstoneEntry == nil {
+		rh.index2UniqueWithTombstoneEntry = make(map[catalog.Index]*uniqueWithTombstoneEntry, len(rh.TableDesc.WritableNonPrimaryIndexes())+1)
+	}
+	tombstoneTmp, ok := rh.index2UniqueWithTombstoneEntry[index]
+	if !ok {
+		implicitKeys := tree.MakeAllDEnumsInType(partitionColValue.ResolvedType())
+		tombstoneTmp = &uniqueWithTombstoneEntry{implicitPartitionKeyVals: implicitKeys, tmpTombstones: make([][]byte, len(implicitKeys)-1)}
+		rh.index2UniqueWithTombstoneEntry[index] = tombstoneTmp
+	}
+	tombstoneTmp.tmpTombstones = tombstoneTmp.tmpTombstones[:0]
+	return tombstoneTmp
+}
+
+// encodeTombstonesForIndex creates a set of keys that can be used to write
+// tombstones for the provided index. These values remain valid for the index
+// until this function is called again for that index.
+func (rh *RowHelper) encodeTombstonesForIndex(
+	ctx context.Context,
+	index catalog.Index,
+	colIDtoRowPosition catalog.TableColMap,
+	values []tree.Datum,
+) ([][]byte, error) {
+	if !rh.UniqueWithTombstoneIndexes.Contains(index.Ordinal()) {
+		return nil, nil
+	}
+
+	if !index.IsUnique() {
+		return nil, errors.AssertionFailedf("Expected index %s to be unique", index.GetName())
+	}
+	if index.GetType() != descpb.IndexDescriptor_FORWARD {
+		return nil, errors.AssertionFailedf("Expected index %s to be a forward index", index.GetName())
+	}
+
+	// Get the position and value of the partition column in this index.
+	partitionColPosition, ok := colIDtoRowPosition.Get(index.GetKeyColumnID(0 /* columnOrdinal */))
+	if !ok {
+		return nil, nil
+	}
+	partitionColValue, ok := values[partitionColPosition].(*tree.DEnum)
+	if !ok {
+		return nil, errors.AssertionFailedf("Expected partition column value to be enum, but got %T", values[partitionColPosition])
+	}
+
+	// Intentionally shadowing values here to avoid accidentally overwriting the tuple
+	values = rh.initRowTmp(values)
+	tombstoneTmpForIndex := rh.getTombstoneTmpForIndex(index, partitionColValue)
+
+	for _, partVal := range tombstoneTmpForIndex.implicitPartitionKeyVals {
+		if bytes.Equal(partitionColValue.PhysicalRep, partVal.(*tree.DEnum).PhysicalRep) {
+			continue
+		}
+		values[partitionColPosition] = partVal
+
+		if index.Primary() {
+			key, err := rh.encodePrimaryIndexKey(colIDtoRowPosition, values)
+			if err != nil {
+				return nil, err
+			}
+			tombstoneTmpForIndex.tmpTombstones = append(tombstoneTmpForIndex.tmpTombstones, key)
+		} else {
+			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values)
+			if err != nil {
+				return nil, err
+			}
+			// If this key contains a NULL value, it can't violate a NULL constraint.
+			if containsNull {
+				tombstoneTmpForIndex.tmpTombstones = tombstoneTmpForIndex.tmpTombstones[:0]
+				break
+			}
+			tombstoneTmpForIndex.tmpTombstones = append(tombstoneTmpForIndex.tmpTombstones, keys...)
+		}
+	}
+
+	return tombstoneTmpForIndex.tmpTombstones, nil
 }
 
 // encodeSecondaryIndexes encodes the secondary index keys based on a row's
@@ -183,7 +300,7 @@ func (rh *RowHelper) encodePrimaryIndex(
 // k/v pairs.
 func (rh *RowHelper) encodeSecondaryIndexes(
 	ctx context.Context,
-	colIDtoRowIndex catalog.TableColMap,
+	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
@@ -200,7 +317,7 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	for i := range rh.Indexes {
 		index := rh.Indexes[i]
 		if !ignoreIndexes.Contains(int(index.GetID())) {
-			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowIndex, values, includeEmpty)
+			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values, includeEmpty)
 			if err != nil {
 				return nil, err
 			}
@@ -211,28 +328,55 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	return rh.indexEntries, nil
 }
 
+// encodePrimaryIndexValuesToBuf encodes the given values, writing
+// into the given buffer.
+func (rh *RowHelper) encodePrimaryIndexValuesToBuf(
+	vals []tree.Datum,
+	valColIDMapping catalog.TableColMap,
+	sortedColumnIDs []descpb.ColumnID,
+	fetchedCols []catalog.Column,
+	buf []byte,
+) ([]byte, error) {
+	var lastColID descpb.ColumnID
+	for _, colID := range sortedColumnIDs {
+		idx, ok := valColIDMapping.Get(colID)
+		if !ok || vals[idx] == tree.DNull {
+			// Column not being updated or inserted.
+			continue
+		}
+
+		if skip, _ := rh.SkipColumnNotInPrimaryIndexValue(colID, vals[idx]); skip {
+			continue
+		}
+
+		col := fetchedCols[idx]
+		if lastColID > col.GetID() {
+			return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
+		}
+		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
+		lastColID = col.GetID()
+		var err error
+		buf, err = valueside.Encode(buf, colIDDelta, vals[idx], nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return buf, nil
+}
+
 // SkipColumnNotInPrimaryIndexValue returns true if the value at column colID
 // does not need to be encoded, either because it is already part of the primary
 // key, or because it is not part of the primary index altogether. Composite
-// datums are considered too, so a composite datum in a PK will return false.
+// datums are considered too, so a composite datum in a PK will return false
+// (but will return true for couldBeComposite).
 func (rh *RowHelper) SkipColumnNotInPrimaryIndexValue(
 	colID descpb.ColumnID, value tree.Datum,
-) bool {
+) (skip, couldBeComposite bool) {
 	if rh.primaryIndexKeyCols.Empty() {
 		rh.primaryIndexKeyCols = rh.TableDesc.GetPrimaryIndex().CollectKeyColumnIDs()
 		rh.primaryIndexValueCols = rh.TableDesc.GetPrimaryIndex().CollectPrimaryStoredColumnIDs()
 	}
-	if !rh.primaryIndexKeyCols.Contains(colID) {
-		return !rh.primaryIndexValueCols.Contains(colID)
-	}
-	if cdatum, ok := value.(tree.CompositeDatum); ok {
-		// Composite columns are encoded in both the key and the value.
-		return !cdatum.IsComposite()
-	}
-	// Skip primary key columns as their values are encoded in the key of
-	// each family. Family 0 is guaranteed to exist and acts as a
-	// sentinel.
-	return true
+	return rowenc.SkipColumnNotInPrimaryIndexValue(colID, value, rh.primaryIndexKeyCols, rh.primaryIndexValueCols)
 }
 
 func (rh *RowHelper) SortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnID, bool) {
@@ -324,4 +468,58 @@ func (rh *RowHelper) deleteIndexEntry(
 		batch.Del(entry.Key)
 	}
 	return nil
+}
+
+// OriginTimetampCPutHelper is used by callers of Inserter, Updater,
+// and Deleter when the caller wants updates to the primary key to be
+// constructed using ConditionalPutRequests with the OriginTimestamp
+// option set.
+type OriginTimestampCPutHelper struct {
+	OriginTimestamp hlc.Timestamp
+	ShouldWinTie    bool
+	// PreviousWasDeleted is used to indicate that the expected
+	// value is non-existent. This is helpful in Deleter to
+	// distinguish between a delete of a value that had no columns
+	// in the value vs a delete of a non-existent value.
+	PreviousWasDeleted bool
+}
+
+func (oh *OriginTimestampCPutHelper) IsSet() bool {
+	return oh != nil && oh.OriginTimestamp.IsSet()
+}
+
+func (oh *OriginTimestampCPutHelper) CPutFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	value *roachpb.Value,
+	expVal []byte,
+	traceKV bool,
+) {
+	if traceKV {
+		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> %s @ %s", *key, value.PrettyPrint(), oh.OriginTimestamp)
+	}
+	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
+}
+
+func (oh *OriginTimestampCPutHelper) DelWithCPut(
+	ctx context.Context, b Putter, key *roachpb.Key, expVal []byte, traceKV bool,
+) {
+	if traceKV {
+		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> nil (delete) @ %s", key, oh.OriginTimestamp)
+	}
+	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
+}
+
+func FetchSpecRequiresRawMVCCValues(spec fetchpb.IndexFetchSpec) bool {
+	for idx := range spec.FetchedColumns {
+		colID := spec.FetchedColumns[idx].ColumnID
+		if colinfo.IsColIDSystemColumn(colID) {
+			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
+			case catpb.SystemColumnKind_ORIGINID, catpb.SystemColumnKind_ORIGINTIMESTAMP:
+				return true
+			}
+		}
+	}
+	return false
 }

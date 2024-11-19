@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -350,6 +347,8 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		batch, _ := req.(*sinkBatch)
 		defer s.metrics.recordSinkIOInflightChange(int64(-batch.numMessages))
 		s.metrics.recordSinkIOInflightChange(int64(batch.numMessages))
+		defer s.metrics.timers().DownstreamClientSend.Start()()
+
 		return s.client.Flush(ctx, batch.payload)
 	}
 	ioEmitter := NewParallelIO(ctx, s.retryOpts, s.ioWorkers, ioHandler, s.metrics, s.settings)

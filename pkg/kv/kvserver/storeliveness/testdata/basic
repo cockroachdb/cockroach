@@ -6,8 +6,9 @@
 # - withdrawing support.
 # -------------------------------------------------------------
 
-add-store node-id=2 store-id=2
+support-from node-id=2 store-id=2
 ----
+epoch: 0, expiration: 0,0
 
 send-heartbeats now=100 liveness-interval=10s
 ----
@@ -23,18 +24,18 @@ responses:
 
 support-from node-id=2 store-id=2
 ----
-requester state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
+epoch: 1, expiration: 110.000000000,0
 
 support-for node-id=2 store-id=2
 ----
-supporter state: {Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:200.000000000,0}
+epoch: 2, support provided: true
 
 withdraw-support now=201
 ----
 
 support-for node-id=2 store-id=2
 ----
-supporter state: {Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:0,0}
+epoch: 3, support provided: false
 
 debug-requester-state
 ----
@@ -49,3 +50,10 @@ meta:
 {MaxWithdrawn:201.000000000,0}
 support for:
 {Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:0,0}
+
+debug-metrics
+----
+HeartbeatSuccess: 1, HeartbeatFailure: 0
+MessageHandleSuccess: 2, MessageHandleFailure: 0
+SupportWithdrawSuccess: 1, SupportWithdrawFailure: 0
+SupportFromStores: 1, SupportForStores: 1

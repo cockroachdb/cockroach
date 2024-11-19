@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package settingswatcher_test
 
@@ -601,15 +596,15 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	tombstone := setting1KV
 	tombstone.Value.RawBytes = nil
 
-	require.NoError(t, stream.Send(newRangeFeedEvent(setting1KV, ts1)))
+	require.NoError(t, stream.SendUnbuffered(newRangeFeedEvent(setting1KV, ts1)))
 	settingIsSoon(t, newSettingValue)
 
-	require.NoError(t, stream.Send(newRangeFeedEvent(tombstone, ts0)))
+	require.NoError(t, stream.SendUnbuffered(newRangeFeedEvent(tombstone, ts0)))
 	settingStillHasValueAfterAShortWhile(t, newSettingValue)
 
-	require.NoError(t, stream.Send(newRangeFeedEvent(tombstone, ts2)))
+	require.NoError(t, stream.SendUnbuffered(newRangeFeedEvent(tombstone, ts2)))
 	settingIsSoon(t, defaultFakeSettingValue)
-	require.NoError(t, stream.Send(newRangeFeedEvent(setting1KV, ts1)))
+	require.NoError(t, stream.SendUnbuffered(newRangeFeedEvent(setting1KV, ts1)))
 	settingStillHasValueAfterAShortWhile(t, defaultFakeSettingValue)
 }
 

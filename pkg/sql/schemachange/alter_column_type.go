@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // schemachange contains utilities describing type conversions.
 package schemachange
@@ -81,7 +76,7 @@ var classifiers = map[types.Family]map[types.Family]classifier{
 	},
 	types.DecimalFamily: {
 		// Decimals are always encoded as an apd.Decimal
-		types.DecimalFamily: classifierHardestOf(classifierDecimalPrecision, classifierWidth),
+		types.DecimalFamily: classifierHardestOf(classifierDecimalPrecision, classifierDecimalScale),
 	},
 	types.FloatFamily: {
 		// Floats are always encoded as 64-bit values on disk and we don't
@@ -188,6 +183,23 @@ func classifierWidth(oldType *types.T, newType *types.T) ColumnConversionKind {
 		return ColumnConversionTrivial
 	default:
 		return ColumnConversionValidate
+	}
+}
+
+// classifierDecimalScale handles when the scale of the decimal changes.
+func classifierDecimalScale(oldType *types.T, newType *types.T) ColumnConversionKind {
+	// Changing the scale of decimals differs from other types because the SQL
+	// standard allows for some data loss. For example, if a column is defined as
+	// DECIMAL(5,3) with a value of 12.345, changing the column type to DECIMAL(5,2)
+	// would round the value to two decimal places, resulting in 12.35. To achieve
+	// this behavior, when decreasing the scale, we need to rewrite the entire column.
+	switch {
+	case oldType.Width() == newType.Width():
+		return ColumnConversionTrivial
+	case newType.Width() < oldType.Width():
+		return ColumnConversionGeneral
+	default:
+		return ColumnConversionTrivial
 	}
 }
 

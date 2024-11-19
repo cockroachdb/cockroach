@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package batcheval
 
@@ -72,6 +67,32 @@ func RequestLease(
 			Message:   err.Error(),
 		}
 		return newFailedLeaseTrigger(false /* isTransfer */), rErr
+	}
+
+	// Lease type switches need extra care to avoid expiration regressions.
+	if args.RevokePrevAndForwardExpiration {
+		// Stop using the current lease. All future calls to leaseStatus on this
+		// node with the current lease will now return a PROSCRIBED status. This
+		// stops the advancement of the expiration of the previous lease.
+		cArgs.EvalCtx.RevokeLease(ctx, prevLease.Sequence)
+
+		// After we revoke the previous lease, forward the new lease's minimum
+		// expiration beyond the maximum expiration reached by the now-revoked
+		// lease.
+		minExp := cArgs.EvalCtx.Clock().Now().Add(int64(cArgs.EvalCtx.GetRangeLeaseDuration()), 0)
+		if newLease.Type() == roachpb.LeaseExpiration {
+			// NOTE: the MinExpiration field is not used by expiration-based leases.
+			// They use the Expiration field to store the expiration instead.
+			newLease.Expiration.Forward(minExp)
+		} else {
+			newLease.MinExpiration.Forward(minExp)
+		}
+
+		// Forwarding the lease's (minimum) expiration is safe because we know that
+		// the lease's sequence number has been incremented. Assert this.
+		if newLease.Sequence <= prevLease.Sequence {
+			log.Fatalf(ctx, "lease sequence not incremented: prev=%s, new=%s", prevLease, newLease)
+		}
 	}
 
 	log.VEventf(ctx, 2, "lease request: prev lease: %+v, new lease: %+v", prevLease, newLease)

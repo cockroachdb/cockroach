@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package config
 
@@ -58,6 +53,10 @@ var (
 
 	// EmailDomain used to form fully qualified usernames for gcloud and slack.
 	EmailDomain string
+
+	// UseSharedUser is used to determine if config.SharedUser should be used for SSH.
+	// By default, this is true, otherwise config.OSUser will be used.
+	UseSharedUser = true
 
 	// DNSRequiredProviders is the list of cloud providers that must be active for
 	// DNS records to be synced when roachprod syncs its state.
@@ -197,6 +196,7 @@ var DefaultPubKeyNames = []string{
 	"id_ed25519",
 	"id_ed25519_sk",
 	"id_dsa",
+	"google_compute_engine",
 }
 
 // SSHPublicKeyPath returns the path to the default public key expected by

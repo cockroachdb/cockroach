@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -48,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -459,9 +457,10 @@ WHERE start_pretty LIKE '%s' ORDER BY start_key ASC`, startPretty)).Scan(&startK
 	lhServer := tc.Server(int(l.Replica.NodeID) - 1)
 	s, repl := getFirstStoreReplica(t, lhServer, startKey)
 	testutils.SucceedsSoon(t, func() error {
-		trace, _, err := s.Enqueue(ctx, "mvccGC", repl, skipShouldQueue, false /* async */)
+		traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, s.GetStoreConfig().Tracer(), "trace-enqueue")
+		_, err := s.Enqueue(traceCtx, "mvccGC", repl, skipShouldQueue, false /* async */)
 		require.NoError(t, err)
-		return checkGCTrace(trace.String())
+		return checkGCTrace(rec().String())
 	})
 }
 
@@ -577,4 +576,17 @@ func requireRecoveryEvent(
 		require.Equal(t, expected, actual)
 		return nil
 	})
+}
+
+// getFullBackupPaths finds all full backups in the given URI and returns their paths using SHOW BACKUPS IN
+func getFullBackupPaths(t *testing.T, sqlDB *sqlutils.SQLRunner, uri string) []string {
+	t.Helper()
+	var fullBackupPaths []string
+	rows := sqlDB.Query(t, `SELECT path FROM [SHOW BACKUPS IN $1]`, uri)
+	for rows.Next() {
+		var path string
+		require.NoError(t, rows.Scan(&path))
+		fullBackupPaths = append(fullBackupPaths, path)
+	}
+	return fullBackupPaths
 }

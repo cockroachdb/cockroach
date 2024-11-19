@@ -391,12 +391,12 @@ ALTER TABLE t DROP COLUMN IF EXISTS e
 
 # Negative test to assert that NOTICEs are NOT emitted if there are no indexes
 # being dropped.
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 statement notice ^$
 ALTER TABLE t DROP COLUMN IF EXISTS e CASCADE
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 statement ok
 ALTER TABLE t DROP COLUMN IF EXISTS e CASCADE
 
@@ -613,7 +613,7 @@ statement ok
 ALTER TABLE add_default ADD COLUMN d TIMESTAMP DEFAULT transaction_timestamp()
 
 query II rowsort
-SELECT a,b FROM add_default WHERE d > c AND d - c < interval '10s'
+SELECT a,b FROM add_default WHERE d > c AND d - c < interval '20s'
 ----
 2 42
 3 10
@@ -624,7 +624,7 @@ statement ok
 ALTER TABLE add_default ADD COLUMN e TIMESTAMP DEFAULT statement_timestamp()
 
 query II rowsort
-SELECT a,b FROM add_default WHERE e > d AND e - d < interval '10s'
+SELECT a,b FROM add_default WHERE e > d AND e - d < interval '20s'
 ----
 2 42
 3 10
@@ -1584,19 +1584,19 @@ statement error column "g" does not exist
 ALTER TABLE unique_without_index ADD CONSTRAINT bad_partial_unique UNIQUE WITHOUT INDEX (f) WHERE g > 0
 
 # The unique constraint prevents new duplicate values.
-skipif config local-read-committed 110873
+skipif config #110873 weak-iso-level-configs
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "my_unique_f"\nDETAIL: Key \(f\)=\(1\) already exists\.
 INSERT INTO unique_without_index (f) VALUES (1), (1)
 
 # There is no unique constraint on e, yet, so this insert succeeds.
-skipif config local-read-committed 110873
+skipif config #110873 weak-iso-level-configs
 statement ok
 INSERT INTO unique_without_index (e, f) VALUES (1, 1), (1, 2)
 
 # But trying to add a unique constraint now fails.
 # Note that we omit the constraint name in the expected error message because if the declarative schema changer is used,
 # the constraint name, at the time of validation failure, is still a place-holder name.
-skipif config local-read-committed 110873
+skipif config #110873 weak-iso-level-configs
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX (e)
 
@@ -1606,7 +1606,7 @@ ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e2 UNIQUE WITHOUT INDEX (e) NOT VALID
 
 # Trying to validate one of the constraints will fail.
-skipif config local-read-committed 110873
+skipif config #110873 weak-iso-level-configs
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
@@ -1618,7 +1618,7 @@ statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # All these constraints are already valid, so validation should succeed.
-skipif config local-read-committed 110873
+skipif config #110873 weak-iso-level-configs
 statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_a_b;
@@ -1955,8 +1955,8 @@ subtest if_table_exists_already
 statement ok
 CREATE TABLE new_table()
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 CREATE TABLE IF NOT EXISTS new_table();
 ----
@@ -2359,8 +2359,8 @@ ALTER TABLE storage_param_table SET (fillfactor=true)
 statement error unimplemented: storage parameter "toast_tuple_target"
 ALTER TABLE storage_param_table SET (toast_tuple_target=100)
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE storage_param_table SET (fillfactor=99.9, autovacuum_enabled = off)
 ----
@@ -3965,5 +3965,122 @@ create table t_124546(a int);
 # Regression Test for https://github.com/cockroachdb/cockroach/issues/124546
 statement error pgcode 42601 variable sub-expressions are not allowed in EXPRESSION INDEX ELEMENT
 ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR READ ONLY ) ) DESC ) STORING ( ident , ident );
+
+subtest end
+
+subtest alter_table_add_column_serial
+
+statement ok
+create table roach (id int);
+insert into roach DEFAULT VALUES;
+insert into roach DEFAULT VALUES;
+SET serial_normalization = rowid
+
+statement ok
+alter table roach add column serial_id SERIAL;
+
+query TTBTTTB colnames,rowsort
+show columns from roach;
+----
+column_name  data_type  is_nullable  column_default  generation_expression  indices       is_hidden
+id           INT8       true         NULL            ·                      {roach_pkey}  false
+rowid        INT8       false        unique_rowid()  ·                      {roach_pkey}  true
+serial_id    INT8       false        unique_rowid()  ·                      {roach_pkey}  false
+
+subtest end
+
+subtest unimplemented_for_non_rowid_in_DSC
+
+statement ok
+SET serial_normalization = sql_sequence
+
+statement ok
+SET use_declarative_schema_changer = unsafe_always
+
+statement error pq: \*tree.ColumnTableDef not implemented in the new schema changer: contains serial data type in unsupported mode
+alter table roach add column serial_id2 SERIAL
+
+subtest end
+
+statement ok
+set use_declarative_schema_changer = on
+
+# Tests for #131948 where we incorrectly backfilled empty column
+# families for composite datums.
+subtest composite_type_131948
+
+statement ok
+CREATE TABLE t1_with_composite(i int, j STRING COLLATE de_DE NOT NULL, family(i), family(j));
+INSERT INTO t1_with_composite VALUES(1, 'a');
+INSERT INTO t1_with_composite VALUES(2, 'b');
+
+statement ok
+ALTER TABLE t1_with_composite DROP COLUMN j;
+
+query I
+SELECT * FROM t1_with_composite ORDER BY i ASC;
+----
+1
+2
+
+subtest end
+
+subtest sanity_test_pk_with_composite_columns
+
+# Sanity testing for single table column families with composite types.
+statement ok
+CREATE TABLE tbl_with_dft_column_family(f float NOT NULL, d decimal NOT NULL, j json NOT NULL, s STRING COLLATE de_DE NOT NULL, family(f), family(d), family(j), family(s))
+
+statement ok
+INSERT INTO tbl_with_dft_column_family VALUES(1.0, 1.0, '{"cat": "mouse"}', 'abc');
+INSERT INTO tbl_with_dft_column_family VALUES(2.0, 2.0, '{"lion": "gazelle"}', 'def');
+INSERT INTO tbl_with_dft_column_family VALUES(3.0, 3.0, '{"wolf": "sheep"}', 'ghi');
+
+query FFTT
+SELECT f, d, j, s FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+statement ok
+ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (f);
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+statement ok
+ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (d);
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+statement ok
+ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (j);
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
+
+statement ok
+ALTER TABLE tbl_with_dft_column_family ALTER PRIMARY KEY USING COLUMNS (s);
+
+query FFTT
+SELECT * FROM tbl_with_dft_column_family ORDER BY 1
+----
+1  1.0  {"cat": "mouse"}     abc
+2  2.0  {"lion": "gazelle"}  def
+3  3.0  {"wolf": "sheep"}    ghi
 
 subtest end

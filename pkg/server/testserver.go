@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -75,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"google.golang.org/grpc"
 )
@@ -305,8 +301,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.Knobs.AdmissionControlOptions == nil {
 		cfg.TestingKnobs.AdmissionControlOptions = &admission.Options{}
 	}
-
-	cfg.ObsServiceAddr = params.ObsServiceAddr
 
 	return cfg
 }
@@ -549,6 +543,14 @@ func (ts *testServer) RaftTransport() interface{} {
 	return nil
 }
 
+// StoreLivenessTransport is part of the serverutils.StorageLayerInterface.
+func (ts *testServer) StoreLivenessTransport() interface{} {
+	if ts != nil {
+		return ts.storelivenessTransport
+	}
+	return nil
+}
+
 // AmbientCtx implements serverutils.ApplicationLayerInterface. This
 // retrieves the ambient context for this server. This is intended for
 // exclusive use by test code.
@@ -625,6 +627,7 @@ func (ts *testServer) startDefaultTestTenant(
 
 	if ts.params.Knobs.Server != nil {
 		params.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+		params.TestingKnobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
 	}
 	return ts.StartTenant(ctx, params)
 }
@@ -641,6 +644,7 @@ func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcess
 	args.Knobs.Server = &TestingKnobs{}
 	if ts.params.Knobs.Server != nil {
 		args.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs = ts.params.Knobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
+		args.Knobs.LicenseTestingKnobs = ts.params.Knobs.LicenseTestingKnobs
 	}
 	return args
 }
@@ -1291,7 +1295,7 @@ func (ts *testServer) StartSharedProcessTenant(
 	}
 	// Helper function to execute SQL statements.
 	ie := ts.InternalExecutor().(*sql.InternalExecutor)
-	execSQL := func(opName, stmt string, qargs ...interface{}) error {
+	execSQL := func(opName redact.RedactableString, stmt string, qargs ...interface{}) error {
 		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
 		return err
 	}
@@ -1644,7 +1648,11 @@ func (ts *testServer) StartTenant(
 	if stopper == nil {
 		// We don't share the stopper with the server because we want their Tracers
 		// to be different, to simulate them being different processes.
-		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
+		tr := params.Tracer
+		if tr == nil {
+			tr = tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
+		}
+
 		stopper = stop.NewStopper(stop.WithTracer(tr))
 		// The server's stopper stops the tenant, for convenience.
 		// Use main server quiesce as a signal to stop tenants stopper. In the
@@ -1663,7 +1671,10 @@ func (ts *testServer) StartTenant(
 			return nil, err
 		}
 	} else if stopper.Tracer() == nil {
-		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
+		tr := params.Tracer
+		if tr == nil {
+			tr = tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
+		}
 		stopper.SetTracer(tr)
 	}
 

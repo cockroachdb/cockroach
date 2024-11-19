@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rpc
 
@@ -286,6 +281,16 @@ func (c *Context) SetLoopbackDialer(loopbackDialFn func(context.Context) (net.Co
 		return
 	}
 	c.loopbackDialFn = loopbackDialFn
+}
+
+// StoreLivenessGracePeriod computes the grace period after a store restarts before which it will
+// not withdraw support from other stores.
+func (c *Context) StoreLivenessWithdrawalGracePeriod() time.Duration {
+	// RPCHeartbeatInterval and RPCHeartbeatTimeout ensure the remote store
+	// probes the RPC connection to the local store. DialTimeout ensures the
+	// remote store has enough time to dial the local store, and NetworkTimeout
+	// ensures the remote store's heartbeat is received by the local store.
+	return c.RPCHeartbeatInterval + c.RPCHeartbeatTimeout + base.DialTimeout + base.NetworkTimeout
 }
 
 // ContextOptions are passed to NewContext to set up a new *Context.

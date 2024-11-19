@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 //
 // This file provides generic interfaces that allow tests to set up test tenants
 // without importing the server package (avoiding circular dependencies). This
@@ -641,6 +636,10 @@ type StorageLayerInterface interface {
 	// RaftTransport returns access to the raft transport.
 	// The return value is of type *kvserver.RaftTransport.
 	RaftTransport() interface{}
+
+	// StoreLivenessTransport provides access to the store liveness transport.
+	// The return value is of type *storeliveness.Transport.
+	StoreLivenessTransport() interface{}
 
 	// GetRangeLease returns information on the lease for the range
 	// containing key, and a timestamp taken from the node. The lease is

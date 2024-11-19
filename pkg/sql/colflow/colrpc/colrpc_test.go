@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colrpc
 
@@ -31,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -135,7 +131,7 @@ func TestOutboxInbox(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClockForTesting(nil)
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
+	_, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	require.NoError(t, err)
 
 	// Generate a random cancellation scenario.
@@ -490,7 +486,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClockForTesting(nil)
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
+	_, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	require.NoError(t, err)
 
 	rng, _ := randutil.NewTestRand()
@@ -578,7 +574,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
+	_, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx,
 		hlc.NewClockForTesting(nil), stopper, execinfra.StaticSQLInstanceID,
 	)
 	require.NoError(t, err)
@@ -773,7 +769,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
+	_, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx,
 		hlc.NewClockForTesting(nil), stopper, execinfra.StaticSQLInstanceID,
 	)
 	require.NoError(b, err)
@@ -848,11 +844,11 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
+	_, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx,
 		hlc.NewClockForTesting(nil), stopper, execinfra.StaticSQLInstanceID,
 	)
 	require.NoError(t, err)
-	dialer := &execinfrapb.MockDialer{Addr: addr}
+	dialer := &flowinfra.MockDialer{Addr: addr}
 	defer dialer.Close()
 
 	typs := []*types.T{types.Int}

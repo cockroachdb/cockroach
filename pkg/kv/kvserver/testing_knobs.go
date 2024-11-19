@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -23,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -49,6 +45,7 @@ type StoreTestingKnobs struct {
 	AllocatorKnobs          *allocator.TestingKnobs
 	GossipTestingKnobs      StoreGossipTestingKnobs
 	ReplicaPlannerKnobs     plan.ReplicaPlannerTestingKnobs
+	StoreLivenessKnobs      *storeliveness.TestingKnobs
 
 	// TestingRequestFilter is called before evaluating each request on a
 	// replica. The filter is run before the request acquires latches, so
@@ -181,6 +178,9 @@ type StoreTestingKnobs struct {
 	DisableReplicaGCQueue bool
 	// DisableReplicateQueue disables the replication queue.
 	DisableReplicateQueue bool
+	// DisableStoreRebalancer turns off the store rebalancer which moves replicas
+	// and leases.
+	DisableStoreRebalancer bool
 	// DisableLoadBasedSplitting turns off LBS so no splits happen because of load.
 	DisableLoadBasedSplitting bool
 	// LoadBasedSplittingOverrideKey returns a key which should be used for load
@@ -281,7 +281,7 @@ type StoreTestingKnobs struct {
 	// RefreshReasonTicksPeriod overrides the default period over which
 	// pending commands are refreshed. The period is specified as a multiple
 	// of Raft group ticks.
-	RefreshReasonTicksPeriod int
+	RefreshReasonTicksPeriod int64
 	// DisableProcessRaft disables the process raft loop.
 	DisableProcessRaft func(roachpb.StoreID) bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
@@ -529,7 +529,7 @@ type StoreTestingKnobs struct {
 	// rangeID should ignore the queue being disabled, and be processed anyway.
 	BaseQueueDisabledBypassFilter func(rangeID roachpb.RangeID) bool
 
-	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndex.
+	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndexRaftMuLocked.
 	// If nil is returned, reproposal will be attempted.
 	InjectReproposalError func(p *ProposalData) error
 
@@ -540,6 +540,16 @@ type StoreTestingKnobs struct {
 	// FlowControlTestingKnobs provide fine-grained control over the various
 	// kvflowcontrol components for testing.
 	FlowControlTestingKnobs *kvflowcontrol.TestingKnobs
+
+	// RaftReportUnreachableBypass is called when a replica reports that another
+	// replica is unreachable. If the bypass function is non-nil and returns
+	// true, the report is ignored and ReportUnreachable is not called on the
+	// raft group for that replica.
+	RaftReportUnreachableBypass func(roachpb.ReplicaID) bool
+
+	// DisableUpdateLastUpdateTimesMapOnRaftGroupStep disables updating the
+	// lastUpdateTimes map when a raft group is stepped.
+	DisableUpdateLastUpdateTimesMapOnRaftGroupStep bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

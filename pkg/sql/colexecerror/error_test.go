@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colexecerror_test
 
@@ -90,6 +85,40 @@ func TestNonCatchablePanicIsNotCaught(t *testing.T) {
 			colexecerror.NonCatchablePanic("should panic")
 		}))
 	})
+}
+
+type testInterface interface {
+	foo()
+}
+
+type testImpl1 struct{}
+
+var _ testInterface = &testImpl1{}
+
+func (t testImpl1) foo() {}
+
+type testImpl2 struct{}
+
+var _ testInterface = &testImpl2{}
+
+func (t testImpl2) foo() {}
+
+// TestRuntimePanicIsCaught verifies that if a runtime panic occurs in the
+// safe-to-catch package (which this test package is), then it is converted into
+// an internal error (#133167).
+func TestRuntimePanicIsCaught(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Use the release-build panic-catching behavior instead of the
+	// crdb_test-build behavior.
+	defer colexecerror.ProductionBehaviorForTests()()
+
+	require.Error(t, colexecerror.CatchVectorizedRuntimeError(func() {
+		// Attempt an invalid interface conversion.
+		var o testInterface = &testImpl1{}
+		_ = o.(*testImpl2)
+	}))
 }
 
 // BenchmarkCatchVectorizedRuntimeError measures the time for

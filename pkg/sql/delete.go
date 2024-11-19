@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -156,18 +151,20 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// satisfy the predicate and therefore do not exist in the partial index.
 	// This set is passed as a argument to tableDeleter.row below.
 	var pm row.PartialIndexUpdateHelper
+	deleteCols := len(d.run.td.rd.FetchCols) + d.run.numPassthrough
 	if n := len(d.run.td.tableDesc().PartialIndexes()); n > 0 {
-		offset := len(d.run.td.rd.FetchCols) + d.run.numPassthrough
-		partialIndexDelVals := sourceVals[offset : offset+n]
+		partialIndexDelVals := sourceVals[deleteCols : deleteCols+n]
 
 		err := pm.Init(nil /*partialIndexPutVals */, partialIndexDelVals, d.run.td.tableDesc())
 		if err != nil {
 			return err
 		}
+	}
 
-		// Truncate sourceVals so that it no longer includes partial index
-		// predicate values.
-		sourceVals = sourceVals[:offset]
+	if len(sourceVals) > deleteCols {
+		// Remove extra columns for partial index predicate values and AFTER
+		// triggers.
+		sourceVals = sourceVals[:deleteCols]
 	}
 
 	// Queue the deletion in the KV batch.

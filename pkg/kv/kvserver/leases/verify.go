@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package leases
 
@@ -16,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -122,7 +118,7 @@ func verifyAcquisition(ctx context.Context, st Settings, i VerifyInput) error {
 	// the leader.
 	leader := roachpb.ReplicaID(i.RaftStatus.Lead)
 	leaderKnown := leader != roachpb.ReplicaID(raft.None)
-	iAmTheLeader := i.RaftStatus.RaftState == raft.StateLeader
+	iAmTheLeader := i.RaftStatus.RaftState == raftpb.StateLeader
 	if (leader == i.LocalReplicaID) != iAmTheLeader {
 		log.Fatalf(ctx, "inconsistent Raft state: %s", i.RaftStatus)
 	}
@@ -218,7 +214,7 @@ func verifyExtension(ctx context.Context, st Settings, i VerifyInput) error {
 	if i.PrevLeaseExpired {
 		return verifyAcquisition(ctx, st, i)
 	}
-	iAmTheLeader := i.RaftStatus.RaftState == raft.StateLeader
+	iAmTheLeader := i.RaftStatus.RaftState == raftpb.StateLeader
 	if !iAmTheLeader {
 		log.VEventf(ctx, 2, "proposing lease extension even though we're not the leader; we hold the current lease")
 	}

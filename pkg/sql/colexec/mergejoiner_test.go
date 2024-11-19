@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colexec
 
@@ -1753,7 +1748,7 @@ func TestFullOuterMergeJoinWithMaximumNumberOfGroups(t *testing.T) {
 	leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
 	a := colexecjoin.NewMergeJoinOp(
-		testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
+		ctx, testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 		colexecop.NewTestingSemaphore(mjFDLimit), descpb.FullOuterJoin,
 		leftSource, rightSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1825,7 +1820,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 				leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 				rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 				a := colexecjoin.NewMergeJoinOp(
-					testAllocator, execinfra.DefaultMemoryLimit,
+					ctx, testAllocator, execinfra.DefaultMemoryLimit,
 					queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 					leftSource, rightSource, typs, typs,
 					[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -1902,7 +1897,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, cols, nTuples)
 					a := colexecjoin.NewMergeJoinOp(
-						testAllocator, execinfra.DefaultMemoryLimit,
+						ctx, testAllocator, execinfra.DefaultMemoryLimit,
 						queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}, {ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}},
@@ -2027,7 +2022,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 					rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, rCols, nTuples)
 
 					a := colexecjoin.NewMergeJoinOp(
-						testAllocator, execinfra.DefaultMemoryLimit,
+						ctx, testAllocator, execinfra.DefaultMemoryLimit,
 						queueCfg, colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 						leftSource, rightSource, typs, typs,
 						[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},

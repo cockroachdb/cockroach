@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package metric
 
@@ -41,6 +36,7 @@ const (
 	LATENCY unitType = iota
 	SIZE
 	COUNT
+	DURATION
 )
 
 var IOLatencyBuckets = staticBucketConfig{
@@ -131,11 +127,19 @@ var Percent100Buckets = staticBucketConfig{
 	units:        COUNT,
 	distribution: Uniform,
 }
+var ResponseTime30sBuckets = staticBucketConfig{
+	category:     "ResponseTime30sBuckets",
+	min:          1e6,  // 1ms
+	max:          30e9, // 30s
+	count:        24,
+	units:        DURATION,
+	distribution: Exponential,
+}
 
 var StaticBucketConfigs = []staticBucketConfig{IOLatencyBuckets,
 	BatchProcessLatencyBuckets, LongRunning60mLatencyBuckets, DataCount16MBuckets,
 	DataSize16MBBuckets, MemoryUsage64MBBuckets, ReplicaCPUTimeBuckets,
-	ReplicaBatchRequestCountBuckets, Count1KBuckets, Percent100Buckets}
+	ReplicaBatchRequestCountBuckets, Count1KBuckets, Percent100Buckets, ResponseTime30sBuckets}
 
 func (config staticBucketConfig) GetBucketsFromBucketConfig() []float64 {
 	var buckets []float64

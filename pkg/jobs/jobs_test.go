@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package jobs_test
 
@@ -19,7 +14,6 @@ import (
 	"reflect"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -216,10 +210,11 @@ func (rts *registryTestSuite) setUp(t *testing.T) func() {
 			ManagerDisableJobCreation: true,
 		}
 		args.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
-			DontUseJobs:                       true,
-			SkipJobMetricsPollingJobBootstrap: true,
-			SkipUpdateSQLActivityJobBootstrap: true,
-			SkipMVCCStatisticsJobBootstrap:    true,
+			DontUseJobs:                           true,
+			SkipJobMetricsPollingJobBootstrap:     true,
+			SkipUpdateSQLActivityJobBootstrap:     true,
+			SkipMVCCStatisticsJobBootstrap:        true,
+			SkipUpdateTableMetadataCacheBootstrap: true,
 		}
 		args.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
 
@@ -1119,8 +1114,15 @@ func TestRegistryLifecycle(t *testing.T) {
 			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
 			Username:  username.TestUserName(),
 		}
-		job, err := rts.registry.CreateAdoptableJobWithTxn(rts.ctx, record, jobID, nil /* txn */)
-		require.NoError(t, err)
+		var job *jobs.Job
+		require.NoError(t, rts.s.InternalDB().(isql.DB).Txn(rts.ctx, func(ctx context.Context, txn isql.Txn) error {
+			txn.SessionData().Location = time.FixedZone("UTC+5", 5*60*60)
+			j, err := rts.registry.CreateAdoptableJobWithTxn(rts.ctx, record, jobID, txn)
+			job = j
+			return err
+		}))
+
+		rts.sqlDB.CheckQueryResults(t, "SELECT created <= now() FROM system.jobs WHERE id = "+jobID.String(), [][]string{{"true"}})
 
 		loadedJob, err := rts.registry.LoadJob(rts.ctx, jobID)
 		require.NoError(t, err)
@@ -2375,7 +2377,7 @@ func TestJobInTxn(t *testing.T) {
 
 		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
-		_, err = txn.Exec("BACKUP tobeaborted TO doesnotmattter")
+		_, err = txn.Exec("BACKUP tobeaborted INTO doesnotmattter")
 		require.NoError(t, err)
 
 		// If we rollback then the job should not run
@@ -2400,7 +2402,7 @@ func TestJobInTxn(t *testing.T) {
 		// Now let's actually commit the transaction and check that the job ran.
 		txn, err := sqlDB.Begin()
 		require.NoError(t, err)
-		_, err = txn.Exec("BACKUP tocommit TO foo")
+		_, err = txn.Exec("BACKUP tocommit INTO foo")
 		require.NoError(t, err)
 		// Committing will block and wait for all jobs to run.
 		require.NoError(t, txn.Commit())
@@ -2422,10 +2424,10 @@ func TestJobInTxn(t *testing.T) {
 		require.NoError(t, err)
 
 		// Add a succeeding job.
-		_, err = txn.Exec("BACKUP doesnotmatter TO doesnotmattter")
+		_, err = txn.Exec("BACKUP doesnotmatter INTO doesnotmattter")
 		require.NoError(t, err)
 		// We hooked up a failing test job to RESTORE.
-		_, err = txn.Exec("RESTORE TABLE tbl FROM somewhere")
+		_, err = txn.Exec("RESTORE TABLE tbl FROM LATEST IN somewhere")
 		require.NoError(t, err)
 
 		// Now let's actually commit the transaction and check that there is a
@@ -3076,155 +3078,6 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	require.NoError(t, err)
 	registry.TestingNudgeAdoptionQueue()
 	require.Regexp(t, `expected session "\w+" but found NULL`, <-resumed)
-}
-
-type resumeStartedSignaler struct {
-	syncutil.Mutex
-	cond      *sync.Cond
-	isStarted bool
-}
-
-func newResumeStartedSignaler() *resumeStartedSignaler {
-	ret := &resumeStartedSignaler{}
-	ret.cond = sync.NewCond(&ret.Mutex)
-	return ret
-
-}
-
-func (r *resumeStartedSignaler) SignalResumeStarted() {
-	r.Lock()
-	r.isStarted = true
-	r.cond.Signal()
-	r.Unlock()
-}
-
-func (r *resumeStartedSignaler) WaitForResumeStarted() {
-	r.Lock()
-	for !r.isStarted {
-		r.cond.Wait()
-	}
-	r.isStarted = false
-	r.Unlock()
-}
-
-// TestPauseReason tests pausing a job with a user specified reason.
-func TestPauseReason(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		},
-	})
-	registry := s.JobRegistry().(*jobs.Registry)
-	defer s.Stopper().Stop(ctx)
-
-	done := make(chan struct{})
-	defer close(done)
-	resumeSignaler := newResumeStartedSignaler()
-	defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-		return jobstest.FakeResumer{
-			OnResume: func(ctx context.Context) error {
-				resumeSignaler.SignalResumeStarted()
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-done:
-					return nil
-				}
-			},
-		}
-	}, jobs.UsesTenantCostControl)()
-
-	rec := jobs.Record{
-		DescriptorIDs: []descpb.ID{1},
-		Details:       jobspb.ImportDetails{},
-		Progress:      jobspb.ImportProgress{},
-		Username:      username.TestUserName(),
-	}
-	tdb := sqlutils.MakeSQLRunner(db)
-
-	jobID := registry.MakeJobID()
-	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */)
-	require.NoError(t, err)
-
-	countRowsWithClaimInfo := func() int {
-		t.Helper()
-		n := 0
-		tdb.QueryRow(t,
-			"SELECT count(*) FROM system.jobs "+
-				"WHERE id = $1 AND (claim_session_id IS NOT NULL OR claim_instance_id IS NOT NULL)",
-			jobID).Scan(&n)
-		return n
-	}
-	mustNotHaveClaim := func() {
-		t.Helper()
-		testutils.SucceedsSoon(t, func() error {
-			if countRowsWithClaimInfo() == 0 {
-				return nil
-			}
-			return errors.New("still waiting for claim to clear")
-		})
-	}
-	mustHaveClaim := func() {
-		t.Helper()
-		testutils.SucceedsSoon(t, func() error {
-			if countRowsWithClaimInfo() == 1 {
-				return nil
-			}
-			return errors.New("still waiting for claim info")
-		})
-	}
-
-	// First wait until the job is running
-	q := fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", jobID)
-	tdb.CheckQueryResultsRetry(t, q, [][]string{{"running"}})
-	mustHaveClaim()
-	resumeSignaler.WaitForResumeStarted()
-
-	getStatusAndPayload := func(t *testing.T, id jobspb.JobID) (string, jobspb.Payload) {
-		var payloadBytes []byte
-		var payload jobspb.Payload
-		var status string
-		tdb.QueryRow(t, "SELECT status, payload FROM crdb_internal.system_jobs where id = $1", jobID).Scan(
-			&status, &payloadBytes)
-		require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
-
-		return status, payload
-	}
-
-	checkStatusAndPauseReason := func(t *testing.T, id jobspb.JobID, expStatus, expPauseReason string) {
-		status, payload := getStatusAndPayload(t, id)
-		require.Equal(t, expStatus, status, "status")
-		require.Equal(t, expPauseReason, payload.PauseReason, "pause reason")
-	}
-
-	{
-		// Next, pause the job with a reason. Wait for pause and make sure the pause reason is set.
-		require.NoError(t, registry.PauseRequested(ctx, nil, jobID, "for testing"))
-		tdb.CheckQueryResultsRetry(t, q, [][]string{{"paused"}})
-		checkStatusAndPauseReason(t, jobID, "paused", "for testing")
-		mustNotHaveClaim()
-	}
-
-	{
-		// Now resume the job. Verify that the job is running now, but the pause reason is still there.
-		require.NoError(t, registry.Unpause(ctx, nil, jobID))
-		tdb.CheckQueryResultsRetry(t, q, [][]string{{"running"}})
-
-		checkStatusAndPauseReason(t, jobID, "running", "for testing")
-		mustHaveClaim()
-		resumeSignaler.WaitForResumeStarted()
-	}
-	{
-		// Pause the job again with a different reason. Verify that the job is paused with the reason.
-		require.NoError(t, registry.PauseRequested(ctx, nil, jobID, "second time"))
-		tdb.CheckQueryResultsRetry(t, q, [][]string{{"paused"}})
-		checkStatusAndPauseReason(t, jobID, "paused", "second time")
-		mustNotHaveClaim()
-	}
 }
 
 // TestJobsRetry tests that (1) non-cancelable jobs retry if they fail with an

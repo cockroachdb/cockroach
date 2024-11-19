@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package producer
 
@@ -13,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -21,10 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -81,6 +82,10 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 	// Resolve table names to tableIDs and spans.
 	spans := make([]roachpb.Span, 0, len(req.TableNames))
 	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
+	mutableTableDescs := make([]*tabledesc.Mutable, 0, len(req.TableNames))
+	tableIDs := make([]uint32, 0, len(req.TableNames))
+	typeDescriptors := make([]descpb.TypeDescriptor, 0)
+	foundTypeDescriptors := make(map[descpb.ID]struct{})
 	for _, name := range req.TableNames {
 		uon, err := parser.ParseTableName(name)
 		if err != nil {
@@ -92,7 +97,13 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 			return streampb.ReplicationProducerSpec{}, err
 		}
 		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
+		tableIDs = append(tableIDs, uint32(td.GetID()))
+		mutableTableDescs = append(mutableTableDescs, td)
 		tableDescs[name] = td.TableDescriptor
+		typeDescriptors, foundTypeDescriptors, err = getUDTs(ctx, r.txn, typeDescriptors, foundTypeDescriptors, td)
+		if err != nil {
+			return streampb.ReplicationProducerSpec{}, err
+		}
 	}
 
 	registry := execConfig.JobRegistry
@@ -103,7 +114,12 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		r.evalCtx.SessionData().User(),
 		ptsID,
 		spans,
+		tableIDs,
 		strings.Join(req.TableNames, ","))
+
+	if err := replicationutils.LockLDRTables(ctx, r.txn, mutableTableDescs, jr.JobID); err != nil {
+		return streampb.ReplicationProducerSpec{}, err
+	}
 
 	// TODO(ssd): Update this to protect the right set of
 	// tables. Perhaps we can just protect the tables and depend
@@ -127,8 +143,59 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		SourceClusterID:      r.evalCtx.ClusterID,
 		ReplicationStartTime: replicationStartTime,
 		TableDescriptors:     tableDescs,
+		TypeDescriptors:      typeDescriptors,
 	}, nil
 }
+
+func getUDTs(
+	ctx context.Context,
+	txn descs.Txn,
+	typeDescriptors []descpb.TypeDescriptor,
+	foundTypeDescriptors map[descpb.ID]struct{},
+	td *tabledesc.Mutable,
+) ([]descpb.TypeDescriptor, map[descpb.ID]struct{}, error) {
+	descriptors := txn.Descriptors()
+	dbDesc, err := descriptors.MutableByID(txn.KV()).Database(ctx, td.GetParentID())
+	if err != nil {
+		return nil, nil, err
+	}
+	typeIDs, _, err := td.GetAllReferencedTypeIDs(dbDesc,
+		func(id descpb.ID) (catalog.TypeDescriptor, error) {
+
+			return descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, id)
+		})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "resolving type descriptors")
+	}
+	for _, typeID := range typeIDs {
+		if _, ok := foundTypeDescriptors[typeID]; ok {
+			continue
+		}
+		foundTypeDescriptors[typeID] = struct{}{}
+
+		typeDesc, err := descriptors.MutableByID(txn.KV()).Type(ctx, typeID)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		typeDescriptors = append(typeDescriptors, typeDesc.TypeDescriptor)
+	}
+	return typeDescriptors, nil, nil
+}
+
+var useStreaksInLDR = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"logical_replication.producer.group_adjacent_spans.enabled",
+	"controls whether to attempt adjacent spans in the same stream",
+	false,
+)
+
+var ldrProcCount = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.producer.ingest_processor_parallelism",
+	"target number of stream partitions per source node",
+	1,
+)
 
 func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	ctx context.Context, req streampb.LogicalReplicationPlanRequest,
@@ -140,20 +207,32 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 
 	spans := make([]roachpb.Span, 0, len(req.TableIDs))
 	tableDescs := make([]descpb.TableDescriptor, 0, len(req.TableIDs))
+	typeDescriptors := make([]descpb.TypeDescriptor, 0)
+	foundTypeDescriptors := make(map[descpb.ID]struct{})
+	descriptors := r.txn.Descriptors()
 	for _, requestedTableID := range req.TableIDs {
-		td, err := r.txn.Descriptors().MutableByID(r.txn.KV()).Table(ctx, descpb.ID(requestedTableID))
+
+		td, err := descriptors.MutableByID(r.txn.KV()).Table(ctx, descpb.ID(requestedTableID))
 		if err != nil {
 			return nil, err
 		}
 		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
 		tableDescs = append(tableDescs, td.TableDescriptor)
+
+		typeDescriptors, foundTypeDescriptors, err = getUDTs(ctx, r.txn, typeDescriptors, foundTypeDescriptors, td)
+		if err != nil {
+			return nil, err
+		}
 	}
-	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans)
+
+	spec, err := buildReplicationStreamSpec(ctx, r.evalCtx, tenID, false, spans,
+		int(ldrProcCount.Get(&r.evalCtx.Settings.SV)), useStreaksInLDR.Get(&r.evalCtx.Settings.SV))
 	if err != nil {
 		return nil, err
 	}
 	spec.TableDescriptors = tableDescs
 	spec.TableSpans = spans
+	spec.TypeDescriptors = typeDescriptors
 	return spec, nil
 }
 
@@ -227,7 +306,7 @@ func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 
 func (r *replicationStreamManagerImpl) DebugGetProducerStatuses(
 	ctx context.Context,
-) []*streampb.DebugProducerStatus {
+) []streampb.DebugProducerStatus {
 	// NB: we don't check license here since if a stream started but the license
 	// expired or was removed, we still want visibility into it during debugging.
 

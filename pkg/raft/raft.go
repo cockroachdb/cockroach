@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -19,20 +19,25 @@ package raft
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"math"
 	"math/big"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft/confchange"
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -48,15 +53,6 @@ const (
 	// log entries to the local state machine. The identifier is used as a
 	// target for MsgStorageApply messages when AsyncStorageWrites is enabled.
 	LocalApplyThread pb.PeerID = math.MaxUint64 - 1
-)
-
-// Possible values for StateType.
-const (
-	StateFollower StateType = iota
-	StateCandidate
-	StateLeader
-	StatePreCandidate
-	numStates
 )
 
 // Possible values for CampaignType
@@ -79,16 +75,16 @@ var ErrProposalDropped = errors.New("raft proposal dropped")
 
 // lockedRand is a small wrapper around rand.Rand to provide
 // synchronization among multiple raft groups. Only the methods needed
-// by the code are exposed (e.g. Intn).
+// by the code are exposed (e.g. Int63n).
 type lockedRand struct {
 	mu sync.Mutex
 }
 
-func (r *lockedRand) Intn(n int) int {
+func (r *lockedRand) Int63n(n int64) int64 {
 	r.mu.Lock()
-	v, _ := rand.Int(rand.Reader, big.NewInt(int64(n)))
+	v, _ := rand.Int(rand.Reader, big.NewInt(n))
 	r.mu.Unlock()
-	return int(v.Int64())
+	return v.Int64()
 }
 
 var globalRand = &lockedRand{}
@@ -97,20 +93,6 @@ var globalRand = &lockedRand{}
 // the reason we use the type of string instead of uint64
 // is because it's simpler to compare and fill in raft entries
 type CampaignType string
-
-// StateType represents the role of a node in a cluster.
-type StateType uint64
-
-var stmap = [...]string{
-	"StateFollower",
-	"StateCandidate",
-	"StateLeader",
-	"StatePreCandidate",
-}
-
-func (st StateType) String() string {
-	return stmap[st]
-}
 
 // Config contains the parameters to start a raft.
 type Config struct {
@@ -123,11 +105,11 @@ type Config struct {
 	// candidate and start an election. ElectionTick must be greater than
 	// HeartbeatTick. We suggest ElectionTick = 10 * HeartbeatTick to avoid
 	// unnecessary leader switching.
-	ElectionTick int
+	ElectionTick int64
 	// HeartbeatTick is the number of Node.Tick invocations that must pass between
 	// heartbeats. That is, a leader sends heartbeat messages to maintain its
 	// leadership every HeartbeatTick ticks.
-	HeartbeatTick int
+	HeartbeatTick int64
 
 	// Storage is the storage for raft. raft generates entries and states to be
 	// stored in storage. raft reads the persisted entries and states out of
@@ -177,6 +159,17 @@ type Config struct {
 	// TODO(#129411): deprecate !AsyncStorageWrites mode as it's not used in
 	// CRDB.
 	AsyncStorageWrites bool
+	// LazyReplication instructs raft to hold off constructing MsgApp messages
+	// eagerly in reaction to Step() calls.
+	//
+	// If LazyReplication is false, a MsgApp can be constructed any time it
+	// becomes possible, e.g. when a new entry is appended to the leader's log, or
+	// the in-flight volume to a peer drops below the max-inflight limits.
+	//
+	// If LazyReplication is true, MsgApp messages for StateReplicate peers are
+	// constructed on demand, when requested by the application layer via the
+	// RawNode.SendMsgApp method.
+	LazyReplication bool
 
 	// MaxSizePerMsg limits the max byte size of each append message. Smaller
 	// value lowers the raft recovery cost(initial probing and message lost
@@ -224,7 +217,7 @@ type Config struct {
 
 	// Logger is the logger used for raft log. For multinode which can host
 	// multiple raft group, each raft group can have its own logger
-	Logger Logger
+	Logger raftlogger.Logger
 
 	// DisableProposalForwarding set to true means that followers will drop
 	// proposals, rather than forwarding them to the leader. One use case for
@@ -258,15 +251,12 @@ type Config struct {
 	// See: https://github.com/etcd-io/raft/issues/80
 	DisableConfChangeValidation bool
 
-	// StepDownOnRemoval makes the leader step down when it is removed from the
-	// group or demoted to a learner.
-	//
-	// This behavior will become unconditional in the future. See:
-	// https://github.com/etcd-io/raft/issues/83
-	StepDownOnRemoval bool
-
 	// StoreLiveness is a reference to the store liveness fabric.
 	StoreLiveness raftstoreliveness.StoreLiveness
+
+	// CRDBVersion exposes the active version to Raft. This helps version-gating
+	// features.
+	CRDBVersion clusterversion.Handle
 }
 
 func (c *Config) validate() error {
@@ -309,7 +299,7 @@ func (c *Config) validate() error {
 	}
 
 	if c.Logger == nil {
-		c.Logger = getLogger()
+		c.Logger = raftlogger.GetLogger()
 	}
 
 	return nil
@@ -327,11 +317,13 @@ type raft struct {
 	maxMsgSize         entryEncodingSize
 	maxUncommittedSize entryPayloadSize
 
-	config          quorum.Config
-	trk             tracker.ProgressTracker
-	electionTracker tracker.ElectionTracker
+	config               quorum.Config
+	trk                  tracker.ProgressTracker
+	electionTracker      tracker.ElectionTracker
+	fortificationTracker *tracker.FortificationTracker
+	lazyReplication      bool
 
-	state StateType
+	state pb.StateType
 
 	// isLearner is true if the local raft node is a learner.
 	isLearner bool
@@ -349,8 +341,9 @@ type raft struct {
 	//
 	// Messages in this list may target other nodes or may target this node.
 	//
-	// Messages in this list have the type MsgAppResp, MsgVoteResp, or
-	// MsgPreVoteResp. See the comment in raft.send for details.
+	// Messages in this list have the type MsgAppResp, MsgVoteResp,
+	// MsgPreVoteResp, or MsgFortifyLeaderResp. See the comment in raft.send for
+	// details.
 	msgsAfterAppend []pb.Message
 
 	// the leader id
@@ -358,11 +351,29 @@ type raft struct {
 	// leadEpoch, if set, corresponds to the StoreLiveness epoch that this peer
 	// has supported the leader in. It's unset if the peer hasn't supported the
 	// current leader.
-	//
-	// TODO(arul): This should be populated when responding to a MsgFortify.
 	leadEpoch pb.Epoch
-	// leadTransferee is id of the leader transfer target when its value is not zero.
-	// Follow the procedure defined in raft thesis 3.10.
+	// leadTransferee, if set, is the id of the leader transfer target during a
+	// pending leadership transfer. The value is set while the outgoing leader
+	// (this node) is catching the target up on its log. During this time, the
+	// leader will drop incoming proposals to give the transfer target time to
+	// catch up. Once the transfer target is caught up, the leader will send it
+	// a MsgTimeoutNow to encourage it to campaign immediately while bypassing
+	// pre-vote and leader support safeguards. As soon as the MsgTimeoutNow is
+	// sent, the leader will step down to a follower, as it has irrevocably
+	// compromised its leadership term by giving the target permission to
+	// overthrow it.
+	//
+	// For cases where the transfer target is already caught up on the log at the
+	// time that the leader receives a MsgTransferLeader, the MsgTimeoutNow will
+	// be sent immediately and the leader will step down to a follower without
+	// ever setting this field.
+	//
+	// In either case, if the transfer fails after the MsgTimeoutNow has been
+	// sent, the leader (who has stepped down to a follower) must call a new
+	// election at a new term in order to reestablish leadership.
+	//
+	// This roughly follows the procedure defined in the raft thesis, section
+	// 3.10: Leadership transfer extension.
 	leadTransferee pb.PeerID
 	// Only one conf change may be pending (in the log, but not yet
 	// applied) at a time. This is enforced via pendingConfIndex, which
@@ -379,35 +390,45 @@ type raft struct {
 	// term changes.
 	uncommittedSize entryPayloadSize
 
-	// number of ticks since it reached last electionTimeout when it is leader
-	// or candidate.
-	// number of ticks since it reached last electionTimeout or received a
-	// valid message from current leader when it is a follower.
-	electionElapsed int
+	// electionElapsed is tracked by both leaders and followers. For followers, it
+	// is the number of ticks since they last received a valid message from the
+	// from the current leader, unless the follower is fortifying a leader
+	// (leadEpoch != 0), in which case it is always set to 0. For leaders, it is
+	// the number of ticks since the last time it performed a checkQuorum.
+	//
+	// Invariant: electionElapsed = 0 when r.leadEpoch != 0 on a follower.
+	electionElapsed int64
 
-	// number of ticks since it reached last heartbeatTimeout.
-	// only leader keeps heartbeatElapsed.
-	heartbeatElapsed int
+	// heartbeatElapsed is the number of ticks since we last reached the
+	// heartbeatTimeout. Leaders use this field to keep track of when they should
+	// broadcast fortification attempts, and in a pre-fortification world,
+	// heartbeats. Followers use this field to keep track of when they should
+	// broadcast de-fortification messages to peers.
+	//
+	// TODO(arul): consider renaming these to "fortifyElapsed" given heartbeats
+	// are no longer the first class concept they used to be pre-leader
+	// fortification.
+	heartbeatElapsed int64
 
 	maxInflight      int
 	maxInflightBytes uint64
 	checkQuorum      bool
 	preVote          bool
 
-	heartbeatTimeout int
-	electionTimeout  int
+	heartbeatTimeout int64
+	electionTimeout  int64
 	// randomizedElectionTimeout is a random number between
 	// [electiontimeout, 2 * electiontimeout - 1]. It gets reset
 	// when raft changes its state to follower or candidate.
-	randomizedElectionTimeout int
+	randomizedElectionTimeout int64
 	disableProposalForwarding bool
-	stepDownOnRemoval         bool
 
 	tick func()
 	step stepFunc
 
-	logger        Logger
+	logger        raftlogger.Logger
 	storeLiveness raftstoreliveness.StoreLiveness
+	crdbVersion   clusterversion.Handle
 }
 
 func newRaft(c *Config) *raft {
@@ -422,11 +443,11 @@ func newRaft(c *Config) *raft {
 
 	r := &raft{
 		id:                          c.ID,
-		lead:                        None,
 		isLearner:                   false,
 		raftLog:                     raftlog,
 		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
+		lazyReplication:             c.LazyReplication,
 		electionTimeout:             c.ElectionTick,
 		heartbeatTimeout:            c.HeartbeatTick,
 		logger:                      c.Logger,
@@ -436,12 +457,13 @@ func newRaft(c *Config) *raft {
 		preVote:                     c.PreVote,
 		disableProposalForwarding:   c.DisableProposalForwarding,
 		disableConfChangeValidation: c.DisableConfChangeValidation,
-		stepDownOnRemoval:           c.StepDownOnRemoval,
 		storeLiveness:               c.StoreLiveness,
+		crdbVersion:                 c.CRDBVersion,
 	}
 	lastID := r.raftLog.lastEntryID()
 
-	r.electionTracker = tracker.MakeVoteTracker(&r.config)
+	r.electionTracker = tracker.MakeElectionTracker(&r.config)
+	r.fortificationTracker = tracker.NewFortificationTracker(&r.config, r.storeLiveness, r.logger)
 
 	cfg, progressMap, err := confchange.Restore(confchange.Changer{
 		Config:           quorum.MakeEmptyConfig(),
@@ -474,8 +496,6 @@ func newRaft(c *Config) *raft {
 	return r
 }
 
-func (r *raft) hasLeader() bool { return r.lead != None }
-
 func (r *raft) softState() SoftState { return SoftState{RaftState: r.state} }
 
 func (r *raft) hardState() pb.HardState {
@@ -488,16 +508,27 @@ func (r *raft) hardState() pb.HardState {
 	}
 }
 
-// send schedules persisting state to a stable storage and AFTER that
-// sending the message (as part of next Ready message processing).
+// send prepares the given message for being sent, and puts it into the outgoing
+// message queue. The message will be handed over to the application via the
+// next Ready handling cycle, except in one condition below.
+//
+// Certain message types are scheduled for being sent *after* the unstable state
+// is durably persisted in storage. If AsyncStorageWrites config flag is true,
+// the responsibility of upholding this condition is on the application, so the
+// message will be handed over via the next Ready as usually; if false, the
+// message will skip one Ready handling cycle, and will be sent after the
+// application has persisted the state.
+//
+// TODO(pav-kv): remove this special case after !AsyncStorageWrites is removed.
 func (r *raft) send(m pb.Message) {
 	if m.From == None {
 		m.From = r.id
 	}
-	if m.Type == pb.MsgVote || m.Type == pb.MsgVoteResp || m.Type == pb.MsgPreVote || m.Type == pb.MsgPreVoteResp {
+	switch m.Type {
+	case pb.MsgVote, pb.MsgVoteResp, pb.MsgPreVote, pb.MsgPreVoteResp, pb.MsgDeFortifyLeader:
 		if m.Term == 0 {
-			// All {pre-,}campaign messages need to have the term set when
-			// sending.
+			// All {pre-,}campaign messages and MsgDeFortifyLeader need to have the
+			// term set when sending.
 			// - MsgVote: m.Term is the term the node is campaigning for,
 			//   non-zero as we increment the term when campaigning.
 			// - MsgVoteResp: m.Term is the new r.Term if the MsgVote was
@@ -508,9 +539,15 @@ func (r *raft) send(m pb.Message) {
 			// - MsgPreVoteResp: m.Term is the term received in the original
 			//   MsgPreVote if the pre-vote was granted, non-zero for the
 			//   same reasons MsgPreVote is
+			// - MsgDeFortifyLeader: m.Term is the term corresponding to the
+			// leadership term that's being de-fortified.
 			r.logger.Panicf("term should be set when sending %s", m.Type)
 		}
-	} else {
+	case pb.MsgApp:
+		if m.Term != r.Term {
+			r.logger.Panicf("invalid term %d in MsgApp, must be %d", m.Term, r.Term)
+		}
+	default:
 		if m.Term != 0 {
 			r.logger.Panicf("term should not be set when sending %s (was %d)", m.Type, m.Term)
 		}
@@ -520,8 +557,9 @@ func (r *raft) send(m pb.Message) {
 			m.Term = r.Term
 		}
 	}
-	if m.Type == pb.MsgAppResp || m.Type == pb.MsgVoteResp ||
-		m.Type == pb.MsgPreVoteResp || m.Type == pb.MsgFortifyLeaderResp {
+
+	switch m.Type {
+	case pb.MsgAppResp, pb.MsgVoteResp, pb.MsgPreVoteResp, pb.MsgFortifyLeaderResp:
 		// If async storage writes are enabled, messages added to the msgs slice
 		// are allowed to be sent out before unstable state (e.g. log entry
 		// writes and election votes) have been durably synced to the local
@@ -534,7 +572,7 @@ func (r *raft) send(m pb.Message) {
 		// synced to stable storage locally. Similarly, it would be incorrect to
 		// acknowledge a log append to the leader before that entry has been synced
 		// to stable storage locally. Similarly, it would also be incorrect to
-		// promise fortification support to a leader without durably persisting the
+		// promise fortification to a leader without durably persisting the
 		// leader's epoch being supported.
 		//
 		// Per the Raft thesis, section 3.8 Persisted state and server restarts:
@@ -570,12 +608,50 @@ func (r *raft) send(m pb.Message) {
 		// we err on the side of safety and omit a `&& !m.Reject` condition
 		// above.
 		r.msgsAfterAppend = append(r.msgsAfterAppend, m)
-	} else {
+	default:
 		if m.To == r.id {
 			r.logger.Panicf("message should not be self-addressed when sending %s", m.Type)
 		}
 		r.msgs = append(r.msgs, m)
 	}
+}
+
+// prepareMsgApp constructs a MsgApp message for being sent to the given peer,
+// and hands it over to the caller. Updates the replication flow control state
+// to account for the fact that the message is about to be sent.
+func (r *raft) prepareMsgApp(to pb.PeerID, pr *tracker.Progress, ls LogSlice) pb.Message {
+	commit := r.raftLog.committed
+	// Update the progress accordingly to the message being sent.
+	pr.SentEntries(len(ls.entries), uint64(payloadsSize(ls.entries)))
+	pr.MaybeUpdateSentCommit(commit)
+	// Hand over the message to the caller.
+	return pb.Message{
+		From:    r.id,
+		To:      to,
+		Type:    pb.MsgApp,
+		Term:    ls.term,
+		Index:   ls.prev.index,
+		LogTerm: ls.prev.term,
+		Entries: ls.entries,
+		Commit:  commit,
+		Match:   pr.Match,
+	}
+}
+
+// maybePrepareMsgApp returns a MsgApp message to be sent to the given peer,
+// containing the given log slice.
+//
+// Returns false if the current state of the node does not permit this MsgApp
+// send, e.g. the log slice is misaligned with the replication flow status.
+func (r *raft) maybePrepareMsgApp(to pb.PeerID, ls LogSlice) (pb.Message, bool) {
+	if r.state != pb.StateLeader || r.Term != ls.term {
+		return pb.Message{}, false
+	}
+	pr := r.trk.Progress(to)
+	if pr == nil || pr.State != tracker.StateReplicate || pr.Next != ls.prev.index+1 {
+		return pb.Message{}, false
+	}
+	return r.prepareMsgApp(to, pr, ls), true
 }
 
 // maybeSendAppend sends an append RPC with log entries (if any) that are not
@@ -595,7 +671,9 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 	pr := r.trk.Progress(to)
 
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
-	if !pr.ShouldSendMsgApp(last, commit) {
+	sendEntries := pr.ShouldSendEntries(last, r.lazyReplication)
+	sendProbe := !sendEntries && pr.ShouldSendProbe(last, commit, r.advanceCommitViaMsgAppOnly())
+	if !sendEntries && !sendProbe {
 		return false
 	}
 
@@ -606,27 +684,42 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 		// follower log anymore. Send a snapshot instead.
 		return r.maybeSendSnapshot(to, pr)
 	}
-
 	var entries []pb.Entry
-	if pr.CanSendEntries(last) {
-		if entries, err = r.raftLog.entries(pr.Next, r.maxMsgSize); err != nil {
+	if sendEntries {
+		if entries, err = r.raftLog.entries(prevIndex, r.maxMsgSize); err != nil {
 			// Send a snapshot if we failed to get the entries.
 			return r.maybeSendSnapshot(to, pr)
 		}
 	}
 
-	// Send the MsgApp, and update the progress accordingly.
-	r.send(pb.Message{
-		To:      to,
-		Type:    pb.MsgApp,
-		Index:   prevIndex,
-		LogTerm: prevTerm,
-		Entries: entries,
-		Commit:  commit,
-		Match:   pr.Match,
-	})
-	pr.SentEntries(len(entries), uint64(payloadsSize(entries)))
-	pr.SentCommit(commit)
+	r.send(r.prepareMsgApp(to, pr, LogSlice{
+		term:    r.Term,
+		prev:    entryID{index: prevIndex, term: prevTerm},
+		entries: entries,
+	}))
+	return true
+}
+
+func (r *raft) sendPing(to pb.PeerID) bool {
+	if r.state != pb.StateLeader {
+		return false
+	}
+	pr := r.trk.Progress(to)
+	if pr == nil || pr.State != tracker.StateReplicate || pr.MsgAppProbesPaused {
+		return false
+	}
+	prevIndex := pr.Next - 1
+	prevTerm, err := r.raftLog.term(prevIndex)
+	// An error happens then the log is truncated beyond Next. We can't send a
+	// MsgApp in this case, and will soon send a snapshot and enter StateSnapshot.
+	if err != nil {
+		return false
+	}
+	// NB: this sets MsgAppProbesPaused to true again.
+	r.send(r.prepareMsgApp(to, pr, LogSlice{
+		term: r.Term,
+		prev: entryID{index: prevIndex, term: prevTerm},
+	}))
 	return true
 }
 
@@ -640,11 +733,7 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 
 	snapshot, err := r.raftLog.snapshot()
 	if err != nil {
-		if err == ErrSnapshotTemporarilyUnavailable {
-			r.logger.Debugf("%x failed to send snapshot to %x because snapshot is temporarily unavailable", r.id, to)
-			return false
-		}
-		panic(err) // TODO(bdarnell)
+		panic(err) // TODO(pav-kv): handle storage errors uniformly.
 	}
 	if IsEmptySnap(snapshot) {
 		panic("need non-empty snapshot")
@@ -668,39 +757,104 @@ func (r *raft) sendHeartbeat(to pb.PeerID) {
 	// or it might not have all the committed entries.
 	// The leader MUST NOT forward the follower's commit to
 	// an unmatched index.
-	commit := min(pr.Match, r.raftLog.committed)
+	// NOTE: Starting from V24_3_AdvanceCommitIndexViaMsgApps, heartbeats do not
+	// advance the commit index. Instead, MsgApp are used for that purpose.
+	// TODO(iskettaneh): Remove the commit from the heartbeat message in versions
+	// >= 25.1.
+	var commit uint64
+	if !r.advanceCommitViaMsgAppOnly() {
+		commit = min(pr.Match, r.raftLog.committed)
+	}
 	r.send(pb.Message{
 		To:     to,
 		Type:   pb.MsgHeartbeat,
 		Commit: commit,
 		Match:  pr.Match,
 	})
-	pr.SentCommit(commit)
+	pr.MaybeUpdateSentCommit(commit)
 }
 
-// sendFortify sends a fortification RPC to the given peer.
-func (r *raft) sendFortify(to pb.PeerID) {
-	if !r.storeLiveness.SupportFromEnabled() {
+// maybeSendFortify sends a fortification RPC to the given peer if it isn't
+// fortified but the peer's store supports the leader's store in StoreLiveness.
+func (r *raft) maybeSendFortify(id pb.PeerID) {
+	if !r.fortificationTracker.FortificationEnabledForTerm() {
 		// The underlying store liveness fabric hasn't been enabled to allow the
 		// leader to request support from peers. No-op.
 		return
 	}
-	if to == r.id {
-		// We handle the case where the leader is trying to fortify itself specially.
-		// Doing so avoids a self-addressed message.
-		epoch, live := r.storeLiveness.SupportFor(r.lead)
-		if live {
-			r.leadEpoch = epoch
-			// TODO(arul): For now, we're not recording any support on the leader. Do
-			// this once we implement handleFortifyResp correctly.
-		} else {
+
+	isFortified, isSupported := r.fortificationTracker.IsFortifiedBy(id)
+
+	if isFortified {
+		return // return early if the follower's fortified
+	}
+
+	if !isSupported {
+		// If the follower isn't providing active store liveness support to the
+		// leader, or it is but the leader isn't hearing about it, we don't need to
+		// send a fortify message. We will attempt to fortify the follower once
+		// store liveness support is established.
+		if id == r.id {
+			// Log if the leader doesn't support itself in the liveness fabric. This
+			// is possible if the leader is affected by disk stalls.
 			r.logger.Infof(
 				"%x leader at term %d does not support itself in the liveness fabric", r.id, r.Term,
 			)
 		}
 		return
 	}
+
+	// Only send a fortify message if we don't know that the follower supports us
+	// at the current epoch.
+	r.sendFortify(id)
+}
+
+// sendFortify sends a fortification RPC to the given peer.
+func (r *raft) sendFortify(to pb.PeerID) {
+	if to == r.id {
+		// We handle the case where the leader is trying to fortify itself specially.
+		// Doing so avoids a self-addressed message.
+		epoch, live := r.storeLiveness.SupportFor(r.lead)
+		if live {
+			r.setLeadEpoch(epoch)
+			// The leader needs to persist the LeadEpoch durably before it can start
+			// supporting itself. We do so by sending a self-addressed
+			// MsgFortifyLeaderResp message so that it is added to the msgsAfterAppend
+			// slice and delivered back to this node only after LeadEpoch is
+			// persisted. At that point, this node can record support without
+			// discrimination for who is providing support (itself vs. other
+			// follower).
+			r.send(pb.Message{To: r.id, Type: pb.MsgFortifyLeaderResp, LeadEpoch: epoch})
+		}
+		return
+	}
 	r.send(pb.Message{To: to, Type: pb.MsgFortifyLeader})
+}
+
+// sendDeFortify sends a de-fortification RPC to the given peer.
+func (r *raft) sendDeFortify(to pb.PeerID) {
+	fortifiedTerm := r.fortificationTracker.Term()
+	if to == r.id {
+		// We handle the case where the leader is trying to de-fortify itself
+		// specially. Doing so avoids a self-addressed message.
+		switch {
+		case r.Term == fortifiedTerm:
+			r.deFortify(r.id, fortifiedTerm)
+		case r.Term > fortifiedTerm:
+			// NB: The current term has advanced, so we don't attempt to de-fortify,
+			// as the de-fortification attempt corresponds to a prior term. These term
+			// checks would have happened in Step had we sent a self-addressed
+			// message; we decided not to, so we need to handle this especially
+			// ourselves.
+			r.logger.Debugf("de-foritfying self at term %d is a no-op; current term %d",
+				fortifiedTerm, r.Term,
+			)
+		case r.Term < fortifiedTerm:
+			panic("fortification tracker's term cannot be higher than raft group's")
+		}
+		return
+	}
+	r.send(pb.Message{To: to, Type: pb.MsgDeFortifyLeader, Term: fortifiedTerm})
 }
 
 // bcastAppend sends RPC, with entries to all peers that are not up-to-date
@@ -708,6 +862,11 @@ func (r *raft) sendFortify(to pb.PeerID) {
 func (r *raft) bcastAppend() {
 	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
 		if id == r.id {
+			// NB: the leader doesn't send MsgApp to itself here nor does it receive
+			// a self directed MsgAppResp. This means that the leader will not have a
+			// chance to update its own MatchCommit/SentCommit. That is fine because
+			// the leader doesn't use MatchCommit/SentCommit for itself. It only uses
+			// the peers' values.
 			return
 		}
 		r.maybeSendAppend(id)
@@ -724,13 +883,79 @@ func (r *raft) bcastHeartbeat() {
 	})
 }
 
-// bcastFortify sends an RPC to fortify the leader to all peers (including the
-// leader itself).
+// bcastFortify attempts to send an RPC to fortify the leader to all the peers
+// (including the leader itself) whose stores are currently providing store
+// liveness support to the leader's store but who have not fortified the leader.
 func (r *raft) bcastFortify() {
-	assertTrue(r.state == StateLeader, "only leaders can fortify")
+	assertTrue(r.state == pb.StateLeader, "only leaders can fortify")
+	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
+		r.maybeSendFortify(id)
+	})
+}
+
+// bcastDeFortify attempts to de-fortify the current peer's last (post restart)
+// leadership term by sending an RPC to all peers (including itself).
+func (r *raft) bcastDeFortify() {
+	assertTrue(r.state != pb.StateLeader, "leaders should not de-fortify without stepping down")
+	assertTrue(r.fortificationTracker.CanDefortify(), "unsafe to de-fortify")
 
 	r.trk.Visit(func(id pb.PeerID, _ *tracker.Progress) {
-		r.sendFortify(id)
+		r.sendDeFortify(id)
+	})
+}
+
+// shouldBCastDeFortify returns whether we should attempt to broadcast a
+// MsgDeFortifyLeader to all peers or not.
+func (r *raft) shouldBcastDeFortify() bool {
+	assertTrue(r.state != pb.StateLeader, "leaders should not be de-fortifying without stepping down")
+
+	if !r.fortificationTracker.NeedsDefortify() {
+		// Fast path for if we've determined we no longer need to de-fortify.
+		return false
+	}
+	if !r.fortificationTracker.CanDefortify() {
+		return false
+	}
+
+	committedTerm, err := r.raftLog.term(r.raftLog.committed)
+	if err != nil {
+		// NB: Extremely rare case where we can't figure out what the currently
+		// committed term is. Conservatively send out a MsgDeFortifyLeader, but log
+		// loudly.
+		r.logger.Warningf("failed to get committed term: %v", err)
+		return true
+	}
+
+	// Inform the fortification tracker of the committed term, and see whether the
+	// answer to whether we should de-fortify has changed.
+	r.fortificationTracker.InformCommittedTerm(committedTerm)
+	return r.fortificationTracker.NeedsDefortify()
+}
+
+// maybeUnpauseAndBcastAppend unpauses and attempts to send an MsgApp to all the
+// followers that provide store liveness support. If there is no store liveness
+// support, we skip unpausing and sending MsgApp because the message is likely
+// to be dropped.
+func (r *raft) maybeUnpauseAndBcastAppend() {
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		if r.id == id {
+			// NB: the leader doesn't send MsgApp to itself here nor does it receive
+			// a self directed MsgAppResp. This means that the leader will not have a
+			// chance to update its own MatchCommit/SentCommit. That is fine because
+			// the leader doesn't use MatchCommit/SentCommit for itself. It only uses
+			// the peers' values.
+			return
+		}
+
+		if _, supported := r.fortificationTracker.IsFortifiedBy(id); !supported {
+			// If the follower's store isn't providing active store liveness support
+			// to the leader's store, or it is but the leader isn't hearing about it,
+			// we don't send a MsgApp.
+			return
+		}
+
+		pr.MsgAppProbesPaused = false
+		r.maybeSendAppend(id)
 	})
 }
 
@@ -739,7 +964,7 @@ func (r *raft) appliedTo(index uint64, size entryEncodingSize) {
 	newApplied := max(index, oldApplied)
 	r.raftLog.appliedTo(newApplied, size)
 
-	if r.config.AutoLeave && newApplied >= r.pendingConfIndex && r.state == StateLeader {
+	if r.config.AutoLeave && newApplied >= r.pendingConfIndex && r.state == pb.StateLeader {
 		// If the current (and most recent, at least for this leader's term)
 		// configuration should be auto-left, initiate that now. We use a
 		// nil Data which unmarshals into an empty ConfChangeV2 and has the
@@ -788,7 +1013,7 @@ func (r *raft) maybeCommit() bool {
 	if !r.raftLog.matchTerm(entryID{term: r.Term, index: index}) {
 		return false
 	}
-	r.raftLog.commitTo(logMark{term: r.Term, index: index})
+	r.raftLog.commitTo(LogMark{Term: r.Term, Index: index})
 	return true
 }
 
@@ -806,10 +1031,7 @@ func (r *raft) reset(term uint64) {
 		// de-fortification.
 		assertTrue(!r.supportingFortifiedLeader(),
 			"should not be changing terms when supporting a fortified leader")
-		r.Term = term
-		r.Vote = None
-		r.lead = None
-		r.leadEpoch = 0
+		r.setTerm(term)
 	}
 
 	r.electionElapsed = 0
@@ -821,10 +1043,11 @@ func (r *raft) reset(term uint64) {
 	r.electionTracker.ResetVotes()
 	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
 		*pr = tracker.Progress{
-			Match:     0,
-			Next:      r.raftLog.lastIndex() + 1,
-			Inflights: tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
-			IsLearner: pr.IsLearner,
+			Match:       0,
+			MatchCommit: 0,
+			Next:        r.raftLog.lastIndex() + 1,
+			Inflights:   tracker.NewInflights(r.maxInflight, r.maxInflightBytes),
+			IsLearner:   pr.IsLearner,
 		}
 		if id == r.id {
 			pr.Match = r.raftLog.lastIndex()
@@ -833,6 +1056,50 @@ func (r *raft) reset(term uint64) {
 
 	r.pendingConfIndex = 0
 	r.uncommittedSize = 0
+}
+
+func (r *raft) setTerm(term uint64) {
+	if term == r.Term {
+		return
+	}
+	assertTrue(term > r.Term, "term cannot regress")
+	r.Term = term
+	r.Vote = None
+	r.resetLead()
+}
+
+func (r *raft) setVote(id pb.PeerID) {
+	if id == r.Vote {
+		return
+	}
+	assertTrue(r.Vote == None, "cannot change vote")
+	r.Vote = id
+}
+
+func (r *raft) setLead(lead pb.PeerID) {
+	if lead == r.lead {
+		return
+	}
+	assertTrue(r.lead == None, "cannot change lead")
+	r.lead = lead
+}
+
+func (r *raft) resetLead() {
+	r.lead = None
+	r.resetLeadEpoch()
+}
+
+func (r *raft) setLeadEpoch(leadEpoch pb.Epoch) {
+	if leadEpoch == r.leadEpoch {
+		return
+	}
+	assertTrue(r.lead != None, "leader must be set")
+	assertTrue(leadEpoch > r.leadEpoch, "leadEpoch cannot regress")
+	r.leadEpoch = leadEpoch
+}
+
+func (r *raft) resetLeadEpoch() {
+	r.leadEpoch = 0
 }
 
 func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
@@ -850,7 +1117,7 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 		// Drop the proposal.
 		return false
 	}
-	app := logSlice{term: r.Term, prev: last, entries: es}
+	app := LogSlice{term: r.Term, prev: last, entries: es}
 	if err := app.valid(); err != nil {
 		r.logger.Panicf("%x leader could not append to its log: %v", r.id, err)
 	} else if !r.raftLog.append(app) {
@@ -878,10 +1145,35 @@ func (r *raft) appendEntry(es ...pb.Entry) (accepted bool) {
 
 // tickElection is run by followers and candidates after r.electionTimeout.
 func (r *raft) tickElection() {
-	r.electionElapsed++
+	assertTrue(r.state != pb.StateLeader, "tickElection called by leader")
 
-	if r.promotable() && r.pastElectionTimeout() {
-		r.electionElapsed = 0
+	r.heartbeatElapsed++
+	if r.heartbeatElapsed >= r.heartbeatTimeout {
+		r.heartbeatElapsed = 0
+		if r.shouldBcastDeFortify() {
+			r.bcastDeFortify()
+		}
+	}
+
+	if r.leadEpoch != 0 {
+		assertTrue(r.electionElapsed == 0, "fortifying followers don't set electionElapsed")
+		if r.supportingFortifiedLeader() {
+			// There's a fortified leader and we're supporting it.
+			return
+		}
+		// We're no longer supporting the fortified leader. Calling r.deFortify()
+		// will forward the electionElapsed to electionTimeout which means that
+		// this peer can immediately vote in elections. Moreover, r.deFortify()
+		// will reset leadEpoch to 0 which ensures that we don't enter this
+		// conditional block again unless the term changes or the follower is
+		// re-fortified. This means we'll only ever skip the initial part of the
+		// election timeout once per fortified -> no longer fortified transition.
+		r.deFortify(r.id, r.Term)
+	} else {
+		r.electionElapsed++
+	}
+
+	if r.atRandomizedElectionTimeout() {
 		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgHup}); err != nil {
 			r.logger.Debugf("error occurred during election: %v", err)
 		}
@@ -890,6 +1182,8 @@ func (r *raft) tickElection() {
 
 // tickHeartbeat is run by leaders to send a MsgBeat after r.heartbeatTimeout.
 func (r *raft) tickHeartbeat() {
+	assertTrue(r.state == pb.StateLeader, "tickHeartbeat called by non-leader")
+
 	r.heartbeatElapsed++
 	r.electionElapsed++
 
@@ -898,22 +1192,42 @@ func (r *raft) tickHeartbeat() {
 		if r.checkQuorum {
 			if err := r.Step(pb.Message{From: r.id, Type: pb.MsgCheckQuorum}); err != nil {
 				r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
+			} else if r.state != pb.StateLeader {
+				return // stepped down
 			}
 		}
-		// If current leader cannot transfer leadership in electionTimeout, it becomes leader again.
-		if r.state == StateLeader && r.leadTransferee != None {
+		// If current leader cannot transfer leadership in electionTimeout, it stops
+		// trying and begins accepting new proposals again.
+		if r.leadTransferee != None {
 			r.abortLeaderTransfer()
 		}
 	}
 
-	if r.state != StateLeader {
-		return
-	}
-
 	if r.heartbeatElapsed >= r.heartbeatTimeout {
 		r.heartbeatElapsed = 0
-		if err := r.Step(pb.Message{From: r.id, Type: pb.MsgBeat}); err != nil {
-			r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
+
+		if r.fortificationTracker.FortificationEnabledForTerm() {
+			// Mark fortifying followers as recently active. We disable heartbeats
+			// when leader fortification is enabled, instead deferring to
+			// StoreLiveness for failure detection. As such, if there is no append
+			// activity for a raft group, it's possible for the leader to not
+			// communicate with a follower within an electionTimeout. We do not want
+			// to infer that the leader can't communicate with a follower in such
+			// cases, which could then cause the leader to spuriously step down
+			// because of CheckQuorum. Instead, we compute RecentlyActive based on
+			// StoreLiveness instead.
+			r.markFortifyingFollowersAsRecentlyActive()
+
+			// Try to refortify any followers that currently support us in
+			// StoreLiveness but aren't fortified.
+			r.bcastFortify()
+			r.maybeUnpauseAndBcastAppend()
+		} else {
+			// Leader fortification isn't enabled, so we rely on sending out periodic
+			// heartbeats to all followers to prevent them from calling an election.
+			if err := r.Step(pb.Message{From: r.id, Type: pb.MsgBeat}); err != nil {
+				r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
+			}
 		}
 	}
 }
@@ -924,32 +1238,55 @@ func (r *raft) tickHeartbeat() {
 // function instead; in there, we can add safety checks to ensure we're not
 // overwriting the leader.
 func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
+	if r.leadEpoch == 0 && lead == r.id {
+		// A non-zero lead epoch indicates that the leader fortified its term.
+		// Fortification promises should hold true even if the leader steps down, so
+		// as the leader, we remember that we were the leader even after we step
+		// down.
+		//
+		// In cases where the leader wasn't fortified prior to stepping down, we
+		// eschew remembering that we were the leader. This maintains parity with
+		// the behavior of leaders stepping down before the fortification protocol
+		// was introduced. This gives us time to stabilize the following state as
+		// the v24.3 release is rolled out:
+		//
+		//   r.state = StateFollower && r.lead = r.id
+		//
+		// Once this state is stabilized (within and above pkg/raft), we can remove
+		// this special case.
+		r.lead = None
+		lead = None
+	}
 	r.step = stepFollower
 	r.reset(term)
 	r.tick = r.tickElection
-	r.lead = lead
-	r.state = StateFollower
+	r.setLead(lead)
+	r.state = pb.StateFollower
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
 }
 
 func (r *raft) becomeCandidate() {
 	// TODO(xiangli) remove the panic when the raft implementation is stable
-	if r.state == StateLeader {
+	if r.state == pb.StateLeader {
 		panic("invalid transition [leader -> candidate]")
 	}
+	// We vote for ourselves when we become a candidate. We shouldn't do so if
+	// we're already fortified.
+	assertTrue(!r.supportingFortifiedLeader(), "shouldn't become a candidate if we're supporting a fortified leader")
 	r.step = stepCandidate
 	r.reset(r.Term + 1)
 	r.tick = r.tickElection
-	r.Vote = r.id
-	r.state = StateCandidate
+	r.setVote(r.id)
+	r.state = pb.StateCandidate
 	r.logger.Infof("%x became candidate at term %d", r.id, r.Term)
 }
 
 func (r *raft) becomePreCandidate() {
 	// TODO(xiangli) remove the panic when the raft implementation is stable
-	if r.state == StateLeader {
+	if r.state == pb.StateLeader {
 		panic("invalid transition [leader -> pre-candidate]")
 	}
+	assertTrue(!r.supportingFortifiedLeader(), "should not be fortifying a leader when becoming pre-candidate")
 	// Becoming a pre-candidate changes our step functions and state,
 	// but doesn't change anything else. In particular it does not increase
 	// r.Term or change r.Vote.
@@ -960,22 +1297,26 @@ func (r *raft) becomePreCandidate() {
 	// leader leases, this is fine, because we wouldn't be here unless we'd
 	// revoked StoreLiveness support for the leader's store to begin with. It's
 	// a bit weird from the perspective of raft though. See if we can avoid this.
-	r.lead = None
-	r.leadEpoch = 0
-	r.state = StatePreCandidate
+	r.resetLead()
+	r.state = pb.StatePreCandidate
 	r.logger.Infof("%x became pre-candidate at term %d", r.id, r.Term)
 }
 
 func (r *raft) becomeLeader() {
 	// TODO(xiangli) remove the panic when the raft implementation is stable
-	if r.state == StateFollower {
+	if r.state == pb.StateFollower {
 		panic("invalid transition [follower -> leader]")
 	}
 	r.step = stepLeader
 	r.reset(r.Term)
+	// NB: The fortificationTracker holds state from a peer's leadership stint
+	// that's acted upon after it has stepped down. We reset it right before
+	// stepping up to become leader again, but not when stepping down as leader
+	// and not even when learning of a leader in a later term.
+	r.fortificationTracker.Reset(r.Term)
 	r.tick = r.tickHeartbeat
-	r.lead = r.id
-	r.state = StateLeader
+	r.setLead(r.id)
+	r.state = pb.StateLeader
 	// Followers enter replicate mode when they've been successfully probed
 	// (perhaps after having received a snapshot as a result). The leader is
 	// trivially in this state. Note that r.reset() has initialized this
@@ -1006,21 +1347,42 @@ func (r *raft) becomeLeader() {
 }
 
 func (r *raft) hup(t CampaignType) {
-	if r.state == StateLeader {
+	if r.state == pb.StateLeader {
 		r.logger.Debugf("%x ignoring MsgHup because already leader", r.id)
 		return
 	}
-
-	// TODO(arul): we will eventually want some kind of logic like this.
-	//
-	//if r.supportingFortifiedLeader() && t != campaignTransfer {
-	//	r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
-	//	return
-	//}
 	if !r.promotable() {
-		r.logger.Warningf("%x is unpromotable and can not campaign", r.id)
+		r.logger.Infof("%x is unpromotable and can not campaign", r.id)
 		return
 	}
+	// NB: Even an old leader that has since stepped down needs to ensure it is
+	// no longer fortifying itself before campaigning at a higher term. This is
+	// because candidates always vote for themselves, and casting a vote isn't
+	// allowed if the candidate is fortifying a leader. So, before campaigning,
+	// the old leader needs to either de-fortify itself[1] or withdraw store
+	// liveness support for its own store for the fortified epoch[2].
+	//
+	// [1] The old leader that's since stepped down will only de-fortify itself
+	// once its leadMaxSupported is in the past. Waiting until we're
+	// de-fortified before campaigning ensures we don't regress the
+	// leadMaxSupported.
+	//
+	// [2] While rare, this can happen if it experiences a disk stall. In this
+	// case, the leadMaxSupported may be in the future by the time we campaign.
+	// However, if this is the case, we won't be able to win the election, as a
+	// majority quorum will not vote for us because they'll be in fortify lease.
+	if r.supportingFortifiedLeader() {
+		r.logger.Debugf("%x ignoring MsgHup due to leader fortification", r.id)
+		return
+	}
+
+	// We shouldn't campaign if we don't have quorum support in store liveness.
+	if r.fortificationTracker.RequireQuorumSupportOnCampaign() &&
+		!r.fortificationTracker.QuorumSupported() {
+		r.logger.Debugf("%x cannot campaign since it's not supported by a quorum in store liveness", r.id)
+		return
+	}
+
 	if r.hasUnappliedConfChanges() {
 		r.logger.Warningf("%x cannot campaign at term %d since there are still pending configuration changes to apply", r.id, r.Term)
 		return
@@ -1034,15 +1396,14 @@ func (r *raft) hup(t CampaignType) {
 // support to a leader. When a peer is providing support to a leader, it must
 // not campaign or vote to disrupt that leader's term, unless specifically asked
 // to do so by the leader.
-// TODO(arul): this is a placeholder implementation. Move it around as you see
-// fit.
 func (r *raft) supportingFortifiedLeader() bool {
 	if r.leadEpoch == 0 {
 		return false // not supporting any leader
 	}
-	assertTrue(r.lead != None, "leader epoch is set but leader is not")
-	epoch, ok := r.storeLiveness.SupportFor(r.lead)
-	return ok && epoch == r.leadEpoch
+	assertTrue(r.lead != None, "lead epoch is set but leader is not")
+	epoch, live := r.storeLiveness.SupportFor(r.lead)
+	assertTrue(epoch >= r.leadEpoch, "epochs in store liveness shouldn't regress")
+	return live && epoch == r.leadEpoch
 }
 
 // errBreak is a sentinel error used to break a callback-based loop.
@@ -1055,7 +1416,7 @@ func (r *raft) hasUnappliedConfChanges() bool {
 	found := false
 	// Scan all unapplied committed entries to find a config change. Paginate the
 	// scan, to avoid a potentially unlimited memory spike.
-	lo, hi := r.raftLog.applied+1, r.raftLog.committed+1
+	lo, hi := r.raftLog.applied, r.raftLog.committed
 	// Reuse the maxApplyingEntsSize limit because it is used for similar purposes
 	// (limiting the read of unapplied committed entries) when raft sends entries
 	// via the Ready struct for application.
@@ -1071,7 +1432,7 @@ func (r *raft) hasUnappliedConfChanges() bool {
 		}
 		return nil
 	}); err != nil && err != errBreak {
-		r.logger.Panicf("error scanning unapplied entries [%d, %d): %v", lo, hi, err)
+		r.logger.Panicf("error scanning unapplied entries (%d, %d]: %v", lo, hi, err)
 	}
 	return found
 }
@@ -1096,15 +1457,8 @@ func (r *raft) campaign(t CampaignType) {
 		voteMsg = pb.MsgVote
 		term = r.Term
 	}
-	var ids []pb.PeerID
-	{
-		idMap := r.config.Voters.IDs()
-		ids = make([]pb.PeerID, 0, len(idMap))
-		for id := range idMap {
-			ids = append(ids, id)
-		}
-		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	}
+	ids := maps.Keys(r.config.Voters.IDs())
+	slices.Sort(ids)
 	for _, id := range ids {
 		if id == r.id {
 			// The candidate votes for itself and should account for this self
@@ -1146,57 +1500,78 @@ func (r *raft) Step(m pb.Message) error {
 	case m.Term == 0:
 		// local message
 	case m.Term > r.Term:
-		if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
-			force := bytes.Equal(m.Context, []byte(campaignTransfer))
-			inLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
-			if !force && inLease {
-				// If a server receives a RequestVote request within the minimum election timeout
-				// of hearing from a current leader, it does not update its term or grant its vote
-				last := r.raftLog.lastEntryID()
-				// TODO(pav-kv): it should be ok to simply print the %+v of the lastEntryID.
-				r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: lease is not expired (remaining ticks: %d)",
-					r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, r.electionTimeout-r.electionElapsed)
+		if IsMsgIndicatingLeader(m.Type) {
+			// We've just received a message that indicates that a new leader was
+			// elected at a higher term, but the message may not be from the leader
+			// itself. Either way, the old leader is no longer fortified, so it's safe
+			// to de-fortify at this point.
+			r.logMsgHigherTerm(m, "new leader indicated, advancing term")
+			r.deFortify(m.From, m.Term)
+			var lead pb.PeerID
+			if IsMsgFromLeader(m.Type) {
+				lead = m.From
+			}
+			r.becomeFollower(m.Term, lead)
+		} else {
+			// We've just received a message that does not indicate that a new leader
+			// was elected at a higher term. All it means is that some other peer may
+			// be operating at this term.
+
+			// If a server receives a message (with any type) but is still supporting
+			// a fortified leader ("in a leader lease"), it does not update its term,
+			// grant a vote, or process the message in any other way.
+			if r.inLeaderLease(m) {
+				// However, since we're in a leader lease and have received a message at
+				// a higher term, we may need to take action to recover a stranded peer
+				// by catching the quorum's term up to the peer's.
+				//
+				// For legacy reasons, we don't consider a MsgVote at a higher term to
+				// be a reason to advance the term to recover a stranded peer. Instead,
+				// we wait for the leader's heartbeat message to be rejected by the
+				// stranded peer, which will cause the leader to step down.
+				//
+				// TODO(nvanbenschoten): remove this special case. If we see a MsgVote
+				// from a peer at a higher term while we are in a leader lease, we should
+				// still step down.
+				strandedPeer := senderHasMsgTerm(m) && m.Type != pb.MsgVote
+				if strandedPeer {
+					// If we are supporting a fortified leader, we can't just jump to the
+					// larger term. Instead, we need to wait for the leader to learn about
+					// the stranded peer, step down, and defortify. The only thing to do
+					// here is check whether we are that leader, in which case we should
+					// step down to kick off this process of catching up to the term of the
+					// stranded peer.
+					if r.state == pb.StateLeader {
+						r.logMsgHigherTerm(m, "stepping down as leader to recover stranded peer")
+						r.becomeFollower(r.Term, r.id)
+					} else {
+						r.logMsgHigherTerm(m, "ignoring and still supporting fortified leader")
+					}
+				}
 				return nil
 			}
-		}
-		switch {
-		case m.Type == pb.MsgPreVote:
-			// Never change our term in response to a PreVote
-		case m.Type == pb.MsgPreVoteResp && !m.Reject:
-			// We send pre-vote requests with a term in our future. If the
-			// pre-vote is granted, we will increment our term when we get a
-			// quorum. If it is not, the term comes from the node that
-			// rejected our vote so we should become a follower at the new
-			// term.
-		default:
-			r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
-				r.id, r.Term, m.Type, m.From, m.Term)
-			switch m.Type {
-			case pb.MsgApp, pb.MsgHeartbeat, pb.MsgSnap, pb.MsgFortifyLeader:
-				// We've just received a message from the new leader which was elected
-				// at a higher term. The old leader's fortification support has expired,
-				// so it's safe to defortify at this point.
-				r.deFortify(m.From, m.Term)
-				r.becomeFollower(m.Term, m.From)
-			case pb.MsgVote:
-				force := bytes.Equal(m.Context, []byte(campaignTransfer))
-				if force {
-					// The leader has asked another follower to campaign. In doing so,
-					// the leader can be thought of as "defortifying".
-					r.deFortify(r.lead, m.Term)
-				}
-				// TODO(arul): Once we start rejecting MsgVotes when we support a
-				// fortified leader we'll never get here. At that point, we can get
-				// rid of this hack.
-				r.deFortify(r.lead, m.Term)
-				r.becomeFollower(m.Term, None)
-			default:
+
+			// If we are willing process a message at a higher term, then make sure we
+			// record that we have withdrawn our support for the current leader, if we
+			// were still providing it with fortification support up to this point.
+			r.deFortify(m.From, m.Term)
+
+			// If the message indicates a higher term, we should update our term and
+			// step down to a follower.
+			if senderHasMsgTerm(m) {
+				r.logMsgHigherTerm(m, "advancing term")
 				r.becomeFollower(m.Term, None)
 			}
 		}
 
 	case m.Term < r.Term:
-		if (r.checkQuorum || r.preVote) && (m.Type == pb.MsgHeartbeat || m.Type == pb.MsgApp) {
+		ignore := true
+
+		switch m.Type {
+		case pb.MsgHeartbeat, pb.MsgApp, pb.MsgFortifyLeader:
+			if !r.checkQuorum && !r.preVote {
+				break
+			}
 			// We have received messages from a leader at a lower term. It is possible
 			// that these messages were simply delayed in the network, but this could
 			// also mean that this node has advanced its term number during a network
@@ -1219,7 +1594,9 @@ func (r *raft) Step(m pb.Message) error {
 			// However, this disruption is inevitable to free this stuck node with
 			// fresh election. This can be prevented with Pre-Vote phase.
 			r.send(pb.Message{To: m.From, Type: pb.MsgAppResp})
-		} else if m.Type == pb.MsgPreVote {
+			return nil
+
+		case pb.MsgPreVote:
 			// Before Pre-Vote enable, there may have candidate with higher term,
 			// but less log. After update to Pre-Vote, the cluster may deadlock if
 			// we drop messages with a lower term.
@@ -1228,12 +1605,31 @@ func (r *raft) Step(m pb.Message) error {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
 				r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
 			r.send(pb.Message{To: m.From, Term: r.Term, Type: pb.MsgPreVoteResp, Reject: true})
-		} else {
-			// ignore other cases
+			return nil
+
+		case pb.MsgSnap:
+			// A snapshot message may arrive under an outdated term. Since it carries
+			// committed state, we can safely process it regardless of the term. The
+			// message term means the snapshot is committed as of this term. By raft
+			// invariants, all committed state under a particular term will be
+			// committed under later terms as well.
+			//
+			// TODO(#127348): the MsgSnap handler assumes the message came from this
+			// term leader, which is not true if the term is bumped here.
+			// TODO(#127349): it is generally not true because the snapshot could have
+			// been initiated by a leaseholder (which at the time of writing is not
+			// necessarily the leader), and/or delegated via a follower.
+			m.Term = r.Term
+			ignore = false
+		}
+
+		// Ignore the message if it has not been handled above and can not be
+		// handled below.
+		if ignore {
 			r.logger.Infof("%x [term: %d] ignored a %s message with lower term from %x [term: %d]",
 				r.id, r.Term, m.Type, m.From, m.Term)
+			return nil
 		}
-		return nil
 	}
 
 	switch m.Type {
@@ -1251,7 +1647,7 @@ func (r *raft) Step(m pb.Message) error {
 			r.appliedSnap(m.Snapshot)
 		}
 		if m.Index != 0 {
-			r.raftLog.stableTo(logMark{term: m.LogTerm, index: m.Index})
+			r.raftLog.stableTo(LogMark{Term: m.LogTerm, Index: m.Index})
 		}
 
 	case pb.MsgStorageApplyResp:
@@ -1264,11 +1660,12 @@ func (r *raft) Step(m pb.Message) error {
 	case pb.MsgVote, pb.MsgPreVote:
 		// We can vote if this is a repeat of a vote we've already cast...
 		canVote := r.Vote == m.From ||
-			// ...we haven't voted and we don't think there's a leader yet in this term...
+			// ...OR we haven't voted and we don't think there's a leader yet in this
+			// term...
 			(r.Vote == None && r.lead == None) ||
-			// ...or this is a PreVote for a future term...
+			// ...OR this is a PreVote for a future term...
 			(m.Type == pb.MsgPreVote && m.Term > r.Term)
-		// ...and we believe the candidate is up to date.
+		// ...AND we believe the candidate is up to date.
 		lastID := r.raftLog.lastEntryID()
 		candLastID := entryID{term: m.LogTerm, index: m.Index}
 		if canVote && r.raftLog.isUpToDate(candLastID) {
@@ -1305,7 +1702,7 @@ func (r *raft) Step(m pb.Message) error {
 			if m.Type == pb.MsgVote {
 				// Only record real votes.
 				r.electionElapsed = 0
-				r.Vote = m.From
+				r.setVote(m.From)
 			}
 		} else {
 			r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
@@ -1322,6 +1719,60 @@ func (r *raft) Step(m pb.Message) error {
 	return nil
 }
 
+// inLeaderLease returns whether the message should be ignored because the
+// recipient is supporting a leader lease.
+func (r *raft) inLeaderLease(m pb.Message) bool {
+	force := bytes.Equal(m.Context, []byte(campaignTransfer))
+	if force {
+		// If the message is a transfer request, we ignore the leader lease.
+		return false
+	}
+
+	inHeartbeatLease := r.checkQuorum &&
+		// We know who the leader is...
+		r.lead != None &&
+		// And we're not fortifying the leader (else we'd be in a fortify lease, see
+		// below)...
+		r.leadEpoch == 0 &&
+		// And we've heard from the leader recently...
+		r.electionElapsed < r.electionTimeout &&
+		// And the message is a pre-vote or vote request. Unlike a fortify lease,
+		// a heartbeat lease only applies to these two message types.
+		(m.Type == pb.MsgPreVote || m.Type == pb.MsgVote)
+
+	inFortifyLease := r.supportingFortifiedLeader() &&
+		// NB: If the peer that's campaigning has an entry in its log with a
+		// higher term than what we're aware of, then this conclusively proves
+		// that a new leader was elected at a higher term. We never heard from
+		// this new leader (otherwise we'd have bumped r.Term in response).
+		// However, any fortification we're providing to a leader that has been
+		// since dethroned is pointless.
+		m.LogTerm <= r.Term
+
+	if !inHeartbeatLease && !inFortifyLease {
+		// We're not in either form of lease. We can safely process the message.
+		return false
+	}
+
+	// Log why we're ignoring the message.
+	var leaseMsg redact.RedactableString
+	if inHeartbeatLease {
+		leaseMsg = redact.Sprintf("recently received communication from leader (remaining ticks: %d)", r.electionTimeout-r.electionElapsed)
+	} else {
+		leaseMsg = redact.Sprintf("supporting fortified leader %d at epoch %d", r.lead, r.leadEpoch)
+	}
+	last := r.raftLog.lastEntryID()
+	// TODO(pav-kv): it should be ok to simply print the %+v of the lastEntryID.
+	r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: %s",
+		r.id, last.term, last.index, r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, leaseMsg)
+	return true
+}
+
+func (r *raft) logMsgHigherTerm(m pb.Message, suffix redact.SafeString) {
+	r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d], %s",
+		r.id, r.Term, m.Type, m.From, m.Term, suffix)
+}
+
 type stepFunc func(r *raft, m pb.Message) error
 
 func stepLeader(r *raft, m pb.Message) error {
@@ -1331,14 +1782,25 @@ func stepLeader(r *raft, m pb.Message) error {
 		r.bcastHeartbeat()
 		return nil
 	case pb.MsgCheckQuorum:
-		if !r.trk.QuorumActive() {
+		quorumActiveByHeartbeats := r.trk.QuorumActive()
+		quorumActiveByFortification := r.fortificationTracker.QuorumActive()
+		if !quorumActiveByHeartbeats {
+			r.logger.Debugf(
+				"%x has not received messages from a quorum of peers in the last election timeout", r.id,
+			)
+		}
+		if !quorumActiveByFortification {
+			r.logger.Debugf("%x does not have store liveness support from a quorum of peers", r.id)
+		}
+		if !quorumActiveByHeartbeats && !quorumActiveByFortification {
 			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
 			// NB: Stepping down because of CheckQuorum is a special, in that we know
-			// the QSE is in the past. This means that the leader can safely call a
-			// new election or vote for a different peer without regressing the QSE.
-			// We don't need to/want to give this any special treatment -- instead, we
-			// handle this like the general step down case by simply remembering the
-			// term/lead information from our stint as the leader.
+			// the LeadSupportUntil is in the past. This means that the leader can
+			// safely call a new election or vote for a different peer without
+			// regressing LeadSupportUntil. We don't need to/want to give this any
+			// special treatment -- instead, we handle this like the general step down
+			// case by simply remembering the term/lead information from our stint as
+			// the leader.
 			r.becomeFollower(r.Term, r.id)
 		}
 		// Mark everyone (but ourselves) as inactive in preparation for the next
@@ -1381,31 +1843,15 @@ func stepLeader(r *raft, m pb.Message) error {
 				cc = ccc
 			}
 			if cc != nil {
-				// Per the "Apply" invariant in the config change safety argument[^1],
-				// the leader must not append a config change if it hasn't applied all
-				// config changes in its log.
-				//
-				// [^1]: https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
-				alreadyPending := r.pendingConfIndex > r.raftLog.applied
-
-				alreadyJoint := len(r.config.Voters[1]) > 0
-				wantsLeaveJoint := len(cc.AsV2().Changes) == 0
-
-				var failedCheck string
-				if alreadyPending {
-					failedCheck = fmt.Sprintf("possible unapplied conf change at index %d (applied to %d)", r.pendingConfIndex, r.raftLog.applied)
-				} else if alreadyJoint && !wantsLeaveJoint {
-					failedCheck = "must transition out of joint config first"
-				} else if !alreadyJoint && wantsLeaveJoint {
-					failedCheck = "not in joint state; refusing empty conf change"
+				ccCtx := confchange.ValidationContext{
+					CurConfig:                         &r.config,
+					Applied:                           r.raftLog.applied,
+					PendingConfIndex:                  r.pendingConfIndex,
+					LeadSupportSafe:                   r.fortificationTracker.ConfigChangeSafe(),
+					DisableValidationAgainstCurConfig: r.disableConfChangeValidation,
 				}
-
-				// Allow disabling config change constraints that are guaranteed by the
-				// upper state machine layer (incorrect ones will apply as no-ops).
-				//
-				// NB: !alreadyPending requirement is always respected, for safety.
-				if alreadyPending || (failedCheck != "" && !r.disableConfChangeValidation) {
-					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, failedCheck)
+				if err := confchange.ValidateProp(ccCtx, cc.AsV2()); err != nil {
+					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, err)
 					m.Entries[i] = pb.Entry{Type: pb.EntryNormal}
 				} else {
 					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
@@ -1421,8 +1867,6 @@ func stepLeader(r *raft, m pb.Message) error {
 
 	case pb.MsgForgetLeader:
 		return nil // noop on leader
-	case pb.MsgFortifyLeaderResp:
-		r.handleFortifyResp(m)
 	}
 
 	// All other message types require a progress for m.From (pr).
@@ -1437,7 +1881,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		// an MsgAppResp to acknowledge the appended entries in the last Ready.
 
 		pr.RecentActive = true
-
+		pr.MaybeUpdateMatchCommit(m.Commit)
 		if m.Reject {
 			// RejectHint is the suggested next base entry for appending (i.e.
 			// we try to append entry RejectHint+1 next), and LogTerm is the
@@ -1612,10 +2056,22 @@ func stepLeader(r *raft, m pb.Message) error {
 				// Transfer leadership is in progress.
 				if m.From == r.leadTransferee && pr.Match == r.raftLog.lastIndex() {
 					r.logger.Infof("%x sent MsgTimeoutNow to %x after received MsgAppResp", r.id, m.From)
-					r.sendTimeoutNow(m.From)
+					r.transferLeader(m.From)
 				}
 			}
 		}
+
+	case pb.MsgFortifyLeaderResp:
+		r.handleFortifyResp(m)
+		// We do the same as we do when receiving a MsgHeartbeatResp.
+		// NB: We ignore self-addressed messages as we don't send MsgApp to
+		// ourselves.
+		if m.From != r.id {
+			pr.RecentActive = true
+			pr.MsgAppProbesPaused = false
+			r.maybeSendAppend(m.From)
+		}
+
 	case pb.MsgHeartbeatResp:
 		pr.RecentActive = true
 		pr.MsgAppProbesPaused = false
@@ -1668,13 +2124,23 @@ func stepLeader(r *raft, m pb.Message) error {
 		}
 		// Transfer leadership to third party.
 		r.logger.Infof("%x [term %d] starts to transfer leadership to %x", r.id, r.Term, leadTransferee)
-		// Transfer leadership should be finished in one electionTimeout, so reset r.electionElapsed.
+		// Transfer leadership should be finished in one electionTimeout, so reset
+		// r.electionElapsed. If the transfer target is not caught up on its log by
+		// then, the transfer is aborted and the leader can resume normal operation.
+		// See raft.abortLeaderTransfer.
 		r.electionElapsed = 0
 		r.leadTransferee = leadTransferee
 		if pr.Match == r.raftLog.lastIndex() {
-			r.sendTimeoutNow(leadTransferee)
 			r.logger.Infof("%x sends MsgTimeoutNow to %x immediately as %x already has up-to-date log", r.id, leadTransferee, leadTransferee)
+			r.transferLeader(leadTransferee)
 		} else {
+			// If the transfer target is not initially caught up on its log, we don't
+			// send it a MsgTimeoutNow immediately. Instead, we eagerly try to catch
+			// it up on its log so that it will be able to win the election when it
+			// campaigns (recall that a candidate can only win an election if its log
+			// is up-to-date). If we are able to successfully catch it up in time,
+			// before the electionElapsed timeout fires, we call raft.transferLeader
+			// in response to receiving the final MsgAppResp.
 			pr.MsgAppProbesPaused = false
 			r.maybeSendAppend(leadTransferee)
 		}
@@ -1685,11 +2151,18 @@ func stepLeader(r *raft, m pb.Message) error {
 // stepCandidate is shared by StateCandidate and StatePreCandidate; the difference is
 // whether they respond to MsgVoteResp or MsgPreVoteResp.
 func stepCandidate(r *raft, m pb.Message) error {
+	if IsMsgFromLeader(m.Type) {
+		// If this is a message from a leader of r.Term, transition to a follower
+		// with the sender of the message as the leader, then process the message.
+		assertTrue(m.Term == r.Term, "message term should equal current term")
+		r.becomeFollower(m.Term, m.From)
+		return r.step(r, m) // stepFollower
+	}
 	// Only handle vote responses corresponding to our candidacy (while in
 	// StateCandidate, we may get stale MsgPreVoteResp messages in this term from
 	// our pre-candidate state).
 	var myVoteRespType pb.MessageType
-	if r.state == StatePreCandidate {
+	if r.state == pb.StatePreCandidate {
 		myVoteRespType = pb.MsgPreVoteResp
 	} else {
 		myVoteRespType = pb.MsgVoteResp
@@ -1698,24 +2171,17 @@ func stepCandidate(r *raft, m pb.Message) error {
 	case pb.MsgProp:
 		r.logger.Infof("%x no leader at term %d; dropping proposal", r.id, r.Term)
 		return ErrProposalDropped
-	case pb.MsgApp:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		r.handleAppendEntries(m)
-	case pb.MsgHeartbeat:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		r.handleHeartbeat(m)
 	case pb.MsgSnap:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
+		// TODO(nvanbenschoten): we can't consider MsgSnap to be from the leader of
+		// Message.Term until we address #127348 and #127349.
+		r.becomeFollower(m.Term, None)
 		r.handleSnapshot(m)
-	case pb.MsgFortifyLeader:
-		r.becomeFollower(m.Term, m.From) // always m.Term == r.Term
-		r.handleFortify(m)
 	case myVoteRespType:
 		gr, rj, res := r.poll(m.From, m.Type, !m.Reject)
 		r.logger.Infof("%x has received %d %s votes and %d vote rejections", r.id, gr, m.Type, rj)
 		switch res {
 		case quorum.VoteWon:
-			if r.state == StatePreCandidate {
+			if r.state == pb.StatePreCandidate {
 				r.campaign(campaignElection)
 			} else {
 				r.becomeLeader()
@@ -1727,13 +2193,20 @@ func stepCandidate(r *raft, m pb.Message) error {
 			// m.Term > r.Term; reuse r.Term
 			r.becomeFollower(r.Term, r.lead)
 		}
-	case pb.MsgTimeoutNow:
-		r.logger.Debugf("%x [term %d state %v] ignored MsgTimeoutNow from %x", r.id, r.Term, r.state, m.From)
 	}
 	return nil
 }
 
 func stepFollower(r *raft, m pb.Message) error {
+	if IsMsgFromLeader(m.Type) {
+		r.setLead(m.From)
+		if m.Type != pb.MsgDeFortifyLeader {
+			// If we receive any message from the leader except a MsgDeFortifyLeader,
+			// we know that the leader is still alive and still acting as the leader,
+			// so reset the election timer.
+			r.electionElapsed = 0
+		}
+	}
 	switch m.Type {
 	case pb.MsgProp:
 		if r.lead == None {
@@ -1749,26 +2222,15 @@ func stepFollower(r *raft, m pb.Message) error {
 		m.To = r.lead
 		r.send(m)
 	case pb.MsgApp:
-		r.electionElapsed = 0
-		// TODO(arul): Once r.lead != None, we shouldn't need to update r.lead
-		// anymore within the course of a single term (in the context of which this
-		// function is always called). Instead, if r.lead != None, we should be able
-		// to assert that the leader hasn't changed within a given term. Maybe at
-		// the caller itself.
-		r.lead = m.From
 		r.handleAppendEntries(m)
 	case pb.MsgHeartbeat:
-		r.electionElapsed = 0
-		r.lead = m.From
 		r.handleHeartbeat(m)
 	case pb.MsgSnap:
-		r.electionElapsed = 0
-		r.lead = m.From
 		r.handleSnapshot(m)
 	case pb.MsgFortifyLeader:
-		r.electionElapsed = 0
-		r.lead = m.From
 		r.handleFortify(m)
+	case pb.MsgDeFortifyLeader:
+		r.handleDeFortify(m)
 	case pb.MsgTransferLeader:
 		if r.lead == None {
 			r.logger.Infof("%x no leader at term %d; dropping leader transfer msg", r.id, r.Term)
@@ -1792,8 +2254,7 @@ func stepFollower(r *raft, m pb.Message) error {
 			return nil
 		}
 		r.logger.Infof("%x forgetting leader %x at term %d", r.id, r.lead, r.Term)
-		r.lead = None
-		r.leadEpoch = 0
+		r.resetLead()
 	case pb.MsgTimeoutNow:
 		// TODO(nvanbenschoten): we will eventually want some kind of logic like
 		// this. However, even this may not be enough, because we're calling a
@@ -1814,16 +2275,16 @@ func stepFollower(r *raft, m pb.Message) error {
 		// be able to replace this leadEpoch assignment with a call to deFortify.
 		// Currently, it may panic because only the leader should be able to
 		// de-fortify without bumping the term.
-		r.leadEpoch = 0
+		r.resetLeadEpoch()
 		r.hup(campaignTransfer)
 	}
 	return nil
 }
 
-// logSliceFromMsgApp extracts the appended logSlice from a MsgApp message.
-func logSliceFromMsgApp(m *pb.Message) logSlice {
-	// TODO(pav-kv): consider also validating the logSlice here.
-	return logSlice{
+// logSliceFromMsgApp extracts the appended LogSlice from a MsgApp message.
+func logSliceFromMsgApp(m *pb.Message) LogSlice {
+	// TODO(pav-kv): consider also validating the LogSlice here.
+	return LogSlice{
 		term:    m.Term,
 		prev:    entryID{term: m.LogTerm, index: m.Index},
 		entries: m.Entries,
@@ -1833,7 +2294,7 @@ func logSliceFromMsgApp(m *pb.Message) logSlice {
 func (r *raft) handleAppendEntries(m pb.Message) {
 	r.checkMatch(m.Match)
 
-	// TODO(pav-kv): construct logSlice up the stack next to receiving the
+	// TODO(pav-kv): construct LogSlice up the stack next to receiving the
 	// message, and validate it before taking any action (e.g. bumping term).
 	a := logSliceFromMsgApp(&m)
 	if err := a.valid(); err != nil {
@@ -1854,7 +2315,7 @@ func (r *raft) handleAppendEntries(m pb.Message) {
 		// committed entries at m.Term (by raft invariants), so it is safe to bump
 		// the commit index even if the MsgApp is stale.
 		lastIndex := a.lastIndex()
-		r.raftLog.commitTo(logMark{term: m.Term, index: min(m.Commit, lastIndex)})
+		r.raftLog.commitTo(LogMark{Term: m.Term, Index: min(m.Commit, lastIndex)})
 		r.send(pb.Message{To: m.From, Type: pb.MsgAppResp, Index: lastIndex,
 			Commit: r.raftLog.committed})
 		return
@@ -1932,8 +2393,8 @@ func (r *raft) handleHeartbeat(m pb.Message) {
 	// commit index if accTerm >= m.Term.
 	// TODO(pav-kv): move this logic to raftLog.commitTo, once the accTerm has
 	// migrated to raftLog/unstable.
-	mark := logMark{term: m.Term, index: min(m.Commit, r.raftLog.lastIndex())}
-	if mark.term == r.raftLog.accTerm() {
+	mark := LogMark{Term: m.Term, Index: min(m.Commit, r.raftLog.lastIndex())}
+	if mark.Term == r.raftLog.accTerm() {
 		r.raftLog.commitTo(mark)
 	}
 	r.send(pb.Message{To: m.From, Type: pb.MsgHeartbeatResp})
@@ -1968,7 +2429,7 @@ func (r *raft) handleSnapshot(m pb.Message) {
 }
 
 func (r *raft) handleFortify(m pb.Message) {
-	assertTrue(r.state == StateFollower, "leaders should locally fortify without sending a message")
+	assertTrue(r.state == pb.StateFollower, "leaders should locally fortify without sending a message")
 	assertTrue(r.lead == m.From, "only the leader should send fortification requests")
 
 	epoch, live := r.storeLiveness.SupportFor(r.lead)
@@ -1982,7 +2443,7 @@ func (r *raft) handleFortify(m pb.Message) {
 		})
 		return
 	}
-	r.leadEpoch = epoch
+	r.setLeadEpoch(epoch)
 	r.send(pb.Message{
 		To:        m.From,
 		Type:      pb.MsgFortifyLeaderResp,
@@ -1991,18 +2452,78 @@ func (r *raft) handleFortify(m pb.Message) {
 }
 
 func (r *raft) handleFortifyResp(m pb.Message) {
-	assertTrue(r.state == StateLeader, "only leaders should be handling fortification responses")
-	// TODO(arul): record support once
-	// https://github.com/cockroachdb/cockroach/issues/125264 lands.
+	assertTrue(r.state == pb.StateLeader, "only leaders should be handling fortification responses")
+	if m.Reject {
+		// Couldn't successfully fortify the follower. Typically, this happens when
+		// the follower isn't supporting the leader's store in StoreLiveness or the
+		// follower is down. We'll try to fortify the follower again later in
+		// tickHeartbeat.
+		return
+	}
+	r.fortificationTracker.RecordFortification(m.From, m.LeadEpoch)
 }
 
-// deFortify (conceptually) revokes previously provided fortification support to
-// a leader.
-func (r *raft) deFortify(from pb.PeerID, term uint64) {
-	assertTrue(term > r.Term || (term == r.Term && from == r.lead),
-		"can only defortify at current term if told by the leader",
+func (r *raft) handleDeFortify(m pb.Message) {
+	assertTrue(r.state != pb.StateLeader, "leaders should locally de-fortify without sending a message")
+	assertTrue(r.lead == None || r.lead == m.From,
+		"only the leader should send de-fortification requests",
 	)
-	r.leadEpoch = 0
+
+	if r.leadEpoch == 0 {
+		r.logger.Debugf("%d is not fortifying %d; de-fortification is a no-op", r.id, m.From)
+	}
+
+	r.deFortify(m.From, m.Term)
+}
+
+// deFortify revokes previously provided fortification to a leader.
+//
+// The from argument corresponds to the ID of the peer initiating (directly[1]
+// or indirectly[2]) the de-fortification. The term argument corresponds to the
+// term known to the peer[3] initiating de-fortification.
+//
+// [1] For example, if a peer realizes it's no longer supporting a previously
+// fortified leader or if a previously fortified leader steps down and
+// broadcasts MsgDeFortifyLeader to the raft group.
+//
+// [2] For example, if a new leader is elected without a vote from this peer
+// (who continues to fortify the previous leader). The peer then learns about
+// the previous leadership term ending when the new leader contacts it.
+//
+// [3] Note that this may not be the term being de-fortified. The term being
+// de-fortified is r.Term, which is the term of the peer being de-fortified.
+func (r *raft) deFortify(from pb.PeerID, term uint64) {
+	if r.leadEpoch == 0 {
+		return // we're not currently fortified, so de-fortification is a no-op
+	}
+
+	assertTrue(
+		// We were fortified at a lower term that has since advanced...
+		term > r.Term ||
+			// ...OR the current term is being explicitly de-fortified by the leader...
+			(term == r.Term && from == r.lead) ||
+			// ...OR we've unilaterally decided to de-fortify because we are no longer
+			// supporting the fortified leader (in StoreLiveness).
+			(term == r.Term && from == r.id && !r.supportingFortifiedLeader()),
+		"can only defortify at current term if told by the leader or if fortification has expired",
+	)
+
+	r.resetLeadEpoch()
+
+	if r.state != pb.StateLeader {
+		// The peer is not fortifying the leader anymore. As a result:
+		// 1. We don't want to wait out an entire election timeout before
+		//    campaigning.
+		// 2. But we do want to take advantage of randomized election timeouts built
+		//    into raft to prevent hung elections.
+		// We achieve both of these goals by "forwarding" electionElapsed to begin
+		// at r.electionTimeout. Also see atRandomizedElectionTimeout.
+		r.logger.Debugf(
+			"%d setting election elapsed to start from %d ticks after store liveness support expired",
+			r.id, r.electionTimeout,
+		)
+		r.electionElapsed = r.electionTimeout
+	}
 }
 
 // restore recovers the state machine from a snapshot. It restores the log and the
@@ -2013,7 +2534,7 @@ func (r *raft) restore(s snapshot) bool {
 	if id.index <= r.raftLog.committed {
 		return false
 	}
-	if r.state != StateFollower {
+	if r.state != pb.StateFollower {
 		// This is defense-in-depth: if the leader somehow ended up applying a
 		// snapshot, it could move into a new term without moving into a
 		// follower state. This should never fire, but if it does, we panic.
@@ -2144,30 +2665,50 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 	// node is removed.
 	r.isLearner = pr != nil && pr.IsLearner
 
-	if (pr == nil || r.isLearner) && r.state == StateLeader {
-		// This node is leader and was removed or demoted, step down if requested.
-		//
-		// We prevent demotions at the time writing but hypothetically we handle
-		// them the same way as removing the leader.
+	// The remaining steps only make sense if this node is the leader and there
+	// are other nodes.
+	if r.state != pb.StateLeader || len(cs.Voters) == 0 {
+		return cs
+	}
+
+	if pr == nil {
+		// This node is leader and was removed. This should not be possible, as we
+		// do not allow voters to be removed directly without first being demoted
+		// to a learner, and only voters may serve as leader. Direct removal of the
+		// raft leader is unsafe for at least two reasons:
+		// 1. the leader (or any voter) may be needed to vote for a candidate who
+		//    has not yet applied the configuration change. This is a liveness issue
+		//    if the leader/voter is immediately removed without stepping down to a
+		//    learner first and waiting for a second configuration change to
+		//    succeed.
+		//    For details, see: https://github.com/cockroachdb/cockroach/pull/42251.
+		// 2. the leader may have fortified its leadership term, binding the
+		//    liveness of the leader replica to the leader's store's store liveness
+		//    heartbeats. Removal of the leader replica from a store while that
+		//    store continues to heartbeat in the store liveness fabric will lead to
+		//    the leader disappearing without any other replica deciding that the
+		//    leader is gone and stepping up to campaign.
+		r.logger.Panicf("%x leader removed from configuration %s", r.id, r.config)
+	}
+
+	if r.isLearner {
+		// This node is leader and was demoted, step down.
 		//
 		// TODO(tbg): ask follower with largest Match to TimeoutNow (to avoid
 		// interruption). This might still drop some proposals but it's better than
 		// nothing.
-		if r.stepDownOnRemoval {
-			// NB: Similar to the CheckQuorum step down case, we must remember our
-			// prior stint as leader, lest we regress the QSE.
-			r.becomeFollower(r.Term, r.lead)
-		}
-		return cs
-	}
-
-	// The remaining steps only make sense if this node is the leader and there
-	// are other nodes.
-	if r.state != StateLeader || len(cs.Voters) == 0 {
+		//
+		// NB: Similar to the CheckQuorum step down case, we must remember our
+		// prior stint as leader, lest we regress the QSE.
+		r.becomeFollower(r.Term, r.lead)
 		return cs
 	}
 
 	r.maybeCommit()
+	// If the configuration change means that there are new followers, fortify
+	// them immediately, without waiting for the next heartbeatTimeout to fire.
+	// bcastFortify is a no-op for peers that are already fortified.
+	r.bcastFortify()
 	// If the configuration change means that more entries are committed now,
 	// broadcast/append to everyone in the updated config.
 	//
@@ -2188,28 +2729,51 @@ func (r *raft) loadState(state pb.HardState) {
 		r.logger.Panicf("%x state.commit %d is out of range [%d, %d]", r.id, state.Commit, r.raftLog.committed, r.raftLog.lastIndex())
 	}
 	r.raftLog.committed = state.Commit
-	r.Term = state.Term
-	r.Vote = state.Vote
-	r.lead = state.Lead
-	r.leadEpoch = state.LeadEpoch
+	r.setTerm(state.Term)
+	r.setVote(state.Vote)
+	if state.LeadEpoch != 0 {
+		// A non-zero lead epoch indicates that the leader fortified its term.
+		// Fortification promises should hold true across restarts, so we need to
+		// restore both the lead and the lead epoch.
+		//
+		// In cases where the leader wasn't fortified prior to the restart, we
+		// eschew loading the leader known to this peer before shutdown. This
+		// maintains parity with how raft restarts worked before the fortification
+		// protocol was introduced. While it isn't incorrect to load the leader, it
+		// does trip the inHeartbeatLease condition without considerable care.
+		// Tripping the inHeartbeatLease condition can delay leader elections by 2s.
+		// This is known to be a source of regressions, which become meaningful when
+		// the 2s delay stacks by a O(ranges) factor. Epoch based leases which are
+		// quiesced before a restart are particularly vulnerable to such
+		// regressions. Not loading the leader if the leader wasn't fortified is a
+		// way by which we avoid this known and possibly other unknown regressions.
+		r.setLead(state.Lead)
+		r.setLeadEpoch(state.LeadEpoch)
+	}
 }
 
-// pastElectionTimeout returns true if r.electionElapsed is greater
-// than or equal to the randomized election timeout in
-// [electiontimeout, 2 * electiontimeout - 1].
-func (r *raft) pastElectionTimeout() bool {
-	return r.electionElapsed >= r.randomizedElectionTimeout
+// atRandomizedElectionTimeout returns true if r.electionElapsed modulo the
+// r.randomizedElectionTimeout is equal to 0. This means that at every
+// r.randomizedElectionTimeout period, this method will return true once.
+func (r *raft) atRandomizedElectionTimeout() bool {
+	return r.electionElapsed != 0 && r.electionElapsed%r.randomizedElectionTimeout == 0
 }
 
 func (r *raft) resetRandomizedElectionTimeout() {
-	r.randomizedElectionTimeout = r.electionTimeout + globalRand.Intn(r.electionTimeout)
+	r.randomizedElectionTimeout = r.electionTimeout + globalRand.Int63n(r.electionTimeout)
 }
 
-func (r *raft) sendTimeoutNow(to pb.PeerID) {
+func (r *raft) transferLeader(to pb.PeerID) {
+	assertTrue(r.state == pb.StateLeader, "only the leader can transfer leadership")
 	r.send(pb.Message{To: to, Type: pb.MsgTimeoutNow})
+	r.becomeFollower(r.Term, r.lead)
 }
 
 func (r *raft) abortLeaderTransfer() {
+	// TODO(arul): we currently call this method regardless of whether we are the
+	// leader or not and regardless of whether there is an in-progress leadership
+	// transfer. We should consider limiting the cases where this can be called
+	// and adding the appropriate preconditions as assertions.
 	r.leadTransferee = None
 }
 
@@ -2248,4 +2812,40 @@ func (r *raft) reduceUncommittedSize(s entryPayloadSize) {
 	} else {
 		r.uncommittedSize -= s
 	}
+}
+
+// markFortifyingFollowersAsRecentlyActive iterates over all the followers, and
+// mark them as recently active if they are supporting the leader.
+func (r *raft) markFortifyingFollowersAsRecentlyActive() {
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		if pr.RecentActive {
+			return // return early as it's already marked as recently active
+		}
+
+		if isFortified, _ := r.fortificationTracker.IsFortifiedBy(id); isFortified {
+			pr.RecentActive = true
+		}
+	})
+}
+
+// advanceCommitViaMsgAppOnly returns true if the commit index is advanced on
+// the followers using MsgApp only. This means that heartbeats are not used to
+// advance the commit index. This function returns true only if all followers
+// communicate their durable commit index back to the leader via MsgAppResp.
+func (r *raft) advanceCommitViaMsgAppOnly() bool {
+	return r.crdbVersion.IsActive(context.Background(),
+		clusterversion.V24_3_AdvanceCommitIndexViaMsgApps)
+}
+
+func (r *raft) testingStepDown() error {
+	if r.lead != r.id {
+		return errors.New("cannot step down if not the leader")
+	}
+	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
+	return nil
+}
+
+func (r *raft) testingSendDeFortify(to pb.PeerID) error {
+	r.sendDeFortify(to)
+	return nil
 }

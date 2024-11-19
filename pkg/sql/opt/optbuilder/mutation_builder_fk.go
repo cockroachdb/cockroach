@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -144,7 +139,11 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 		//    there are any "orphaned" rows in the child table.
 		if a := h.fk.DeleteReferenceAction(); a != tree.Restrict && a != tree.NoAction {
 			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
-			var builder memo.CascadeBuilder
+			cols := make(opt.ColList, len(h.tabOrdinals))
+			for i, tabOrd := range h.tabOrdinals {
+				cols[i] = mb.fetchColIDs[tabOrd]
+			}
+			var builder memo.PostQueryBuilder
 			switch a {
 			case tree.Cascade:
 				// Try the fast builder first; if it cannot be used, use the regular builder.
@@ -154,25 +153,18 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 				)
 				if !ok {
 					mb.ensureWithID()
-					builder = newOnDeleteCascadeBuilder(mb.tab, i, h.otherTab)
+					builder = newOnDeleteCascadeBuilder(mb.tab, i, h.otherTab, cols)
 				}
 			case tree.SetNull, tree.SetDefault:
 				mb.ensureWithID()
-				builder = newOnDeleteSetBuilder(mb.tab, i, h.otherTab, a)
+				builder = newOnDeleteSetBuilder(mb.tab, i, h.otherTab, a, cols)
 			default:
 				panic(errors.AssertionFailedf("unhandled action type %s", a))
-			}
-
-			cols := make(opt.ColList, len(h.tabOrdinals))
-			for i, tabOrd := range h.tabOrdinals {
-				cols[i] = mb.fetchColIDs[tabOrd]
 			}
 			mb.cascades = append(mb.cascades, memo.FKCascade{
 				FKConstraint: h.fk,
 				Builder:      builder,
 				WithID:       mb.withID,
-				OldValues:    cols,
-				NewValues:    nil,
 			})
 			continue
 		}
@@ -300,26 +292,22 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
 			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
 			mb.ensureWithID()
-			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a)
-
 			oldCols := make(opt.ColList, len(h.tabOrdinals))
 			newCols := make(opt.ColList, len(h.tabOrdinals))
-			for i, tabOrd := range h.tabOrdinals {
+			for j, tabOrd := range h.tabOrdinals {
 				fetchColID := mb.fetchColIDs[tabOrd]
 				updateColID := mb.updateColIDs[tabOrd]
 				if updateColID == 0 {
 					updateColID = fetchColID
 				}
-
-				oldCols[i] = fetchColID
-				newCols[i] = updateColID
+				oldCols[j] = fetchColID
+				newCols[j] = updateColID
 			}
+			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a, oldCols, newCols)
 			mb.cascades = append(mb.cascades, memo.FKCascade{
 				FKConstraint: h.fk,
 				Builder:      builder,
 				WithID:       mb.withID,
-				OldValues:    oldCols,
-				NewValues:    newCols,
 			})
 			continue
 		}
@@ -419,11 +407,9 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 		if a := h.fk.UpdateReferenceAction(); a != tree.Restrict && a != tree.NoAction {
 			telemetry.Inc(sqltelemetry.ForeignKeyCascadesUseCounter)
 			mb.ensureWithID()
-			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a)
-
 			oldCols := make(opt.ColList, len(h.tabOrdinals))
 			newCols := make(opt.ColList, len(h.tabOrdinals))
-			for i, tabOrd := range h.tabOrdinals {
+			for j, tabOrd := range h.tabOrdinals {
 				fetchColID := mb.fetchColIDs[tabOrd]
 				// Here we don't need to use the upsertColIDs because the rows that
 				// correspond to inserts will be ignored in the cascade.
@@ -432,15 +418,14 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 					updateColID = fetchColID
 				}
 
-				oldCols[i] = fetchColID
-				newCols[i] = updateColID
+				oldCols[j] = fetchColID
+				newCols[j] = updateColID
 			}
+			builder := newOnUpdateCascadeBuilder(mb.tab, i, h.otherTab, a, oldCols, newCols)
 			mb.cascades = append(mb.cascades, memo.FKCascade{
 				FKConstraint: h.fk,
 				Builder:      builder,
 				WithID:       mb.withID,
-				OldValues:    oldCols,
-				NewValues:    newCols,
 			})
 			continue
 		}

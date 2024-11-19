@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package admissionpb
 
@@ -27,8 +22,8 @@ type WorkPriority int8
 const (
 	// LowPri is low priority work.
 	LowPri WorkPriority = math.MinInt8
-	// TTLLowPri is low priority work from TTL internal submissions.
-	TTLLowPri WorkPriority = -100
+	// BulkLowPri is low priority work from internal bulk submissions.
+	BulkLowPri WorkPriority = -100
 	// UserLowPri is low priority work from user submissions (SQL).
 	UserLowPri WorkPriority = -50
 	// BulkNormalPri is bulk priority work from bulk jobs, which could be run due
@@ -67,7 +62,7 @@ func (w WorkPriority) SafeFormat(p redact.SafePrinter, verb rune) {
 // name is used as the suffix on exported work queue metrics.
 var WorkPriorityDict = map[WorkPriority]string{
 	LowPri:           "low-pri",
-	TTLLowPri:        "ttl-low-pri",
+	BulkLowPri:       "bulk-low-pri",
 	UserLowPri:       "user-low-pri",
 	BulkNormalPri:    "bulk-normal-pri",
 	NormalPri:        "normal-pri",
@@ -104,7 +99,7 @@ func init() {
 
 	orderedPris := []WorkPriority{
 		LowPri,
-		TTLLowPri,
+		BulkLowPri,
 		UserLowPri,
 		BulkNormalPri,
 		NormalPri,
@@ -189,6 +184,37 @@ const (
 	NumWorkClasses
 )
 
+// StoreWorkType represents the type of work,
+type StoreWorkType int8
+
+const (
+	// RegularStoreWorkType is for type of store-specific work that corresponds to
+	// RegularWorkClass.
+	RegularStoreWorkType StoreWorkType = iota
+	// SnapshotIngestStoreWorkType is for snapshot work type. It is classified as
+	// ElasticWorkClass, but is prioritized higher than other work of that class.
+	SnapshotIngestStoreWorkType = 1
+	// ElasticStoreWorkType is for store-specific work that corresponds to
+	// ElasticWorkClass, excluding SnapshotIngestStoreWorkType.
+	ElasticStoreWorkType = 2
+	// NumStoreWorkTypes is the number of store work types.
+	NumStoreWorkTypes = 3
+)
+
+// WorkClassFromStoreWorkType translates StoreWorkType to a WorkClass
+func WorkClassFromStoreWorkType(workType StoreWorkType) WorkClass {
+	var class WorkClass
+	switch workType {
+	case RegularStoreWorkType:
+		class = RegularWorkClass
+	case ElasticStoreWorkType:
+		class = ElasticWorkClass
+	case SnapshotIngestStoreWorkType:
+		class = ElasticWorkClass
+	}
+	return class
+}
+
 // WorkClassFromPri translates a WorkPriority to its given WorkClass.
 func WorkClassFromPri(pri WorkPriority) WorkClass {
 	class := RegularWorkClass
@@ -216,7 +242,7 @@ func (w WorkClass) SafeFormat(p redact.SafePrinter, verb rune) {
 
 // Prevent the linter from emitting unused warnings.
 var _ = LowPri
-var _ = TTLLowPri
+var _ = BulkLowPri
 var _ = UserLowPri
 var _ = NormalPri
 var _ = UserHighPri

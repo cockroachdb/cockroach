@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -361,7 +356,7 @@ func runAllocationBench(
 		t.L().PrintfCtx(ctx, "no samples found for allocation bench run, won't put any artifacts")
 		return
 	}
-	if err := result.SerializeOutRun(ctx, t, c); err != nil {
+	if err := result.SerializeOutRun(ctx, t, c, t.ExportOpenmetrics()); err != nil {
 		t.L().PrintfCtx(ctx, "error putting run artifacts, %v", err)
 	}
 }

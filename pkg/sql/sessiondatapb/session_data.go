@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sessiondatapb
 
@@ -55,7 +50,7 @@ func (c DataConversionConfig) GetFloatPrec(typ *types.T) int {
 }
 
 func (m VectorizeExecMode) String() string {
-	if m == VectorizeUnset {
+	if m == VectorizeUnset || m == DeprecatedVectorize201Auto {
 		m = VectorizeOn
 	}
 	name, ok := VectorizeExecMode_name[int32(m)]
@@ -76,6 +71,9 @@ func VectorizeExecModeFromString(val string) (VectorizeExecMode, bool) {
 	m := VectorizeExecMode(mInt)
 	if m == VectorizeUnset {
 		return 0, false
+	}
+	if m == DeprecatedVectorize201Auto {
+		m = VectorizeOn
 	}
 	return m, true
 }
@@ -106,6 +104,6 @@ func (s *SessionData) User() username.SQLUsername {
 
 // SystemIdentity retrieves the session's system identity.
 // (Identity presented by the client prior to identity mapping.)
-func (s *LocalOnlySessionData) SystemIdentity() username.SQLUsername {
-	return s.SystemIdentityProto.Decode()
+func (s *LocalOnlySessionData) SystemIdentity() string {
+	return s.SystemIdentityProto
 }

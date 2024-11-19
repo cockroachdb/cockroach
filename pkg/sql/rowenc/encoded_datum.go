@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rowenc
 
@@ -144,7 +139,7 @@ func EncDatumFromEncoded(enc catenumpb.DatumEncoding, encoded []byte) EncDatum {
 // slice for the rest of the buffer.
 func EncDatumFromBuffer(enc catenumpb.DatumEncoding, buf []byte) (EncDatum, []byte, error) {
 	if len(buf) == 0 {
-		return EncDatum{}, nil, errors.New("empty encoded value")
+		return EncDatum{}, nil, errors.AssertionFailedf("empty encoded value")
 	}
 	switch enc {
 	case catenumpb.DatumEncoding_ASCENDING_KEY, catenumpb.DatumEncoding_DESCENDING_KEY:

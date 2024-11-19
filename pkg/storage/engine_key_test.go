@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -493,4 +488,27 @@ func engineKey(key string, ts int) EngineKey {
 		Key:     roachpb.Key(key),
 		Version: encodeMVCCTimestamp(wallTS(ts)),
 	}
+}
+
+var possibleVersionLens = []int{
+	engineKeyNoVersion,
+	engineKeyVersionWallTimeLen,
+	engineKeyVersionWallAndLogicalTimeLen,
+	engineKeyVersionWallLogicalAndSyntheticTimeLen,
+	engineKeyVersionLockTableLen,
+}
+
+func randomSerializedEngineKey(r *rand.Rand, maxUserKeyLen int) []byte {
+	userKeyLen := randutil.RandIntInRange(r, 1, maxUserKeyLen)
+	versionLen := possibleVersionLens[r.Intn(len(possibleVersionLens))]
+	serializedLen := userKeyLen + versionLen + 1
+	if versionLen > 0 {
+		serializedLen++ // sentinel
+	}
+	k := randutil.RandBytes(r, serializedLen)
+	k[userKeyLen] = 0x00
+	if versionLen > 0 {
+		k[len(k)-1] = byte(versionLen + 1)
+	}
+	return k
 }

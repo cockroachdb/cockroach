@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -229,6 +224,15 @@ func (n *createFunctionNode) replaceFunction(
 	}
 	if isSameUDT {
 		udfDesc.ReturnType.Type = retType
+	}
+
+	// Make sure that a trigger function is not replaced.
+	if retType.Identical(types.Trigger) && len(udfDesc.DependedOnBy) > 0 {
+		return errors.WithHint(
+			unimplemented.NewWithIssue(134555,
+				"cannot replace a trigger function with an active trigger"),
+			"consider dropping and recreating the trigger",
+		)
 	}
 
 	// Verify whether changes, if any, to the parameter names and classes are
@@ -587,17 +591,25 @@ func setFuncOptions(
 	}
 
 	if lang != catpb.Function_UNKNOWN_LANGUAGE && body != "" {
-		// Replace any sequence names in the function body with IDs.
-		seqReplacedFuncBody, err := replaceSeqNamesWithIDsLang(params.ctx, params.p, body, true, lang)
-		if err != nil {
-			return err
+		// Trigger functions do not analyze SQL statements beyond parsing, so type
+		// and sequence names should not be replaced during trigger-function
+		// creation.
+		returnType := udfDesc.ReturnType.Type
+		lazilyEvalSQL := returnType != nil && returnType.Identical(types.Trigger)
+		if !lazilyEvalSQL {
+			// Replace any sequence names in the function body with IDs.
+			body, err = replaceSeqNamesWithIDsLang(params.ctx, params.p, body, true, lang)
+			if err != nil {
+				return err
+			}
+			// Replace any UDT names in the function body with IDs.
+			body, err = serializeUserDefinedTypesLang(
+				params.ctx, params.p.SemaCtx(), body, true /* multiStmt */, "UDFs", lang)
+			if err != nil {
+				return err
+			}
 		}
-		typeReplacedFuncBody, err := serializeUserDefinedTypesLang(
-			params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */, "UDFs", lang)
-		if err != nil {
-			return err
-		}
-		udfDesc.SetFuncBody(typeReplacedFuncBody)
+		udfDesc.SetFuncBody(body)
 	}
 	return nil
 }

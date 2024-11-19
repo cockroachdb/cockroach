@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colcontainer
 
@@ -226,7 +221,7 @@ func (p *PartitionedDiskQueue) Enqueue(
 			idxToClose, found := p.partitionIdxToIndex[p.lastEnqueuedPartitionIdx]
 			if !found {
 				// This would be unexpected.
-				return errors.New("PartitionerStrategyCloseOnNewPartition unable to find last Enqueued partition")
+				return errors.AssertionFailedf("PartitionerStrategyCloseOnNewPartition unable to find last Enqueued partition")
 			}
 			if p.partitions[idxToClose].state == partitionStateWriting {
 				// Close the last enqueued partition. No need to release or acquire a new
@@ -260,9 +255,9 @@ func (p *PartitionedDiskQueue) Enqueue(
 	}
 	if state := p.partitions[idx].state; state != partitionStateWriting {
 		if state == partitionStatePermanentlyClosed {
-			return errors.Errorf("partition at index %d permanently closed, cannot Enqueue", partitionIdx)
+			return errors.AssertionFailedf("partition at index %d permanently closed, cannot Enqueue", partitionIdx)
 		}
-		return errors.New("Enqueue illegally called after Dequeue or CloseAllOpenWriteFileDescriptors")
+		return errors.AssertionFailedf("Enqueue illegally called after Dequeue or CloseAllOpenWriteFileDescriptors")
 	}
 	p.lastEnqueuedPartitionIdx = partitionIdx
 	return p.partitions[idx].Enqueue(ctx, batch)
@@ -295,7 +290,7 @@ func (p *PartitionedDiskQueue) Dequeue(
 	case partitionStateReading:
 	// Do nothing.
 	case partitionStatePermanentlyClosed:
-		return errors.Errorf("partition at index %d permanently closed, cannot Dequeue", partitionIdx)
+		return errors.AssertionFailedf("partition at index %d permanently closed, cannot Dequeue", partitionIdx)
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unhandled state %d", state))
 	}

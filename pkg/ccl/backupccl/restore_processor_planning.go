@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -176,21 +173,17 @@ func distRestore(
 			EndTime:                     md.restoreTime,
 			Spans:                       md.dataToRestore.getSpans(),
 			BackupLocalityInfo:          md.backupLocalityInfo,
-			HighWater:                   md.spanFilter.highWaterMark,
 			UserProto:                   execCtx.User().EncodeProto(),
 			TargetSize:                  md.spanFilter.targetSize,
 			MaxFileCount:                int64(md.spanFilter.maxFileCount),
 			ChunkSize:                   int64(chunkSize),
 			NumEntries:                  int64(md.numImportSpans),
-			UseFrontierCheckpointing:    md.spanFilter.useFrontierCheckpointing,
 			NumNodes:                    int64(numNodes),
 			JobID:                       int64(md.jobID),
 			SQLInstanceIDs:              instanceIDs,
 			ExclusiveFileSpanComparison: md.exclusiveEndKeys,
 		}
-		if md.spanFilter.useFrontierCheckpointing {
-			spec.CheckpointedSpans = persistFrontier(md.spanFilter.checkpointFrontier, 0)
-		}
+		spec.CheckpointedSpans = persistFrontier(md.spanFilter.checkpointFrontier, 0)
 
 		splitAndScatterProc := physicalplan.Processor{
 			SQLInstanceID: execCtx.ExecCfg().NodeInfo.NodeID.SQLInstanceID(),

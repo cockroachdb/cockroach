@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree
 
@@ -21,6 +16,11 @@ type ZoneSpecifier struct {
 
 	// Partition is only respected when Table is set.
 	Partition Name
+
+	// StarIndex is true if the special `table@*` specifier is used. It indicates
+	// that the zone configuration should be applied across all of a table's
+	// indexes. (e.g., ALTER PARTITION ... OF INDEX <tablename>@*)
+	StarIndex bool
 }
 
 // TelemetryName returns a name fitting for telemetry purposes.
@@ -51,7 +51,7 @@ func (node ZoneSpecifier) TargetsTable() bool {
 
 // TargetsIndex returns whether the zone specifier targets an index.
 func (node ZoneSpecifier) TargetsIndex() bool {
-	return node.TargetsTable() && node.TableOrIndex.Index != ""
+	return node.TargetsTable() && (node.TableOrIndex.Index != "" || node.StarIndex)
 }
 
 // TargetsPartition returns whether the zone specifier targets a partition.
@@ -79,6 +79,9 @@ func (node *ZoneSpecifier) Format(ctx *FmtCtx) {
 			ctx.WriteString("TABLE ")
 		}
 		ctx.FormatNode(&node.TableOrIndex)
+		if node.StarIndex {
+			ctx.WriteString("@*")
+		}
 	}
 }
 
@@ -104,9 +107,6 @@ func (node *ShowZoneConfig) Format(ctx *FmtCtx) {
 // statement.
 type SetZoneConfig struct {
 	ZoneSpecifier
-	// AllIndexes indicates that the zone configuration should be applied across
-	// all of a tables indexes. (ALTER PARTITION ... OF INDEX <tablename>@*)
-	AllIndexes bool
 	ZoneConfigSettings
 }
 

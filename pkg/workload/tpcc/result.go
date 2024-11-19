@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tpcc
 
@@ -14,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
 	"github.com/codahale/hdrhistogram"
 )
@@ -124,7 +120,7 @@ func NewResult(
 // NewResultWithSnapshots creates a new result from a deserialized set of
 // histogram snapshots.
 func NewResultWithSnapshots(
-	activeWarehouses int, warehouseFactor float64, snapshots map[string][]histogram.SnapshotTick,
+	activeWarehouses int, warehouseFactor float64, snapshots map[string][]exporter.SnapshotTick,
 ) *Result {
 	var start time.Time
 	var end time.Time

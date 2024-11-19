@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package fs
 
@@ -24,9 +19,9 @@ type stickyConfig struct {
 }
 
 // UseStrictMemFS option instructs StickyRegistry to produce strict in-memory
-// filesystems, i.e. to use vfs.NewStrictMem instead of vfs.NewMem.
+// filesystems, i.e. to use vfs.NewCrashableMem instead of vfs.NewMem.
 var UseStrictMemFS = StickyOption(func(cfg *stickyConfig) {
-	cfg.newFS = vfs.NewStrictMem
+	cfg.newFS = vfs.NewCrashableMem
 })
 
 // StickyRegistry manages the lifecycle of sticky in-memory filesystems. It
@@ -36,6 +31,9 @@ type StickyRegistry interface {
 	// Get returns the named in-memory FS, constructing a new one if this is the
 	// first time a FS with the provided ID has been requested.
 	Get(stickyVFSID string) *vfs.MemFS
+	// Set changes the named in-memory FS; the given instance will be returned by
+	// subsequent Gets for this ID.
+	Set(stickyVFSID string, fs *vfs.MemFS)
 }
 
 // stickyRegistryImpl is the bookkeeper for all active sticky filesystems,
@@ -61,7 +59,7 @@ func NewStickyRegistry(opts ...StickyOption) StickyRegistry {
 	return registry
 }
 
-// Get implements the StickyRegistry interface.
+// Get is part of the StickyRegistry interface.
 func (registry *stickyRegistryImpl) Get(stickyVFSID string) *vfs.MemFS {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
@@ -72,4 +70,12 @@ func (registry *stickyRegistryImpl) Get(stickyVFSID string) *vfs.MemFS {
 	fs := registry.cfg.newFS()
 	registry.entries[stickyVFSID] = fs
 	return fs
+}
+
+// Set is part of the StickyRegistry interface.
+func (registry *stickyRegistryImpl) Set(stickyVFSID string, fs *vfs.MemFS) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	registry.entries[stickyVFSID] = fs
 }

@@ -84,6 +84,27 @@ define CreateFunctionPrivate {
     FuncDeps SchemaFunctionDeps
 }
 
+# CreateTrigger represents a CREATE TRIGGER statement.
+[Relational, DDL, Mutation]
+define CreateTrigger {
+    _ CreateTriggerPrivate
+}
+
+[Private]
+define CreateTriggerPrivate {
+    # Syntax is the CREATE TRIGGER AST node.
+    Syntax CreateTrigger
+
+    # Deps contains the data source dependencies of the trigger.
+    Deps SchemaDeps
+
+    # TypeDeps contains the type dependencies of the trigger.
+    TypeDeps SchemaTypeDeps
+
+    # FuncDeps contains the function dependencies of the trigger.
+    FuncDeps SchemaFunctionDeps
+}
+
 # Explain returns information about the execution plan of the "input"
 # expression.
 [Relational]

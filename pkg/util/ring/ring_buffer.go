@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package ring
 
@@ -15,8 +10,10 @@ package ring
 // The zero value is ready to use. See MakeBuffer() for initializing a Buffer
 // with pre-allocated space.
 //
-// Note: it is backed by a slice (unlike container/ring which is backed by a
-// linked list).
+// Note: it is backed by a slice (unlike container/ring/ring_buffer.go which
+// is backed by a linked list). There is also a container/ring/buffer.go, that
+// is backed by a slice and can both grow and shrink and uses bit arithmetic.
+// We should replace this implementation with that one.
 type Buffer[T any] struct {
 	buffer []T
 	head   int // the index of the front of the buffer

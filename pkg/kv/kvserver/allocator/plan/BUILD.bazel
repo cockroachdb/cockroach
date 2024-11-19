@@ -18,6 +18,7 @@ go_library(
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/benignerror",
+        "//pkg/kv/kvserver/kvflowcontrol/rac2",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/raft",
         "//pkg/raft/raftpb",

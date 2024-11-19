@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package memo exposes logic for `Memo`, the central data structure for `opt`.
 package memo
@@ -201,6 +196,8 @@ type Memo struct {
 	pushOffsetIntoIndexJoin                    bool
 	usePolymorphicParameterFix                 bool
 	useConditionalHoistFix                     bool
+	pushLimitIntoProjectFilteredScan           bool
+	unsafeAllowTriggersModifyingCascades       bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -288,6 +285,8 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		pushOffsetIntoIndexJoin:                    evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin,
 		usePolymorphicParameterFix:                 evalCtx.SessionData().OptimizerUsePolymorphicParameterFix,
 		useConditionalHoistFix:                     evalCtx.SessionData().OptimizerUseConditionalHoistFix,
+		pushLimitIntoProjectFilteredScan:           evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan,
+		unsafeAllowTriggersModifyingCascades:       evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -453,6 +452,8 @@ func (m *Memo) IsStale(
 		m.pushOffsetIntoIndexJoin != evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin ||
 		m.usePolymorphicParameterFix != evalCtx.SessionData().OptimizerUsePolymorphicParameterFix ||
 		m.useConditionalHoistFix != evalCtx.SessionData().OptimizerUseConditionalHoistFix ||
+		m.pushLimitIntoProjectFilteredScan != evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan ||
+		m.unsafeAllowTriggersModifyingCascades != evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}

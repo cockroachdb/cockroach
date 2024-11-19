@@ -3958,7 +3958,7 @@ statement ok
 ALTER TABLE t65890_c ADD CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES t65890_p(a, b)
 
 # Ensure that a fast path on ba_idx is used.
-skipif config local-read-committed
+skipif config weak-iso-level-configs
 query T
 SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
 ----
@@ -3968,7 +3968,7 @@ SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
   FK check: t65890_p@ba_idx
   size: 3 columns, 1 row
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 query T
 SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
 ----
@@ -4066,28 +4066,28 @@ CREATE DATABASE db_type_test
 statement ok
 CREATE TABLE db_type_test.public.parent (id INT8 PRIMARY KEY, name STRING NULL)
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 CREATE TABLE db_type_test.public.child_1 (id INT8 PRIMARY KEY, parent_id INT4 NULL REFERENCES db_type_test.public.parent(id), name STRING NULL)
 ----
 NOTICE: type of foreign key column "parent_id" (INT4) is not identical to referenced column "parent"."id" (INT8)
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 statement ok
 CREATE TABLE db_type_test.public.child_1 (id INT8 PRIMARY KEY, parent_id INT4 NULL REFERENCES db_type_test.public.parent(id), name STRING NULL)
 
 statement ok
 CREATE TABLE db_type_test.public.child_2 (id INT8 PRIMARY KEY, parent_id INT4 NULL, name STRING NULL)
 
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE db_type_test.public.child_2 ADD CONSTRAINT child_2_fk_parent_id FOREIGN KEY (parent_id) REFERENCES db_type_test.public.parent(id)
 ----
 NOTICE: type of foreign key column "parent_id" (INT4) is not identical to referenced column "parent"."id" (INT8)
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 statement ok
 ALTER TABLE db_type_test.public.child_2 ADD CONSTRAINT child_2_fk_parent_id FOREIGN KEY (parent_id) REFERENCES db_type_test.public.parent(id)
 
@@ -4219,29 +4219,50 @@ subtest ensure_notice_when_fk_type_not_equal_in_alter
 statement ok
 CREATE TABLE t1_fk ( pk INT PRIMARY KEY, col1 CHAR(7), col2 INT4, UNIQUE (col1,col2), FAMILY f1 (pk,col1,col2) );
 
+skipif config weak-iso-level-configs
 query T noticetrace
 CREATE TABLE t2_fk ( pk INT PRIMARY KEY, t1_fk_col1 CHAR(8), t1_fk_col2 INT4, col3 INT, FOREIGN KEY (t1_fk_col1,t1_fk_col2) REFERENCES t1_fk(col1, col2), FAMILY f1 (pk,t1_fk_col1,t1_fk_col2) );
 ----
-NOTICE: type of foreign key column "t1_fk_col1" \(CHAR\(8\)\) is not identical to referenced column "t1_fk"."col1" \(CHAR\(7\)\)
+NOTICE: type of foreign key column "t1_fk_col1" (CHAR(8)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
+
+onlyif config weak-iso-level-configs
+query T noticetrace
+CREATE TABLE t2_fk ( pk INT PRIMARY KEY, t1_fk_col1 CHAR(8), t1_fk_col2 INT4, col3 INT, FOREIGN KEY (t1_fk_col1,t1_fk_col2) REFERENCES t1_fk(col1, col2), FAMILY f1 (pk,t1_fk_col1,t1_fk_col2) );
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+NOTICE: type of foreign key column "t1_fk_col1" (CHAR(8)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
 
 # Test trivial data type change
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
+skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col2 SET DATA TYPE INT8
 ----
-NOTICE: type of foreign key column "t1_fk_col2" \(INT8\) is not identical to referenced column "t1_fk"."col2" \(INT4\)
+NOTICE: type of foreign key column "t1_fk_col2" (INT8) is not identical to referenced column "t1_fk"."col2" (INT4)
+
+onlyif config weak-iso-level-configs
+query T noticetrace
+ALTER TABLE t2_fk ALTER COLUMN t1_fk_col2 SET DATA TYPE INT8
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+NOTICE: type of foreign key column "t1_fk_col2" (INT8) is not identical to referenced column "t1_fk"."col2" (INT4)
 
 # Test validation data type change
-skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
+skipif config local-legacy-schema-changer weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col1 SET DATA TYPE CHAR(5)
 ----
-NOTICE: type of foreign key column "t1_fk_col1" \(CHAR\(5\)\) is not identical to referenced column "t1_fk"."col1" \(CHAR\(7\)\)
+NOTICE: type of foreign key column "t1_fk_col1" (CHAR(5)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
+
+onlyif config weak-iso-level-configs
+query T noticetrace
+ALTER TABLE t2_fk ALTER COLUMN t1_fk_col1 SET DATA TYPE CHAR(5)
+----
+NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+NOTICE: type of foreign key column "t1_fk_col1" (CHAR(5)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
+
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-24.1
 query TT
 SHOW CREATE TABLE t2_fk
 ----

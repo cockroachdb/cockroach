@@ -291,19 +291,19 @@ subtest end
 
 subtest ccl_functions
 
-skipif config 3node-tenant-default-configs
+skipif config enterprise-configs
 query error pgcode XXC01 encrypt can only be used with a CCL distribution
 SELECT encrypt('abc', 'key', 'aes')
 
-skipif config 3node-tenant-default-configs
+skipif config enterprise-configs
 query error pgcode XXC01 encrypt_iv can only be used with a CCL distribution
 SELECT encrypt_iv('abc', 'key', '123', 'aes')
 
-skipif config 3node-tenant-default-configs
+skipif config enterprise-configs
 query error pgcode XXC01 decrypt can only be used with a CCL distribution
 SELECT decrypt('\xdb5f149a7caf0cd275ca18c203a212c9', 'key', 'aes')
 
-skipif config 3node-tenant-default-configs
+skipif config enterprise-configs
 query error pgcode XXC01 decrypt_iv can only be used with a CCL distribution
 SELECT decrypt_iv('\x91b4ef63852013c8da53829da662b871', 'key', '123', 'aes')
 

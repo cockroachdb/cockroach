@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests_test
 
@@ -30,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -233,8 +229,9 @@ func (db *verifyFormatDB) execWithResettableTimeout(
 						strings.Contains(es, "driver: bad connection") ||
 						strings.Contains(es, "unexpected error inside CockroachDB") {
 						return &crasher{
-							sql: sql,
-							err: err,
+							sql:    sql,
+							err:    err,
+							detail: pgerror.FullError(err),
 						}
 					}
 					return &nonCrasher{sql: sql, err: err}
@@ -964,7 +961,7 @@ func testRandomSyntax(
 					// NOTE: Changes to this output format must be kept in-sync
 					// with logic in CondensedMessage.RSGCrash in order for
 					// crashes to be correctly reported to Github.
-					t.Errorf("Crash detected: %s\n%s;\n\nStack trace:\n%s", c.Error(), c.sql, c.detail)
+					t.Errorf("Crash detected: %s\n%s;\n\nMore details:\n%s", c.Error(), c.sql, c.detail)
 				}
 			}
 			countsMu.Unlock()

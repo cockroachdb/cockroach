@@ -60,6 +60,7 @@ go_library(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_pmezard_go_difflib//difflib",
     ],
 )

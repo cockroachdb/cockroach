@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rangefeed
 
@@ -339,7 +334,9 @@ func TestInitResolvedTSScan(t *testing.T) {
 	defer engine.Close()
 
 	// Mock processor. We just needs its eventC.
-	p := LegacyProcessor{
+	s := newTestScheduler(1)
+	p := ScheduledProcessor{
+		scheduler: s.NewClientScheduler(),
 		Config: Config{
 			Span: span,
 		},
@@ -482,7 +479,11 @@ func TestTxnPushAttempt(t *testing.T) {
 
 	// Mock processor. We configure its key span to exclude one of txn2's lock
 	// spans and a portion of three of txn4's lock spans.
-	p := LegacyProcessor{eventC: make(chan *event, 100)}
+	s := newTestScheduler(1)
+	p := ScheduledProcessor{
+		scheduler: s.NewClientScheduler(),
+		eventC:    make(chan *event, 100),
+	}
 	p.Span = roachpb.RSpan{Key: roachpb.RKey("b"), EndKey: roachpb.RKey("m")}
 	p.TxnPusher = &tp
 

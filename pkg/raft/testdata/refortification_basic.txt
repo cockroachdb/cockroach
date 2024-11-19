@@ -1,0 +1,242 @@
+# Basic tests for leader refortification.
+
+log-level none
+----
+ok
+
+add-nodes 3 voters=(1,2,3) index=2
+----
+ok
+
+log-level info
+----
+ok
+
+# Muck around with StoreLiveness to make it somewhat interesting.
+bump-epoch 1
+----
+  1 2 3
+1 2 1 1
+2 2 1 1
+3 2 1 1
+
+withdraw-support 1 1
+----
+  1 2 3
+1 x 1 1
+2 2 1 1
+3 2 1 1
+
+grant-support 1 1
+----
+  1 2 3
+1 3 1 1
+2 2 1 1
+3 2 1 1
+
+withdraw-support 3 1
+----
+  1 2 3
+1 3 1 1
+2 2 1 1
+3 x 1 1
+
+campaign 1
+----
+INFO 1 is starting a new election at term 0
+INFO 1 became candidate at term 1
+INFO 1 [logterm: 1, index: 2] sent MsgVote request to 2 at term 1
+INFO 1 [logterm: 1, index: 2] sent MsgVote request to 3 at term 1
+
+stabilize
+----
+> 1 handling Ready
+  Ready MustSync=true:
+  State:StateCandidate
+  HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
+  Messages:
+  1->2 MsgVote Term:1 Log:1/2
+  1->3 MsgVote Term:1 Log:1/2
+  INFO 1 received MsgVoteResp from 1 at term 1
+  INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
+> 2 receiving messages
+  1->2 MsgVote Term:1 Log:1/2
+  INFO 2 [term: 0] received a MsgVote message with higher term from 1 [term: 1], advancing term
+  INFO 2 became follower at term 1
+  INFO 2 [logterm: 1, index: 2, vote: 0] cast MsgVote for 1 [logterm: 1, index: 2] at term 1
+> 3 receiving messages
+  1->3 MsgVote Term:1 Log:1/2
+  INFO 3 [term: 0] received a MsgVote message with higher term from 1 [term: 1], advancing term
+  INFO 3 became follower at term 1
+  INFO 3 [logterm: 1, index: 2, vote: 0] cast MsgVote for 1 [logterm: 1, index: 2] at term 1
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
+  Messages:
+  2->1 MsgVoteResp Term:1 Log:0/0
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:2 Lead:0 LeadEpoch:0
+  Messages:
+  3->1 MsgVoteResp Term:1 Log:0/0
+> 1 receiving messages
+  2->1 MsgVoteResp Term:1 Log:0/0
+  INFO 1 received MsgVoteResp from 2 at term 1
+  INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
+  INFO 1 became leader at term 1
+  3->1 MsgVoteResp Term:1 Log:0/0
+> 1 handling Ready
+  Ready MustSync=true:
+  State:StateLeader
+  HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:3
+  Entries:
+  1/3 EntryNormal ""
+  Messages:
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
+  1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
+> 2 receiving messages
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
+> 3 receiving messages
+  1->3 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:2
+  Entries:
+  1/3 EntryNormal ""
+  Messages:
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
+  2->1 MsgAppResp Term:1 Log:0/3 Commit:2
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:2 Lead:1 LeadEpoch:0
+  Entries:
+  1/3 EntryNormal ""
+  Messages:
+  3->1 MsgAppResp Term:1 Log:0/3 Commit:2
+> 1 receiving messages
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
+  2->1 MsgAppResp Term:1 Log:0/3 Commit:2
+  3->1 MsgAppResp Term:1 Log:0/3 Commit:2
+> 1 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:3
+  CommittedEntries:
+  1/3 EntryNormal ""
+  Messages:
+  1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
+  1->2 MsgApp Term:1 Log:1/3 Commit:3
+  1->3 MsgApp Term:1 Log:1/3 Commit:3
+> 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/2 Commit:2 Entries:[1/3 EntryNormal ""]
+  1->2 MsgApp Term:1 Log:1/3 Commit:3
+> 3 receiving messages
+  1->3 MsgApp Term:1 Log:1/3 Commit:3
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:2
+  CommittedEntries:
+  1/3 EntryNormal ""
+  Messages:
+  2->1 MsgAppResp Term:1 Log:0/3 Commit:2
+  2->1 MsgAppResp Term:1 Log:0/3 Commit:3
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0
+  CommittedEntries:
+  1/3 EntryNormal ""
+  Messages:
+  3->1 MsgAppResp Term:1 Log:0/3 Commit:3
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/3 Commit:2
+  2->1 MsgAppResp Term:1 Log:0/3 Commit:3
+  3->1 MsgAppResp Term:1 Log:0/3 Commit:3
+
+# On the next heartbeat timeout, the leader still won't send a MsgFortifyLeader
+# to follower 3 because it doesn't support it in the store liveness fabric.
+tick-heartbeat 1
+----
+ok
+
+stabilize 1
+----
+ok
+
+grant-support 3 1
+----
+  1 2 3
+1 3 1 1
+2 2 1 1
+3 3 1 1
+
+# Now that follower 3 supports the leader in the store liveness fabric, the
+# leader will try to fortify it on the next heartbeat.
+tick-heartbeat 1
+----
+ok
+
+stabilize
+----
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->3 MsgFortifyLeader Term:1 Log:0/0
+> 3 receiving messages
+  1->3 MsgFortifyLeader Term:1 Log:0/0
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:3
+  Messages:
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
+> 1 receiving messages
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
+
+# If the follower supports the leader at an older epoch, the leader will try
+# to refortify it on the next heartbeat timeout.
+bump-epoch 1
+----
+  1 2 3
+1 4 1 1
+2 3 1 1
+3 4 1 1
+
+tick-heartbeat 1
+----
+ok
+
+stabilize
+----
+> 1 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:4
+  Messages:
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->3 MsgFortifyLeader Term:1 Log:0/0
+> 2 receiving messages
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+> 3 receiving messages
+  1->3 MsgFortifyLeader Term:1 Log:0/0
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:3
+  Messages:
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:4
+  Messages:
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:4
+> 1 receiving messages
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:3
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:4
+
+# If no follower needs to be refortified, the leader won't send any
+# fortification messages.
+tick-heartbeat 1
+----
+ok
+
+stabilize
+----
+ok

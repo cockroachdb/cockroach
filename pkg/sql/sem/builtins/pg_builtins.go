@@ -1,18 +1,14 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package builtins
 
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -181,8 +177,16 @@ func init() {
 			},
 		)
 	})
-	// Add casts between the same type.
-	for typOID, def := range castBuiltins {
+	// Add casts between the same type in deterministic order.
+	typOIDs := make([]oid.Oid, 0, len(castBuiltins))
+	for typOID := range castBuiltins {
+		typOIDs = append(typOIDs, typOID)
+	}
+	sort.Slice(typOIDs, func(i, j int) bool {
+		return typOIDs[i] < typOIDs[j]
+	})
+	for _, typOID := range typOIDs {
+		def := castBuiltins[typOID]
 		typ := types.OidToType[typOID]
 		if !shouldMakeFromCastBuiltin(typ) {
 			continue

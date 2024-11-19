@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -271,7 +268,6 @@ func makeImportSpans(
 	spans []roachpb.Span,
 	backups []backuppb.BackupManifest,
 	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
-	highWaterMark []byte,
 	targetSize int64,
 	introducedSpanFrontier spanUtils.Frontier,
 	completedSpans []jobspb.RestoreProgress_FrontierEntry,
@@ -289,11 +285,10 @@ func makeImportSpans(
 	filter, err := makeSpanCoveringFilter(
 		spans,
 		completedSpans,
-		highWaterMark,
 		introducedSpanFrontier,
 		targetSize,
 		defaultMaxFileCount,
-		highWaterMark == nil)
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +415,6 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			spans,
 			backups,
 			layerToIterFactory,
-			nil,
 			noSpanTargetSize,
 			emptySpanFrontier,
 			emptyCompletedSpans)
@@ -442,7 +436,6 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			spans,
 			backups,
 			layerToIterFactory,
-			nil,
 			2<<20,
 			emptySpanFrontier,
 			emptyCompletedSpans)
@@ -466,7 +459,6 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			spans,
 			backups,
 			layerToIterFactory,
-			nil,
 			noSpanTargetSize,
 			introducedSpanFrontier,
 			emptyCompletedSpans)
@@ -495,7 +487,6 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			spans,
 			backups,
 			layerToIterFactory,
-			nil,
 			noSpanTargetSize,
 			emptySpanFrontier,
 			persistFrontier(frontier, 0))
@@ -523,7 +514,6 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 			spans,
 			backups,
 			layerToIterFactory,
-			nil,
 			noSpanTargetSize,
 			emptySpanFrontier,
 			emptyCompletedSpans)
@@ -692,10 +682,9 @@ func TestCheckpointFilter(t *testing.T) {
 			[]roachpb.Span{requiredSpan},
 			checkpointedSpans,
 			nil,
-			nil,
 			0,
 			defaultMaxFileCount,
-			true)
+		)
 		require.NoError(t, err)
 		defer f.close()
 		require.Equal(t, tc.expectedToDoSpans, f.filterCompleted(requiredSpan))
@@ -835,7 +824,6 @@ func runTestRestoreEntryCoverForSpanAndFileCounts(
 							backups[numBackups-1].Spans,
 							backups,
 							layerToIterFactory,
-							nil,
 							target<<20,
 							introducedSpanFrontier,
 							[]jobspb.RestoreProgress_FrontierEntry{})
@@ -848,32 +836,23 @@ func runTestRestoreEntryCoverForSpanAndFileCounts(
 						if len(cover) > 0 {
 							for n := 1; n <= 5; n++ {
 								var completedSpans []roachpb.Span
-								var highWater []byte
 								var frontierEntries []jobspb.RestoreProgress_FrontierEntry
 
 								// Randomly choose to use frontier checkpointing instead of
 								// explicitly testing both forms to avoid creating an exponential
 								// number of tests.
-								useFrontierCheckpointing := rand.Intn(2) == 0
-								if useFrontierCheckpointing {
-									completedSpans = getRandomCompletedSpans(cover, n)
-									for _, sp := range completedSpans {
-										frontierEntries = append(frontierEntries, jobspb.RestoreProgress_FrontierEntry{
-											Span:      sp,
-											Timestamp: completedSpanTime,
-										})
-									}
-								} else {
-									idx := r.Intn(len(cover))
-									highWater = cover[idx].Span.EndKey
+								completedSpans = getRandomCompletedSpans(cover, n)
+								for _, sp := range completedSpans {
+									frontierEntries = append(frontierEntries, jobspb.RestoreProgress_FrontierEntry{
+										Span:      sp,
+										Timestamp: completedSpanTime,
+									})
 								}
-
 								resumeCover, err := makeImportSpans(
 									ctx,
 									backups[numBackups-1].Spans,
 									backups,
 									layerToIterFactory,
-									highWater,
 									target<<20,
 									introducedSpanFrontier,
 									frontierEntries)
@@ -883,21 +862,11 @@ func runTestRestoreEntryCoverForSpanAndFileCounts(
 								// completed spans from the original required spans.
 								var resumedRequiredSpans roachpb.Spans
 								for _, origReq := range backups[numBackups-1].Spans {
-									var resumeReq []roachpb.Span
-									if useFrontierCheckpointing {
-										resumeReq = roachpb.SubtractSpans([]roachpb.Span{origReq}, completedSpans)
-									} else {
-										resumeReq = roachpb.SubtractSpans([]roachpb.Span{origReq}, []roachpb.Span{{Key: cover[0].Span.Key, EndKey: highWater}})
-									}
+									resumeReq := roachpb.SubtractSpans([]roachpb.Span{origReq}, completedSpans)
 									resumedRequiredSpans = append(resumedRequiredSpans, resumeReq...)
 								}
 
-								var errorMsg string
-								if useFrontierCheckpointing {
-									errorMsg = fmt.Sprintf("completed spans in frontier: %v", completedSpans)
-								} else {
-									errorMsg = fmt.Sprintf("highwater: %v", highWater)
-								}
+								errorMsg := fmt.Sprintf("completed spans in frontier: %v", completedSpans)
 
 								require.NoError(t, checkRestoreCovering(ctx, backups, resumedRequiredSpans,
 									resumeCover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage),
@@ -1036,7 +1005,7 @@ func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
 				expectedCover = tt.expectedCoverGenerated
 			}
 
-			cover, err := makeImportSpans(ctx, tt.requiredSpans, backups, layerToIterFactory, nil, noSpanTargetSize, emptySpanFrontier, emptyCompletedSpans)
+			cover, err := makeImportSpans(ctx, tt.requiredSpans, backups, layerToIterFactory, noSpanTargetSize, emptySpanFrontier, emptyCompletedSpans)
 			require.NoError(t, err)
 
 			simpleCover := make([]simpleRestoreSpanEntry, len(cover))

@@ -1,0 +1,131 @@
+echo
+----
+----
+# No streams.
+
+
+# Single stream with 1 MiB of eval regular tokens deducted.
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 1,
+  "available_eval_regular_tokens": "15728640",
+  "available_eval_elastic_tokens": "7340032",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "8388608"
+}
+
+
+# Single stream with 1 MiB of elastic+regular (send+eval) tokens deducted.
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 1,
+  "available_eval_regular_tokens": "15728640",
+  "available_eval_elastic_tokens": "7340032",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "7340032"
+}
+
+
+# Three streams, with 1 MiB of regular tokens deducted each.
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 1,
+  "available_eval_regular_tokens": "15728640",
+  "available_eval_elastic_tokens": "7340032",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "8388608"
+}
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 2,
+  "available_eval_regular_tokens": "15728640",
+  "available_eval_elastic_tokens": "7340032",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "8388608"
+}
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 3,
+  "available_eval_regular_tokens": "15728640",
+  "available_eval_elastic_tokens": "7340032",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "8388608"
+}
+
+
+# Three streams, with 1 MiB of elastic send tokens deducted from each.
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 1,
+  "available_eval_regular_tokens": "15728640",
+  "available_eval_elastic_tokens": "7340032",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "7340032"
+}
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 2,
+  "available_eval_regular_tokens": "15728640",
+  "available_eval_elastic_tokens": "7340032",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "7340032"
+}
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 3,
+  "available_eval_regular_tokens": "15728640",
+  "available_eval_elastic_tokens": "7340032",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "7340032"
+}
+
+
+# Three streams, all tokens returned.
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 1,
+  "available_eval_regular_tokens": "16777216",
+  "available_eval_elastic_tokens": "8388608",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "8388608"
+}
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 2,
+  "available_eval_regular_tokens": "16777216",
+  "available_eval_elastic_tokens": "8388608",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "8388608"
+}
+{
+  "tenant_id": {
+    "id": "1"
+  },
+  "store_id": 3,
+  "available_eval_regular_tokens": "16777216",
+  "available_eval_elastic_tokens": "8388608",
+  "available_send_regular_tokens": "16777216",
+  "available_send_elastic_tokens": "8388608"
+}
+----
+----

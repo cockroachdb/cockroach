@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
@@ -14,7 +9,6 @@ import {
   SqlStatsSortType,
   DEFAULT_STATS_REQ_OPTIONS,
 } from "src/api/statementsApi";
-import { ViewMode } from "src/databaseDetailsPage/types";
 import { WorkloadInsightEventFilters } from "src/insights";
 import { defaultFilters, Filters } from "src/queryFilter/";
 
@@ -84,7 +78,6 @@ export type LocalStorageState = {
   "typeSetting/JobsPage": number;
   "statusSetting/JobsPage": string;
   "showSetting/JobsPage": string;
-  [LocalStorageKeys.DB_DETAILS_VIEW_MODE]: ViewMode;
   [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]: boolean;
   "requestTime/StatementsPage": moment.Moment;
   "requestTime/TransactionsPage": moment.Moment;
@@ -123,8 +116,6 @@ const defaultNameSortSetting: SortSetting = {
   ascending: true,
   columnTitle: "name",
 };
-
-export const defaultDatabaseDetailsViewMode = ViewMode.Tables;
 
 const defaultFiltersActiveExecutions = {
   app: "",
@@ -278,9 +269,6 @@ const initialState: LocalStorageState = {
   "statusSetting/JobsPage":
     JSON.parse(localStorage.getItem("statusSetting/JobsPage")) ||
     defaultJobStatusSetting,
-  [LocalStorageKeys.DB_DETAILS_VIEW_MODE]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_DETAILS_VIEW_MODE)) ||
-    defaultDatabaseDetailsViewMode,
   [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]:
     JSON.parse(
       localStorage.getItem(

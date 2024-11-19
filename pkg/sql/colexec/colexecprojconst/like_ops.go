@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colexecprojconst
 
@@ -19,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
+
+var ilikeConstantPatternErr = errors.New("ILIKE and NOT ILIKE aren't supported with a constant pattern")
 
 // GetLikeProjectionOperator returns a projection operator which projects the
 // result of the specified LIKE pattern, or NOT LIKE if the negate argument is
@@ -60,7 +57,7 @@ func GetLikeProjectionOperator(
 			// We don't have an equivalent projection operator that would
 			// convert the argument to capital letters, so for now we fall back
 			// to the default comparison operator.
-			return nil, errors.New("ILIKE and NOT ILIKE aren't supported with a constant pattern")
+			return nil, ilikeConstantPatternErr
 		}
 		if negate {
 			return &projNEBytesBytesConstOp{

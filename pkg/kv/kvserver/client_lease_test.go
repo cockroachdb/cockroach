@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver_test
 
@@ -32,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -436,7 +431,7 @@ func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
 		require.NoError(t, repl0.RaftReportUnreachable(4))
 		// Check the Raft progress.
 		s := repl0.RaftStatus()
-		require.Equal(t, raft.StateLeader, s.RaftState)
+		require.Equal(t, raftpb.StateLeader, s.RaftState)
 		p := s.Progress
 		require.Len(t, p, 4)
 		require.Contains(t, p, raftpb.PeerID(4))
@@ -447,11 +442,12 @@ func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
 	})
 
 	// Run the range through the replicate queue on n1.
-	trace, processErr, err := store0.Enqueue(
-		ctx, "replicate", repl0, true /* skipShouldQueue */, false /* async */)
+	traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store0.GetStoreConfig().Tracer(), "trace-enqueue")
+	processErr, err := store0.Enqueue(
+		traceCtx, "replicate", repl0, true /* skipShouldQueue */, false /* async */)
 	require.NoError(t, err)
 	require.NoError(t, processErr)
-	formattedTrace := trace.String()
+	formattedTrace := rec().String()
 	expectedMessages := []string{
 		`transitioning out of joint configuration`,
 		`leaseholder .* is being removed through an atomic replication change, transferring lease to`,
@@ -556,7 +552,7 @@ func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) 
 	atomic.StoreInt64(&scratchRangeID, 0)
 	store := tc.GetFirstStoreFromServer(t, 0)
 	repl := store.LookupReplica(roachpb.RKey(scratchStartKey))
-	_, _, err = store.Enqueue(
+	_, err = store.Enqueue(
 		ctx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
 	)
 	require.NoError(t, err)
@@ -1316,7 +1312,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
 			require.NotNil(t, repl)
 			// We don't know who the leaseholder might be, so ignore errors.
-			_, _, _ = tc.GetFirstStoreFromServer(t, i).Enqueue(
+			_, _ = tc.GetFirstStoreFromServer(t, i).Enqueue(
 				ctx, "lease", repl, true /* skipShouldQueue */, false, /* async */
 			)
 		}

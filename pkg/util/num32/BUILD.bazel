@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "num32",
+    srcs = [
+        "doc.go",
+        "mat.go",
+        "scalar.go",
+        "vec.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/num32",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_gonum_v1_gonum//blas",
+        "@org_gonum_v1_gonum//blas/blas32",
+        "@org_gonum_v1_gonum//blas/blas64",
+        "@org_gonum_v1_gonum//floats/scalar",
+        "@org_gonum_v1_gonum//lapack/lapack64",
+    ],
+)
+
+go_test(
+    name = "num32_test",
+    srcs = [
+        "mat_test.go",
+        "scalar_test.go",
+        "vec_test.go",
+    ],
+    embed = [":num32"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

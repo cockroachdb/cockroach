@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package delegate
 
@@ -287,6 +282,12 @@ AND s.end_key > r.start_key`)
 			fmt.Fprintf(&buf, " AND s.index_id = %d", idx.ID())
 		}
 	}
+
+	// Exclude dropped tables from .crdb_internal.table_spans
+	if n.Source != tree.ShowRangesIndex && n.Options.Mode != tree.ExpandIndexes {
+		buf.WriteString(" AND s.dropped = false")
+	}
+
 	buf.WriteString("\n)") // end of ranges CTE.
 
 	// Now, enhance the result set so far with additional table/index
@@ -704,6 +705,10 @@ all_span_stats AS (
 		for i := len(colinfo.RangesNoLeases); i < len(colinfo.Ranges); i++ {
 			// NB: we've already output lease_holder above.
 			if colinfo.Ranges[i].Name == "lease_holder" {
+				continue
+			}
+			// Skip the errors column; it's used for internal purposes.
+			if colinfo.Ranges[i].Name == "errors" {
 				continue
 			}
 			fmt.Fprintf(&buf, ",\n  %s", tree.NameString(colinfo.Ranges[i].Name))

@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 //go:build crdb_test && !crdb_test_off
 // +build crdb_test,!crdb_test_off
@@ -123,12 +118,24 @@ func (i *assertionIter) Key() []byte {
 }
 
 func (i *assertionIter) Value() []byte {
+	panic(errors.AssertionFailedf("Value() is deprecated; use ValueAndErr()"))
+}
+
+func (i *assertionIter) ValueAndErr() ([]byte, error) {
 	if !i.Valid() {
-		panic(errors.AssertionFailedf("Value() called on !Valid() pebble.Iterator"))
+		panic(errors.AssertionFailedf("ValueAndErr() called on !Valid() pebble.Iterator"))
 	}
+	val, err := i.Iterator.ValueAndErr()
 	idx := i.unsafeBufs.idx
-	i.unsafeBufs.val[idx] = append(i.unsafeBufs.val[idx][:0], i.Iterator.Value()...)
-	return i.unsafeBufs.val[idx]
+	i.unsafeBufs.val[idx] = append(i.unsafeBufs.val[idx][:0], val...)
+	// Preserve nil-ness to ensure we test exactly the behavior of Pebble.
+	if val == nil {
+		return val, err
+	}
+	if i.unsafeBufs.val[idx] == nil {
+		i.unsafeBufs.val[idx] = []byte{}
+	}
+	return i.unsafeBufs.val[idx], err
 }
 
 func (i *assertionIter) LazyValue() pebble.LazyValue {

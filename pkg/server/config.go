@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -33,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -267,11 +263,6 @@ type BaseConfig struct {
 	// other service (typically, the serverController) will accept and
 	// route SQL connections instead.
 	DisableSQLListener bool
-
-	// ObsServiceAddr is the address of the OTLP sink to send events to, if any.
-	// These events are meant for the Observability Service, but they might pass
-	// through an OpenTelemetry Collector.
-	ObsServiceAddr string
 
 	// RPCListenerFactory provides an alternate implementation of
 	// ListenAndUpdateAddrs for use when creating gPRC
@@ -542,6 +533,9 @@ type SQLConfig struct {
 	// NodeMetricsRecorder is the node's MetricRecorder; the tenant's metrics will
 	// be recorded with it. Nil if this is not a shared-process tenant.
 	NodeMetricsRecorder *status.MetricsRecorder
+
+	// LicenseEnforcer is used to enforce license policies.
+	LicenseEnforcer *license.Enforcer
 }
 
 // LocalKVServerInfo is used to group information about the local KV server
@@ -575,6 +569,7 @@ func (sqlCfg *SQLConfig) SetDefaults(tempStorageCfg base.TempStorageConfig) {
 	sqlCfg.TableStatCacheSize = defaultSQLTableStatCacheSize
 	sqlCfg.QueryCacheSize = defaultSQLQueryCacheSize
 	sqlCfg.TempStorageConfig = tempStorageCfg
+	sqlCfg.LicenseEnforcer = license.NewEnforcer(nil)
 }
 
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard

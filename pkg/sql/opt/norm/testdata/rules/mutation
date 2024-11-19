@@ -359,6 +359,8 @@ SELECT a FROM t WHERE a = 1 FOR SHARE;
 ----
 lock t
  ├── columns: a:2!null  [hidden: k:1!null]
+ ├── key columns: k:1
+ ├── lock columns: (12-20)
  ├── locking: for-share
  ├── volatile, mutations
  ├── key: (1)

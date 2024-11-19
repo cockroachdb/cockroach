@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
@@ -29,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type applierDecision string
@@ -55,7 +53,7 @@ const (
 	applierQueryBase = `
 WITH data (%s)
 AS (VALUES (%s))
-SELECT [FUNCTION %d]('%s', data, existing, ROW(%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_replication_origin_timestamp, $%d, $%d) AS decision
+SELECT [FUNCTION %d]('%s', data, existing, ROW(%s), existing.crdb_internal_mvcc_timestamp, existing.crdb_internal_origin_timestamp, $%d) AS decision
 FROM data LEFT JOIN [%d as existing]
 %s`
 	applierUpsertQueryBase = `UPSERT INTO [%d as t] (%s) VALUES (%s)`
@@ -89,22 +87,21 @@ type applierQuerier struct {
 	ieoInsert, ieoDelete, ieoApplyUDF sessiondata.InternalExecutorOverride
 
 	// Used for the applier query to reduce allocations.
-	proposedMVCCTs     tree.DDecimal
-	proposedPrevMVCCTs tree.DDecimal
+	proposedMVCCTs tree.DDecimal
 }
 
 func makeApplierQuerier(
 	ctx context.Context,
 	settings *cluster.Settings,
-	tableConfigs map[descpb.ID]sqlProcessorTableConfig,
+	tableConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 	jobID jobspb.JobID,
 	ie isql.Executor,
 ) *applierQuerier {
 	return &applierQuerier{
 		queryBuffer: queryBuffer{
-			deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableConfigs)),
-			insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
-			applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigs)),
+			deleteQueries:  make(map[catid.DescID]queryBuilder, len(tableConfigByDestID)),
+			insertQueries:  make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigByDestID)),
+			applierQueries: make(map[catid.DescID]map[catid.FamilyID]queryBuilder, len(tableConfigByDestID)),
 		},
 		settings:    settings,
 		ieoInsert:   getIEOverride(replicatedInsertOpName, jobID),
@@ -208,11 +205,10 @@ func (aq *applierQuerier) applyUDF(
 	}
 
 	aq.proposedMVCCTs.Decimal = eval.TimestampToDecimal(row.MvccTimestamp)
-	aq.proposedPrevMVCCTs.Decimal = eval.TimestampToDecimal(prevRow.MvccTimestamp)
-
+	datums = append(datums, &aq.proposedMVCCTs)
 	decisionRow, err := aq.queryRowExParsed(
 		ctx, replicatedApplyUDFOpName, txn, ie, aq.ieoApplyUDF, stmt,
-		append(datums, &aq.proposedMVCCTs, &aq.proposedPrevMVCCTs)...,
+		datums...,
 	)
 	if err != nil {
 		return noDecision, err
@@ -254,7 +250,9 @@ func (aq *applierQuerier) applyDecision(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if err := aq.execParsed(ctx, replicatedDeleteOpName, txn, ie, aq.ieoDelete, stmt, datums...); err != nil {
+		sess := aq.ieoDelete
+		sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
+		if err := aq.execParsed(ctx, replicatedDeleteOpName, txn, ie, sess, stmt, datums...); err != nil {
 			return batchStats{}, err
 		}
 		return batchStats{}, nil
@@ -270,7 +268,9 @@ func (aq *applierQuerier) applyDecision(
 		if err != nil {
 			return batchStats{}, err
 		}
-		if err := aq.execParsed(ctx, replicatedInsertOpName, txn, ie, aq.ieoInsert, stmt, datums...); err != nil {
+		sess := aq.ieoInsert
+		sess.OriginTimestampForLogicalDataReplication = row.MvccTimestamp
+		if err := aq.execParsed(ctx, replicatedInsertOpName, txn, ie, sess, stmt, datums...); err != nil {
 			return batchStats{}, err
 		}
 		return batchStats{}, nil
@@ -281,7 +281,7 @@ func (aq *applierQuerier) applyDecision(
 
 func (aq *applierQuerier) execParsed(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	ie isql.Executor,
 	o sessiondata.InternalExecutorOverride,
@@ -297,7 +297,7 @@ func (aq *applierQuerier) execParsed(
 
 func (aq *applierQuerier) queryRowExParsed(
 	ctx context.Context,
-	opName string,
+	opName redact.RedactableString,
 	txn *kv.Txn,
 	ie isql.Executor,
 	o sessiondata.InternalExecutorOverride,
@@ -369,12 +369,11 @@ func makeApplierApplyQueries(
 	}
 
 	var (
-		colCount          = len(inputColumnNames)
-		colNames          = escapedColumnNameList(inputColumnNames)
-		valStr            = valueStringForNumItems(colCount, 1)
-		prevValStr        = valueStringForNumItems(colCount, colCount+1)
-		remoteMVCCIdx     = (colCount * 2) + 1
-		remotePrevMVCCIdx = remoteMVCCIdx + 1
+		colCount      = len(inputColumnNames)
+		colNames      = escapedColumnNameList(inputColumnNames)
+		valStr        = valueStringForNumItems(colCount, 1)
+		prevValStr    = valueStringForNumItems(colCount, colCount+1)
+		remoteMVCCIdx = (colCount * 2) + 1
 	)
 
 	joinClause := makeApplierJoinClause(td.TableDesc().PrimaryIndex.KeyColumnNames)
@@ -392,7 +391,6 @@ func makeApplierApplyQueries(
 			mutType,
 			prevValStr,
 			remoteMVCCIdx,
-			remotePrevMVCCIdx,
 			dstTableDescID,
 			joinClause,
 		)
@@ -419,8 +417,8 @@ func makeApplierInsertQueries(
 		if err != nil {
 			return err
 		}
-		colNames := escapedColumnNameList(append(inputColumnNames, originTimestampColumnName))
-		valStr := valueStringForNumItems(len(inputColumnNames)+1, 1)
+		colNames := escapedColumnNameList(inputColumnNames)
+		valStr := valueStringForNumItems(len(inputColumnNames), 1)
 		upsertQuery, err := parser.ParseOne(fmt.Sprintf(applierUpsertQueryBase,
 			dstTableDescID,
 			colNames,
@@ -431,10 +429,9 @@ func makeApplierInsertQueries(
 		}
 
 		queryBuilders[family.ID] = queryBuilder{
-			stmts:                []statements.Statement[tree.Statement]{upsertQuery},
-			needsOriginTimestamp: true,
-			inputColumns:         inputColumnNames,
-			scratchDatums:        make([]interface{}, len(inputColumnNames)+1),
+			stmts:         []statements.Statement[tree.Statement]{upsertQuery},
+			inputColumns:  inputColumnNames,
+			scratchDatums: make([]interface{}, len(inputColumnNames)),
 		}
 		return err
 	}); err != nil {
@@ -465,7 +462,7 @@ func makeApplierDeleteQuery(
 	return queryBuilder{
 		stmts:        []statements.Statement[tree.Statement]{stmt},
 		inputColumns: names,
-		// 2 extra datum slots for the proposed and previous MVCC timestamp.
-		scratchDatums: make([]interface{}, len(names)+2),
+		// Extra datum slots for the proposed MVCC timestamp.
+		scratchDatums: make([]interface{}, len(names)+1),
 	}, nil
 }

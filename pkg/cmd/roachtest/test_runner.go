@@ -1,18 +1,13 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
 import (
 	"context"
-	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"html"
 	"io"
@@ -31,21 +26,21 @@ import (
 
 	"github.com/DataExMachina-dev/side-eye-go/sideeyeclient"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -81,11 +76,17 @@ var (
 	// *and* VMs were preempted. These errors are directed to Test Eng
 	// instead of owning teams.
 	vmPreemptionError = func(preemptedVMs string) error {
-		return registry.ErrorWithOwner(
+		infraFlakeErr := registry.ErrorWithOwner(
 			registry.OwnerTestEng, fmt.Errorf("preempted VMs: %s", preemptedVMs),
 			registry.WithTitleOverride("vm_preemption"),
 			registry.InfraFlake,
 		)
+
+		// The returned error is marked as non-reportable to avoid the
+		// noise, as we get dozens of preemptions on each nightly run.  We
+		// have dashboards that can be used to check how often we get
+		// preemptions in test runs.
+		return registry.NonReportable(infraFlakeErr)
 	}
 
 	// vmHostError is the error that indicates that a test failed
@@ -109,6 +110,9 @@ const VmLabelTestName string = "test_name"
 
 // VmLabelTestRunID is the label used to identify the test run id in the VM metadata
 const VmLabelTestRunID string = "test_run_id"
+
+// VmLabelTestOwner is the label used to identify the test owner in the VM metadata
+const VmLabelTestOwner string = "test_owner"
 
 // testRunner runs tests.
 type testRunner struct {
@@ -259,6 +263,7 @@ type testOpts struct {
 	versionsBinaryOverride map[string]string
 	skipInit               bool
 	goCoverEnabled         bool
+	exportOpenMetrics      bool
 }
 
 // Run runs tests.
@@ -577,7 +582,7 @@ func (r *testRunner) runWorker(
 ) error {
 	stdout := lopt.stdout
 
-	wStatus := r.addWorker(ctx, name)
+	wStatus := r.addWorker(ctx, l, name)
 	defer func() {
 		r.removeWorker(ctx, name)
 	}()
@@ -646,7 +651,7 @@ func (r *testRunner) runWorker(
 		testToRun := testToRunRes{noWork: true}
 		if c != nil {
 			// Try to reuse cluster.
-			testToRun = work.selectTestForCluster(ctx, c.spec, r.cr, roachtestflags.Cloud)
+			testToRun = work.selectTestForCluster(ctx, l, c.spec, r.cr, roachtestflags.Cloud)
 			if !testToRun.noWork {
 				// We found a test to run on this cluster. Wipe the cluster.
 				if err := c.WipeForReuse(ctx, l, testToRun.spec.Cluster); err != nil {
@@ -831,6 +836,7 @@ func (r *testRunner) runWorker(
 			skipInit:               topt.skipInit,
 			debug:                  clustersOpt.debugMode.IsDebug(),
 			goCoverEnabled:         topt.goCoverEnabled,
+			exportOpenmetrics:      topt.exportOpenMetrics,
 		}
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
@@ -840,7 +846,9 @@ func (r *testRunner) runWorker(
 		handleClusterCreationFailure := func(err error) {
 			t.Error(errClusterProvisioningFailed(err))
 
-			if _, err := github.MaybePost(t, l, t.failureMsg(), "" /* sideEyeTimeoutSnapshotURL */); err != nil {
+			params := getTestParameters(t, github.cluster, github.vmCreateOpts)
+			logTestParameters(l, params)
+			if _, err := github.MaybePost(t, l, t.failureMsg(), "" /* sideEyeTimeoutSnapshotURL */, params); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		}
@@ -894,19 +902,32 @@ func (r *testRunner) runWorker(
 				c.clusterSettings = map[string]string{}
 				c.virtualClusterSettings = map[string]string{}
 
-				switch testSpec.Leases {
+				leases := testSpec.Leases
+				if leases == registry.MetamorphicLeases {
+					// 50% change of using the default lease type, 50% change of choosing
+					// a random, specific lease type.
+					if prng.Intn(2) == 0 {
+						leases = registry.DefaultLeases
+					} else {
+						leases = registry.LeaseTypes[prng.Intn(len(registry.LeaseTypes))]
+					}
+					c.status(fmt.Sprintf("metamorphically using %s leases", leases))
+					t.AddParam("metamorphicLeases", leases.String())
+				}
+				switch leases {
 				case registry.DefaultLeases:
 				case registry.EpochLeases:
 					c.clusterSettings["kv.expiration_leases_only.enabled"] = "false"
+					c.clusterSettings["kv.raft.leader_fortification.fraction_enabled"] = "0.0"
 				case registry.ExpirationLeases:
 					c.clusterSettings["kv.expiration_leases_only.enabled"] = "true"
+				case registry.LeaderLeases:
+					c.clusterSettings["kv.expiration_leases_only.enabled"] = "false"
+					c.clusterSettings["kv.raft.leader_fortification.fraction_enabled"] = "1.0"
 				case registry.MetamorphicLeases:
-					enabled := prng.Float64() < 0.5
-					c.status(fmt.Sprintf("metamorphically setting kv.expiration_leases_only.enabled = %t",
-						enabled))
-					c.clusterSettings["kv.expiration_leases_only.enabled"] = fmt.Sprintf("%t", enabled)
+					t.Fatalf("metamorphic leases handled above")
 				default:
-					t.Fatalf("unknown lease type %s", testSpec.Leases)
+					t.Fatalf("unknown lease type %s", leases)
 				}
 
 				c.goCoverDir = t.GoCoverArtifactsDir()
@@ -1072,7 +1093,7 @@ func (r *testRunner) runTest(
 	s := t.Spec().(*registry.TestSpec)
 
 	grafanaAvailable := roachtestflags.Cloud == spec.GCE
-	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID}); err != nil {
+	if err := c.addLabels(map[string]string{VmLabelTestName: testRunID, VmLabelTestOwner: t.Owner()}); err != nil {
 		shout(ctx, l, stdout, "failed to add label to cluster [%s] - %s", c.Name(), err)
 		grafanaAvailable = false
 	}
@@ -1089,7 +1110,7 @@ func (r *testRunner) runTest(
 	sideEyeTimeoutSnapshotURL := ""
 	defer func() {
 		t.end = timeutil.Now()
-		if err := c.removeLabels([]string{VmLabelTestName}); err != nil {
+		if err := c.removeLabels([]string{VmLabelTestName, VmLabelTestOwner}); err != nil {
 			shout(ctx, l, stdout, "failed to remove label from cluster [%s] - %s", c.Name(), err)
 		}
 
@@ -1135,14 +1156,6 @@ func (r *testRunner) runTest(
 					// Note that this error message is referred for test selection in
 					// pkg/cmd/roachtest/testselector/snowflake_query.sql.
 					failureMsg = fmt.Sprintf("VMs preempted during the test run: %s\n\n**Other Failures:**\n%s", preemptedVMNames, failureMsg)
-					// Reset failures in the test so that the VM preemption
-					// error is the one that is taken into account when
-					// reporting the failure. Note any other failures that
-					// happened during the test will be present in the
-					// `failureMsg` used when reporting the issue. In addition,
-					// `failure_N.log` files should also already exist at this
-					// point.
-					t.resetFailures()
 					t.Error(vmPreemptionError(preemptedVMNames))
 				}
 				hostErrorVMNames := getHostErrorVMNames(ctx, c, l)
@@ -1153,7 +1166,9 @@ func (r *testRunner) runTest(
 				}
 
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
-				issue, err := github.MaybePost(t, l, output, sideEyeTimeoutSnapshotURL)
+				params := getTestParameters(t, github.cluster, github.vmCreateOpts)
+				logTestParameters(l, params)
+				issue, err := github.MaybePost(t, l, output, sideEyeTimeoutSnapshotURL, params)
 				if err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
 				}
@@ -1227,6 +1242,9 @@ func (r *testRunner) runTest(
 		if s.Run != nil {
 			if t.Failed() {
 				errWithOwner := failuresAsErrorWithOwnership(t.failures())
+				if errWithOwner == nil {
+					errWithOwner = transientErrorOwnershipFallback(t.failures())
+				}
 				if errWithOwner == nil || !errWithOwner.InfraFlake {
 					r.status.fail[t] = struct{}{}
 				}
@@ -1256,6 +1274,8 @@ func (r *testRunner) runTest(
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	t.taskManager = task.NewManager(runCtx, t.L())
 	t.mu.Lock()
 	// t.Fatal() will cancel this context.
 	t.mu.cancel = cancel
@@ -1280,8 +1300,31 @@ func (r *testRunner) runTest(
 		}()
 
 		grafanaAnnotateTestStart(runCtx, t, c)
+		// Actively poll for VM preemptions, so we can bail out of tests early and
+		// avoid situations where a test times out and the flake assignment logic fails.
+		monitorForPreemptedVMs(runCtx, t, c, l)
 		// This is the call to actually run the test.
 		s.Run(runCtx, t, c)
+	}()
+
+	// Monitor the task manager for completed events, or failure events and log
+	// them. A failure will call t.Errorf which cancels the test's context.
+	go func() {
+		for {
+			select {
+			case event := <-t.taskManager.CompletedEvents():
+				if event.Err == nil {
+					t.L().Printf("task finished: %s", event.Name)
+					continue
+				} else if event.TriggeredByTest {
+					t.L().Printf("task canceled by test: %s", event.Name)
+					continue
+				}
+				t.Errorf("task `%s` returned error: %v", event.Name, event.Err)
+			case <-runCtx.Done():
+				return
+			}
+		}
 	}()
 
 	var timedOut bool
@@ -1310,20 +1353,7 @@ func (r *testRunner) runTest(
 	case <-time.After(timeout):
 		// NB: We're adding the timeout failure intentionally without cancelling the context
 		// to capture as much state as possible during artifact collection.
-		//
-		// Temporarily route all runtime assertion timeouts to test-eng while
-		// we gauge the frequency they occur and adjust test timeouts accordingly.
-		// TODO(darryl): once we are more confident in the stability of runtime
-		// assertions we can remove this.
-		if tests.UsingRuntimeAssertions(t) {
-			timeoutErr := registry.ErrorWithOwnership{
-				Err:   errors.Newf("test timed out (%s)", timeout),
-				Owner: registry.OwnerTestEng,
-			}
-			t.addFailure(0, "", timeoutErr)
-		} else {
-			t.addFailure(0, "test timed out (%s)", timeout)
-		}
+		t.addFailure(0, "test timed out (%s)", timeout)
 
 		// We suppress other failures from being surfaced to the top as the timeout is always going
 		// to be the main error and subsequent errors (i.e. context cancelled) add noise.
@@ -1399,7 +1429,7 @@ func getVMNames(fullVMNames []string) string {
 // getPreemptedVMNames returns a comma separated list of preempted VM
 // names, or an empty string if no VM was preempted or an error was found.
 func getPreemptedVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) string {
-	preemptedVMs, err := c.GetPreemptedVMs(ctx, l)
+	preemptedVMs, err := getPreemptedVMsHook(c, ctx, l)
 	if err != nil {
 		l.Printf("failed to check preempted VMs:\n%+v", err)
 		return ""
@@ -1462,8 +1492,7 @@ func (r *testRunner) postTestAssertions(
 			postAssertionErr(errors.WithDetail(err, "Unable to check health status"))
 		}
 
-		var db *gosql.DB
-		var validationNode int
+		validationNode := 0
 		for _, s := range statuses {
 			if s.Err != nil {
 				t.L().Printf("n%d:/health?ready=1 error=%s", s.Node, s.Err)
@@ -1475,9 +1504,8 @@ func (r *testRunner) postTestAssertions(
 				continue
 			}
 
-			if db == nil {
-				db = c.Conn(ctx, t.L(), s.Node)
-				validationNode = s.Node
+			if validationNode == 0 {
+				validationNode = s.Node // NB: s.Node is never zero
 			}
 			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
 		}
@@ -1490,25 +1518,34 @@ func (r *testRunner) postTestAssertions(
 		//
 		// TODO(testinfra): figure out why this can still get stuck despite the
 		// above.
-		if db != nil {
-			defer db.Close()
-			t.L().Printf("running validation checks on node %d (<10m)", validationNode)
-			// If this validation fails due to a timeout, it is very likely that
-			// the replica divergence check below will also fail.
-			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
+		if validationNode == 0 {
+			t.L().Printf("no live node found, skipping validation checks")
+			return
+		}
+
+		t.L().Printf("running validation checks on node %d (<10m)", validationNode)
+		// If this validation fails due to a timeout, it is very likely that
+		// the replica divergence check below will also fail.
+		if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
+			func() {
+				db := c.Conn(ctx, t.L(), validationNode)
+				defer db.Close()
 				if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
 					postAssertionErr(errors.WithDetail(err, "invalid descriptors check failed"))
 				}
-			}
-			// Detect replica divergence (i.e. ranges in which replicas have arrived
-			// at the same log position with different states).
-			if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
+			}()
+		}
+		// Detect replica divergence (i.e. ranges in which replicas have arrived
+		// at the same log position with different states).
+		if t.spec.SkipPostValidations&registry.PostValidationReplicaDivergence == 0 {
+			func() {
+				// NB: the consistency checks should run at the system tenant level.
+				db := c.Conn(ctx, t.L(), validationNode, option.VirtualClusterName("system"))
+				defer db.Close()
 				if err := c.assertConsistentReplicas(ctx, db, t); err != nil {
 					postAssertionErr(errors.WithDetail(err, "consistency check failed"))
 				}
-			}
-		} else {
-			t.L().Printf("no live node found, skipping validation checks")
+			}()
 		}
 	})
 
@@ -1532,7 +1569,13 @@ func (r *testRunner) postTestAssertions(
 func (r *testRunner) teardownTest(
 	ctx context.Context, t *testImpl, c *clusterImpl, timedOut bool,
 ) (string, error) {
-	if timedOut || t.Failed() {
+	defer func() {
+		// Terminate tasks to ensure that any stray tasks are cleaned up.
+		t.L().Printf("terminating tasks")
+		t.taskManager.Terminate(t.L())
+	}()
+
+	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
 		snapURL := ""
 		if timedOut {
 			// If the Side-Eye integration was configured, capture a snapshot of the
@@ -1572,7 +1615,6 @@ func (r *testRunner) teardownTest(
 		t.L().Printf("Retrieving go cover artifacts")
 		getGoCoverArtifacts(ctx, c, t)
 	}
-
 	return "", nil
 }
 
@@ -1639,7 +1681,7 @@ func (r *testRunner) collectArtifacts(
 		// Do this before collecting logs to make sure the file gets
 		// downloaded below.
 		if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
-			t.L().Printf("failed to fetch disk uage summary: %s", err)
+			t.L().Printf("failed to fetch disk usage summary: %s", err)
 		}
 		if err := c.FetchLogs(ctx, t.L()); err != nil {
 			t.L().Printf("failed to download logs: %s", err)
@@ -1712,12 +1754,12 @@ func (r *testRunner) generateReport() string {
 }
 
 // addWorker updates the bookkeeping for one more worker.
-func (r *testRunner) addWorker(ctx context.Context, name string) *workerStatus {
+func (r *testRunner) addWorker(ctx context.Context, l *logger.Logger, name string) *workerStatus {
 	r.workersMu.Lock()
 	defer r.workersMu.Unlock()
 	w := &workerStatus{name: name}
 	if _, ok := r.workersMu.workers[name]; ok {
-		log.Fatalf(ctx, "worker %q already exists", name)
+		logFatalfCtx(ctx, l, "worker %q already exists", name)
 	}
 	r.workersMu.workers[name] = w
 	return w
@@ -2019,4 +2061,104 @@ func grafanaAnnotateTestStart(ctx context.Context, t test.Test, c cluster.Cluste
 	if err := c.AddGrafanaAnnotation(ctx, t.L(), grafana.AddAnnotationRequest{Text: text, Tags: tags}); err != nil {
 		t.L().Printf(errors.Wrap(err, "error adding annotation for test start").Error())
 	}
+}
+
+// logFatalfCtx logs the message using the provided logger and then closes the
+// logger and exits the process with status 1. It should only be used in
+// circumstances where the process cannot continue, and not by tests.
+func logFatalfCtx(ctx context.Context, l *logger.Logger, f string, args ...interface{}) {
+	l.ErrorfCtxDepth(ctx, 2 /* depth */, f, args...)
+	l.Close()
+	exit.WithCode(exit.UnspecifiedError())
+}
+
+func logTestParameters(l *logger.Logger, params map[string]string) {
+	// Log the parameters as we've seen cases where it's hard to extract the information (i.e.
+	// encryption at rest) if we don't have the Github issue to refer to.
+	if jsonBytes, err := json.MarshalIndent(params, "", " "); err == nil {
+		// Attempt to log the parameters to their own file, but log to stdout
+		// anyway if child logger creation fails. Knowing the test parameters
+		// is worth the noise.
+		paramLogger, err := l.ChildLogger("params", logger.QuietStdout, logger.QuietStderr)
+		if err == nil {
+			defer paramLogger.Close()
+			paramLogger.Printf("Roachtest Parameters:\n%s", jsonBytes)
+		} else {
+			l.Printf("Roachtest Parameters:\n%s", jsonBytes)
+		}
+	}
+}
+
+func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) map[string]string {
+	spec := t.spec
+	clusterParams := map[string]string{
+		"cloud":                  roachtestflags.Cloud.String(),
+		"cpu":                    fmt.Sprintf("%d", spec.Cluster.CPUs),
+		"ssd":                    fmt.Sprintf("%d", spec.Cluster.SSDs),
+		"runtimeAssertionsBuild": fmt.Sprintf("%t", roachtestutil.UsingRuntimeAssertions(t)),
+		"coverageBuild":          fmt.Sprintf("%t", t.goCoverEnabled),
+	}
+	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
+	if spec.Cluster.Arch != "" {
+		clusterParams["arch"] = string(spec.Cluster.Arch)
+	}
+	// These params can be probabilistically set, so we pass them here to
+	// show what their actual values are in the posted issue.
+	if createOpts != nil {
+		clusterParams["fs"] = createOpts.SSDOpts.FileSystem
+		clusterParams["localSSD"] = fmt.Sprintf("%v", createOpts.SSDOpts.UseLocalSSD)
+	}
+
+	if c != nil {
+		clusterParams["encrypted"] = fmt.Sprintf("%v", c.encAtRest)
+		if spec.Cluster.Arch == "" {
+			// N.B. when Arch is specified, it cannot differ from cluster's arch.
+			// Hence, we only emit when arch was unspecified.
+			clusterParams["arch"] = string(c.arch)
+		}
+	}
+
+	extraParams := t.getExtraParams()
+	for label, value := range extraParams {
+		clusterParams[label] = value
+	}
+
+	return clusterParams
+}
+
+// getPreemptedVMsHook is a hook for unit tests to inject their own c.GetPreemptedVMs
+// implementation.
+var getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+	return c.GetPreemptedVMs(ctx, l)
+}
+
+// pollPreemptionInterval is how often to poll for preempted VMs.
+var pollPreemptionInterval = 5 * time.Minute
+
+func monitorForPreemptedVMs(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger) {
+	if c.IsLocal() || !c.Spec().UseSpotVMs {
+		return
+	}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(pollPreemptionInterval):
+				preemptedVMs, err := getPreemptedVMsHook(c, ctx, l)
+				if err != nil {
+					l.Printf("WARN: monitorForPreemptedVMs: failed to check preempted VMs:\n%+v", err)
+					continue
+				}
+
+				// If we find any preemptions, fail the test. Note that we will recheck for
+				// preemptions in post failure processing, which will correctly assign this
+				// failure as an infra flake.
+				if len(preemptedVMs) != 0 {
+					t.Errorf("monitorForPreemptedVMs: Preempted VMs detected: %s", preemptedVMs)
+				}
+			}
+		}
+	}()
 }

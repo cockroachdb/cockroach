@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package serverpb
 
@@ -48,6 +43,8 @@ type SQLStatusServer interface {
 	NodesUI(context.Context, *NodesRequest) (*NodesResponseExternal, error)
 	RequestJobProfilerExecutionDetails(context.Context, *RequestJobProfilerExecutionDetailsRequest) (*RequestJobProfilerExecutionDetailsResponse, error)
 	TenantServiceStatus(context.Context, *TenantServiceStatusRequest) (*TenantServiceStatusResponse, error)
+	UpdateTableMetadataCache(context.Context, *UpdateTableMetadataCacheRequest) (*UpdateTableMetadataCacheResponse, error)
+	GetUpdateTableMetadataCacheSignal() chan struct{}
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
@@ -81,6 +78,7 @@ type NodesStatusServer interface {
 //
 // It is available for all tenants.
 type TenantStatusServer interface {
+	Ranges(context.Context, *RangesRequest) (*RangesResponse, error)
 	TenantRanges(context.Context, *TenantRangesRequest) (*TenantRangesResponse, error)
 	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
 	HotRangesV2(context.Context, *HotRangesRequest) (*HotRangesResponseV2, error)

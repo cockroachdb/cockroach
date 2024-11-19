@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package clisqlexec
 
@@ -16,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 )
 
 func isNotPrintableASCII(r rune) bool { return r < 0x20 || r > 0x7e || r == '"' || r == '\\' }
@@ -45,10 +42,11 @@ func FormatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 				return t
 			}
 		}
-		s := fmt.Sprintf("%+q", t)
+		s := lexbase.EscapeSQLString(t)
+		// The result from EscapeSQLString is an escape-quoted string, like e'...'.
 		// Strip the start and final quotes. The surrounding display
 		// format (e.g. CSV/TSV) will add its own quotes.
-		return s[1 : len(s)-1]
+		return s[2 : len(s)-1]
 	}
 
 	// Fallback to printing the value as-is.

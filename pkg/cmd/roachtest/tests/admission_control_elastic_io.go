@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -72,16 +67,21 @@ func registerElasticIO(r registry.Registry) {
 			promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
 			require.NoError(t, err)
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
-			setAdmissionControl(ctx, t, c, true)
+			roachtestutil.SetAdmissionControl(ctx, t, c, true)
 			duration := 30 * time.Minute
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.CRDBNodes())
+			labels := map[string]string{
+				"duration":    fmt.Sprintf("%d", duration.Milliseconds()),
+				"concurrency": "512",
+			}
 			m.Go(func(ctx context.Context) error {
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := "./cockroach workload run kv --init --histograms=perf/stats.json --concurrency=512 " +
-					"--splits=1000 --read-percent=0 --min-block-bytes=65536 --max-block-bytes=65536 " +
-					"--txn-qos=background --tolerate-errors --secure" + dur + url
+				cmd := fmt.Sprintf("./cockroach workload run kv --init %s -concurrency=512 "+
+					"--splits=1000 --read-percent=0 --min-block-bytes=65536 --max-block-bytes=65536 "+
+					"--txn-qos=background --tolerate-errors --secure %s %s",
+					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), dur, url)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil
 			})
@@ -133,7 +133,7 @@ func registerElasticIO(r registry.Registry) {
 					// We want to use the mean of the last 2m of data to avoid short-lived
 					// spikes causing failures.
 					if len(l0SublevelCount) >= sampleCountForL0Sublevel {
-						latestSampleMeanL0Sublevels := getMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
+						latestSampleMeanL0Sublevels := roachtestutil.GetMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
 						if latestSampleMeanL0Sublevels > subLevelThreshold {
 							t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
 						}

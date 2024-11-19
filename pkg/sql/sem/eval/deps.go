@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package eval
 
@@ -31,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -367,12 +363,7 @@ type Planner interface {
 	//
 	// The fields set in session that are set override the respective fields if
 	// they have previously been set through SetSessionData().
-	QueryRowEx(
-		ctx context.Context,
-		opName string,
-		override sessiondata.InternalExecutorOverride,
-		stmt string,
-		qargs ...interface{}) (tree.Datums, error)
+	QueryRowEx(ctx context.Context, opName redact.RedactableString, override sessiondata.InternalExecutorOverride, stmt string, qargs ...interface{}) (tree.Datums, error)
 
 	// QueryIteratorEx executes the query, returning an iterator that can be used
 	// to get the results. If the call is successful, the returned iterator
@@ -380,7 +371,7 @@ type Planner interface {
 	//
 	// The fields set in session that are set override the respective fields if they
 	// have previously been set through SetSessionData().
-	QueryIteratorEx(ctx context.Context, opName string, override sessiondata.InternalExecutorOverride, stmt string, qargs ...interface{}) (InternalRows, error)
+	QueryIteratorEx(ctx context.Context, opName redact.RedactableString, override sessiondata.InternalExecutorOverride, stmt string, qargs ...interface{}) (InternalRows, error)
 
 	// IsActive returns if the version specified by key is active.
 	IsActive(ctx context.Context, key clusterversion.Key) bool

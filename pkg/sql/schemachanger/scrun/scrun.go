@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scrun
 
@@ -183,6 +178,7 @@ func executeStage(
 ) (err error) {
 	defer scerrors.StartEventf(
 		ctx,
+		0, /* level */
 		"executing declarative schema change %s (rollback=%v) for %s",
 		redact.Safe(stage),
 		redact.Safe(p.InRollback),
@@ -309,6 +305,7 @@ func makeState(
 ) (state scpb.CurrentState, err error) {
 	defer scerrors.StartEventf(
 		ctx,
+		0, /* level */
 		"rebuilding declarative schema change state from descriptors %v",
 		redact.Safe(descriptorIDs),
 	).HandlePanicAndLogError(ctx, &err)

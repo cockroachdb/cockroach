@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -17,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -24,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -57,6 +55,15 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		return nil, err
 	}
 	mode := p.extendedEvalCtx.SchemaChangerState.mode
+	// Lease the system database to see if schema changes are blocked on reader
+	// catalogs.
+	systemDB, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Database(ctx, keys.SystemDatabaseID)
+	if err != nil {
+		return nil, err
+	}
+	if systemDB.GetReplicatedPCRVersion() != 0 {
+		return nil, pgerror.Newf(pgcode.ReadOnlySQLTransaction, "schema changes are not allowed on a reader catalog")
+	}
 	// When new schema changer is on we will not support it for explicit
 	// transaction, since we don't know if subsequent statements don't
 	// support it.
@@ -117,6 +124,8 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 		p, /* nodesStatusInfo */
 		p, /* regionProvider */
 		p.SemaCtx(),
+		p.EvalContext(),
+		p.execCfg.DefaultZoneConfig,
 	)
 }
 
@@ -163,6 +172,8 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			blockingJobIDs = desc.ConcurrentSchemaChangeJobIDs()
 			return nil
 		}); err != nil {
+			log.Infof(ctx, "done schema change wait on concurrent jobs due"+
+				" to error on descriptor (%d): %s", descID, err)
 			return err
 		}
 		if !isBlocked {

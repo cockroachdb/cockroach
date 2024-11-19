@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package ui embeds the assets for the web UI into the Cockroach binary.
 //
@@ -32,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -52,6 +48,15 @@ var _ = settings.RegisterEnumSetting(
 		// See pkg/ui/workspaces/cluster-ui/webpack.config.js
 		// and pkg/ui/workspaces/db-console/webpack.config.js.
 	},
+	settings.WithPublic)
+
+// TODO(davidh): This setting can be removed after 24.3 since it only
+// affects legacy DB page.
+var DatabaseLocalityMetadataEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"ui.database_locality_metadata.enabled",
+	"if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute",
+	true,
 	settings.WithPublic)
 
 // Assets is used for embedded JS assets required for UI.
@@ -168,7 +173,7 @@ func Handler(cfg Config) http.Handler {
 		if err != nil {
 			log.Errorf(context.Background(), "unable to get license type: %+v", err)
 		}
-		licenseTTL := base.LicenseTTL.Value()
+		licenseTTL := base.GetLicenseTTL(r.Context(), cfg.Settings, timeutil.DefaultTimeSource{})
 		oidcConf := cfg.OIDC.GetOIDCConf()
 		major, minor := build.BranchReleaseSeries()
 		args := indexHTMLArgs{

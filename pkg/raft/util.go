@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -22,12 +22,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
-
-func (st StateType) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf("%q", st.String())), nil
-}
 
 var isLocalMsg = [...]bool{
 	pb.MsgHup:               true,
@@ -52,6 +49,33 @@ var isResponseMsg = [...]bool{
 	pb.MsgFortifyLeaderResp: true,
 }
 
+// isMsgFromLeader contains message types that come from the leader of the
+// message's term.
+var isMsgFromLeader = [...]bool{
+	pb.MsgApp: true,
+	// TODO(nvanbenschoten): we can't consider MsgSnap to be from the leader of
+	// Message.Term until we address #127348 and #127349.
+	// pb.MsgSnap:            true,
+	pb.MsgHeartbeat:       true,
+	pb.MsgTimeoutNow:      true,
+	pb.MsgFortifyLeader:   true,
+	pb.MsgDeFortifyLeader: true,
+}
+
+// isMsgIndicatingLeader contains message types that indicate that there is a
+// leader at the message's term, even if the message is not from the leader
+// itself.
+//
+// TODO(nvanbenschoten): remove this when we address the TODO above.
+var isMsgIndicatingLeader = [...]bool{
+	pb.MsgApp:             true,
+	pb.MsgSnap:            true,
+	pb.MsgHeartbeat:       true,
+	pb.MsgTimeoutNow:      true,
+	pb.MsgFortifyLeader:   true,
+	pb.MsgDeFortifyLeader: true,
+}
+
 func isMsgInArray(msgt pb.MessageType, arr []bool) bool {
 	i := int(msgt)
 	return i < len(arr) && arr[i]
@@ -65,8 +89,36 @@ func IsResponseMsg(msgt pb.MessageType) bool {
 	return isMsgInArray(msgt, isResponseMsg[:])
 }
 
+func IsMsgFromLeader(msgt pb.MessageType) bool {
+	return isMsgInArray(msgt, isMsgFromLeader[:])
+}
+
+func IsMsgIndicatingLeader(msgt pb.MessageType) bool {
+	return isMsgInArray(msgt, isMsgIndicatingLeader[:])
+}
+
 func IsLocalMsgTarget(id pb.PeerID) bool {
 	return id == LocalAppendThread || id == LocalApplyThread
+}
+
+// senderHasMsgTerm returns true if the message type is one that should have
+// the sender's term.
+func senderHasMsgTerm(m pb.Message) bool {
+	switch {
+	case m.Type == pb.MsgPreVote:
+		// We send pre-vote requests with a term in our future.
+		return false
+	case m.Type == pb.MsgPreVoteResp && !m.Reject:
+		// We send pre-vote requests with a term in our future. If the
+		// pre-vote is granted, we will increment our term when we get a
+		// quorum. If it is not, the term comes from the node that
+		// rejected our vote so we should become a follower at the new
+		// term.
+		return false
+	default:
+		// All other messages are sent with the sender's term.
+		return true
+	}
 }
 
 // voteResponseType maps vote and prevote message types to their corresponding responses.
@@ -97,16 +149,10 @@ func DescribeSoftState(ss SoftState) string {
 	return fmt.Sprintf("State:%s", ss.RaftState)
 }
 
-func DescribeConfState(state pb.ConfState) string {
-	return fmt.Sprintf(
-		"Voters:%v VotersOutgoing:%v Learners:%v LearnersNext:%v AutoLeave:%v",
-		state.Voters, state.VotersOutgoing, state.Learners, state.LearnersNext, state.AutoLeave,
-	)
-}
-
 func DescribeSnapshot(snap pb.Snapshot) string {
 	m := snap.Metadata
-	return fmt.Sprintf("Index:%d Term:%d ConfState:%s", m.Index, m.Term, DescribeConfState(m.ConfState))
+	return fmt.Sprintf("Index:%d Term:%d ConfState:%s",
+		m.Index, m.Term, m.ConfState.Describe())
 }
 
 func DescribeReady(rd Ready, f EntryFormatter) string {
@@ -194,6 +240,10 @@ func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) st
 		fmt.Fprintf(&buf, "\n%s]", indent)
 	}
 	return buf.String()
+}
+
+func DescribeTarget(id pb.PeerID) string {
+	return describeTarget(id)
 }
 
 func describeTarget(id pb.PeerID) string {
@@ -307,7 +357,7 @@ func payloadsSize(ents []pb.Entry) entryPayloadSize {
 	return s
 }
 
-func assertConfStatesEquivalent(l Logger, cs1, cs2 pb.ConfState) {
+func assertConfStatesEquivalent(l raftlogger.Logger, cs1, cs2 pb.ConfState) {
 	err := cs1.Equivalent(cs2)
 	if err == nil {
 		return

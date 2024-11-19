@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 //
 // Data structures and basic infrastructure for distributed SQL APIs. See
 // docs/RFCS/distributed_sql.md.
@@ -334,6 +329,8 @@ message RemoteProducerMetadata {
       (gogoproto.customname) = "FlowID",
       (gogoproto.customtype) = "FlowID"];
     optional bool drained = 9 [(gogoproto.nullable) = false];
+    // ProcessorID is the ID of the processor that published the metadata.
+    optional int32 processor_id = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "ProcessorID"];
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {

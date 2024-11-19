@@ -1,0 +1,246 @@
+# ----------
+# Construct new index with one vector in the root.
+# ----------
+new-index min-partition-size=1 max-partition-size=3 beam-size=2
+vec1: (1, 2)
+----
+• 1 (0, 0)
+│
+└───• vec1 (1, 2)
+
+# Delete remaining vector in the root.
+delete
+vec1
+----
+• 1 (0, 0)
+
+# ----------
+# Construct new index with only duplicate vectors.
+# ----------
+new-index min-partition-size=1 max-partition-size=3 beam-size=2
+vec1: (1, 2)
+vec2: (1, 2)
+vec3: (1, 2)
+vec4: (1, 2)
+vec5: (1, 2)
+vec6: (1, 2)
+----
+• 1 (1, 2)
+│
+├───• 2 (1, 2)
+│   │
+│   ├───• vec1 (1, 2)
+│   └───• vec2 (1, 2)
+│
+└───• 3 (1, 2)
+    │
+    ├───• vec3 (1, 2)
+    ├───• vec4 (1, 2)
+    ├───• vec5 (1, 2)
+    └───• vec6 (1, 2)
+
+# Ensure the correct duplicates are deleted (i.e. with matching keys).
+delete
+vec1
+vec5
+----
+• 1 (1, 2)
+│
+├───• 2 (1, 2)
+│   │
+│   └───• vec2 (1, 2)
+│
+└───• 3 (1, 2)
+    │
+    ├───• vec3 (1, 2)
+    ├───• vec4 (1, 2)
+    └───• vec6 (1, 2)
+
+# ----------
+# Construct new index with multiple levels.
+# ----------
+new-index min-partition-size=1 max-partition-size=3 beam-size=1
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+vec4: (-4, 5)
+vec5: (1, 11)
+vec6: (1, -6)
+vec7: (0, 4)
+vec8: (-2, 8)
+vec9: (2, 8)
+----
+• 1 (1.5, 1.875)
+│
+├───• 2 (1, -2)
+│   │
+│   ├───• vec1 (1, 2)
+│   └───• vec6 (1, -6)
+│
+├───• 4 (1.75, 4)
+│   │
+│   ├───• vec3 (4, 3)
+│   ├───• vec4 (-4, 5)
+│   ├───• vec7 (0, 4)
+│   └───• vec2 (7, 4)
+│
+└───• 5 (0.3333, 9)
+    │
+    ├───• vec5 (1, 11)
+    ├───• vec8 (-2, 8)
+    └───• vec9 (2, 8)
+
+# Test case where initial search fails to find vector to delete and it must be
+# retried.
+delete
+vec1: (0, 8)
+----
+• 1 (1.5, 1.875)
+│
+├───• 2 (1, -2)
+│   │
+│   └───• vec6 (1, -6)
+│
+├───• 4 (1.75, 4)
+│   │
+│   ├───• vec3 (4, 3)
+│   ├───• vec4 (-4, 5)
+│   ├───• vec7 (0, 4)
+│   └───• vec2 (7, 4)
+│
+└───• 5 (0.3333, 9)
+    │
+    ├───• vec5 (1, 11)
+    ├───• vec8 (-2, 8)
+    └───• vec9 (2, 8)
+
+# Delete multiple vectors.
+delete
+vec4
+vec5
+vec6
+----
+• 1 (1.5, 1.875)
+│
+├───• 2 (1, -2)
+├───• 4 (1.75, 4)
+│   │
+│   ├───• vec3 (4, 3)
+│   ├───• vec2 (7, 4)
+│   └───• vec7 (0, 4)
+│
+└───• 5 (0.3333, 9)
+    │
+    ├───• vec9 (2, 8)
+    └───• vec8 (-2, 8)
+
+# ----------
+# Construct new index with multiple levels.
+# ----------
+new-index min-partition-size=1 max-partition-size=3 beam-size=2
+vec1: (1, 2)
+vec2: (7, 4)
+vec3: (4, 3)
+vec4: (5, 5)
+----
+• 1 (4.25, 3.5)
+│
+├───• 2 (6, 4.5)
+│   │
+│   ├───• vec4 (5, 5)
+│   └───• vec2 (7, 4)
+│
+└───• 3 (2.5, 2.5)
+    │
+    ├───• vec3 (4, 3)
+    └───• vec1 (1, 2)
+
+# Delete vector from primary index, but not from secondary index.
+delete not-found
+vec3
+----
+• 1 (4.25, 3.5)
+│
+├───• 2 (6, 4.5)
+│   │
+│   ├───• vec4 (5, 5)
+│   └───• vec2 (7, 4)
+│
+└───• 3 (2.5, 2.5)
+    │
+    ├───• vec3 (MISSING)
+    └───• vec1 (1, 2)
+
+# Ensure deleted vector is not returned by search. This should enqueue a fixup
+# that removes the vector from the index.
+search max-results=1
+(4, 3)
+----
+vec4: 5 (centroid=1.118)
+4 leaf vectors, 6 vectors, 4 full vectors, 3 partitions
+
+# Again, with higher max results.
+search max-results=2
+(4, 3)
+----
+vec4: 5 (centroid=1.118)
+vec1: 10 (centroid=1.5811)
+4 leaf vectors, 6 vectors, 4 full vectors, 3 partitions
+
+# Vector should now be gone from the index.
+# TODO(andyk): This will be true once fixups are added.
+format-tree
+----
+• 1 (4.25, 3.5)
+│
+├───• 2 (6, 4.5)
+│   │
+│   ├───• vec4 (5, 5)
+│   └───• vec2 (7, 4)
+│
+└───• 3 (2.5, 2.5)
+    │
+    ├───• vec3 (MISSING)
+    └───• vec1 (1, 2)
+
+# Delete all vectors from one branch of the tree.
+delete not-found
+vec1
+----
+• 1 (4.25, 3.5)
+│
+├───• 2 (6, 4.5)
+│   │
+│   ├───• vec4 (5, 5)
+│   └───• vec2 (7, 4)
+│
+└───• 3 (2.5, 2.5)
+    │
+    ├───• vec3 (MISSING)
+    └───• vec1 (MISSING)
+
+# Search the empty branch.
+search max-results=1 beam-size=1
+(1, 2)
+----
+2 leaf vectors, 4 vectors, 2 full vectors, 2 partitions
+
+# Search root partition with only missing vectors.
+new-index min-partition-size=1 max-partition-size=3 beam-size=2
+vec1: (1, 2)
+----
+• 1 (0, 0)
+│
+└───• vec1 (1, 2)
+
+delete not-found
+vec1
+----
+• 1 (0, 0)
+│
+└───• vec1 (MISSING)
+
+search max-results=1 beam-size=1
+(1, 2)
+----
+1 leaf vectors, 1 vectors, 1 full vectors, 1 partitions

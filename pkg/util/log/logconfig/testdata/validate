@@ -254,7 +254,7 @@ capture-stray-errors:
   dir: /default-dir
   max-group-size: 100MiB
 
-# Check that file-defaults format options are transferred to stderr if using a crdb-v2 format.
+# Check that file-defaults format options are transferred to stderr if using the same format (crdb-v2).
 yaml
 file-defaults:
   format: crdb-v2
@@ -276,7 +276,38 @@ capture-stray-errors:
   dir: /default-dir
   max-group-size: 100MiB
 
-# Check that file-defaults format options are NOT transferred to stderr if NOT using a crdb-v2 format.
+# Check that file-defaults format options are transferred to stderr if stderr is using the same format (json).
+yaml
+file-defaults:
+  format: json
+  format-options: {datetime-format: rfc3339, datetime-timezone: America/New_York}
+sinks:
+  stderr:
+    format: json
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+      format: json
+      format-options:
+        datetime-format: rfc3339
+        datetime-timezone: America/New_York
+  stderr:
+    filter: NONE
+    format: json
+    format-options:
+      datetime-format: rfc3339
+      datetime-timezone: America/New_York
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that file-defaults format options are NOT transferred to stderr if stderr is NOT using the same format
+# as file-defaults.
+# Note that here, we are using the default stderr format crdb-v2-tty.
 yaml
 file-defaults:
   format: json
@@ -323,7 +354,7 @@ capture-stray-errors:
   dir: /default-dir
   max-group-size: 100MiB
 
-# Check that stderr always uses crdb-v2-tty format, even if we try to set it to an invalid format
+# Check that stderr can accept formats other than crdb-v2-tty.
 yaml
 sinks:
   stderr:
@@ -336,6 +367,7 @@ sinks:
       filter: INFO
   stderr:
     filter: NONE
+    format: crdb-v1-tty
 capture-stray-errors:
   enable: true
   dir: /default-dir
@@ -836,3 +868,15 @@ file-defaults:
     max-buffer-size: 50MiB
 ----
 ERROR: Unable to use "buffered-writes" in conjunction with a "buffering" configuration. These configuration options are mutually exclusive.
+
+# Check that auditable and buffered-writes are incompatible together.
+yaml
+file-defaults:
+  buffered-writes: false
+  auditable: true
+  buffering:
+    max-staleness: 5s
+    flush-trigger-size: 1.0MiB
+    max-buffer-size: 50MiB
+----
+ERROR: File-based audit logging cannot coexist with buffering configuration. Disable either the buffering configuration ("buffering") or auditable log ("auditable") configuration.

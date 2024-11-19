@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -17,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -44,12 +40,17 @@ func registerLedger(r registry.Registry) {
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
-				concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*32))
-				duration := " --duration=" + ifLocal(c, "10s", "10m")
+				concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(nodes*32))
+				duration := " --duration=" + roachtestutil.IfLocal(c, "10s", "10m")
+
+				labels := map[string]string{
+					"concurrency": fmt.Sprint(nodes * 32),
+					"duration":    roachtestutil.IfLocal(c, "10000", "600000"),
+				}
 
 				// See https://github.com/cockroachdb/cockroach/issues/94062 for the --data-loader.
-				cmd := fmt.Sprintf("./workload run ledger --init --data-loader=INSERT --histograms="+t.PerfArtifactsDir()+"/stats.json"+
-					concurrency+duration+" {pgurl%s}", gatewayNodes)
+				cmd := fmt.Sprintf("./workload run ledger --init --data-loader=INSERT %s %s %s {pgurl%s}",
+					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), concurrency, duration, gatewayNodes)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil
 			})

@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logstore
 
@@ -607,7 +602,7 @@ func TestSideloadStorageSync(t *testing.T) {
 		// Create a sideloaded storage with an in-memory FS. Use strict MemFS to be
 		// able to emulate crash restart by rolling it back to last synced state.
 		ctx := context.Background()
-		memFS := vfs.NewStrictMem()
+		memFS := vfs.NewCrashableMem()
 		env, err := fs.InitEnv(ctx, memFS, "", fs.EnvConfig{}, nil /* statsCollector */)
 		require.NoError(t, err)
 		eng, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings(), storage.ForTesting)
@@ -622,15 +617,13 @@ func TestSideloadStorageSync(t *testing.T) {
 			require.NoError(t, ss.Sync())
 		}
 		// Cut off all syncs from this point, to emulate a crash.
-		memFS.SetIgnoreSyncs(true)
+		crashFS := memFS.CrashClone(vfs.CrashCloneCfg{})
 		ss = nil
 		eng.Close()
 		// Reset filesystem to the last synced state.
-		memFS.ResetToSyncedState()
-		memFS.SetIgnoreSyncs(false)
 
 		// Emulate process restart. Load from the last synced state.
-		env, err = fs.InitEnv(ctx, memFS, "", fs.EnvConfig{}, nil /* statsCollector */)
+		env, err = fs.InitEnv(ctx, crashFS, "", fs.EnvConfig{}, nil /* statsCollector */)
 		require.NoError(t, err)
 		eng, err = storage.Open(ctx, env, cluster.MakeTestingClusterSettings(), storage.ForTesting)
 		require.NoError(t, err)
@@ -739,7 +732,7 @@ func TestMkdirAllAndSyncParents(t *testing.T) {
 		wantGone:  []string{"../a/b/c"},
 	}} {
 		t.Run("", func(t *testing.T) {
-			fs := vfs.NewStrictMem()
+			fs := vfs.NewCrashableMem()
 			require.NoError(t, fs.MkdirAll(tc.path, os.ModePerm))
 			for _, dir := range tc.sync {
 				handle, err := fs.OpenDir(dir)
@@ -767,7 +760,7 @@ func TestMkdirAllAndSyncParents(t *testing.T) {
 			assertExistence(t, tc.wantGone, true)
 			// After crash and resetting to the synced state, wantExist directories
 			// must exist, and wantGone are lost.
-			fs.ResetToSyncedState()
+			fs = fs.CrashClone(vfs.CrashCloneCfg{})
 			assertExistence(t, tc.wantExist, true)
 			assertExistence(t, tc.wantGone, false)
 		})

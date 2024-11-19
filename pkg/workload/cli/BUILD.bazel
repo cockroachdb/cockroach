@@ -25,8 +25,10 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
+        "//pkg/workload/histogram/exporter",
         "//pkg/workload/workloadsql",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_datadog_datadog_api_client_go_v2//api/datadogV1",
         "@com_github_prometheus_client_golang//prometheus/collectors",
         "@com_github_prometheus_client_golang//prometheus/promhttp",
         "@com_github_spf13_cobra//:cobra",
@@ -66,7 +68,13 @@ go_library(
         "@io_bazel_rules_go//go/platform:openbsd": [
             "@org_golang_x_sys//unix",
         ],
+        "@io_bazel_rules_go//go/platform:osx": [
+            "@org_golang_x_sys//unix",
+        ],
         "@io_bazel_rules_go//go/platform:plan9": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:qnx": [
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:solaris": [

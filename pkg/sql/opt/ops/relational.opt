@@ -229,6 +229,11 @@ define InvertedFilterPrivate {
     # PreFiltererState represents the optional pre-filtering state.
     PreFiltererState PreFiltererState
 
+    # PKCols is the set of primary key columns in the underlying table of the
+    # input inverted index scan.. It is used to build FDs for the
+    # InvertedFilter.
+    PKCols ColSet
+
     # The InvertedColumn is the id of the inverted column in the input. It is
     # used during execution to map rows from the input to their corresponding
     # spans in the SpanExpression.

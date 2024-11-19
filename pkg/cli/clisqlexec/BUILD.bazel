@@ -39,6 +39,7 @@ go_test(
     name = "clisqlexec_test",
     srcs = [
         "format_html_test.go",
+        "format_sql_test.go",
         "format_table_test.go",
         "format_value_test.go",
         "main_test.go",

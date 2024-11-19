@@ -1281,6 +1281,9 @@ SELECT (json_populate_record(((1.01, 2, 3) AS d, c, a), '{"a": 3, "c": 10, "d": 
 d
 11.001
 
+statement error argument of json_populate_record must be an object
+SELECT * FROM json_populate_record(((1, 2) AS a, b), '"a"')
+
 statement ok
 CREATE TABLE testtab (
 	i	int,

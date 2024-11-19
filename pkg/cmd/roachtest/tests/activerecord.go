@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -32,8 +27,8 @@ var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\
 
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
-var supportedRailsVersion = "7.1.3"
-var activerecordAdapterVersion = "v7.1.0"
+var supportedRailsVersion = "7.2.1"
+var activerecordAdapterVersion = "v7.2.0"
 
 // This test runs activerecord's full test suite against a single cockroach node.
 
@@ -151,7 +146,7 @@ func registerActiveRecord(r registry.Registry) {
 			c,
 			node,
 			"installing bundler",
-			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && sudo gem install bundler:2.1.4`,
+			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && sudo gem install bundler:2.4.9`,
 		); err != nil {
 			t.Fatal(err)
 		}

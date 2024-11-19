@@ -6,7 +6,7 @@ set -euo pipefail
 # clusters that ensures consistent use of the correct project-assignment vars
 # and done some additional sanity check enforcement on some flags.
 
-export GCE_PROJECT=cockroach-drt
+export ROACHPROD_GCE_DEFAULT_PROJECT=cockroach-drt
 export ROACHPROD_DNS="drt.crdb.io"
 
 if [ "$#" -lt 1 ]; then
@@ -45,8 +45,12 @@ case $1 in
     case $cluster in
       "drt-large")
         shift
-        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --store-count=16 --restart=false "$@"
+        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --store-count=16 --restart=false --args="--wal-failover=among-stores" "$@"
         roachprod run $cluster -- "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+        ;;
+      "drt-chaos")
+        shift
+        set -- start "--binary" "./cockroach" --args=--log="file-defaults: {dir: 'logs', max-group-size: 1GiB}" --store-count=4 --args="--wal-failover=among-stores" "$@"
         ;;
       "drt-ldr1"|"drt-ldr2")
         shift
@@ -418,6 +422,12 @@ EOF"
         $0 sql drt-ua1:1 --cluster=system -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
         $0 sql drt-ua2:1 --cluster=system -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
 
+        # enable weak transaction isolation levels.
+        $0 sql drt-ua1:1 --cluster=system -- -e "SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true"
+        $0 sql drt-ua2:1 --cluster=system -- -e "SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true"
+        $0 sql drt-ua1:1 --cluster=system -- -e "SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true"
+        $0 sql drt-ua2:1 --cluster=system -- -e "SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true"
+
         # Setup the main tenant, on ua1 initilly.
         $0 sql drt-ua1:1 --cluster=system -- -e "CREATE VIRTUAL CLUSTER main"
         $0 sql drt-ua1:1 --cluster=system -- -e "ALTER VIRTUAL CLUSTER main START SERVICE SHARED"
@@ -536,11 +546,25 @@ EOF"
         $0 start drt-ldr2 --restart=false
 
         $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING sql.ttl.default_delete_batch_size = 1000"
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 2000"
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING sql.ttl.default_select_batch_size = 5000"
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true"
+        $0 sql drt-ldr1:1 -- -e "SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true"
+
         $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING sql.ttl.default_delete_batch_size = 1000"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 2000"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING sql.ttl.default_select_batch_size = 5000"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true"
+        $0 sql drt-ldr2:1 -- -e "SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true"
 
         # import the workload
         $0 sql drt-ldr1:1 -- -e "CREATE DATABASE ycsb"
+        $0 sql drt-ldr1:1 -- -e "ALTER DATABASE ycsb CONFIGURE ZONE USING gc.ttlseconds = 600"
+
         $0 sql drt-ldr2:1 -- -e "CREATE DATABASE ycsb"
+        $0 sql drt-ldr2:1 -- -e "ALTER DATABASE ycsb CONFIGURE ZONE USING gc.ttlseconds = 600"
         
         $0 ssh drt-ldr1:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 --families=false {pgurl:1}"
         $0 ssh drt-ldr2:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 --families=false --insert-start=4511686018427387904 {pgurl:1}"
@@ -551,8 +575,12 @@ EOF"
         $0 sql drt-ldr1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr2' AS '${ldr2}'"
         $0 sql drt-ldr2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr1' AS '${ldr1}'"
 
-        $0 sql drt-ldr1:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL;"
-        $0 sql drt-ldr2:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN crdb_replication_origin_timestamp DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL;"
+        $0 sql drt-ldr1:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN expired_at TIMESTAMPTZ NOT NULL DEFAULT now() + '30 minutes';"
+        # set row level ttl
+        $0 sql drt-ldr1:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expiration_expression = 'expired_at', ttl_job_cron = '*/30 * * * *');"
+
+        $0 sql drt-ldr2:1 -- -e "ALTER TABLE ycsb.public.usertable ADD COLUMN expired_at TIMESTAMPTZ NOT NULL DEFAULT now() + '30 minutes';"
+        $0 sql drt-ldr2:1 -- -e "ALTER TABLE ycsb.public.usertable SET (ttl_expiration_expression = 'expired_at', ttl_job_cron = '*/30 * * * *');"
 
         roachprod sql drt-ldr1:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://drt-ldr2' INTO TABLE ycsb.public.usertable;"
         roachprod sql drt-ldr2:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://drt-ldr1' INTO TABLE ycsb.public.usertable;"
@@ -606,7 +634,8 @@ exec ./cockroach workload run ycsb \\
     --insert-start=0 \\
     --families=false \\
     --tolerate-errors \\
-    --workload='custom' --read-freq=0.1 --read-modify-write-freq 0.1 --insert-freq 0.3 --scan-freq 0.1 --update-freq 0.2 --delete-freq 0.2 \\
+    --request-distribution=uniform \\
+    --workload='custom' --read-freq=0.2 --read-modify-write-freq 0.1 --insert-freq 0.3 --scan-freq 0.1 --update-freq 0.2 --delete-freq 0.1 \\
     \$(cat /home/ubuntu/pgurls.ldr1.txt)
 EOF'
         roachprod ssh workload-ldr:1 -- 'cat - > ycsb_run_ldr2.sh << EOF
@@ -618,7 +647,8 @@ exec ./cockroach workload run ycsb \\
     --tolerate-errors \\
     --families=false \\
     --insert-start=4611686018427387904 \\
-    --workload='custom' --read-freq=0.2 --read-modify-write-freq 0.1 --insert-freq 0.3 --scan-freq 0.1 --update-freq 0.1 --delete-freq 0.2 \\
+    --request-distribution=uniform \\
+    --workload='custom' --read-freq=0.2 --read-modify-write-freq 0.1 --insert-freq 0.3 --scan-freq 0.1 --update-freq 0.2 --delete-freq 0.1 \\
     \$(cat /home/ubuntu/pgurls.ldr2.txt)
 EOF'
         roachprod ssh workload-ldr:1 -- "chmod +x ./ycsb_run_ldr1.sh;

@@ -1,10 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -17,12 +14,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -80,14 +79,22 @@ type AggMetrics struct {
 	AggregatorProgress          *aggmetric.AggGauge
 	CheckpointProgress          *aggmetric.AggGauge
 	LaggingRanges               *aggmetric.AggGauge
+	TotalRanges                 *aggmetric.AggGauge
 	CloudstorageBufferedBytes   *aggmetric.AggGauge
 	KafkaThrottlingNanos        *aggmetric.AggHistogram
+	SinkErrors                  *aggmetric.AggCounter
+
+	Timers *timers.Timers
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
 		syncutil.Mutex
 		sliMetrics map[string]*sliMetrics
 	}
+
+	// TODO(#130358): This doesn't really belong here, but is easier than
+	// threading the NetMetrics through all the other places.
+	NetMetrics *cidr.NetMetrics
 }
 
 const (
@@ -113,6 +120,8 @@ type metricsRecorder interface {
 	recordSinkIOInflightChange(int64)
 	makeCloudstorageFileAllocCallback() func(delta int64)
 	getKafkaThrottlingMetrics(*cluster.Settings) metrics.Histogram
+	netMetrics() *cidr.NetMetrics
+	timers() *timers.ScopedTimers
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -152,8 +161,12 @@ type sliMetrics struct {
 	AggregatorProgress          *aggmetric.Gauge
 	CheckpointProgress          *aggmetric.Gauge
 	LaggingRanges               *aggmetric.Gauge
+	TotalRanges                 *aggmetric.Gauge
 	CloudstorageBufferedBytes   *aggmetric.Gauge
 	KafkaThrottlingNanos        *aggmetric.Histogram
+	SinkErrors                  *aggmetric.Counter
+
+	Timers *timers.ScopedTimers
 
 	mu struct {
 		syncutil.Mutex
@@ -161,6 +174,7 @@ type sliMetrics struct {
 		resolved   map[int64]hlc.Timestamp
 		checkpoint map[int64]hlc.Timestamp
 	}
+	NetMetrics *cidr.NetMetrics
 }
 
 // closeId unregisters an id. The id can still be used after its closed, but
@@ -332,6 +346,22 @@ func (m *sliMetrics) recordSizeBasedFlush() {
 	}
 
 	m.SizeBasedFlushes.Inc(1)
+}
+
+func (m *sliMetrics) netMetrics() *cidr.NetMetrics {
+	if m == nil {
+		return nil
+	}
+
+	return m.NetMetrics
+}
+
+func (m *sliMetrics) timers() *timers.ScopedTimers {
+	if m == nil {
+		return timers.NoopScopedTimers
+	}
+
+	return m.Timers
 }
 
 // JobScopedUsageMetrics are aggregated metrics keeping track of
@@ -649,6 +679,14 @@ func (w *wrappingCostController) getKafkaThrottlingMetrics(
 	return w.inner.getKafkaThrottlingMetrics(settings)
 }
 
+func (w *wrappingCostController) netMetrics() *cidr.NetMetrics {
+	return w.inner.netMetrics()
+}
+
+func (w *wrappingCostController) timers() *timers.ScopedTimers {
+	return w.inner.timers()
+}
+
 var (
 	metaChangefeedForwardedResolvedMessages = metric.Metadata{
 		Name:        "changefeed.forwarded_resolved_messages",
@@ -736,9 +774,21 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaNetworkBytesIn = metric.Metadata{
+		Name:        "changefeed.network.bytes_in",
+		Help:        "The number of bytes received from the network by changefeeds",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaNetworkBytesOut = metric.Metadata{
+		Name:        "changefeed.network.bytes_out",
+		Help:        "The number of bytes sent over the network by changefeeds",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
-func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
+func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *AggMetrics {
 	metaChangefeedEmittedMessages := metric.Metadata{
 		Name:        "changefeed.emitted_messages",
 		Help:        "Messages emitted by all feeds",
@@ -906,9 +956,15 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Unix Timestamp Nanoseconds",
 		Unit:        metric.Unit_TIMESTAMP_NS,
 	}
-	metaLaggingRangePercentage := metric.Metadata{
+	metaLaggingRanges := metric.Metadata{
 		Name:        "changefeed.lagging_ranges",
 		Help:        "The number of ranges considered to be lagging behind",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTotalRanges := metric.Metadata{
+		Name:        "changefeed.total_ranges",
+		Help:        "The total number of ranges being watched by changefeed aggregators",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -923,6 +979,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Help:        "Time spent in throttling due to exceeding kafka quota",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSinkErrors := metric.Metadata{
+		Name:        "changefeed.sink_errors",
+		Help:        "Number of changefeed errors caused by the sink",
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
 	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
@@ -1015,7 +1077,8 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		SchemaRegistrations:       b.Counter(metaSchemaRegistryRegistrations),
 		AggregatorProgress:        b.FunctionalGauge(metaAggregatorProgress, functionalGaugeMinFn),
 		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
-		LaggingRanges:             b.Gauge(metaLaggingRangePercentage),
+		LaggingRanges:             b.Gauge(metaLaggingRanges),
+		TotalRanges:               b.Gauge(metaTotalRanges),
 		CloudstorageBufferedBytes: b.Gauge(metaCloudstorageBufferedBytes),
 		KafkaThrottlingNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedKafkaThrottlingNanos,
@@ -1024,6 +1087,9 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 			SigFigs:      2,
 			BucketConfig: metric.BatchProcessLatencyBuckets,
 		}),
+		SinkErrors: b.Counter(metaSinkErrors),
+		Timers:     timers.New(histogramWindow),
+		NetMetrics: lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -1089,8 +1155,16 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		SchemaRegistryRetries:       a.SchemaRegistryRetries.AddChild(scope),
 		SchemaRegistrations:         a.SchemaRegistrations.AddChild(scope),
 		LaggingRanges:               a.LaggingRanges.AddChild(scope),
+		TotalRanges:                 a.TotalRanges.AddChild(scope),
 		CloudstorageBufferedBytes:   a.CloudstorageBufferedBytes.AddChild(scope),
 		KafkaThrottlingNanos:        a.KafkaThrottlingNanos.AddChild(scope),
+		SinkErrors:                  a.SinkErrors.AddChild(scope),
+
+		Timers: a.Timers.GetOrCreateScopedTimers(scope),
+
+		// TODO(#130358): Again, this doesn't belong here, but it's the most
+		// convenient way to feed this metric to changefeeds.
+		NetMetrics: a.NetMetrics,
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
@@ -1123,7 +1197,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 // getLaggingRangesCallback returns a function which can be called to update the
 // lagging ranges metric. It should be called with the current number of lagging
 // ranges.
-func (s *sliMetrics) getLaggingRangesCallback() func(int64) {
+func (s *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64) {
 	// Because this gauge is shared between changefeeds in the same metrics scope,
 	// we must instead modify it using `Inc` and `Dec` (as opposed to `Update`) to
 	// ensure values written by others are not overwritten. The code below is used
@@ -1140,13 +1214,18 @@ func (s *sliMetrics) getLaggingRangesCallback() func(int64) {
 	// If 1 lagging range is deleted, last=7,i=10: X.Dec(11-10) = X.Dec(1)
 	last := struct {
 		syncutil.Mutex
-		v int64
+		lagging int64
+		total   int64
 	}{}
-	return func(i int64) {
+	return func(lagging int64, total int64) {
 		last.Lock()
 		defer last.Unlock()
-		s.LaggingRanges.Dec(last.v - i)
-		last.v = i
+
+		s.LaggingRanges.Dec(last.lagging - lagging)
+		last.lagging = lagging
+
+		s.TotalRanges.Dec(last.total - total)
+		last.total = total
 	}
 }
 
@@ -1185,9 +1264,9 @@ func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 }
 
 // MakeMetrics makes the metrics for changefeed monitoring.
-func MakeMetrics(histogramWindow time.Duration) metric.Struct {
+func MakeMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) metric.Struct {
 	m := &Metrics{
-		AggMetrics:        newAggregateMetrics(histogramWindow),
+		AggMetrics:        newAggregateMetrics(histogramWindow, lookup),
 		UsageMetrics:      newJobScopedUsageMetrics(histogramWindow),
 		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
 		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),

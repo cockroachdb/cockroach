@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -15,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -22,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -138,6 +135,24 @@ func (p *planner) EvalRoutineExpr(
 		}
 	}
 
+	if expr.TriggerFunc {
+		// In cyclical reference situations, the number of nested trigger actions
+		// can be arbitrarily large. To avoid OOM, we enforce a limit on the depth
+		// of nested triggers. This is also a safeguard in case we have a bug that
+		// results in an infinite trigger loop.
+		var triggerDepth int
+		if triggerDepthValue := ctx.Value(triggerDepthKey{}); triggerDepthValue != nil {
+			triggerDepth = triggerDepthValue.(int)
+		}
+		if limit := int(p.SessionData().RecursionDepthLimit); triggerDepth > limit {
+			telemetry.Inc(sqltelemetry.RecursionDepthLimitReached)
+			err = pgerror.Newf(pgcode.TriggeredActionException,
+				"trigger reached recursion depth limit: %d", limit)
+			return nil, err
+		}
+		ctx = context.WithValue(ctx, triggerDepthKey{}, triggerDepth+1)
+	}
+
 	var g routineGenerator
 	g.init(p, expr, args)
 	defer g.Close(ctx)
@@ -172,6 +187,8 @@ func (p *planner) EvalRoutineExpr(
 	}
 	return res, nil
 }
+
+type triggerDepthKey struct{}
 
 // RoutineExprGenerator returns an eval.ValueGenerator that produces the results
 // of a routine.
@@ -525,30 +542,6 @@ func (g *routineGenerator) CanOptimizeTailCall(nestedRoutine *tree.RoutineExpr) 
 func (g *routineGenerator) SendDeferredRoutine(nestedRoutine *tree.RoutineExpr, args tree.Datums) {
 	g.deferredRoutine.expr = nestedRoutine
 	g.deferredRoutine.args = args
-}
-
-// droppingResultWriter drops all rows that are added to it. It only tracks
-// errors with the SetError and Err functions.
-type droppingResultWriter struct {
-	err error
-}
-
-// AddRow is part of the rowResultWriter interface.
-func (d *droppingResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	return nil
-}
-
-// SetRowsAffected is part of the rowResultWriter interface.
-func (d *droppingResultWriter) SetRowsAffected(ctx context.Context, n int) {}
-
-// SetError is part of the rowResultWriter interface.
-func (d *droppingResultWriter) SetError(err error) {
-	d.err = err
-}
-
-// Err is part of the rowResultWriter interface.
-func (d *droppingResultWriter) Err() error {
-	return d.err
 }
 
 func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursorHelper, error) {

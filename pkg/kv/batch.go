@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kv
 
@@ -557,6 +552,37 @@ func (b *Batch) CPut(key, value interface{}, expValue []byte) {
 // entry or the existing entry has the expected value.
 func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte) {
 	b.cputInternal(key, value, expValue, true, false)
+}
+
+// CPutWithOriginTimestamp is like CPut except that it also sets the
+// OriginTimestamp and ShouldWinOriginTimestampTie fields.
+//
+// See the comments on kvpb.ConditionalPutRequest related to these
+// fields for a full description of the semantics.
+//
+// This is used by logical data replication and other uses of this API
+// are discouraged since the semantics are subject to change as
+// required by that feature.
+func (b *Batch) CPutWithOriginTimestamp(
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
+) {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 1, notRaw, err)
+		return
+	}
+
+	v, err := marshalValue(value)
+	if err != nil {
+		b.initResult(0, 1, notRaw, err)
+		return
+	}
+	r := kvpb.NewConditionalPut(k, v, expValue, false)
+	r.(*kvpb.ConditionalPutRequest).OriginTimestamp = ts
+	r.(*kvpb.ConditionalPutRequest).ShouldWinOriginTimestampTie = shouldWinTie
+	b.appendReqs(r)
+	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
+	b.initResult(1, 1, notRaw, nil)
 }
 
 // CPutInline conditionally sets the value for a key if the existing value is

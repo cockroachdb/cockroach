@@ -1,10 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { util } from "@cockroachlabs/cluster-ui";
 import * as protosccl from "@cockroachlabs/crdb-protobuf-client-ccl";
@@ -16,7 +13,6 @@ import React from "react";
 import { EncryptionStatusProps } from "oss/src/views/reports/containers/stores/encryption";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
-
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 

@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 //
 
 package kvserverbase
@@ -19,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 // ProposalRejectionType indicates how to handle a proposal that was
@@ -77,7 +73,22 @@ func CheckForcedErr(
 	raftCmd *kvserverpb.RaftCommand,
 	isLocal bool,
 	replicaState *kvserverpb.ReplicaState,
-) ForcedErrResult {
+) (res ForcedErrResult) {
+	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
+
+	defer func() {
+		if res.ForcedError != nil &&
+			raftCmd.ReplicatedEvalResult.State != nil &&
+			raftCmd.ReplicatedEvalResult.State.Lease != nil {
+			op := redact.SafeString("transfer")
+			if isLeaseRequest {
+				op = "request"
+			}
+			log.Infof(ctx, "rejected lease %s %s; current lease %s; err: %s",
+				op, raftCmd.ReplicatedEvalResult.State.Lease, replicaState.Lease, res.ForcedError)
+		}
+	}()
+
 	if raftCmd.ReplicatedEvalResult.IsProbe {
 		// A Probe is handled by forcing an error during application (which
 		// avoids a separate "success" code path for this type of request)
@@ -89,7 +100,6 @@ func CheckForcedErr(
 		}
 	}
 	leaseIndex := replicaState.LeaseAppliedIndex
-	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
 	var requestedLease roachpb.Lease
 	if isLeaseRequest {
 		requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease
@@ -260,6 +270,9 @@ func CheckForcedErr(
 			ForcedError: kvpb.NewError(&kvpb.BatchTimestampBeforeGCError{
 				Timestamp: wts,
 				Threshold: *replicaState.GCThreshold,
+				RangeID:   replicaState.Desc.RangeID,
+				StartKey:  replicaState.Desc.StartKey.AsRawKey(),
+				EndKey:    replicaState.Desc.EndKey.AsRawKey(),
 			}),
 		}
 	}

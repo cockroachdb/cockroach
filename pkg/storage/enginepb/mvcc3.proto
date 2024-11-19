@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.storage.enginepb;
@@ -150,7 +145,7 @@ message IgnoredSeqNumRange {
 //
 // NB: a shallow copy of this value has to equal a deep copy, i.e. there
 // must be (recursively) no pointers in this type. Should this need to
-// change, need to update mvccGetWithValueHeader.
+// change, need to update mvccGet.
 //
 // NB: ensure that this struct stays in sync with MVCCValueHeader{Pure,CrdbTest}.
 // See kvpb.RequestHeader for details on how they help us keep the KVNemesisSeq

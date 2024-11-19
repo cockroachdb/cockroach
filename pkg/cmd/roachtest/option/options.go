@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package option
 
@@ -19,15 +14,18 @@ import (
 
 // StartOpts is a type that combines the start options needed by roachprod and roachtest.
 type StartOpts struct {
-	// SeparateProcessStorageNodes is used when starting a virtual
-	// cluster, indicating the nodes that should be used as storage
-	// nodes. When not set, all nodes should be considered part of the
-	// storage cluster.
-	SeparateProcessStorageNodes NodeListOption
+	// StorageNodes is used when starting a virtual cluster, indicating
+	// the nodes that should be used as storage nodes. When not set, all
+	// nodes should be considered part of the storage cluster.
+	StorageNodes NodeListOption
 	// SeparateProcessNode is used when starting a virtual cluster,
 	// indicating the nodes in which the virtual cluster should be
 	// started.
 	SeparateProcessNodes NodeListOption
+	// WaitForReplication indicates if we should wait for the
+	// corresponding replication factor after starting a cockroach
+	// process on a node.
+	WaitForReplicationFactor int
 
 	RoachprodOpts install.StartOpts
 	RoachtestOpts struct {
@@ -167,10 +165,32 @@ func InMemoryDB(size float64) StartStopOption {
 	}
 }
 
+// WaitForReplication tells the start process to wait for at least 3X
+// replication after starting a cockroach process.
+func WaitForReplication() StartStopOption {
+	return func(opts interface{}) {
+		switch opts := opts.(type) {
+		case *StartOpts:
+			opts.WaitForReplicationFactor = 3
+		}
+	}
+}
+
 func SkipInit(opts interface{}) {
 	switch opts := opts.(type) {
 	case *StartOpts:
 		opts.RoachprodOpts.SkipInit = true
+	}
+}
+
+// Tag sets a process tag when stopping processes. Useful if we want
+// to kill a cockroach process that was started with `settings.TagOption`.
+func Tag(tag string) func(opts interface{}) {
+	return func(opts interface{}) {
+		switch opts := opts.(type) {
+		case *StopOpts:
+			opts.RoachprodOpts.ProcessTag = tag
+		}
 	}
 }
 
@@ -209,7 +229,7 @@ func StorageCluster(nodes NodeListOption) StartStopOption {
 	return func(opts interface{}) {
 		switch opts := opts.(type) {
 		case *StartOpts:
-			opts.SeparateProcessStorageNodes = nodes
+			opts.StorageNodes = nodes
 		}
 	}
 }
@@ -220,6 +240,15 @@ func NoBackupSchedule(opts interface{}) {
 	switch opts := opts.(type) {
 	case *StartOpts:
 		opts.RoachprodOpts.ScheduleBackups = false
+	}
+}
+
+// DisableWALFailover can be used to generate StartOpts that disable use of WAL
+// failover.
+func DisableWALFailover(opts interface{}) {
+	switch opts := opts.(type) {
+	case *StartOpts:
+		opts.RoachprodOpts.WALFailover = ""
 	}
 }
 

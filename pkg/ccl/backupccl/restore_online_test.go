@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -104,11 +101,11 @@ func TestOnlineRestorePartitioned(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `BACKUP DATABASE data TO ('nodelocal://1/a?COCKROACH_LOCALITY=default',
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO ('nodelocal://1/a?COCKROACH_LOCALITY=default',
 		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2',
 		'nodelocal://1/c?COCKROACH_LOCALITY=dc%3Ddc3')`)
 
-	j := sqlDB.QueryStr(t, `RESTORE DATABASE data FROM ('nodelocal://1/a?COCKROACH_LOCALITY=default',
+	j := sqlDB.QueryStr(t, `RESTORE DATABASE data FROM LATEST IN ('nodelocal://1/a?COCKROACH_LOCALITY=default',
 		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2',
 		'nodelocal://1/c?COCKROACH_LOCALITY=dc%3Ddc3') WITH new_db_name='d2', EXPERIMENTAL DEFERRED COPY`)
 

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package base exposes basic utilities used across cockroach.
 package base
@@ -16,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -39,31 +33,32 @@ var CCLDistributionAndEnterpriseEnabled = func(st *cluster.Settings) bool {
 	return CheckEnterpriseEnabled(st, "" /* feature */) == nil
 }
 
-var licenseTTLMetadata = metric.Metadata{
+var LicenseTTLMetadata = metric.Metadata{
 	// This metric name isn't namespaced for backwards
 	// compatibility. The prior version of this metric was manually
 	// inserted into the prometheus output
 	Name:        "seconds_until_enterprise_license_expiry",
-	Help:        "Seconds until enterprise license expiry (0 if no license present or running without enterprise features)",
+	Help:        "Seconds until license expiry (0 if no license present)",
 	Measurement: "Seconds",
 	Unit:        metric.Unit_SECONDS,
 }
 
-// LicenseTTL is a metric gauge that measures the number of seconds
-// until the current enterprise license (if any) expires.
-var LicenseTTL = metric.NewGauge(licenseTTLMetadata)
+var AdditionalLicenseTTLMetadata = metric.Metadata{
+	Name:        "seconds_until_license_expiry",
+	Help:        "Seconds until license expiry (0 if no license present)",
+	Measurement: "Seconds",
+	Unit:        metric.Unit_SECONDS,
+}
 
-// UpdateMetricOnLicenseChange is a function that's called on startup
-// in order to connect the enterprise license setting update to the
-// prometheus metric provided as an argument.
-var UpdateMetricOnLicenseChange = func(
+// GetLicenseTTL is a function which returns the TTL for the active cluster.
+// The implementation here returns 0, but if utilccl is started this function is
+// overridden with an appropriate getter.
+var GetLicenseTTL = func(
 	ctx context.Context,
 	st *cluster.Settings,
-	metric *metric.Gauge,
 	ts timeutil.TimeSource,
-	stopper *stop.Stopper,
-) error {
-	return nil
+) int64 {
+	return 0
 }
 
 // LicenseType returns what type of license the cluster is running with, or

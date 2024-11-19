@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.roachpb;
@@ -263,6 +258,18 @@ message GetRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 3;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Values
+  // should contain the full bytes of the underlying MVCCValue,
+  // including the MVCCValueHeader. If the MVCCValueHeader is
+  // non-empty, the returned value will be encoded using the extended
+  // encoding with MVCC_EXTENDED_ENCODING_SENTINEL value type as its
+  // tag. If the MVCCValueHeader is empty, the default, simple
+  // encoding will be used.
+  //
+  // This option is not compatible for reads over inline values (see
+  // https://github.com/cockroachdb/cockroach/issues/131667)
+  bool return_raw_mvcc_values = 4 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -382,6 +389,39 @@ message ConditionalPutRequest {
   // timestamp. This option should be used with care as it precludes
   // the use of this value with transactions.
   bool inline = 7;
+
+  // OriginTimestamp, if set, indicates that the ConditionalPut should
+  // only succeed if the provided timestamp is greater than the
+  // OriginTimestamp field in the MVCCValueHeader of the existing
+  // value (if the value has a non-zero OriginTimestamp) or the MVCC
+  // timestamp of the existing value. If there is no existing value,
+  // the timestamp check succeeds.
+  //
+  // The conditional put request will only succeed if this timestamp
+  // comparison is successful and the expected bytes matches the
+  // actual bytes.
+  //
+  // On success, this timestamp will also be stored in the
+  // OriginTimestamp field of the the MVCCValueHeader for the newly
+  // written value.
+  //
+  // In the proposed use case, the OriginTimestamp is the MVCC version
+  // timestamp of the row on the source cluster and the semantics lead
+  // to idempotent last-write-wins semantics against the "original
+  // MVCC timestamp" of the value on the destination, which is its
+  // MVCC timestamp or, if set, the OriginTimestamp (reflecting that
+  // this value originated from the source cluster).
+  //
+  // Used by logical data replication.
+  util.hlc.Timestamp origin_timestamp = 8 [(gogoproto.nullable) = false];
+
+  // ShouldWinOriginTimestampTie, if true, indicates that if the "comparison
+  // timestamp" (see comment on OriginTimestamp) and OriginTimestamp are equal,
+  // then the ConditionalPut should succeed (assuming the expected and actual
+  // bytes also match).
+  //
+  // This must only be used in conjunction with OriginTimestamp.
+  bool should_win_origin_timestamp_tie = 9;
 }
 
 // A ConditionalPutResponse is the return value from the
@@ -669,6 +709,18 @@ message ScanRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 6;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Values
+  // should contain the full bytes of the underlying MVCCValue,
+  // including the MVCCValueHeader. If the MVCCValueHeader is
+  // non-empty, the returned value will be encoded using the extended
+  // encoding with MVCC_EXTENDED_ENCODING_SENTINEL value type as its
+  // tag. If the MVCCValueHeader is empty, the default, simple
+  // encoding will be used.
+  //
+  // This option is not compatible for reads over inline values (see
+  // https://github.com/cockroachdb/cockroach/issues/131667)
+  bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -757,6 +809,18 @@ message ReverseScanRequest {
   // transactions that need guaranteed locks for correctness (read:
   // read-committed or snapshot isolation transactions).
   kv.kvserver.concurrency.lock.Durability key_locking_durability = 6;
+
+  // ReturnRawMVCCValues indicates that the returned roachpb.Values
+  // should contain the full bytes of the underlying MVCCValue,
+  // including the MVCCValueHeader. If the MVCCValueHeader is
+  // non-empty, the returned value will be encoded using the extended
+  // encoding with MVCC_EXTENDED_ENCODING_SENTINEL value type as its
+  // tag. If the MVCCValueHeader is empty, the default, simple
+  // encoding will be used.
+  //
+  // This option is not compatible for reads over inline values (see
+  // https://github.com/cockroachdb/cockroach/issues/131667)
+  bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -1650,6 +1714,12 @@ message RequestLeaseRequest {
   // it has not changed when executing this command.
   Lease prev_lease = 3 [(gogoproto.nullable) = false];
   reserved 4;
+  // RevokePrevAndForwardExpiration indicates that the previous lease should be
+  // explicitly revoked when acquiring the new lease. Then, after doing so, the
+  // expiration of the next lease should be forwarded beyond the expiration of
+  // the previous lease. This is used to prevent expiration regressions during
+  // lease type switches.
+  bool revoke_prev_and_forward_expiration = 5;
 }
 
 // A TransferLeaseRequest represents the arguments to the TransferLease()
@@ -2981,6 +3051,10 @@ message Header {
 
 message WriteOptions {
   uint32 origin_id = 1[(gogoproto.customname) = "OriginID"];
+  // OriginTimestamp is bound to the MVCCValueHeader of written key in the
+  // batch. Note that a kv client cannot set this if they use CPut's origin
+  // timestamp arg.
+  util.hlc.Timestamp origin_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // BoundedStalenessHeader contains configuration values pertaining to bounded
@@ -3213,13 +3287,16 @@ message RangeFeedRequest {
   // OmitInRangefeeds = true, the write will not be emitted on the rangefeed.
   // WithFiltering should NOT be set for system-table rangefeeds.
   bool with_filtering = 7;
-  
+
   // WithMatchingOriginIDs specifies if the rangefeed server should emit events
   // originating from specific clusters during Logical Data Replication. If this
   // field is empty, all events are emitted.
   repeated uint32 with_matching_origin_ids = 8 [(gogoproto.customname) = "WithMatchingOriginIDs"];
 
-  // NextID = 9;
+  // ConsumerID is set by the caller to identify itself.
+  int64 consumer_id = 9 [(gogoproto.customname) = "ConsumerID"];
+
+  // NextID = 10;
 }
 
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to
@@ -3493,7 +3570,15 @@ message TenantSettingsEvent {
   // can't do that yet due to a dependency cycle. We should break the cycle.
   uint32 service_mode = 9;
 
-  // NEXT ID: 10
+  // ClusterInitGracePeriodEndTS is the timestamp (in seconds since the Unix epoch)
+  // marking the end of the grace period for clusters without a license. After this
+  // timestamp, if no license is installed, the cluster will be subject to throttling.
+  // Since secondary tenants cannot access the KV store where this is saved, the value
+  // is propagated through the tenant settings. This is only set when the event type is
+  // METADATA_EVENT.
+  int64 ClusterInitGracePeriodEndTS = 10;
+
+  // NEXT ID: 11
 }
 
 // TenantSetting contains the setting key and value of a tenant setting.

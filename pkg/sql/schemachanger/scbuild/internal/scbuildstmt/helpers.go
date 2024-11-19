@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuildstmt
 
@@ -18,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -232,11 +228,13 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			dropCascadeDescriptor(next, t.TypeID)
 		case *scpb.FunctionBody:
 			dropCascadeDescriptor(next, t.FunctionID)
+		case *scpb.TriggerDeps:
+			dropCascadeDescriptor(next, t.TableID)
 		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
 			// These only have type references.
 			break
 		case *scpb.Namespace, *scpb.Function, *scpb.SecondaryIndex, *scpb.PrimaryIndex,
-			*scpb.TableLocalitySecondaryRegion:
+			*scpb.TableLocalitySecondaryRegion, *scpb.Trigger:
 			// These can be safely skipped and will be cleaned up on their own because
 			// of dependents cleaned up above.
 		case
@@ -871,6 +869,10 @@ func fallBackIfSubZoneConfigExists(b BuildCtx, n tree.NodeFormatter, id catid.De
 			panic(scerrors.NotImplementedErrorf(n,
 				"sub zone configs are not supported"))
 		}
+		if _, _, elem := scpb.FindPartitionZoneConfig(tableElts); elem != nil {
+			panic(scerrors.NotImplementedErrorf(n,
+				"sub zone configs are not supported"))
+		}
 	}
 }
 
@@ -976,16 +978,41 @@ func shouldSkipValidatingConstraint(
 	return skip, err
 }
 
-// panicIfSchemaIsLocked panics if table's schema is locked.
-// It is used to prevent schema change stmts.
-func panicIfSchemaIsLocked(tableElements ElementResultSet) {
+// panicIfSchemaChangeIsDisallowed panics if a schema change is not allowed on
+// this table. A schema change is disallowed if one of the following is true:
+//   - The schema_locked table storage parameter is true, and this statement is
+//     not modifying the value of schema_locked.
+//   - The table is referenced by logical data replication jobs, and the statement
+//     is not in the allow list of LDR schema changes.
+func panicIfSchemaChangeIsDisallowed(tableElements ElementResultSet, n tree.Statement) {
 	_, _, schemaLocked := scpb.FindTableSchemaLocked(tableElements)
-	if schemaLocked != nil {
+	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
 		_, _, ns := scpb.FindNamespace(tableElements)
 		if ns == nil {
 			panic(errors.AssertionFailedf("programming error: Namespace element not found"))
 		}
 		panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
+	}
+
+	_, _, ldrJobIDs := scpb.FindLDRJobIDs(tableElements)
+	if ldrJobIDs != nil && len(ldrJobIDs.JobIDs) > 0 {
+		var virtualColNames []string
+		scpb.ForEachColumnType(tableElements, func(current scpb.Status, target scpb.TargetStatus, colTypeElem *scpb.ColumnType) {
+			if !colTypeElem.IsVirtual {
+				return
+			}
+			col := tableElements.FilterColumnName().Filter(func(current scpb.Status, target scpb.TargetStatus, colNameElem *scpb.ColumnName) bool {
+				return colNameElem.ColumnID == colTypeElem.ColumnID && target == scpb.ToPublic
+			}).MustGetOneElement()
+			virtualColNames = append(virtualColNames, col.Name)
+		})
+		if !tree.IsAllowedLDRSchemaChange(n, virtualColNames) {
+			_, _, ns := scpb.FindNamespace(tableElements)
+			if ns == nil {
+				panic(errors.AssertionFailedf("programming error: Namespace element not found"))
+			}
+			panic(sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(ns.Name, ldrJobIDs.JobIDs))
+		}
 	}
 }
 
@@ -1698,4 +1725,80 @@ func mustRetrieveIndexColumnElements(
 			"element for index ID %v", indexID))
 	}
 	return idxCols
+}
+
+// mustRetrievePhysicalTableElem will resolve a tableID to a physical table
+// element. A "physical" table element includes tables, views, and sequences.
+func mustRetrievePhysicalTableElem(b BuildCtx, descID catid.DescID) scpb.Element {
+	return b.QueryByID(descID).Filter(func(
+		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
+	) bool {
+		switch e := e.(type) {
+		case *scpb.Table:
+			return e.TableID == descID
+		case *scpb.View:
+			if e.IsMaterialized {
+				return e.ViewID == descID
+			}
+		case *scpb.Sequence:
+			return e.SequenceID == descID
+		}
+		return false
+	}).MustGetOneElement()
+}
+
+// mustRetrieveIndexNameElem will resolve a tableID and indexID to an index name
+// element.
+func mustRetrieveIndexNameElem(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) *scpb.IndexName {
+	return b.QueryByID(tableID).FilterIndexName().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) bool {
+			return e.IndexID == indexID
+		}).MustGetOneElement()
+}
+
+func mustRetrieveColumnName(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnName {
+	return b.QueryByID(tableID).FilterColumnName().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnName) bool { return e.ColumnID == columnID }).
+		MustGetOneElement()
+}
+
+func mustRetrievePrimaryIndex(b BuildCtx, tableID catid.DescID) *scpb.PrimaryIndex {
+	return b.QueryByID(tableID).FilterPrimaryIndex().MustGetOneElement()
+}
+
+func retrieveColumnNotNull(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnNotNull {
+	return b.QueryByID(tableID).FilterColumnNotNull().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnNotNull) bool { return e.ColumnID == columnID }).
+		MustGetZeroOrOneElement()
+}
+
+func retrieveColumnComment(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnComment {
+	return b.QueryByID(tableID).FilterColumnComment().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComment) bool { return e.ColumnID == columnID }).
+		MustGetZeroOrOneElement()
+}
+
+// mustRetrievePartitioningFromIndexPartitioning retrieves the partitioning
+// from the index partitioning element associated with the given tableID
+// and indexID.
+func mustRetrievePartitioningFromIndexPartitioning(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) catalog.Partitioning {
+	idxPart := b.QueryByID(tableID).FilterIndexPartitioning().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexPartitioning) bool {
+			return e.IndexID == indexID
+		}).MustGetZeroOrOneElement()
+	partition := tabledesc.NewPartitioning(nil)
+	if idxPart != nil {
+		partition = tabledesc.NewPartitioning(&idxPart.PartitioningDescriptor)
+	}
+	return partition
 }

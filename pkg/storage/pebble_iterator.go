@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -18,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -237,7 +231,7 @@ func (p *pebbleIterator) setOptions(
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 		KeyTypes:                  opts.KeyTypes,
 		UseL6Filters:              opts.useL6Filters,
-		CategoryAndQoS:            fs.GetCategoryAndQoS(opts.ReadCategory),
+		Category:                  opts.ReadCategory.PebbleCategory(),
 	}
 	p.prefix = opts.Prefix
 
@@ -745,8 +739,9 @@ func (p *pebbleIterator) RangeKeys() MVCCRangeKeyStack {
 			continue
 		}
 		stack.Versions = append(stack.Versions, MVCCRangeKeyVersion{
-			Timestamp: timestamp,
-			Value:     rangeKey.Value,
+			Timestamp:              timestamp,
+			Value:                  rangeKey.Value,
+			EncodedTimestampSuffix: rangeKey.Suffix,
 		})
 	}
 	return stack

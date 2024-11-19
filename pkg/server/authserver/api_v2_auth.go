@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package authserver
 
@@ -39,7 +34,6 @@ const (
 // verification of sessions for regular endpoints happens in authenticationV2Mux,
 // not here.
 type authenticationV2Server struct {
-	ctx        context.Context
 	sqlServer  SQLServerInterface
 	authServer *authenticationServer
 	mux        *http.ServeMux
@@ -132,8 +126,9 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "not found", http.StatusNotFound)
 	}
+	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		srverrors.APIV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 	if r.Form.Get("username") == "" {
@@ -148,10 +143,21 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	// without further normalization.
 	username, _ := username.MakeSQLUsernameFromUserInput(r.Form.Get("username"), username.PurposeValidation)
 
-	// Verify the provided username/password pair.
-	verified, expired, err := a.authServer.VerifyPasswordDBConsole(a.ctx, username, r.Form.Get("password"))
+	// Verify the user and check if DB console session could be started.
+	verified, pwRetrieveFn, err := a.authServer.VerifyUserSessionDBConsole(ctx, username)
 	if err != nil {
-		srverrors.APIV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
+		return
+	}
+	if !verified {
+		http.Error(w, "the provided credentials did not match any account on the server", http.StatusUnauthorized)
+		return
+	}
+
+	// Verify the provided username/password pair.
+	verified, expired, err := a.authServer.VerifyPasswordDBConsole(ctx, username, r.Form.Get("password"), pwRetrieveFn)
+	if err != nil {
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 	if expired {
@@ -163,13 +169,13 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := a.createSessionFor(a.ctx, username)
+	session, err := a.createSessionFor(ctx, username)
 	if err != nil {
-		srverrors.APIV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 
-	apiutil.WriteJSONResponse(r.Context(), w, http.StatusOK, &loginResponse{Session: session})
+	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, &loginResponse{Session: session})
 }
 
 type logoutResponse struct {
@@ -208,36 +214,37 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 	}
 	var sessionCookie serverpb.SessionCookie
 	decoded, err := base64.StdEncoding.DecodeString(session)
+	ctx := r.Context()
 	if err != nil {
-		srverrors.APIV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 	if err := protoutil.Unmarshal(decoded, &sessionCookie); err != nil {
-		srverrors.APIV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 
 	// Revoke the session.
 	if n, err := a.sqlServer.InternalExecutor().ExecEx(
-		a.ctx,
+		ctx,
 		"revoke-auth-session",
 		nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE id = $1`,
 		sessionCookie.ID,
 	); err != nil {
-		srverrors.APIV2InternalError(r.Context(), err, w)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	} else if n == 0 {
 		err := status.Errorf(
 			codes.InvalidArgument,
 			"session with id %d nonexistent", sessionCookie.ID)
-		log.Infof(a.ctx, "%v", err)
+		log.Infof(ctx, "%v", err)
 		http.Error(w, "invalid session", http.StatusBadRequest)
 		return
 	}
 
-	apiutil.WriteJSONResponse(r.Context(), w, http.StatusOK, &logoutResponse{LoggedOut: true})
+	apiutil.WriteJSONResponse(ctx, w, http.StatusOK, &logoutResponse{LoggedOut: true})
 }
 
 func (a *authenticationV2Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

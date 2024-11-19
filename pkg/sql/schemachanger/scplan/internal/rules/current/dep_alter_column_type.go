@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package current
 
@@ -54,6 +49,23 @@ func init() {
 				to.TargetStatus(scpb.ToPublic),
 				from.CurrentStatus(scpb.Status_TRANSIENT_VALIDATED),
 				to.CurrentStatus(scpb.Status_PUBLIC),
+			}
+		},
+	)
+
+	registerDepRule(
+		"adding a transient column compute expression moves to 'absent' after PK validation to ensures it's there for the backfill",
+		scgraph.Precedence,
+		"primary-index", "transient-column-compute",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.ColumnComputeExpression)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				from.TargetStatus(scpb.ToPublic),
+				to.TargetStatus(scpb.Transient),
+				from.CurrentStatus(scpb.Status_VALIDATED),
+				to.CurrentStatus(scpb.Status_TRANSIENT_ABSENT),
 			}
 		},
 	)

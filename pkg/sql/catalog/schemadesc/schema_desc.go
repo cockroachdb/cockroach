@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package schemadesc
 
@@ -109,6 +104,28 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 		}
 	}
 	return nil
+}
+
+// MaybeRequiresTypeHydration implements the catalog.Descriptor interface.
+func (desc *immutable) MaybeRequiresTypeHydration() bool {
+	for _, f := range desc.Functions {
+		for _, sig := range f.Signatures {
+			if catid.IsOIDUserDefined(sig.ReturnType.Oid()) {
+				return true
+			}
+			for _, typ := range sig.ArgTypes {
+				if catid.IsOIDUserDefined(typ.Oid()) {
+					return true
+				}
+			}
+			for _, typ := range sig.OutParamTypes {
+				if catid.IsOIDUserDefined(typ.Oid()) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // SafeMessage makes Mutable a SafeMessager.
@@ -636,6 +653,11 @@ func (desc *immutable) ForEachFunctionSignature(
 		}
 	}
 	return nil
+}
+
+// GetReplicatedPCRVersion is a part of the catalog.Descriptor
+func (desc *immutable) GetReplicatedPCRVersion() descpb.DescriptorVersion {
+	return desc.ReplicatedPCRVersion
 }
 
 // IsSchemaNameValid returns whether the input name is valid for a user defined

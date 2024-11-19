@@ -11,11 +11,13 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv",
+        "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/parser/statements",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/util/admission/admissionpb",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )

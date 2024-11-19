@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -224,7 +221,6 @@ func doCreateBackupSchedules(
 		Options: tree.BackupOptions{
 			Detached: tree.DBoolTrue,
 		},
-		Nested:         true,
 		AppendToLatest: false,
 	}
 
@@ -364,8 +360,7 @@ func doCreateBackupSchedules(
 		if err := scheduledJobs.Create(ctx, inc); err != nil {
 			return err
 		}
-		if err := emitSchedule(inc, backupNode, destinations, nil, /* incrementalFrom */
-			kmsURIs, incDests, resultsCh); err != nil {
+		if err := emitSchedule(inc, backupNode, destinations, kmsURIs, incDests, resultsCh); err != nil {
 			return err
 		}
 		unpauseOnSuccessID = inc.ScheduleID()
@@ -416,8 +411,7 @@ func doCreateBackupSchedules(
 	}
 
 	collectScheduledBackupTelemetry(ctx, incRecurrence, fullRecurrence, firstRun, fullRecurrencePicked, ignoreExisting, details, backupEvent)
-	return emitSchedule(full, backupNode, destinations, nil, /* incrementalFrom */
-		kmsURIs, nil, resultsCh)
+	return emitSchedule(full, backupNode, destinations, kmsURIs, nil, resultsCh)
 }
 
 func setDependentSchedule(
@@ -524,7 +518,7 @@ func makeBackupSchedule(
 func emitSchedule(
 	sj *jobs.ScheduledJob,
 	backupNode *tree.Backup,
-	to, incrementalFrom, kmsURIs []string,
+	to, kmsURIs []string,
 	incrementalStorage []string,
 	resultsCh chan<- tree.Datums,
 ) error {
@@ -544,7 +538,7 @@ func emitSchedule(
 		nextRun = next
 	}
 
-	redactedBackupNode, err := GetRedactedBackupNode(backupNode, to, incrementalFrom, kmsURIs, "",
+	redactedBackupNode, err := GetRedactedBackupNode(backupNode, to, kmsURIs, "",
 		incrementalStorage, false /* hasBeenPlanned */)
 	if err != nil {
 		return err

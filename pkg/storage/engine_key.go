@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -213,6 +208,10 @@ func DecodeEngineKey(b []byte) (key EngineKey, ok bool) {
 	// Last byte is the version length + 1 when there is a version,
 	// else it is 0.
 	versionLen := int(b[len(b)-1])
+	if versionLen == 1 {
+		// The key encodes an empty version, which is not valid.
+		return EngineKey{}, false
+	}
 	// keyPartEnd points to the sentinel byte.
 	keyPartEnd := len(b) - 1 - versionLen
 	if keyPartEnd < 0 || b[keyPartEnd] != 0x00 {
@@ -392,10 +391,7 @@ func (key *EngineKey) Verify(value []byte) error {
 // decodeMVCCValueAndVerify will try to decode the value as
 // MVCCValue and then verify the checksum.
 func decodeMVCCValueAndVerify(key roachpb.Key, value []byte) error {
-	mvccValue, ok, err := tryDecodeSimpleMVCCValue(value)
-	if !ok && err == nil {
-		mvccValue, err = decodeExtendedMVCCValue(value)
-	}
+	mvccValue, err := decodeMVCCValueIgnoringHeader(value)
 	if err != nil {
 		return err
 	}

@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package leases
 
@@ -49,6 +44,22 @@ func TestInputValidation(t *testing.T) {
 			name:   "empty",
 			input:  BuildInput{},
 			expErr: "no lease target provided",
+		},
+		{
+			name: "no timestamp",
+			input: BuildInput{
+				NextLeaseHolder: repl2,
+			},
+			expErr: "no clock timestamp provided",
+		},
+		{
+			name: "invalid minimum lease proposed timestamp",
+			input: BuildInput{
+				NextLeaseHolder:    repl2,
+				Now:                cts20,
+				MinLeaseProposedTS: cts30,
+			},
+			expErr: "clock timestamp earlier than minimum lease proposed timestamp",
 		},
 		{
 			name: "remote transfer",
@@ -211,14 +222,20 @@ func raftStatusFollower(replicaID roachpb.ReplicaID) *raft.Status {
 	s := &raft.Status{}
 	s.ID = raftpb.PeerID(replicaID)
 	s.Term = 5
-	s.RaftState = raft.StateFollower
+	s.RaftState = raftpb.StateFollower
 	return s
 }
 
 func raftStatusLeader(replicaID roachpb.ReplicaID) *raft.Status {
 	s := raftStatusFollower(replicaID)
-	s.RaftState = raft.StateLeader
+	s.RaftState = raftpb.StateLeader
 	s.LeadSupportUntil = ts30
+	return s
+}
+
+func raftStatusLeaderDuringTransfer(replicaID roachpb.ReplicaID) *raft.Status {
+	s := raftStatusLeader(replicaID)
+	s.LeadTransferee = raftpb.PeerID(repl2.ReplicaID)
 	return s
 }
 
@@ -469,6 +486,28 @@ func TestBuild(t *testing.T) {
 				},
 			},
 			{
+				name: "acquire leader lease, as raft leader, during leadership transfer",
+				st:   useLeaderSettings(),
+				input: func() BuildInput {
+					i := defaultInput
+					i.RaftStatus = raftStatusLeaderDuringTransfer(repl1.ReplicaID)
+					return i
+				}(),
+				// The replica is a leader that is transferring leadership away, so it
+				// gets an expiration-based lease.
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts20,
+						ProposedTS:            cts20,
+						Expiration:            &ts40,
+						DeprecatedStartStasis: &ts40,
+						Sequence:              8,
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+				},
+			},
+			{
 				name: "replace expiration, acquire leader lease, as raft follower",
 				st:   useLeaderSettings(),
 				input: func() BuildInput {
@@ -477,6 +516,29 @@ func TestBuild(t *testing.T) {
 					return i
 				}(),
 				// The replica is a follower, so it gets an expiration-based lease.
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica: repl1,
+						// Start time backdated to the expiration of the previous lease.
+						Start:                 hlc.ClockTimestamp{WallTime: 10, Logical: 1},
+						ProposedTS:            cts20,
+						Expiration:            &ts40,
+						DeprecatedStartStasis: &ts40,
+						Sequence:              8,
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+				},
+			},
+			{
+				name: "replace expiration, acquire leader lease, as raft leader, during leadership transfer",
+				st:   useLeaderSettings(),
+				input: func() BuildInput {
+					i := expirationInput
+					i.RaftStatus = raftStatusLeaderDuringTransfer(repl1.ReplicaID)
+					return i
+				}(),
+				// The replica is a leader that is transferring leadership away, so it
+				// gets an expiration-based lease.
 				expOutput: Output{
 					NextLease: roachpb.Lease{
 						Replica: repl1,
@@ -688,6 +750,28 @@ func TestBuild(t *testing.T) {
 				},
 			},
 			{
+				name: "promote expiration to leader lease, as raft leader, during leadership transfer",
+				st:   useLeaderSettings(),
+				input: func() BuildInput {
+					i := expirationInput
+					i.RaftStatus = raftStatusLeaderDuringTransfer(repl1.ReplicaID)
+					return i
+				}(),
+				// The replica is a leader that is transferring leadership away, so it
+				// gets an (extended) expiration-based lease.
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts20,
+						Expiration:            &ts40,
+						DeprecatedStartStasis: &ts40,
+						Sequence:              7, // sequence not changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+				},
+			},
+			{
 				name:  "extend expiration",
 				st:    useExpirationSettings(),
 				input: expirationInput,
@@ -778,6 +862,9 @@ func TestBuild(t *testing.T) {
 						Sequence:              8, // sequence not changed
 						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
 					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextExpiration: true,
+					},
 				},
 			},
 			{
@@ -802,6 +889,129 @@ func TestBuild(t *testing.T) {
 						Expiration:            &ts50,
 						DeprecatedStartStasis: &ts50,
 						Sequence:              8, // sequence not changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextExpiration: true,
+					},
+				},
+			},
+			{
+				name:  "switch epoch to expiration",
+				st:    useExpirationSettings(),
+				input: defaultInput,
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts20,
+						Expiration:            &ts40,
+						DeprecatedStartStasis: &ts40,
+						Sequence:              8, // sequence changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextExpiration: true,
+					},
+				},
+			},
+			{
+				name:  "switch epoch to leader lease",
+				st:    useLeaderSettings(),
+				input: defaultInput,
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:         repl1,
+						Start:           cts10,
+						ProposedTS:      cts20,
+						Term:            5,
+						Sequence:        8, // sequence changed
+						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
+						MinExpiration:   ts40,
+					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextExpiration: true,
+					},
+				},
+			},
+			{
+				name: "switch epoch to expiration, previous expired",
+				st:   useExpirationSettings(),
+				input: func() BuildInput {
+					i := defaultInput
+					i.Now = cts30
+					i.PrevLeaseExpired = true
+					return i
+				}(),
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts30,
+						Expiration:            &ts50,
+						DeprecatedStartStasis: &ts50,
+						Sequence:              8, // sequence changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+					NodeLivenessManipulation: NodeLivenessManipulation{
+						Heartbeat: &defaultNodeLivenessRecord(repl1.NodeID).Liveness,
+					},
+				},
+			},
+			{
+				name:  "switch leader lease to expiration",
+				st:    useExpirationSettings(),
+				input: leaderInput,
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts20,
+						Expiration:            &ts40,
+						DeprecatedStartStasis: &ts40,
+						Sequence:              8, // sequence changed
+						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
+					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextExpiration: true,
+					},
+				},
+			},
+			{
+				name:  "switch leader lease to epoch",
+				input: leaderInput,
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:         repl1,
+						Start:           cts10,
+						ProposedTS:      cts20,
+						Epoch:           3,
+						Sequence:        8, // sequence changed
+						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
+						MinExpiration:   hlc.Timestamp{}, // set after revoke
+					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextExpiration: true,
+					},
+				},
+			},
+			{
+				name: "switch leader lease to expiration, prev expired",
+				st:   useExpirationSettings(),
+				input: func() BuildInput {
+					i := leaderInput
+					i.Now = cts30
+					i.PrevLeaseExpired = true
+					return i
+				}(),
+				expOutput: Output{
+					NextLease: roachpb.Lease{
+						Replica:               repl1,
+						Start:                 cts10,
+						ProposedTS:            cts30,
+						Expiration:            &ts50,
+						DeprecatedStartStasis: &ts50,
+						Sequence:              8, // sequence changed
 						AcquisitionType:       roachpb.LeaseAcquisitionType_Request,
 					},
 				},
@@ -876,6 +1086,9 @@ func TestBuild(t *testing.T) {
 						Sequence:        8,
 						AcquisitionType: roachpb.LeaseAcquisitionType_Transfer,
 					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextStart: true,
+					},
 				},
 			},
 			{
@@ -890,6 +1103,9 @@ func TestBuild(t *testing.T) {
 						Sequence:        8,
 						AcquisitionType: roachpb.LeaseAcquisitionType_Transfer,
 					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextStart: true,
+					},
 				},
 			},
 			{
@@ -903,6 +1119,9 @@ func TestBuild(t *testing.T) {
 						Expiration:      &ts40,
 						Sequence:        8,
 						AcquisitionType: roachpb.LeaseAcquisitionType_Transfer,
+					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextStart: true,
 					},
 				},
 			},
@@ -922,6 +1141,9 @@ func TestBuild(t *testing.T) {
 						Epoch:           3,
 						Sequence:        8,
 						AcquisitionType: roachpb.LeaseAcquisitionType_Transfer,
+					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextStart: true,
 					},
 				},
 			},
@@ -955,6 +1177,9 @@ func TestBuild(t *testing.T) {
 						Expiration:      &ts40,
 						Sequence:        8,
 						AcquisitionType: roachpb.LeaseAcquisitionType_Transfer,
+					},
+					PrevLeaseManipulation: PrevLeaseManipulation{
+						RevokeAndForwardNextStart: true,
 					},
 				},
 			},

@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package clusterversion
 
@@ -228,8 +223,45 @@ const (
 	// to the system tenant.
 	V24_3_TableMetadata
 
-	// V24_3_ListenNotifyQueue is the migration to add the listen/notify table
-	V24_3_ListenNotifyQueue
+	// V24_3_TenantExcludeDataFromBackup is the migration to add
+	// `exclude_data_from_backup` on certain system tables with low GC
+	// TTL to mirror the behaviour on the system tenant.
+	V24_3_TenantExcludeDataFromBackup
+
+	// V24_3_AdvanceCommitIndexViaMsgApps is the version that makes the commit
+	// index advancement using MsgApps only, and not MsgHeartbeat.
+	V24_3_AdvanceCommitIndexViaMsgApps
+
+	// V24_3_SQLInstancesAddDraining is the migration to add the `is_draining`
+	// column to the system.sql_instances table.
+	V24_3_SQLInstancesAddDraining
+
+	// V24_3_MaybePreventUpgradeForCoreLicenseDeprecation is the migration step
+	// that checks for the core license deprecation. It checks to make sure that
+	// the cluster would not be unknowingly in violation of the new license
+	// policies.
+	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation
+
+	// V24_3_UseRACV2WithV1EntryEncoding is the earliest version which supports
+	// ranges using replication flow control v2, still with v1 entry encoding.
+	V24_3_UseRACV2WithV1EntryEncoding
+
+	// V24_3_UseRACV2Full is the earliest version which supports ranges using
+	// replication flow control v2, with v2 entry encoding. Replication flow
+	// control v1 is unsupported at this version.
+	V24_3_UseRACV2Full
+
+	// V24_3_AddTableMetadataCols is the migration to add additional columns
+	// to the system.table_metadata table
+	V24_3_AddTableMetadataCols
+
+	// V24_3 is CockroachDB v24.3. It's used for all v24.3.x patch releases.
+	V24_3
+
+	V25_1_Start
+
+	// V25_1_ListenNotifyQueue is the migration to add the listen/notify table
+	V25_1_ListenNotifyQueue
 
 	// *************************************************
 	// Step (1) Add new versions above this comment.
@@ -279,10 +311,22 @@ var versionTable = [numKeys]roachpb.Version{
 	// v24.3 versions. Internal versions must be even.
 	V24_3_Start: {Major: 24, Minor: 2, Internal: 2},
 
-	V24_3_StoreLivenessEnabled:    {Major: 24, Minor: 2, Internal: 4},
-	V24_3_AddTimeseriesZoneConfig: {Major: 24, Minor: 2, Internal: 6},
-	V24_3_TableMetadata:           {Major: 24, Minor: 2, Internal: 8},
-	V24_3_ListenNotifyQueue:       {Major: 24, Minor: 3, Internal: 10},
+	V24_3_StoreLivenessEnabled:                         {Major: 24, Minor: 2, Internal: 4},
+	V24_3_AddTimeseriesZoneConfig:                      {Major: 24, Minor: 2, Internal: 6},
+	V24_3_TableMetadata:                                {Major: 24, Minor: 2, Internal: 8},
+	V24_3_TenantExcludeDataFromBackup:                  {Major: 24, Minor: 2, Internal: 10},
+	V24_3_AdvanceCommitIndexViaMsgApps:                 {Major: 24, Minor: 2, Internal: 12},
+	V24_3_SQLInstancesAddDraining:                      {Major: 24, Minor: 2, Internal: 14},
+	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation: {Major: 24, Minor: 2, Internal: 16},
+	V24_3_UseRACV2WithV1EntryEncoding:                  {Major: 24, Minor: 2, Internal: 18},
+	V24_3_UseRACV2Full:                                 {Major: 24, Minor: 2, Internal: 20},
+	V24_3_AddTableMetadataCols:                         {Major: 24, Minor: 2, Internal: 22},
+
+	V24_3: {Major: 24, Minor: 3, Internal: 0},
+
+	// v25.1 versions. Internal versions must be even.
+	V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
+	V25_1_ListenNotifyQueue:       {Major: 25, Minor: 1, Internal: 0},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
@@ -295,21 +339,19 @@ var versionTable = [numKeys]roachpb.Version{
 const Latest Key = numKeys - 1
 
 // MinSupported is the minimum logical cluster version supported by this branch.
-const MinSupported Key = V24_1
+const MinSupported Key = V24_2
 
-// PreviousRelease is the logical cluster version of the previous release.
-//
-// Note: this is always the last element of SupportedPreviousReleases(); it is
-// also provided as a constant for convenience.
+// PreviousRelease is the logical cluster version of the previous release (which must
+// have at least an RC build published).
 const PreviousRelease Key = V24_2
 
-// V24_3 is a placeholder that will eventually be replaced by the actual 24.3
+// V25_1 is a placeholder that will eventually be replaced by the actual 25.1
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
 // a cluster is running 24.3 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 24.3.
-const V24_3 = Latest
+// only need to check that the cluster has upgraded to 25.1.
+const V25_1 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
@@ -334,16 +376,6 @@ const finalVersion Key = -1
 func (k Key) Version() roachpb.Version {
 	version := versionTable[k]
 	return maybeApplyDevOffset(k, version)
-}
-
-// FenceVersion is the fence version -- the internal immediately prior -- for
-// the named version, if it is Internal.
-func (k Key) FenceVersion() roachpb.Version {
-	v := k.Version()
-	if v.Internal > 0 {
-		v.Internal -= 1
-	}
-	return v
 }
 
 // IsFinal returns true if the key corresponds to a final version (as opposed to
@@ -378,7 +410,7 @@ func (k Key) String() string {
 // cluster).
 func SupportedPreviousReleases() []Key {
 	res := make([]Key, 0, 2)
-	for k := MinSupported; k < Latest; k++ {
+	for k := MinSupported; k <= PreviousRelease; k++ {
 		if k.IsFinal() {
 			res = append(res, k)
 		}

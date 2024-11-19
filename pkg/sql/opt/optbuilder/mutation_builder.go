@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -66,6 +61,8 @@ type mutationBuilder struct {
 	// inserted into the target table. It is only populated for INSERT
 	// expressions. It is currently used to inline constant insert values into
 	// uniqueness checks.
+	//
+	// insertExpr may not be set (e.g. if there are INSERT triggers).
 	insertExpr memo.RelExpr
 
 	// targetColList is an ordered list of IDs of the table columns into which
@@ -141,6 +138,15 @@ type mutationBuilder struct {
 	// the table.
 	partialIndexDelColIDs opt.OptionalColList
 
+	// triggerColIDs is the set of column IDs used to project the OLD and NEW rows
+	// for row-level AFTER triggers, and possibly also contains the canary column.
+	// It is only populated if the mutation statement has row-level AFTER
+	// triggers.
+	//
+	// NOTE: triggerColIDs may contain columns both contained and not contained in
+	// the lists above.
+	triggerColIDs opt.ColSet
+
 	// canaryColID is the ID of the column that is used to decide whether to
 	// insert or update each row. If the canary column's value is null, then it's
 	// an insert; otherwise it's an update.
@@ -190,6 +196,9 @@ type mutationBuilder struct {
 	// cascades contains foreign key check cascades; see buildFK* methods.
 	cascades memo.FKCascades
 
+	// afterTriggers contains AFTER triggers; see buildRowLevelAfterTriggers.
+	afterTriggers *memo.AfterTriggers
+
 	// withID is nonzero if we need to buffer the input for FK or uniqueness
 	// checks.
 	withID opt.WithID
@@ -214,6 +223,10 @@ type mutationBuilder struct {
 	// inputForInsertExpr stores the result of outscope.expr from the most
 	// recent call to buildInputForInsert.
 	inputForInsertExpr memo.RelExpr
+
+	// uniqueWithTombstoneIndexes is the set of unique indexes that ensure uniqueness
+	// by writing tombstones to all partitions
+	uniqueWithTombstoneIndexes intsets.Fast
 }
 
 func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
@@ -1062,21 +1075,26 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 	}
 
 	private := &memo.MutationPrivate{
-		Table:               mb.tabID,
-		InsertCols:          checkEmptyList(mb.insertColIDs),
-		FetchCols:           checkEmptyList(mb.fetchColIDs),
-		UpdateCols:          checkEmptyList(mb.updateColIDs),
-		CanaryCol:           mb.canaryColID,
-		ArbiterIndexes:      mb.arbiters.IndexOrdinals(),
-		ArbiterConstraints:  mb.arbiters.UniqueConstraintOrdinals(),
-		CheckCols:           checkEmptyList(mb.checkColIDs),
-		PartialIndexPutCols: checkEmptyList(mb.partialIndexPutColIDs),
-		PartialIndexDelCols: checkEmptyList(mb.partialIndexDelColIDs),
-		FKCascades:          mb.cascades,
+		Table:                      mb.tabID,
+		InsertCols:                 checkEmptyList(mb.insertColIDs),
+		FetchCols:                  checkEmptyList(mb.fetchColIDs),
+		UpdateCols:                 checkEmptyList(mb.updateColIDs),
+		CanaryCol:                  mb.canaryColID,
+		ArbiterIndexes:             mb.arbiters.IndexOrdinals(),
+		ArbiterConstraints:         mb.arbiters.UniqueConstraintOrdinals(),
+		CheckCols:                  checkEmptyList(mb.checkColIDs),
+		PartialIndexPutCols:        checkEmptyList(mb.partialIndexPutColIDs),
+		PartialIndexDelCols:        checkEmptyList(mb.partialIndexDelColIDs),
+		TriggerCols:                mb.triggerColIDs,
+		FKCascades:                 mb.cascades,
+		AfterTriggers:              mb.afterTriggers,
+		UniqueWithTombstoneIndexes: mb.uniqueWithTombstoneIndexes.Ordered(),
 	}
 
-	// If we didn't actually plan any checks or cascades, don't buffer the input.
-	if len(mb.uniqueChecks) > 0 || len(mb.fkChecks) > 0 || len(mb.cascades) > 0 {
+	// If we didn't actually plan any checks, cascades, or triggers, don't buffer
+	// the input.
+	if len(mb.uniqueChecks) > 0 || len(mb.fkChecks) > 0 ||
+		len(mb.cascades) > 0 || mb.afterTriggers != nil {
 		private.WithID = mb.withID
 	}
 
@@ -1538,7 +1556,11 @@ func (mb *mutationBuilder) buildCheckInputScan(
 	// TODO(mgartner): We do not currently inline constants for FK checks
 	// because this would break the insert fast path. The fast path can
 	// currently only be planned when FK checks are built with WithScans.
-	if !isFK && mb.insertExpr != nil {
+	//
+	// We also do not inline constants for checks that have row-level triggers
+	// because the triggers may modify the values that are being checked.
+	if !isFK && mb.insertExpr != nil &&
+		!mb.hasRowLevelTriggers(tree.TriggerActionTimeBefore, tree.TriggerEventInsert) {
 		// Find the constant columns produced by the insert expression. All
 		// input columns must be constant in order to inline them.
 		constCols := memo.FindInlinableConstants(mb.insertExpr)

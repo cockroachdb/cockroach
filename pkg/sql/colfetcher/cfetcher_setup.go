@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colfetcher
 
@@ -18,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -37,6 +33,10 @@ var cFetcherTableArgsPool = sync.Pool{
 	New: func() interface{} {
 		return &cFetcherTableArgs{}
 	},
+}
+
+func (a cFetcherTableArgs) RequiresRawMVCCValues() bool {
+	return row.FetchSpecRequiresRawMVCCValues(a.spec)
 }
 
 func (a *cFetcherTableArgs) Release() {

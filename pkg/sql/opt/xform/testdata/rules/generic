@@ -446,8 +446,8 @@ project
       │    ├── flags: disallow merge join
       │    ├── lookup expression
       │    │    └── filters
-      │    │         ├── "$1":8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
-      │    │         └── t:5 > column9:9 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
+      │    │         ├── t:5 > column9:9 [outer=(5,9), constraints=(/5: (/NULL - ]; /9: (/NULL - ])]
+      │    │         └── "$1":8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
       │    ├── stable, has-placeholder
       │    ├── key: (1)
       │    ├── fd: ()-->(2,8,9), (1)-->(5), (2)==(8), (8)==(2)

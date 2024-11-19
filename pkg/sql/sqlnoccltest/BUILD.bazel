@@ -2,25 +2,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "sqlnoccltest_test",
-    srcs = [
-        "main_test.go",
-        "partition_test.go",
-    ],
+    srcs = ["main_test.go"],
     deps = [
-        "//pkg/base",
-        "//pkg/config/zonepb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql/catalog/catalogkeys",
-        "//pkg/sql/catalog/catpb",
-        "//pkg/sql/catalog/desctestutils",
-        "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
-        "//pkg/util/encoding",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
-        "//pkg/util/protoutil",
     ],
 )

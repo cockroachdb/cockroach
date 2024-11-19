@@ -43,6 +43,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -90,6 +92,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -159,6 +163,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -271,6 +277,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -328,6 +336,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -439,6 +449,8 @@ TABLE t
  ├── v string
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_k_v (k, v)
  ├── PRIMARY INDEX t_pkey
  │    ├── k int not null
@@ -644,8 +656,6 @@ TABLE system.public.tenant_usage                                                
 TABLE system.public.transaction_activity                                           NULL        system       transaction_activity          NULL           NULL
 TABLE system.public.transaction_statistics                                         NULL        system       transaction_statistics        NULL           NULL
 TABLE test.public.t                                                                NULL        test         t                             NULL           NULL
-TABLE test.public.t36642                                                           NULL      test         t36642                        NULL           NULL
-TABLE test.public.t36644                                                           NULL      test         t36644                        NULL           NULL
 
 # Test the zone information being displayed in SHOW CREATE
 statement ok
@@ -889,6 +899,8 @@ ALTER TABLE auth.t3 CONFIGURE ZONE USING num_replicas = 3
 # Index and rows (partitions) should inherit table permissions
 statement ok
 ALTER INDEX auth.t3@x CONFIGURE ZONE USING num_replicas=5;
+
+statement ok
 ALTER PARTITION p OF INDEX auth.t3@x CONFIGURE ZONE USING num_replicas = 3
 
 # Granting the admin role should allow configuring zones on system tables and
@@ -911,8 +923,12 @@ ALTER TABLE system.jobs CONFIGURE ZONE USING num_replicas = 3
 # zone configuration does not appear in partition p1 of infect@infect_pkey's zone config.
 statement ok
 CREATE TABLE infect (x INT PRIMARY KEY);
-ALTER TABLE infect PARTITION BY LIST (x) ( PARTITION p1 VALUES IN (1));
+ALTER TABLE infect PARTITION BY LIST (x) (PARTITION p1 VALUES IN (1));
+
+statement ok
 ALTER INDEX infect@infect_pkey CONFIGURE ZONE USING num_replicas=5;
+
+statement ok
 ALTER PARTITION p1 OF TABLE infect CONFIGURE ZONE USING constraints='[+dc=dc1]'
 
 query TT
@@ -1073,7 +1089,11 @@ WHERE table_name = 'copy_from_parent' AND index_name = 'primary' AND partition_n
 # check that copy from parent on a subzone doesn't accidentally modify the parent zone.
 statement ok
 CREATE TABLE parent_modify (x INT, INDEX idx (x));
+
+statement ok
 ALTER TABLE parent_modify CONFIGURE ZONE USING gc.ttlseconds = 700;
+
+statement ok
 ALTER INDEX parent_modify@idx CONFIGURE ZONE USING num_replicas = COPY FROM PARENT
 
 query TTT
@@ -1118,8 +1138,14 @@ ALTER INDEX t@i2 PARTITION BY LIST (w) (
 
 statement ok
 ALTER PARTITION p1 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15210;
+
+statement ok
 ALTER PARTITION p2 OF INDEX t@i1 CONFIGURE ZONE USING gc.ttlseconds = 15213;
+
+statement ok
 ALTER PARTITION p3 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15411;
+
+statement ok
 ALTER PARTITION p4 OF INDEX t@i2 CONFIGURE ZONE USING gc.ttlseconds = 15418;
 
 statement ok
@@ -1191,6 +1217,8 @@ subtest regression_69647
 statement ok
 CREATE table t_69647(pk INT PRIMARY KEY, i INT);
 CREATE INDEX i_69647 ON t_69647(i);
+
+statement ok
 ALTER TABLE t_69647 CONFIGURE ZONE USING global_reads=true;
 
 query TT
@@ -1239,6 +1267,8 @@ INDEX test.public.t_69647@i_69647  ALTER INDEX test.public.t_69647@i_69647 CONFI
 # Same test as above, but this time for partitions instead of indexes.
 statement ok
 ALTER TABLE t_69647 PARTITION BY LIST (pk) (PARTITION "one" VALUES IN (1), PARTITION "rest" VALUES IN (DEFAULT));
+
+statement ok
 ALTER PARTITION "one" OF TABLE t_69647 CONFIGURE ZONE USING num_replicas=3;
 
 query TT
@@ -1252,3 +1282,107 @@ PARTITION one OF TABLE t_69647  ALTER PARTITION one OF TABLE t_69647 CONFIGURE Z
                                   num_replicas = 3,
                                   constraints = '[]',
                                   lease_preferences = '[]'
+
+subtest regression_130605
+
+statement ok
+CREATE DATABASE foo;
+USE foo;
+CREATE TABLE foob (i int, j int);
+
+# Setting a subzone configuration on a table should mark the table's zone
+# configuration as a subzone placeholder. This means that the table's zone
+# configuration is not "set" yet and we should just show its parent's zone
+# configuration.
+statement ok
+ALTER INDEX foob@foob_pkey CONFIGURE ZONE USING num_replicas = 8;
+
+statement ok
+ALTER DATABASE foo CONFIGURE ZONE USING num_replicas = 11;
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE foob;
+----
+DATABASE foo  ALTER DATABASE foo CONFIGURE ZONE USING
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 14400,
+                num_replicas = 11,
+                constraints = '[]',
+                lease_preferences = '[]'
+
+subtest end
+
+subtest bad_partition
+
+statement ok
+CREATE TABLE fooba(pk INT PRIMARY KEY, i INT)
+
+statement ok
+ALTER TABLE fooba PARTITION BY LIST (pk) (PARTITION "one" VALUES IN (1), PARTITION "rest" VALUES IN (DEFAULT));
+
+# Configure the zone of a partition that does not exist.
+statement error partition "cadr" does not exist on index "fooba_pkey"
+ALTER PARTITION cadr OF INDEX fooba@fooba_pkey CONFIGURE ZONE USING num_replicas = 1;
+
+# Configure the zone of a partition on an index that does not exist.
+statement error index "nonexistent" (?:not found in relation "fooba"|does not exist)
+ALTER PARTITION rest OF INDEX fooba@nonexistent CONFIGURE ZONE USING num_replicas = 1;
+
+subtest end
+
+# Regression test for #134986 where subzone configs in an explicit txn were
+# incorrect due to faulty seqNum logic.
+subtest subzone_side_effects
+
+statement ok
+CREATE TABLE person (
+    name STRING,
+    country STRING,
+    birth_date DATE,
+    PRIMARY KEY (country, birth_date, name),
+    FAMILY fam_0_birth_date (birth_date),
+    FAMILY fam_1_country_name (country, name)
+)
+    PARTITION BY LIST (country) (
+            PARTITION australia
+                VALUES IN ('AU', 'NZ')
+                PARTITION BY RANGE (birth_date)
+                    (
+                        PARTITION old_au VALUES FROM (minvalue) TO ('1995-01-01'),
+                        PARTITION yung_au VALUES FROM ('1995-01-01') TO (maxvalue)
+                    )
+        );
+
+statement ok
+BEGIN;
+SET LOCAL use_declarative_schema_changer = 'unsafe_always';
+ALTER PARTITION australia OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 2;
+ALTER PARTITION old_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 4;
+ALTER PARTITION yung_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 5;
+COMMIT;
+
+query TT
+SHOW CREATE person;
+----
+person  CREATE TABLE public.person (
+          name STRING NOT NULL,
+          country STRING NOT NULL,
+          birth_date DATE NOT NULL,
+          CONSTRAINT person_pkey PRIMARY KEY (country ASC, birth_date ASC, name ASC),
+          FAMILY fam_0_birth_date (birth_date),
+          FAMILY fam_1_country_name (country, name)
+        ) PARTITION BY LIST (country) (
+          PARTITION australia VALUES IN (('AU'), ('NZ')) PARTITION BY RANGE (birth_date) (
+            PARTITION old_au VALUES FROM (MINVALUE) TO ('1995-01-01'),
+            PARTITION yung_au VALUES FROM ('1995-01-01') TO (MAXVALUE)
+          )
+        );
+        ALTER PARTITION australia OF INDEX foo.public.person@person_pkey CONFIGURE ZONE USING
+          gc.ttlseconds = 2;
+        ALTER PARTITION old_au OF INDEX foo.public.person@person_pkey CONFIGURE ZONE USING
+          gc.ttlseconds = 4;
+        ALTER PARTITION yung_au OF INDEX foo.public.person@person_pkey CONFIGURE ZONE USING
+          gc.ttlseconds = 5
+
+subtest end

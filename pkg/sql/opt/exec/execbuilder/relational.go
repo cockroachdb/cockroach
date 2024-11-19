@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package execbuilder
 
@@ -43,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -284,6 +278,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 
 	case *memo.CreateFunctionExpr:
 		ep, outputCols, err = b.buildCreateFunction(t)
+
+	case *memo.CreateTriggerExpr:
+		ep, outputCols, err = b.buildCreateTrigger(t)
 
 	case *memo.WithExpr:
 		ep, outputCols, err = b.buildWith(t)
@@ -758,7 +755,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		return execPlan{}, colOrdMap{},
 			errors.AssertionFailedf("expected inverted index scan to have a constraint")
 	}
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
+	b.IndexesUsed.add(tab.ID(), idx.ID())
 
 	// Save if we planned a full (large) table/index scan on the builder so that
 	// the planner can be made aware later. We only do this for non-virtual
@@ -770,7 +767,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	relProps := scan.Relational()
 	stats := relProps.Statistics()
 	if !tab.IsVirtualTable() && isUnfiltered {
-		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
+		large := !stats.Available || stats.RowCount >= b.evalCtx.SessionData().LargeFullScanRows
 		if scan.Index == cat.PrimaryIndex {
 			b.flags.Set(exec.PlanFlagContainsFullTableScan)
 			if large {
@@ -2299,7 +2296,7 @@ func (b *Builder) buildIndexJoin(
 	// TODO(radu): the distsql implementation of index join assumes that the input
 	// starts with the PK columns in order (#40749).
 	pri := tab.Index(cat.PrimaryIndex)
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), pri.ID())})
+	b.IndexesUsed.add(tab.ID(), pri.ID())
 	keyCols := make([]exec.NodeColumnOrdinal, pri.KeyColumnCount())
 	for i := range keyCols {
 		keyCols[i], err = getNodeColumnOrdinal(inputCols, join.Table.ColumnID(pri.Column(i).Ordinal()))
@@ -2677,7 +2674,7 @@ func (b *Builder) buildLookupJoin(
 
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
+	b.IndexesUsed.add(tab.ID(), idx.ID())
 
 	locking, err := b.buildLocking(join.Table, join.Locking)
 	if err != nil {
@@ -2857,7 +2854,7 @@ func (b *Builder) buildInvertedJoin(
 	md := b.mem.Metadata()
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed, []string{fmt.Sprintf("%d@%d", tab.ID(), idx.ID())})
+	b.IndexesUsed.add(tab.ID(), idx.ID())
 
 	prefixEqCols := make([]exec.NodeColumnOrdinal, len(join.PrefixKeyCols))
 	for i, c := range join.PrefixKeyCols {
@@ -2999,10 +2996,8 @@ func (b *Builder) buildZigzagJoin(
 	rightTable := md.Table(join.RightTable)
 	leftIndex := leftTable.Index(join.LeftIndex)
 	rightIndex := rightTable.Index(join.RightIndex)
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed,
-		[]string{fmt.Sprintf("%d@%d", leftTable.ID(), leftIndex.ID())})
-	b.IndexesUsed = util.CombineUnique(b.IndexesUsed,
-		[]string{fmt.Sprintf("%d@%d", rightTable.ID(), rightIndex.ID())})
+	b.IndexesUsed.add(leftTable.ID(), leftIndex.ID())
+	b.IndexesUsed.add(rightTable.ID(), rightIndex.ID())
 
 	leftEqCols := make([]exec.TableColumnOrdinal, len(join.LeftEqCols))
 	rightEqCols := make([]exec.TableColumnOrdinal, len(join.RightEqCols))
@@ -3109,9 +3104,7 @@ func (b *Builder) buildZigzagJoin(
 	return b.applySimpleProject(res, outputCols, join, join.Cols, join.ProvidedPhysical().Ordering)
 }
 
-func (b *Builder) buildLockingImpl(
-	toLock opt.TableID, locking opt.Locking, allowPredicateLocks bool,
-) (opt.Locking, error) {
+func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
 	if b.forceForUpdateLocking.Contains(int(toLock)) {
 		locking = locking.Max(forUpdateLocking)
 	}
@@ -3122,14 +3115,9 @@ func (b *Builder) buildLockingImpl(
 				"cannot execute SELECT %s in a read-only transaction", locking.Strength.String(),
 			)
 		}
-		if !allowPredicateLocks && locking.Form == tree.LockPredicate {
+		if locking.Form == tree.LockPredicate {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
 				110873, "explicit unique checks are not yet supported under read committed isolation",
-			)
-		}
-		if locking.Form == tree.LockPredicate && locking.WaitPolicy != tree.LockWaitBlock {
-			return opt.Locking{}, unimplemented.NewWithIssuef(
-				126592, "non-blocking predicate locks are not yet supported",
 			)
 		}
 		// Check if we can actually use shared locks here, or we need to use
@@ -3147,11 +3135,6 @@ func (b *Builder) buildLockingImpl(
 		b.flags.Set(exec.PlanFlagContainsLocking)
 	}
 	return locking, nil
-}
-
-// TODO (#126592): Delete this function once predicate locks are universally supported.
-func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Locking, error) {
-	return b.buildLockingImpl(toLock, locking, false /* allowPredicateLocks */)
 }
 
 func (b *Builder) buildMax1Row(
@@ -3271,8 +3254,8 @@ func (b *Builder) buildRecursiveCTE(
 		}
 		rootRowCount := int64(rec.Recursive.Relational().Statistics().RowCountIfAvailable())
 		return innerBld.factory.ConstructPlan(
-			plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks, rootRowCount,
-			innerBld.flags,
+			plan.root, innerBld.subqueries, innerBld.cascades, innerBld.triggers, innerBld.checks,
+			rootRowCount, innerBld.flags,
 		)
 	}
 
@@ -3422,6 +3405,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		udf.Def.SetReturning,
 		false, /* tailCall */
 		true,  /* procedure */
+		false, /* triggerFunc */
 		false, /* blockStart */
 		nil,   /* blockState */
 		nil,   /* cursorDeclaration */

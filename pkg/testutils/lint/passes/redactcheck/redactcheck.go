@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package redactcheck defines an Analyzer that checks registered redact-safe
 // types against an allow-list.
@@ -136,12 +131,22 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split": {
 						"SplitObjective": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb": {
+						"Epoch": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities": {
 						"ID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/raft/raftpb": {
-						"PeerID": {},
-						"Epoch":  {},
+						"Epoch":                {},
+						"PeerID":               {},
+						"MessageType":          {},
+						"EntryType":            {},
+						"ConfChangeType":       {},
+						"ConfChangeTransition": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/raft/tracker": {
+						"StateType": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/repstream/streampb": {
 						"StreamID": {},
@@ -162,6 +167,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					},
 					"github.com/cockroachdb/cockroach/pkg/rpc/rpcpb": {
 						"ConnectionClass": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/server/license": {
+						"LicType": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb": {
 						"JobID":      {},
@@ -194,7 +202,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ConstraintType": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb": {
-						"ForeignKeyAction": {},
+						"ForeignKeyAction":  {},
+						"TriggerActionTime": {},
+						"TriggerEventType":  {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph": {
 						"RuleName": {},
@@ -206,6 +216,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"FamilyID":       {},
 						"IndexID":        {},
 						"PGAttributeNum": {},
+						"TriggerID":      {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/tree": {
 						"IsolationLevel": {},
@@ -223,6 +234,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/util/admission": {
 						"WorkKind":  {},
 						"QueueKind": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb": {
+						"TraceID": {},
+						"SpanID":  {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/util/hlc": {
 						"ClockTimestamp":  {},

@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -47,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/raft"
@@ -247,6 +243,9 @@ func createTestStoreWithoutStart(
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
+	)
+	cfg.StoreLivenessTransport = storeliveness.NewTransport(
+		cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, server, nil, /* knobs */
 	)
 
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
@@ -700,10 +699,12 @@ func TestReplicasByKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	rep.raftMu.Lock()
 	rep.mu.Lock()
-	desc := *rep.mu.state.Desc // shallow copy to replace desc wholesale
+	desc := *rep.shMu.state.Desc // shallow copy to replace desc wholesale
 	desc.EndKey = roachpb.RKey("e")
-	rep.mu.state.Desc = &desc
+	rep.shMu.state.Desc = &desc
+	rep.raftMu.Unlock()
 	rep.mu.Unlock()
 
 	// Ensure that this shrinkage is recognized by future additions to replicasByKey.
@@ -1241,7 +1242,7 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cfg := TestStoreConfig(hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)),
-		time.Millisecond /* maxOffset */, time.Millisecond /* toleratedOffset */))
+		time.Millisecond /* maxOffset */, time.Millisecond /* toleratedOffset */, hlc.PanicLogger))
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	args := getArgs([]byte("a"))
 	// Set args timestamp to exceed max offset.
@@ -1391,7 +1392,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	cfg := TestStoreConfig(hlc.NewClock(
-		manual, 1000*time.Nanosecond /* maxOffset */, 1000*time.Nanosecond /* toleratedOffset */))
+		manual, 1000*time.Nanosecond /* maxOffset */, 1000*time.Nanosecond /* toleratedOffset */, hlc.PanicLogger))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
 			pr, ok := filterArgs.Req.(*kvpb.PushTxnRequest)
@@ -2788,7 +2789,7 @@ func TestStoreGCThreshold(t *testing.T) {
 			t.Fatal(err)
 		}
 		repl.mu.Lock()
-		gcThreshold := *repl.mu.state.GCThreshold
+		gcThreshold := *repl.shMu.state.GCThreshold
 		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.TODOEngine())
 		repl.mu.Unlock()
 		if err != nil {
@@ -4096,7 +4097,7 @@ func TestManuallyEnqueueUninitializedReplica(t *testing.T) {
 		StoreID:   tc.store.StoreID(),
 		ReplicaID: 7,
 	})
-	_, _, err := tc.store.Enqueue(
+	_, err := tc.store.Enqueue(
 		ctx, "replicaGC", repl, true /* skipShouldQueue */, false, /* async */
 	)
 	require.Error(t, err)

@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -17,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -56,21 +50,21 @@ func (s *baseStore) StoreID() roachpb.StoreID {
 // Enqueue is part of kvserverbase.Store.
 func (s *baseStore) Enqueue(
 	ctx context.Context, queue string, rangeID roachpb.RangeID, skipShouldQueue bool,
-) (tracingpb.Recording, error) {
+) error {
 	store := (*Store)(s)
 	repl, err := store.GetReplica(rangeID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	trace, processErr, enqueueErr := store.Enqueue(ctx, queue, repl, skipShouldQueue, false /* async */)
+	processErr, enqueueErr := store.Enqueue(ctx, queue, repl, skipShouldQueue, false /* async */)
 	if processErr != nil {
-		return nil, processErr
+		return processErr
 	}
 	if enqueueErr != nil {
-		return nil, enqueueErr
+		return enqueueErr
 	}
-	return trace, nil
+	return nil
 }
 
 // SetQueueActive is part of kvserverbase.Store.

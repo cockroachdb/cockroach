@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -188,13 +183,17 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		}
 
 		if rewrite {
+			writeablePathArg := func(dir string) string {
+				return fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir))
+			}
+
 			dir := filepath.Join(filepath.Dir(baseTestsDir), "testdata")
-			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
+			args = append(args, writeablePathArg(dir))
 			if choice == "ccl" {
 				// The ccl logictest target shares the testdata directory with the base
 				// logictest target -- make an allowance explicitly for that.
-				args = append(args, fmt.Sprintf("--sandbox_writable_path=%s",
-					filepath.Join(workspace, "pkg/sql/logictest")))
+				args = append(args, writeablePathArg("pkg/sql/logictest"))
+				args = append(args, writeablePathArg("pkg/sql/opt/exec/execbuilder/testdata/"))
 			}
 		}
 	}

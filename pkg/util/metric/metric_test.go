@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package metric
 
@@ -24,6 +19,7 @@ import (
 	"github.com/kr/pretty"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,6 +48,40 @@ func TestGauge(t *testing.T) {
 		t.Fatalf("unexpected value: %d", v)
 	}
 	testMarshal(t, g, "10")
+}
+
+func TestGaugeVector(t *testing.T) {
+	g := NewExportedGaugeVec(emptyMetadata, []string{"label1", "label2"})
+	ls1 := map[string]string{"label1": "value1", "label2": "value2"}
+	ls2 := map[string]string{"label1": "value3", "label2": "value4"}
+
+	g.Update(ls1, 10)
+	g.Update(ls2, 10)
+
+	metrics := g.ToPrometheusMetrics()
+	require.Len(t, metrics, 2)
+	require.Equal(t, *metrics[0].Gauge.Value, 10.0)
+	require.Equal(t, *metrics[1].Gauge.Value, 10.0)
+
+	var wg sync.WaitGroup
+	for i := int64(0); i < 10; i++ {
+		wg.Add(2)
+		go func() { g.Inc(ls1, 1); wg.Done() }()
+		go func() { g.Inc(ls2, 2); wg.Done() }()
+	}
+	wg.Wait()
+
+	metrics = g.ToPrometheusMetrics()
+	require.Equal(t, 20.0, *metrics[0].Gauge.Value)
+	require.Equal(t, 30.0, *metrics[1].Gauge.Value)
+	require.Equal(t, "label1", *metrics[0].GetLabel()[0].Name)
+	require.Equal(t, "value1", *metrics[0].GetLabel()[0].Value)
+	require.Equal(t, "label2", *metrics[0].GetLabel()[1].Name)
+	require.Equal(t, "value2", *metrics[0].GetLabel()[1].Value)
+	require.Equal(t, "label1", *metrics[1].GetLabel()[0].Name)
+	require.Equal(t, "value3", *metrics[1].GetLabel()[0].Value)
+	require.Equal(t, "label2", *metrics[1].GetLabel()[1].Name)
+	require.Equal(t, "value4", *metrics[1].GetLabel()[1].Value)
 }
 
 func TestFunctionalGauge(t *testing.T) {
@@ -567,4 +597,325 @@ func TestMergeWindowedHistogram(t *testing.T) {
 			require.Equal(t, uint64(1), *bucket.CumulativeCount)
 		}
 	}
+}
+
+type toPromMetricsTC struct {
+	labels [][]string
+	value  float64
+}
+
+func (cv *CounterVec) assertPrometheusMetrics(t *testing.T, tc []toPromMetricsTC) {
+	t.Helper()
+
+	promMetrics := cv.ToPrometheusMetrics()
+	assert.Len(t, promMetrics, len(tc))
+
+	for i, m := range promMetrics {
+		labels := []*prometheusgo.LabelPair{}
+
+		for _, l := range tc[i].labels {
+			labels = append(labels, &prometheusgo.LabelPair{
+				Name:  &l[0],
+				Value: &l[1],
+			})
+		}
+
+		assert.Equal(t, &prometheusgo.Metric{
+			Label: labels,
+			Counter: &prometheusgo.Counter{
+				Value: &tc[i].value,
+			},
+		}, m)
+	}
+
+}
+
+func TestCounterVec(t *testing.T) {
+	t.Run("labels provided match what is declared", func(t *testing.T) {
+		c := NewExportedCounterVec(emptyMetadata, []string{"label1", "label2"})
+		t.Run("update", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				c.Update(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+				}, 10)
+
+				c.Update(map[string]string{
+					"label1": "value3",
+					"label2": "value4",
+				}, 10)
+
+				// overwrite the previous value
+				c.Update(map[string]string{
+					"label1": "value3",
+					"label2": "value4",
+				}, 20)
+			})
+		})
+
+		t.Run("inc", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				c.Inc(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+				}, 10)
+
+				c.Inc(map[string]string{
+					"label1": "value3",
+					"label2": "value4",
+				}, 10)
+			})
+		})
+
+		t.Run("count", func(t *testing.T) {
+			assert.Equal(t, int64(20), c.Count(map[string]string{
+				"label1": "value1",
+				"label2": "value2",
+			}))
+
+			assert.Equal(t, int64(30), c.Count(map[string]string{
+				"label1": "value3",
+				"label2": "value4",
+			}))
+
+			// timeseries doesn't exist
+			assert.Equal(t, int64(0), c.Count(map[string]string{
+				"label1": "value5",
+				"label2": "value6",
+			}))
+		})
+
+		t.Run("to prometheus metrics", func(t *testing.T) {
+			c.assertPrometheusMetrics(t, []toPromMetricsTC{{
+				labels: [][]string{{"label1", "value1"}, {"label2", "value2"}},
+				value:  20,
+			}, {
+				labels: [][]string{{"label1", "value3"}, {"label2", "value4"}},
+				value:  30,
+			}})
+		})
+	})
+
+	t.Run("labels provided exceed what is declared", func(t *testing.T) {
+		c := NewExportedCounterVec(emptyMetadata, []string{"label1", "label2"})
+		t.Run("update", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				c.Update(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+					"label3": "value3",
+				}, 10)
+
+				c.Update(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+					"label3": "value3",
+					"label4": "value4",
+					"label5": "value5",
+				}, 50)
+			})
+		})
+
+		t.Run("count", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				assert.Equal(t, int64(50), c.Count(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+					"label3": "value3",
+					"label6": "value6",
+				}))
+			})
+		})
+
+		t.Run("to prometheus metrics", func(t *testing.T) {
+			c.assertPrometheusMetrics(t, []toPromMetricsTC{
+				{
+					labels: [][]string{{"label1", "value1"}, {"label2", "value2"}},
+					value:  50,
+				},
+			})
+		})
+		// we don't have to test all operation again
+	})
+
+	t.Run("labels provided are less than what is declared", func(t *testing.T) {
+		c := NewExportedCounterVec(emptyMetadata, []string{"label1", "label2", "label3"})
+		t.Run("update", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				c.Update(map[string]string{
+					"label1": "value1",
+					"label2": "value2",
+				}, 10)
+			})
+		})
+
+		t.Run("count", func(t *testing.T) {
+			assert.Equal(t, int64(10), c.Count(map[string]string{
+				"label1": "value1",
+				"label2": "value2",
+				"label3": "",
+			}))
+
+			assert.Equal(t, int64(0), c.Count(map[string]string{
+				"label1": "value1",
+				"label2": "value2",
+				"label3": "value3",
+			}))
+		})
+
+		t.Run("to prometheus metrics", func(t *testing.T) {
+			c.assertPrometheusMetrics(t, []toPromMetricsTC{
+				{
+					labels: [][]string{{"label1", "value1"}, {"label2", "value2"}, {"label3", ""}},
+					value:  10,
+				},
+			})
+		})
+	})
+
+	t.Run("no matching labels", func(t *testing.T) {
+		c := NewExportedCounterVec(emptyMetadata, []string{"label1", "label2"})
+		t.Run("update", func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				c.Update(map[string]string{
+					"label3": "value3",
+					"label4": "value4",
+				}, 10)
+			})
+		})
+
+		t.Run("count", func(t *testing.T) {
+			assert.Equal(t, int64(10), c.Count(map[string]string{
+				"label1": "",
+				"label2": "",
+			}))
+
+			// TODO(arjunmahishi): Handle this case carefully. This is a bug.
+			// assert.Equal(t, int64(0), c.Count(map[string]string{
+			// 	"label3": "value3",
+			// 	"label4": "value4",
+			// }))
+		})
+
+		t.Run("to prometheus metrics", func(t *testing.T) {
+			c.assertPrometheusMetrics(t, []toPromMetricsTC{
+				{
+					labels: [][]string{{"label1", ""}, {"label2", ""}},
+					value:  10,
+				},
+			})
+		})
+	})
+}
+
+func TestHistogramVec(t *testing.T) {
+	t.Run("Observe", func(t *testing.T) {
+
+		h := NewExportedHistogramVec(emptyMetadata, Count1KBuckets, []string{"label1", "label2"})
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"label2": "value2",
+		}, 10)
+
+		metrics := h.ToPrometheusMetrics()
+		require.Len(t, metrics, 1)
+		require.Equal(t, uint64(1), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(10), *metrics[0].Histogram.SampleSum)
+
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"label2": "value2",
+		}, 20)
+
+		metrics = h.ToPrometheusMetrics()
+		require.Len(t, metrics, 1)
+		require.Equal(t, uint64(2), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(30), *metrics[0].Histogram.SampleSum)
+
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"label2": "value3",
+		}, 10)
+
+		metrics = h.ToPrometheusMetrics()
+		require.Len(t, metrics, 2)
+		// metric[0] should be unchanged
+		require.Equal(t, uint64(2), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(30), *metrics[0].Histogram.SampleSum)
+
+		require.Equal(t, uint64(1), *metrics[1].Histogram.SampleCount)
+		require.Equal(t, float64(10), *metrics[1].Histogram.SampleSum)
+
+	})
+
+	t.Run("Observe no matching labels", func(t *testing.T) {
+		h := NewExportedHistogramVec(emptyMetadata, Count1KBuckets, []string{"label1", "label2"})
+		h.Observe(map[string]string{
+			"labelx": "value1",
+			"labely": "value2",
+		}, 10)
+
+		metrics := h.ToPrometheusMetrics()
+		// metric is still recorded
+		require.Len(t, metrics, 1)
+		require.Equal(t, uint64(1), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(10), *metrics[0].Histogram.SampleSum)
+
+		// metric only has pre-defined labels with no values
+		labels := metrics[0].Label
+		require.Len(t, labels, 2)
+		require.Equal(t, "label1", *labels[0].Name)
+		require.Equal(t, "", *labels[0].Value)
+		require.Equal(t, "label2", *labels[1].Name)
+		require.Equal(t, "", *labels[1].Value)
+	})
+
+	t.Run("Observe partial matching labels", func(t *testing.T) {
+		h := NewExportedHistogramVec(emptyMetadata, Count1KBuckets, []string{"label1", "label2"})
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"labely": "value2",
+		}, 10)
+
+		metrics := h.ToPrometheusMetrics()
+		// metric is still recorded
+		require.Len(t, metrics, 1)
+		require.Equal(t, uint64(1), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(10), *metrics[0].Histogram.SampleSum)
+
+		// metric only has pre-defined labels
+		labels := metrics[0].Label
+		require.Len(t, labels, 2)
+		require.Equal(t, "label1", *labels[0].Name)
+		require.Equal(t, "value1", *labels[0].Value)
+		require.Equal(t, "label2", *labels[1].Name)
+		require.Equal(t, "", *labels[1].Value)
+
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"labely": "value3",
+		}, 20)
+
+		metrics = h.ToPrometheusMetrics()
+		// metric is still recorded
+		require.Len(t, metrics, 1)
+		require.Equal(t, uint64(2), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(30), *metrics[0].Histogram.SampleSum)
+
+		h.Observe(map[string]string{
+			"label1": "value1",
+			"label2": "value2",
+			"labely": "value3",
+		}, 1)
+
+		metrics = h.ToPrometheusMetrics()
+		// new metric recorded
+		require.Len(t, metrics, 2)
+		// First metric remains the same
+		require.Equal(t, uint64(2), *metrics[0].Histogram.SampleCount)
+		require.Equal(t, float64(30), *metrics[0].Histogram.SampleSum)
+
+		require.Equal(t, uint64(1), *metrics[1].Histogram.SampleCount)
+		require.Equal(t, float64(1), *metrics[1].Histogram.SampleSum)
+	})
 }

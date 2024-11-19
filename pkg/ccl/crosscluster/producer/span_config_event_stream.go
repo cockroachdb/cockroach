@@ -1,15 +1,13 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package producer
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -27,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -157,7 +156,12 @@ func (s *spanConfigEventStream) Next(ctx context.Context) (bool, error) {
 	case err := <-s.errCh:
 		return false, err
 	case s.data = <-s.streamCh:
-		return true, nil
+		select {
+		case err := <-s.errCh:
+			return false, err
+		default:
+			return true, nil
+		}
 	}
 }
 
@@ -206,6 +210,27 @@ func (s *spanConfigEventStream) flushEvent(ctx context.Context, event *streampb.
 	case <-s.doneChan:
 		return nil
 	}
+}
+
+type checkpointPacer struct {
+	pace time.Duration
+	next time.Time
+}
+
+func makeCheckpointPacer(frequency time.Duration) checkpointPacer {
+	return checkpointPacer{
+		pace: frequency,
+		next: timeutil.Now().Add(frequency),
+	}
+}
+
+func (p *checkpointPacer) shouldCheckpoint() bool {
+	now := timeutil.Now()
+	if p.next.Before(now) {
+		p.next = now.Add(p.pace)
+		return true
+	}
+	return false
 }
 
 // streamLoop is the main processing loop responsible for reading buffered rangefeed events,
@@ -269,7 +294,7 @@ func (s *spanConfigEventStream) streamLoop(ctx context.Context) error {
 			}
 			batcher.addSpanConfigs(bufferedEvents, update.Timestamp)
 			bufferedEvents = bufferedEvents[:0]
-			if pacer.shouldCheckpoint(update.Timestamp, true) || fromFullScan {
+			if pacer.shouldCheckpoint() || fromFullScan {
 				log.VEventf(ctx, 2, "checkpointing span config stream at %s", update.Timestamp.GoTime())
 				if batcher.getSize() > 0 {
 					log.VEventf(ctx, 2, "sending %d span config events", len(batcher.batch.SpanConfigs))
@@ -292,8 +317,7 @@ func makeSpanConfigFrontier(span roachpb.Span) *spanConfigFrontier {
 	checkpoint := streampb.StreamEvent_StreamCheckpoint{
 		ResolvedSpans: []jobspb.ResolvedSpan{{
 			Span: span,
-		},
-		},
+		}},
 	}
 	return &spanConfigFrontier{
 		checkpoint: checkpoint,

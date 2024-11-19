@@ -3,8 +3,9 @@
 # values for the liveness interval.
 # -------------------------------------------------------------
 
-add-store node-id=2 store-id=2
+support-from node-id=2 store-id=2
 ----
+epoch: 0, expiration: 0,0
 
 # -------------------------------------------------------------
 # Store (n1, s1) requests and receives support with
@@ -22,7 +23,7 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-requester state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
+epoch: 1, expiration: 110.000000000,0
 
 
 # -------------------------------------------------------------
@@ -41,7 +42,7 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-requester state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:121.000000000,0}
+epoch: 1, expiration: 121.000000000,0
 
 
 # -------------------------------------------------------------
@@ -60,4 +61,11 @@ handle-messages
 
 support-from node-id=2 store-id=2
 ----
-requester state: {Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:121.000000000,0}
+epoch: 1, expiration: 121.000000000,0
+
+debug-metrics
+----
+HeartbeatSuccess: 3, HeartbeatFailure: 0
+MessageHandleSuccess: 3, MessageHandleFailure: 0
+SupportWithdrawSuccess: 0, SupportWithdrawFailure: 0
+SupportFromStores: 1, SupportForStores: 0

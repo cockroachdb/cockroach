@@ -1,14 +1,10 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { util } from "@cockroachlabs/cluster-ui";
+import { Skeleton } from "antd";
 import classNames from "classnames";
 import d3 from "d3";
 import React from "react";
@@ -16,7 +12,6 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
-import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { nodeSumsSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
@@ -282,21 +277,22 @@ class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
   }
 
   render() {
-    const children = [];
-
-    if (this.props.loading) {
-      children.push(<img className="visualization__spinner" src={spinner} />);
-    } else {
-      children.push(
-        ...renderCapacityUsage(this.props.capacityUsage),
-        ...renderNodeLiveness(this.props.nodeLiveness),
-        ...renderReplicationStatus(this.props.replicationStatus),
-      );
-    }
+    const children = [
+      ...renderCapacityUsage(this.props.capacityUsage),
+      ...renderNodeLiveness(this.props.nodeLiveness),
+      ...renderReplicationStatus(this.props.replicationStatus),
+    ];
 
     return (
       <section className="cluster-summary">
-        {React.Children.toArray(children)}
+        <Skeleton
+          loading={this.props.loading}
+          active
+          // This styling is necessary because this section is a grid.
+          style={{ gridColumn: "1 / span all" }}
+        >
+          {React.Children.toArray(children)}
+        </Skeleton>
       </section>
     );
   }

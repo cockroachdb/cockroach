@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package replicationtestutils
 
@@ -71,6 +68,7 @@ type TenantStreamingClustersArgs struct {
 	DestClusterSettings            map[string]string
 	DestClusterTestRegions         []string
 	RetentionTTLSeconds            int
+	EnableReaderTenant             bool
 	TestingKnobs                   *sql.StreamingTestingKnobs
 	TenantCapabilitiesTestingKnobs *tenantcapabilities.TestingKnobs
 
@@ -119,6 +117,10 @@ type TenantStreamingClusters struct {
 	DestSysSQL     *sqlutils.SQLRunner
 	DestTenantConn *gosql.DB
 	DestTenantSQL  *sqlutils.SQLRunner
+
+	ReaderTenantServer serverutils.ApplicationLayerInterface
+	ReaderTenantConn   *gosql.DB
+	ReaderTenantSQL    *sqlutils.SQLRunner
 
 	Rng *rand.Rand
 }
@@ -193,6 +195,32 @@ func (c *TenantStreamingClusters) StartDestTenant(
 	return func() {
 		require.NoError(c.T, c.DestTenantConn.Close())
 	}
+}
+
+// ConnectToReaderTenant should be invoked when a PCR job has reader tenant enabled
+// and is in running state to open a connection to the standby reader tenant.
+func (c *TenantStreamingClusters) ConnectToReaderTenant(
+	ctx context.Context, tenantID roachpb.TenantID, tenantName string, server int,
+) {
+	var err error
+	c.ReaderTenantServer, c.ReaderTenantConn, err = c.DestCluster.Server(server).TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		TenantID:    tenantID,
+		TenantName:  roachpb.TenantName(tenantName),
+		UseDatabase: "defaultdb",
+	})
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING jobs.registry.interval.adopt = '1s'`, tenantName)
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING bulkio.stream_ingestion.standby_read_ts_poll_interval = '500ms'`, tenantName)
+
+	// Attempt to keep the reader tenant's historical aost close to the present.
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`, tenantName)
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`, tenantName)
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'`, tenantName)
+
+	require.NoError(c.T, err)
+	c.ReaderTenantConn = c.DestCluster.Server(server).SystemLayer().SQLConn(c.T,
+		serverutils.DBName("cluster:"+tenantName+"/defaultdb"))
+	c.ReaderTenantSQL = sqlutils.MakeSQLRunner(c.ReaderTenantConn)
+	testutils.SucceedsSoon(c.T, func() error { return c.ReaderTenantConn.Ping() })
 }
 
 // CompareResult compares the results of query on the primary and standby
@@ -328,6 +356,13 @@ func (c *TenantStreamingClusters) BuildCreateTenantQuery(externalConnection stri
 		sourceURI)
 	if c.Args.RetentionTTLSeconds > 0 {
 		streamReplStmt = fmt.Sprintf("%s WITH RETENTION = '%ds'", streamReplStmt, c.Args.RetentionTTLSeconds)
+	}
+	if c.Args.EnableReaderTenant {
+		if c.Args.RetentionTTLSeconds == 0 {
+			streamReplStmt = fmt.Sprintf("%s WITH READ VIRTUAL CLUSTER", streamReplStmt)
+		} else {
+			streamReplStmt = fmt.Sprintf("%s, READ VIRTUAL CLUSTER", streamReplStmt)
+		}
 	}
 	return streamReplStmt
 }
@@ -527,6 +562,7 @@ func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJo
 func WaitUntilReplicatedTime(
 	t *testing.T, targetTime hlc.Timestamp, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID,
 ) {
+	now := timeutil.Now()
 	testutils.SucceedsSoon(t, func() error {
 		err := requireReplicatedTime(targetTime, jobutils.GetJobProgress(t, db, ingestionJobID))
 		if err == nil {
@@ -544,6 +580,7 @@ func WaitUntilReplicatedTime(
 		}
 		return err
 	})
+	t.Logf("waited for %s to advance to %s", timeutil.Since(now), targetTime)
 }
 
 func requireReplicatedTime(targetTime hlc.Timestamp, progress *jobspb.Progress) error {
@@ -599,6 +636,8 @@ var defaultSrcClusterSetting = map[string]string{
 	// Large timeout makes test to not fail with unexpected timeout failures.
 	`stream_replication.stream_liveness_track_frequency`: `'2s'`,
 	`stream_replication.min_checkpoint_frequency`:        `'1s'`,
+	// Finer grain checkpoints to keep replicated time close to present.
+	`physical_replication.producer.timestamp_granularity`: `'100ms'`,
 	// Make all AddSSTable operation to trigger AddSSTable events.
 	`kv.bulk_io_write.small_write_size`: `'1'`,
 	`jobs.registry.interval.adopt`:      `'1s'`,
@@ -607,13 +646,13 @@ var defaultSrcClusterSetting = map[string]string{
 }
 
 var defaultDestClusterSetting = map[string]string{
-	`stream_replication.consumer_heartbeat_frequency`:      `'1s'`,
-	`stream_replication.job_checkpoint_frequency`:          `'100ms'`,
-	`bulkio.stream_ingestion.minimum_flush_interval`:       `'10ms'`,
-	`bulkio.stream_ingestion.cutover_signal_poll_interval`: `'100ms'`,
-	`jobs.registry.interval.adopt`:                         `'1s'`,
-	`spanconfig.reconciliation_job.checkpoint_interval`:    `'100ms'`,
-	`kv.rangefeed.enabled`:                                 `true`,
+	`stream_replication.consumer_heartbeat_frequency`:       `'1s'`,
+	`stream_replication.job_checkpoint_frequency`:           `'100ms'`,
+	`bulkio.stream_ingestion.minimum_flush_interval`:        `'10ms'`,
+	`bulkio.stream_ingestion.failover_signal_poll_interval`: `'100ms'`,
+	`jobs.registry.interval.adopt`:                          `'1s'`,
+	`spanconfig.reconciliation_job.checkpoint_interval`:     `'100ms'`,
+	`kv.rangefeed.enabled`:                                  `true`,
 }
 
 func ConfigureClusterSettings(setting map[string]string) []string {
@@ -682,4 +721,8 @@ func SSTMaker(t *testing.T, keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable 
 		},
 		WriteTS: batchTS,
 	}
+}
+
+func WaitForAllProducerJobsToFail(t *testing.T, sql *sqlutils.SQLRunner) {
+	sql.CheckQueryResultsRetry(t, "SELECT distinct(status) FROM [SHOW JOBS] where job_type = 'REPLICATION STREAM PRODUCER'", [][]string{{"failed"}})
 }

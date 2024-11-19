@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree
 
@@ -87,9 +82,17 @@ var (
 	// postgres 4714 BC (JULIAN = 0) - 4713 in their docs - and 294276 AD.
 
 	// MaxSupportedTime is the maximum time we support parsing.
-	MaxSupportedTime = timeutil.Unix(9224318016000-1, 999999000) // 294276-12-31 23:59:59.999999
+	//
+	// Refer to the doc comments of the function "timeutil.Unix" for the process of
+	// deriving the arguments to construct a specific time.Time.
+	MaxSupportedTime    = timeutil.Unix(9224318016000-1, 999999000) // 294276-12-31 23:59:59.999999
+	MaxSupportedTimeSec = float64(MaxSupportedTime.Unix())
 	// MinSupportedTime is the minimum time we support parsing.
-	MinSupportedTime = timeutil.Unix(-210866803200, 0) // 4714-11-24 00:00:00+00 BC
+	//
+	// Refer to the doc comments of the function "timeutil.Unix" for the process of
+	// deriving the arguments to construct a specific time.Time.
+	MinSupportedTime    = timeutil.Unix(-210866803200, 0) // 4714-11-24 00:00:00+00 BC
+	MinSupportedTimeSec = float64(MinSupportedTime.Unix())
 )
 
 // CompareContext represents the dependencies used to evaluate comparisons
@@ -224,7 +227,7 @@ func (d Datums) Compare(ctx context.Context, evalCtx CompareContext, other Datum
 
 // CompositeDatum is a Datum that may require composite encoding in
 // indexes. Any Datum implementing this interface must also add itself to
-// colinfo.HasCompositeKeyEncoding.
+// colinfo.CanHaveCompositeKeyEncoding.
 type CompositeDatum interface {
 	Datum
 	// IsComposite returns true if this datum is not round-tripable in a key
@@ -1102,11 +1105,14 @@ var (
 	// DZeroDecimal is the decimal constant '0'.
 	DZeroDecimal = &DDecimal{Decimal: apd.Decimal{}}
 
-	// dNaNDecimal is the decimal constant 'NaN'.
-	dNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
+	// DNaNDecimal is the decimal constant 'NaN'.
+	DNaNDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.NaN}}
 
-	// dPosInfDecimal is the decimal constant 'inf'.
-	dPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
+	// DPosInfDecimal is the decimal constant 'inf'.
+	DPosInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: false}}
+
+	// DNegInfDecimal is the decimal constant '-inf'.
+	DNegInfDecimal = &DDecimal{Decimal: apd.Decimal{Form: apd.Infinite, Negative: true}}
 )
 
 // IsMax implements the Datum interface.
@@ -1121,12 +1127,12 @@ func (d *DDecimal) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
 
 // Max implements the Datum interface.
 func (d *DDecimal) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return dPosInfDecimal, true
+	return DPosInfDecimal, true
 }
 
 // Min implements the Datum interface.
 func (d *DDecimal) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return dNaNDecimal, true
+	return DNaNDecimal, true
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -2592,12 +2598,11 @@ type DTimestamp struct {
 }
 
 // MakeDTimestamp creates a DTimestamp with specified precision.
-func MakeDTimestamp(t time.Time, precision time.Duration) (*DTimestamp, error) {
-	ret := t.Round(precision)
-	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, NewTimestampExceedsBoundsError(ret)
+func MakeDTimestamp(t time.Time, precision time.Duration) (_ *DTimestamp, err error) {
+	if t, err = roundAndCheck(t, precision); err != nil {
+		return nil, err
 	}
-	return &DTimestamp{Time: ret}, nil
+	return &DTimestamp{Time: t}, nil
 }
 
 // MustMakeDTimestamp wraps MakeDTimestamp but panics if there is an error.
@@ -2868,9 +2873,20 @@ type DTimestampTZ struct {
 	time.Time
 }
 
-func checkTimeBounds(t time.Time, precision time.Duration) (time.Time, error) {
+// roundAndCheck rounds the given time to the specified precision and checks
+// if the rounded time is within the supported bounds.
+//
+// Supported bounds:
+//   - [MinSupportedTime, MaxSupportedTime]
+//   - TimeInfinity
+//   - TimeNegativeInfinity
+func roundAndCheck(t time.Time, precision time.Duration) (time.Time, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
+		if t == pgdate.TimeInfinity || t == pgdate.TimeNegativeInfinity {
+			return t, nil
+		}
+
 		return time.Time{}, NewTimestampExceedsBoundsError(ret)
 	}
 	return ret, nil
@@ -2878,7 +2894,7 @@ func checkTimeBounds(t time.Time, precision time.Duration) (time.Time, error) {
 
 // MakeDTimestampTZ creates a DTimestampTZ with specified precision.
 func MakeDTimestampTZ(t time.Time, precision time.Duration) (_ *DTimestampTZ, err error) {
-	if t, err = checkTimeBounds(t, precision); err != nil {
+	if t, err = roundAndCheck(t, precision); err != nil {
 		return nil, err
 	}
 	return &DTimestampTZ{Time: t}, nil
@@ -2921,7 +2937,7 @@ func ParseTimestampTZ(
 	if err != nil {
 		return time.Time{}, false, err
 	}
-	if t, err = checkTimeBounds(t, precision); err != nil {
+	if t, err = roundAndCheck(t, precision); err != nil {
 		return time.Time{}, false, err
 	}
 	return t, dependsOnContext, nil

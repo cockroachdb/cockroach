@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -268,6 +263,19 @@ func (p *planner) dropTableImpl(
 	for _, col := range tableDesc.PublicColumns() {
 		if err := p.dropSequencesOwnedByCol(ctx, col, !droppingParent, behavior); err != nil {
 			return droppedViews, err
+		}
+	}
+
+	// Remove trigger dependencies on other tables.
+	//
+	// NOTE: we don't have to explicitly do this for other types of backreferences
+	// because they use the "GetAll..." methods.
+	for i := range tableDesc.Triggers {
+		trigger := &tableDesc.Triggers[i]
+		for _, id := range trigger.DependsOn {
+			if err := p.removeTriggerBackReference(ctx, tableDesc, id); err != nil {
+				return droppedViews, err
+			}
 		}
 	}
 
@@ -653,6 +661,30 @@ func removeFKBackReferenceFromTable(
 	// Delete our match.
 	referencedTableDesc.InboundFKs = append(referencedTableDesc.InboundFKs[:matchIdx],
 		referencedTableDesc.InboundFKs[matchIdx+1:]...)
+	return nil
+}
+
+// removeTriggerBackReference removes the trigger back reference for the
+// referenced table with the given ID.
+func (p *planner) removeTriggerBackReference(
+	ctx context.Context, tableDesc *tabledesc.Mutable, refID descpb.ID,
+) error {
+	var refTableDesc *tabledesc.Mutable
+	// We don't want to lookup/edit a second copy of the same table.
+	if tableDesc.ID == refID {
+		refTableDesc = tableDesc
+	} else {
+		lookup, err := p.Descriptors().MutableByID(p.txn).Table(ctx, refID)
+		if err != nil {
+			return errors.Wrapf(err, "error resolving referenced table ID %d", refID)
+		}
+		refTableDesc = lookup
+	}
+	if refTableDesc.Dropped() {
+		// The referenced table is being dropped. No need to modify it further.
+		return nil
+	}
+	refTableDesc.DependedOnBy = removeMatchingReferences(refTableDesc.DependedOnBy, tableDesc.ID)
 	return nil
 }
 

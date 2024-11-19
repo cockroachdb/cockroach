@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver_test
 
@@ -462,13 +457,9 @@ func newDummyStream(ctx context.Context, name string) *dummyStream {
 	}
 }
 
-func (s *dummyStream) Context() context.Context {
-	return s.ctx
-}
+func (s *dummyStream) SendUnbufferedIsThreadSafe() {}
 
-func (s *dummyStream) SendIsThreadSafe() {}
-
-func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
+func (s *dummyStream) SendUnbuffered(ev *kvpb.RangeFeedEvent) error {
 	if ev.Val == nil && ev.Error == nil {
 		return nil
 	}
@@ -481,9 +472,9 @@ func (s *dummyStream) Send(ev *kvpb.RangeFeedEvent) error {
 	}
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
+// SendError implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
-func (s *dummyStream) Disconnect(err *kvpb.Error) {
+func (s *dummyStream) SendError(err *kvpb.Error) {
 	s.done <- err
 }
 
@@ -495,10 +486,10 @@ func waitReplicaRangeFeed(
 		event.SetValue(&kvpb.RangeFeedError{
 			Error: *err,
 		})
-		return stream.Send(&event)
+		return stream.SendUnbuffered(&event)
 	}
 
-	err := r.RangeFeed(req, stream, nil /* pacer */)
+	_, err := r.RangeFeed(stream.ctx, req, stream, nil /* pacer */, nil /* perConsumerCatchupLimiter */)
 	if err != nil {
 		return sendErrToStream(kvpb.NewError(err))
 	}
@@ -865,9 +856,9 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 	// requests and node liveness heartbeats still succeed.
 	partitioned := &atomic.Bool{}
 	partitioned.Store(true)
-	dropRaftMessagesFrom(t, n1, desc.RangeID, []roachpb.ReplicaID{3}, partitioned)
-	dropRaftMessagesFrom(t, n2, desc.RangeID, []roachpb.ReplicaID{3}, partitioned)
-	dropRaftMessagesFrom(t, n3, desc.RangeID, []roachpb.ReplicaID{1, 2}, partitioned)
+	dropRaftMessagesFrom(t, n1, desc, []roachpb.ReplicaID{3}, partitioned)
+	dropRaftMessagesFrom(t, n2, desc, []roachpb.ReplicaID{3}, partitioned)
+	dropRaftMessagesFrom(t, n3, desc, []roachpb.ReplicaID{1, 2}, partitioned)
 	t.Logf("partitioned n3 raft traffic from n1 and n2")
 
 	repl3.TripBreaker()
@@ -892,9 +883,16 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 	var leader raftpb.PeerID
 	require.Eventually(t, func() bool {
 		for _, repl := range repls {
-			if l := repl.RaftStatus().Lead; l == 3 {
+			l := repl.RaftStatus().Lead
+			if l == 3 {
 				return false
-			} else if l > 0 {
+			}
+			if repl.ReplicaID() != 3 && l == 0 {
+				// The old leader (3) steps down because of check quorum. A new leader
+				// should be elected amongst 1 and 2, and both of them should know who
+				// that is before we proceed with the test.
+				return false
+			} else if repl.ReplicaID() != 3 {
 				leader = l
 			}
 		}
@@ -906,8 +904,8 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 
 	// Also partition n1 and n2 away from each other, and trip their breakers. All
 	// nodes are now completely partitioned away from each other.
-	dropRaftMessagesFrom(t, n1, desc.RangeID, []roachpb.ReplicaID{2, 3}, partitioned)
-	dropRaftMessagesFrom(t, n2, desc.RangeID, []roachpb.ReplicaID{1, 3}, partitioned)
+	dropRaftMessagesFrom(t, n1, desc, []roachpb.ReplicaID{2, 3}, partitioned)
+	dropRaftMessagesFrom(t, n2, desc, []roachpb.ReplicaID{1, 3}, partitioned)
 
 	repl1.TripBreaker()
 	repl2.TripBreaker()

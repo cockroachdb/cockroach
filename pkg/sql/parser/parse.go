@@ -7,13 +7,8 @@
 //
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // This code was derived from https://github.com/youtube/vitess.
 
@@ -454,17 +449,18 @@ func GetTypeFromCastOrCollate(expr tree.Expr) (tree.ResolvableTypeReference, err
 	return cast.Type, nil
 }
 
-var errBitLengthNotPositive = pgerror.WithCandidateCode(
-	errors.New("length for type bit must be at least 1"), pgcode.InvalidParameterValue)
+var errVarBitLengthNotPositive = pgerror.WithCandidateCode(
+	errors.New("length for type varbit must be at least 1"), pgcode.InvalidParameterValue)
 
 // newBitType creates a new BIT type with the given bit width.
 func newBitType(width int32, varying bool) (*types.T, error) {
-	if width < 1 {
-		return nil, errBitLengthNotPositive
-	}
 	if varying {
+		if width < 1 {
+			return nil, errVarBitLengthNotPositive
+		}
 		return types.MakeVarBit(width), nil
 	}
+	// The iconst32 pattern in the parser guarantees that the width is positive.
 	return types.MakeBit(width), nil
 }
 

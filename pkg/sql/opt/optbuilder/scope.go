@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -16,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -142,6 +138,7 @@ const (
 	exprKindWhere
 	exprKindWindowFrameStart
 	exprKindWindowFrameEnd
+	exprKindWhen
 )
 
 var exprKindName = [...]string{
@@ -165,6 +162,7 @@ var exprKindName = [...]string{
 	exprKindWhere:             "WHERE",
 	exprKindWindowFrameStart:  "WINDOW FRAME START",
 	exprKindWindowFrameEnd:    "WINDOW FRAME END",
+	exprKindWhen:              "WHEN",
 }
 
 func (k exprKind) String() string {
@@ -568,6 +566,17 @@ func (s *scope) colList() opt.ColList {
 	return colList
 }
 
+// forEachColWithExtras applies the given function to every column in the scope,
+// including extra columns.
+func (s *scope) forEachColWithExtras(fn func(col *scopeColumn)) {
+	for i := range s.cols {
+		fn(&s.cols[i])
+	}
+	for i := range s.extraCols {
+		fn(&s.extraCols[i])
+	}
+}
+
 // hasSameColumns returns true if this scope has the same columns
 // as the other scope.
 //
@@ -661,6 +670,20 @@ func (s *scope) findFuncArgCol(idx tree.PlaceholderIdx) *scopeColumn {
 		for i := range s.cols {
 			col := &s.cols[i]
 			if col.funcParamReferencedBy(idx) {
+				return col
+			}
+		}
+	}
+	return nil
+}
+
+// findAnonymousColumnWithMetadataName returns the first anonymous column that
+// has the given name in the query metadata.
+func (s *scope) findAnonymousColumnWithMetadataName(metadataName string) *scopeColumn {
+	for ; s != nil; s = s.parent {
+		for i := range s.cols {
+			col := &s.cols[i]
+			if col.name.refName == "" && col.name.metadataName == metadataName {
 				return col
 			}
 		}
@@ -1045,12 +1068,30 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
 			// Attempt to resolve as a TupleStar.
 			if sqlerrors.IsUndefinedColumnError(resolveErr) {
+				if s.context == exprKindWhen {
+					panic(errors.WithHint(resolveErr,
+						"column references in a trigger WHEN clause must be prefixed with NEW or OLD"))
+				}
 				// Attempt to resolve as columnname.*, which allows items
 				// such as SELECT row_to_json(tbl_name) FROM tbl_name to work.
 				return func() (bool, tree.Expr) {
 					defer wrapColTupleStarPanic(resolveErr)
 					return s.VisitPre(columnNameAsTupleStar(string(t.ColumnName)))
 				}()
+			}
+			if sqlerrors.IsUndefinedRelationError(resolveErr) && t.TableName.Object() != "" {
+				// Attempt to resolve as columnname.fieldname in order to provide a more
+				// helpful error message.
+				_, sourceResolveErr := colinfo.ResolveColumnItem(
+					s.builder.ctx, s, &tree.ColumnItem{ColumnName: tree.Name(t.TableName.Object())},
+				)
+				if sourceResolveErr == nil {
+					panic(errors.WithIssueLink(errors.WithHint(resolveErr,
+						"to access a field of a composite-typed column or variable, "+
+							"surround the column/variable name in parentheses: (varName).fieldName"),
+						errors.IssueLink{IssueURL: build.MakeIssueURL(114687)},
+					))
+				}
 			}
 			panic(resolveErr)
 		}

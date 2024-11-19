@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 //
 // persistedsqlstats is a subsystem that is responsible for flushing node-local
 // in-memory stats into persisted system tables.
@@ -66,12 +61,6 @@ type PersistedSQLStats struct {
 
 	cfg *Config
 
-	// memoryPressureSignal is used by the persistedsqlstats.ApplicationStats to signal
-	// memory pressure during stats recording. A signal is emitted through this
-	// channel either if the fingerprint limit or the memory limit has been
-	// exceeded.
-	memoryPressureSignal chan struct{}
-
 	// Used to signal the flush completed.
 	flushDoneMu struct {
 		syncutil.Mutex
@@ -99,10 +88,9 @@ var _ sqlstats.Provider = &PersistedSQLStats{}
 // New returns a new instance of the PersistedSQLStats.
 func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 	p := &PersistedSQLStats{
-		SQLStats:             memSQLStats,
-		cfg:                  cfg,
-		memoryPressureSignal: make(chan struct{}),
-		drain:                make(chan struct{}),
+		SQLStats: memSQLStats,
+		cfg:      cfg,
+		drain:    make(chan struct{}),
 	}
 
 	p.jobMonitor = jobMonitor{
@@ -180,10 +168,6 @@ func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper 
 			select {
 			case <-timer.C:
 				timer.Read = true
-			case <-s.memoryPressureSignal:
-				// We are experiencing memory pressure, so we flush SQL stats to disk
-				// immediately, rather than waiting the full flush interval, in an
-				// attempt to relieve some of that pressure.
 			case <-resetIntervalChanged:
 				// In this case, we would restart the loop without performing any flush
 				// and recalculate the flush interval in the for-loop's post statement.

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql_test
 
@@ -212,14 +207,14 @@ func TestOldBitColumnMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
-
 	ctx := context.Background()
 	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -433,10 +428,6 @@ func TestInvalidObjects(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
-
 	ctx := context.Background()
 	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
@@ -446,6 +437,10 @@ func TestInvalidObjects(t *testing.T) {
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -1897,4 +1892,53 @@ func TestVirtualPTSTable(t *testing.T) {
 		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
 		require.Equal(t, ts, virtualRow.lastUpdated)
 	})
+}
+
+// TestMVCCValueHeaderSystemColumns tests that the system columns that read MVCCValueHeaders data.
+func TestMVCCValueHeaderSystemColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	internalDB := srv.ApplicationLayer().InternalDB().(isql.DB)
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, "CREATE DATABASE test")
+	sqlDB.Exec(t, "CREATE TABLE test.foo (pk int primary key, v1 int, v2 int, INDEX(v2))")
+
+	_, err := internalDB.Executor().ExecEx(ctx, "test-insert-with-origin-id",
+		nil,
+		sessiondata.InternalExecutorOverride{OriginIDForLogicalDataReplication: 42},
+		"INSERT INTO test.foo VALUES (1, 1, 1), (2, 2, 2)")
+	require.NoError(t, err)
+
+	_, err = internalDB.Executor().ExecEx(ctx, "test-insert-with-origin-id",
+		nil,
+		sessiondata.InternalExecutorOverride{},
+		"INSERT INTO test.foo VALUES (3, 3, 3)")
+	require.NoError(t, err)
+
+	queries := map[string]string{
+		"primary":    "SELECT pk, v1, crdb_internal_origin_id FROM test.foo ",
+		"index join": "SELECT pk, v1, crdb_internal_origin_id FROM test.foo@{FORCE_INDEX=foo_v2_idx}",
+	}
+	exp := [][]string{
+		{"1", "1", "42"},
+		{"2", "2", "42"},
+		{"3", "3", "0"}}
+	for n, q := range queries {
+		t.Run(n, func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
+				if vectorize {
+					sqlDB.Exec(t, "SET vectorize=on")
+				} else {
+					sqlDB.Exec(t, "SET vectorize=off")
+				}
+				sqlDB.CheckQueryResults(t, q, exp)
+			})
+		})
+	}
 }

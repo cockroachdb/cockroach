@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvpb_test
 
@@ -23,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -90,7 +86,7 @@ func TestReplicaUnavailableError(t *testing.T) {
 func TestAmbiguousResultError(t *testing.T) {
 	ctx := context.Background()
 
-	wrapped := errors.Errorf("boom with a %s", redact.Unsafe("secret"))
+	wrapped := errors.Errorf("boom with a %s", encoding.Unsafe("secret"))
 	var err error = kvpb.NewAmbiguousResultError(wrapped)
 	err = errors.DecodeError(ctx, errors.EncodeError(ctx, err))
 	require.True(t, errors.Is(err, wrapped), "%+v", err)

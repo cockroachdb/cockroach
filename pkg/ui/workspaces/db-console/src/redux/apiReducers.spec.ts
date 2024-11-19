@@ -1,14 +1,9 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
-import { api as clusterUiApi, util } from "@cockroachlabs/cluster-ui";
+import { util } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { createMemoryHistory } from "history";
 import merge from "lodash/merge";
@@ -18,11 +13,7 @@ import { RouteComponentProps } from "react-router";
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { queryByName } from "src/util/query";
 
-import { indexUnusedDuration } from "../util/constants";
-
 import {
-  databaseRequestPayloadToID,
-  tableRequestToID,
   createSelectorForCachedDataField,
   createSelectorForKeyedCachedDataField,
 } from "./apiReducers";
@@ -40,30 +31,6 @@ describe("table id generator", function () {
     expect(
       decodeURIComponent(util.generateTableID(db, table).split("/")[1]),
     ).toEqual(table);
-  });
-});
-
-describe("request to string functions", function () {
-  it("correctly generates a string from a database details request", function () {
-    const database = "testDatabase";
-    expect(
-      databaseRequestPayloadToID({
-        database,
-        csIndexUnusedDuration: indexUnusedDuration,
-      }),
-    ).toEqual(database);
-  });
-  it("correctly generates a string from a table details request", function () {
-    const database = "testDatabase";
-    const table = "testTable";
-    const tableRequest: clusterUiApi.TableDetailsReqParams = {
-      database,
-      table,
-      csIndexUnusedDuration: indexUnusedDuration,
-    };
-    expect(tableRequestToID(tableRequest)).toEqual(
-      util.generateTableID(database, table),
-    );
   });
 });
 

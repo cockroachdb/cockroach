@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tenantcostclient
 
@@ -207,13 +204,13 @@ func (m *metrics) Init(locality roachpb.Locality) {
 	m.ProvisionedVcpus = metric.NewGauge(metaProvisionedVcpus)
 
 	// Metric labels for KV replication traffic will be derived from the SQL
-	// server's locality. e.g. {"from_region", "from_az", "to_region", "to_az"}.
+	// server's locality. e.g. {"source_region", "source_az", "destination_region", "destination_az"}.
 	var labels []string
 	for _, t := range locality.Tiers {
-		labels = append(labels, fmt.Sprintf("from_%s", t.Key))
+		labels = append(labels, fmt.Sprintf("source_%s", t.Key))
 	}
 	for _, t := range locality.Tiers {
-		labels = append(labels, fmt.Sprintf("to_%s", t.Key))
+		labels = append(labels, fmt.Sprintf("destination_%s", t.Key))
 	}
 	m.EstimatedReplicationBytes = aggmetric.NewCounter(metaTotalEstimatedReplicationBytes, labels...)
 	m.mu.pathMetrics = make(map[string]*networkPathMetrics)

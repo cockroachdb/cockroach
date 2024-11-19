@@ -1,0 +1,25 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@require '~src/components/core/index.styl'
+
+.alert-bar
+  padding 12px
+  text-align center
+
+.alert--alert
+  background-color $colors--alert
+  color $colors--white
+  a
+    color $colors--white
+
+.alert--warning
+  background-color $colors--warning
+  color $colors--neutral-9
+  a
+    color $colors--neutral-9
+
+.alert-tooltip
+  border-bottom 1px dashed

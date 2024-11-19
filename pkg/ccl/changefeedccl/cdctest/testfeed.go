@@ -1,15 +1,13 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cdctest
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -78,6 +76,8 @@ type EnterpriseTestFeed interface {
 	Resume() error
 	// WaitForStatus waits for the provided func to return true, or returns an error.
 	WaitForStatus(func(s jobs.Status) bool) error
+	// WaitDurationForStatus waits for a specified time for the provided func to return true, or returns an error.
+	WaitDurationForStatus(dur time.Duration, statusPred func(status jobs.Status) bool) error
 	// FetchTerminalJobErr retrieves the error message from changefeed job.
 	FetchTerminalJobErr() error
 	// FetchRunningStatus retrieves running status from changefeed job.

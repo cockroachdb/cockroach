@@ -13,7 +13,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
  │         │    ├── ABSENT → PUBLIC      ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
  │         │    ├── ABSENT → PUBLIC      ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
- │         │    └── ABSENT → PUBLIC      ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │         │    └── ABSENT → PUBLIC      ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
  │         └── 4 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":106}
@@ -25,7 +25,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
  │    │    │    ├── PUBLIC      → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
  │    │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
- │    │    │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │    │    │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -33,7 +33,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 3 (j+)}
  │         │    ├── ABSENT → PUBLIC      ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j+)}
  │         │    ├── ABSENT → PUBLIC      ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j+), TypeName: "INT8"}
- │         │    └── ABSENT → PUBLIC      ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+)}
+ │         │    └── ABSENT → PUBLIC      ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j+), Usage: REGULAR}
  │         └── 6 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":106}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"j","TableID":106}

@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlsmith
 
@@ -118,7 +113,7 @@ func makeCreateSchema(s *Smither) (tree.Statement, bool) {
 }
 
 func makeCreateTable(s *Smither) (tree.Statement, bool) {
-	table := randgen.RandCreateTable(context.Background(), s.rnd, "", 0, false /* isMultiRegion */)
+	table := randgen.RandCreateTable(context.Background(), s.rnd, "", 0, randgen.TableOptNone)
 	schemaOrd := s.rnd.Intn(len(s.schemas))
 	schema := s.schemas[schemaOrd]
 	table.Table = tree.MakeTableNameWithSchema(tree.Name(s.dbName), schema.SchemaName, s.name("tab"))

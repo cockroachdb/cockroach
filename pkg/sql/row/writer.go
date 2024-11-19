@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package row
 
@@ -16,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -99,9 +93,20 @@ func prepareInsertOrUpdateBatch(
 	kvValue *roachpb.Value,
 	rawValueBuf []byte,
 	putFn func(ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool),
+	oth *OriginTimestampCPutHelper,
+	oldValues []tree.Datum,
 	overwrite, traceKV bool,
 ) ([]byte, error) {
 	families := helper.TableDesc.GetFamilies()
+	// TODO(ssd): We don't currently support multiple column
+	// families on the LDR write path. As a result, we don't have
+	// good end-to-end testing of multi-column family writes with
+	// the origin timestamp helper set. Until we write such tests,
+	// we error if we ever see such writes.
+	if oth.IsSet() && len(families) > 1 {
+		return nil, errors.AssertionFailedf("OriginTimestampCPutHelper is not yet testing with multi-column family writes")
+	}
+
 	for i := range families {
 		family := &families[i]
 		update := false
@@ -139,19 +144,48 @@ func prepareInsertOrUpdateBatch(
 			if !ok {
 				continue
 			}
+
+			var marshaled roachpb.Value
+			var err error
+			typ := fetchedCols[idx].GetType()
+
 			// Skip any values with a default ID not stored in the primary index,
 			// which can happen if we are adding new columns.
-			if skip := helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx]); skip {
-				continue
-			}
-			typ := fetchedCols[idx].GetType()
-			marshaled, err := valueside.MarshalLegacy(typ, values[idx])
-			if err != nil {
-				return nil, err
+			skip, couldBeComposite := helper.SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID, values[idx])
+			if skip {
+				// If the column could be composite, there could be a previous KV, so we
+				// still need to issue a Delete.
+				if !couldBeComposite {
+					continue
+				}
+			} else {
+				marshaled, err = valueside.MarshalLegacy(typ, values[idx])
+				if err != nil {
+					return nil, err
+				}
 			}
 
-			if marshaled.RawBytes == nil {
-				if overwrite {
+			var oldVal []byte
+			if oth.IsSet() && len(oldValues) > 0 {
+				// If the column could be composite, we only encode the old value if it
+				// was a composite value.
+				if !couldBeComposite || oldValues[idx].(tree.CompositeDatum).IsComposite() {
+					old, err := valueside.MarshalLegacy(typ, oldValues[idx])
+					if err != nil {
+						return nil, err
+					}
+					if old.IsPresent() {
+						oldVal = old.TagAndDataBytes()
+					}
+				}
+			}
+
+			if !marshaled.IsPresent() {
+				if oth.IsSet() {
+					// If using OriginTimestamp'd CPuts, we _always_ want to issue a Delete
+					// so that we can confirm our expected bytes were correct.
+					oth.DelWithCPut(ctx, batch, kvKey, oldVal, traceKV)
+				} else if overwrite {
 					// If the new family contains a NULL value, then we must
 					// delete any pre-existing row.
 					insertDelFn(ctx, batch, kvKey, traceKV)
@@ -163,45 +197,56 @@ func prepareInsertOrUpdateBatch(
 				if err := helper.CheckRowSize(ctx, kvKey, marshaled.RawBytes, family.ID); err != nil {
 					return nil, err
 				}
-				putFn(ctx, batch, kvKey, &marshaled, traceKV)
+
+				if oth.IsSet() {
+					oth.CPutFn(ctx, batch, kvKey, &marshaled, oldVal, traceKV)
+				} else {
+					putFn(ctx, batch, kvKey, &marshaled, traceKV)
+				}
 			}
 
 			continue
 		}
 
-		rawValueBuf = rawValueBuf[:0]
-
-		var lastColID descpb.ColumnID
 		familySortedColumnIDs, ok := helper.SortedColumnFamily(family.ID)
 		if !ok {
 			return nil, errors.AssertionFailedf("invalid family sorted column id map")
 		}
-		for _, colID := range familySortedColumnIDs {
-			idx, ok := valColIDMapping.Get(colID)
-			if !ok || values[idx] == tree.DNull {
-				// Column not being updated or inserted.
-				continue
-			}
 
-			if skip := helper.SkipColumnNotInPrimaryIndexValue(colID, values[idx]); skip {
-				continue
-			}
+		rawValueBuf = rawValueBuf[:0]
+		var err error
+		rawValueBuf, err = helper.encodePrimaryIndexValuesToBuf(values, valColIDMapping, familySortedColumnIDs, fetchedCols, rawValueBuf)
+		if err != nil {
+			return nil, err
+		}
 
-			col := fetchedCols[idx]
-			if lastColID > col.GetID() {
-				return nil, errors.AssertionFailedf("cannot write column id %d after %d", col.GetID(), lastColID)
-			}
-			colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.GetID())
-			lastColID = col.GetID()
-			var err error
-			rawValueBuf, err = valueside.Encode(rawValueBuf, colIDDelta, values[idx], nil)
+		// TODO(ssd): Here and below investigate reducing the number of
+		// allocations required to marshal the old value.
+		//
+		// If we are using OriginTimestamp ConditionalPuts, calculate the expected
+		// value.
+		var expBytes []byte
+		if oth.IsSet() && len(oldValues) > 0 {
+			var oldBytes []byte
+			oldBytes, err = helper.encodePrimaryIndexValuesToBuf(oldValues, valColIDMapping, familySortedColumnIDs, fetchedCols, oldBytes)
 			if err != nil {
 				return nil, err
+			}
+			// For family 0, we expect a value even when
+			// no columns have been encoded to oldBytes.
+			if family.ID == 0 || len(oldBytes) > 0 {
+				old := &roachpb.Value{}
+				old.SetTuple(oldBytes)
+				expBytes = old.TagAndDataBytes()
 			}
 		}
 
 		if family.ID != 0 && len(rawValueBuf) == 0 {
-			if overwrite {
+			if oth.IsSet() {
+				// If using OriginTimestamp'd CPuts, we _always_ want to issue a Delete
+				// so that we can confirm our expected bytes were correct.
+				oth.DelWithCPut(ctx, batch, kvKey, expBytes, traceKV)
+			} else if overwrite {
 				// The family might have already existed but every column in it is being
 				// set to NULL, so delete it.
 				insertDelFn(ctx, batch, kvKey, traceKV)
@@ -214,7 +259,11 @@ func prepareInsertOrUpdateBatch(
 			if err := helper.CheckRowSize(ctx, kvKey, kvValue.RawBytes, family.ID); err != nil {
 				return nil, err
 			}
-			putFn(ctx, batch, kvKey, kvValue, traceKV)
+			if oth.IsSet() {
+				oth.CPutFn(ctx, batch, kvKey, kvValue, expBytes, traceKV)
+			} else {
+				putFn(ctx, batch, kvKey, kvValue, traceKV)
+			}
 		}
 
 		// Release reference to roachpb.Key.

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package tabledesc provides concrete implementations of catalog.TableDesc.
 package tabledesc
@@ -659,6 +654,11 @@ func (desc *wrapper) ForEachUDTDependentForHydration(fn func(t *types.T) error) 
 		}
 	}
 	return nil
+}
+
+// MaybeRequiresTypeHydration implements the catalog.Descriptor interface.
+func (desc *wrapper) MaybeRequiresTypeHydration() bool {
+	return len(desc.UserDefinedTypeColumns()) > 0
 }
 
 // IsSchemaLocked implements the TableDescriptor interface.

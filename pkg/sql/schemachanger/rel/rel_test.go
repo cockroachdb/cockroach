@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rel_test
 
@@ -322,7 +317,7 @@ func TestTooManyAttributesInValues(t *testing.T) {
 		{
 			q, err := rel.NewQuery(sc, append(base, c.Type((*tooManyAttrs)(nil)))...)
 			require.NoError(t, err)
-			require.Regexp(t, "failed to create predicate with more than 8 attributes", q.Iterate(db, func(r rel.Result) error {
+			require.Regexp(t, "failed to create predicate with more than 8 attributes", q.Iterate(db, &rel.QueryStats{}, func(r rel.Result) error {
 				return nil
 			}))
 		}
@@ -332,7 +327,7 @@ func TestTooManyAttributesInValues(t *testing.T) {
 					base, c.Type((*tooManyAttrs)(nil), (*rel.Schema)(nil)),
 				)...)
 				require.NoError(t, err)
-				require.Regexp(t, "failed to create predicate with more than 8 attributes", q.Iterate(db, func(r rel.Result) error {
+				require.Regexp(t, "failed to create predicate with more than 8 attributes", q.Iterate(db, nil, func(r rel.Result) error {
 					return nil
 				}))
 			}
@@ -527,7 +522,7 @@ func TestConcurrentQueryInDifferentDatabases(t *testing.T) {
 	run := func(i int) func() error {
 		return func() error {
 			var got []*entity
-			assert.NoError(t, q.Iterate(dbs[i%len(dbs)], func(r rel.Result) error {
+			assert.NoError(t, q.Iterate(dbs[i%len(dbs)], nil, func(r rel.Result) error {
 				got = append(got, r.Var("e").(*entity))
 				return nil
 			}))

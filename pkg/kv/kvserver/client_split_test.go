@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver_test
 
@@ -76,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
@@ -808,12 +804,19 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	start := s.Clock().Now()
 
 	// Get the range stats now that we have data.
+	// NB: need raft lock so that in-mem and disk stats can be expected to match.
+	// See: https://github.com/cockroachdb/cockroach/issues/129601#issuecomment-2309865742
+	repl.RaftLock()
+	replMS := repl.GetMVCCStats()
 	snap := store.TODOEngine().NewSnapshot()
 	defer snap.Close()
+	repl.RaftUnlock()
+
 	ms, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 	assertRecomputedStats(t, "before split", snap, repl.Desc(), ms, start.WallTime)
-	require.Equal(t, repl.GetMVCCStats(), ms, "in-memory and on-disk stats diverge")
+
+	require.Equal(t, replMS, ms, "in-memory and on-disk stats diverge")
 
 	// Split the range at approximate halfway point.
 	// Call AdminSplit on the replica directly so that we can pass a
@@ -1139,9 +1142,11 @@ func TestStoreRangeSplitWithTracing(t *testing.T) {
 	repl := store.LookupReplica(splitKeyAddr)
 	targetRange.Store(int32(repl.RangeID))
 
-	recording, processErr, enqueueErr := store.Enqueue(
-		ctx, "split", repl, true /* skipShouldQueue */, false, /* async */
+	traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+	processErr, enqueueErr := store.Enqueue(
+		traceCtx, "split", repl, true /* skipShouldQueue */, false, /* async */
 	)
+	recording := rec()
 	require.NoError(t, enqueueErr)
 	require.NoError(t, processErr)
 
@@ -2656,6 +2661,8 @@ func TestLeaderAfterSplit(t *testing.T) {
 }
 
 func BenchmarkStoreRangeSplit(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(b, base.TestServerArgs{})
 
@@ -2663,20 +2670,23 @@ func BenchmarkStoreRangeSplit(b *testing.B) {
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(b, err)
 
+	_, err = s.ScratchRange()
+	require.NoError(b, err)
+
 	// Perform initial split of ranges.
-	sArgs := adminSplitArgs(roachpb.Key("b"))
+	sArgs := adminSplitArgs(scratchKey("b"))
 	if _, err := kv.SendWrapped(ctx, store.TestSender(), sArgs); err != nil {
 		b.Fatal(err)
 	}
 
 	// Write some values left and right of the split key.
-	aDesc := store.LookupReplica([]byte("a")).Desc()
-	bDesc := store.LookupReplica([]byte("c")).Desc()
-	kvserver.WriteRandomDataToRange(b, store, aDesc.RangeID, []byte("aaa"))
-	kvserver.WriteRandomDataToRange(b, store, bDesc.RangeID, []byte("ccc"))
+	aDesc := store.LookupReplica([]byte(scratchKey("a"))).Desc()
+	bDesc := store.LookupReplica([]byte(scratchKey("c"))).Desc()
+	kvserver.WriteRandomDataToRange(b, store, aDesc.RangeID, scratchKey("aaa"))
+	kvserver.WriteRandomDataToRange(b, store, bDesc.RangeID, scratchKey("ccc"))
 
 	// Merge the b range back into the a range.
-	mArgs := adminMergeArgs(roachpb.KeyMin)
+	mArgs := adminMergeArgs(keys.ScratchRangeMin)
 	if _, err := kv.SendWrapped(ctx, store.TestSender(), mArgs); err != nil {
 		b.Fatal(err)
 	}
@@ -4354,7 +4364,7 @@ func TestLBSplitUnsafeKeys(t *testing.T) {
 			// Update the split key override so that the split queue will enqueue and
 			// process the range. Remove it afterwards to avoid retrying the LHS.
 			splitKeyOverride.Store(splitKey)
-			_, processErr, enqueueErr := store.Enqueue(ctx, "split", repl, false /* shouldSkipQueue */, false /* async */)
+			processErr, enqueueErr := store.Enqueue(ctx, "split", repl, false /* shouldSkipQueue */, false /* async */)
 			splitKeyOverride.Store(roachpb.Key{})
 			require.NoError(t, enqueueErr)
 

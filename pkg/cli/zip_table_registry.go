@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
@@ -336,62 +331,11 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"resolved_age",
 		},
 	},
-	`"".crdb_internal.cluster_replication_node_streams`: {
+	`"".crdb_internal.logical_replication_spans`: {
 		nonSensitiveCols: NonSensitiveColumns{
-			"stream_id",
-			"consumer",
-			"spans",
-			"initial_ts",
-			"prev_ts",
-			"batches",
-			"checkpoints",
-			"megabytes",
-			"produce_wait",
-			"emit_wait",
-			"last_produce_wait",
-			"last_emit_wait",
-			"last_checkpoint",
-			"rf_checkpoints",
-			"rf_advances",
-			"rf_last_advance",
-			"rf_resolved",
-			"rf_resolved_age",
-		},
-	},
-	`"".crdb_internal.cluster_replication_node_stream_spans`: {
-		nonSensitiveCols: NonSensitiveColumns{
-			"stream_id",
-			"consumer",
-		},
-	},
-	`"".crdb_internal.cluster_replication_node_stream_checkpoints`: {
-		nonSensitiveCols: NonSensitiveColumns{
-			"stream_id",
-			"consumer",
+			"job_id",
 			"resolved",
 			"resolved_age",
-		},
-	},
-	`"".crdb_internal.logical_replication_node_processors`: {
-		nonSensitiveCols: NonSensitiveColumns{
-			"stream_id",
-			"consumer",
-			"recv_wait",
-			"last_recv_wait",
-			"flush_count",
-			"flush_time",
-			"flush_kvs",
-			"flush_bytes",
-			"flush_batches",
-			"last_time",
-			"last_kvs",
-			"last_bytes",
-			"last_slowest",
-			"cur_time",
-			"cur_kvs_done",
-			"cur_kvs_todo",
-			"cur_batches",
-			"cur_slowest",
 		},
 	},
 	"crdb_internal.default_privileges": {
@@ -1105,6 +1049,67 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"tenant_id",
 			"capability_name",
 			"capability_value",
+		},
+	},
+	"crdb_internal.cluster_replication_node_streams": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer",
+			"spans",
+			"state",
+			"read",
+			"emit",
+			"last_read_ms",
+			"last_emit_ms",
+			"seq",
+			"chkpts",
+			"last_chkpt",
+			"batches",
+			"megabytes",
+			"last_kb",
+			"rf_chk",
+			"rf_adv",
+			"rf_last_adv",
+			"resolved_age",
+		},
+	},
+	"crdb_internal.cluster_replication_node_stream_spans": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer",
+		},
+	},
+	"crdb_internal.cluster_replication_node_stream_checkpoints": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer",
+			"resolved",
+			"resolved_age",
+		},
+	},
+	"crdb_internal.logical_replication_node_processors": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"consumer",
+			"state",
+			"recv_time",
+			"last_recv_time",
+			"ingest_time",
+			"flush_time",
+			"flush_count",
+			"flush_kvs",
+			"flush_bytes",
+			"flush_batches",
+			"last_flush_time",
+			"chunks_running",
+			"chunks_done",
+			"last_kvs_done",
+			"last_kvs_todo",
+			"last_batches",
+			"last_slowest",
+			"checkpoints",
+			"retry_size",
+			"resolved_age",
 		},
 	},
 }

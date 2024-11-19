@@ -1,10 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package allccl
 
@@ -116,6 +113,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 
 func TestAllRegisteredSetup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 
 	for _, meta := range workload.Registered() {
 		if bigInitialData(meta) {

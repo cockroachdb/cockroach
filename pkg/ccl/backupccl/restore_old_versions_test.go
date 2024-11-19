@@ -1,10 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -349,7 +346,7 @@ func fullClusterRestoreSystemRoleMembersWithoutIDs(exportDir string) func(t *tes
 		// manifest version is always less than the MinSupportedVersion which will
 		// in turn fail the restore unless we pass in the specified option to elide
 		// the compatibility check.
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '/' IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
 			{"admin", "root", "true", "2", "1"},
@@ -384,7 +381,7 @@ func fullClusterRestoreSystemPrivilegesWithoutIDs(exportDir string) func(t *test
 		// manifest version is always less than the MinSupportedVersion which will
 		// in turn fail the restore unless we pass in the specified option to elide
 		// the compatibility check.
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '/' IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.privileges", [][]string{
 			{"public", "/vtable/crdb_internal/tables", "{}", "{}", "4"},
@@ -419,7 +416,7 @@ func fullClusterRestoreSystemDatabaseRoleSettingsWithoutIDs(exportDir string) fu
 		// manifest version is always less than the MinSupportedVersion which will
 		// in turn fail the restore unless we pass in the specified option to elide
 		// the compatibility check.
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '/' IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.database_role_settings", [][]string{
 			{"0", "", "{timezone=America/New_York}", "0"},
@@ -454,7 +451,7 @@ func fullClusterRestoreSystemExternalConnectionsWithoutIDs(exportDir string) fun
 		// manifest version is always less than the MinSupportedVersion which will
 		// in turn fail the restore unless we pass in the specified option to elide
 		// the compatibility check.
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '/' IN '%s' WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION", localFoo))
 
 		sqlDB.CheckQueryResults(t, "SELECT * FROM system.external_connections", [][]string{
 			{"connection1", "2023-03-20 01:26:50.174781 +0000 +0000", "2023-03-20 01:26:50.174781 +0000 +0000", "STORAGE",

@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package upgradebase
 
@@ -73,6 +68,12 @@ type TestingKnobs struct {
 	SkipUpdateSQLActivityJobBootstrap bool
 
 	SkipMVCCStatisticsJobBootstrap bool
+
+	SkipUpdateTableMetadataCacheBootstrap bool
+
+	// ForceCheckLicenseViolation is true if we want the v24_3_check_license_violation.go
+	// task to continue even though we are in a test environment.
+	ForceCheckLicenseViolation bool
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.

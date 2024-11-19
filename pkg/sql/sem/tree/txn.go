@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree
 
@@ -64,22 +59,74 @@ func (i IsolationLevel) String() string {
 	return isolationLevelNames[i]
 }
 
-// IsolationLevelFromKVTxnIsolationLevel converts a kv level isolation.Level to
-// its SQL semantic equivalent.
-func IsolationLevelFromKVTxnIsolationLevel(level isolation.Level) IsolationLevel {
-	var ret IsolationLevel
-	switch level {
-	case isolation.Serializable:
-		ret = SerializableIsolation
-	case isolation.ReadCommitted:
-		ret = ReadCommittedIsolation
-	case isolation.Snapshot:
-		ret = SnapshotIsolation
+// ToKVIsoLevel converts an IsolationLevel to its isolation.Level equivalent.
+func (i IsolationLevel) ToKVIsoLevel() isolation.Level {
+	switch i {
+	case ReadUncommittedIsolation, ReadCommittedIsolation:
+		return isolation.ReadCommitted
+	case RepeatableReadIsolation, SnapshotIsolation:
+		return isolation.Snapshot
+	case SerializableIsolation:
+		return isolation.Serializable
 	default:
-		panic("What to do here? Log is a banned import")
-		// log.Fatalf(context.Background(), "unknown isolation level: %s", level)
+		panic(fmt.Sprintf("unknown isolation level: %s", i))
 	}
-	return ret
+}
+
+// FromKVIsoLevel converts an isolation.Level to its SQL semantic equivalent.
+func FromKVIsoLevel(level isolation.Level) IsolationLevel {
+	switch level {
+	case isolation.ReadCommitted:
+		return ReadCommittedIsolation
+	case isolation.Snapshot:
+		return RepeatableReadIsolation
+	case isolation.Serializable:
+		return SerializableIsolation
+	default:
+		panic(fmt.Sprintf("unknown isolation level: %s", level))
+	}
+}
+
+// UpgradeToEnabledLevel upgrades the isolation level to the weakest enabled
+// isolation level that is stronger than or equal to the input level.
+func (i IsolationLevel) UpgradeToEnabledLevel(
+	allowReadCommitted, allowRepeatableRead, hasLicense bool,
+) (_ IsolationLevel, upgraded, upgradedDueToLicense bool) {
+	switch i {
+	case ReadUncommittedIsolation:
+		// READ UNCOMMITTED is mapped to READ COMMITTED. PostgreSQL also does
+		// this: https://www.postgresql.org/docs/current/transaction-iso.html.
+		upgraded = true
+		fallthrough
+	case ReadCommittedIsolation:
+		// READ COMMITTED is only allowed if the cluster setting is enabled and the
+		// cluster has a license. Otherwise, it is mapped to a stronger isolation
+		// level (REPEATABLE READ if enabled, SERIALIZABLE otherwise).
+		if allowReadCommitted && hasLicense {
+			return ReadCommittedIsolation, upgraded, upgradedDueToLicense
+		}
+		upgraded = true
+		if allowReadCommitted && !hasLicense {
+			upgradedDueToLicense = true
+		}
+		fallthrough
+	case RepeatableReadIsolation, SnapshotIsolation:
+		// REPEATABLE READ and SNAPSHOT are considered aliases. The isolation levels
+		// are only allowed if the cluster setting is enabled and the cluster has a
+		// license. Otherwise, they are mapped to SERIALIZABLE.
+		if allowRepeatableRead && hasLicense {
+			return RepeatableReadIsolation, upgraded, upgradedDueToLicense
+		}
+		upgraded = true
+		if allowRepeatableRead && !hasLicense {
+			upgradedDueToLicense = true
+		}
+		fallthrough
+	case SerializableIsolation:
+		return SerializableIsolation, upgraded, upgradedDueToLicense
+	default:
+		panic(fmt.Sprintf("unknown isolation level: %s", i))
+	}
 }
 
 // UserPriority holds the user priority for a transaction.

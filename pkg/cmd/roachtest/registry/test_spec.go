@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package registry
 
@@ -229,6 +224,8 @@ func (l LeaseType) String() string {
 		return "epoch"
 	case ExpirationLeases:
 		return "expiration"
+	case LeaderLeases:
+		return "leader"
 	case MetamorphicLeases:
 		return "metamorphic"
 	default:
@@ -243,10 +240,17 @@ const (
 	EpochLeases
 	// ExpirationLeases uses expiration leases for all ranges.
 	ExpirationLeases
+	// LeaderLeases uses leader leases where possible.
+	LeaderLeases
 	// MetamorphicLeases randomly chooses epoch or expiration
-	// leases (across the entire cluster)
+	// leases (across the entire cluster).
 	MetamorphicLeases
 )
+
+// LeaseTypes contains all lease types.
+//
+// The list does not contain aliases like "default" and "metamorphic".
+var LeaseTypes = []LeaseType{EpochLeases, ExpirationLeases, LeaderLeases}
 
 // CloudSet represents a set of clouds.
 //
@@ -366,11 +370,13 @@ const (
 	PebbleNightlyYCSBRace = "pebble_nightly_ycsb_race"
 	Roachtest             = "roachtest"
 	Acceptance            = "acceptance"
+	Perturbation          = "perturbation"
 )
 
 var allSuites = []string{
 	Nightly, Weekly, ReleaseQualification, ORM, Driver, Tool, Smoketest, Quick, Fixtures,
 	Pebble, PebbleNightlyWrite, PebbleNightlyYCSB, PebbleNightlyYCSBRace, Roachtest, Acceptance,
+	Perturbation,
 }
 
 // SuiteSet represents a set of suites.

@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tpcc
 
@@ -26,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -83,6 +79,7 @@ type tpcc struct {
 	onTxnStartFns []func(ctx context.Context, tx pgx.Tx) error
 
 	workers                int
+	activeWorkers          int
 	fks                    bool
 	separateColumnFamilies bool
 	// deprecatedFKIndexes adds in foreign key indexes that are no longer needed
@@ -135,6 +132,8 @@ type tpcc struct {
 	// context group for any background reset table operation to avoid goroutine leaks during long duration workloads
 	resetTableGrp      ctxgroup.Group
 	resetTableCancelFn context.CancelFunc
+
+	asOfSystemTime string
 }
 
 type waitSetter struct {
@@ -250,6 +249,7 @@ var tpccMeta = workload.Meta{
 			`partition-strategy`:       {RuntimeOnly: true},
 			`zones`:                    {RuntimeOnly: true},
 			`active-warehouses`:        {RuntimeOnly: true},
+			`active-workers`:           {RuntimeOnly: true},
 			`scatter`:                  {RuntimeOnly: true},
 			`split`:                    {RuntimeOnly: true},
 			`wait`:                     {RuntimeOnly: true},
@@ -265,7 +265,8 @@ var tpccMeta = workload.Meta{
 			`deprecated-fk-indexes`:    {RuntimeOnly: true},
 			`query-trace-file`:         {RuntimeOnly: true},
 			`fake-time`:                {RuntimeOnly: true},
-			"txn-preamble-file":        {RuntimeOnly: true},
+			`txn-preamble-file`:        {RuntimeOnly: true},
+			`aost`:                     {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
@@ -296,6 +297,7 @@ var tpccMeta = workload.Meta{
 		g.flags.StringSliceVar(&g.multiRegionCfg.regions, "regions", []string{}, "Regions to use for multi-region partitioning. The first region is the PRIMARY REGION. Does not work with --zones.")
 		g.flags.Var(&g.multiRegionCfg.survivalGoal, "survival-goal", "Survival goal to use for multi-region setups. Allowed values: [zone, region].")
 		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
+		g.flags.IntVar(&g.activeWorkers, `active-workers`, 0, `Number of workers that can execute at any given time. Defaults to --workers'`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
@@ -305,6 +307,10 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.queryTraceFile, `query-trace-file`, ``, `File to write the query traces to. Defaults to no output`)
 		// Support executing a query file before each transaction.
 		g.flags.StringVar(&g.txnPreambleFile, "txn-preamble-file", "", "queries that will be injected before each txn")
+		g.flags.StringVar(&g.asOfSystemTime, "aost", "",
+			"This is an optional parameter to specify AOST; used exclusively in conjunction with the TPC-C consistency "+
+				"check. Example values are (\"'-1m'\", \"'-1h'\")")
+
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		// Hardcode this since it doesn't seem like anyone will want to change
@@ -414,6 +420,12 @@ func (w *tpcc) Hooks() workload.Hooks {
 				w.workers = w.activeWarehouses * NumWorkersPerWarehouse
 			}
 
+			if w.activeWorkers > w.workers {
+				return errors.Errorf(`--active-workers needs to be less than or equal to workers (%d)`, w.workers)
+			} else if w.activeWorkers == 0 {
+				w.activeWorkers = w.workers
+			}
+
 			if w.numConns == 0 {
 				// If we're not waiting, open up a connection for each worker. If we are
 				// waiting, we only use up to a set number of connections per warehouse.
@@ -426,8 +438,8 @@ func (w *tpcc) Hooks() workload.Hooks {
 				}
 			}
 
-			if w.waitFraction > 0 && w.workers != w.activeWarehouses*NumWorkersPerWarehouse {
-				return errors.Errorf(`--wait > 0 and --warehouses=%d requires --workers=%d`,
+			if w.waitFraction > 0 && w.activeWorkers != w.activeWarehouses*NumWorkersPerWarehouse {
+				return errors.Errorf(`--wait > 0 and --warehouses=%d requires --active-workers=%d`,
 					w.activeWarehouses, w.warehouses*NumWorkersPerWarehouse)
 			}
 
@@ -609,7 +621,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 				}
 
 				start := timeutil.Now()
-				err := check.Fn(db, "" /* asOfSystemTime */)
+				err := check.Fn(db, w.asOfSystemTime /* asOfSystemTime */)
 				log.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
 				if err != nil {
 					return errors.Wrapf(err, `check failed: %s`, check.Name)
@@ -989,6 +1001,9 @@ func (w *tpcc) Ops(
 		// If nothing is mine, then everything is mine.
 		return len(w.affinityPartitions) == 0
 	}
+
+	workersSem := quotapool.NewIntPool("workers", uint64(w.activeWorkers))
+
 	// Limit the amount of workers we initialize in parallel, to avoid running out
 	// of memory (#36897).
 	sem := make(chan struct{}, 100)
@@ -1017,7 +1032,7 @@ func (w *tpcc) Ops(
 		idx := len(ql.WorkerFns) - 1
 		sem <- struct{}{}
 		group.Go(func() error {
-			worker, err := newWorker(ctx, w, db, reg.GetHandle(), w.txCounters, warehouse)
+			worker, err := newWorker(ctx, w, db, reg.GetHandle(), w.txCounters, warehouse, workersSem)
 			if err == nil {
 				ql.WorkerFns[idx] = worker.run
 			}

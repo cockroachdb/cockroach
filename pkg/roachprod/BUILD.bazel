@@ -13,6 +13,7 @@ go_library(
         "//pkg/build",
         "//pkg/cli/exit",
         "//pkg/cmd/roachprod/grafana",
+        "//pkg/cmd/roachtest/test",
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/fluentbit",

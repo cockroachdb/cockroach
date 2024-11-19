@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package auditloggingccl
 
@@ -17,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -29,83 +25,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
-
-func TestRoleBasedAuditEnterpriseGated(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	sc := log.ScopeWithoutShowLogs(t)
-	defer sc.Close(t)
-
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_SENSITIVE_ACCESS)
-	defer cleanup()
-
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	rootRunner := sqlutils.MakeSQLRunner(sqlDB)
-	defer s.Stopper().Stop(context.Background())
-
-	// Disable enterprise.
-	enableEnterprise := utilccl.TestingDisableEnterprise()
-
-	// Enable auditing.
-	rootRunner.Exec(t, `SET CLUSTER SETTING sql.log.user_audit = 'ALL ALL'`)
-
-	testutils.SucceedsSoon(t, func() error {
-		var currentVal string
-		rootRunner.QueryRow(t,
-			"SHOW CLUSTER SETTING sql.log.user_audit",
-		).Scan(&currentVal)
-		if currentVal == "" {
-			return errors.Newf("waiting for cluster setting to be set")
-		}
-		return nil
-	})
-
-	// Run a test query.
-	rootRunner.Exec(t, `SHOW CLUSTER SETTING sql.log.user_audit`)
-
-	log.FlushFiles()
-
-	entries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"role_based_audit_event"`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Enterprise is disabled, expect the number of entries to be 0.
-	if len(entries) != 0 {
-		t.Fatal(errors.Newf("enterprise is disabled, found unexpected entries"))
-	}
-
-	// Enable enterprise
-	enableEnterprise()
-
-	// Run a test query.
-	rootRunner.Exec(t, `SHOW CLUSTER SETTING sql.log.user_audit`)
-
-	log.FlushFiles()
-
-	entries, err = log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"Statement":"SHOW CLUSTER SETTING \\"sql.log.user_audit\\""`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Enterprise is enabled, expect an audit log.
-	if len(entries) != 1 {
-		t.Fatal(errors.Newf("enterprise is enabled, expected 1 entry, got %d", len(entries)))
-	}
-}
 
 func TestSingleRoleAuditLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()

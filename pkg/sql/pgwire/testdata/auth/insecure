@@ -6,7 +6,7 @@ subtest check_ssl_disabled_error
 # Check that an attempt to use SSL fails with "SSL not enabled".
 connect user=root sslmode=require
 ----
-ERROR: pq: SSL is not enabled on the server
+ERROR: tls error (server refused TLS connection)
 
 subtest end
 
@@ -38,15 +38,15 @@ subtest end
 
 subtest regular_login
 
-connect user=testuser sslmode=disable
+connect user=testuser sslmode=disable show_authentication_method
 ----
-ok defaultdb
+ok defaultdb insecure
 
 # If a password is provided, it is ignored.
 
-connect user=testuser password=abc sslmode=disable
+connect user=testuser password=abc sslmode=disable show_authentication_method
 ----
-ok defaultdb
+ok defaultdb insecure
 
 subtest end
 

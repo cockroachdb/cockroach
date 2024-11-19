@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -14,27 +9,27 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
 // runDecommissionSelf decommissions n2 through n2. This is an acceptance test.
 //
 // See https://github.com/cockroachdb/cockroach/issues/56718
 func runDecommissionSelf(ctx context.Context, t test.Test, c cluster.Cluster) {
-	allNodes := c.All()
-	u := newVersionUpgradeTest(c,
-		uploadCockroachStep(allNodes, clusterupgrade.CurrentVersion()),
-		startVersion(allNodes, clusterupgrade.CurrentVersion()),
-		fullyDecommissionStep(2, 2, clusterupgrade.CurrentVersion()),
-		func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			// Stop n2 and exclude it from post-test consistency checks,
-			// as this node can't contact cluster any more and operations
-			// on it will hang.
-			u.c.Wipe(ctx, c.Node(2))
-		},
-		checkOneMembership(1, "decommissioned"),
-	)
+	n1, n2 := 1, 2
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
-	u.run(ctx, t)
+	if err := fullyDecommission(ctx, c, n2, n2, test.DefaultCockroachPath); err != nil {
+		t.Fatal(err)
+	}
+
+	t.L().Printf("n2 decommissioned")
+	db := c.Conn(ctx, t.L(), n1)
+	defer db.Close()
+
+	if err := newLivenessInfo(db).membershipEquals("decommissioned").eventuallyOnlyNode(n2); err != nil {
+		t.Fatal(err)
+	}
 }

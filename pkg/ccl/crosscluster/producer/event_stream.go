@@ -1,16 +1,14 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package producer
 
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
@@ -39,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/golang/snappy"
 )
 
@@ -54,9 +53,10 @@ type eventStream struct {
 	data     tree.Datums
 
 	// Fields below initialized when Start called.
-	rf  *rangefeed.RangeFeed
-	mon *mon.BytesMonitor
-	acc mon.BoundAccount
+	rf    *rangefeed.RangeFeed
+	mon   *mon.BytesMonitor
+	acc   mon.BoundAccount
+	stats *rangeStatsPoller
 
 	// The remaining fields are used to process rangefeed messages.
 	// addMu is non-nil during initial scans, where it serializes the onValue and
@@ -68,9 +68,10 @@ type eventStream struct {
 	lastCheckpointTime time.Time
 	lastCheckpointLen  int
 
-	lastPolled time.Time
+	seqNum uint64
+	debug  streampb.DebugProducerStatusHolder
 
-	debug streampb.DebugProducerStatus
+	consumerReady atomic.Bool
 }
 
 var quantize = settings.RegisterDurationSettingWithExplicitUnit(
@@ -105,11 +106,14 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	// false.  However, this generator never terminates without an error,
 	// so this method should be called once.  Be defensive and return an error
 	// if this method is called again.
+	ctx = logtags.AddTag(ctx, "id", s.streamID)
+	ctx = logtags.AddTag(ctx, "dst-node", s.spec.ConsumerNode)
+	ctx = logtags.AddTag(ctx, "dst-proc", s.spec.ConsumerProc)
 	if s.errCh != nil {
 		return errors.AssertionFailedf("expected to be started once")
 	}
 
-	s.lastPolled = timeutil.Now()
+	s.debug.Emitting()
 
 	sourceTenantID, err := s.validateProducerJobAndSpec(ctx)
 	if err != nil {
@@ -149,6 +153,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
 		rangefeed.WithOnValues(s.onValues),
 		rangefeed.WithDiff(s.spec.WithDiff),
+		rangefeed.WithConsumerID(int64(s.streamID)),
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
 		rangefeed.WithFiltering(s.spec.WithFiltering),
 	}
@@ -163,10 +168,11 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 	}
 
 	initialTimestamp := s.spec.InitialScanTimestamp
-	s.frontier, err = span.MakeFrontier(s.spec.Spans...)
+	frontier, err := span.MakeFrontier(s.spec.Spans...)
 	if err != nil {
 		return err
 	}
+	s.frontier = span.MakeConcurrentFrontier(frontier)
 	for _, sp := range s.spec.Progress {
 		if _, err := s.frontier.Forward(sp.Span, sp.Timestamp); err != nil {
 			s.frontier.Release()
@@ -186,6 +192,8 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		log.Infof(ctx, "resuming event stream (no initial scan) from %s", initialTimestamp)
 	}
 
+	s.stats = startStatsPoller(ctx, time.Minute, s.spec.Spans, s.frontier, s.execCfg.RangeDescIteratorFactory)
+
 	// Reserve batch kvsSize bytes from monitor.  We might have to do something more fancy
 	// in the future, but for now, grabbing chunk of memory from the monitor would do the trick.
 	if err := s.acc.Grow(ctx, s.spec.Config.BatchByteSize); err != nil {
@@ -202,8 +210,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		return err
 	}
 
-	s.debug.StreamID = s.streamID
-	s.debug.Spec = s.spec
+	s.debug.Setup(s.streamID, s.spec)
 	streampb.RegisterProducerStatus(&s.debug)
 	return nil
 }
@@ -223,11 +230,10 @@ func (s *eventStream) setErr(err error) bool {
 
 // Next implements eval.ValueGenerator interface.
 func (s *eventStream) Next(ctx context.Context) (bool, error) {
-	emitWait := int64(timeutil.Since(s.lastPolled))
+	s.debug.Producing()
 
-	s.debug.Flushes.LastEmitWaitNanos.Store(emitWait)
-	s.debug.Flushes.EmitWaitNanos.Add(emitWait)
-	s.lastPolled = timeutil.Now()
+	s.consumerReady.Store(true)
+	defer s.consumerReady.Store(false)
 
 	select {
 	case <-ctx.Done():
@@ -240,10 +246,7 @@ func (s *eventStream) Next(ctx context.Context) (bool, error) {
 		case err := <-s.errCh:
 			return false, err
 		default:
-			produceWait := int64(timeutil.Since(s.lastPolled))
-			s.debug.Flushes.ProduceWaitNanos.Add(produceWait)
-			s.debug.Flushes.LastProduceWaitNanos.Store(produceWait)
-			s.lastPolled = timeutil.Now()
+			s.debug.Emitting()
 			return true, nil
 		}
 	}
@@ -263,6 +266,9 @@ func (s *eventStream) Close(ctx context.Context) {
 	}
 	if s.frontier != nil {
 		s.frontier.Release()
+	}
+	if s.stats != nil {
+		s.stats.Close()
 	}
 	s.acc.Close(ctx)
 }
@@ -301,13 +307,11 @@ func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
 }
 
 func (s *eventStream) onCheckpoint(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
-	s.debug.RF.Checkpoints.Add(1)
+	s.debug.Checkpoint()
 }
 
 func (s *eventStream) onFrontier(ctx context.Context, timestamp hlc.Timestamp) {
-	s.debug.RF.Advances.Add(1)
-	s.debug.RF.LastAdvanceMicros.Store(timeutil.Now().UnixMicro())
-	s.debug.RF.ResolvedMicros.Store(timestamp.GoTime().UnixMicro())
+	s.debug.Advance(timestamp.GoTime())
 }
 
 func (s *eventStream) onSSTable(
@@ -352,7 +356,7 @@ func (s *eventStream) maybeCheckpoint(
 }
 
 func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.VisitableFrontier) {
-	if err := s.flushBatch(ctx); err != nil {
+	if err := s.flushBatch(ctx, streampb.FlushCheckpoint); err != nil {
 		return
 	}
 
@@ -363,35 +367,50 @@ func (s *eventStream) sendCheckpoint(ctx context.Context, frontier rangefeed.Vis
 	})
 	s.lastCheckpointLen = len(spans)
 
-	if s.setErr(s.sendFlush(ctx, &streampb.StreamEvent{Checkpoint: &streampb.StreamEvent_StreamCheckpoint{ResolvedSpans: spans}})) {
+	s.seqNum++
+	err := s.sendFlush(ctx, &streampb.StreamEvent{StreamSeq: s.seqNum, Checkpoint: &streampb.StreamEvent_StreamCheckpoint{
+		ResolvedSpans: spans,
+		RangeStats:    s.stats.MaybeStats(),
+	}})
+	if err != nil {
+		s.setErr(err)
 		return
 	}
 	// set the local time for pacing.
 	s.lastCheckpointTime = timeutil.Now()
 
-	s.debug.Flushes.Checkpoints.Add(1)
-	s.debug.LastCheckpoint.Micros.Store(s.lastCheckpointTime.UnixMicro())
-	s.debug.LastCheckpoint.Spans.Store(spans)
+	s.debug.CheckpointEmitted(s.lastCheckpointTime, spans, s.seqNum)
 }
 
 func (s *eventStream) maybeFlushBatch(ctx context.Context) error {
+	// If the consumer is ready to ingest, flush at a lower threshold. This
+	// ensures the consumer always has work to do.
+	//
+	// If the consumer is not ready, the larger batch delays the flush call and
+	// preventing the slow consumer from blocking rangefeed progress, avoiding
+	// catchup scans.
 	if s.seb.size > int(s.spec.Config.BatchByteSize) {
-		return s.flushBatch(ctx)
+		return s.flushBatch(ctx, streampb.FlushFull)
+	}
+	if s.consumerReady.Load() && s.seb.size > minBatchByteSize {
+		return s.flushBatch(ctx, streampb.FlushReady)
 	}
 	return nil
 }
 
-func (s *eventStream) flushBatch(ctx context.Context) error {
+func (s *eventStream) flushBatch(ctx context.Context, reason streampb.FlushReason) error {
 	if s.seb.size == 0 {
 		return nil
 	}
-	s.debug.Flushes.Batches.Add(1)
-	s.debug.Flushes.Bytes.Add(int64(s.seb.size))
+	s.seqNum++
+	s.debug.Flushed(int64(s.seb.size), reason, s.seqNum)
 
 	defer s.seb.reset()
-	return s.sendFlush(ctx, &streampb.StreamEvent{Batch: &s.seb.batch})
+
+	return s.sendFlush(ctx, &streampb.StreamEvent{StreamSeq: s.seqNum, Batch: &s.seb.batch})
 }
 func (s *eventStream) sendFlush(ctx context.Context, event *streampb.StreamEvent) error {
+	event.EmitUnixNanos = timeutil.Now().UnixNano()
 	data, err := protoutil.Marshal(event)
 	if err != nil {
 		return err
@@ -405,53 +424,6 @@ func (s *eventStream) sendFlush(ctx context.Context, event *streampb.StreamEvent
 	case s.streamCh <- tree.Datums{tree.NewDBytes(tree.DBytes(data))}:
 		return nil
 	}
-}
-
-type checkpointPacer struct {
-	pace    time.Duration
-	next    time.Time
-	skipped bool
-}
-
-func makeCheckpointPacer(frequency time.Duration) checkpointPacer {
-	return checkpointPacer{
-		pace:    frequency,
-		next:    timeutil.Now().Add(frequency),
-		skipped: false,
-	}
-}
-
-func (p *checkpointPacer) shouldCheckpoint(
-	currentFrontier hlc.Timestamp, frontierAdvanced bool,
-) bool {
-	now := timeutil.Now()
-	enoughTimeElapsed := p.next.Before(now)
-
-	// Handle previously skipped updates.
-	// Normally, we want to emit checkpoint records when frontier advances.
-	// However, checkpoints could be skipped if the frontier advanced too rapidly
-	// (i.e. more rapid than MinCheckpointFrequency).  In those cases, we skip emitting
-	// the checkpoint, but we will emit it at a later time.
-	if p.skipped {
-		if enoughTimeElapsed {
-			p.skipped = false
-			p.next = now.Add(p.pace)
-			return true
-		}
-		return false
-	}
-
-	isInitialScanCheckpoint := currentFrontier.IsEmpty()
-	// Handle updates when frontier advances.
-	if frontierAdvanced || isInitialScanCheckpoint {
-		if enoughTimeElapsed {
-			p.next = now.Add(p.pace)
-			return true
-		}
-		p.skipped = true
-		return false
-	}
-	return false
 }
 
 // Add a RangeFeedSSTable into current batch.
@@ -531,6 +503,7 @@ func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.T
 }
 
 const defaultBatchSize = 1 << 20
+const minBatchByteSize = 1 << 20
 
 func streamPartition(
 	evalCtx *eval.Context, streamID streampb.StreamID, opaqueSpec []byte,
@@ -542,7 +515,9 @@ func streamPartition(
 	if len(spec.Spans) == 0 {
 		return nil, errors.AssertionFailedf("expected at least one span, got none")
 	}
-	spec.Config.BatchByteSize = defaultBatchSize
+	if spec.Config.BatchByteSize == 0 {
+		spec.Config.BatchByteSize = defaultBatchSize
+	}
 	spec.Config.MinCheckpointFrequency = crosscluster.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV)
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)

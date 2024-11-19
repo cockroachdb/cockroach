@@ -34,9 +34,9 @@ ok
 
 # Now testuser can log in.
 
-connect password=abc user=testuser sslmode=disable
+connect password=abc user=testuser sslmode=disable show_authentication_method
 ----
-ok defaultdb
+ok defaultdb cert-password
 
 # But not with the wrong password.
 
@@ -71,3 +71,7 @@ local     all      all          password
 connect password=abc user=testuser sslmode=disable
 ----
 ERROR: authentication rejected by configuration (SQLSTATE 28000)
+
+# Revert enable non-TLS secure connections.
+reject_sql_without_tls
+----

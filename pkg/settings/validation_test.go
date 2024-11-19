@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package settings_test
 
@@ -19,6 +14,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
+
+var cantBeTrue = settings.WithValidateBool(func(sv *settings.Values, b bool) error {
+	if b {
+		return fmt.Errorf("it cant be true")
+	}
+	return nil
+})
+
+var cantBeFalse = settings.WithValidateBool(func(sv *settings.Values, b bool) error {
+	if !b {
+		return fmt.Errorf("it cant be false")
+	}
+	return nil
+})
 
 func TestValidationOptions(t *testing.T) {
 	type subTest struct {
@@ -180,6 +189,26 @@ func TestValidationOptions(t *testing.T) {
 				{val: 1, opt: settings.ByteSizeWithMinimum(10), expectedErr: "cannot be set to a value lower than 10 B"},
 				{val: 10, opt: settings.ByteSizeWithMinimum(10), expectedErr: ""},
 				{val: 11, opt: settings.ByteSizeWithMinimum(10), expectedErr: ""},
+			},
+		},
+		{
+			testLabel: "bool",
+			settingFn: func(n int, bval interface{}, opt settings.SettingOption) settings.Setting {
+				val := bval.(bool)
+				b := settings.RegisterBoolSetting(settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)), "desc",
+					val, opt)
+				// We explicitly check here to test validation which does not happen on initialization.
+				err := b.Validate(&settings.Values{}, val)
+				if err != nil {
+					panic(err)
+				}
+				return b
+			},
+			subTests: []subTest{
+				{val: true, opt: cantBeTrue, expectedErr: "it cant be true"},
+				{val: false, opt: cantBeTrue, expectedErr: ""},
+				{val: true, opt: cantBeFalse, expectedErr: ""},
+				{val: false, opt: cantBeFalse, expectedErr: "it cant be false"},
 			},
 		},
 	}

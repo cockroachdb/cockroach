@@ -1446,7 +1446,7 @@ CREATE TABLE def_assn_cast (
   id INT4,
   a INT4 DEFAULT 1.0::FLOAT4,
   b VARCHAR DEFAULT 'true'::BOOL,
-  c NAME DEFAULT 'foo'::BPCHAR
+  c NAME DEFAULT 'foo'::CHAR
 )
 
 statement ok

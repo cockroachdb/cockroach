@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
@@ -62,6 +57,23 @@ type debugZipContext struct {
 	firstNodeSQLConn clisqlclient.Conn
 
 	sem semaphore.Semaphore
+}
+
+var filterFlags = map[string]struct{}{
+	"cert-principal-map":                {},
+	"certs-dir":                         {},
+	"cluster-name":                      {},
+	"disable-cluster-name-verification": {},
+	"format":                            {},
+	"host":                              {},
+	"url":                               {},
+	"enterprise-require-fips-ready":     {},
+	"log":                               {},
+	"log-config-file":                   {},
+	"log-config-vars":                   {},
+	"log-dir":                           {},
+	"logtostderr":                       {},
+	"vmodule":                           {},
 }
 
 func (zc *debugZipContext) runZipFn(
@@ -333,7 +345,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			// Add a little helper script to draw attention to the existence of tags in
 			// the profiles.
 			{
-				s := zc.clusterPrinter.start("pprof summary script")
+				s = zc.clusterPrinter.start("pprof summary script")
 				if err := z.createRaw(s, zc.prefix+"/pprof-summary.sh", []byte(`#!/bin/sh
 find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 `)); err != nil {
@@ -343,7 +355,7 @@ find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 
 			// A script to summarize the hottest ranges for a storage server's range reports.
 			if zipCtx.includeRangeInfo {
-				s := zc.clusterPrinter.start("hot range summary script")
+				s = zc.clusterPrinter.start("hot range summary script")
 				if err := z.createRaw(s, zc.prefix+"/hot-ranges.sh", []byte(`#!/bin/sh
 for stat in "queries" "writes" "reads" "write_bytes" "read_bytes" "cpu_time"; do
 	echo "$stat"
@@ -356,7 +368,7 @@ done
 
 			// A script to summarize the hottest ranges for a tenant's range report.
 			if zipCtx.includeRangeInfo {
-				s := zc.clusterPrinter.start("tenant hot range summary script")
+				s = zc.clusterPrinter.start("tenant hot range summary script")
 				if err := z.createRaw(s, zc.prefix+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
 for stat in "queries" "writes" "reads" "write_bytes" "read_bytes" "cpu_time"; do
     echo "$stat"_per_second
@@ -366,6 +378,17 @@ done
 					return err
 				}
 			}
+
+			s = zr.start("capture debug zip flags")
+			flags := getCLIClusterFlags(true, cmd, func(flag string) bool {
+				_, filter := filterFlags[flag]
+				return filter
+			})
+
+			if err := z.createRaw(s, zc.prefix+"/debug_zip_command_flags.txt", []byte(flags)); err != nil {
+				return err
+			}
+
 			return nil
 		}(); err != nil {
 			return err

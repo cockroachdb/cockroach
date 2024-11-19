@@ -1,0 +1,119 @@
+# Show that elastic work can get completely starved out by regular work, but
+# not the other way around.
+init
+----
+
+# Kick off two threads, one for each work class, each writing at 1MiB/s over
+# across reqs/s.
+timeline
+t=[0s,16s) class=regular stream=t1/s1 adjust=-1MiB/s rate=100/s
+t=[0s,8s)  class=elastic stream=t1/s1 adjust=-1MiB/s rate=100/s
+----
+
+simulate
+----
+
+# Observe that initially elastic tokens deplete faster than regular tokens
+# (while elastic tokens > 0MiB), since regular work deducts from both but
+# elastic work only deducts from the elastic bucket. Eventually the rate of
+# elastic token deductions slows down since elastic requests stop being
+# admitted (and thus deducting tokens) once elastic tokens <= 0 MiB. So it's
+# only regular request deductions from that point on. See
+# TestFlowTokenAdjustment for more details.
+plot
+kvflowcontrol.tokens.eval.{regular,elastic}.available unit=MiB
+----
+  16.0 ┼╮
+  14.1 ┤╰────╮
+  12.3 ┤     ╰───╮
+  10.4 ┤         ╰────╮
+   8.6 ┤              ╰───╮
+   6.7 ┼─╮                ╰────╮
+   4.8 ┤ ╰──╮                  ╰───╮
+   3.0 ┤    ╰─╮                    ╰────╮
+   1.1 ┤      ╰─╮                       ╰───╮
+  -0.7 ┤        ╰───╮                       ╰──
+  -2.6 ┤            ╰───╮
+  -4.5 ┤                ╰────╮
+  -6.3 ┤                     ╰───╮
+  -8.2 ┤                         ╰────╮
+ -10.0 ┤                              ╰───╮
+ -11.9 ┤                                  ╰────
+        tokens.eval.{regular,elastic}.available (MiB)
+
+
+# Confirm that all throughout we're able to admit regular requests at its
+# incoming rate of 100/s. But for elastic requests, once we're out of elastic
+# flow tokens, we stop admitting and start waiting instead. We run of elastic
+# tokens faster since there are fewer of them (8MiB instead of 16MiB), and also
+# they're deducted by both regular and elastic work, compared to regular tokens
+# that are deducted only by regular work.
+plot
+kvflowcontrol.eval_wait.regular.requests.{admitted,waiting} unit=reqs/s rate=true
+kvflowcontrol.eval_wait.elastic.requests.{admitted,waiting} unit=reqs/s rate=true
+----
+----
+ 100.0 ┤  ╭────────────────────────────────────
+  93.3 ┤  │
+  86.7 ┤  │
+  80.0 ┤  │
+  73.3 ┤  │
+  66.7 ┤  │
+  60.0 ┤  │
+  53.3 ┤  │
+  46.7 ┤  │
+  40.0 ┤  │
+  33.3 ┤  │
+  26.7 ┤  │
+  20.0 ┤  │
+  13.3 ┤  │
+   6.7 ┤  │
+   0.0 ┼───────────────────────────────────────
+        rate(eval_wait.regular.requests.{admitted,waiting}) (reqs/s)
+
+
+ 100.0 ┤  ╭──────╮  ╭──────╮
+  93.3 ┤  │      ╰╮╭╯      │
+  86.7 ┤  │       ││       ╰╮
+  80.0 ┤  │       ││        │
+  73.3 ┤  │       ││        │
+  66.7 ┤  │       ││        │
+  60.0 ┤  │       ││        │
+  53.3 ┤  │       ╰│        │
+  46.7 ┤  │       ╭╯        │
+  40.0 ┤  │       ││        ╰╮
+  33.3 ┤  │       ││         │
+  26.7 ┤  │       ││         │
+  20.0 ┤  │       ││         │
+  13.3 ┤  │       ││         │
+   6.7 ┤  │      ╭╯╰╮        │
+   0.0 ┼─────────╯  ╰────────╰─────────────────
+        rate(eval_wait.elastic.requests.{admitted,waiting}) (reqs/s)
+----
+----
+
+# Confirm the above -- when both regular and elastic work gets admitted, we're
+# deducting elastic tokens at 2MiB/s, and at t=4s when elastic work gets
+# blocked, we start deducting at 1MiB/s.
+plot
+kvflowcontrol.tokens.eval.elastic.deducted  unit=MiB/s rate=true
+----
+ 2.0 ┤  ╭──────╮
+ 1.9 ┤  │      ╰╮
+ 1.7 ┤  │       │
+ 1.6 ┤  │       │
+ 1.5 ┤  │       ╰╮
+ 1.3 ┤  │        │
+ 1.2 ┤  │        │
+ 1.1 ┤  │        ╰───────────────────────────
+ 0.9 ┤  │
+ 0.8 ┤  │
+ 0.7 ┤  │
+ 0.5 ┤  │
+ 0.4 ┤  │
+ 0.3 ┤  │
+ 0.1 ┤  │
+ 0.0 ┼──╯
+      rate(tokens.eval.elastic.deducted) (MiB/s)
+
+# vim:ft=conf

@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -80,7 +75,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	const gcRetryTimeout = 7 * time.Minute
 
 	var randomSeed int64
-	if UsingRuntimeAssertions(t) {
+	if roachtestutil.UsingRuntimeAssertions(t) {
 		// Do not use `0` as that is reserved to mean that we are running
 		// without runtime assertions.
 		for randomSeed == 0 {
@@ -119,7 +114,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// rebalancing is better than increasing wait time further.
 	setClusterSetting("kv.allocator.load_based_lease_rebalancing.enabled", false)
 
-	if err := WaitFor3XReplication(ctx, t, t.L(), conn); err != nil {
+	if err := roachtestutil.WaitFor3XReplication(ctx, t.L(), conn); err != nil {
 		t.Fatalf("failed to up-replicate cluster: %s", err)
 	}
 
@@ -138,7 +133,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		wlCtx, wlCancel := context.WithCancel(ctx)
 		defer wlCancel()
-		wlFailure := make(chan error)
+		wlFailure := make(chan error, 1)
 		go func() {
 			defer close(wlFailure)
 			cmd = roachtestutil.NewCommand("./cockroach workload run kv").

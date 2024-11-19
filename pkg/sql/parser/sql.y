@@ -872,9 +872,6 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 func (u *sqlSymUnion) tenantSpec() *tree.TenantSpec {
     return u.val.(*tree.TenantSpec)
 }
-func (u *sqlSymUnion) likeTenantSpec() *tree.LikeTenantSpec {
-    return u.val.(*tree.LikeTenantSpec)
-}
 func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
     return u.val.(tree.CTEMaterializeClause)
 }
@@ -977,7 +974,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS IGNORE_CDC_IGNORED_TTL_DELETES ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
 %token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCLUDE_ALL_VIRTUAL_CLUSTERS INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
@@ -1240,7 +1237,6 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> create_proc_stmt
 %type <tree.Statement> create_trigger_stmt
 
-%type <*tree.LikeTenantSpec> opt_like_virtual_cluster
 %type <tree.LogicalReplicationResources> logical_replication_resources, logical_replication_resources_list
 %type <*tree.LogicalReplicationOptions> opt_logical_replication_options logical_replication_options logical_replication_options_list
 
@@ -2091,6 +2087,7 @@ alter_database_stmt:
 //    CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT
 //    IMMUTABLE | STABLE | VOLATILE
 //    [ NOT ] LEAKPROOF
+//    [ EXTERNAL ] SECURITY { INVOKER | DEFINER }
 // %SeeAlso: WEBDOCS/alter-function.html
 alter_func_stmt:
   alter_func_options_stmt
@@ -2697,8 +2694,8 @@ alter_zone_partition_stmt:
     s.ZoneSpecifier = tree.ZoneSpecifier{
        TableOrIndex: tree.TableIndexName{Table: name},
        Partition: tree.Name($3),
+       StarIndex: true,
     }
-    s.AllIndexes = true
     $$.val = s
   }
 | ALTER PARTITION partition_name OF TABLE table_name '@' error
@@ -3369,7 +3366,6 @@ backup_stmt:
     $$.val = &tree.Backup{
       Targets: $2.backupTargetListPtr(),
       To: $6.stringOrPlaceholderOptList(),
-      Nested: true,
       AppendToLatest: false,
       Subdir: $4.expr(),
       AsOf: $7.asOfClause(),
@@ -3381,7 +3377,6 @@ backup_stmt:
     $$.val = &tree.Backup{
       Targets: $2.backupTargetListPtr(),
       To: $4.stringOrPlaceholderOptList(),
-      Nested: true,
       AsOf: $5.asOfClause(),
       Options: *$6.backupOptions(),
     }
@@ -3391,21 +3386,15 @@ backup_stmt:
     $$.val = &tree.Backup{
       Targets: $2.backupTargetListPtr(),
       To: $6.stringOrPlaceholderOptList(),
-      Nested: true,
       AppendToLatest: true,
       AsOf: $7.asOfClause(),
       Options: *$8.backupOptions(),
     }
   }
-| BACKUP opt_backup_targets TO string_or_placeholder_opt_list opt_as_of_clause opt_incremental opt_with_backup_options
+| BACKUP opt_backup_targets TO error
   {
-    $$.val = &tree.Backup{
-      Targets: $2.backupTargetListPtr(),
-      To: $4.stringOrPlaceholderOptList(),
-      IncrementalFrom: $6.exprs(),
-      AsOf: $5.asOfClause(),
-      Options: *$7.backupOptions(),
-    }
+    setErr(sqllex, errors.New("The `BACKUP TO` syntax is no longer supported. Please use `BACKUP INTO` to create a backup collection."))
+    return helpWith(sqllex, "BACKUP")
   }
 | BACKUP error // SHOW HELP: BACKUP
 
@@ -3829,14 +3818,10 @@ drop_external_connection_stmt:
 //    include_all_virtual_clusters: enable backups of all virtual clusters during a cluster backup
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
-  RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+  RESTORE FROM error
   {
-    $$.val = &tree.Restore{
-    DescriptorCoverage: tree.AllDescriptors,
-    From: $3.listOfStringOrPlaceholderOptList(),
-    AsOf: $4.asOfClause(),
-    Options: *($5.restoreOptions()),
-    }
+    setErr(sqllex, errors.New("The `RESTORE FROM <backupURI>` syntax is no longer supported. Please use `RESTORE FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "RESTORE")
   }
 | RESTORE FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
@@ -3848,14 +3833,10 @@ restore_stmt:
 		Options: *($7.restoreOptions()),
     }
   }
-| RESTORE backup_targets FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE backup_targets FROM error
   {
-    $$.val = &tree.Restore{
-    Targets: $2.backupTargetList(),
-    From: $4.listOfStringOrPlaceholderOptList(),
-    AsOf: $5.asOfClause(),
-    Options: *($6.restoreOptions()),
-    }
+    setErr(sqllex, errors.New("The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "RESTORE")
   }
 | RESTORE backup_targets FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
@@ -3867,14 +3848,10 @@ restore_stmt:
       Options: *($8.restoreOptions()),
     }
   }
-| RESTORE SYSTEM USERS FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+| RESTORE SYSTEM USERS FROM error
   {
-    $$.val = &tree.Restore{
-      DescriptorCoverage: tree.SystemUsers,
-      From: $5.listOfStringOrPlaceholderOptList(),
-      AsOf: $6.asOfClause(),
-      Options: *($7.restoreOptions()),
-    }
+    setErr(sqllex, errors.New("The `RESTORE <targets> FROM <backupURI>` syntax is no longer supported. Please use `RESTORE <targets> FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "RESTORE")
   }
 | RESTORE SYSTEM USERS FROM string_or_placeholder IN list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
   {
@@ -4645,7 +4622,7 @@ create_stmt:
 //  < CURSOR = start_time > |
 //  < DEFAULT FUNCTION = lww | dlq | udf
 //  < FUNCTION 'udf' FOR TABLE local_name  , ... > |
-//  < IGNORE_CDC_IGNORED_TTL_DELETES >
+//  < DISCARD = 'ttl-deletes' >
 // ]
 create_logical_replication_stream_stmt:
   CREATE LOGICAL REPLICATION STREAM FROM logical_replication_resources ON string_or_placeholder INTO logical_replication_resources opt_logical_replication_options
@@ -4743,57 +4720,61 @@ logical_replication_options:
   {
      $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[tree.UnresolvedName]tree.RoutineName{*$5.unresolvedObjectName().ToUnresolvedName():$2.unresolvedObjectName().ToRoutineName()}}
   }
-| IGNORE_CDC_IGNORED_TTL_DELETES
+ | DISCARD '=' string_or_placeholder
   {
-    $$.val = &tree.LogicalReplicationOptions{FilterRangefeed: tree.MakeDBool(true)}
+    $$.val = &tree.LogicalReplicationOptions{Discard: $3.expr()}
+  }
+| SKIP SCHEMA CHECK
+  {
+    $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)} 
+  }
+| LABEL '=' string_or_placeholder
+  {
+    $$.val = &tree.LogicalReplicationOptions{MetricsLabel: $3.expr()}
   }
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster
 // %Category: Experimental
 // %Text:
-// CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ LIKE <virtual_cluster_spec> ] [ <replication> ]
+// CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ <replication> ]
 //
 // Replication option:
 //    FROM REPLICATION OF <virtual_cluster_spec> ON <location> [ WITH OPTIONS ... ]
 create_virtual_cluster_stmt:
-  CREATE virtual_cluster d_expr opt_like_virtual_cluster
+  CREATE virtual_cluster d_expr
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
-      Like: $4.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster
+| CREATE virtual_cluster IF NOT EXISTS d_expr
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       IfNotExists: true,
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
-      Like: $7.likeTenantSpec(),
     }
   }
-| CREATE virtual_cluster d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
+| CREATE virtual_cluster d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
-      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $8.expr()},
-      ReplicationSourceAddress: $10.expr(),
-      Options: *$11.tenantReplicationOptions(),
-      Like: $4.likeTenantSpec(),
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
+      ReplicationSourceAddress: $9.expr(),
+      Options: *$10.tenantReplicationOptions(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr opt_like_virtual_cluster FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
+| CREATE virtual_cluster IF NOT EXISTS d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       IfNotExists: true,
       TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
-      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $11.expr()},
-      ReplicationSourceAddress: $13.expr(),
-      Options: *$14.tenantReplicationOptions(),
-      Like: $7.likeTenantSpec(),
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $10.expr()},
+      ReplicationSourceAddress: $12.expr(),
+      Options: *$13.tenantReplicationOptions(),
     }
   }
 | CREATE virtual_cluster error // SHOW HELP: CREATE VIRTUAL CLUSTER
@@ -4801,19 +4782,6 @@ create_virtual_cluster_stmt:
 virtual_cluster:
   TENANT { /* SKIP DOC */ }
 | VIRTUAL CLUSTER
-
-// opt_like_virtual_cluster defines a LIKE clause for CREATE VIRTUAL CLUSTER.
-// Eventually this can grow to support INCLUDING/EXCLUDING options
-// like in CREATE TABLE.
-opt_like_virtual_cluster:
-  /* EMPTY */
-  {
-     $$.val = &tree.LikeTenantSpec{}
-  }
-| LIKE virtual_cluster_spec
-  {
-      $$.val = &tree.LikeTenantSpec{OtherTenant: $2.tenantSpec()}
-  }
 
 // Optional tenant replication options.
 opt_with_replication_options:
@@ -4853,6 +4821,10 @@ replication_options:
   EXPIRATION WINDOW '=' d_expr
   {
       $$.val = &tree.TenantReplicationOptions{ExpirationWindow: $4.expr()}
+  }
+| READ VIRTUAL CLUSTER
+  {
+    $$.val = &tree.TenantReplicationOptions{EnableReaderTenant: tree.MakeDBool(true)}
   }
 
 // %Help: CREATE SCHEDULE
@@ -4896,7 +4868,7 @@ create_extension_stmt:
 //    | [ NOT ] LEAKPROOF
 //    | { CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT }
 //    | AS 'definition'
-//    | { [ EXTERNAL ] SECURITY DEFINER }
+//    | { [ EXTERNAL ] SECURITY { INVOKER | DEFINER } }
 //  } ...
 // %SeeAlso: WEBDOCS/create-function.html
 create_func_stmt:
@@ -5422,7 +5394,7 @@ create_trigger_stmt:
       Transitions: $9.triggerTransitions(),
       ForEach: $10.triggerForEach(),
       When: $11.expr(),
-      FuncName: $14.resolvableFuncRefFromName(),
+      FuncName: $14.unresolvedName(),
       FuncArgs: $16.strs(),
     }
   }
@@ -5443,12 +5415,12 @@ trigger_event_list:
     events := append($1.triggerEvents(), $3.triggerEvent())
 
     // Validate that the trigger events are unique.
-    var seenEvents tree.TriggerEventType
+    var seenEvents tree.TriggerEventTypeSet
     for i := range events {
-      if events[i].EventType&seenEvents != 0 {
+      if seenEvents.Contains(events[i].EventType) {
         return setErr(sqllex, errors.New("duplicate trigger events specified"))
       }
-      seenEvents |= events[i].EventType
+      seenEvents.Add(events[i].EventType)
     }
     $$.val = events
   }
@@ -5473,10 +5445,6 @@ trigger_event:
 | TRUNCATE
   {
     $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventTruncate}
-  }
-| UPSERT
-  {
-    $$.val = &tree.TriggerEvent{EventType: tree.TriggerEventUpsert}
   }
 
 opt_trigger_transition_list:
@@ -7581,7 +7549,7 @@ set_exprs_internal:
 // %Text:
 // SET [SESSION] <var> { TO | = } <values...>
 // SET [SESSION] TIME ZONE <tz>
-// SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { READ COMMITTED | SERIALIZABLE }
+// SET [SESSION] CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL { READ COMMITTED | REPEATABLE READ | SERIALIZABLE }
 // SET [SESSION] TRACING { TO | = } { on | off | cluster | kv | results } [,...]
 //
 // %SeeAlso: SHOW SESSION, RESET, DISCARD, SHOW, SET CLUSTER SETTING, SET TRANSACTION, SET LOCAL
@@ -7638,7 +7606,7 @@ set_local_stmt:
 // SET [SESSION] TRANSACTION <txnparameters...>
 //
 // Transaction parameters:
-//    ISOLATION LEVEL { READ COMMITTED | SERIALIZABLE }
+//    ISOLATION LEVEL { READ COMMITTED | REPEATABLE READ | SERIALIZABLE }
 //    PRIORITY { LOW | NORMAL | HIGH }
 //    AS OF SYSTEM TIME <expr>
 //    [NOT] DEFERRABLE
@@ -8280,57 +8248,42 @@ show_backup_stmt:
 			Options: *$6.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP string_or_placeholder opt_with_show_backup_options error
 	{
-		$$.val = &tree.ShowBackup{
-		  Details:  tree.BackupDefaultDetails,
-			Path:    $3.expr(),
-			Options: *$4.showBackupOptions(),
-		}
+    setErr(sqllex, errors.New("The `SHOW BACKUP` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "SHOW BACKUP")
 	}
-| SHOW BACKUP SCHEMAS string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP SCHEMAS string_or_placeholder opt_with_show_backup_options error
 	{
-		$$.val = &tree.ShowBackup{
-		  Details:  tree.BackupSchemaDetails,
-			Path:    $4.expr(),
-			Options: *$5.showBackupOptions(),
-		}
+    setErr(sqllex, errors.New("The `SHOW BACKUP SCHEMAS` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP SCHEMAS FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "SHOW BACKUP")
 	}
-| SHOW BACKUP FILES string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP FILES string_or_placeholder opt_with_show_backup_options error
 	{
     /* SKIP DOC */
-		$$.val = &tree.ShowBackup{
-		  Details:  tree.BackupFileDetails,
-			Path:    $4.expr(),
-			Options: *$5.showBackupOptions(),
-		}
+    setErr(sqllex, errors.New("The `SHOW BACKUP FILES` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP FILES FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "SHOW BACKUP")
 	}
-| SHOW BACKUP RANGES string_or_placeholder opt_with_show_backup_options
+| SHOW BACKUP RANGES string_or_placeholder opt_with_show_backup_options error
 	{
     /* SKIP DOC */
+    setErr(sqllex, errors.New("The `SHOW BACKUP RANGES` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP RANGES FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "SHOW BACKUP")
+	}
+| SHOW BACKUP VALIDATE string_or_placeholder opt_with_show_backup_options error
+	{
+		/* SKIP DOC */
+		setErr(sqllex, errors.New("The `SHOW BACKUP VALIDATE` syntax without the `IN` keyword is no longer supported. Please use `SHOW BACKUP VALIDATE FROM <subdirectory> IN <collectionURI>`."))
+    return helpWith(sqllex, "SHOW BACKUP")
+	}
+| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_connection_options_list error
+	{
 		$$.val = &tree.ShowBackup{
-		  Details:  tree.BackupRangeDetails,
+			Details:  tree.BackupConnectionTest,
 			Path:    $4.expr(),
 			Options: *$5.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP VALIDATE string_or_placeholder opt_with_show_backup_options
-  	{
-      /* SKIP DOC */
-  		$$.val = &tree.ShowBackup{
-  		  Details:  tree.BackupValidateDetails,
-  			Path:    $4.expr(),
-  			Options: *$5.showBackupOptions(),
-  		}
-  	}
-| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_connection_options_list
-  	{
-  		$$.val = &tree.ShowBackup{
-  		  Details:  tree.BackupConnectionTest,
-  			Path:    $4.expr(),
-  			Options: *$5.showBackupOptions(),
-  		}
-  	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
 
 show_backup_details:
@@ -8648,11 +8601,11 @@ show_external_connections_stmt:
 
 // %Help: SHOW TYPES - list user defined types
 // %Category: Misc
-// %Text: SHOW TYPES
+// %Text: SHOW TYPES [WITH_COMMENT]
 show_types_stmt:
-  SHOW TYPES
+  SHOW TYPES with_comment
   {
-    $$.val = &tree.ShowTypes{}
+    $$.val = &tree.ShowTypes{WithComment: $3.bool()}
   }
 | SHOW TYPES error // SHOW HELP: SHOW TYPES
 
@@ -9642,10 +9595,10 @@ show_locality_stmt:
   }
 
 show_fingerprints_stmt:
-  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
+  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name opt_with_show_fingerprints_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
+    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName(), Options: *$6.showFingerprintOptions()}
   }
 | SHOW EXPERIMENTAL_FINGERPRINTS FROM virtual_cluster virtual_cluster_spec opt_with_show_fingerprints_options
   {
@@ -9686,6 +9639,11 @@ fingerprint_options:
   {
     $$.val = &tree.ShowFingerprintOptions{StartTimestamp: $4.expr()}
   }
+| EXCLUDE COLUMNS '=' string_or_placeholder_opt_list
+  {
+    $$.val = &tree.ShowFingerprintOptions{ExcludedUserColumns: $4.stringOrPlaceholderOptList()}
+  }
+
 
 
 show_full_scans_stmt:
@@ -12570,7 +12528,7 @@ transaction_stmt:
 // START TRANSACTION [ <txnparameter> [[,] ...] ]
 //
 // Transaction parameters:
-//    ISOLATION LEVEL { READ COMMITTED | SERIALIZABLE }
+//    ISOLATION LEVEL { READ COMMITTED | REPEATABLE READ | SERIALIZABLE }
 //    PRIORITY { LOW | NORMAL | HIGH }
 //
 // %SeeAlso: COMMIT, ROLLBACK, WEBDOCS/begin-transaction.html
@@ -17784,7 +17742,6 @@ unreserved_keyword:
 | NOWAIT
 | NULLS
 | IGNORE_FOREIGN_KEYS
-| IGNORE_CDC_IGNORED_TTL_DELETES
 | INSENSITIVE
 | OF
 | OFF
@@ -18212,7 +18169,6 @@ bare_label_keywords:
 | IFERROR
 | IFNULL
 | IGNORE_FOREIGN_KEYS
-| IGNORE_CDC_IGNORED_TTL_DELETES
 | ILIKE
 | IMMEDIATE
 | IMMEDIATELY

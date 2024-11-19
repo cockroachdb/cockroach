@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -60,9 +55,9 @@ func (o OutputFlags) set(f OutputFlags) OutputFlags {
 	return o | f
 }
 
-// Has returns true if this flag has the given f OutputFlags on.
+// Has returns true if this flag has all of the given f OutputFlags on.
 func (o OutputFlags) Has(f OutputFlags) bool {
-	return o&f != 0
+	return o&f == f
 }
 
 type testResult struct {

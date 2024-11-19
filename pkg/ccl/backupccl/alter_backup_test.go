@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -114,10 +111,10 @@ func TestAlterBackupRestore(t *testing.T) {
 	// Tests to see that show backup correctly recognizes the new encryption-info
 	// file when SHOW BACKUP is called on an altered encrypted backup.
 	t.Run("alter-backup-show-backup", func(t *testing.T) {
-		query = fmt.Sprintf("SHOW BACKUP LATEST IN %s WITH KMS = %s", userfile, newURI)
+		query = fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH KMS = %s", userfile, newURI)
 		sqlDB.Exec(t, query)
 
-		query = fmt.Sprintf("SHOW BACKUP LATEST IN %s WITH KMS = %s", userfile, oldURI)
+		query = fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH KMS = %s", userfile, oldURI)
 		sqlDB.Exec(t, query)
 	})
 

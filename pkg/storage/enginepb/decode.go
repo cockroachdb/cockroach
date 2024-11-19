@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package enginepb
 
@@ -33,6 +28,10 @@ func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 		return nil, nil, false
 	}
 	tsLen := int(mvccKey[len(mvccKey)-1])
+	if tsLen == 1 {
+		// We never encode an empty version.
+		return nil, nil, false
+	}
 	keyPartEnd := len(mvccKey) - 1 - tsLen
 	if keyPartEnd < 0 {
 		return nil, nil, false

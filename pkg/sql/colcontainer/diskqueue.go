@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colcontainer
 
@@ -625,13 +620,13 @@ func (d *diskQueue) Enqueue(ctx context.Context, b coldata.Batch) error {
 	}
 	if d.state == diskQueueStateDequeueing {
 		if d.cfg.CacheMode != DiskQueueCacheModeIntertwinedCalls {
-			return errors.Errorf(
+			return errors.AssertionFailedf(
 				"attempted to Enqueue to DiskQueue after Dequeueing "+
 					"in mode that disallows it: %d", d.cfg.CacheMode,
 			)
 		}
 		if d.rewindable {
-			return errors.Errorf("attempted to Enqueue to RewindableDiskQueue after Dequeue has been called")
+			return errors.AssertionFailedf("attempted to Enqueue to RewindableDiskQueue after Dequeue has been called")
 		}
 	}
 	d.state = diskQueueStateEnqueueing
@@ -757,7 +752,7 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 		d.cfg.SpilledBytesRead.Inc(int64(n))
 	}
 	if n != len(d.writer.scratch.compressedBuf) {
-		return false, errors.Errorf("expected to read %d bytes but read %d", len(d.writer.scratch.compressedBuf), n)
+		return false, errors.AssertionFailedf("expected to read %d bytes but read %d", len(d.writer.scratch.compressedBuf), n)
 	}
 
 	blockType := d.writer.scratch.compressedBuf[0]

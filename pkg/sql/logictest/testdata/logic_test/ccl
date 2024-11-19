@@ -1,20 +1,20 @@
-# 3node-tenant is blocked from running this file because the config runs with
+# enterprise-configs are blocked from running this file because they run with
 # a CCL binary, so the expected failures from using a non-CCL binary don't occur.
-# LogicTest: !3node-tenant-default-configs
+# LogicTest: !enterprise-configs
 
 # CCL-only statements error out trying to handle the parsed statements.
 
 statement error pgcode XXC01 a CCL binary is required to use this statement type: \*tree\.Backup
-BACKUP foo TO "bar"
+BACKUP foo INTO "bar"
 
 statement error pgcode XXC01 a CCL binary is required to use this statement type: \*tree\.Restore
-RESTORE foo FROM "bar"
+RESTORE foo FROM LATEST IN "bar"
 
 statement error pgcode XXC01 a CCL binary is required to use this statement type: \*tree\.CreateChangefeed
 CREATE CHANGEFEED FOR foo
 
 query error pgcode XXC01 a CCL binary is required to use this statement type
-BACKUP DATABASE foo TO '/bar' INCREMENTAL FROM '/baz'
+BACKUP DATABASE foo INTO '/bar' WITH incremental_location = '/baz'
 
 query error  pgcode XXC01 a CCL binary is required to use this statement type
-RESTORE DATABASE foo FROM '/bar'
+RESTORE DATABASE foo FROM LATEST IN '/bar'

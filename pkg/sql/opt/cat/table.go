@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cat
 
@@ -180,6 +175,12 @@ type Table interface {
 	// IsHypothetical returns true if this is a hypothetical table (used when
 	// searching for index recommendations).
 	IsHypothetical() bool
+
+	// TriggerCount returns the number of triggers present on the table.
+	TriggerCount() int
+
+	// Trigger returns the ith trigger, where i < TriggerCount.
+	Trigger(i int) Trigger
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints
@@ -361,6 +362,10 @@ type UniqueConstraint interface {
 
 	// WithoutIndex is true if this unique constraint is not enforced by an index.
 	WithoutIndex() bool
+
+	// CanUseTombstones is true if this unique constraint can be enforced by
+	// writing tombstones to all partitions.
+	CanUseTombstones() bool
 
 	// Validated is true if the constraint is validated (i.e. we know that the
 	// existing data satisfies the constraint). It is possible to set up a unique

@@ -11,7 +11,7 @@ Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹foo�
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 2 (foo), SeqNum: 1}
  │         └── 1 Mutation operation
- │              └── AddIndexZoneConfig {"IndexID":2,"TableID":104}
+ │              └── AddIndexZoneConfig {"TableID":104}
  └── PreCommitPhase
       ├── Stage 1 of 2 in PreCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
@@ -22,4 +22,4 @@ Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹foo�
            ├── 1 element transitioning toward PUBLIC
            │    └── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 2 (foo), SeqNum: 1}
            └── 1 Mutation operation
-                └── AddIndexZoneConfig {"IndexID":2,"TableID":104}
+                └── AddIndexZoneConfig {"TableID":104}

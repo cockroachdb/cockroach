@@ -114,9 +114,9 @@ dropped: 1->3 MsgApp Term:1 Log:1/13 Commit:13
 
 status 1
 ----
-1: StateReplicate match=13 next=14
-2: StateReplicate match=13 next=14
-3: StateReplicate match=11 next=14 inflight=2
+1: StateReplicate match=13 next=14 sentCommit=11 matchCommit=11
+2: StateReplicate match=13 next=14 sentCommit=13 matchCommit=13
+3: StateReplicate match=11 next=14 sentCommit=13 matchCommit=11 inflight=2
 
 # The leader still observes that the entries are in-flight to the follower 3,
 # since it hasn't heard from it. Nothing triggers updating the follower's
@@ -126,40 +126,23 @@ tick-heartbeat 1
 ----
 ok
 
-# However, the leader does not push the real commit index to the follower 3. It
-# cuts the commit index at the Progress.Match mark, because it thinks that it is
-# unsafe to send a commit index higher than that.
+# The leader knows that the follower 3 is lagging behind, so it sends a MsgApp
+# to fix that.
 process-ready 1
 ----
 Ready MustSync=false:
 Messages:
-1->2 MsgHeartbeat Term:1 Log:0/0 Commit:13
-1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+1->3 MsgApp Term:1 Log:1/13 Commit:13
 
-# Since the heartbeat message does not bump the follower's commit index, it will
-# take another roundtrip with the leader to update it. As such, the total time
-# it takes for the follower to learn the commit index is:
-#
-#   delay = HeartbeatInterval + 3/2 * RTT
-#
-# This is suboptimal. It could have taken HeartbeatInterval + 1/2 * RTT, if the
-# leader sent the up-to-date commit index in the heartbeat message.
-#
-# See https://github.com/etcd-io/raft/issues/138 which aims to fix this.
+# Since the leader sends a MsgApp on the heartbeat timeout, it takes this long
+# for the follower to advance its commit index:
+#   delay = HeartbeatInterval + 1/2 * RTT
+# This is better than what we previously had, which was: 
+# HeartbeatInterval + 3/2 * RTT. That was the case because the leader needed to
+# wait to send/receive a MsgHeartbeat/MsgHeartbeatResp before it could send the
+# MsgApp.
 stabilize 1 3
 ----
-> 3 receiving messages
-  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
-> 3 handling Ready
-  Ready MustSync=false:
-  Messages:
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-> 1 receiving messages
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-> 1 handling Ready
-  Ready MustSync=false:
-  Messages:
-  1->3 MsgApp Term:1 Log:1/13 Commit:13
 > 3 receiving messages
   1->3 MsgApp Term:1 Log:1/13 Commit:13
 > 3 handling Ready

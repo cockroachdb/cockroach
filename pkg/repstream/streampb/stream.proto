@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 
 syntax = "proto3";
@@ -56,6 +51,8 @@ message ReplicationProducerSpec {
   // TODO(ssd): We likely want to remove this one-time table
   // descriptor fetch with a schemafeed that the consumer starts.
   map<string, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 7 [(gogoproto.nullable) = false];
+
+  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 8 [(gogoproto.nullable) = false];
 }
 
 // ReplicationProducerRequest is sent by the consuming cluster when
@@ -209,6 +206,7 @@ message ReplicationStreamSpec {
   // this is in response to a LogicalReplicationPlanRequest.
   repeated roachpb.Span table_spans = 4 [(gogoproto.nullable) = false];
   repeated cockroach.sql.sqlbase.TableDescriptor table_descriptors = 5 [(gogoproto.nullable) = false];
+  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 6 [(gogoproto.nullable) = false];
 }
 
 // StreamedSpanConfigEntry holds a span config update and its source side commit timestamp
@@ -235,15 +233,35 @@ message StreamEvent {
     repeated KV kvs = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVs"];
   }
 
+  message RangeStats {
+    // RangeCount is the number of ranges covered by the spans specified when
+    // starting the event stream. The number of ranges is counted per requested
+    // span, so the count will be an overestimate if a range is shared between
+    // multiple requested spans.
+    int64 range_count = 1;
+
+    // ScanningRangeCount is the number of ranges that have yet to complete the
+    // initial scan. ScanningRangeCount <= RangeCount.
+    int64 scanning_range_count = 2;
+    
+    // LaggingRangeCount is the number of ranges that are signficantly behind,
+    // after completing the initial scan.
+    int64 lagging_range_count = 3;
+  }
+
   // Checkpoint represents stream checkpoint.
   message StreamCheckpoint {
     reserved 1;
     repeated cockroach.sql.jobs.jobspb.ResolvedSpan resolved_spans = 2  [(gogoproto.nullable) = false];
+    RangeStats range_stats = 3;
   }
 
   // Only 1 field ought to be set.
   Batch batch = 1;
   StreamCheckpoint checkpoint = 2;
+
+  uint64 stream_seq = 3;
+  int64 emit_unix_nanos = 4;
 }
 
 message StreamReplicationStatus {

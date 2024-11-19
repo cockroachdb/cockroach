@@ -17,6 +17,8 @@ TABLE p
  ├── q int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_p_q (p, q)
  └── PRIMARY INDEX p_pkey
       ├── p int not null
@@ -50,6 +52,8 @@ TABLE q
  ├── r int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── FAMILY fam_0_q_r (q, r)
  └── PRIMARY INDEX q_pkey
       └── q int not null
@@ -94,20 +98,20 @@ EXPLAIN (OPT, VERBOSE, REDACT) INSERT INTO p VALUES (1, 1)
 insert p
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:5 => p:1
- │    └── column2:6 => q:2
+ │    ├── column1:7 => p:1
+ │    └── column2:8 => q:2
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 0.03
  ├── distribution: test
  └── values
-      ├── columns: column1:5 column2:6
+      ├── columns: column1:7 column2:8
       ├── cardinality: [1 - 1]
       ├── stats: [rows=1]
       ├── cost: 0.02
       ├── key: ()
-      ├── fd: ()-->(5,6)
+      ├── fd: ()-->(7,8)
       ├── distribution: test
       └── ‹(‹×›, ‹×›)›
 
@@ -117,20 +121,20 @@ EXPLAIN (OPT, TYPES, REDACT) INSERT INTO p VALUES (1, 1)
 insert p
  ├── columns: <none>
  ├── insert-mapping:
- │    ├── column1:5 => p:1
- │    └── column2:6 => q:2
+ │    ├── column1:7 => p:1
+ │    └── column2:8 => q:2
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 0.03
  ├── distribution: test
  └── values
-      ├── columns: column1:5(int!null) column2:6(int!null)
+      ├── columns: column1:7(int!null) column2:8(int!null)
       ├── cardinality: [1 - 1]
       ├── stats: [rows=1]
       ├── cost: 0.02
       ├── key: ()
-      ├── fd: ()-->(5,6)
+      ├── fd: ()-->(7,8)
       ├── distribution: test
       └── tuple [type=tuple{int, int}]
            ├── const: ‹×› [type=int]
@@ -139,9 +143,9 @@ insert p
 query T
 EXPLAIN (OPT, MEMO, REDACT) INSERT INTO p VALUES (1, 1)
 ----
-memo (optimized, ~4KB, required=[presentation: info:7] [distribution: test])
+memo (optimized, ~4KB, required=[presentation: info:9] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
- │    └── [presentation: info:7] [distribution: test]
+ │    └── [presentation: info:9] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
  │         └── cost: 0.05
  ├── G2: (insert G3 G4 G5 G6 p)
@@ -229,9 +233,9 @@ scan p
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM p WHERE p = 11
 ----
-memo (optimized, ~7KB, required=[presentation: info:5] [distribution: test])
+memo (optimized, ~7KB, required=[presentation: info:7] [distribution: test])
  ├── G1: (explain G2 [presentation: p:1,q:2] [distribution: test])
- │    └── [presentation: info:5] [distribution: test]
+ │    └── [presentation: info:7] [distribution: test]
  │         ├── best: (explain G2="[presentation: p:1,q:2] [distribution: test]" [presentation: p:1,q:2] [distribution: test])
  │         └── cost: 9.11
  ├── G2: (select G3 G4) (scan p,cols=(1,2),constrained)
@@ -313,9 +317,9 @@ scan q
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT * FROM q WHERE q > 2
 ----
-memo (optimized, ~7KB, required=[presentation: info:5] [distribution: test])
+memo (optimized, ~7KB, required=[presentation: info:7] [distribution: test])
  ├── G1: (explain G2 [presentation: q:1,r:2] [distribution: test])
- │    └── [presentation: info:5] [distribution: test]
+ │    └── [presentation: info:7] [distribution: test]
  │         ├── best: (explain G2="[presentation: q:1,r:2] [distribution: test]" [presentation: q:1,r:2] [distribution: test])
  │         └── cost: 378.04
  ├── G2: (select G3 G4) (scan q,cols=(1,2),constrained)
@@ -375,26 +379,26 @@ create-function
 query T
 EXPLAIN (OPT, MEMO, REDACT) CREATE FUNCTION f() RETURNS STRING LANGUAGE SQL AS $$ SELECT * FROM t128282 WHERE col = 'secret' $$
 ----
-memo (optimized, ~8KB, required=[presentation: info:5] [distribution: test])
+memo (optimized, ~8KB, required=[presentation: info:7] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
- │    └── [presentation: info:5] [distribution: test]
+ │    └── [presentation: info:7] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
  │         └── cost: 0.03
  └── G2: (create-function &{‹×› ‹×›
      ‹×›
      ‹×›
-     ‹×› [{‹×› ‹×› map[‹×›:0 ‹×›:1 ‹×›:2 ‹×›:3] false 0}] ‹×› ‹×›})
+     ‹×› [{‹×› ‹×› map[‹×›:0 ‹×›:1 ‹×›:2 ‹×›:3 ‹×›:4 ‹×›:5] false 0}] ‹×› ‹×›})
       ├── [distribution: test]
       │    ├── best: (create-function &{‹×› ‹×›
       │    │   ‹×›
       │    │   ‹×›
-      │    │   ‹×› [{‹×› ‹×› map[‹×›:0 ‹×›:1 ‹×›:2 ‹×›:3] false 0}] ‹×› ‹×›})
+      │    │   ‹×› [{‹×› ‹×› map[‹×›:0 ‹×›:1 ‹×›:2 ‹×›:3 ‹×›:4 ‹×›:5] false 0}] ‹×› ‹×›})
       │    └── cost: 0.01
       └── []
            ├── best: (create-function &{‹×› ‹×›
            │   ‹×›
            │   ‹×›
-           │   ‹×› [{‹×› ‹×› map[‹×›:0 ‹×›:1 ‹×›:2 ‹×›:3] false 0}] ‹×› ‹×›})
+           │   ‹×› [{‹×› ‹×› map[‹×›:0 ‹×›:1 ‹×›:2 ‹×›:3 ‹×›:4 ‹×›:5] false 0}] ‹×› ‹×›})
            └── cost: 0.01
 create-function
  ├── CREATE FUNCTION f()

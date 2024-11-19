@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -421,6 +418,7 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 		}
 	}
 
+	stop := c.metrics.Timers.Encode.Start()
 	if c.encodingOpts.Format == changefeedbase.OptFormatParquet {
 		return c.encodeForParquet(
 			ctx, updatedRow, prevRow, topic, schemaTS, updatedRow.MvccTimestamp,
@@ -444,10 +442,18 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	// Since we're done processing/converting this event, and will not use much more
 	// than len(key)+len(bytes) worth of resources, adjust allocation to match.
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
+	stop()
 
-	if err := c.sink.EmitRow(
-		ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
-	); err != nil {
+	c.metrics.Timers.EmitRow.Time(func() {
+		err = c.sink.EmitRow(
+			ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
+		)
+	})
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			log.Warningf(ctx, `sink failed to emit row: %v`, err)
+			c.metrics.SinkErrors.Inc(1)
+		}
 		return err
 	}
 	if log.V(3) {

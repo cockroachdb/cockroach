@@ -5,14 +5,17 @@
 # - withdrawing support.
 # -------------------------------------------------------------
 
-add-store node-id=1 store-id=2
+support-from node-id=1 store-id=2
 ----
+epoch: 0, expiration: 0,0
 
-add-store node-id=2 store-id=3
+support-from node-id=2 store-id=3
 ----
+epoch: 0, expiration: 0,0
 
-add-store node-id=2 store-id=4
+support-from node-id=2 store-id=4
 ----
+epoch: 0, expiration: 0,0
 
 send-heartbeats now=100 liveness-interval=10s
 ----
@@ -72,3 +75,54 @@ support for:
 {Target:{NodeID:1 StoreID:2} Epoch:3 Expiration:0,0}
 {Target:{NodeID:2 StoreID:3} Epoch:4 Expiration:0,0}
 {Target:{NodeID:2 StoreID:4} Epoch:4 Expiration:104.000000000,0}
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) processes some messages that require updating
+# both the requester and supporter states. The writes to disk
+# fail; both states are expected to be reset to the pre-update
+# values.
+# -------------------------------------------------------------
+
+error-on-write on=true
+----
+
+handle-messages
+  msg type=MsgHeartbeat from-node-id=2 from-store-id=3 epoch=4 expiration=200
+  msg type=MsgHeartbeatResp from-node-id=2 from-store-id=4 epoch=1 expiration=200
+----
+
+error-on-write on=false
+----
+
+debug-requester-state
+----
+meta:
+{MaxEpoch:2 MaxRequested:110.000000000,0}
+support from:
+{Target:{NodeID:1 StoreID:2} Epoch:1 Expiration:110.000000000,0}
+{Target:{NodeID:2 StoreID:3} Epoch:2 Expiration:0,0}
+{Target:{NodeID:2 StoreID:4} Epoch:1 Expiration:110.000000000,0}
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:103.000000000,0}
+support for:
+{Target:{NodeID:1 StoreID:2} Epoch:3 Expiration:0,0}
+{Target:{NodeID:2 StoreID:3} Epoch:4 Expiration:0,0}
+{Target:{NodeID:2 StoreID:4} Epoch:4 Expiration:104.000000000,0}
+
+send-heartbeats now=200 liveness-interval=10s
+----
+heartbeats:
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:2} Epoch:1 Expiration:210.000000000,0}
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:3} Epoch:2 Expiration:210.000000000,0}
+{Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:4} Epoch:1 Expiration:210.000000000,0}
+
+debug-metrics
+----
+HeartbeatSuccess: 6, HeartbeatFailure: 0
+MessageHandleSuccess: 6, MessageHandleFailure: 2
+SupportWithdrawSuccess: 2, SupportWithdrawFailure: 0
+SupportFromStores: 3, SupportForStores: 3

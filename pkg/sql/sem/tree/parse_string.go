@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree
 
@@ -270,7 +265,7 @@ func ParseAndRequireStringHandler(
 		var ts time.Time
 		if ts, _, err = pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s, dateParseHelper(ctx)); err == nil {
 			// Always normalize time to the current location.
-			if ts, err = checkTimeBounds(ts, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
+			if ts, err = roundAndCheck(ts, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
 				vh.TimestampTZ(ts)
 			}
 		}

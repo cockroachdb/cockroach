@@ -18,12 +18,3 @@ go_binary(
     exec_properties = {"Pool": "large"},
     visibility = ["//visibility:public"],
 )
-
-disallowed_imports_test(
-    "cockroach-oss",
-    disallowed_list = [],
-    disallowed_prefixes = [
-        "pkg/ccl",
-        "pkg/ui/distccl",
-    ],
-)

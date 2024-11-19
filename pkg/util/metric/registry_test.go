@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package metric
 
@@ -102,6 +97,7 @@ func TestRegistry(t *testing.T) {
 		StructHistogram     IHistogram
 		NestedStructGauge   NestedStruct
 		ArrayStructCounters [4]*Counter
+		MapOfCounters       map[int32]*Counter
 		// Ensure that nil struct values in arrays are safe.
 		NestedStructArray [2]*NestedStruct
 		// A few extra ones: either not exported, or not metric objects.
@@ -129,6 +125,10 @@ func TestRegistry(t *testing.T) {
 			NewCounter(Metadata{Name: "array.struct.counter.1"}),
 			nil, // skipped
 			NewCounter(Metadata{Name: "array.struct.counter.3"}),
+		},
+		MapOfCounters: map[int32]*Counter{
+			1: NewCounter(Metadata{Name: "map.counter.0"}),
+			2: NewCounter(Metadata{Name: "map.counter.1"}),
 		},
 		NestedStructArray: [2]*NestedStruct{
 			0: nil, // skipped
@@ -159,6 +159,8 @@ func TestRegistry(t *testing.T) {
 		"array.struct.counter.0":      {},
 		"array.struct.counter.1":      {},
 		"array.struct.counter.3":      {},
+		"map.counter.0":               {},
+		"map.counter.1":               {},
 		"nested.struct.array.1.gauge": {},
 	}
 	totalMetrics := len(expNames)

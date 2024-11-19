@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package explain
 
@@ -27,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -36,7 +32,7 @@ import (
 )
 
 func init() {
-	if numOperators != 62 {
+	if numOperators != 63 {
 		// This error occurs when an operator has been added or removed in
 		// pkg/sql/opt/exec/explain/factory.opt. If an operator is added at the
 		// end of factory.opt, simply adjust the hardcoded value above. If an
@@ -144,12 +140,12 @@ func NewPlanGistFactory(wrappedFactory exec.Factory) *PlanGistFactory {
 func (f *PlanGistFactory) ConstructPlan(
 	root exec.Node,
 	subqueries []exec.Subquery,
-	cascades []exec.Cascade,
+	cascades, triggers []exec.PostQuery,
 	checks []exec.Node,
 	rootRowCount int64,
 	flags exec.PlanFlags,
 ) (exec.Plan, error) {
-	plan, err := f.wrappedFactory.ConstructPlan(root, subqueries, cascades, checks, rootRowCount, flags)
+	plan, err := f.wrappedFactory.ConstructPlan(root, subqueries, cascades, triggers, checks, rootRowCount, flags)
 	return plan, err
 }
 
@@ -161,7 +157,7 @@ func (f *PlanGistFactory) PlanGist() PlanGist {
 
 // DecodePlanGistToRows converts a gist to a logical plan and returns the rows.
 func DecodePlanGistToRows(
-	ctx context.Context, gist string, catalog cat.Catalog,
+	ctx context.Context, evalCtx *eval.Context, gist string, catalog cat.Catalog,
 ) (_ []string, retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -185,7 +181,7 @@ func DecodePlanGistToRows(
 	if err != nil {
 		return nil, err
 	}
-	err = Emit(ctx, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
+	err = Emit(ctx, evalCtx, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
 	if err != nil {
 		return nil, err
 	}
@@ -337,6 +333,9 @@ func (f *PlanGistFactory) encodeNodeColumnOrdinals(vals []exec.NodeColumnOrdinal
 
 func (f *PlanGistFactory) decodeNodeColumnOrdinals() []exec.NodeColumnOrdinal {
 	l := f.decodeInt()
+	if l < 0 {
+		return nil
+	}
 	vals := make([]exec.NodeColumnOrdinal, l)
 	return vals
 }
@@ -347,6 +346,9 @@ func (f *PlanGistFactory) encodeResultColumns(vals colinfo.ResultColumns) {
 
 func (f *PlanGistFactory) decodeResultColumns() colinfo.ResultColumns {
 	numCols := f.decodeInt()
+	if numCols < 0 {
+		return nil
+	}
 	return make(colinfo.ResultColumns, numCols)
 }
 
@@ -469,6 +471,9 @@ func (f *PlanGistFactory) encodeRows(rows [][]tree.TypedExpr) {
 
 func (f *PlanGistFactory) decodeRows() [][]tree.TypedExpr {
 	numRows := f.decodeInt()
+	if numRows < 0 {
+		return nil
+	}
 	return make([][]tree.TypedExpr, numRows)
 }
 
@@ -628,6 +633,16 @@ func (u *unknownTable) IsHypothetical() bool {
 	return false
 }
 
+// TriggerCount is part of the cat.Table interface.
+func (u *unknownTable) TriggerCount() int {
+	return 0
+}
+
+// Trigger is part of the cat.Table interface.
+func (u *unknownTable) Trigger(i int) cat.Trigger {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
 var _ cat.Table = &unknownTable{}
 
 // unknownTable implements the cat.Index interface and is used to represent
@@ -644,7 +659,7 @@ func (u *unknownIndex) Name() tree.Name {
 }
 
 func (u *unknownIndex) Table() cat.Table {
-	panic(errors.AssertionFailedf("not implemented"))
+	return &unknownTable{}
 }
 
 func (u *unknownIndex) Ordinal() cat.IndexOrdinal {
@@ -687,7 +702,7 @@ func (u *unknownIndex) Column(i int) cat.IndexColumn {
 	var col cat.Column
 	col.Init(
 		i,
-		cat.StableID(0),
+		cat.DefaultStableID,
 		"?",
 		cat.Ordinary,
 		types.Int,

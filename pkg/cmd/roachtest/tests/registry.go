@@ -1,16 +1,14 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
-import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests/perturbation"
+)
 
 // RegisterTests registers all tests to the Registry. This powers `roachtest run`.
 func RegisterTests(r registry.Registry) {
@@ -39,6 +37,7 @@ func RegisterTests(r registry.Registry) {
 	registerClockJumpTests(r)
 	registerClockMonotonicTests(r)
 	registerClusterToCluster(r)
+	registerC2CMixedVersions(r)
 	registerClusterReplicationResilience(r)
 	registerClusterReplicationDisconnect(r)
 	registerConnectionLatencyTest(r)
@@ -75,6 +74,7 @@ func RegisterTests(r registry.Registry) {
 	registerJasyncSQL(r)
 	registerJepsen(r)
 	registerJobs(r)
+	registerKerberosConnectionStressTest(r)
 	registerKV(r)
 	registerKVBench(r)
 	registerKVContention(r)
@@ -114,6 +114,7 @@ func RegisterTests(r registry.Registry) {
 	registerProcessLock(r)
 	registerPsycopg(r)
 	registerPruneDanglingSnapshotsAndDisks(r)
+	registerPTP(r)
 	registerQueue(r)
 	registerQuitTransfersLeases(r)
 	registerRebalanceLoad(r)
@@ -155,9 +156,12 @@ func RegisterTests(r registry.Registry) {
 	registerTPCHVec(r)
 	registerTypeORM(r)
 	registerUnoptimizedQueryOracle(r)
+	registerValidateSystemSchemaAfterVersionUpgradeSeparateProcess(r)
 	registerYCSB(r)
 	registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r)
 	registerMultiRegionMixedVersion(r)
 	registerMultiRegionSystemDatabase(r)
 	registerSqlStatsMixedVersion(r)
+	registerDbConsole(r)
+	perturbation.RegisterTests(r)
 }

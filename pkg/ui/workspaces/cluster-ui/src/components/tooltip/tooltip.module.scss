@@ -1,0 +1,23 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+
+.underline {
+  border-bottom: 1px dashed $colors--neutral-5;
+}
+
+.container {
+  &:hover{
+    cursor: pointer;
+  }
+}
+
+.title {
+ a {
+   font: inherit;
+   color: inherit;
+ }
+}

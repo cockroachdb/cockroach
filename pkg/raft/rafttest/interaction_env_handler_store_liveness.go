@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rafttest
 
@@ -40,6 +35,10 @@ type livenessFabric struct {
 	// state is a 2D array, where state[i][j] represents store i's support for
 	// store j. Stores are 1-indexed.
 	state [][]livenessEntry
+
+	// leadSupportExpired tracks whether a store considers its leadSupportUntil
+	// to be expired or not.
+	leadSupportExpired []bool
 }
 
 // newLivenessFabric initializes and returns a livenessFabric.
@@ -49,8 +48,12 @@ func newLivenessFabric() *livenessFabric {
 	state := make([][]livenessEntry, 1)
 	state[0] = make([]livenessEntry, 1)
 	state[0][0] = initLivenessEntry
+	// Ditto for leadSupportExpired.
+	leadSupportExpired := make([]bool, 1)
+	leadSupportExpired[0] = false
 	return &livenessFabric{
-		state: state,
+		state:              state,
+		leadSupportExpired: leadSupportExpired,
 	}
 }
 
@@ -76,6 +79,7 @@ func (l *livenessFabric) addNode() {
 	// Finally, initialize the liveness entry for the node we've just added. It'll
 	// start off with epoch 1 and support itself.
 	l.state[len(l.state)-1][len(l.state)-1] = initLivenessEntry
+	l.leadSupportExpired = append(l.leadSupportExpired, false)
 }
 
 func (l *livenessFabric) String() string {
@@ -129,13 +133,13 @@ func (s *storeLiveness) SupportFor(id pb.PeerID) (pb.Epoch, bool) {
 }
 
 // SupportFrom implements the StoreLiveness interface.
-func (s *storeLiveness) SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp, bool) {
+func (s *storeLiveness) SupportFrom(id pb.PeerID) (pb.Epoch, hlc.Timestamp) {
 	entry := s.livenessFabric.state[id][s.nodeID]
 	if !entry.isSupported {
-		return 0, hlc.Timestamp{}, false
+		return 0, hlc.Timestamp{}
 	}
 	// TODO(arul): we may need to inject timestamps in here as well.
-	return entry.epoch, hlc.MaxTimestamp, entry.isSupported
+	return entry.epoch, hlc.MaxTimestamp
 }
 
 // SupportFromEnabled implements the StoreLiveness interface.
@@ -144,9 +148,19 @@ func (s *storeLiveness) SupportFromEnabled() bool {
 }
 
 // SupportExpired implements the StoreLiveness interface.
-func (s *storeLiveness) SupportExpired(hlc.Timestamp) bool {
-	// TODO(arul): we may need to implement this if we start injecting timestamps.
-	return false
+func (s *storeLiveness) SupportExpired(ts hlc.Timestamp) bool {
+	if s.livenessFabric.leadSupportExpired[s.nodeID] {
+		return true
+	}
+	// If not configured explicitly, infer from the supplied timestamp.
+	switch ts {
+	case hlc.Timestamp{}:
+		return true
+	case hlc.MaxTimestamp:
+		return false
+	default:
+		panic("unexpected timestamp")
+	}
 }
 
 // handleBumpEpoch handles the case where the epoch of a store is bumped and the
@@ -174,9 +188,9 @@ func (env *InteractionEnv) handleWithdrawSupport(t *testing.T, d datadriven.Test
 	return err
 }
 
-// handleGrantSupport handles the case where where a store grants support for
-// another store. To enable this, the store for whom support is being granted
-// must seek support at a higher epoch.
+// handleGrantSupport handles the case where a store grants support for another
+// store. To enable this, the store for whom support is being granted must seek
+// support at a higher epoch.
 func (env *InteractionEnv) handleGrantSupport(t *testing.T, d datadriven.TestData) error {
 	fromStore := nthAsInt(t, d, 0)
 	forStore := nthAsInt(t, d, 1)
@@ -193,4 +207,16 @@ func (env *InteractionEnv) handleGrantSupport(t *testing.T, d datadriven.TestDat
 	env.Fabric.state[fromStore][forStore].isSupported = true
 	_, err := env.Output.WriteString(env.Fabric.String())
 	return err
+}
+
+// handleSupportExpired is a testing hook to configure whether a store
+// considers its leadSupportUntil expired or not.
+func (env *InteractionEnv) handleSupportExpired(t *testing.T, d datadriven.TestData) error {
+	idx := firstAsInt(t, d)
+	if d.HasArg("reset") {
+		env.Fabric.leadSupportExpired[idx] = false
+	} else {
+		env.Fabric.leadSupportExpired[idx] = true
+	}
+	return nil
 }

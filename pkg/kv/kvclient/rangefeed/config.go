@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rangefeed
 
@@ -44,6 +39,7 @@ type config struct {
 	withDiff              bool
 	withFiltering         bool
 	withMatchingOriginIDs []uint32
+	consumerID            int64
 	onUnrecoverableError  OnUnrecoverableError
 	onCheckpoint          OnCheckpoint
 	frontierQuantize      time.Duration
@@ -161,6 +157,12 @@ func WithFiltering(withFiltering bool) Option {
 func WithOriginIDsMatching(originIDs ...uint32) Option {
 	return optionFunc(func(c *config) {
 		c.withMatchingOriginIDs = originIDs
+	})
+}
+
+func WithConsumerID(cid int64) Option {
+	return optionFunc(func(c *config) {
+		c.consumerID = cid
 	})
 }
 

@@ -1,16 +1,14 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuildstmt
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -28,7 +26,11 @@ import (
 )
 
 func alterTableDropColumn(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, n *tree.AlterTableDropColumn,
+	b BuildCtx,
+	tn *tree.TableName,
+	tbl *scpb.Table,
+	stmt tree.Statement,
+	n *tree.AlterTableDropColumn,
 ) {
 	fallBackIfSubZoneConfigExists(b, n, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, n, tbl.TableID)
@@ -40,7 +42,7 @@ func alterTableDropColumn(
 		return
 	}
 	checkColumnNotInaccessible(col, n)
-	dropColumn(b, tn, tbl, n, col, elts, n.DropBehavior)
+	dropColumn(b, tn, tbl, stmt, n, col, elts, n.DropBehavior)
 	b.LogEventForExistingTarget(col)
 }
 
@@ -129,6 +131,7 @@ func dropColumn(
 	b BuildCtx,
 	tn *tree.TableName,
 	tbl *scpb.Table,
+	stmt tree.Statement,
 	n tree.NodeFormatter,
 	col *scpb.Column,
 	colElts ElementResultSet,
@@ -162,7 +165,7 @@ func dropColumn(
 				_, _, computedColName := scpb.FindColumnName(elts.Filter(publicTargetFilter))
 				panic(sqlerrors.NewColumnReferencedByComputedColumnError(cn.Name, computedColName.Name))
 			}
-			dropColumn(b, tn, tbl, n, e, elts, behavior)
+			dropColumn(b, tn, tbl, stmt, n, e, elts, behavior)
 		case *scpb.PrimaryIndex:
 			// Nothing needs to be done. Primary index related drops (bc of column
 			// drop) are handled below in `handleDropColumnPrimaryIndexes`.
@@ -222,7 +225,7 @@ func dropColumn(
 		case *scpb.UniqueWithoutIndexConstraint:
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
-			alterTableDropConstraint(b, tn, tbl, &tree.AlterTableDropConstraint{
+			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
 				IfExists:     false,
 				Constraint:   tree.Name(constraintName.Name),
 				DropBehavior: behavior,
@@ -230,7 +233,7 @@ func dropColumn(
 		case *scpb.UniqueWithoutIndexConstraintUnvalidated:
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
-			alterTableDropConstraint(b, tn, tbl, &tree.AlterTableDropConstraint{
+			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
 				IfExists:     false,
 				Constraint:   tree.Name(constraintName.Name),
 				DropBehavior: behavior,
@@ -265,7 +268,7 @@ func dropColumn(
 		}
 	})
 	if _, _, ct := scpb.FindColumnType(colElts); !ct.IsVirtual {
-		handleDropColumnPrimaryIndexes(b, tbl, n, col)
+		handleDropColumnPrimaryIndexes(b, tbl, col)
 	}
 	assertAllColumnElementsAreDropped(colElts)
 }
@@ -435,9 +438,7 @@ func panicIfColReferencedInPredicate(
 	}
 }
 
-func handleDropColumnPrimaryIndexes(
-	b BuildCtx, tbl *scpb.Table, n tree.NodeFormatter, col *scpb.Column,
-) {
+func handleDropColumnPrimaryIndexes(b BuildCtx, tbl *scpb.Table, col *scpb.Column) {
 	inflatedChain := getInflatedPrimaryIndexChain(b, tbl.TableID)
 
 	// If `col` is already public in `old`, then we just need to drop it from `final`.
@@ -502,10 +503,10 @@ func dropIndexColumnFromInternal(
 
 func assertAllColumnElementsAreDropped(colElts ElementResultSet) {
 	if stillPublic := colElts.Filter(publicTargetFilter); !stillPublic.IsEmpty() {
-		var elements []scpb.Element
+		var sb strings.Builder
 		stillPublic.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
-			elements = append(elements, e)
+			sb.WriteString(fmt.Sprintf("%T[%v]", e, e))
 		})
-		panic(errors.AssertionFailedf("failed to drop all of the relevant elements: %v", elements))
+		panic(errors.AssertionFailedf("failed to drop all of the relevant elements: %s", sb.String()))
 	}
 }

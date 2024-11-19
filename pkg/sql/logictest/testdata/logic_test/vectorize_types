@@ -182,3 +182,39 @@ FROM
 	t107615
 WHERE
 	(_bool OR (NOT _bool));
+
+# Regression test for corrupting the column type schema captured by a vectorized
+# operator due to sharing the same type slice by multiple stages of processors
+# during physical planning (#130402).
+statement ok
+CREATE TABLE abcdef (
+  a STRING,
+  b INT4,
+  c INT4,
+  d INT4,
+  e STRING,
+  f STRING
+);
+INSERT INTO abcdef (a, b, c, d, e, f) VALUES ('a', 0, 0, 0, 'e', 'f');
+CREATE TABLE ghijkl (
+  g INT4,
+  h INT4,
+  i BOOL,
+  j INT4,
+  k STRING,
+  l STRING
+);
+INSERT INTO ghijkl (g, h, i, j, k, l) VALUES (0, 0, true, -1, 'k', 'l');
+SELECT c7, c1 >= (SELECT c FROM abcdef WHERE e != c3), c5
+FROM (
+  SELECT
+    generate_series(g, d) AS c0,
+    h AS c1,
+    l AS c3,
+    k AS c5,
+    c AS c7
+  FROM ghijkl
+  LEFT JOIN abcdef ON b > j OR i NOT IN (e NOT IN (f, a),)
+  LIMIT 2
+)
+WHERE c0 NOT IN (SELECT NULL FROM ghijkl);

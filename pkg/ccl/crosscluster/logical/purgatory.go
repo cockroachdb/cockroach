@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
@@ -58,6 +55,7 @@ type purgatory struct {
 	bytes                   int64
 	levels                  []purgatoryLevel
 	eventsGauge, bytesGauge *metric.Gauge
+	debug                   *streampb.DebugLogicalConsumerStatus
 }
 
 type purgatoryLevel struct {
@@ -95,6 +93,7 @@ func (p *purgatory) Store(
 	p.bytes += byteSize
 	p.bytesGauge.Inc(byteSize)
 	p.eventsGauge.Inc(int64(len(events)))
+	p.debug.RecordPurgatory(int64(len(events)))
 	return nil
 }
 
@@ -133,7 +132,9 @@ func (p *purgatory) Drain(ctx context.Context) error {
 		}
 
 		p.bytesGauge.Dec(levelBytes - p.levels[i].bytes)
-		p.eventsGauge.Dec(int64(levelCount - len(remaining)))
+		flushedEventCount := int64(levelCount - len(remaining))
+		p.eventsGauge.Dec(flushedEventCount)
+		p.debug.RecordPurgatory(-flushedEventCount)
 
 		// If we have resolved every prior level and all events in this level were
 		// handled, we can resolve this level and emit its checkpoint, if any.

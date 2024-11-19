@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -18,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -74,7 +70,7 @@ func registerYCSB(r registry.Registry) {
 		db := c.Conn(ctx, t.L(), 1)
 		err := enableIsolationLevels(ctx, t, db)
 		require.NoError(t, err)
-		err = WaitFor3XReplication(ctx, t, t.L(), db)
+		err = roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 		require.NoError(t, err)
 		require.NoError(t, db.Close())
 
@@ -82,7 +78,7 @@ func registerYCSB(r registry.Registry) {
 		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			var args string
-			args += " --ramp=" + ifLocal(c, "0s", "2m")
+			args += " --ramp=" + roachtestutil.IfLocal(c, "0s", "2m")
 			if opts.readCommitted {
 				args += " --isolation-level=read_committed"
 			}
@@ -90,13 +86,19 @@ func registerYCSB(r registry.Registry) {
 				args += " --request-distribution=uniform"
 			}
 
-			defaultDuration := ifLocal(c, "10s", "30m")
-			args += getEnvWorkloadDurationValueOrDefault(defaultDuration)
+			defaultDuration := roachtestutil.IfLocal(c, "10s", "30m")
+			args += roachtestutil.GetEnvWorkloadDurationValueOrDefault(defaultDuration)
+
+			labels := map[string]string{
+				"workload_ycsb_type": wl,
+				"concurrency":        fmt.Sprintf("%d", conc),
+				"cpu":                fmt.Sprintf("%d", cpus),
+			}
+
 			cmd := fmt.Sprintf(
 				"./cockroach workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
-					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+args+
-					" {pgurl%s}",
-				wl, conc, len(c.CRDBNodes()), c.CRDBNodes())
+					" --splits=%d %s %s {pgurl%s}", wl, conc, len(c.CRDBNodes()),
+				roachtestutil.GetWorkloadHistogramArgs(t, c, labels), args, c.CRDBNodes())
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 			return nil
 		})
@@ -193,6 +195,8 @@ func enableIsolationLevels(ctx context.Context, t test.Test, db *gosql.DB) error
 		// master, we should keep these to ensure that the settings are configured
 		// properly in mixed-version roachtests.
 		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = 'true';`,
+		// NOTE: for a similar reason, we use the deprecated name for this setting
+		// to ensure that it is properly configured in mixed-version roachtests.
 		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = 'true';`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {

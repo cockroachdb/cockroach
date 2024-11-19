@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package application_api_test
 
@@ -1350,7 +1345,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 		stmt.AggregatedTs = startTs
 		stmt.Key.App = server.CrdbInternalStmtStatsPersisted
 		stmt.Key.TransactionFingerprintID = 1
-		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtStats(ctx, ie, &stmt, 1 /* nodeId */, nil))
+		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtStats(ctx, ie, []appstatspb.CollectedStatementStatistics{stmt}, 1))
 
 		stmt.Key.App = server.CrdbInternalStmtStatsCached
 		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtActivity(ctx, ie, &stmt, nil))
@@ -1360,7 +1355,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 		txn.TransactionFingerprintID = 1
 		txn.AggregatedTs = startTs
 		txn.App = server.CrdbInternalTxnStatsPersisted
-		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnStats(ctx, ie, &txn, 1, nil))
+		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnStats(ctx, ie, []appstatspb.CollectedTransactionStatistics{txn}, 1))
 		txn.App = server.CrdbInternalTxnStatsCached
 		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnActivity(ctx, ie, &txn, nil))
 

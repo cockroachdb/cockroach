@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Cannot be proto3 because we use nullable primitives.
 syntax = "proto2";
@@ -18,6 +13,7 @@ import "sql/types/types.proto";
 import "sql/catalog/catenumpb/index.proto";
 import "geo/geopb/config.proto";
 import "util/hlc/timestamp.proto";
+import "roachpb/data.proto";
 
 // IndexFetchSpec contains the subset of information (from TableDescriptor and
 // IndexDescriptor) that is necessary to decode KVs into SQL keys and values.
@@ -135,13 +131,13 @@ message IndexFetchSpec {
 
   message ExternalRowData {
     optional util.hlc.Timestamp as_of = 1 [(gogoproto.nullable) = false];
-    // OldPrefix contains the original TenantPrefix + TableID prefix of the keys
-    // produced by SQL layer that need to be remapped to the external data.
-    optional bytes old_prefix = 2;
-    // NewPrefix contains the re-mapped TenantPrefix + TableID prefix of the
-    // keys that need to be used against the KV layer to fetch the external
-    // data.
-    optional bytes new_prefix = 3;
+    // TenantID is the new tenant ID to use in keys when fetching external data
+    // from KV.
+    optional roachpb.TenantID tenant_id = 2 [(gogoproto.nullable) = false,  (gogoproto.customname) = "TenantID"];
+    // TableID is the new table ID to use in keys when fetching external data
+    // from KV.
+    optional uint32 table_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "TableID",
+                                  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   }
   // External, if set, indicates where the row data for this object is stored if
   // it is stored outside the span of the object.

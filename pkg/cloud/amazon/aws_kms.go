@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package amazon
 
@@ -16,11 +11,12 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/kms"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,7 +31,7 @@ const (
 )
 
 type awsKMS struct {
-	kms                 *kms.KMS
+	kms                 *kms.Client
 	customerMasterKeyID string
 }
 
@@ -128,38 +124,41 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	}
 
 	region := kmsURIParams.region
-	awsConfig := &aws.Config{
-		Credentials: credentials.NewStaticCredentials(kmsURIParams.accessKey,
-			kmsURIParams.secret, kmsURIParams.tempToken),
+	if region == "" {
+		// TODO(adityamaru): Maybe use the KeyID to get the region, similar to how
+		// we infer the region from the bucket for s3_storage.
+		return nil, errors.New("aws kms REGION parameter not specified")
 	}
-	awsConfig.Logger = newLogAdapter(ctx)
+	var loadOptions []func(options *config.LoadOptions) error
+	addLoadOption := func(option config.LoadOptionsFunc) {
+		loadOptions = append(loadOptions, option)
+	}
+	addLoadOption(config.WithLogger(newLogAdapter(ctx)))
 	if kmsURIParams.verbose {
-		awsConfig.LogLevel = awsVerboseLogging
+		addLoadOption(config.WithClientLogMode(awsVerboseLogging))
 	}
 
+	var endpointURI string
 	if kmsURIParams.endpoint != "" {
 		if env.KMSConfig().DisableHTTP {
 			return nil, errors.New(
 				"custom endpoints disallowed for aws kms due to --aws-kms-disable-http flag")
 		}
-		awsConfig.Endpoint = &kmsURIParams.endpoint
-		if region == "" {
-			// TODO(adityamaru): Think about what the correct way to handle this
-			// situation is.
-			region = "default-region"
-		}
-		client, err := cloud.MakeHTTPClient(env.ClusterSettings(), cloud.NilMetrics, "aws", "KMS")
+		client, err := cloud.MakeHTTPClient(env.ClusterSettings(), cloud.NilMetrics, "aws", "KMS", "")
 		if err != nil {
 			return nil, err
 		}
-		awsConfig.HTTPClient = client
+		addLoadOption(config.WithHTTPClient(client))
+		endpointURI, err = constructEndpointURI(kmsURIParams.endpoint)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// "specified": use credentials provided in URI params; error if not present.
 	// "implicit": enable SharedConfig, which loads in credentials from environment.
 	//             Detailed in https://docs.aws.amazon.com/sdk-for-go/api/aws/session/
 	// "": default to `specified`.
-	opts := session.Options{}
 	switch kmsURIParams.auth {
 	case "", cloud.AuthParamSpecified:
 		if kmsURIParams.accessKey == "" {
@@ -178,50 +177,46 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				AWSSecretParam,
 			)
 		}
-		opts.Config.MergeIn(awsConfig)
+		addLoadOption(config.WithCredentialsProvider(aws.NewCredentialsCache(
+			credentials.NewStaticCredentialsProvider(kmsURIParams.accessKey,
+				kmsURIParams.secret, kmsURIParams.tempToken))))
 	case cloud.AuthParamImplicit:
 		if env.KMSConfig().DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-disable-implicit-credentials flag")
 		}
-		opts.SharedConfigState = session.SharedConfigEnable
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
 
-	sess, err := session.NewSessionWithOptions(opts)
+	cfg, err := config.LoadDefaultConfig(ctx, loadOptions...)
 	if err != nil {
-		return nil, cloud.KMSInaccessible(errors.Wrap(err, "new aws session"))
+		return nil, cloud.KMSInaccessible(errors.Wrap(err, "could not initialize an aws config"))
 	}
+	cfg.Region = region
 
 	if kmsURIParams.roleProvider != (roleProvider{}) {
 		// If there are delegate roles in the assume-role chain, we create a session
 		// for each role in order for it to fetch the credentials from the next role
 		// in the chain.
 		for _, delegateProvider := range kmsURIParams.delegateRoleProviders {
-			intermediateCreds := stscreds.NewCredentials(sess, delegateProvider.roleARN, withExternalID(delegateProvider.externalID))
-			opts.Config.Credentials = intermediateCreds
+			client := sts.NewFromConfig(cfg, func(options *sts.Options) {
+				if endpointURI != "" {
+					options.BaseEndpoint = aws.String(endpointURI)
+				}
+			})
+			intermediateCreds := stscreds.NewAssumeRoleProvider(client, delegateProvider.roleARN, withExternalID(delegateProvider.externalID))
+			cfg.Credentials = intermediateCreds
+		}
 
-			sess, err = session.NewSessionWithOptions(opts)
-			if err != nil {
-				return nil, cloud.KMSInaccessible(errors.Wrap(err, "session with intermediate credentials"))
+		client := sts.NewFromConfig(cfg, func(options *sts.Options) {
+			if endpointURI != "" {
+				options.BaseEndpoint = aws.String(endpointURI)
 			}
-		}
-
-		creds := stscreds.NewCredentials(sess, kmsURIParams.roleProvider.roleARN, withExternalID(kmsURIParams.roleProvider.externalID))
-		opts.Config.Credentials = creds
-		sess, err = session.NewSessionWithOptions(opts)
-		if err != nil {
-			return nil, cloud.KMSInaccessible(errors.Wrap(err, "session with assume role credentials"))
-		}
+		})
+		creds := stscreds.NewAssumeRoleProvider(client, kmsURIParams.roleProvider.roleARN, withExternalID(kmsURIParams.roleProvider.externalID))
+		cfg.Credentials = creds
 	}
-
-	if region == "" {
-		// TODO(adityamaru): Maybe use the KeyID to get the region, similar to how
-		// we infer the region from the bucket for s3_storage.
-		return nil, errors.New("could not find the aws kms region")
-	}
-	sess.Config.Region = aws.String(region)
 
 	reuse := reuseKMSSession.Get(&env.ClusterSettings().SV)
 	if reuse {
@@ -234,7 +229,11 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	}
 
 	kms := &awsKMS{
-		kms:                 kms.New(sess),
+		kms: kms.NewFromConfig(cfg, func(options *kms.Options) {
+			if endpointURI != "" {
+				options.BaseEndpoint = aws.String(endpointURI)
+			}
+		}),
 		customerMasterKeyID: kmsURIParams.customerMasterKeyID,
 	}
 
@@ -258,7 +257,7 @@ func (k *awsKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
 		Plaintext: data,
 	}
 
-	encryptOutput, err := k.kms.Encrypt(encryptInput)
+	encryptOutput, err := k.kms.Encrypt(ctx, encryptInput)
 	if err != nil {
 		return nil, cloud.KMSInaccessible(err)
 	}
@@ -273,7 +272,7 @@ func (k *awsKMS) Decrypt(ctx context.Context, data []byte) ([]byte, error) {
 		CiphertextBlob: data,
 	}
 
-	decryptOutput, err := k.kms.Decrypt(decryptInput)
+	decryptOutput, err := k.kms.Decrypt(ctx, decryptInput)
 	if err != nil {
 		return nil, cloud.KMSInaccessible(err)
 	}

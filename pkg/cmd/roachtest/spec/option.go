@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package spec
 
@@ -38,11 +33,21 @@ func CPU(n int) Option {
 	}
 }
 
-// WorkloadNode indicates that the last node is a workload node.
-// Defaults to a VM with 4 CPUs if not specified by WorkloadNodeCPUs.
+// WorkloadNodeCount indicates the count of last nodes in cluster to be treated
+// as workload node. Defaults to a VM with 4 CPUs if not specified by
+// WorkloadNodeCPUs.
+func WorkloadNodeCount(n int) Option {
+	return func(spec *ClusterSpec) {
+		spec.WorkloadNodeCount = n
+		spec.WorkloadNode = true
+	}
+}
+
+// TODO(GouravKumar): remove use of WorkloadNode, use WorkloadNodeCount instead
 func WorkloadNode() Option {
 	return func(spec *ClusterSpec) {
 		spec.WorkloadNode = true
+		spec.WorkloadNodeCount = 1
 	}
 }
 

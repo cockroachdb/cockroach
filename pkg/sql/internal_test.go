@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql_test
 
@@ -38,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -303,10 +299,10 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 
 type testInternalExecutor interface {
 	QueryRow(
-		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+		ctx context.Context, opName redact.RedactableString, txn *kv.Txn, stmt string, qargs ...interface{},
 	) (tree.Datums, error)
 	Exec(
-		ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+		ctx context.Context, opName redact.RedactableString, txn *kv.Txn, stmt string, qargs ...interface{},
 	) (int, error)
 }
 
@@ -508,7 +504,7 @@ func TestInternalExecutorWithDefinedQoSOverrideDoesNotPanic(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
-	qosLevel := sessiondatapb.TTLLow
+	qosLevel := sessiondatapb.BulkLow
 	_, err := ie.ExecEx(
 		ctx, "defined_quality_of_service_level_does_not_panic", nil,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName(), QualityOfService: &qosLevel},

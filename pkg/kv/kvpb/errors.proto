@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto2";
 // NB: this file (along with most things in api.proto and metadata.proto)
@@ -400,6 +395,20 @@ message OpRequiresTxnError {
 // contain the actual value found.
 message ConditionFailedError {
   optional roachpb.Value actual_value = 1;
+  // HadNewerOriginTimestamp is returned when an OriginTimestamp was
+  // sent in the conditional put, the origin timestamp was newer than
+  // the existing value's "comparison timestamp" (see comment for
+  // OriginTimestampOlderThan) but the expected value was
+  // mismatched. The caller may choose to try again using the returned
+  // ActualValue as the expected value.
+  optional bool had_newer_origin_timestamp = 2 [(gogoproto.nullable) = false];
+  // OriginTimestampOlderThan is returned when an OriginTimestamp was
+  // sent in the conditional put and it was older than the existing
+  // value's OriginTimestamp (if it exists) or MVCC timestamp.
+  //
+  // See the comment on the OriginTimestamp field of
+  // kvpb.ConditionalPutRequest for more details.
+  optional util.hlc.Timestamp origin_timestamp_older_than = 3 [(gogoproto.nullable) = false];
 }
 
 // A LeaseRejectedError indicates that the requested replica could
@@ -584,6 +593,11 @@ message BatchTimestampBeforeGCError {
   // that has been marked as excluded from a backup via
   // `ALTER TABLE ... SET (exclude_data_from_backup = true)`.
   optional bool data_excluded_from_backup = 3 [(gogoproto.nullable) = false];
+  optional int64 range_id = 4 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  optional bytes start_key = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  optional bytes end_key = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
 
 // A MVCCHistoryMutationError indicates that MVCC history was unexpectedly
@@ -692,7 +706,7 @@ message RefreshFailedError {
 
   // The timestamp the key was last updated.
   optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
-  
+
   // The conflicting transaction's TxnMeta, if available. This field is used
   // when the refresh fails with REASON_INTENT and is bubbled up for
   // observability purposes to track the conflicting transaction. This field is

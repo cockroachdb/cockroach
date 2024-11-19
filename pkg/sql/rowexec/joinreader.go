@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rowexec
 
@@ -325,7 +320,7 @@ func newJoinReader(
 	case lookupJoinReaderType:
 		lookupCols = spec.LookupColumns
 	default:
-		return nil, errors.Errorf("unsupported joinReaderType")
+		return nil, errors.AssertionFailedf("unsupported joinReaderType")
 	}
 	// The joiner has a choice to make between getting DistSender-level
 	// parallelism for its lookup batches and setting row and memory limits (due
@@ -399,7 +394,7 @@ func newJoinReader(
 	case lookupJoinReaderType:
 		leftTypes = input.OutputTypes()
 	default:
-		return nil, errors.Errorf("unsupported joinReaderType")
+		return nil, errors.AssertionFailedf("unsupported joinReaderType")
 	}
 	rightTypes := spec.FetchSpec.FetchedColumnTypes()
 
@@ -575,6 +570,7 @@ func newJoinReader(
 			diskBuffer,
 			&jr.streamerInfo.txnKVStreamerMemAcc,
 			spec.FetchSpec.External,
+			row.FetchSpecRequiresRawMVCCValues(spec.FetchSpec),
 		)
 	} else {
 		// When not using the Streamer API, we want to limit the batch size hint

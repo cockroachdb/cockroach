@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -299,11 +294,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		{NodeID: 5, StoreID: 5, ReplicaID: 5},
 	}
 	repl := &Replica{RangeID: firstRangeID}
-
-	repl.mu.Lock()
-	repl.mu.state.Stats = &enginepb.MVCCStats{}
-	repl.mu.Unlock()
-
+	repl.shMu.state.Stats = &enginepb.MVCCStats{}
 	repl.loadStats = load.NewReplicaLoad(clock, nil)
 
 	var rangeUsageInfo allocator.RangeUsageInfo
@@ -312,7 +303,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		Progress: make(map[raftpb.PeerID]tracker.Progress),
 	}
 	status.Lead = 1
-	status.RaftState = raft.StateLeader
+	status.RaftState = raftpb.StateLeader
 	status.Commit = 10
 	for _, replica := range replicas {
 		status.Progress[raftpb.PeerID(replica.ReplicaID)] = tracker.Progress{

@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { AxisUnits, util } from "@cockroachlabs/cluster-ui";
 import React from "react";
@@ -27,7 +22,9 @@ export default function (props: GraphDashboardProps) {
       title="Replication Latency"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip={"The difference in commit times between the source cluster and the destination cluster"}
+      tooltip={
+        "The difference in commit times between the source cluster and the destination cluster"
+      }
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
@@ -50,7 +47,9 @@ export default function (props: GraphDashboardProps) {
       title="Replication Lag"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={"The age of the oldest row on the source cluster that has yet to replicate to destination cluster"}
+      tooltip={
+        "The age of the oldest row on the source cluster that has yet to replicate to destination cluster"
+      }
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="duration">
@@ -65,11 +64,11 @@ export default function (props: GraphDashboardProps) {
               .map(d =>
                 d.value
                   ? {
-                    ...d,
-                    value:
-                      d.timestamp_nanos.toNumber() -
-                      util.SecondsToNano(d.value),
-                  }
+                      ...d,
+                      value:
+                        d.timestamp_nanos.toNumber() -
+                        util.SecondsToNano(d.value),
+                    }
                   : d,
               )
           }
@@ -122,7 +121,9 @@ export default function (props: GraphDashboardProps) {
       title="Batch Application Processing Time: 50th percentile"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip={"The 50th percentile in the time it takes to write a batch of row updates"}
+      tooltip={
+        "The 50th percentile in the time it takes to write a batch of row updates"
+      }
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="processing time">
@@ -142,7 +143,9 @@ export default function (props: GraphDashboardProps) {
       title="Batch Application Processing Time: 99th percentile"
       isKvGraph={false}
       tenantSource={tenantSource}
-      tooltip={"The 99th percentile in the time it takes to write a batch of row updates"}
+      tooltip={
+        "The 99th percentile in the time it takes to write a batch of row updates"
+      }
       showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="processing time">
@@ -182,7 +185,6 @@ export default function (props: GraphDashboardProps) {
           nonNegativeRate
         />
       </Axis>
-
     </LineGraph>,
 
     <LineGraph

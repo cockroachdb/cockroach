@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package physical
 
@@ -198,7 +195,7 @@ func TestAlterTenantUpdateExistingCutoverTime(t *testing.T) {
 	}
 	getCutoverTime := func() hlc.Timestamp {
 		var cutoverStr string
-		c.DestSysSQL.QueryRow(c.T, fmt.Sprintf("SELECT cutover_time FROM [SHOW TENANT %s WITH REPLICATION STATUS]",
+		c.DestSysSQL.QueryRow(c.T, fmt.Sprintf("SELECT failover_time FROM [SHOW TENANT %s WITH REPLICATION STATUS]",
 			c.Args.DestTenantName)).Scan(&cutoverStr)
 		cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 		return cutoverOutput
@@ -219,7 +216,7 @@ func TestAlterTenantUpdateExistingCutoverTime(t *testing.T) {
 		args.DestTenantName, cutoverTime.AsOfSystemTime()).Scan(&cutoverStr)
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.Equal(t, cutoverTime, cutoverOutput)
-	require.Equal(c.T, "replication pending cutover", getTenantStatus())
+	require.Equal(c.T, "replication pending failover", getTenantStatus())
 	require.Equal(t, cutoverOutput, getCutoverTime())
 
 	// And cutover to an even further time.
@@ -228,7 +225,7 @@ func TestAlterTenantUpdateExistingCutoverTime(t *testing.T) {
 		args.DestTenantName, cutoverTime.AsOfSystemTime()).Scan(&cutoverStr)
 	cutoverOutput = replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.Equal(t, cutoverTime, cutoverOutput)
-	require.Equal(c.T, "replication pending cutover", getTenantStatus())
+	require.Equal(c.T, "replication pending failover", getTenantStatus())
 	require.Equal(t, cutoverOutput, getCutoverTime())
 }
 
@@ -399,7 +396,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 		args.DestTenantName, cutoverTime)
 
-	require.Equal(c.T, "replication pending cutover", getTenantStatus())
+	require.Equal(c.T, "replication pending failover", getTenantStatus())
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`, args.DestTenantName)
 	unblockResumerExit()
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -468,10 +465,10 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		s := getTenantStatus()
-		if s == "replication pending cutover" {
-			return errors.Errorf("tenant status is still 'replication pending cutover', waiting")
+		if s == "replication pending failover" {
+			return errors.Errorf("tenant status is still 'replication pending failover', waiting")
 		}
-		require.Equal(c.T, "replication cutting over", s)
+		require.Equal(c.T, "replication failing over", s)
 		return nil
 	})
 
@@ -582,7 +579,7 @@ func TestAlterTenantStartReplicationAfterRestore(t *testing.T) {
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
 	db.Exec(t, "CREATE TENANT t1")
-	db.Exec(t, "BACKUP TENANT 3 TO 'nodelocal://1/t'")
+	db.Exec(t, "BACKUP TENANT 3 INTO 'nodelocal://1/t'")
 
 	afterBackup := srv.Clock().Now()
 	enforcedGC.Lock()
@@ -592,7 +589,7 @@ func TestAlterTenantStartReplicationAfterRestore(t *testing.T) {
 	u, cleanupURLA := sqlutils.PGUrl(t, srv.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupURLA()
 
-	db.Exec(t, "RESTORE TENANT 3 FROM 'nodelocal://1/t' WITH TENANT = '5', TENANT_NAME = 't2'")
+	db.Exec(t, "RESTORE TENANT 3 FROM LATEST IN 'nodelocal://1/t' WITH TENANT = '5', TENANT_NAME = 't2'")
 	db.Exec(t, "ALTER TENANT t2 START REPLICATION OF t1 ON $1", u.String())
 	srv.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 

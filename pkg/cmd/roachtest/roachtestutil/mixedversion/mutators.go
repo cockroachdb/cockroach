@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package mixedversion
 
@@ -253,8 +248,10 @@ func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutati
 
 			// We skip restart steps as we might insert the cluster setting
 			// change step concurrently with the selected step.
-			_, isRestartNode := s.impl.(restartWithNewBinaryStep)
-			return s.context.System.Stage >= OnStartupStage && !isRestartNode
+			_, isRestartSystem := s.impl.(restartWithNewBinaryStep)
+			_, isRestartTenant := s.impl.(restartVirtualClusterStep)
+			isRestart := isRestartSystem || isRestartTenant
+			return s.context.System.Stage >= OnStartupStage && !isRestart
 		})
 
 	for _, changeStep := range m.changeSteps(rng, len(possiblePointsInTime)) {

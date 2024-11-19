@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rpc
 
@@ -235,8 +230,12 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 	t.Logf("client dial")
 	// Dial: this causes the heartbeats to start.
 	remoteAddr := ln.Addr().String()
-	_, err = rpcCtxClient.GRPCDialNode(remoteAddr, 1, roachpb.Locality{}, SystemClass).Connect(ctx)
-	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		_, err = rpcCtxClient.GRPCDialNode(
+			remoteAddr, 1, roachpb.Locality{}, SystemClass,
+		).Connect(ctx)
+		return err
+	})
 
 	// The first ping establishes the TCP+TLS connection and uses a blocking dialback,
 	// so it's usually pretty noisy in terms of detecting clock offsets. The second
@@ -284,16 +283,12 @@ type rangefeedEventSink struct {
 
 var _ kvpb.RangeFeedEventSink = (*rangefeedEventSink)(nil)
 
-func (s *rangefeedEventSink) Context() context.Context {
-	return s.ctx
-}
+// Note that SendUnbuffered itself is not thread-safe (grpc stream is not
+// thread-safe), but tests were written in a way that sends sequentially,
+// ensuring thread-safety for SendUnbuffered.
+func (s *rangefeedEventSink) SendUnbufferedIsThreadSafe() {}
 
-// Note that Send itself is not thread-safe (grpc stream is not thread-safe),
-// but tests were written in a way that sends sequentially, ensuring
-// thread-safety for Send.
-func (s *rangefeedEventSink) SendIsThreadSafe() {}
-
-func (s *rangefeedEventSink) Send(event *kvpb.RangeFeedEvent) error {
+func (s *rangefeedEventSink) SendUnbuffered(event *kvpb.RangeFeedEvent) error {
 	return s.stream.Send(&kvpb.MuxRangeFeedEvent{RangeFeedEvent: *event})
 }
 
@@ -320,7 +315,7 @@ func (*internalServer) RangeLookup(
 func (s *internalServer) singleRangeFeed(sink kvpb.RangeFeedEventSink) error {
 	for _, ev := range s.rangeFeedEvents {
 		evCpy := ev
-		if err := sink.Send(&evCpy); err != nil {
+		if err := sink.SendUnbuffered(&evCpy); err != nil {
 			return err
 		}
 	}

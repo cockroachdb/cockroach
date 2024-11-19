@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package pgwire_test
 
@@ -47,8 +42,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/stdstrings"
 	"github.com/cockroachdb/redact"
+	"github.com/jackc/pgconn"
 	pgx "github.com/jackc/pgx/v4"
-	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -135,6 +130,7 @@ func TestAuthenticationAndHBARules(t *testing.T) {
 	skip.UnderRace(t, "takes >1min under race")
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
+		defer leaktest.AfterTest(t)()
 		hbaRunTest(t, insecure)
 	})
 }
@@ -175,6 +171,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 	if !insecure {
 		httpScheme = "https://"
 	}
+	ctx := context.Background()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "auth"), func(t *testing.T, path string) {
 		defer leaktest.AfterTest(t)()
@@ -216,13 +213,21 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		}
 		defer cleanup()
 
-		s, conn, _ := serverutils.StartServer(t,
+		s := serverutils.StartServerOnly(t,
 			base.TestServerArgs{
 				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107310),
 				Insecure:          insecure,
 				SocketFile:        maybeSocketFile,
 			})
-		defer s.Stopper().Stop(context.Background())
+		defer s.Stopper().Stop(ctx)
+
+		pgURL, cleanup := s.PGUrl(t, serverutils.User(username.RootUser), serverutils.ClientCerts(!insecure))
+		defer cleanup()
+		rootConn, err := pgx.Connect(ctx, pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = rootConn.Close(ctx) }()
 
 		// Enable conn/auth logging.
 		// We can't use the cluster settings to do this, because
@@ -239,7 +244,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		}
 		httpHBAUrl := httpScheme + s.HTTPAddr() + "/debug/hba_conf"
 
-		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
+		if _, err := rootConn.Exec(ctx, fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -272,8 +277,11 @@ func hbaRunTest(t *testing.T, insecure bool) {
 				case "accept_sql_without_tls":
 					testServer.SetAcceptSQLWithoutTLS(true)
 
+				case "reject_sql_without_tls":
+					testServer.SetAcceptSQLWithoutTLS(false)
+
 				case "set_hba":
-					_, err := conn.ExecContext(context.Background(),
+					_, err := rootConn.Exec(ctx,
 						`SET CLUSTER SETTING server.host_based_authentication.configuration = $1`, td.Input)
 					if err != nil {
 						return "", err
@@ -314,7 +322,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					return string(body), nil
 
 				case "set_identity_map":
-					_, err := conn.ExecContext(context.Background(),
+					_, err := rootConn.Exec(ctx,
 						`SET CLUSTER SETTING server.identity_map.configuration = $1`, td.Input)
 					if err != nil {
 						return "", err
@@ -355,7 +363,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					return string(body), nil
 
 				case "sql":
-					_, err := conn.ExecContext(context.Background(), td.Input)
+					_, err := rootConn.Exec(ctx, td.Input)
 					return "ok", err
 
 				case "authlog":
@@ -477,6 +485,13 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						showSystemIdentity = true
 					}
 
+					// Whether to display the authentication_method as well.
+					showAuthMethod := false
+					if td.HasArg("show_authentication_method") {
+						rmArg("show_authentication_method")
+						showAuthMethod = true
+					}
+
 					certName := ""
 					if td.HasArg("cert_name") {
 						td.ScanArgs(t, "cert_name", &certName)
@@ -551,35 +566,57 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						if len(a.Vals) > 0 {
 							val = a.Vals[0]
 						}
+						if len(val) == 0 {
+							// pgx.Connect requires empty values to be passed as a
+							// single-quoted empty string.
+							val = "''"
+						}
 						fmt.Fprintf(&dsnBuf, "%s%s=%s", sp, a.Key, val)
 						sp = " "
 					}
 					dsn := dsnBuf.String()
 
 					// Finally, connect and test the connection.
-					dbSQL, err := gosql.Open("postgres", dsn)
+					dbSQL, err := pgx.Connect(ctx, dsn)
 					if dbSQL != nil {
-						// Note: gosql.Open may return a valid db (with an open
+						// Note: pgx.Connect may return a valid db (with an open
 						// TCP connection) even if there is an error. We want to
 						// ensure this gets closed so that we catch the conn close
 						// message in the log.
-						defer dbSQL.Close()
+						defer func() { _ = dbSQL.Close(ctx) }()
 					}
 					if err != nil {
 						return "", err
 					}
-					row := dbSQL.QueryRow("SELECT current_catalog")
+					row := dbSQL.QueryRow(ctx, "SELECT current_catalog")
 					var result string
 					if err := row.Scan(&result); err != nil {
 						return "", err
 					}
 					if showSystemIdentity {
-						row := dbSQL.QueryRow(`SHOW system_identity`)
+						row := dbSQL.QueryRow(ctx, `SHOW system_identity`)
 						var name string
 						if err := row.Scan(&name); err != nil {
 							t.Fatal(err)
 						}
 						result += " " + name
+					}
+					if showAuthMethod {
+						var method, methodFromShowSessions string
+						row := dbSQL.QueryRow(ctx, `SHOW authentication_method`)
+						if err := row.Scan(&method); err != nil {
+							t.Fatal(err)
+						}
+						// Verify that the session variable agrees with the information
+						// in SHOW SESSIONS.
+						row = dbSQL.QueryRow(ctx, `SELECT authentication_method FROM [SHOW SESSIONS] WHERE session_id = current_setting('session_id');`)
+						if err := row.Scan(&methodFromShowSessions); err != nil {
+							t.Fatal(err)
+						}
+						if method != methodFromShowSessions {
+							t.Fatalf("SHOW SESSIONS disagrees with SHOW: %s vs %s", method, methodFromShowSessions)
+						}
+						result += " " + method
 					}
 
 					return "ok " + result, nil
@@ -603,13 +640,13 @@ var authLogFileRe = regexp.MustCompile(`"EventType":"client_`)
 func fmtErr(err error) string {
 	if err != nil {
 		errStr := ""
-		if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-			errStr = pqErr.Message
-			if pgcode.MakeCode(string(pqErr.Code)) != pgcode.Uncategorized {
-				errStr += fmt.Sprintf(" (SQLSTATE %s)", pqErr.Code)
+		if pgxErr := (*pgconn.PgError)(nil); errors.As(err, &pgxErr) {
+			errStr = pgxErr.Message
+			if pgcode.MakeCode(pgxErr.Code) != pgcode.Uncategorized {
+				errStr += fmt.Sprintf(" (SQLSTATE %s)", pgxErr.Code)
 			}
-			if pqErr.Hint != "" {
-				hint := strings.Replace(pqErr.Hint, stdstrings.IssueReferral, "<STANDARD REFERRAL>", 1)
+			if pgxErr.Hint != "" {
+				hint := strings.Replace(pgxErr.Hint, stdstrings.IssueReferral, "<STANDARD REFERRAL>", 1)
 				if strings.Contains(hint, "Supported methods:") {
 					// Depending on whether the test is running on linux or not
 					// (or, more specifically, whether gss build tag is set),
@@ -619,11 +656,18 @@ func fmtErr(err error) string {
 				}
 				errStr += "\nHINT: " + hint
 			}
-			if pqErr.Detail != "" {
-				errStr += "\nDETAIL: " + pqErr.Detail
+			if pgxErr.Detail != "" {
+				errStr += "\nDETAIL: " + pgxErr.Detail
 			}
 		} else {
 			errStr = err.Error()
+			// pgx uses an internal type (pgconn.connectError) for "TLS not enabled"
+			// errors here. We need to munge the error here to avoid including
+			// non-stable information like IP addresses in the output.
+			const tlsErr = "tls error (server refused TLS connection)"
+			if strings.HasSuffix(errStr, tlsErr) {
+				errStr = tlsErr
+			}
 		}
 		return "ERROR: " + errStr
 	}

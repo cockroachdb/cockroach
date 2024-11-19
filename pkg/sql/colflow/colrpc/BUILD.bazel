@@ -61,6 +61,7 @@ go_test(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/flowinfra",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/util/cancelchecker",
@@ -74,6 +75,6 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_stretchr_testify//require",
-        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//:grpc",
     ],
 )

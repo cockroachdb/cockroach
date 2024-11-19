@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2019 The etcd Authors
 //
@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 )
 
 type logLevels [6]string
@@ -33,7 +33,7 @@ type RedirectLogger struct {
 	Lvl int // 0 = DEBUG, 1 = INFO, 2 = WARNING, 3 = ERROR, 4 = FATAL, 5 = NONE
 }
 
-var _ raft.Logger = (*RedirectLogger)(nil)
+var _ raftlogger.Logger = (*RedirectLogger)(nil)
 
 func (l *RedirectLogger) printf(lvl int, format string, args ...interface{}) {
 	if l.Lvl <= lvl {

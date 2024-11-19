@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scmutationexec
 
@@ -20,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -100,6 +96,23 @@ func (i *immediateVisitor) addNewColumnType(
 		for i := range tbl.Families {
 			fam := &tbl.Families[i]
 			if fam.ID == op.ColumnType.FamilyID {
+				// If the column family order was specified, find the spot in the column
+				// family we will insert the new column at.
+				if op.ColumnType.ColumnFamilyOrderFollowsColumnID != 0 {
+					var foundColumnID bool
+					for j, id := range fam.ColumnIDs {
+						if id == op.ColumnType.ColumnFamilyOrderFollowsColumnID {
+							foundColumnID = true
+							fam.ColumnIDs = append(fam.ColumnIDs[:j+1], append([]catid.ColumnID{col.ID}, fam.ColumnIDs[j+1:]...)...)
+							fam.ColumnNames = append(fam.ColumnNames[:j+1], append([]string{col.Name}, fam.ColumnNames[j+1:]...)...)
+							break
+						}
+					}
+					// If the column ID wasn't found, we fall through and just append to the end.
+					if foundColumnID {
+						break
+					}
+				}
 				fam.ColumnIDs = append(fam.ColumnIDs, col.ID)
 				fam.ColumnNames = append(fam.ColumnNames, col.Name)
 				break
@@ -438,11 +451,17 @@ func (i *immediateVisitor) updateExistingColumnType(
 }
 
 func clearComputedExpr(col *descpb.ColumnDescriptor) {
-	// This operation needs to zero the computed column expression to remove
-	// any references to sequences and whatnot but it can't simply remove the
-	// expression entirely, otherwise in the case of virtual computed columns
-	// the column descriptor will then be interpreted as a virtual non-computed
-	// column, which doesn't make any sense.
-	null := tree.Serialize(tree.DNull)
-	col.ComputeExpr = &null
+	// This operation zeros out the computed column expression to remove references
+	// to sequences or other dependencies, but it can't always remove the expression entirely.
+	//
+	// For virtual computed columns, removing the expression would turn the column
+	// into a virtual non-computed column, which doesn't make sense. When dropping
+	// the expression for a column that still exists (e.g., a stored column), we do
+	// want to remove the expression.
+	if col.Virtual {
+		null := tree.Serialize(tree.DNull)
+		col.ComputeExpr = &null
+	} else {
+		col.ComputeExpr = nil
+	}
 }

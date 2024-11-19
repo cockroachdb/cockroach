@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logictestbase
 
@@ -24,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 var (
@@ -82,9 +78,9 @@ type TestClusterConfig struct {
 	// disableLocalityOptimizedSearch disables the cluster setting
 	// locality_optimized_partitioned_index_scan, which is enabled by default.
 	DisableLocalityOptimizedSearch bool
-	// EnableDefaultReadCommitted uses READ COMMITTED for all transactions
-	// by default.
-	EnableDefaultReadCommitted bool
+	// EnableDefaultIsolationLevel uses the specified isolation level for all
+	// transactions by default.
+	EnableDefaultIsolationLevel tree.IsolationLevel
 	// DeclarativeCorpusCollection enables support for collecting corpuses
 	// for the declarative schema changer.
 	DeclarativeCorpusCollection bool
@@ -302,11 +298,18 @@ var LogicTestConfigs = []TestClusterConfig{
 		OverrideVectorize:   "off",
 	},
 	{
-		Name:                       "local-read-committed",
-		NumNodes:                   1,
-		OverrideDistSQLMode:        "off",
-		IsCCLConfig:                true,
-		EnableDefaultReadCommitted: true,
+		Name:                        "local-read-committed",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		IsCCLConfig:                 true,
+		EnableDefaultIsolationLevel: tree.ReadCommittedIsolation,
+	},
+	{
+		Name:                        "local-repeatable-read",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		IsCCLConfig:                 true,
+		EnableDefaultIsolationLevel: tree.RepeatableReadIsolation,
 	},
 	{
 		Name:                "fakedist",
@@ -481,16 +484,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		// This config runs tests using 24.1 cluster version, simulating a node that
-		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-24.1",
-		NumNodes:                    1,
-		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V24_1,
-		DisableUpgrade:              true,
-		DeclarativeCorpusCollection: true,
-	},
-	{
 		// This config runs tests using 24.2 cluster version, simulating a node that
 		// is operating in a mixed-version cluster.
 		Name:                        "local-mixed-24.2",
@@ -502,18 +495,28 @@ var LogicTestConfigs = []TestClusterConfig{
 	},
 	{
 		// This config runs a cluster with 3 nodes, with a separate process per
-		// node. The nodes initially start on v24.1.
-		Name:                     "cockroach-go-testserver-24.1",
-		UseCockroachGoTestserver: true,
-		BootstrapVersion:         clusterversion.V24_1,
-		NumNodes:                 3,
-	},
-	{
-		// This config runs a cluster with 3 nodes, with a separate process per
 		// node. The nodes initially start on v24.2.
 		Name:                     "cockroach-go-testserver-24.2",
 		UseCockroachGoTestserver: true,
 		BootstrapVersion:         clusterversion.V24_2,
+		NumNodes:                 3,
+	},
+	{
+		// This config runs tests using 24.3 cluster version, simulating a node that
+		// is operating in a mixed-version cluster.
+		Name:                        "local-mixed-24.3",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		BootstrapVersion:            clusterversion.V24_3,
+		DisableUpgrade:              true,
+		DeclarativeCorpusCollection: true,
+	},
+	{
+		// This config runs a cluster with 3 nodes, with a separate process per
+		// node. The nodes initially start on v24.2.
+		Name:                     "cockroach-go-testserver-24.3",
+		UseCockroachGoTestserver: true,
+		BootstrapVersion:         clusterversion.V24_3,
 		NumNodes:                 3,
 	},
 }
@@ -581,11 +584,13 @@ var (
 		"local-legacy-schema-changer",
 		"local-vec-off",
 		"local-read-committed",
+		"local-repeatable-read",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
-		"local-mixed-24.1",
 		"local-mixed-24.2",
+		// TODO(radu): enable this.
+		//"local-mixed-24.3",
 	}
 	// FiveNodeDefaultConfigName is a special alias for all 5 node configs.
 	FiveNodeDefaultConfigName = "5node-default-configs"
@@ -609,6 +614,16 @@ var (
 		"3node-tenant",
 		"3node-tenant-multiregion",
 		"local-read-committed",
+		"local-repeatable-read",
+	}
+	// WeakIsoLevelConfigName is a special alias for all configs which default to
+	// a weak transaction isolation level.
+	WeakIsoLevelConfigName = "weak-iso-level-configs"
+	// WeakIsoLevelConfigNames is the list of all weak transaction isolation level
+	// configs.
+	WeakIsoLevelConfigNames = []string{
+		"local-read-committed",
+		"local-repeatable-read",
 	}
 	// DefaultConfig is the default test configuration.
 	DefaultConfig = parseTestConfig(DefaultConfigNames)
@@ -618,6 +633,8 @@ var (
 	ThreeNodeTenantDefaultConfig = parseTestConfig(ThreeNodeTenantDefaultConfigNames)
 	// EnterpriseConfig is the enterprise test configuration.
 	EnterpriseConfig = parseTestConfig(EnterpriseConfigNames)
+	// WeakIsoLevelConfig is the weak transaction isolation level test configuration.
+	WeakIsoLevelConfig = parseTestConfig(WeakIsoLevelConfigNames)
 )
 
 // logger is an interface implemented by testing.TB as well as stdlogger below.
@@ -807,6 +824,8 @@ func processConfigs(
 				configs = append(configs, applyBlocklistToConfigs(ThreeNodeTenantDefaultConfig, blocklist)...)
 			case EnterpriseConfigName:
 				configs = append(configs, applyBlocklistToConfigs(EnterpriseConfig, blocklist)...)
+			case WeakIsoLevelConfigName:
+				configs = append(configs, applyBlocklistToConfigs(WeakIsoLevelConfig, blocklist)...)
 			default:
 				t.Fatalf("%s: unknown config name %s", path, configName)
 			}
@@ -882,6 +901,8 @@ func getDefaultConfigListNames(name string) []string {
 		return ThreeNodeTenantDefaultConfigNames
 	case EnterpriseConfigName:
 		return EnterpriseConfigNames
+	case WeakIsoLevelConfigName:
+		return WeakIsoLevelConfigNames
 	}
 	return []string{}
 }

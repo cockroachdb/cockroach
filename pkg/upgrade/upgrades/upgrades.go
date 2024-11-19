@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package upgrades contains the implementation of upgrades. It is imported
 // by the server library.
@@ -108,16 +103,50 @@ var upgrades = []upgradebase.Upgrade{
 	),
 
 	upgrade.NewTenantUpgrade(
-		"add new table_metadata table to the system tenant",
+		"add new table_metadata table and job to the system tenant",
 		clusterversion.V24_3_TableMetadata.Version(),
 		upgrade.NoPrecondition,
-		addTableMetadataTable,
+		addTableMetadataTableAndJob,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 
 	upgrade.NewTenantUpgrade(
+		"add exclude_data_from_backup to certain system tables on tenants",
+		clusterversion.V24_3_TenantExcludeDataFromBackup.Version(),
+		upgrade.NoPrecondition,
+		tenantExcludeDataFromBackup,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore affected tables"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"add new column to the system.sql_instances table to store whether a node is draining",
+		clusterversion.V24_3_SQLInstancesAddDraining.Version(),
+		upgrade.NoPrecondition,
+		sqlInstancesAddDrainingMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"check that we are not in violation of the new license policies",
+		clusterversion.V24_3_MaybePreventUpgradeForCoreLicenseDeprecation.Version(),
+		checkForPostUpgradeThrottlePreCond,
+		checkForPostUpgradeThrottleProcessing,
+		upgrade.RestoreActionNotRequired("this check does not persist anything"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"adds new columns to table_metadata table",
+		clusterversion.V24_3_AddTableMetadataCols.Version(),
+		upgrade.NoPrecondition,
+		addTableMetadataCols,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
+	newFirstUpgrade(clusterversion.V25_1_Start.Version()),
+
+	upgrade.NewTenantUpgrade(
 		"add new table for listen/notify queue",
-		clusterversion.V24_3_ListenNotifyQueue.Version(),
+		clusterversion.V25_1_ListenNotifyQueue.Version(),
 		upgrade.NoPrecondition,
 		createListenNotifyQueueTables,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore these tables"),

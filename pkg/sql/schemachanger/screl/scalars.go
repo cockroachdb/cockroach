@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package screl
 
@@ -127,8 +122,13 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		return true
 	case *scpb.TypeComment, *scpb.DatabaseZoneConfig:
 		return version.IsActive(clusterversion.V24_2)
-	case *scpb.ColumnComputeExpression, *scpb.FunctionSecurity:
+	case *scpb.ColumnComputeExpression, *scpb.FunctionSecurity, *scpb.LDRJobIDs,
+		*scpb.PartitionZoneConfig, *scpb.Trigger, *scpb.TriggerName,
+		*scpb.TriggerEnabled, *scpb.TriggerTiming, *scpb.TriggerEvents, *scpb.TriggerTransition,
+		*scpb.TriggerWhen, *scpb.TriggerFunctionCall, *scpb.TriggerDeps:
 		return version.IsActive(clusterversion.V24_3)
+	case *scpb.NamedRangeZoneConfig:
+		return version.IsActive(clusterversion.V25_1)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}

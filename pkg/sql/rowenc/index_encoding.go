@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rowenc
 
@@ -1155,6 +1150,7 @@ func EncodePrimaryIndex(
 	}
 
 	storedColumns := getStoredColumnsForPrimaryIndex(index, colMap)
+	keyColumns := index.CollectKeyColumnIDs()
 
 	var entryValue []byte
 	indexEntries := make([]IndexEntry, 0, tableDesc.NumFamilies())
@@ -1172,13 +1168,14 @@ func EncodePrimaryIndex(
 		// The decoders expect that column family 0 is encoded with a TUPLE value tag, so we
 		// don't want to use the untagged value encoding.
 		if len(family.ColumnIDs) == 1 && family.ColumnIDs[0] == family.DefaultColumnID && family.ID != 0 {
-			// Single column value families which are not stored can be skipped, these
-			// may exist temporarily while adding a column.
-			if !storedColumns.Contains(family.DefaultColumnID) {
-				if cdatum, ok := values[colMap.GetDefault(family.DefaultColumnID)].(tree.CompositeDatum); !ok ||
-					!cdatum.IsComposite() {
-					return nil
-				}
+			// Single column value families which are not stored or key columns can be skipped,
+			// these may exist temporarily while adding a column. For key columns composite keys may
+			// be stored at the same time.
+			if skipColumn, _ := SkipColumnNotInPrimaryIndexValue(family.DefaultColumnID,
+				values[colMap.GetDefault(family.DefaultColumnID)],
+				keyColumns,
+				storedColumns); skipColumn {
+				return nil
 			}
 			datum := findColumnValue(family.DefaultColumnID, colMap, values)
 			// We want to include this column if its value is non-null or
@@ -1286,6 +1283,34 @@ func MakeNullPKError(
 	return errors.AssertionFailedf("NULL value in unknown key column")
 }
 
+// EncodeSecondaryIndexKey encodes the key for a secondary index. The 'colMap'
+// maps descpb.ColumnIDs to positions in 'values'. This function returns a slice
+// of byte arrays representing the key values.
+func EncodeSecondaryIndexKey(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	tableDesc catalog.TableDescriptor,
+	secondaryIndex catalog.Index,
+	colMap catalog.TableColMap,
+	values []tree.Datum,
+) ([][]byte, bool, error) {
+	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
+
+	var containsNull = false
+	var secondaryKeys [][]byte
+	var err error
+	if secondaryIndex.GetType() == descpb.IndexDescriptor_INVERTED {
+		secondaryKeys, err = EncodeInvertedIndexKeys(ctx, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+	} else {
+		var secondaryIndexKey []byte
+		secondaryIndexKey, containsNull, err = EncodeIndexKey(
+			tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+
+		secondaryKeys = [][]byte{secondaryIndexKey}
+	}
+	return secondaryKeys, containsNull, err
+}
+
 // EncodeSecondaryIndex encodes key/values for a secondary
 // index. colMap maps descpb.ColumnIDs to indices in `values`. This returns a
 // slice of IndexEntry. includeEmpty controls whether or not
@@ -1301,25 +1326,12 @@ func EncodeSecondaryIndex(
 	values []tree.Datum,
 	includeEmpty bool,
 ) ([]IndexEntry, error) {
-	secondaryIndexKeyPrefix := MakeIndexKeyPrefix(codec, tableDesc.GetID(), secondaryIndex.GetID())
-
 	// Use the primary key encoding for covering indexes.
 	if secondaryIndex.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
 		return EncodePrimaryIndex(codec, tableDesc, secondaryIndex, colMap, values, includeEmpty)
 	}
 
-	var containsNull = false
-	var secondaryKeys [][]byte
-	var err error
-	if secondaryIndex.GetType() == descpb.IndexDescriptor_INVERTED {
-		secondaryKeys, err = EncodeInvertedIndexKeys(ctx, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
-	} else {
-		var secondaryIndexKey []byte
-		secondaryIndexKey, containsNull, err = EncodeIndexKey(
-			tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
-
-		secondaryKeys = [][]byte{secondaryIndexKey}
-	}
+	secondaryKeys, containsNull, err := EncodeSecondaryIndexKey(ctx, codec, tableDesc, secondaryIndex, colMap, values)
 	if err != nil {
 		return []IndexEntry{}, err
 	}
@@ -1718,4 +1730,28 @@ func DecodeWrapper(value *roachpb.Value) (*rowencpb.IndexValueWrapper, error) {
 	}
 
 	return &wrapper, nil
+}
+
+// SkipColumnNotInPrimaryIndexValue returns true if the value at column colID
+// does not need to be encoded, either because it is already part of the primary
+// key, or because it is not part of the primary index altogether. Composite
+// datums are considered too, so a composite datum in a PK will return false
+// (but will return true for couldBeComposite).
+func SkipColumnNotInPrimaryIndexValue(
+	colID descpb.ColumnID,
+	value tree.Datum,
+	keyCols catalog.TableColSet,
+	storedCols catalog.TableColSet,
+) (skip, couldBeComposite bool) {
+	if !keyCols.Contains(colID) {
+		return !storedCols.Contains(colID), false
+	}
+	if cdatum, ok := value.(tree.CompositeDatum); ok {
+		// Composite columns are encoded in both the key and the value.
+		return !cdatum.IsComposite(), true
+	}
+	// Skip primary key columns as their values are encoded in the key of
+	// each family. Family 0 is guaranteed to exist and acts as a
+	// sentinel.
+	return true, false
 }

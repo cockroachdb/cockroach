@@ -1,18 +1,14 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -25,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -80,8 +77,6 @@ func (s *systemStatusServer) spanStatsFanOut(
 		res.SpanToStats[sp.String()] = &roachpb.SpanStats{}
 	}
 
-	responses := make(map[string]struct{})
-
 	spansPerNode, err := s.getSpansPerNode(ctx, req)
 	if err != nil {
 		return nil, err
@@ -130,38 +125,6 @@ func (s *systemStatusServer) spanStatsFanOut(
 		return resp, err
 	}
 
-	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		// Noop if nil response (returned from skipped node).
-		if resp == nil {
-			return
-		}
-
-		nodeResponse := resp.(*roachpb.SpanStatsResponse)
-
-		// Values of ApproximateTotalStats, ApproximateDiskBytes,
-		// RemoteFileBytes, and ExternalFileBytes should be physical values, but
-		// TotalStats should be the logical, pre-replicated value.
-		//
-		// Note: This implementation can return arbitrarily stale values, because instead of getting
-		// MVCC stats from the leaseholder, MVCC stats are taken from the node that responded first.
-		// See #108779.
-		for spanStr, spanStats := range nodeResponse.SpanToStats {
-			// Accumulate physical values across all replicas:
-			res.SpanToStats[spanStr].ApproximateTotalStats.Add(spanStats.TotalStats)
-			res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
-			res.SpanToStats[spanStr].RemoteFileBytes += spanStats.RemoteFileBytes
-			res.SpanToStats[spanStr].ExternalFileBytes += spanStats.ExternalFileBytes
-
-			// Logical values: take the values from the node that responded first.
-			// TODO: This should really be read from the leaseholder.
-			if _, ok := responses[spanStr]; !ok {
-				res.SpanToStats[spanStr].TotalStats = spanStats.TotalStats
-				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount
-				responses[spanStr] = struct{}{}
-			}
-		}
-	}
-
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		log.Errorf(ctx, nodeErrorMsgPlaceholder, nodeID, err)
 		errorMessage := fmt.Sprintf("%v", err)
@@ -177,13 +140,65 @@ func (s *systemStatusServer) spanStatsFanOut(
 		timeout,
 		smartDial,
 		nodeFn,
-		responseFn,
+		collectSpanStatsResponses(ctx, res),
 		errorFn,
 	); err != nil {
 		return nil, err
 	}
 
 	return res, nil
+}
+
+// collectSpanStatsResponses takes a *roachpb.SpanStatsResponse and creates a closure around it
+// to provide as a callback to fanned out SpanStats requests.
+func collectSpanStatsResponses(
+	ctx context.Context, res *roachpb.SpanStatsResponse,
+) func(nodeID roachpb.NodeID, resp interface{}) {
+	responses := make(map[string]struct{})
+	return func(nodeID roachpb.NodeID, resp interface{}) {
+		// Noop if nil response (returned from skipped node).
+		if resp == nil {
+			return
+		}
+
+		nodeResponse := resp.(*roachpb.SpanStatsResponse)
+
+		// Values of ApproximateTotalStats, ApproximateDiskBytes,
+		// RemoteFileBytes, and ExternalFileBytes should be physical values, but
+		// TotalStats should be the logical, pre-replicated value.
+		//
+		// Note: This implementation can return arbitrarily stale values, because instead of getting
+		// MVCC stats from the leaseholder, MVCC stats are taken from the node that responded first.
+		// See #108779.
+		for spanStr, spanStats := range nodeResponse.SpanToStats {
+			if spanStats == nil {
+				log.Errorf(ctx, "Span stats for %s from node response is nil", spanStr)
+				continue
+			}
+
+			_, ok := res.SpanToStats[spanStr]
+			if !ok {
+				log.Warningf(ctx, "Received Span not in original request: %s", spanStr)
+				res.SpanToStats[spanStr] = &roachpb.SpanStats{}
+			}
+
+			// Accumulate physical values across all replicas:
+			res.SpanToStats[spanStr].ApproximateTotalStats.Add(spanStats.TotalStats)
+			res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
+			res.SpanToStats[spanStr].RemoteFileBytes += spanStats.RemoteFileBytes
+			res.SpanToStats[spanStr].ExternalFileBytes += spanStats.ExternalFileBytes
+			res.SpanToStats[spanStr].StoreIDs = util.CombineUnique(res.SpanToStats[spanStr].StoreIDs, spanStats.StoreIDs)
+
+			// Logical values: take the values from the node that responded first.
+			// TODO: This should really be read from the leaseholder.
+			if _, ok := responses[spanStr]; !ok {
+				res.SpanToStats[spanStr].TotalStats = spanStats.TotalStats
+				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount
+				res.SpanToStats[spanStr].ReplicaCount = spanStats.ReplicaCount
+				responses[spanStr] = struct{}{}
+			}
+		}
+	}
 }
 
 func (s *systemStatusServer) getLocalStats(
@@ -248,6 +263,7 @@ func (s *systemStatusServer) statsForSpan(
 		return nil, err
 	}
 
+	storeIDs := make(map[roachpb.StoreID]struct{})
 	var fullyContainedKeysBatch []roachpb.Key
 	// Iterate through the span's ranges.
 	for _, desc := range descriptors {
@@ -255,6 +271,12 @@ func (s *systemStatusServer) statsForSpan(
 		// Get the descriptor for the current range of the span.
 		descSpan := desc.RSpan()
 		spanStats.RangeCount += 1
+
+		voterAndNonVoterReplicas := desc.Replicas().VoterAndNonVoterDescriptors()
+		spanStats.ReplicaCount += int32(len(voterAndNonVoterReplicas))
+		for _, repl := range voterAndNonVoterReplicas {
+			storeIDs[repl.StoreID] = struct{}{}
+		}
 
 		// Is the descriptor fully contained by the request span?
 		if rSpan.ContainsKeyRange(descSpan.Key, desc.EndKey) {
@@ -287,6 +309,7 @@ func (s *systemStatusServer) statsForSpan(
 			log.VEventf(ctx, 1, "Range %v exceeds span %v, calculating stats for subspan %v",
 				descSpan, rSpan, roachpb.RSpan{Key: scanStart, EndKey: scanEnd},
 			)
+
 			err = s.stores.VisitStores(func(s *kvserver.Store) error {
 				stats, err := storage.ComputeStats(
 					ctx,
@@ -303,11 +326,19 @@ func (s *systemStatusServer) statsForSpan(
 				spanStats.TotalStats.Add(stats)
 				return nil
 			})
-
 			if err != nil {
 				return nil, err
 			}
 		}
+
+		spanStats.StoreIDs = make([]roachpb.StoreID, 0, len(storeIDs))
+		for storeID := range storeIDs {
+			spanStats.StoreIDs = append(spanStats.StoreIDs, storeID)
+		}
+		sort.Slice(spanStats.StoreIDs, func(i, j int) bool {
+			return spanStats.StoreIDs[i] < spanStats.StoreIDs[j]
+		})
+
 	}
 	// If we still have some remaining ranges, request range stats for the current batch.
 	if len(fullyContainedKeysBatch) > 0 {

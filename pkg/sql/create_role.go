@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -32,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // CreateRoleNode creates entries in the system.users table.
@@ -122,7 +118,7 @@ func (p *planner) CreateRoleNode(
 }
 
 func (n *CreateRoleNode) startExec(params runParams) error {
-	var opName string
+	var opName redact.RedactableString
 	if n.isRole {
 		sqltelemetry.IncIAMCreateCounter(sqltelemetry.Role)
 		opName = "create-role"
@@ -202,7 +198,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 
 func updateRoleOptions(
 	params runParams,
-	opName string,
+	opName redact.RedactableString,
 	roleOptions roleoption.List,
 	roleName username.SQLUsername,
 	telemetryOp string,

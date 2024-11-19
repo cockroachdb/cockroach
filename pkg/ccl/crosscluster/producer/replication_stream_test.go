@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package producer_test
 
@@ -109,7 +106,7 @@ func (d *partitionStreamDecoder) pop() crosscluster.Event {
 		// TODO(yevgeniy): Fix checkpoint handling and support backfill checkpoints.
 		// For now, check that we only have one span in the checkpoint, and use that timestamp.
 		require.Equal(d.t, 1, len(d.e.Checkpoint.ResolvedSpans))
-		event := crosscluster.MakeCheckpointEvent(d.e.Checkpoint.ResolvedSpans)
+		event := crosscluster.MakeCheckpointEvent(d.e.Checkpoint)
 		d.e.Checkpoint = nil
 		return event
 	}
@@ -379,6 +376,9 @@ USE d;
 		// Periodically, resolved timestamps should be published.
 		// Observe resolved timestamp that's higher than the previous value timestamp.
 		feed.ObserveResolved(ctx, firstObserved.Value.Timestamp)
+
+		stats := feed.ObserveRangeStats(ctx)
+		require.Greater(t, stats.RangeCount, int64(0))
 
 		// Update our row.
 		srcTenant.SQL.Exec(t, `UPDATE d.t1 SET b = 'world' WHERE i = 42`)

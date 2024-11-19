@@ -1,0 +1,60 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+@import "application.module.scss";
+
+.page-header {
+  width: 100%;
+  margin-bottom: crl-gutters(2);
+
+  &--reduced-margin {
+    margin-bottom: crl-gutters(1);
+  }
+}
+
+.title {
+  min-height: 40px; // Ensures the title will match the height of an optional button.
+  display: flex;
+  align-items: center; // Allows the text to center vertically.
+  margin-bottom: 0;
+  gap: crl-gutters(2);
+  color: $colors--neutral-7;
+  font-family: $font-family--semi-bold;
+  font-style: normal;
+  font-stretch: normal;
+  font-size: $font-size--large;
+  padding-bottom: 12px;
+}
+
+
+.header-breadcrumbs {
+  margin-top: crl-gutters(1);
+  margin-bottom: crl-gutters(1);
+}
+
+.icon {
+  margin-right: crl-gutters(1.5);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+}
+
+.description {
+  margin-bottom: 0;
+}
+
+.action-wrapper {
+  display: flex;
+  gap: crl-gutters(1);
+  min-width: fit-content;
+}
+
+.loader {
+  margin-left: crl-gutters(1);
+}
+

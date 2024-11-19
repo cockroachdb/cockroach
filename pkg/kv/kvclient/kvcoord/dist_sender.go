@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvcoord
 
@@ -46,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -117,11 +113,23 @@ var (
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderAsyncInProgress = metric.Metadata{
+		Name:        "distsender.batches.async.in_progress",
+		Help:        "Number of partial batches currently being executed asynchronously",
+		Measurement: "Partial Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderAsyncThrottledCount = metric.Metadata{
 		Name:        "distsender.batches.async.throttled",
 		Help:        "Number of partial batches not sent asynchronously due to throttling",
 		Measurement: "Partial Batches",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaDistSenderAsyncThrottledDuration = metric.Metadata{
+		Name:        "distsender.batches.async.throttled_cumulative_duration_nanos",
+		Help:        "Cumulative duration of partial batches being throttled (in nanoseconds)",
+		Measurement: "Throttled Duration",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaTransportSentCount = metric.Metadata{
 		Name:        "distsender.rpc.sent",
@@ -343,8 +351,10 @@ var CanSendToFollower = func(
 }
 
 const (
-	// The default limit for asynchronous senders.
-	defaultSenderConcurrency = 1024
+	// The default scaling factor for the number of async ops per vCPU.
+	DefaultSenderStreamsPerVCPU = 384
+	// The minimum number of recommended vCPUs.
+	MinViableProcs = 2
 	// RangeLookupPrefetchCount is the maximum number of range descriptors to prefetch
 	// during range lookups.
 	RangeLookupPrefetchCount = 8
@@ -368,7 +378,7 @@ var senderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"kv.dist_sender.concurrency_limit",
 	"maximum number of asynchronous send requests",
-	max(defaultSenderConcurrency, int64(64*runtime.GOMAXPROCS(0))),
+	DefaultSenderStreamsPerVCPU*max(MinViableProcs, int64(runtime.GOMAXPROCS(0))),
 	settings.NonNegativeInt,
 )
 
@@ -411,7 +421,9 @@ type DistSenderMetrics struct {
 	CrossZoneBatchRequestBytes         *metric.Counter
 	CrossZoneBatchResponseBytes        *metric.Counter
 	AsyncSentCount                     *metric.Counter
+	AsyncInProgress                    *metric.Gauge
 	AsyncThrottledCount                *metric.Counter
+	AsyncThrottledDuration             *metric.Counter
 	SentCount                          *metric.Counter
 	LocalSentCount                     *metric.Counter
 	NextReplicaErrCount                *metric.Counter
@@ -457,7 +469,9 @@ func MakeDistSenderMetrics(locality roachpb.Locality) DistSenderMetrics {
 		BatchCount:                         metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:                  metric.NewCounter(metaDistSenderPartialBatchCount),
 		AsyncSentCount:                     metric.NewCounter(metaDistSenderAsyncSentCount),
+		AsyncInProgress:                    metric.NewGauge(metaDistSenderAsyncInProgress),
 		AsyncThrottledCount:                metric.NewCounter(metaDistSenderAsyncThrottledCount),
+		AsyncThrottledDuration:             metric.NewCounter(metaDistSenderAsyncThrottledDuration),
 		SentCount:                          metric.NewCounter(metaTransportSentCount),
 		LocalSentCount:                     metric.NewCounter(metaTransportLocalSentCount),
 		ReplicaAddressedBatchRequestBytes:  metric.NewCounter(metaDistSenderReplicaAddressedBatchRequestBytes),
@@ -513,24 +527,25 @@ func makeDistSenderCircuitBreakerMetrics() DistSenderCircuitBreakerMetrics {
 type rangeFeedErrorCounters struct {
 	RangefeedRestartRanges *metric.Counter
 	RangefeedErrorCatchup  *metric.Counter
-	RetryErrors            []*metric.Counter
+	RetryErrors            map[int32]*metric.Counter
 	SendErrors             *metric.Counter
 	StoreNotFound          *metric.Counter
 	NodeNotFound           *metric.Counter
 	RangeNotFound          *metric.Counter
 	RangeKeyMismatch       *metric.Counter
+	RetryUnknown           *metric.Counter
 }
 
 func makeRangeFeedErrorCounters() rangeFeedErrorCounters {
-	var retryCounters []*metric.Counter
-	for name := range kvpb.RangeFeedRetryError_Reason_value {
+	retryCounters := make(map[int32]*metric.Counter, len(kvpb.RangeFeedRetryError_Reason_value))
+	for name, idx := range kvpb.RangeFeedRetryError_Reason_value {
 		name = strings.TrimPrefix(name, "REASON_")
-		retryCounters = append(retryCounters, metric.NewCounter(metric.Metadata{
+		retryCounters[idx] = metric.NewCounter(metric.Metadata{
 			Name:        fmt.Sprintf("distsender.rangefeed.retry.%s", strings.ToLower(name)),
 			Help:        fmt.Sprintf(`Number of ranges that encountered retryable %s error`, name),
 			Measurement: "Ranges",
 			Unit:        metric.Unit_COUNT,
-		}))
+		})
 	}
 
 	retryMeta := func(name string) metric.Metadata {
@@ -551,6 +566,7 @@ func makeRangeFeedErrorCounters() rangeFeedErrorCounters {
 		NodeNotFound:           metric.NewCounter(retryMeta("node not found")),
 		RangeNotFound:          metric.NewCounter(retryMeta("range not found")),
 		RangeKeyMismatch:       metric.NewCounter(retryMeta("range key mismatch")),
+		RetryUnknown:           metric.NewCounter(retryMeta("unknown")),
 	}
 }
 
@@ -560,25 +576,10 @@ func makeRangeFeedErrorCounters() rangeFeedErrorCounters {
 func (c rangeFeedErrorCounters) GetRangeFeedRetryCounter(
 	reason kvpb.RangeFeedRetryError_Reason,
 ) *metric.Counter {
-	// Normally, retry reason values are contiguous.  One way gaps could be
-	// introduced, is if some retry reasons are retired (deletions are
-	// accomplished by reserving enum value to prevent its re-use), and then more
-	// reason added after.  Then, we can't use reason value as an index into
-	// retryCounters.  Because this scenario is believed to be very unlikely, we
-	// forego any fancy re-mapping schemes, and instead opt for explicit handling.
-	switch reason {
-	case kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
-		kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
-		kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT,
-		kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
-		kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
-		kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
-		kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER,
-		kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER,
-		kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED:
-		return c.RetryErrors[reason]
-	default:
-		panic(errors.AssertionFailedf("unknown retry reason %d", reason))
+	if metric, ok := c.RetryErrors[int32(reason)]; ok {
+		return metric
+	} else {
+		return c.RetryUnknown
 	}
 }
 
@@ -1368,7 +1369,7 @@ func (ds *DistSender) sendProxyRequest(
 	// never evaluated locally.
 	sendCtx, cbToken, cbErr := ds.circuitBreakers.
 		ForReplica(&ba.ProxyRangeInfo.Desc, &ba.ProxyRangeInfo.Lease.Replica).
-		Track(ctx, ba, withCommit, timeutil.Now().UnixNano())
+		Track(ctx, ba, withCommit, crtime.NowMono())
 	if cbErr != nil {
 		ds.metrics.ProxyForwardErrCount.Inc(1)
 		// Circuit breaker is tripped. Return immediately.
@@ -1383,7 +1384,7 @@ func (ds *DistSender) sendProxyRequest(
 
 	// If the request failed because the circuit breaker tripped, change our
 	// error to the circuit breaker's error.
-	if cancelErr := cbToken.Done(br, err, timeutil.Now().UnixNano()); cancelErr != nil {
+	if cancelErr := cbToken.Done(br, err, crtime.NowMono()); cancelErr != nil {
 		log.VEventf(ctx, 2, "failing proxy request after cb cancellation %s", err)
 		br, err = nil, cancelErr
 	}
@@ -1933,16 +1934,29 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		}
 
 		lastRange := !ri.NeedAnother(rs)
+		var asyncSent, asyncThrottled bool
 		// Send the next partial batch to the first range in the "rs" span.
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
-		if canParallelize && !lastRange && !ds.disableParallelBatches &&
-			ds.sendPartialBatchAsync(ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), responseCh, positions) {
-			// Sent the batch asynchronously.
-		} else {
-			resp := ds.sendPartialBatch(
-				ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(),
-			)
+		if canParallelize && !lastRange && !ds.disableParallelBatches {
+			if ds.sendPartialBatchAsync(ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), responseCh, positions) {
+				asyncSent = true
+			} else {
+				asyncThrottled = true
+			}
+		}
+		if !asyncSent {
+			resp := func() response {
+				if asyncThrottled {
+					tStart := crtime.NowMono()
+					defer func() {
+						ds.metrics.AsyncThrottledDuration.Inc(int64(tStart.Elapsed()))
+					}()
+				}
+				return ds.sendPartialBatch(
+					ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(),
+				)
+			}()
 			resp.positions = positions
 			responseCh <- resp
 			if resp.pErr != nil {
@@ -2044,6 +2058,8 @@ func (ds *DistSender) sendPartialBatchAsync(
 		},
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
+			ds.metrics.AsyncInProgress.Inc(1)
+			defer ds.metrics.AsyncInProgress.Dec(1)
 			resp := ds.sendPartialBatch(ctx, ba, rs, isReverse, withCommit, batchIdx, routing)
 			resp.positions = positions
 			responseCh <- resp
@@ -2475,13 +2491,6 @@ const slowDistSenderRangeThreshold = time.Minute
 // to a single replica.
 const slowDistSenderReplicaThreshold = 10 * time.Second
 
-// defaultSendClosedTimestampPolicy is used when the closed timestamp policy
-// is not known by the range cache. This choice prevents sending batch requests
-// to only voters when a perfectly good non-voter may exist in the local
-// region. It's defined as a constant here to ensure that we use the same
-// value when populating the batch header.
-const defaultSendClosedTimestampPolicy = roachpb.LEAD_FOR_GLOBAL_READS
-
 // sendToReplicas sends a batch to the replicas of a range. Replicas are tried one
 // at a time (generally the leaseholder first). The result of this call is
 // either a BatchResponse or an error. In the former case, the BatchResponse
@@ -2520,7 +2529,7 @@ func (ds *DistSender) sendToReplicas(
 	if ba.RoutingPolicy == kvpb.RoutingPolicy_LEASEHOLDER &&
 		CanSendToFollower(
 			ctx, ds.st, ds.clock,
-			routing.ClosedTimestampPolicy(defaultSendClosedTimestampPolicy), ba,
+			routing.ClosedTimestampPolicy(rangecache.DefaultSendClosedTimestampPolicy), ba,
 		) {
 		ba = ba.ShallowCopy()
 		ba.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
@@ -2684,7 +2693,7 @@ func (ds *DistSender) sendToReplicas(
 			// doesn't have info. Like above, this asks the server to return an
 			// update.
 			ClosedTimestampPolicy: routing.ClosedTimestampPolicy(
-				defaultSendClosedTimestampPolicy,
+				rangecache.DefaultSendClosedTimestampPolicy,
 			),
 
 			// Range info is only returned when ClientRangeInfo is non-empty.
@@ -2728,17 +2737,16 @@ func (ds *DistSender) sendToReplicas(
 			ds.metrics.ProxySentCount.Inc(1)
 		}
 
-		tBegin := timeutil.Now() // for slow log message
-		sendCtx, cbToken, cbErr := ds.circuitBreakers.ForReplica(desc, &curReplica).
-			Track(ctx, ba, withCommit, tBegin.UnixNano())
+		tBegin := crtime.NowMono() // for slow log message
+		sendCtx, cbToken, cbErr := ds.circuitBreakers.ForReplica(desc, &curReplica).Track(ctx, ba, withCommit, tBegin)
 		if cbErr != nil {
 			// Circuit breaker is tripped. err will be handled below.
 			err = cbErr
 			transport.SkipReplica()
 		} else {
 			br, err = transport.SendNext(sendCtx, requestToSend)
-			tEnd := timeutil.Now()
-			if cancelErr := cbToken.Done(br, err, tEnd.UnixNano()); cancelErr != nil {
+			tEnd := crtime.NowMono()
+			if cancelErr := cbToken.Done(br, err, tEnd); cancelErr != nil {
 				// The request was cancelled by the circuit breaker tripping. If this is
 				// detected by request evaluation (as opposed to the transport send), it
 				// will return the context error in br.Error instead of err, which won't

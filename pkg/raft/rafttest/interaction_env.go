@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2019 The etcd Authors
 //
@@ -33,7 +33,7 @@ type InteractionOpts struct {
 
 	// SetRandomizedElectionTimeout is used to plumb this function down from the
 	// raft test package.
-	SetRandomizedElectionTimeout func(node *raft.RawNode, timeout int)
+	SetRandomizedElectionTimeout func(node *raft.RawNode, timeout int64)
 }
 
 // Node is a member of a raft group tested via an InteractionEnv.

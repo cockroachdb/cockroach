@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -111,6 +106,9 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 
 	// Build each of the SET expressions.
 	mb.addUpdateCols(upd.Exprs)
+
+	// Project row-level BEFORE triggers for UPDATE.
+	mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, false /* cascade */)
 
 	// Build the final update statement, including any returned expressions.
 	if resultsNeeded(upd.Returning) {
@@ -351,6 +349,8 @@ func (mb *mutationBuilder) buildUpdate(returning *tree.ReturningExprs) {
 	mb.buildUniqueChecksForUpdate()
 
 	mb.buildFKChecksForUpdate()
+
+	mb.buildRowLevelAfterTriggers(opt.UpdateOp)
 
 	private := mb.makeMutationPrivate(returning != nil)
 	for _, col := range mb.extraAccessibleCols {

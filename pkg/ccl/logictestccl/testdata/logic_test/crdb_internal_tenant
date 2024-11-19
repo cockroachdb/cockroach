@@ -55,6 +55,7 @@ crdb_internal  databases                                    table  node  NULL  N
 crdb_internal  default_privileges                           table  node  NULL  NULL
 crdb_internal  feature_usage                                table  node  NULL  NULL
 crdb_internal  forward_dependencies                         table  node  NULL  NULL
+crdb_internal  fully_qualified_names                        view   node  NULL  NULL
 crdb_internal  gossip_alerts                                table  node  NULL  NULL
 crdb_internal  gossip_liveness                              table  node  NULL  NULL
 crdb_internal  gossip_network                               table  node  NULL  NULL
@@ -71,8 +72,11 @@ crdb_internal  kv_catalog_namespace                         table  node  NULL  N
 crdb_internal  kv_catalog_zones                             table  node  NULL  NULL
 crdb_internal  kv_dropped_relations                         view   node  NULL  NULL
 crdb_internal  kv_flow_control_handles                      table  node  NULL  NULL
+crdb_internal  kv_flow_control_handles_v2                   table  node  NULL  NULL
 crdb_internal  kv_flow_controller                           table  node  NULL  NULL
+crdb_internal  kv_flow_controller_v2                        table  node  NULL  NULL
 crdb_internal  kv_flow_token_deductions                     table  node  NULL  NULL
+crdb_internal  kv_flow_token_deductions_v2                  table  node  NULL  NULL
 crdb_internal  kv_inherited_role_members                    table  node  NULL  NULL
 crdb_internal  kv_node_liveness                             table  node  NULL  NULL
 crdb_internal  kv_node_status                               table  node  NULL  NULL
@@ -83,6 +87,7 @@ crdb_internal  kv_store_status                              table  node  NULL  N
 crdb_internal  kv_system_privileges                         view   node  NULL  NULL
 crdb_internal  leases                                       table  node  NULL  NULL
 crdb_internal  logical_replication_node_processors          table  node  NULL  NULL
+crdb_internal  logical_replication_spans                    view   node  NULL  NULL
 crdb_internal  lost_descriptors_with_data                   table  node  NULL  NULL
 crdb_internal  node_build_info                              table  node  NULL  NULL
 crdb_internal  node_contention_events                       table  node  NULL  NULL
@@ -112,6 +117,8 @@ crdb_internal  statement_activity                           view   node  NULL  N
 crdb_internal  statement_statistics                         view   node  NULL  NULL
 crdb_internal  statement_statistics_persisted               view   node  NULL  NULL
 crdb_internal  statement_statistics_persisted_v22_2         view   node  NULL  NULL
+crdb_internal  store_liveness_support_for                   table  node  NULL  NULL
+crdb_internal  store_liveness_support_from                  table  node  NULL  NULL
 crdb_internal  super_regions                                table  node  NULL  NULL
 crdb_internal  system_jobs                                  table  node  NULL  NULL
 crdb_internal  table_columns                                table  node  NULL  NULL
@@ -268,15 +275,15 @@ SELECT  * FROM crdb_internal.cluster_transactions WHERE node_id < 0
 ----
 id  node_id  session_id  start  txn_string  application_name  num_stmts  num_retries  num_auto_retries  last_auto_retry_reason  isolation_level  priority  quality_of_service
 
-query ITTTTTTITTTIITTIII colnames
+query ITTTTTTTITTTIITTIII colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
 ----
-node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  num_txns_executed  session_start  active_query_start  kv_txn  alloc_bytes  max_alloc_bytes  status  session_end  pg_backend_pid  trace_id  goroutine_id
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  num_txns_executed  session_start  active_query_start  kv_txn  alloc_bytes  max_alloc_bytes  status  session_end  pg_backend_pid  trace_id  goroutine_id  authentication_method
 
-query ITTTTTTITTTIITTIII colnames
+query ITTTTTTTITTTIITTIII colnames
 SELECT * FROM crdb_internal.cluster_sessions WHERE node_id < 0
 ----
-node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  num_txns_executed  session_start  active_query_start  kv_txn  alloc_bytes  max_alloc_bytes  status  session_end  pg_backend_pid  trace_id  goroutine_id
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  num_txns_executed  session_start  active_query_start  kv_txn  alloc_bytes  max_alloc_bytes  status  session_end  pg_backend_pid  trace_id  goroutine_id  authentication_method
 
 query IIITTTI colnames
 SELECT * FROM crdb_internal.node_contention_events WHERE table_id < 0
@@ -406,7 +413,7 @@ select crdb_internal.get_vmodule()
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.3
+25.1
 
 query ITTT colnames,rowsort
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -494,7 +501,7 @@ select * from crdb_internal.gossip_alerts
 query T
 SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-24.3
+25.1
 
 user root
 

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.util.log.eventpb;
@@ -579,7 +574,7 @@ message CreateFunction {
 message DropFunction {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  // Name of the created function.
+  // Name of the dropped function.
   string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
 }
 
@@ -600,4 +595,24 @@ message AlterFunctionOptions {
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // Name of the affected function.
   string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// CreateTrigger is recorded when a trigger is created.
+message CreateTrigger {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Name of the trigger's table.
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // Name of the created trigger.
+  string trigger_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// DropTrigger is recorded when a trigger is dropped.
+message DropTrigger {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Name of the trigger's table.
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // Name of the dropped trigger.
+  string trigger_name = 4  [(gogoproto.jsontag) = ",omitempty"];
 }

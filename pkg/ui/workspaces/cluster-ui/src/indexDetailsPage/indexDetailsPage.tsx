@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { Caution, Search as IndexIcon } from "@cockroachlabs/icons";
 import { Heading } from "@cockroachlabs/ui-components";
@@ -36,6 +31,7 @@ import {
 } from "../api/indexDetailsApi";
 import { BreadcrumbItem, Breadcrumbs } from "../breadcrumbs";
 import { commonStyles } from "../common";
+import { CockroachCloudContext } from "../contexts";
 import { CaretRight } from "../icon/caretRight";
 import { Pagination } from "../pagination";
 import {
@@ -74,6 +70,11 @@ import {
   unique,
   unset,
 } from "../util";
+import {
+  databaseDetailsPagePath,
+  DB_PAGE_PATH,
+  tableDetailsPagePath,
+} from "../util/routes";
 
 import styles from "./indexDetailsPage.module.scss";
 
@@ -127,6 +128,7 @@ interface IndexDetails {
   lastRead: Moment;
   lastReset: Moment;
   indexRecommendations: IndexRecommendation[];
+  databaseID: number;
 }
 
 export type RecommendationType = "DROP_UNUSED" | "Unknown";
@@ -162,6 +164,8 @@ export class IndexDetailsPage extends React.Component<
   IndexDetailsPageProps,
   IndexDetailsPageState
 > {
+  static contextType = CockroachCloudContext;
+
   refreshDataInterval: NodeJS.Timeout;
   constructor(props: IndexDetailsPageProps) {
     super(props);
@@ -385,20 +389,26 @@ export class IndexDetailsPage extends React.Component<
         />
       );
     }
+
+    const isCockroachCloud = this.context;
     // If no props are passed, render db-console breadcrumb links by default.
     return (
       <Breadcrumbs
         items={[
-          { link: "/databases", name: "Databases" },
+          { link: DB_PAGE_PATH, name: "Databases" },
           {
-            link: EncodeDatabaseUri(this.props.databaseName),
-            name: "Tables",
+            link: isCockroachCloud
+              ? EncodeDatabaseUri(this.props.databaseName)
+              : databaseDetailsPagePath(this.props.details.databaseID),
+            name: this.props.databaseName,
           },
           {
-            link: EncodeDatabaseTableUri(
-              this.props.databaseName,
-              this.props.tableName,
-            ),
+            link: isCockroachCloud
+              ? EncodeDatabaseTableUri(
+                  this.props.databaseName,
+                  this.props.tableName,
+                )
+              : tableDetailsPagePath(parseInt(this.props.details.tableID, 10)),
             name: `Table: ${this.props.tableName}`,
           },
           {

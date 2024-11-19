@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -14,6 +9,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -91,7 +87,7 @@ import (
 // in an (identical) copy of the proposal being added to the log. (All but the
 // first copy that will be applied will not be associated with a proposal).
 // [5]: if the entry applies under an already-consumed LeaseAppliedIndex,
-// tryReproposeWithNewLeaseIndex creates a *new* proposal (which inherits the
+// tryReproposeWithNewLeaseIndexRaftMuLocked creates a *new* proposal (which inherits the
 // waiting caller, latches, etc) and the cycle begins again whereas the current
 // proposal results in an error (which nobody is listening to).
 //
@@ -121,7 +117,15 @@ type ProposalData struct {
 	// that during command application one should always use `replicatedCmd.ctx`
 	// for best coverage. `p.ctx` should be used when a `replicatedCmd` is not in
 	// scope, i.e. outside of raft command application.
-	ctx context.Context
+	//
+	// The context may be updated during the proposal lifecycle but will never
+	// be nil. To clear out the context, set it to context.Background().  It is
+	// protected by an atomic pointer because it can be read without holding the
+	// raftMu. Use ProposalData.Context() to read it.
+	//
+	// TODO(baptist): Track down all the places where we read and write ctx and
+	// determine whether we can convert this back to non-atomic field.
+	ctx atomic.Pointer[context.Context]
 
 	// An optional tracing span bound to the proposal in the case of async
 	// consensus (it will be referenced by p.ctx). We need to finish this span
@@ -134,11 +138,11 @@ type ProposalData struct {
 
 	// proposedAtTicks is the (logical) time at which this command was
 	// last (re-)proposed.
-	proposedAtTicks int
+	proposedAtTicks int64
 
 	// createdAtTicks is the (logical) time at which this command was
 	// *first* proposed.
-	createdAtTicks int
+	createdAtTicks int64
 
 	// command is the log entry that is encoded into encodedCommand and proposed
 	// to raft. Never mutated.
@@ -151,7 +155,7 @@ type ProposalData struct {
 
 	// quotaAlloc is the allocation retrieved from the proposalQuota. The quota is
 	// released when the command comes up for application (even if it will be
-	// reproposed). See retrieveLocalProposals and tryReproposeWithNewLeaseIndex.
+	// reproposed). See retrieveLocalProposals and tryReproposeWithNewLeaseIndexRaftMuLocked.
 	quotaAlloc *quotapool.IntAlloc
 
 	// ec.done is called after command application to update the timestamp
@@ -164,7 +168,7 @@ type ProposalData struct {
 	ec endCmds
 
 	// applied is set when the a command finishes application. It is a remnant of
-	// an earlier version of tryReproposeWithNewLeaseIndex that has yet to be
+	// an earlier version of tryReproposeWithNewLeaseIndexRaftMuLocked that has yet to be
 	// phased out.
 	//
 	// TODO(repl): phase this field out.
@@ -221,6 +225,12 @@ type ProposalData struct {
 	lastReproposal *ProposalData
 }
 
+// Context returns the context associated with the proposal. The context may
+// change during the lifetime of the proposal.
+func (proposal *ProposalData) Context() context.Context {
+	return *proposal.ctx.Load()
+}
+
 // useReplicationAdmissionControl indicates whether this raft command should
 // be subject to replication admission control.
 func (proposal *ProposalData) useReplicationAdmissionControl() bool {
@@ -275,7 +285,8 @@ func (proposal *ProposalData) signalProposalResult(pr proposalResult) {
 		//
 		// NB: `proposal.ec.repl` might already have been cleared if we arrive here
 		// through finishApplication.
-		proposal.ctx = context.Background()
+		ctx := context.Background()
+		proposal.ctx.Store(&ctx)
 	}
 }
 
@@ -300,6 +311,8 @@ const (
 	// don't know what other previous leases we haven't applied.
 	allowLeaseJump = true
 )
+
+var leaseAcquisitionLoggerEvery = log.Every(1 * time.Second)
 
 // leasePostApplyLocked updates the Replica's internal state to reflect the
 // application of a new Range lease. The method is idempotent, so it can be
@@ -375,17 +388,6 @@ func (r *Replica) leasePostApplyLocked(
 	// timestamp cache.
 	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID || prevLease.Sequence != newLease.Sequence
 
-	if iAmTheLeaseHolder {
-		// Log lease acquisitions loudly when verbose logging is enabled or when the
-		// new leaseholder is draining, in which case it should be shedding leases.
-		// Otherwise, log a trace event.
-		if log.V(1) || (leaseChangingHands && r.store.IsDraining()) {
-			log.Infof(ctx, "new range lease %s following %s", newLease, prevLease)
-		} else {
-			log.Eventf(ctx, "new range lease %s following %s", newLease, prevLease)
-		}
-	}
-
 	if leaseChangingHands && iAmTheLeaseHolder {
 		// When taking over the lease, we need to check whether a merge is in
 		// progress, as only the old leaseholder would have been explicitly notified
@@ -453,14 +455,15 @@ func (r *Replica) leasePostApplyLocked(
 
 	// Inform the propBuf about the new lease so that it can initialize its closed
 	// timestamp tracking.
-	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.RaftClosedTimestamp, r.mu.state.LeaseAppliedIndex)
+	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder,
+		r.shMu.state.RaftClosedTimestamp, r.shMu.state.LeaseAppliedIndex)
 
 	// Ordering is critical here. We only install the new lease after we've
 	// checked for an in-progress merge and updated the timestamp cache. If the
 	// ordering were reversed, it would be possible for requests to see the new
 	// lease but not the updated merge or timestamp cache state, which can result
 	// in serializability violations.
-	r.mu.state.Lease = newLease
+	r.shMu.state.Lease = newLease
 
 	now := r.store.Clock().NowAsClockTimestamp()
 
@@ -471,9 +474,9 @@ func (r *Replica) leasePostApplyLocked(
 		r.gossipFirstRangeLocked(ctx)
 	}
 
-	// Log the lease acquisition, if appropriate.
-	if leaseChangingHands && iAmTheLeaseHolder {
-		r.maybeLogLeaseAcquisition(ctx, now, prevLease, newLease)
+	// Log the lease, if appropriate.
+	if iAmTheLeaseHolder {
+		r.maybeLogLease(ctx, now, prevLease, newLease)
 	}
 
 	st := r.leaseStatusAtRLocked(ctx, now)
@@ -586,58 +589,94 @@ func (r *Replica) leasePostApplyLocked(
 	}
 }
 
-// maybeLogLeaseAcquisition is called on the new leaseholder when the lease
-// changes hands, to log the lease acquisition if appropriate.
-func (r *Replica) maybeLogLeaseAcquisition(
+// maybeLogLease is called on the new leaseholder to log the lease
+// if appropriate.
+func (r *Replica) maybeLogLease(
 	ctx context.Context, now hlc.ClockTimestamp, prevLease, newLease *roachpb.Lease,
 ) {
-	// Log acquisition of meta and liveness range leases. These are critical to
-	// cluster health, so it's useful to know their location over time.
-	if r.descRLocked().StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax)) {
-		if r.ownsValidLeaseRLocked(ctx, now) {
-			log.Health.Infof(ctx, "acquired system range lease: %s [acquisition-type=%s]",
-				newLease, newLease.AcquisitionType)
-		} else {
-			log.Health.Warningf(ctx, "applied system range lease after it expired: %s [acquisition-type=%s]",
-				newLease, newLease.AcquisitionType)
-		}
+	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID ||
+		prevLease.Sequence != newLease.Sequence
+
+	// TODO(arul): consider pulling out all these leasing related logging into
+	// a separate log channel.
+
+	extension := newLease.Type() == roachpb.LeaseExpiration && !leaseChangingHands
+	promotion := prevLease.Type() == roachpb.LeaseExpiration &&
+		newLease.Type() != roachpb.LeaseExpiration && !leaseChangingHands
+	if r.store.IsDraining() && leaseChangingHands {
+		// If the new leaseholder is on a draining node, in which case it should be
+		// shedding leases, indicate this in the log line.
+		log.Health.Infof(ctx, "new range lease %s on draining node following %s", newLease, prevLease)
+	} else if log.V(1) {
+		// Log every lease acquisition if verbose logging is enabled.
+		log.Health.Infof(ctx, "new range lease %s following %s", newLease, prevLease)
+	} else if !extension && leaseAcquisitionLoggerEvery.ShouldLog() {
+		// We log lease applications once every leaseAcquisitionLoggerEvery
+		// duration. to prevent logs from getting too spammy. Moreover, to make
+		// these logs useful, we don't log extensions for expiration based leases,
+		// as those are fairly frequent.
+		log.Health.Infof(ctx, "new range lease %s following %s", newLease, prevLease)
+	} else if promotion {
+		// Lease is being promoted. It likely won't be caught by the
+		// leaseAcquisitionLoggerEvery above, as we attempt to promote the moment
+		// the lease transfer is applied. Log it here. Note that we log every
+		// lease transfer anyway, so this shouldn't be too much more chatty.
+		log.Health.Infof(ctx, "new range lease %s promoted from %s", newLease, prevLease)
+	} else {
+		// If none of the above is true, just log as a trace event.
+		log.Eventf(ctx, "new range lease %s following %s", newLease, prevLease)
 	}
 
-	const slowLeaseApplyWarnThreshold = time.Second
-	newLeaseAppDelay := time.Duration(now.WallTime - newLease.ProposedTS.WallTime)
-	if newLeaseAppDelay > slowLeaseApplyWarnThreshold {
-		// If we hold the lease now and the lease was proposed "earlier", there
-		// must have been replication lag, and possibly reads and/or writes were
-		// delayed.
-		//
-		// We see this most commonly with lease transfers targeting a behind replica,
-		// or, in the worst case, a snapshot. We are constantly improving our
-		// heuristics for avoiding that[^1] but if it does happen it's good to know
-		// from the logs.
-		//
-		// In the case of a lease transfer, the two timestamps compared below are from
-		// different clocks, so there could be skew. We just pretend this is not the
-		// case, which is good enough here.
-		//
-		// [^1]: https://github.com/cockroachdb/cockroach/pull/82758
-		log.Health.Warningf(ctx,
-			"applied lease after ~%.2fs replication lag, client traffic may have "+
-				"been delayed [lease=%v prev=%v acquisition-type=%s]",
-			newLeaseAppDelay.Seconds(), newLease, prevLease, newLease.AcquisitionType)
-	} else if prevLease.Type() == roachpb.LeaseExpiration &&
-		newLease.Type() != roachpb.LeaseExpiration &&
-		prevLease.Expiration != nil && // nil when there is no previous lease
-		prevLease.Expiration.LessEq(newLease.Start.ToTimestamp()) {
-		// If the previous lease is expiration-based, but the new lease is not and
-		// starts at or after its expiration, it is likely that a lease transfer
-		// (which is expiration-based) went to a follower that then couldn't upgrade
-		// it to an epoch lease (for example, didn't apply it in time for it to
-		// actually serve any traffic). The result was likely an outage which
-		// resolves right now, so log to point this out.
-		log.Health.Warningf(ctx,
-			"lease expired before epoch/leader lease upgrade, client traffic may "+
-				"have been delayed [lease=%v prev=%v acquisition-type=%s]",
-			newLease, prevLease, newLease.AcquisitionType)
+	if leaseChangingHands {
+		// Log acquisition of meta and liveness range leases. These are critical to
+		// cluster health, so it's useful to know their location over time.
+		if r.descRLocked().StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax)) {
+			if r.ownsValidLeaseRLocked(ctx, now) {
+				log.Health.Infof(ctx, "acquired system range lease: %s [acquisition-type=%s]",
+					newLease, newLease.AcquisitionType)
+			} else {
+				log.Health.Warningf(ctx, "applied system range lease after it expired: %s [acquisition-type=%s]",
+					newLease, newLease.AcquisitionType)
+			}
+		}
+
+		// Log slow lease applications in the Health log.
+		const slowLeaseApplyWarnThreshold = time.Second
+		newLeaseAppDelay := time.Duration(now.WallTime - newLease.ProposedTS.WallTime)
+		if newLeaseAppDelay > slowLeaseApplyWarnThreshold {
+			// If we hold the lease now and the lease was proposed "earlier", there
+			// must have been replication lag, and possibly reads and/or writes were
+			// delayed.
+			//
+			// We see this most commonly with lease transfers targeting a behind replica,
+			// or, in the worst case, a snapshot. We are constantly improving our
+			// heuristics for avoiding that[^1] but if it does happen it's good to know
+			// from the logs.
+			//
+			// In the case of a lease transfer, the two timestamps compared below are from
+			// different clocks, so there could be skew. We just pretend this is not the
+			// case, which is good enough here.
+			//
+			// [^1]: https://github.com/cockroachdb/cockroach/pull/82758
+			log.Health.Warningf(ctx,
+				"applied lease after ~%.2fs replication lag, client traffic may have "+
+					"been delayed [lease=%v prev=%v acquisition-type=%s]",
+				newLeaseAppDelay.Seconds(), newLease, prevLease, newLease.AcquisitionType)
+		} else if prevLease.Type() == roachpb.LeaseExpiration &&
+			newLease.Type() != roachpb.LeaseExpiration &&
+			prevLease.Expiration != nil && // nil when there is no previous lease
+			prevLease.Expiration.LessEq(newLease.Start.ToTimestamp()) {
+			// If the previous lease is expiration-based, but the new lease is not and
+			// starts at or after its expiration, it is likely that a lease transfer
+			// (which is expiration-based) went to a follower that then couldn't upgrade
+			// it to an epoch lease (for example, didn't apply it in time for it to
+			// actually serve any traffic). The result was likely an outage which
+			// resolves right now, so log to point this out.
+			log.Health.Warningf(ctx,
+				"lease expired before epoch/leader lease upgrade, client traffic may "+
+					"have been delayed [lease=%v prev=%v acquisition-type=%s]",
+				newLease, prevLease, newLease.AcquisitionType)
+		}
 	}
 }
 
@@ -1054,13 +1093,13 @@ func (r *Replica) requestToProposal(
 
 	// Fill out the results even if pErr != nil; we'll return the error below.
 	proposal := &ProposalData{
-		ctx:         ctx,
 		idKey:       idKey,
 		doneCh:      make(chan proposalResult, 1),
 		Local:       &res.Local,
 		Request:     ba,
 		leaseStatus: *st,
 	}
+	proposal.ctx.Store(&ctx)
 
 	if needConsensus {
 		proposal.command = &kvserverpb.RaftCommand{

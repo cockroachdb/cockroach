@@ -1,26 +1,27 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 package amazon
 
 import (
 	"context"
+	"encoding/pem"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -41,9 +42,10 @@ func TestEncryptDecryptAWS(t *testing.T) {
 	// If environment credentials are not present, we want to
 	// skip all AWS KMS tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
-	_, err := credentials.NewEnvCredentials().Get()
-	if err != nil {
-		skip.IgnoreLint(t, "Test only works with AWS credentials")
+	envConfig, err := config.NewEnvConfig()
+	require.NoError(t, err)
+	if !envConfig.Credentials.HasKeys() {
+		skip.IgnoreLint(t, "No AWS credentials")
 	}
 
 	q := make(url.Values)
@@ -95,8 +97,10 @@ func TestEncryptDecryptAWS(t *testing.T) {
 		// in the AWS console, then set it up locally.
 		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
+		ctx := context.Background()
+		cfg, err := config.LoadDefaultConfig(ctx)
+		require.NoError(t, err)
+		_, err = cfg.Credentials.Retrieve(ctx)
 		if err != nil {
 			skip.IgnoreLint(t, err)
 		}
@@ -130,9 +134,10 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 	// If environment credentials are not present, we want to
 	// skip all AWS KMS tests, including auth-implicit, even though
 	// it is not used in auth-implicit.
-	_, err := credentials.NewEnvCredentials().Get()
-	if err != nil {
-		skip.IgnoreLint(t, "Test only works with AWS credentials")
+	envConfig, err := config.NewEnvConfig()
+	require.NoError(t, err)
+	if !envConfig.Credentials.HasKeys() {
+		skip.IgnoreLint(t, "No AWS credentials")
 	}
 
 	q := make(url.Values)
@@ -172,8 +177,11 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 		// in the AWS console, then set it up locally.
 		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
 		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
+		ctx := context.Background()
+		cfg, err := config.LoadDefaultConfig(ctx,
+			config.WithSharedConfigProfile(config.DefaultSharedConfigProfile))
+		require.NoError(t, err)
+		_, err = cfg.Credentials.Retrieve(ctx)
 		if err != nil {
 			skip.IgnoreLint(t, err)
 		}
@@ -220,6 +228,63 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 		q.Set(AssumeRoleParam, roleChainStr)
 		uri = fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, testEnv)
+	})
+}
+
+func TestKMSAgainstMockAWS(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Setup a bogus credentials file so it doesn't try to use a metadata server.
+	tempDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	credFile := filepath.Join(tempDir, "credentials")
+	require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE", credFile))
+	defer func() {
+		require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+	}()
+	require.NoError(t, os.WriteFile(credFile, []byte(`[default]
+		aws_access_key_id = abc
+		aws_secret_access_key = xyz
+		`), 0644))
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		defer r.Body.Close()
+		// Default to replying with static placeholder "ciphertext", unless req is
+		// a decrypt req, in which case send static "decrypted" plaintext resp.
+		resp := `{"CiphertextBlob": "dW51c2Vk"}` // "unused".
+		if strings.Contains(string(body), "Ciphertext") {
+			resp = `{"Plaintext": "aGVsbG8gd29ybGQ="}` // base64 for 'hello world'
+		}
+		_, err = w.Write([]byte(resp))
+		require.NoError(t, err)
+	}))
+	defer srv.Close()
+
+	tEnv := &cloud.TestKMSEnv{Settings: cluster.MakeTestingClusterSettings(), ExternalIOConfig: &base.ExternalIODirConfig{}}
+
+	// Set the custom CA so testserver is trusted, and defer reset of it.
+	u := tEnv.Settings.MakeUpdater()
+	require.NoError(t, u.Set(ctx, "cloudstorage.http.custom_ca", settings.EncodedValue{
+		Type: "s", Value: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
+	}))
+
+	t.Run("implicit", func(t *testing.T) {
+		q := url.Values{
+			KMSRegionParam: []string{"r"}, AWSEndpointParam: []string{srv.URL},
+			cloud.AuthParam: []string{"implicit"},
+		}
+		cloud.KMSEncryptDecrypt(t, fmt.Sprintf("aws:///arn?%s", q.Encode()), tEnv)
+	})
+
+	t.Run("specified", func(t *testing.T) {
+		q := url.Values{
+			KMSRegionParam: []string{"r"}, AWSEndpointParam: []string{srv.URL},
+			AWSAccessKeyParam: []string{"k"}, AWSSecretParam: []string{"s"},
+		}
+		cloud.KMSEncryptDecrypt(t, fmt.Sprintf("aws:///arn?%s", q.Encode()), tEnv)
 	})
 }
 
@@ -333,7 +398,7 @@ func TestAWSKMSInaccessibleError(t *testing.T) {
 		q2.Set(AWSSecretParam, q.Get(AWSSecretParam)+"garbage")
 		uri := fmt.Sprintf("%s:///%s?%s", awsKMSScheme, keyID, q2.Encode())
 
-		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "status code: 400")
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "StatusCode: 400")
 	})
 
 	t.Run("incorrect-kms", func(t *testing.T) {
@@ -364,4 +429,49 @@ func TestAWSKMSInaccessibleError(t *testing.T) {
 		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "(not authorized to perform: sts:AssumeRole|InvalidCiphertext)")
 	})
 
+}
+
+func TestAWSKMSImplicitAuthRequiresNoSharedConfigFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Tests if the AWS KMS client can be created when the shared config files
+	// are not present, but are present through the rest of the credential/config
+	// chain as specified in https://docs.aws.amazon.com/cli/v1/userguide/cli-chap-authentication.html#cli-chap-authentication-precedence
+
+	// If either KMS region or key ARN is not set, we can assume we are not
+	// running in the nightly test environment and can skip.
+	kmsRegion := os.Getenv("AWS_KMS_REGION")
+	if kmsRegion == "" {
+		skip.IgnoreLint(t, "AWS_KMS_REGION env var must be set")
+	}
+	keyID := os.Getenv("AWS_KMS_KEY_ARN")
+	if keyID == "" {
+		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
+	}
+
+	// Setup a bogus credentials/configs file so that we can simulate a non-existent
+	// shared config file. The test environment is already setup with the
+	// default config/credential files at ~/.aws/config and ~/.aws/credentials,
+	// so in order to circumvent this and test the case where the shared config
+	// files are not present, we need to set the AWS_CONFIG_FILE and
+	// AWS_SHARED_CREDENTIALS_FILE.
+	require.NoError(t, os.Setenv("AWS_CONFIG_FILE", "/tmp/config"))
+	require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE",
+		"/tmp/credentials"))
+	defer func() {
+		require.NoError(t, os.Unsetenv("AWS_CONFIG_FILE"))
+		require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+	}()
+
+	testEnv := &cloud.TestKMSEnv{
+		Settings:         awsKMSTestSettings,
+		ExternalIOConfig: &base.ExternalIODirConfig{},
+	}
+
+	params := make(url.Values)
+	params.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+	params.Add(KMSRegionParam, kmsRegion)
+
+	uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
+	_, err := MakeAWSKMS(context.Background(), uri, testEnv)
+	require.NoError(t, err)
 }

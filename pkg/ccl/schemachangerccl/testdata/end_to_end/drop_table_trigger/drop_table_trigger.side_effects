@@ -1,0 +1,210 @@
+/* setup */
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f();
+----
+...
+
+/* test */
+DROP TABLE defaultdb.t;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP TABLE
+increment telemetry for sql.schema.drop_table
+write *eventpb.DropTable to event log:
+  sql:
+    descriptorId: 104
+    statement: DROP TABLE ‹defaultdb›.‹public›.‹t›
+    tag: DROP TABLE
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 51 MutationType ops
+delete object namespace entry {100 101 t} -> 104
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  -  triggers:
+  -  - actionTime: BEFORE
+  -    dependsOnRoutines:
+  -    - 105
+  -    enabled: true
+  -    events:
+  -    - type: INSERT
+  -    - type: UPDATE
+  -    - type: DELETE
+  -    forEachRow: true
+  -    funcBody: |
+  -      BEGIN
+  -      RAISE NOTICE '%: % -> %', tg_op, old, new;
+  -      RETURN COALESCE(old, new);
+  -      END;
+  -    funcId: 105
+  -    id: 1
+  -    name: tr
+  +  state: DROP
+  +  triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+   function:
+  -  dependedOnBy:
+  -  - id: 104
+  -    triggerIds:
+  -    - 1
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "2"
+  +  version: "3"
+     volatility: VOLATILE
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 54 MutationType ops
+delete object namespace entry {100 101 t} -> 104
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 104
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TABLE ‹defaultdb›.‹public›.‹t›
+  +        statement: DROP TABLE defaultdb.t
+  +        statementTag: DROP TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  -  triggers:
+  -  - actionTime: BEFORE
+  -    dependsOnRoutines:
+  -    - 105
+  -    enabled: true
+  -    events:
+  -    - type: INSERT
+  -    - type: UPDATE
+  -    - type: DELETE
+  -    forEachRow: true
+  -    funcBody: |
+  -      BEGIN
+  -      RAISE NOTICE '%: % -> %', tg_op, old, new;
+  -      RETURN COALESCE(old, new);
+  -      END;
+  -    funcId: 105
+  -    id: 1
+  -    name: tr
+  +  state: DROP
+  +  triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+   function:
+  -  dependedOnBy:
+  -  - id: 104
+  -    triggerIds:
+  -    - 1
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: f
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "2"
+  +  version: "3"
+     volatility: VOLATILE
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "DROP TABLE defaultdb.public.t"
+  descriptor IDs: [104 105]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 104
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP TABLE ‹defaultdb›.‹public›.‹t›
+  -        statement: DROP TABLE defaultdb.t
+  -        statementTag: DROP TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     dropTime: <redacted>"
+     families:
+  ...
+     triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #105
+   function:
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: f
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "3"
+  +  version: "4"
+     volatility: VOLATILE
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for DROP TABLE defaultdb.public.t"
+  descriptor IDs: [104]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #3
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

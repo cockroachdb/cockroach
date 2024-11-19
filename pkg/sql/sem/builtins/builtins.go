@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package builtins
 
@@ -48,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/randgen/randgencfg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -1938,9 +1934,9 @@ var regularBuiltins = map[string]builtinDefinition{
 
 	"quote_literal": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:             tree.ParamTypes{{Name: "val", Typ: types.String}},
-			ReturnType:        tree.FixedReturnType(types.String),
-			PreferredOverload: true,
+			Types:              tree.ParamTypes{{Name: "val", Typ: types.String}},
+			ReturnType:         tree.FixedReturnType(types.String),
+			OverloadPreference: tree.OverloadPreferencePreferred,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				s := tree.MustBeDString(args[0])
 				return tree.NewDString(lexbase.EscapeSQLString(string(s))), nil
@@ -1972,9 +1968,9 @@ var regularBuiltins = map[string]builtinDefinition{
 			Category: builtinconstants.CategoryString,
 		},
 		tree.Overload{
-			Types:             tree.ParamTypes{{Name: "val", Typ: types.String}},
-			ReturnType:        tree.FixedReturnType(types.String),
-			PreferredOverload: true,
+			Types:              tree.ParamTypes{{Name: "val", Typ: types.String}},
+			ReturnType:         tree.FixedReturnType(types.String),
+			OverloadPreference: tree.OverloadPreferencePreferred,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.NewDString("NULL"), nil
@@ -2726,9 +2722,9 @@ months and years, use the timestamptz subtraction operator.`,
 	"statement_timestamp": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
-			PreferredOverload: true,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.TimestampTZ),
+			OverloadPreference: tree.OverloadPreferencePreferred,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestampTZ(evalCtx.GetStmtTimestamp(), time.Microsecond)
 			},
@@ -2891,9 +2887,9 @@ value if you rely on the HLC for accuracy.`,
 	"clock_timestamp": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
-			PreferredOverload: true,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.TimestampTZ),
+			OverloadPreference: tree.OverloadPreferencePreferred,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.MakeDTimestampTZ(timeutil.Now(), time.Microsecond)
 			},
@@ -5854,6 +5850,54 @@ SELECT
 		},
 	),
 
+	// Fetches the corresponding lease_holder for the request key. If an error
+	// occurs, the query still succeeds and the error is included in the output.
+	"crdb_internal.lease_holder_with_errors": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key", Typ: types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.Txn == nil { // can occur during backfills
+					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+						"cannot use crdb_internal.lease_holder_with_errors in this context")
+				}
+				key := []byte(tree.MustBeDBytes(args[0]))
+				b := evalCtx.Txn.DB().NewBatch()
+				b.AddRawRequest(&kvpb.LeaseInfoRequest{
+					RequestHeader: kvpb.RequestHeader{
+						Key: key,
+					},
+				})
+				type leaseholderAndError struct {
+					Leaseholder roachpb.StoreID
+					Error       string
+				}
+				lhae := &leaseholderAndError{}
+				if err := evalCtx.Txn.DB().Run(ctx, b); err != nil {
+					lhae.Error = err.Error()
+				} else {
+					resp := b.RawResponse().Responses[0].GetInner().(*kvpb.LeaseInfoResponse)
+					lhae.Leaseholder = resp.Lease.Replica.StoreID
+				}
+
+				jsonStr, err := gojson.Marshal(lhae)
+				if err != nil {
+					return nil, err
+				}
+				jsonDatum, err := tree.ParseDJSON(string(jsonStr))
+				if err != nil {
+					return nil, err
+				}
+				return jsonDatum, nil
+			},
+			Info:       "This function is used to fetch the leaseholder corresponding to a request key",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.trim_tenant_prefix": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     builtinconstants.CategoryMultiTenancy,
@@ -6155,6 +6199,27 @@ SELECT
 					return nil, err
 				}
 				return jsonDatum, nil
+			},
+			Info:       "This function is used to retrieve range statistics information as a JSON object.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	// Return statistics about a range.
+	"crdb_internal.range_stats_with_errors": makeBuiltin(
+		tree.FunctionProperties{
+			Category: builtinconstants.CategorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "key", Typ: types.Bytes},
+			},
+			SpecializedVecBuiltin: tree.CrdbInternalRangeStatsWithErrors,
+			ReturnType:            tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// This function is a placeholder and will never be called because
+				// CrdbInternalRangeStatsWithErrors overrides it.
+				return tree.DNull, nil
 			},
 			Info:       "This function is used to retrieve range statistics information as a JSON object.",
 			Volatility: volatility.Volatile,
@@ -7841,8 +7906,7 @@ run from. One of 'mvccGC', 'merge', 'split', 'replicate', 'replicaGC',
 
 				var foundRepl bool
 				if err := evalCtx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
-					var err error
-					_, err = store.Enqueue(ctx, queue, rangeID, skipShouldQueue)
+					err := store.Enqueue(ctx, queue, rangeID, skipShouldQueue)
 					if err == nil {
 						foundRepl = true
 						return nil
@@ -7892,7 +7956,14 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 				var rec tracingpb.Recording
 				if err := evalCtx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
 					var err error
-					rec, err = store.Enqueue(ctx, queue, rangeID, skipShouldQueue)
+					if shouldReturnTrace {
+						traceCtx, trace := tracing.ContextWithRecordingSpan(ctx, evalCtx.Tracer, "trace-enqueue")
+						err = store.Enqueue(traceCtx, queue, rangeID, skipShouldQueue)
+						rec = trace()
+					} else {
+						err = store.Enqueue(ctx, queue, rangeID, skipShouldQueue)
+					}
+
 					if err == nil {
 						foundRepl = true
 						return nil
@@ -7946,7 +8017,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 				if err := evalCtx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
 					if storeID == store.StoreID() {
 						foundStore = true
-						_, err := store.Enqueue(ctx, queue, rangeID, skipShouldQueue)
+						err := store.Enqueue(ctx, queue, rangeID, skipShouldQueue)
 						return err
 					}
 					return nil
@@ -8829,6 +8900,44 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.get_fully_qualified_table_name": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "table_descriptor_id", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Body: `
+SELECT fq_name
+FROM crdb_internal.fully_qualified_names
+WHERE object_id = table_descriptor_id
+`,
+			Info:       `This function is used to get the fully qualified table name given a table descriptor ID`,
+			Volatility: volatility.Stable,
+			Language:   tree.RoutineLangSQL,
+		},
+	),
+	"crdb_internal.type_is_indexable": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				oid := tree.MustBeDOid(args[0]).Oid
+				var typ *types.T
+				if resolvedTyp, ok := types.OidToType[oid]; ok {
+					typ = resolvedTyp
+				} else {
+					var err error
+					if typ, err = evalCtx.Planner.ResolveTypeByOID(ctx, oid); err != nil {
+						return nil, err
+					}
+				}
+				return tree.MakeDBool(tree.DBool(colinfo.ColumnTypeIsIndexable(typ))), nil
+			},
+			Info:       "Returns whether the given type OID is indexable.",
+			Volatility: volatility.Stable,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
@@ -9276,12 +9385,17 @@ func getTimeAdditionalDesc(preferTZOverload bool) (string, string) {
 }
 
 func txnTSOverloads(preferTZOverload bool) []tree.Overload {
+	pref := tree.OverloadPreferencePreferred
+	tzPref := tree.OverloadPreferenceNone
+	if preferTZOverload {
+		pref, tzPref = tzPref, pref
+	}
 	tzAdditionalDesc, noTZAdditionalDesc := getTimeAdditionalDesc(preferTZOverload)
 	return []tree.Overload{
 		{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.TimestampTZ),
-			PreferredOverload: preferTZOverload,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.TimestampTZ),
+			OverloadPreference: tzPref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return evalCtx.GetTxnTimestamp(time.Microsecond), nil
 			},
@@ -9289,9 +9403,9 @@ func txnTSOverloads(preferTZOverload bool) []tree.Overload {
 			Volatility: volatility.Stable,
 		},
 		{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.Timestamp),
-			PreferredOverload: !preferTZOverload,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.Timestamp),
+			OverloadPreference: pref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return evalCtx.GetTxnTimestampNoZone(time.Microsecond), nil
 			},
@@ -9309,13 +9423,18 @@ func txnTSOverloads(preferTZOverload bool) []tree.Overload {
 }
 
 func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
+	pref := tree.OverloadPreferencePreferred
+	tzPref := tree.OverloadPreferenceNone
+	if preferTZOverload {
+		pref, tzPref = tzPref, pref
+	}
 	tzAdditionalDesc, noTZAdditionalDesc := getTimeAdditionalDesc(preferTZOverload)
 	return append(
 		[]tree.Overload{
 			{
-				Types:             tree.ParamTypes{{Name: "precision", Typ: types.Int}},
-				ReturnType:        tree.FixedReturnType(types.TimestampTZ),
-				PreferredOverload: preferTZOverload,
+				Types:              tree.ParamTypes{{Name: "precision", Typ: types.Int}},
+				ReturnType:         tree.FixedReturnType(types.TimestampTZ),
+				OverloadPreference: tzPref,
 				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 					prec := int32(tree.MustBeDInt(args[0]))
 					if prec < 0 || prec > 6 {
@@ -9327,9 +9446,9 @@ func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
 				Volatility: volatility.Stable,
 			},
 			{
-				Types:             tree.ParamTypes{{Name: "precision", Typ: types.Int}},
-				ReturnType:        tree.FixedReturnType(types.Timestamp),
-				PreferredOverload: !preferTZOverload,
+				Types:              tree.ParamTypes{{Name: "precision", Typ: types.Int}},
+				ReturnType:         tree.FixedReturnType(types.Timestamp),
+				OverloadPreference: pref,
 				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 					prec := int32(tree.MustBeDInt(args[0]))
 					if prec < 0 || prec > 6 {
@@ -9377,13 +9496,18 @@ func txnTSWithPrecisionImplBuiltin(preferTZOverload bool) builtinDefinition {
 }
 
 func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
+	pref := tree.OverloadPreferencePreferred
+	tzPref := tree.OverloadPreferenceNone
+	if preferTZOverload {
+		pref, tzPref = tzPref, pref
+	}
 	tzAdditionalDesc, noTZAdditionalDesc := getTimeAdditionalDesc(preferTZOverload)
 	return makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.TimeTZ),
-			PreferredOverload: preferTZOverload,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.TimeTZ),
+			OverloadPreference: tzPref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return evalCtx.GetTxnTime(time.Microsecond), nil
 			},
@@ -9391,9 +9515,9 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types:             tree.ParamTypes{},
-			ReturnType:        tree.FixedReturnType(types.Time),
-			PreferredOverload: !preferTZOverload,
+			Types:              tree.ParamTypes{},
+			ReturnType:         tree.FixedReturnType(types.Time),
+			OverloadPreference: pref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return evalCtx.GetTxnTimeNoZone(time.Microsecond), nil
 			},
@@ -9401,9 +9525,9 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types:             tree.ParamTypes{{Name: "precision", Typ: types.Int}},
-			ReturnType:        tree.FixedReturnType(types.TimeTZ),
-			PreferredOverload: preferTZOverload,
+			Types:              tree.ParamTypes{{Name: "precision", Typ: types.Int}},
+			ReturnType:         tree.FixedReturnType(types.TimeTZ),
+			OverloadPreference: tzPref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				prec := int32(tree.MustBeDInt(args[0]))
 				if prec < 0 || prec > 6 {
@@ -9415,9 +9539,9 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			Types:             tree.ParamTypes{{Name: "precision", Typ: types.Int}},
-			ReturnType:        tree.FixedReturnType(types.Time),
-			PreferredOverload: !preferTZOverload,
+			Types:              tree.ParamTypes{{Name: "precision", Typ: types.Int}},
+			ReturnType:         tree.FixedReturnType(types.Time),
+			OverloadPreference: pref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				prec := int32(tree.MustBeDInt(args[0]))
 				if prec < 0 || prec > 6 {

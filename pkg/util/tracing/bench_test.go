@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tracing
 
@@ -30,8 +25,8 @@ func BenchmarkTracer_StartSpanCtx(b *testing.B) {
 	skip.UnderDeadlock(b, "span reuse triggers false-positives in the deadlock detector")
 	ctx := context.Background()
 
-	staticLogTags := logtags.Buffer{}
-	staticLogTags.Add("foo", "bar")
+	staticLogTags := &logtags.Buffer{}
+	staticLogTags = staticLogTags.Add("foo", "bar")
 	mockListener := &mockEventListener{}
 
 	for _, tc := range []struct {
@@ -44,7 +39,7 @@ func BenchmarkTracer_StartSpanCtx(b *testing.B) {
 		{name: "none", defaultMode: TracingModeOnDemand},
 		{name: "real", defaultMode: TracingModeActiveSpansRegistry},
 		{name: "real,logtag", defaultMode: TracingModeActiveSpansRegistry,
-			opts: []SpanOption{WithLogTags(&staticLogTags)}},
+			opts: []SpanOption{WithLogTags(staticLogTags)}},
 		{name: "real,autoparent", defaultMode: TracingModeActiveSpansRegistry, parent: true},
 		{name: "real,manualparent", defaultMode: TracingModeActiveSpansRegistry, parent: true,
 			opts: []SpanOption{WithDetachedRecording()}},

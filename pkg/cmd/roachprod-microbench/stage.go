@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -26,7 +21,7 @@ import (
 func stage(cluster, archivePath, remoteDest string) (err error) {
 	ctx := context.Background()
 
-	initRoachprod()
+	InitRoachprod()
 	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
 	l, err := loggerCfg.NewLogger("")
 	if err != nil {
@@ -38,22 +33,22 @@ func stage(cluster, archivePath, remoteDest string) (err error) {
 
 	defer func() {
 		// Remove the remote archive after we're done.
-		cleanUpErr := roachprodRun(cluster, l, []string{"rm", "-rf", archiveRemotePath})
+		cleanUpErr := RoachprodRun(cluster, l, []string{"rm", "-rf", archiveRemotePath})
 		err = errors.CombineErrors(err, errors.Wrapf(cleanUpErr, "removing remote archive: %s", archiveRemotePath))
 	}()
 
 	// Remove the remote archive and destination directory if they exist.
-	if err = roachprodRun(cluster, l, []string{"rm", "-rf", archiveRemotePath}); err != nil {
+	if err = RoachprodRun(cluster, l, []string{"rm", "-rf", archiveRemotePath}); err != nil {
 		return errors.Wrapf(err, "removing remote archive: %s", archiveRemotePath)
 	}
-	if err = roachprodRun(cluster, l, []string{"rm", "-rf", remoteDest}); err != nil {
+	if err = RoachprodRun(cluster, l, []string{"rm", "-rf", remoteDest}); err != nil {
 		return errors.Wrapf(err, "removing remote destination: %s", remoteDest)
 	}
 
 	// Copy the archive to the remote machine.
 	copyFromGCS := strings.HasPrefix(archivePath, "gs://")
 	if copyFromGCS {
-		if err = roachprodRun(cluster, l, []string{"gsutil", "-q", "-m", "cp", archivePath, archiveRemotePath}); err != nil {
+		if err = RoachprodRun(cluster, l, []string{"gsutil", "-q", "-m", "cp", archivePath, archiveRemotePath}); err != nil {
 			return errors.Wrapf(err, "copying archive from GCS: %s", archivePath)
 		}
 	} else {
@@ -63,10 +58,10 @@ func stage(cluster, archivePath, remoteDest string) (err error) {
 	}
 
 	// Extract the archive on the remote machine.
-	if err = roachprodRun(cluster, l, []string{"mkdir", "-p", remoteDest}); err != nil {
+	if err = RoachprodRun(cluster, l, []string{"mkdir", "-p", remoteDest}); err != nil {
 		return errors.Wrapf(err, "creating remote destination: %s", remoteDest)
 	}
-	if err = roachprodRun(cluster, l, []string{"tar", "-C", remoteDest, "-xzf", archiveRemotePath}); err != nil {
+	if err = RoachprodRun(cluster, l, []string{"tar", "-C", remoteDest, "-xzf", archiveRemotePath}); err != nil {
 		return errors.Wrapf(err, "extracting archive: %s", archiveRemotePath)
 	}
 

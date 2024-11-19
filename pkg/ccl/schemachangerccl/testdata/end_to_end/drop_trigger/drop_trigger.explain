@@ -1,0 +1,29 @@
+/* setup */
+CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t FOR EACH ROW EXECUTE FUNCTION f();
+
+/* test */
+EXPLAIN (DDL) DROP TRIGGER tr ON defaultdb.t;
+----
+Schema change plan for DROP TRIGGER ‹tr› ON ‹defaultdb›.‹t›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT Trigger:{DescID: 104 (t), TriggerID: 1}
+ │         │    └── PUBLIC → ABSENT TriggerDeps:{DescID: 104 (t), TriggerID: 1}
+ │         └── 2 Mutation operations
+ │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+ │              └── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── ABSENT → PUBLIC Trigger:{DescID: 104 (t), TriggerID: 1}
+      │    │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── PUBLIC → ABSENT Trigger:{DescID: 104 (t), TriggerID: 1}
+           │    └── PUBLIC → ABSENT TriggerDeps:{DescID: 104 (t), TriggerID: 1}
+           └── 2 Mutation operations
+                ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+                └── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}

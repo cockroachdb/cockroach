@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
@@ -52,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -98,8 +94,11 @@ table_name NOT IN (
 	'kv_dropped_relations',
 	'kv_inherited_role_members',
 	'kv_flow_control_handles',
+	'kv_flow_control_handles_v2',
 	'kv_flow_controller',
+	'kv_flow_controller_v2',
 	'kv_flow_token_deductions',
+	'kv_flow_token_deductions_v2',
 	'lost_descriptors_with_data',
 	'table_columns',
 	'table_row_statistics',
@@ -108,20 +107,23 @@ table_name NOT IN (
 	'predefined_comments',
 	'session_trace',
 	'session_variables',
-  'table_spans',
+	'table_spans',
 	'tables',
 	'cluster_statement_statistics',
-  'statement_activity',
+	'statement_activity',
 	'statement_statistics_persisted',
 	'statement_statistics_persisted_v22_2',
+	'store_liveness_support_for',
+	'store_liveness_support_from',
 	'cluster_transaction_statistics',
 	'statement_statistics',
-  'transaction_activity',
+	'transaction_activity',
 	'transaction_statistics_persisted',
 	'transaction_statistics_persisted_v22_2',
 	'transaction_statistics',
 	'tenant_usage_details',
-  'pg_catalog_table_is_implemented'
+	'pg_catalog_table_is_implemented',
+	'fully_qualified_names'
 )
 ORDER BY name ASC`)
 	assert.NoError(t, err)
@@ -186,6 +188,12 @@ func TestZipQueryFallback(t *testing.T) {
 	skip.UnderRace(t, "test too slow under race")
 
 	existing := zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"]
+
+	// Avoid leaking configuration changes after the tests end.
+	defer func() {
+		zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"] = existing
+	}()
+
 	zipInternalTablesPerCluster["crdb_internal.transaction_contention_events"] = TableRegistryConfig{
 		nonSensitiveCols: existing.nonSensitiveCols,
 		// We want this to fail to trigger the fallback.
@@ -1194,4 +1202,106 @@ func TestZipJobTrace(t *testing.T) {
 	close(blockCh)
 	jobutils.WaitForJobToSucceed(t, runner, importJobID)
 	jobutils.WaitForJobToSucceed(t, runner, importJobID2)
+}
+
+// This test the command flags values set during command execution.
+func TestCommandFlags(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.Cleanup()
+
+	_, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 --exclude-nodes=1" +
+		" --redact --nodes=1 --exclude-files=*.log --include-goroutine-stacks --include-running-job-traces " + dir + "/debug.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := zip.OpenReader(dir + "/debug.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, f := range r.File {
+		if f.Name == "debug/debug_zip_command_flags.txt" {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rc.Close()
+
+			actualFlags, err := io.ReadAll(rc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assert.Equal(t, " --concurrency=1 --cpu-profile-duration=0s --exclude-files=[*.log] --exclude-nodes=1"+
+				" --include-goroutine-stacks=true --include-running-job-traces=true --insecure=false --nodes=1 --redact=true",
+				string(actualFlags))
+			return
+		}
+	}
+	assert.Fail(t, "debug/debug_zip_command_flags.txt is not generated")
+
+	if err = r.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// This tests the operation of zip over excluded nodes.
+func TestPartialZipForExcludedNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.Cleanup()
+	zipName := filepath.Join(dir, "debug.zip")
+
+	// We want a low timeout so that the test doesn't take forever;
+	// however low timeouts make race runs flaky with false positives.
+	skip.UnderShort(t)
+	skip.UnderRace(t)
+
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+	// Reduce the number of output log files to just what's expected.
+	defer sc.SetupSingleFileLogging()()
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Insecure:          true,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, err := c.RunWithCapture("debug zip --concurrency=1 --exclude-nodes=1 --cpu-profile-duration=0 " + dir + "/debug.zip")
+	require.NoError(t, err)
+
+	r, err := zip.OpenReader(zipName)
+	defer func() { _ = r.Close() }()
+	require.NoError(t, err)
+
+	d, err := r.Open("debug/nodes/1")
+	defer func() {
+		if d != nil {
+			_ = d.Close()
+		}
+	}()
+
+	require.True(t, oserror.IsNotExist(err), "node directory should not be present in the zip")
 }

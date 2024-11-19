@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -18,6 +13,47 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
+
+// uiNodeMetrics contains all the metrics required for the db-console frontend.
+// These will be the only node metrics returned in the serverpb.NodeResponse
+// metrics.
+var uiNodeMetrics = []string{
+	"sys.cpu.user.percent",
+	"sys.cpu.sys.percent",
+	"sys.go.allocbytes",
+	"sql.conns",
+	"sys.rss",
+}
+
+// uiStoreMetrics contains all the metrics required for the db-console frontend.
+// These will be the only node store metrics returned in the
+// serverpb.NodeResponse store_status metrics.
+var uiStoreMetrics = []string{
+	"replicas",
+	"replicas.leaders",
+	"replicas.leaseholders",
+	"ranges",
+	"ranges.unavailable",
+	"ranges.underreplicated",
+	"livebytes",
+	"keybytes",
+	"valbytes",
+	"rangekeybytes",
+	"rangevalbytes",
+	"totalbytes",
+	"intentbytes",
+	"livecount",
+	"keycount",
+	"valcount",
+	"intentcount",
+	"intentage",
+	"gcbytesage",
+	"capacity",
+	"capacity.available",
+	"capacity.used",
+	"sysbytes",
+	"syscount",
+}
 
 func nodeStatusToResp(n *statuspb.NodeStatus, hasViewClusterMetadata bool) serverpb.NodeResponse {
 	tiers := make([]serverpb.Tier, len(n.Desc.Locality.Tiers))
@@ -57,6 +93,12 @@ func nodeStatusToResp(n *statuspb.NodeStatus, hasViewClusterMetadata bool) serve
 
 	statuses := make([]serverpb.StoreStatus, len(n.StoreStatuses))
 	for i, ss := range n.StoreStatuses {
+		storeMetrics := make(map[string]float64, len(uiStoreMetrics))
+		for _, m := range uiStoreMetrics {
+			if d, ok := ss.Metrics[m]; ok {
+				storeMetrics[m] = d
+			}
+		}
 		statuses[i] = serverpb.StoreStatus{
 			Desc: serverpb.StoreDescriptor{
 				StoreID:  ss.Desc.StoreID,
@@ -69,7 +111,7 @@ func nodeStatusToResp(n *statuspb.NodeStatus, hasViewClusterMetadata bool) serve
 					Encrypted: ss.Desc.Properties.Encrypted,
 				},
 			},
-			Metrics: ss.Metrics,
+			Metrics: storeMetrics,
 		}
 		if fsprops := ss.Desc.Properties.FileStoreProperties; fsprops != nil {
 			sfsprops := &roachpb.FileStoreProperties{
@@ -85,12 +127,19 @@ func nodeStatusToResp(n *statuspb.NodeStatus, hasViewClusterMetadata bool) serve
 		}
 	}
 
+	metrics := make(map[string]float64, len(uiNodeMetrics))
+	for _, m := range uiNodeMetrics {
+		if d, ok := n.Metrics[m]; ok {
+			metrics[m] = d
+		}
+	}
+
 	resp := serverpb.NodeResponse{
 		Desc:              nodeDescriptor,
 		BuildInfo:         n.BuildInfo,
 		StartedAt:         n.StartedAt,
 		UpdatedAt:         n.UpdatedAt,
-		Metrics:           n.Metrics,
+		Metrics:           metrics,
 		StoreStatuses:     statuses,
 		Args:              nil,
 		Env:               nil,

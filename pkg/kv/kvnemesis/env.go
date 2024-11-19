@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvnemesis
 
@@ -14,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
@@ -67,6 +63,23 @@ func (e *Env) CheckConsistency(ctx context.Context, span roachpb.Span) []error {
 		var key, status, detail string
 		if err := rows.Scan(&rangeID, &key, &status, &detail); err != nil {
 			return []error{err}
+		}
+		// NB: There's a known issue that can result in a 10-byte discrepancy in
+		// SysBytes. See:
+		// https://github.com/cockroachdb/cockroach/issues/93896
+		//
+		// This isn't critical, so we ignore such discrepancies.
+		if status == kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT.String() {
+			m := regexp.MustCompile(`.*\ndelta \(stats-computed\): \{(.*)\}`).FindStringSubmatch(detail)
+			if len(m) > 1 {
+				delta := m[1]
+				// Strip out LastUpdateNanos and all zero-valued fields.
+				delta = regexp.MustCompile(`LastUpdateNanos:\d+`).ReplaceAllString(delta, "")
+				delta = regexp.MustCompile(`\S+:0\b`).ReplaceAllString(delta, "")
+				if regexp.MustCompile(`^\s*SysBytes:-?10\s*$`).MatchString(delta) {
+					continue
+				}
+			}
 		}
 		switch status {
 		case kvpb.CheckConsistencyResponse_RANGE_INDETERMINATE.String():

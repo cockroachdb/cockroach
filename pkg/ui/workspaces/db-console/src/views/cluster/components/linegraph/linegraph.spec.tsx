@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import {
   calculateXAxisDomain,
@@ -24,7 +19,6 @@ import * as protos from "src/js/protos";
 import * as timewindow from "src/redux/timeScale";
 import { configureUPlotLineChart } from "src/views/cluster/util/graphs";
 import { Axis } from "src/views/shared/components/metricQuery";
-
 
 import LineGraph, { fillGaps, InternalLineGraph, OwnProps } from "./index";
 

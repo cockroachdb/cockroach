@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
@@ -18,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -27,9 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -76,18 +77,31 @@ func setupDLQTestTables(
 	sqlDB.Exec(t, `CREATE TABLE a.baz.foo (a INT)`)
 
 	dstTableMeta := []dstTableMetadata{
+		// Base test case.
 		{
 			database: defaultDbName,
 			schema:   publicScName,
 			table:    "foo",
 			tableID:  1,
 		},
+		// Verify that distinct DLQ tables are created for tables
+		// in different databases with identical schema and table
+		// names.
 		{
 			database: defaultDbName,
 			schema:   "baz",
 			table:    "foo",
 			tableID:  1,
 		},
+		{
+			database: dbAName,
+			schema:   "baz",
+			table:    "foo",
+			tableID:  1,
+		},
+		// Verify that distinct DLQ tables are created for tables
+		// with identical fully qualified names and distinct
+		// table IDs.
 		{
 			database: defaultDbName,
 			schema:   "bar",
@@ -99,18 +113,6 @@ func setupDLQTestTables(
 			schema:   "bar_",
 			table:    "foo",
 			tableID:  2,
-		},
-		{
-			database: dbAName,
-			schema:   publicScName,
-			table:    "bar",
-			tableID:  1,
-		},
-		{
-			database: dbAName,
-			schema:   "baz",
-			table:    "foo",
-			tableID:  1,
 		},
 	}
 
@@ -129,8 +131,25 @@ func setupDLQTestTables(
 	return tableNameToDesc, srcTableIDToName, expectedDLQTables, ie
 }
 
-func TestLoggingDLQClient(t *testing.T) {
+func WaitForDLQLogs(t *testing.T, db *sqlutils.SQLRunner, tableName string, minNumRows int) {
+	t.Logf("waiting for write conflicts to be logged in DLQ table %s", tableName)
+	testutils.SucceedsSoon(t, func() error {
+		query := fmt.Sprintf("SELECT count(*) FROM %s", tableName)
+		var numRows int
+		db.QueryRow(t, query).Scan(&numRows)
+		if numRows < minNumRows {
+			return errors.Newf("waiting for DLQ table '%s' to have %d rows, received %d rows instead",
+				tableName,
+				minNumRows,
+				numRows)
+		}
+		return nil
+	})
+}
+
+func TestNoopDLQClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -151,7 +170,7 @@ func TestLoggingDLQClient(t *testing.T) {
 	ed, err := cdcevent.NewEventDescriptor(tableDesc, familyDesc, false, false, hlc.Timestamp{})
 	require.NoError(t, err)
 
-	dlqClient := InitLoggingDeadLetterQueueClient()
+	dlqClient := InitNoopDeadLetterQueueClient()
 	require.NoError(t, dlqClient.Create(ctx))
 
 	type testCase struct {
@@ -193,6 +212,7 @@ func TestLoggingDLQClient(t *testing.T) {
 
 func TestDLQCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -220,18 +240,16 @@ func TestDLQCreation(t *testing.T) {
 	slices.Sort(actualDQLTables)
 	require.Equal(t, expectedDLQTables, actualDQLTables)
 
-	// Verify enum creation
-	enumRow := [][]string{
-		{dlqSchemaName, "mutation_type", "{insert,update,delete}"},
-	}
+	// Verify that no custom enums were created
 	sqlDB.CheckQueryResults(t,
-		fmt.Sprintf(`SELECT schema, name, values FROM [SHOW ENUMS FROM %s.%s]`, defaultDbName, dlqSchemaName), enumRow)
+		fmt.Sprintf(`SHOW ENUMS FROM %s.%s`, defaultDbName, dlqSchemaName), [][]string{})
 	sqlDB.CheckQueryResults(t,
-		fmt.Sprintf(`SELECT schema, name, values FROM [SHOW ENUMS FROM %s.%s]`, dbAName, dlqSchemaName), enumRow)
+		fmt.Sprintf(`SHOW ENUMS FROM %s.%s`, dbAName, dlqSchemaName), [][]string{})
 }
 
 func TestDLQLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -288,13 +306,6 @@ func TestDLQLogging(t *testing.T) {
 			name:         "insert dlq fallback row for default.bar_.foo",
 			jobID:        1,
 			tableDesc:    tableNameToDesc["defaultdb.bar_.foo"],
-			dlqReason:    noSpace,
-			mutationType: insertMutation,
-		},
-		{
-			name:         "insert dlq fallback row for a.public.bar",
-			jobID:        1,
-			tableDesc:    tableNameToDesc["a.public.bar"],
 			dlqReason:    noSpace,
 			mutationType: insertMutation,
 		},
@@ -378,6 +389,7 @@ func TestDLQLogging(t *testing.T) {
 
 func TestDLQJSONQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -394,8 +406,8 @@ func TestDLQJSONQuery(t *testing.T) {
 
 	sqlDB.Exec(t, `
 	CREATE TABLE foo (
-		a INT, 
-		b STRING, 
+		a INT,
+		b STRING,
 		rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC)
 	)`)
@@ -446,4 +458,96 @@ func TestDLQJSONQuery(t *testing.T) {
 	require.Equal(t, 1, a)
 	require.Equal(t, "hello", b)
 	require.NotZero(t, rowID)
+}
+
+// TestEndToEndDLQ tests that write conflicts that occur during an
+// LDR job are persisted to its corresponding DLQ table
+func TestEndToEndDLQ(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	testDLQClusterArgs := base.TestClusterArgs{
+		// This test makes assertions about the exact number of events that end up in
+		// the DLQ. However, that is impacted by retries that result from range
+		// splits. Setting ReplicationManual disables the split queue.
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(127241),
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				DistSQL: &execinfra.TestingKnobs{
+					StreamingTestingKnobs: &sql.StreamingTestingKnobs{
+						FailureRate: 100,
+					},
+				},
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testDLQClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+
+	var expectedJobID jobspb.JobID
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'dlq'", dbBURL.String()).Scan(&expectedJobID)
+
+	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbA, expectedJobID)
+
+	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
+	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
+
+	expectedTableID := sqlutils.QueryTableID(t, server.Conns[0], "a", "public", "tab")
+	dlqTableName := fmt.Sprintf("crdb_replication.dlq_%d_public_tab", expectedTableID)
+	WaitForDLQLogs(t, dbA, dlqTableName, 2)
+
+	var (
+		jobID        jobspb.JobID
+		tableID      uint32
+		dlqReason    string
+		mutationType string
+	)
+
+	dbA.QueryRow(t, fmt.Sprintf(`
+	SELECT
+		ingestion_job_id,
+		table_id,
+		dlq_reason,
+		mutation_type
+	FROM %s
+	`, dlqTableName)).Scan(
+		&jobID,
+		&tableID,
+		&dlqReason,
+		&mutationType,
+	)
+
+	require.Equal(t, expectedJobID, jobID)
+	require.Equal(t, expectedTableID, tableID)
+	// DLQ reason is set to `tooOld` when `errInjected` is thrown by `failureInjector`
+	require.Equal(t, fmt.Sprintf("%s (%s)", errInjected, tooOld), dlqReason)
+	require.Equal(t, insertMutation.String(), mutationType)
+
+	dbA.CheckQueryResults(
+		t,
+		fmt.Sprintf(`
+	SELECT
+		incoming_row->>'payload' AS payload,
+		incoming_row->>'pk' AS pk
+	FROM %s
+	ORDER BY pk
+	`, dlqTableName),
+		[][]string{
+			{
+				"goodbye, again", "1",
+			},
+			{
+				"celeriac", "3",
+			},
+		},
+	)
 }

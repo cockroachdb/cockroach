@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -18,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 )
 
 var upsertNodePool = sync.Pool{
@@ -41,7 +37,7 @@ var _ mutationPlanNode = &upsertNode{}
 
 // upsertRun contains the run-time state of upsertNode during local execution.
 type upsertRun struct {
-	tw        optTableUpserter
+	tw        tableUpserter
 	checkOrds checkSet
 
 	// insertCols are the columns being inserted/upserted into.
@@ -138,8 +134,26 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 // processSourceRow processes one row from the source for upsertion.
 // The table writer is in charge of accumulating the result rows.
 func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) error {
-	if err := enforceNotNullConstraints(rowVals, n.run.insertCols); err != nil {
-		return err
+	// Check for NOT NULL constraint violations.
+	if n.run.tw.canaryOrdinal != -1 && rowVals[n.run.tw.canaryOrdinal] != tree.DNull {
+		// When there is a canary column and its value is not NULL, then an
+		// existing row is being updated, so check only the update columns for
+		// NOT NULL constraint violations.
+		offset := len(n.run.insertCols) + len(n.run.tw.fetchCols)
+		vals := rowVals[offset : offset+len(n.run.tw.updateCols)]
+		if err := enforceNotNullConstraints(vals, n.run.tw.updateCols); err != nil {
+			return err
+		}
+	} else {
+		// Otherwise, there is no canary column (i.e., canaryOrdinal is -1,
+		// which is the case for "blind" upsert which overwrites existing rows
+		// without performing a read) or it is NULL, indicating that a new row
+		// is being inserted. In this case, check the insert columns for a NOT
+		// NULL constraint violation.
+		vals := rowVals[:len(n.run.insertCols)]
+		if err := enforceNotNullConstraints(vals, n.run.insertCols); err != nil {
+			return err
+		}
 	}
 
 	// Create a set of partial index IDs to not add or remove entries from.
@@ -163,21 +177,33 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 		rowVals = rowVals[:offset]
 	}
 
+	upsertCols := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols)
+	if n.run.tw.canaryOrdinal != -1 {
+		upsertCols++
+	}
+
 	// Verify the CHECK constraints by inspecting boolean columns from the input that
 	// contain the results of evaluation.
 	if !n.run.checkOrds.Empty() {
-		ord := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols)
-		if n.run.tw.canaryOrdinal != -1 {
-			ord++
-		}
-		checkVals := rowVals[ord:]
+		checkVals := rowVals[upsertCols:]
 		if err := checkMutationInput(
 			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
 			n.run.tw.tableDesc(), n.run.checkOrds, checkVals,
 		); err != nil {
 			return err
 		}
-		rowVals = rowVals[:ord]
+	}
+
+	if len(rowVals) > upsertCols {
+		// Remove extra columns for check constraints and AFTER triggers.
+		rowVals = rowVals[:upsertCols]
+	}
+
+	if buildutil.CrdbTestBuild {
+		// This testing knob allows us to suspend execution to force a race condition.
+		if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
+			fn()
+		}
 	}
 
 	// Process the row. This is also where the tableWriter will accumulate

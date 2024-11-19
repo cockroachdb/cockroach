@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import classNames from "classnames/bind";
 import includes from "lodash/includes";
@@ -160,6 +155,14 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
         {content ? (
           content
         ) : (
+          // The below typescript fails to typecheck because the
+          // react-select library's types aren't flexible enough to
+          // accept the `options` and `onChange` props that use the
+          // custom `DropdownOption` type as the target. It's likely
+          // that an upgrade of react-select would fix this but we
+          // avoid it here because it will likely break implementation.
+
+          /* eslint @typescript-eslint/ban-ts-comment: "off" */
           // @ts-ignore
           <Select
             className={cx("dropdown__select")}

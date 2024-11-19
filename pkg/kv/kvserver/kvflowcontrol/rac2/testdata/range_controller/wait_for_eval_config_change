@@ -1,0 +1,117 @@
+# Initialize a range with voters on s1,s2 and s3. The local replica and
+# leaseholder will be s1. The leaseholder is denoted by the '*' suffix. Also
+# set streams to initially have 0 tokens and a limit of 8MiB tokens.
+init regular_limit=8MiB regular_init=0 elastic_limit=8MiB elastic_init=0
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: eval reg=+0 B/+8.0 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+8.0 MiB ela=+0 B/+8.0 MiB
+t1/s2: eval reg=+0 B/+8.0 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+8.0 MiB ela=+0 B/+8.0 MiB
+t1/s3: eval reg=+0 B/+8.0 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+8.0 MiB ela=+0 B/+8.0 MiB
+
+# Wait for eval for high priority request 'a'. It is waiting since there are
+# no tokens.
+wait_for_eval name=a range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=false waited=false err=<nil>
+
+# Disable replication admission control.
+set_flow_control_config enabled=false
+----
+enabled: false mode: apply_to_all
+
+# The request stops waiting.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=<nil>
+
+# Enable replication admission control.
+set_flow_control_config enabled=true
+----
+enabled: true mode: apply_to_all
+
+# Wait for eval for normal priority request 'b'. It is waiting since there are
+# no tokens.
+wait_for_eval name=b range_id=1 pri=NormalPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=<nil>
+  name=b pri=normal-pri done=false waited=false err=<nil>
+
+# Change replication admission control to only apply to elastic work.
+set_flow_control_config mode=apply_to_elastic
+----
+enabled: true mode: apply_to_elastic
+
+# The request stops waiting.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=<nil>
+  name=b pri=normal-pri done=true  waited=false err=<nil>
+
+# Restore enabled and apply_to_all.
+set_flow_control_config mode=apply_to_all
+----
+enabled: true mode: apply_to_all
+
+# Wait for eval for low priority request 'c'. It is waiting since there are no
+# tokens.
+wait_for_eval name=c range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=<nil>
+  name=b pri=normal-pri done=true  waited=false err=<nil>
+  name=c pri=low-pri  done=false waited=false err=<nil>
+
+# Change replication admission control to only apply to elastic work.
+set_flow_control_config mode=apply_to_elastic
+----
+enabled: true mode: apply_to_elastic
+
+# The change does not affect request 'c'.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=<nil>
+  name=b pri=normal-pri done=true  waited=false err=<nil>
+  name=c pri=low-pri  done=false waited=false err=<nil>
+
+# Change replication admission control to apply to all work.
+set_flow_control_config mode=apply_to_all
+----
+enabled: true mode: apply_to_all
+
+# The change does not affect request 'c'.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=<nil>
+  name=b pri=normal-pri done=true  waited=false err=<nil>
+  name=c pri=low-pri  done=false waited=false err=<nil>
+
+# Disable replication admission control.
+set_flow_control_config enabled=false
+----
+enabled: false mode: apply_to_all
+
+# The request stops waiting.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=<nil>
+  name=b pri=normal-pri done=true  waited=false err=<nil>
+  name=c pri=low-pri  done=true  waited=false err=<nil>
+
+# Restore settings.
+set_flow_control_config enabled=true
+----
+enabled: true mode: apply_to_all

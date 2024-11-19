@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 set -exuo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
@@ -9,19 +15,11 @@ source "$dir/teamcity-support.sh"
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 log_into_gcloud
 
-# Check if a given GCS path exists
-function check_gcs_path_exists() {
-  local path=$1
-  gsutil ls "$path" &>/dev/null
-  return
-}
-
 # Build and copy binaries, for the given SHA, to GCS bucket
 function build_and_upload_binaries() {
   local sha=$1
-  archive_name=${BENCH_PACKAGE//\//-}
-  archive_name="$sha-${archive_name/.../all}.tar.gz"
-  if check_gcs_path_exists "gs://$BUILDS_BUCKET/builds/$archive_name"; then
+  archive_name="$sha-${SANITIZED_BENCH_PACKAGE}.tar.gz"
+  if check_gcs_path_exists "gs://$BENCH_BUCKET/builds/$archive_name"; then
     echo "Build for $sha already exists. Skipping..."
     return
   fi
@@ -57,7 +55,7 @@ EOF
   out_dir=$(mktemp -d)
   tar -chf - -C "$stage_dir" . | ./bin/roachprod-microbench compress > "$out_dir/$archive_name"
   rm -rf "$stage_dir"
-  gsutil -q -m cp "$out_dir/$archive_name" "gs://$BUILDS_BUCKET/builds/$archive_name"
+  gsutil -q -m cp "$out_dir/$archive_name" "gs://$BENCH_BUCKET/builds/$archive_name"
   rm -rf "$out_dir"
 }
 

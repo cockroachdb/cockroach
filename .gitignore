@@ -21,14 +21,13 @@ artifacts
 /certs
 # make stress, acceptance produce stress.test, acceptance.test
 *.test*
+pkg/cmd/roachtest/_runner-logs
 # fuzz tests
 work-Fuzz*
 *-fuzz.zip
 /vendor
 # vendoring by `go mod vendor` may produce this file temporarily
 /.vendor.tmp.*
-# The Observability Service binary.
-/obsservice
 # The Workload Binary
 /workload
 # Instrumentation artifacts.
@@ -41,6 +40,8 @@ customenv.mk
 # Generated files containing include paths.
 zcgo_flags*.go
 build/Railroad.jar
+# Legacy `make` content.
+build/variables.mk
 
 # Bazel generated symlinks
 /_bazel

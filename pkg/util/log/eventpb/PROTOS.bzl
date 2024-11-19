@@ -19,6 +19,7 @@ EVENTPB_PROTOS = [
     "health_events.proto",
     "storage_events.proto",
     "telemetry.proto",
+    "changefeed_events.proto",
 ]
 
 EVENTPB_PROTO_DEPS = [ "//pkg/util/log/logpb:event.proto", ] + EVENTPB_PROTOS

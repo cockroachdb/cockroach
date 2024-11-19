@@ -1,23 +1,20 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scmutationexec
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func (i *immediateVisitor) CreateDatabaseDescriptor(
@@ -41,6 +38,6 @@ func (i *immediateVisitor) CreateDatabaseDescriptor(
 func (i *immediateVisitor) AddDatabaseZoneConfig(
 	ctx context.Context, op scop.AddDatabaseZoneConfig,
 ) error {
-	i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.DatabaseID, op.ZoneConfig)
+	i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.DatabaseID, protoutil.Clone(&op.ZoneConfig).(*zonepb.ZoneConfig))
 	return nil
 }

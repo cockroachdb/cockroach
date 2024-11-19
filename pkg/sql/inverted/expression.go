@@ -1,21 +1,17 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package inverted
 
 import (
 	"bytes"
 	"fmt"
-	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keysbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -107,7 +103,7 @@ func MakeSingleValSpan(val EncVal) Span {
 
 // IsSingleVal returns true iff the span is equivalent to [val, val].
 func (s Span) IsSingleVal() bool {
-	return bytes.Equal(keysbase.PrefixEnd(s.Start), s.End)
+	return s.Start != nil && bytes.Equal(keysbase.PrefixEnd(s.Start), s.End)
 }
 
 // Equals returns true if this span has the same start and end as the given
@@ -158,16 +154,20 @@ func (is Spans) Format(tp treeprinter.Node, label string, redactable bool) {
 }
 
 func formatSpan(span Span, redactable bool) string {
-	end := span.End
 	spanEndOpenOrClosed := ')'
+	vals, _ := encoding.PrettyPrintValuesWithTypes(nil, span.Start)
+	start := strings.Join(vals, "/")
+	var end string
 	if span.IsSingleVal() {
-		end = span.Start
+		end = start
 		spanEndOpenOrClosed = ']'
+	} else {
+		vals, _ := encoding.PrettyPrintValuesWithTypes(nil, span.End)
+		end = strings.Join(vals, "/")
 	}
-	output := fmt.Sprintf("[%s, %s%c", strconv.Quote(string(span.Start)),
-		strconv.Quote(string(end)), spanEndOpenOrClosed)
+	output := fmt.Sprintf("[%s, %s%c", start, end, spanEndOpenOrClosed)
 	if redactable {
-		output = string(redact.Sprintf("%s", redact.Unsafe(output)))
+		output = string(redact.Sprintf("%s", encoding.Unsafe(output)))
 	}
 	return output
 }

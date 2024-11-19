@@ -1,16 +1,13 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -148,3 +145,61 @@ func (f *jsonFormatter) outputTick(startElapsed time.Duration, t histogram.Tick)
 func (f *jsonFormatter) outputTotal(startElapsed time.Duration, t histogram.Tick) {}
 
 func (f *jsonFormatter) outputResult(startElapsed time.Duration, t histogram.Tick) {}
+
+type tickRaw struct {
+	Time time.Time
+	Errs int
+	Avgt float64
+	P50l float64
+	P95l float64
+	P99l float64
+	Maxl float64
+	Type string
+}
+
+type Tick struct {
+	Time       time.Time
+	Errs       int
+	Throughput float64
+	P50        time.Duration
+	P95        time.Duration
+	P99        time.Duration
+	PMax       time.Duration
+	Type       string
+}
+
+// fromJson parses a json string and returns a Tick struct.
+func fromJson(data string) (Tick, error) {
+	var tr tickRaw
+	if err := json.Unmarshal([]byte(data), &tr); err != nil {
+		return Tick{}, err
+	}
+	return Tick{
+		Time:       tr.Time,
+		Errs:       tr.Errs,
+		Throughput: tr.Avgt,
+		P50:        time.Duration(tr.P50l * float64(time.Millisecond)),
+		P95:        time.Duration(tr.P95l * float64(time.Millisecond)),
+		P99:        time.Duration(tr.P99l * float64(time.Millisecond)),
+		PMax:       time.Duration(tr.Maxl * float64(time.Millisecond)),
+		Type:       tr.Type,
+	}, nil
+}
+
+// ParseOutput reads the output of a workload run and returns the list of valid
+// Ticks it contains.
+// TODO(baptist): The output currently has a bunch of other garbage in it which
+// has accumulated over time. Ideally this should be removed from the original
+// output, but for now just ignore it.
+func ParseOutput(reader io.Reader) []Tick {
+	scanner := bufio.NewScanner(reader)
+	var ticks []Tick
+	for scanner.Scan() {
+		line := scanner.Text()
+		tick, err := fromJson(line)
+		if err == nil {
+			ticks = append(ticks, tick)
+		}
+	}
+	return ticks
+}

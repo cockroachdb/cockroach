@@ -1,0 +1,311 @@
+# ------------------------------------------------------------------------------
+# Test basic operations.
+
+reset term=1 index=5
+----
+mark:{Term:1 Index:5}, stable:5, admitted:[5 5 5 5]
+
+append term=1 after=5 to=10
+----
+mark:{Term:1 Index:10}, stable:5, admitted:[5 5 5 5]
+
+register term=1 index=7 pri=LowPri
+----
+mark:{Term:1 Index:10}, stable:5, admitted:[5 5 5 5]
+LowPri: {Term:1 Index:7}
+
+sync term=1 index=10
+----
+[upd] mark:{Term:1 Index:10}, stable:10, admitted:[6 10 10 10]
+LowPri: {Term:1 Index:7}
+
+admit term=1 index=6 pri=LowPri
+----
+mark:{Term:1 Index:10}, stable:10, admitted:[6 10 10 10]
+LowPri: {Term:1 Index:7}
+
+admit term=1 index=7 pri=LowPri
+----
+[upd] mark:{Term:1 Index:10}, stable:10, admitted:[10 10 10 10]
+
+append term=1 after=10 to=12
+----
+mark:{Term:1 Index:12}, stable:10, admitted:[10 10 10 10]
+
+register term=1 index=11 pri=LowPri
+----
+mark:{Term:1 Index:12}, stable:10, admitted:[10 10 10 10]
+LowPri: {Term:1 Index:11}
+
+register term=1 index=12 pri=HighPri
+----
+mark:{Term:1 Index:12}, stable:10, admitted:[10 10 10 10]
+LowPri: {Term:1 Index:11}
+HighPri: {Term:1 Index:12}
+
+append term=2 after=5 to=10
+----
+[upd] mark:{Term:2 Index:10}, stable:5, admitted:[5 5 5 5]
+
+register term=2 index=6 pri=LowPri
+----
+mark:{Term:2 Index:10}, stable:5, admitted:[5 5 5 5]
+LowPri: {Term:2 Index:6}
+
+# A snapshot at the same term does not admit all the previous entries, and
+# retains the stable index. The index will move when the snapshot is synced.
+snap term=2 index=20
+----
+mark:{Term:2 Index:20}, stable:5, admitted:[5 5 5 5]
+LowPri: {Term:2 Index:6}
+
+# Same does a snapshot at a new term and index higher than previous marks. It
+# only updates the term of the marks.
+snap term=3 index=10
+----
+[upd] mark:{Term:3 Index:10}, stable:5, admitted:[5 5 5 5]
+LowPri: {Term:2 Index:6}
+
+# A snapshot at a low index regresses the stable index, and admitted state and
+# queue.
+snap term=4 index=3
+----
+[upd] mark:{Term:4 Index:3}, stable:3, admitted:[3 3 3 3]
+
+sync term=4 index=3
+----
+mark:{Term:4 Index:3}, stable:3, admitted:[3 3 3 3]
+
+# ------------------------------------------------------------------------------
+# Test stable index advancement racing with admission.
+
+reset term=1 index=1
+----
+mark:{Term:1 Index:1}, stable:1, admitted:[1 1 1 1]
+
+append term=1 after=1 to=10
+----
+mark:{Term:1 Index:10}, stable:1, admitted:[1 1 1 1]
+
+register term=1 index=5 pri=HighPri
+----
+mark:{Term:1 Index:10}, stable:1, admitted:[1 1 1 1]
+HighPri: {Term:1 Index:5}
+
+admit term=1 index=5 pri=HighPri
+----
+mark:{Term:1 Index:10}, stable:1, admitted:[1 1 1 1]
+
+sync term=1 index=10
+----
+[upd] mark:{Term:1 Index:10}, stable:10, admitted:[10 10 10 10]
+
+# ------------------------------------------------------------------------------
+# Same race but sync completes first.
+
+reset term=1 index=1
+----
+mark:{Term:1 Index:1}, stable:1, admitted:[1 1 1 1]
+
+append term=1 after=1 to=10
+----
+mark:{Term:1 Index:10}, stable:1, admitted:[1 1 1 1]
+
+register term=1 index=5 pri=HighPri
+----
+mark:{Term:1 Index:10}, stable:1, admitted:[1 1 1 1]
+HighPri: {Term:1 Index:5}
+
+sync term=1 index=10
+----
+[upd] mark:{Term:1 Index:10}, stable:10, admitted:[10 10 10 4]
+HighPri: {Term:1 Index:5}
+
+admit term=1 index=5 pri=HighPri
+----
+[upd] mark:{Term:1 Index:10}, stable:10, admitted:[10 10 10 10]
+
+# ------------------------------------------------------------------------------
+# Regression test with admitting an entry missing in the queue.
+
+reset term=1 index=1
+----
+mark:{Term:1 Index:1}, stable:1, admitted:[1 1 1 1]
+
+append term=1 after=1 to=3
+----
+mark:{Term:1 Index:3}, stable:1, admitted:[1 1 1 1]
+
+register term=1 index=3 pri=LowPri
+----
+mark:{Term:1 Index:3}, stable:1, admitted:[1 1 1 1]
+LowPri: {Term:1 Index:3}
+
+append term=3 after=3 to=5
+----
+[upd] mark:{Term:3 Index:5}, stable:1, admitted:[1 1 1 1]
+LowPri: {Term:1 Index:3}
+
+# The term 1 entry is admitted because the admission mark is at term 3.
+admit term=3 index=2 pri=LowPri
+----
+mark:{Term:3 Index:5}, stable:1, admitted:[1 1 1 1]
+
+# ------------------------------------------------------------------------------
+# Port of waiting_for_admission_state test.
+
+reset term=3 index=1
+----
+mark:{Term:3 Index:1}, stable:1, admitted:[1 1 1 1]
+
+append term=3 after=1 to=7
+----
+mark:{Term:3 Index:7}, stable:1, admitted:[1 1 1 1]
+
+register term=3 index=5 pri=LowPri
+----
+mark:{Term:3 Index:7}, stable:1, admitted:[1 1 1 1]
+LowPri: {Term:3 Index:5}
+
+register term=3 index=6 pri=HighPri
+----
+mark:{Term:3 Index:7}, stable:1, admitted:[1 1 1 1]
+LowPri: {Term:3 Index:5}
+HighPri: {Term:3 Index:6}
+
+register term=3 index=7 pri=HighPri
+----
+mark:{Term:3 Index:7}, stable:1, admitted:[1 1 1 1]
+LowPri: {Term:3 Index:5}
+HighPri: {Term:3 Index:6} {Term:3 Index:7}
+
+# No-op, since the term is old.
+admit term=2 index=7 pri=HighPri
+----
+mark:{Term:3 Index:7}, stable:1, admitted:[1 1 1 1]
+LowPri: {Term:3 Index:5}
+HighPri: {Term:3 Index:6} {Term:3 Index:7}
+
+# Entry admitted, but the admitted index stays at 1 since the stable index is
+# still there.
+admit term=3 index=6 pri=HighPri
+----
+mark:{Term:3 Index:7}, stable:1, admitted:[1 1 1 1]
+LowPri: {Term:3 Index:5}
+HighPri: {Term:3 Index:7}
+
+# Stable index moves, and admitted indices move accordingly.
+sync term=3 index=7
+----
+[upd] mark:{Term:3 Index:7}, stable:7, admitted:[4 7 7 6]
+LowPri: {Term:3 Index:5}
+HighPri: {Term:3 Index:7}
+
+append term=3 after=7 to=8
+----
+mark:{Term:3 Index:8}, stable:7, admitted:[4 7 7 6]
+LowPri: {Term:3 Index:5}
+HighPri: {Term:3 Index:7}
+
+register term=3 index=8 pri=HighPri
+----
+mark:{Term:3 Index:8}, stable:7, admitted:[4 7 7 6]
+LowPri: {Term:3 Index:5}
+HighPri: {Term:3 Index:7} {Term:3 Index:8}
+
+# Admitted indices move up for priorities with no queue.
+sync term=3 index=8
+----
+[upd] mark:{Term:3 Index:8}, stable:8, admitted:[4 8 8 6]
+LowPri: {Term:3 Index:5}
+HighPri: {Term:3 Index:7} {Term:3 Index:8}
+
+# All HighPri entries are admitted.
+admit term=3 index=8 pri=HighPri
+----
+[upd] mark:{Term:3 Index:8}, stable:8, admitted:[4 8 8 8]
+LowPri: {Term:3 Index:5}
+
+append term=3 after=8 to=11
+----
+mark:{Term:3 Index:11}, stable:8, admitted:[4 8 8 8]
+LowPri: {Term:3 Index:5}
+
+register term=3 index=9 pri=LowPri
+----
+mark:{Term:3 Index:11}, stable:8, admitted:[4 8 8 8]
+LowPri: {Term:3 Index:5} {Term:3 Index:9}
+
+register term=3 index=11 pri=LowPri
+----
+mark:{Term:3 Index:11}, stable:8, admitted:[4 8 8 8]
+LowPri: {Term:3 Index:5} {Term:3 Index:9} {Term:3 Index:11}
+
+# New term, removes a suffix of the log.
+append term=4 after=9 to=10
+----
+[upd] mark:{Term:4 Index:10}, stable:8, admitted:[4 8 8 8]
+LowPri: {Term:3 Index:5} {Term:3 Index:9}
+
+register term=4 index=10 pri=LowPri
+----
+mark:{Term:4 Index:10}, stable:8, admitted:[4 8 8 8]
+LowPri: {Term:3 Index:5} {Term:3 Index:9} {Term:4 Index:10}
+
+# New term, again removes a suffix of the log.
+append term=5 after=8 to=9
+----
+[upd] mark:{Term:5 Index:9}, stable:8, admitted:[4 8 8 8]
+LowPri: {Term:3 Index:5}
+
+register term=5 index=9 pri=LowPri
+----
+mark:{Term:5 Index:9}, stable:8, admitted:[4 8 8 8]
+LowPri: {Term:3 Index:5} {Term:5 Index:9}
+
+# New term, again removes a suffix of the log.
+append term=6 after=6 to=7
+----
+[upd] mark:{Term:6 Index:7}, stable:6, admitted:[4 6 6 6]
+LowPri: {Term:3 Index:5}
+
+register term=6 index=7 pri=LowPri
+----
+mark:{Term:6 Index:7}, stable:6, admitted:[4 6 6 6]
+LowPri: {Term:3 Index:5} {Term:6 Index:7}
+
+# New term, no suffix is removed.
+append term=7 after=7 to=8
+----
+[upd] mark:{Term:7 Index:8}, stable:6, admitted:[4 6 6 6]
+LowPri: {Term:3 Index:5} {Term:6 Index:7}
+
+register term=7 index=8 pri=LowPri
+----
+mark:{Term:7 Index:8}, stable:6, admitted:[4 6 6 6]
+LowPri: {Term:3 Index:5} {Term:6 Index:7} {Term:7 Index:8}
+
+# Index not found, but a prefix of the queue is removed. Note: the term 6 entry
+# is removed due to being stale, even though its index is above the admitted.
+admit term=7 index=6 pri=LowPri
+----
+[upd] mark:{Term:7 Index:8}, stable:6, admitted:[6 6 6 6]
+LowPri: {Term:7 Index:8}
+
+# A stale admission, no-op.
+admit term=6 index=8 pri=LowPri
+----
+mark:{Term:7 Index:8}, stable:6, admitted:[6 6 6 6]
+LowPri: {Term:7 Index:8}
+
+sync term=7 index=8
+----
+[upd] mark:{Term:7 Index:8}, stable:8, admitted:[7 8 8 8]
+LowPri: {Term:7 Index:8}
+
+# Everything is persisted and admitted.
+admit term=7 index=8 pri=LowPri
+----
+[upd] mark:{Term:7 Index:8}, stable:8, admitted:[8 8 8 8]
+
+# ------------------------------------------------------------------------------

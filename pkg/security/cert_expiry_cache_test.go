@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package security_test
 
@@ -41,75 +36,88 @@ func TestEntryCache(t *testing.T) {
 
 	ctx := context.Background()
 
+	timesource := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	// Create a cache with a capacity of 3.
-	cache, metric := newCache(
+	cache, expMetric, ttlMetric := newCache(
 		ctx,
 		&cluster.Settings{},
 		3, /* capacity */
-		timeutil.NewManualTime(timeutil.Unix(0, 123)),
+		timesource,
 	)
 	require.Equal(t, 0, cache.Len())
 
 	// Verify insert.
-	cache.MaybeUpsert(ctx, fooUser, laterExpiration, metric)
+	cache.MaybeUpsert(ctx, fooUser, laterExpiration, expMetric, ttlMetric)
 	require.Equal(t, 1, cache.Len())
 
 	// Verify update.
-	cache.MaybeUpsert(ctx, fooUser, closerExpiration, metric)
+	cache.MaybeUpsert(ctx, fooUser, closerExpiration, expMetric, ttlMetric)
 	require.Equal(t, 1, cache.Len())
 
 	// Verify retrieval.
-	expiration, found := cache.Get(fooUser)
+	expiration, found := cache.GetExpiration(fooUser)
 	require.Equal(t, true, found)
 	require.Equal(t, closerExpiration, expiration)
 
 	// Verify the cache retains the minimum expiration for a user, assuming no
 	// eviction.
-	cache.MaybeUpsert(ctx, barUser, closerExpiration, metric)
+	cache.MaybeUpsert(ctx, barUser, closerExpiration, expMetric, ttlMetric)
 	require.Equal(t, 2, cache.Len())
-	cache.MaybeUpsert(ctx, barUser, laterExpiration, metric)
+	cache.MaybeUpsert(ctx, barUser, laterExpiration, expMetric, ttlMetric)
 	require.Equal(t, 2, cache.Len())
-	expiration, found = cache.Get(barUser)
+	expiration, found = cache.GetExpiration(barUser)
 	require.Equal(t, true, found)
 	require.Equal(t, closerExpiration, expiration)
 
 	// Verify indication of absence for non-existent values.
-	expiration, found = cache.Get(fakeUser)
+	expiration, found = cache.GetExpiration(fakeUser)
 	require.Equal(t, false, found)
 	require.Equal(t, int64(0), expiration)
 
 	// Verify eviction when the capacity is exceeded.
-	cache.MaybeUpsert(ctx, blahUser, laterExpiration, metric)
+	cache.MaybeUpsert(ctx, blahUser, laterExpiration, expMetric, ttlMetric)
 	require.Equal(t, 3, cache.Len())
-	cache.MaybeUpsert(ctx, fakeUser, closerExpiration, metric)
+	cache.MaybeUpsert(ctx, fakeUser, closerExpiration, expMetric, ttlMetric)
 	require.Equal(t, 3, cache.Len())
-	_, found = cache.Get(fooUser)
+	_, found = cache.GetExpiration(fooUser)
 	require.Equal(t, false, found)
-	_, found = cache.Get(barUser)
+	_, found = cache.GetExpiration(barUser)
 	require.Equal(t, true, found)
 
 	// Verify previous entries can be inserted after the cache is cleared.
 	cache.Clear()
 	require.Equal(t, 0, cache.Len())
-	_, found = cache.Get(fooUser)
+	_, found = cache.GetExpiration(fooUser)
 	require.Equal(t, false, found)
-	_, found = cache.Get(barUser)
+	_, found = cache.GetExpiration(barUser)
 	require.Equal(t, false, found)
-	cache.MaybeUpsert(ctx, fooUser, laterExpiration, metric)
+	cache.MaybeUpsert(ctx, fooUser, laterExpiration, expMetric, ttlMetric)
 	require.Equal(t, 1, cache.Len())
-	cache.MaybeUpsert(ctx, barUser, laterExpiration, metric)
+	cache.MaybeUpsert(ctx, barUser, laterExpiration, expMetric, ttlMetric)
 	require.Equal(t, 2, cache.Len())
-	expiration, found = cache.Get(fooUser)
+	expiration, found = cache.GetExpiration(fooUser)
 	require.Equal(t, true, found)
 	require.Equal(t, laterExpiration, expiration)
-	expiration, found = cache.Get(barUser)
+	expiration, found = cache.GetExpiration(barUser)
 	require.Equal(t, true, found)
 	require.Equal(t, laterExpiration, expiration)
 
 	// Verify expirations in the past cannot be inserted into the cache.
 	cache.Clear()
-	cache.MaybeUpsert(ctx, fooUser, int64(0), metric)
+	cache.MaybeUpsert(ctx, fooUser, int64(0), expMetric, ttlMetric)
 	require.Equal(t, 0, cache.Len())
+
+	// Verify value of TTL metrics
+	cache.Clear()
+	timesource.AdvanceTo(timeutil.Unix(closerExpiration+20, 0))
+	cache.MaybeUpsert(ctx, fooUser, closerExpiration, expMetric, ttlMetric)
+	cache.MaybeUpsert(ctx, barUser, laterExpiration, expMetric, ttlMetric)
+	ttl, found := cache.GetTTL(fooUser)
+	require.Equal(t, false, found)
+	require.Equal(t, int64(0), ttl)
+	ttl, found = cache.GetTTL(barUser)
+	require.Equal(t, true, found)
+	require.Equal(t, laterExpiration-(closerExpiration+20), ttl)
 }
 
 func TestPurgePastEntries(t *testing.T) {
@@ -130,15 +138,15 @@ func TestPurgePastEntries(t *testing.T) {
 
 	// Create a cache with a capacity of 4.
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cache, metric := newCache(ctx, &cluster.Settings{}, 4 /* capacity */, clock)
+	cache, expMetric, ttlMetric := newCache(ctx, &cluster.Settings{}, 4 /* capacity */, clock)
 
 	// Insert entries that we expect to be cleaned up after advancing in time.
-	cache.MaybeUpsert(ctx, fooUser, pastExpiration1, metric)
-	cache.MaybeUpsert(ctx, barUser, pastExpiration2, metric)
-	cache.MaybeUpsert(ctx, blahUser, pastExpiration2, metric)
+	cache.MaybeUpsert(ctx, fooUser, pastExpiration1, expMetric, ttlMetric)
+	cache.MaybeUpsert(ctx, barUser, pastExpiration2, expMetric, ttlMetric)
+	cache.MaybeUpsert(ctx, blahUser, pastExpiration2, expMetric, ttlMetric)
 	// Insert an entry that should NOT be removed after advancing in time
 	// because it is still in the future.
-	cache.MaybeUpsert(ctx, bazUser, futureExpiration, metric)
+	cache.MaybeUpsert(ctx, bazUser, futureExpiration, expMetric, ttlMetric)
 	require.Equal(t, 4, cache.Len())
 
 	// Advance time so that expirations have been reached already.
@@ -146,7 +154,7 @@ func TestPurgePastEntries(t *testing.T) {
 
 	// Verify an expiration from the past cannot be retrieved. Confirm it has
 	// been removed after the attempt as well.
-	_, found := cache.Get(fooUser)
+	_, found := cache.GetExpiration(fooUser)
 	require.Equal(t, false, found)
 	require.Equal(t, 3, cache.Len())
 
@@ -154,7 +162,7 @@ func TestPurgePastEntries(t *testing.T) {
 	// Confirm that expirations in the future do not get removed.
 	cache.PurgePastExpirations()
 	require.Equal(t, 1, cache.Len())
-	_, found = cache.Get(bazUser)
+	_, found = cache.GetExpiration(bazUser)
 	require.Equal(t, true, found)
 }
 
@@ -167,7 +175,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	st := &cluster.Settings{}
 
 	// Create a cache with a large capacity.
-	cache, metric := newCache(
+	cache, expMetric, ttlMetric := newCache(
 		ctx,
 		st,
 		10000, /* capacity */
@@ -186,7 +194,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	for i := 0; i < N; i++ {
 		go func(i int) {
 			if i%2 == 1 {
-				cache.MaybeUpsert(ctx, user, expiration, metric)
+				cache.MaybeUpsert(ctx, user, expiration, expMetric, ttlMetric)
 			} else {
 				cache.Clear()
 			}
@@ -201,19 +209,19 @@ func BenchmarkCertExpirationCacheInsert(b *testing.B) {
 	ctx := context.Background()
 	st := &cluster.Settings{}
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cache, metric := newCache(ctx, st, 1000 /* capacity */, clock)
+	cache, expMetric, ttlMetric := newCache(ctx, st, 1000 /* capacity */, clock)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cache.MaybeUpsert(ctx, "foo", clock.Now().Unix(), metric)
-		cache.MaybeUpsert(ctx, "bar", clock.Now().Unix(), metric)
-		cache.MaybeUpsert(ctx, "blah", clock.Now().Unix(), metric)
+		cache.MaybeUpsert(ctx, "foo", clock.Now().Unix(), expMetric, ttlMetric)
+		cache.MaybeUpsert(ctx, "bar", clock.Now().Unix(), expMetric, ttlMetric)
+		cache.MaybeUpsert(ctx, "blah", clock.Now().Unix(), expMetric, ttlMetric)
 	}
 }
 
 func newCache(
 	ctx context.Context, st *cluster.Settings, capacity int, clock *timeutil.ManualTime,
-) (*security.ClientCertExpirationCache, *aggmetric.AggGauge) {
+) (*security.ClientCertExpirationCache, *aggmetric.AggGauge, *aggmetric.AggGauge) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	security.ClientCertExpirationCacheCapacity.Override(ctx, &st.SV, int64(capacity))
@@ -222,5 +230,5 @@ func newCache(
 		Settings: st,
 	})
 	cache := security.NewClientCertExpirationCache(ctx, st, stopper, clock, parentMon)
-	return cache, aggmetric.MakeBuilder(security.SQLUserLabel).Gauge(metric.Metadata{})
+	return cache, aggmetric.MakeBuilder(security.SQLUserLabel).Gauge(metric.Metadata{}), aggmetric.MakeBuilder(security.SQLUserLabel).Gauge(metric.Metadata{})
 }

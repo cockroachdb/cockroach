@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -184,6 +179,13 @@ func (wb *writeBatch) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
+	// If the range key holds an encoded timestamp as it was read from storage,
+	// write the tombstone to clear it using the same encoding of the timestamp.
+	// See #129592.
+	if len(rangeKey.EncodedTimestampSuffix) > 0 {
+		return wb.ClearEngineRangeKey(
+			rangeKey.StartKey, rangeKey.EndKey, rangeKey.EncodedTimestampSuffix)
+	}
 	return wb.ClearEngineRangeKey(
 		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
@@ -211,6 +213,9 @@ func (wb *writeBatch) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) er
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
+	// NB: We deliberately do not use rangeKey.EncodedTimestampSuffix even if
+	// it's present, because we explicitly do NOT want to write range keys with
+	// the synthetic bit set.
 	return wb.PutEngineRangeKey(
 		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
 }
@@ -268,11 +273,7 @@ func (wb *writeBatch) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
 	}
-	encValue, err := EncodeMVCCValue(value)
-	if err != nil {
-		return err
-	}
-	return wb.put(key, encValue)
+	return wb.putMVCC(key, value)
 }
 
 // PutRawMVCC implements the Writer interface.
@@ -297,13 +298,41 @@ func (wb *writeBatch) PutEngineKey(key EngineKey, value []byte) error {
 	return wb.batch.Set(wb.buf, value, nil)
 }
 
+func (wb *writeBatch) putMVCC(key MVCCKey, value MVCCValue) error {
+	// For performance, this method uses the pebble Batch's deferred operation
+	// API to avoid an extra memcpy. We:
+	// - determine the length of the encoded MVCC key and MVCC value
+	// - reserve space in the pebble Batch using SetDeferred
+	// - encode the MVCC key and MVCC value directly into the Batch
+	// - call Finish on the deferred operation (which will index the key if
+	//   wb.batch is indexed)
+	valueLen, isExtended := mvccValueSize(value)
+	keyLen := encodedMVCCKeyLength(key)
+	o := wb.batch.SetDeferred(keyLen, valueLen)
+	encodeMVCCKeyToBuf(o.Key, key, keyLen)
+	if !isExtended {
+		// Fast path; we don't need to use the extended encoding and can copy
+		// RawBytes in verbatim.
+		copy(o.Value, value.Value.RawBytes)
+	} else {
+		// Slow path; we need the MVCC value header.
+		err := encodeExtendedMVCCValueToSizedBuf(value, o.Value)
+		if err != nil {
+			return err
+		}
+	}
+	return o.Finish()
+}
+
 func (wb *writeBatch) put(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-
-	wb.buf = EncodeMVCCKeyToBuf(wb.buf[:0], key)
-	return wb.batch.Set(wb.buf, value, nil)
+	keyLen := encodedMVCCKeyLength(key)
+	o := wb.batch.SetDeferred(keyLen, len(value))
+	encodeMVCCKeyToBuf(o.Key, key, keyLen)
+	copy(o.Value, value)
+	return o.Finish()
 }
 
 // LogData implements the Writer interface.
@@ -678,7 +707,7 @@ func (p *pebbleBatch) PinEngineStateForIterators(readCategory fs.ReadCategory) e
 	var err error
 	if p.iter == nil {
 		var iter *pebble.Iterator
-		o := &pebble.IterOptions{CategoryAndQoS: fs.GetCategoryAndQoS(readCategory)}
+		o := &pebble.IterOptions{Category: readCategory.PebbleCategory()}
 		if p.batch.Indexed() {
 			iter, err = p.batch.NewIter(o)
 		} else {
@@ -751,8 +780,7 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(
 			startRaw := EncodeMVCCKey(MVCCKey{Key: rangeKeys.Bounds.Key})
 			endRaw := EncodeMVCCKey(MVCCKey{Key: rangeKeys.Bounds.EndKey})
 			for _, v := range rangeKeys.Versions {
-				if err := p.batch.RangeKeyUnset(startRaw, endRaw,
-					EncodeMVCCTimestampSuffix(v.Timestamp), nil); err != nil {
+				if err := p.batch.RangeKeyUnset(startRaw, endRaw, v.EncodedTimestampSuffix, nil); err != nil {
 					return err
 				}
 			}

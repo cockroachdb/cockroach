@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -427,7 +422,7 @@ func exportStats(ctx context.Context, rd restoreDriver, restoreStats restoreStat
 			exportingStats.Stats[latencyQueryKey].Value[i] = 0
 		}
 	}
-	if err := exportingStats.SerializeOutRun(ctx, rd.t, rd.c); err != nil {
+	if err := exportingStats.SerializeOutRun(ctx, rd.t, rd.c, rd.t.ExportOpenmetrics()); err != nil {
 		return errors.Wrap(err, "failed to export stats")
 	}
 	return nil
@@ -564,9 +559,9 @@ func runRestore(
 			}
 
 		}
-		opts := ""
+		opts := "WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION"
 		if runOnline {
-			opts = "WITH EXPERIMENTAL DEFERRED COPY"
+			opts = "WITH EXPERIMENTAL DEFERRED COPY, UNSAFE_RESTORE_INCOMPATIBLE_VERSION"
 		}
 		if err := maybeAddSomeEmptyTables(ctx, rd); err != nil {
 			return errors.Wrapf(err, "failed to add some empty tables")

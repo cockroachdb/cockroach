@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package memo
 
@@ -639,8 +634,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *InsertExpr:
-		f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+		f.formatIndexes(tp, "arbiter", t.ArbiterIndexes, t.Table)
 		f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
+		f.formatIndexes(tp, "unique w/tombstone", t.UniqueWithTombstoneIndexes, t.Table)
 		if !f.HasFlags(ExprFmtHideColumns) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
@@ -653,6 +649,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *UpdateExpr:
+		f.formatIndexes(tp, "unique w/tombstone", t.UniqueWithTombstoneIndexes, t.Table)
 		if !f.HasFlags(ExprFmtHideColumns) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
@@ -668,8 +665,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *UpsertExpr:
-		f.formatArbiterIndexes(tp, t.ArbiterIndexes, t.Table)
+		f.formatIndexes(tp, "arbiter", t.ArbiterIndexes, t.Table)
 		f.formatArbiterConstraints(tp, t.ArbiterConstraints, t.Table)
+		f.formatIndexes(tp, "unique w/tombstone", t.UniqueWithTombstoneIndexes, t.Table)
 		if !f.HasFlags(ExprFmtHideColumns) {
 			if len(colList) == 0 {
 				tp.Child("columns: <none>")
@@ -702,6 +700,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *LockExpr:
+		f.formatColList(tp, "key columns:", t.KeyCols, opt.ColSet{} /* notNullCols */)
+		tp.Childf("lock columns: %v", t.LockCols)
 		f.formatLocking(tp, t.Locking)
 
 	case *WithExpr:
@@ -755,6 +755,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			fmtFlags = tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
 		}
 		tp.Child(tree.AsStringWithFlags(t.Syntax, fmtFlags))
+		f.formatDependencies(tp, t.Deps, t.TypeDeps)
+
+	case *CreateTriggerExpr:
+		tp.Child(t.Syntax.String())
 		f.formatDependencies(tp, t.Deps, t.TypeDeps)
 
 	case *CreateStatisticsExpr:
@@ -1407,18 +1411,18 @@ func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, rev
 	}
 }
 
-// formatArbiterIndexes constructs a new treeprinter child containing the
-// specified list of arbiter indexes.
-func (f *ExprFmtCtx) formatArbiterIndexes(
-	tp treeprinter.Node, arbiters cat.IndexOrdinals, tabID opt.TableID,
+// formatIndexes constructs a new treeprinter child containing the
+// specified list of indexes with the label specified.
+func (f *ExprFmtCtx) formatIndexes(
+	tp treeprinter.Node, label string, indexes cat.IndexOrdinals, tabID opt.TableID,
 ) {
 	md := f.Memo.Metadata()
 	tab := md.Table(tabID)
 
-	if len(arbiters) > 0 {
+	if len(indexes) > 0 {
 		f.Buffer.Reset()
-		f.Buffer.WriteString("arbiter indexes:")
-		for _, idx := range arbiters {
+		f.Buffer.WriteString(fmt.Sprintf("%s indexes:", label))
+		for _, idx := range indexes {
 			name := string(tab.Index(idx).Name())
 			f.space()
 			f.Buffer.WriteString(name)
@@ -1556,6 +1560,12 @@ func (f *ExprFmtCtx) formatMutationCommon(tp treeprinter.Node, p *MutationPrivat
 		c := tp.Childf("cascades")
 		for i := range p.FKCascades {
 			c.Child(p.FKCascades[i].FKConstraint.Name())
+		}
+	}
+	if p.AfterTriggers != nil {
+		c := tp.Childf("after-triggers")
+		for i := range p.AfterTriggers.Triggers {
+			c.Child(p.AfterTriggers.Triggers[i].Name().Normalize())
 		}
 	}
 }

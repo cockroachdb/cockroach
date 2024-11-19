@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -17,13 +12,12 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -64,6 +58,8 @@ func registerKV(r registry.Registry) {
 		// Set to true to make jemalloc release memory more aggressively to the
 		// OS, to reduce resident size.
 		jemallocReleaseFaster bool
+		// Set to true to reduce the Pebble block cache from 25% to 20%.
+		smallBlockCache bool
 	}
 	computeConcurrency := func(opts kvOptions) int {
 		// Scale the workload concurrency with the number of nodes in the cluster to
@@ -100,6 +96,9 @@ func registerKV(r registry.Registry) {
 			settings.Env = append(settings.Env,
 				"MALLOC_CONF=background_thread:true,dirty_decay_ms:2000,muzzy_decay_ms:0")
 		}
+		if opts.smallBlockCache {
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--cache=0.20")
+		}
 		c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
 		db := c.Conn(ctx, t.L(), 1)
@@ -129,7 +128,7 @@ func registerKV(r registry.Registry) {
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
-			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(computeConcurrency(opts)))
+			concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(computeConcurrency(opts)))
 			splits := ""
 			if opts.splits > 0 {
 				splits = " --splits=" + strconv.Itoa(opts.splits)
@@ -148,7 +147,7 @@ func registerKV(r registry.Registry) {
 			} else {
 				readPercent = fmt.Sprintf(" --read-percent=%d", opts.readPercent)
 			}
-			histograms := " --histograms=" + t.PerfArtifactsDir() + "/stats.json"
+
 			var batchSize string
 			if opts.batchSize > 0 {
 				batchSize = fmt.Sprintf(" --batch=%d", opts.batchSize)
@@ -166,12 +165,14 @@ func registerKV(r registry.Registry) {
 				sequential = " --sequential"
 			}
 
-			defaultDuration := ifLocal(c, "10s", opts.duration.String())
-			duration := getEnvWorkloadDurationValueOrDefault(defaultDuration)
+			defaultDuration := roachtestutil.IfLocal(c, "10s", opts.duration.String())
+			duration := roachtestutil.GetEnvWorkloadDurationValueOrDefault(defaultDuration)
 			url := fmt.Sprintf(" {pgurl:1-%d}", nodes)
 			if opts.sharedProcessMT {
 				url = fmt.Sprintf(" {pgurl:1-%d:%s}", nodes, appTenantName)
 			}
+
+			histograms := " " + roachtestutil.GetWorkloadHistogramArgs(t, c, nil)
 			cmd := fmt.Sprintf(
 				"./cockroach workload run kv --tolerate-errors --init --user=%s --password=%s", install.DefaultUser, install.DefaultPassword,
 			) +
@@ -198,7 +199,11 @@ func registerKV(r registry.Registry) {
 		// from the 80KB size class in jemalloc. So the allocated bytes from jemalloc
 		// by the block cache are 20% higher than configured. By setting this flag to true,
 		// we reduce the (resident-allocated) size in jemalloc.
-		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16 /* 64 KB */, jemallocReleaseFaster: true},
+		//
+		// Also reduce the Pebble block cache, since we have seen one OOM despite
+		// the jemallocReleaseFaster setting.
+		{nodes: 1, cpus: 8, readPercent: 0, concMultiplier: 4096, blockSize: 1 << 16, /* 64 KB */
+			jemallocReleaseFaster: true, smallBlockCache: true},
 		{nodes: 1, cpus: 8, readPercent: 95},
 		{nodes: 1, cpus: 8, readPercent: 95, sharedProcessMT: true},
 		{nodes: 1, cpus: 32, readPercent: 0},
@@ -454,7 +459,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
-			err := WaitFor3XReplication(ctx, t, t.L(), db)
+			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 			require.NoError(t, err)
 
 			qps := func(f func()) float64 {
@@ -523,8 +528,16 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// If the test ever fails, the person who investigates the
 			// failure will likely be thankful for this additional logging.
 			startOpts := option.DefaultStartOpts()
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store=2,store_rebalancer=2")
-			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store=2,"+
+				"store_rebalancer=2,liveness=2")
+			// TODO(kvoli): We are enabling continous profiling here to help debug
+			// #131569, disable this once the issue is resolved.
+			settings := install.MakeClusterSettings()
+			settings.ClusterSettings["server.cpu_profile.duration"] = "5s"
+			settings.ClusterSettings["server.cpu_profile.interval"] = "1s"
+			settings.ClusterSettings["server.cpu_profile.cpu_usage_combined_threshold"] = "15"
+			settings.ClusterSettings["server.cpu_profile.total_dump_size_limit"] = fmt.Sprintf("%d", 256<<20 /* 256MB */)
+			c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
 			// Don't connect to the node we are going to shut down.
 			dbs := make([]*gosql.DB, nodes-1)
@@ -533,13 +546,8 @@ func registerKVGracefulDraining(r registry.Registry) {
 				defer dbs[i].Close()
 			}
 
-			err := WaitFor3XReplication(ctx, t, t.L(), dbs[0])
+			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), dbs[0])
 			require.NoError(t, err)
-
-			// TODO(baptist): Remove setting once #129427 is addressed.
-			if _, err := dbs[0].ExecContext(ctx, "SET CLUSTER SETTING kv.store_gossip.max_frequency = '0s'"); err != nil {
-				t.Fatalf("failed to disable load based splitting: %v", err)
-			}
 
 			t.Status("initializing workload")
 
@@ -565,11 +573,15 @@ func registerKVGracefulDraining(r registry.Registry) {
 			t.Status("starting workload")
 			workloadStartTime := timeutil.Now()
 			// Three iterations, each iteration has a 3-minute duration.
-			desiredRunDuration := 10 * time.Minute
+			// We also warm up the workload for a minute, and let the initial
+			// replica movement finish.
+			desiredRunDuration := 11 * time.Minute
 			m.Go(func(ctx context.Context) error {
+				// TODO(baptist): Remove --tolerate-errors once #129427 (ambiguous results)
+				// is addressed.
 				// Don't connect to the node we are going to shut down.
 				cmd := fmt.Sprintf(
-					"./cockroach workload run kv --duration=%s --read-percent=50 --follower-read-percent=50 --concurrency=200 --max-rate=%d {pgurl%s}",
+					"./cockroach workload run kv --tolerate-errors --duration=%s --read-percent=50 --follower-read-percent=50 --concurrency=200 --max-rate=%d {pgurl%s}",
 					desiredRunDuration, specifiedQPS, c.Range(1, nodes-1))
 				t.WorkerStatus(cmd)
 				defer func() {
@@ -578,9 +590,28 @@ func registerKVGracefulDraining(r registry.Registry) {
 				}()
 				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 			})
+			// Sleep for the first minute to let ranges settle down, leases warm up,
+			// and stats populate. It also helps teamcity metrics to pick up what the
+			// cluster is doing so that we're not flying blind[1] in the early phases
+			// of the test.
+			// [1]: https://cockroachlabs.slack.com/archives/C023S0V4YEB/p1726483324593879
+			t.L().PrintfCtx(ctx, "sleeping one minute")
+			select {
+			case <-time.After(time.Minute):
+			case <-ctx.Done():
+			}
+			// Set up statement bundles for the (now known) top queries, with reasonable
+			// criteria. This gives us something to look into should the test fail to
+			// meet its qps targets.
+			require.NoError(t, roachtestutil.ProfileTopStatements(ctx, c, t.L(), roachtestutil.ProfDbName("kv")))
+			defer func() {
+				if err := roachtestutil.DownloadProfiles(ctx, c, t.L(), t.ArtifactsDir()); err != nil {
+					t.L().PrintfCtx(ctx, "failed to download stmt bundles: %v", err)
+				}
+			}()
 
 			verifyQPS := func(ctx context.Context) error {
-				if qps := measureQPS(ctx, t, time.Second, dbs...); qps < expectedQPS {
+				if qps := roachtestutil.MeasureQPS(ctx, t, c, time.Second, c.Range(1, nodes-1)); qps < expectedQPS {
 					return errors.Newf(
 						"QPS of %.2f at time %v is below minimum allowable QPS of %.2f",
 						qps, timeutil.Now(), expectedQPS)
@@ -690,15 +721,22 @@ func registerKVSplits(r registry.Registry) {
 		// far past the number of replicas per node we support, at least if the
 		// ranges start to unquiesce (which can set off a cascade due to resource
 		// exhaustion).
-		{true, 300000, registry.EpochLeases, 2 * time.Hour},
+		{true, 300_000, registry.EpochLeases, 2 * time.Hour},
 		// This version of the test prevents range quiescence to trigger the
 		// badness described above more reliably for when we wish to improve
 		// the performance. For now, just verify that 30k unquiesced ranges
 		// is tenable.
-		{false, 30000, registry.EpochLeases, 2 * time.Hour},
+		{false, 30_000, registry.EpochLeases, 2 * time.Hour},
 		// Expiration-based leases prevent quiescence, and are also more expensive
 		// to keep alive. Again, just verify that 30k ranges is ok.
-		{false, 30000, registry.ExpirationLeases, 2 * time.Hour},
+		{false, 30_000, registry.ExpirationLeases, 2 * time.Hour},
+		// Leader leases don't need quiescence, as they use store liveness for
+		// failure detection and lease extension, so they don't issue raft
+		// heartbeats or periodic lease extensions. However, the cost of raft
+		// ticking is not entirely negligible (see #133885), so each range isn't
+		// completely free. Currently, they should be able to support 80k ranges in
+		// this cluster configuration.
+		{false, 80_000, registry.LeaderLeases, 2 * time.Hour},
 	} {
 		item := item // for use in closure below
 		r.Add(registry.TestSpec{
@@ -723,8 +761,8 @@ func registerKVSplits(r registry.Registry) {
 				m := c.NewMonitor(workloadCtx, c.CRDBNodes())
 				m.Go(func(ctx context.Context) error {
 					defer workloadCancel()
-					concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
-					splits := " --splits=" + ifLocal(c, "2000", fmt.Sprint(item.splits))
+					concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(nodes*64))
+					splits := " --splits=" + roachtestutil.IfLocal(c, "2000", fmt.Sprint(item.splits))
 					cmd := fmt.Sprintf(
 						"./cockroach workload run kv --init --max-ops=1"+
 							concurrency+splits+
@@ -809,7 +847,7 @@ func registerKVRangeLookups(r registry.Registry) {
 				conns[i].Close()
 			}
 		}()
-		err := WaitFor3XReplication(ctx, t, t.L(), conns[0])
+		err := roachtestutil.WaitFor3XReplication(ctx, t.L(), conns[0])
 		require.NoError(t, err)
 
 		m := c.NewMonitor(ctx, c.CRDBNodes())
@@ -820,7 +858,7 @@ func registerKVRangeLookups(r registry.Registry) {
 			if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
 				return err
 			}
-			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(len(c.CRDBNodes())*64))
+			concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(len(c.CRDBNodes())*64))
 			duration := " --duration=10m"
 			readPercent := " --read-percent=50"
 			// We run kv with --tolerate-errors, since the relocate workload is
@@ -915,49 +953,6 @@ func registerKVRangeLookups(r registry.Registry) {
 	}
 }
 
-// measureQPS will measure the approx QPS at the time this command is run. The
-// duration is the interval to measure over. Setting too short of an interval
-// can mean inaccuracy in results. Setting too long of an interval may mean the
-// impact is blurred out.
-func measureQPS(
-	ctx context.Context, t test.Test, duration time.Duration, dbs ...*gosql.DB,
-) float64 {
-
-	currentQPS := func() uint64 {
-		var value uint64
-		var wg sync.WaitGroup
-		wg.Add(len(dbs))
-
-		// Count the inserts before sleeping.
-		for _, db := range dbs {
-			db := db
-			go func() {
-				defer wg.Done()
-				var v float64
-				if err := db.QueryRowContext(
-					ctx, `SELECT sum(value) FROM crdb_internal.node_metrics WHERE name in ('sql.select.count', 'sql.insert.count')`,
-				).Scan(&v); err != nil {
-					t.Fatal(err)
-				}
-				atomic.AddUint64(&value, uint64(v))
-			}()
-		}
-		wg.Wait()
-		return value
-	}
-
-	// Measure the current time and the QPS now.
-	startTime := timeutil.Now()
-	beforeQPS := currentQPS()
-	// Wait for the duration minus the first query time.
-	select {
-	case <-ctx.Done():
-		return 0
-	case <-time.After(duration - timeutil.Since(startTime)):
-		return float64(currentQPS()-beforeQPS) / duration.Seconds()
-	}
-}
-
 // registerKVRestartImpact measures the impact of stopping and then restarting
 // a node during a write-heavy workload. Specifically the Raft log on the node
 // falls behind when the node is down and when it comes back up it goes into IO
@@ -1007,15 +1002,6 @@ func registerKVRestartImpact(r registry.Registry) {
 			downtimeDuration := testDuration / 18 // 10 minutes for non-local, 20 sec for local.
 			printInterval := testDuration / 72    // Show 72 point results during the run.
 
-			var dbs []*gosql.DB
-			// Don't include the node we plan to shut down in the pool of nodes used
-			// to measure SQL QPS.
-			for i := 1; i <= nodes-1; i++ {
-				db := c.Conn(ctx, t.L(), i)
-				dbs = append(dbs, db)
-				defer db.Close()
-			}
-
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf("./cockroach workload init kv --splits=%d {pgurl:1}", splits))
 
 			workloadStartTime := timeutil.Now()
@@ -1052,7 +1038,7 @@ func registerKVRestartImpact(r registry.Registry) {
 				for {
 					// Measure QPS every few seconds throughout the test. measureQPS takes time
 					// to run, so we don't sleep between invocations.
-					qps := measureQPS(ctx, t, 5*time.Second, dbs...)
+					qps := roachtestutil.MeasureQPS(ctx, t, c, 5*time.Second, c.Range(1, nodes-1))
 					if qps < passingQPS {
 						return errors.Newf(
 							"QPS of %.2f at time %v is below minimum allowable QPS of %.2f",

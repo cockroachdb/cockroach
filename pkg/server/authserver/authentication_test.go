@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package authserver_test
 
@@ -308,23 +303,40 @@ func TestVerifyPasswordDBConsole(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			username := username.MakeSQLUsernameFromPreNormalizedString(tc.username)
 			authServer := ts.HTTPAuthServer().(authserver.Server)
-			valid, expired, err := authServer.VerifyPasswordDBConsole(context.Background(), username, tc.password)
+			verified, pwRetrieveFn, err := authServer.VerifyUserSessionDBConsole(context.Background(), username)
 			if err != nil {
-				t.Errorf(
-					"credentials %s/%s failed with error %s, wanted no error",
+				t.Fatalf(
+					"user session verification failed, credentials %s/%s failed with error %s, wanted no error",
 					tc.username,
 					tc.password,
 					err,
 				)
 			}
-			if valid && !expired != tc.shouldAuthenticate {
-				t.Errorf(
-					"credentials %s/%s valid = %t, wanted %t",
-					tc.username,
-					tc.password,
-					valid,
-					tc.shouldAuthenticate,
-				)
+			if !verified && tc.shouldAuthenticate {
+				t.Fatalf("unexpected user %s for DB console login, verified: %t, expected shouldAuthenticate: %t",
+					tc.username, verified, tc.shouldAuthenticate)
+			} else if verified {
+				valid, expired, err := authServer.VerifyPasswordDBConsole(context.Background(), username, tc.password, pwRetrieveFn)
+				if err != nil {
+					t.Errorf(
+						"credentials %s/%s failed with error %s, wanted no error",
+						tc.username,
+						tc.password,
+						err,
+					)
+				}
+				if !valid && tc.shouldAuthenticate {
+					t.Fatalf("unexpected credentials %s/%s for DB console login, valid: %t, expected shouldAuthenticate: %t",
+						tc.username, tc.password, valid, tc.shouldAuthenticate)
+				} else if valid && !expired != tc.shouldAuthenticate {
+					t.Errorf(
+						"credentials %s/%s valid = %t, wanted %t",
+						tc.username,
+						tc.password,
+						valid,
+						tc.shouldAuthenticate,
+					)
+				}
 			}
 		})
 	}

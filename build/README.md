@@ -42,7 +42,7 @@ To build the image yourself:
 
     ```sh
     cp ./artifacts/{cockroach,libgeos.so,libgeos_c.so} ./build/deploy
-    cp -r ./licenses ./build/deploy
+    cp ./LICENSE ./licenses/THIRD-PARTY-NOTICES.txt ./build/deploy
     ```
 
 1. Build the CockroachDB Docker image.

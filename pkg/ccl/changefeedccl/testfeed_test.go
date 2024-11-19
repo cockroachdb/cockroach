@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -443,13 +440,15 @@ func (f *jobFeed) status() (status string, err error) {
 	return
 }
 
-func (f *jobFeed) WaitForStatus(statusPred func(status jobs.Status) bool) error {
+func (f *jobFeed) WaitDurationForStatus(
+	dur time.Duration, statusPred func(status jobs.Status) bool,
+) error {
 	if f.jobID == jobspb.InvalidJobID {
 		// Job may not have been started.
 		return nil
 	}
 	// Wait for the job status predicate to become true.
-	return testutils.SucceedsSoonError(func() error {
+	return testutils.SucceedsWithinError(func() error {
 		var status string
 		var err error
 		if status, err = f.status(); err != nil {
@@ -459,7 +458,11 @@ func (f *jobFeed) WaitForStatus(statusPred func(status jobs.Status) bool) error 
 			return nil
 		}
 		return errors.Newf("still waiting for job status; current %s", status)
-	})
+	}, dur)
+}
+
+func (f *jobFeed) WaitForStatus(statusPred func(status jobs.Status) bool) error {
+	return f.WaitDurationForStatus(testutils.SucceedsSoonDuration(), statusPred)
 }
 
 // Pause implements the TestFeed interface.

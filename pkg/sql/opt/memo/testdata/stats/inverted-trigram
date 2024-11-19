@@ -36,7 +36,7 @@ select
  │    └── scan a@inv,inverted
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted constraint: /5/2
- │         │    └── spans: ["\x12foo\x00\x01", "\x12foo\x00\x01"]
+ │         │    └── spans: ["foo", "foo"]
  │         ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0]
  │         └── key: (2)
  └── filters
@@ -102,21 +102,19 @@ select
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: false, unique: true
- │         │         │    └── union spans: ["\x12bla\x00\x01", "\x12bla\x00\x01"]
+ │         │         │    └── union spans: ["bla", "bla"]
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
- │         │              └── union spans: ["\x12lah\x00\x01", "\x12lah\x00\x01"]
+ │         │              └── union spans: ["lah", "lah"]
  │         ├── stats: [rows=111.1111]
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
- │              │         ├── ["\x12bla\x00\x01", "\x12bla\x00\x01"]
- │              │         └── ["\x12lah\x00\x01", "\x12lah\x00\x01"]
- │              ├── stats: [rows=111.1111, distinct(2)=111.111, null(2)=0, distinct(5)=100, null(5)=0]
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              │         ├── ["bla", "bla"]
+ │              │         └── ["lah", "lah"]
+ │              └── stats: [rows=111.1111, distinct(2)=111.111, null(2)=0, distinct(5)=100, null(5)=0]
  └── filters
       └── a:1 LIKE '%blah%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
@@ -236,23 +234,21 @@ select
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: false, unique: true
- │         │         │    └── union spans: ["\x12bla\x00\x01", "\x12bla\x00\x01"]
+ │         │         │    └── union spans: ["bla", "bla"]
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
- │         │              └── union spans: ["\x12lah\x00\x01", "\x12lah\x00\x01"]
+ │         │              └── union spans: ["lah", "lah"]
  │         ├── stats: [rows=20]
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
- │              │         ├── ["\x12bla\x00\x01", "\x12bla\x00\x01"]
- │              │         └── ["\x12lah\x00\x01", "\x12lah\x00\x01"]
- │              ├── stats: [rows=20, distinct(2)=4, null(2)=0, distinct(5)=2, null(5)=0]
- │              │   histogram(5)=  0         10         0         10         0         0
- │              │                <--- '\x12626c610001' --- '\x126c61680001' --- '\x126c61680002'
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              │         ├── ["bla", "bla"]
+ │              │         └── ["lah", "lah"]
+ │              └── stats: [rows=20, distinct(2)=4, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0         10         0         10         0         0
+ │                               <--- '\x12626c610001' --- '\x126c61680001' --- '\x126c61680002'
  └── filters
       └── a:1 LIKE '%blah%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
@@ -274,24 +270,22 @@ select
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: false, unique: true
- │         │         │    └── union spans: ["\x12ooo\x00\x01", "\x12ooo\x00\x01"]
+ │         │         │    └── union spans: ["ooo", "ooo"]
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
- │         │              └── union spans: ["\x12zoo\x00\x01", "\x12zoo\x00\x01"]
+ │         │              └── union spans: ["zoo", "zoo"]
  │         ├── stats: [rows=1980]
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
- │              │         ├── ["\x12ooo\x00\x01", "\x12ooo\x00\x01"]
- │              │         └── ["\x12zoo\x00\x01", "\x12zoo\x00\x01"]
+ │              │         ├── ["ooo", "ooo"]
+ │              │         └── ["zoo", "zoo"]
  │              ├── flags: force-index=inv
- │              ├── stats: [rows=1980, distinct(2)=396, null(2)=0, distinct(5)=2, null(5)=0]
- │              │   histogram(5)=  0        990         0        990
- │              │                <--- '\x126f6f6f0001' --- '\x127a6f6f0001'
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              └── stats: [rows=1980, distinct(2)=396, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0        990         0        990
+ │                               <--- '\x126f6f6f0001' --- '\x127a6f6f0001'
  └── filters
       └── a:1 LIKE '%zooo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
@@ -314,10 +308,10 @@ select
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null)
  │              ├── constraint: /5
- │              │    ├── [/'\x1220626c0001' - /'\x1220626c0001']
- │              │    ├── [/'\x126168200001' - /'\x126168200001']
- │              │    ├── [/'\x12626c610001' - /'\x12626c610001']
- │              │    └── [/'\x126c61680001' - /'\x126c61680001']
+ │              │    ├── [/" bl" - /" bl"]
+ │              │    ├── [/"ah " - /"ah "]
+ │              │    ├── [/"bla" - /"bla"]
+ │              │    └── [/"lah" - /"lah"]
  │              └── stats: [rows=40, distinct(2)=8, null(2)=0, distinct(5)=4, null(5)=0]
  │                  histogram(5)=  0         10         0         10         0         10         0         10
  │                               <--- '\x1220626c0001' --- '\x126168200001' --- '\x12626c610001' --- '\x126c61680001'
@@ -342,10 +336,10 @@ select
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null)
  │              ├── constraint: /5
- │              │    ├── [/'\x1220626c0001' - /'\x1220626c0001']
- │              │    ├── [/'\x126168200001' - /'\x126168200001']
- │              │    ├── [/'\x12626c610001' - /'\x12626c610001']
- │              │    └── [/'\x126c61680001' - /'\x126c61680001']
+ │              │    ├── [/" bl" - /" bl"]
+ │              │    ├── [/"ah " - /"ah "]
+ │              │    ├── [/"bla" - /"bla"]
+ │              │    └── [/"lah" - /"lah"]
  │              └── stats: [rows=40, distinct(2)=8, null(2)=0, distinct(5)=4, null(5)=0]
  │                  histogram(5)=  0         10         0         10         0         10         0         10
  │                               <--- '\x1220626c0001' --- '\x126168200001' --- '\x12626c610001' --- '\x126c61680001'
@@ -370,7 +364,7 @@ select
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null)
- │              ├── constraint: /5: [/'\x126c61680001' - /'\x126c61680001']
+ │              ├── constraint: /5: [/"lah" - /"lah"]
  │              └── stats: [rows=10, distinct(2)=2, null(2)=0, distinct(5)=1, null(5)=0]
  │                  histogram(5)=  0         10
  │                               <--- '\x126c61680001'
@@ -482,23 +476,21 @@ select
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: false, unique: true
- │         │         │    └── union spans: ["\x12bla\x00\x01", "\x12bla\x00\x01"]
+ │         │         │    └── union spans: ["bla", "bla"]
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
- │         │              └── union spans: ["\x12lah\x00\x01", "\x12lah\x00\x01"]
+ │         │              └── union spans: ["lah", "lah"]
  │         ├── stats: [rows=20]
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
- │              │         ├── ["\x12bla\x00\x01", "\x12bla\x00\x01"]
- │              │         └── ["\x12lah\x00\x01", "\x12lah\x00\x01"]
- │              ├── stats: [rows=20, distinct(2)=4, null(2)=0, distinct(5)=2, null(5)=0]
- │              │   histogram(5)=  0         10         0         10         0         0
- │              │                <--- '\x12626c610001' --- '\x126c61680001' --- '\x126c61680002'
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              │         ├── ["bla", "bla"]
+ │              │         └── ["lah", "lah"]
+ │              └── stats: [rows=20, distinct(2)=4, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0         10         0         10         0         0
+ │                               <--- '\x12626c610001' --- '\x126c61680001' --- '\x126c61680002'
  └── filters
       └── a:1 LIKE '%blah%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
@@ -520,24 +512,22 @@ select
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: false, unique: true
- │         │         │    └── union spans: ["\x12ooo\x00\x01", "\x12ooo\x00\x01"]
+ │         │         │    └── union spans: ["ooo", "ooo"]
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
- │         │              └── union spans: ["\x12zoo\x00\x01", "\x12zoo\x00\x01"]
+ │         │              └── union spans: ["zoo", "zoo"]
  │         ├── stats: [rows=1980]
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/2
  │              │    └── spans
- │              │         ├── ["\x12ooo\x00\x01", "\x12ooo\x00\x01"]
- │              │         └── ["\x12zoo\x00\x01", "\x12zoo\x00\x01"]
+ │              │         ├── ["ooo", "ooo"]
+ │              │         └── ["zoo", "zoo"]
  │              ├── flags: force-index=inv
- │              ├── stats: [rows=1980, distinct(2)=396, null(2)=0, distinct(5)=2, null(5)=0]
- │              │   histogram(5)=  0        990         0        990
- │              │                <--- '\x126f6f6f0001' --- '\x127a6f6f0001'
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              └── stats: [rows=1980, distinct(2)=396, null(2)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0        990         0        990
+ │                               <--- '\x126f6f6f0001' --- '\x127a6f6f0001'
  └── filters
       └── a:1 LIKE '%zooo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 

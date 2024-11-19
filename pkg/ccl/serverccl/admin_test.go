@@ -1,10 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package serverccl
 
@@ -52,14 +49,7 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	// TODO(clust-obs): This test should work with just a single node,
 	// i.e. using serverutils.StartServer` instead of
 	// `StartCluster`.
-	testCluster := serverutils.StartCluster(t, 3,
-		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				// The code below ought to work when this is omitted. This
-				// needs to be investigated further.
-				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(106897),
-			},
-		})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)

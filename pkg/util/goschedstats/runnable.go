@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package goschedstats
 
@@ -14,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -64,6 +61,12 @@ var _ = numRunnableGoroutines
 // interaction with processor idle state
 // https://github.com/golang/go/issues/30740#issuecomment-471634471. See
 // #66881.
+//
+// The use of underloadedRunnablePerProcThreshold does not provide sufficient
+// protection against sluggish response in the admission control system, which
+// uses these samples to adjust concurrency of request processing. So
+// goschedstats.always_use_short_sample_period.enabled can be set to true to
+// force this responsiveness.
 const samplePeriodShort = time.Millisecond
 const samplePeriodLong = 250 * time.Millisecond
 
@@ -77,6 +80,12 @@ const samplePeriodLong = 250 * time.Millisecond
 // https://github.com/cockroachdb/cockroach/issues/111125). So we set this to
 // 0.1 runnable goroutine per proc.
 const underloadedRunnablePerProcThreshold = 1 * toFixedPoint / 10
+
+var alwaysUseShortSamplePeriodEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"goschedstats.always_use_short_sample_period.enabled",
+	"when set to true, the system always does 1ms sampling of runnable queue lengths",
+	false)
 
 // We "report" the average value every reportingPeriod.
 // Note: if this is changed from 1s, CumulativeNormalizedRunnableGoroutines()
@@ -113,6 +122,7 @@ var callbackInfo struct {
 	// Multiple cbs are used only for tests which can run multiple CockroachDB
 	// nodes in a process.
 	cbs []callbackWithID
+	st  *cluster.Settings
 }
 
 // RegisterRunnableCountCallback registers a callback to be run with the
@@ -160,6 +170,14 @@ func UnregisterRunnableCountCallback(id int64) {
 	callbackInfo.cbs = newCBs
 }
 
+// RegisterSettings provides a settings object that can be used to alter
+// callback frequency.
+func RegisterSettings(st *cluster.Settings) {
+	callbackInfo.mu.Lock()
+	defer callbackInfo.mu.Unlock()
+	callbackInfo.st = st
+}
+
 func init() {
 	go func() {
 		sst := schedStatsTicker{
@@ -172,8 +190,9 @@ func init() {
 			t := <-ticker.C
 			callbackInfo.mu.Lock()
 			cbs := callbackInfo.cbs
+			st := callbackInfo.st
 			callbackInfo.mu.Unlock()
-			sst.getStatsOnTick(t, cbs, ticker)
+			sst.getStatsOnTick(t, cbs, st, ticker)
 		}
 	}()
 }
@@ -199,9 +218,9 @@ type schedStatsTicker struct {
 	localTotal, localEWMA uint64
 }
 
-// getStatsOnTick gets scheduler stats as the ticker has ticked.
+// getStatsOnTick gets scheduler stats as the ticker has ticked. st can be nil.
 func (s *schedStatsTicker) getStatsOnTick(
-	t time.Time, cbs []callbackWithID, ticker timeTickerInterface,
+	t time.Time, cbs []callbackWithID, st *cluster.Settings, ticker timeTickerInterface,
 ) {
 	if t.Sub(s.lastTime) > reportingPeriod {
 		var avgValue uint64
@@ -221,7 +240,8 @@ func (s *schedStatsTicker) getStatsOnTick(
 		// Both the mean over the last 1s, and the exponentially weighted average
 		// must be low for the system to be considered underloaded.
 		if avgValue < underloadedRunnablePerProcThreshold &&
-			s.localEWMA < underloadedRunnablePerProcThreshold {
+			s.localEWMA < underloadedRunnablePerProcThreshold &&
+			(st == nil || !alwaysUseShortSamplePeriodEnabled.Get(&st.SV)) {
 			// Underloaded, so switch to longer sampling period.
 			nextPeriod = samplePeriodLong
 		}

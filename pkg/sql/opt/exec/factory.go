@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package exec contains execution-related utilities. (See README.md.)
 package exec
@@ -81,16 +76,19 @@ const (
 	PlanFlagCheckContainsLocking
 )
 
-func (pf PlanFlags) IsSet(flag PlanFlags) bool {
-	return (pf & flag) != 0
+// IsSet returns true if the receiver has all of the given flags set.
+func (pf PlanFlags) IsSet(flags PlanFlags) bool {
+	return (pf & flags) == flags
 }
 
-func (pf *PlanFlags) Set(flag PlanFlags) {
-	*pf |= flag
+// Set sets all of the given flags in the receiver.
+func (pf *PlanFlags) Set(flags PlanFlags) {
+	*pf |= flags
 }
 
-func (pf *PlanFlags) Unset(flag PlanFlags) {
-	*pf &^= flag
+// Unset unsets all of the given flags in the receiver.
+func (pf *PlanFlags) Unset(flags PlanFlags) {
+	*pf &^= flags
 }
 
 // ScanParams contains all the parameters for a table scan.
@@ -273,11 +271,17 @@ type RecursiveCTEIterationFn func(ef Factory, bufferRef Node) (Plan, error)
 // rightColumns passed to ConstructApplyJoin (in order).
 type ApplyJoinPlanRightSideFn func(ctx context.Context, ef Factory, leftRow tree.Datums) (Plan, error)
 
-// Cascade describes a cascading query. The query uses a node created by
-// ConstructBuffer as an input; it should only be triggered if this buffer is
-// not empty.
-type Cascade struct {
+// PostQuery describes a cascading query or an AFTER trigger action. The query
+// uses a node created by ConstructBuffer as an input; it should only be
+// triggered if this buffer is not empty.
+type PostQuery struct {
+	// FKConstraint is used for logging and EXPLAIN purposes. It is nil if this
+	// PostQuery describes a set of AFTER triggers.
 	FKConstraint cat.ForeignKeyConstraint
+
+	// Triggers is used for logging and EXPLAIN purposes. It is nil if this
+	// PostQuery describes a foreign-key cascade action.
+	Triggers []cat.Trigger
 
 	// Buffer is the Node returned by ConstructBuffer which stores the input to
 	// the mutation. It is nil if the cascade does not require a buffer.

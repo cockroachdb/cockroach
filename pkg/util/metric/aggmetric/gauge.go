@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package aggmetric
 
@@ -178,6 +173,11 @@ func (g *Gauge) Dec(i int64) {
 func (g *Gauge) Update(val int64) {
 	old := atomic.SwapInt64(&g.value, val)
 	g.parent.g.Inc(val - old)
+}
+
+// UpdateFn updates the function on the gauge.
+func (g *Gauge) UpdateFn(fn func() int64) {
+	g.fn = fn
 }
 
 // AggGaugeFloat64 maintains a value as the sum of its children. The gauge will

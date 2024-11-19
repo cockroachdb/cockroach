@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package install
 
@@ -27,6 +22,9 @@ type RunOptions struct {
 	// recommended to check the documentation of the function you are using to see
 	// what the default behaviour is.
 	FailOption FailOption
+	// ExpanderConfig configures the behaviour of the roachprod expander
+	// during a run.
+	ExpanderConfig ExpanderConfig
 
 	// These are private to roachprod
 	Nodes       Nodes
@@ -101,5 +99,10 @@ func (r RunOptions) WithConcurrency(concurrency int) RunOptions {
 
 func (r RunOptions) WithDisplay(display string) RunOptions {
 	r.Display = display
+	return r
+}
+
+func (r RunOptions) WithExpanderConfig(cfg ExpanderConfig) RunOptions {
+	r.ExpanderConfig = cfg
 	return r
 }

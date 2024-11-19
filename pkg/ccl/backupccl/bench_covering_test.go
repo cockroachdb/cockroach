@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -94,11 +91,10 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 											filter, err := makeSpanCoveringFilter(
 												backups[numBackups-1].Spans,
 												[]jobspb.RestoreProgress_FrontierEntry{},
-												nil,
 												introducedSpanFrontier,
 												0,
 												defaultMaxFileCount,
-												false)
+											)
 											require.NoError(b, err)
 											defer filter.close()
 

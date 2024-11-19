@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -268,9 +263,9 @@ func prepareRightReplicaForSplit(
 	// the replica according to whether it holds the lease. This enables the
 	// txnWaitQueue.
 	rightRepl.leasePostApplyLocked(ctx,
-		rightRepl.mu.state.Lease, /* prevLease */
-		rightRepl.mu.state.Lease, /* newLease - same as prevLease */
-		nil,                      /* priorReadSum */
+		rightRepl.shMu.state.Lease, /* prevLease */
+		rightRepl.shMu.state.Lease, /* newLease - same as prevLease */
+		nil,                        /* priorReadSum */
 		assertNoLeaseJump)
 
 	// We need to explicitly unquiesce the Raft group on the right-hand range or

@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backuppb
 
@@ -118,20 +115,6 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 			return nil, err
 		}
 		backup.To[i] = tree.NewDString(clean)
-	}
-
-	// NB: this will never be non-nil with current schedule syntax but is here for
-	// completeness.
-	for i := range backup.IncrementalFrom {
-		raw, ok := backup.IncrementalFrom[i].(*tree.StrVal)
-		if !ok {
-			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
-		}
-		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
-		if err != nil {
-			return nil, err
-		}
-		backup.IncrementalFrom[i] = tree.NewDString(clean)
 	}
 
 	for i := range backup.Options.IncrementalStorage {

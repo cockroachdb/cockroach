@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -80,7 +75,7 @@ func (d *replicaDecoder) decode(ctx context.Context, ents []raftpb.Entry) error 
 // with a proposal in that way are considered "local", meaning a client is
 // waiting on their result, and may be reproposed (as a new proposal) with a new
 // lease index in case they apply with an illegal lease index (see
-// tryReproposeWithNewLeaseIndex).
+// tryReproposeWithNewLeaseIndexRaftMuLocked).
 func (d *replicaDecoder) retrieveLocalProposals() (anyLocal bool) {
 	d.r.mu.Lock()
 	defer d.r.mu.Unlock()
@@ -150,7 +145,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 			propCtx := ctx // raft scheduler's ctx
 			var propSp *tracing.Span
 			// If the client has a trace, put a child into propCtx.
-			if sp := tracing.SpanFromContext(cmd.proposal.ctx); sp != nil {
+			if sp := tracing.SpanFromContext(cmd.proposal.Context()); sp != nil {
 				propCtx, propSp = sp.Tracer().StartSpanCtx(
 					propCtx, "local proposal", tracing.WithParent(sp),
 				)

@@ -1,0 +1,563 @@
+# Initialize a range with voters on s1,s2 and s3. The local replica and
+# leaseholder will be s1. The leaseholder is denoted by the '*' suffix. Also
+# set all streams to initially have 0 tokens and a limit of 1 token to simplify
+# the test, as evaluation requests only wait for positive tokens.
+init regular_limit=1 regular_init=0 elastic_limit=1 elastic_init=0
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
+t1/s1: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+metrics
+----
+kvflowcontrol.eval_wait.regular.requests.waiting  : 0
+kvflowcontrol.eval_wait.regular.requests.admitted : 0
+kvflowcontrol.eval_wait.regular.requests.errored  : 0
+kvflowcontrol.eval_wait.regular.requests.bypassed : 0
+kvflowcontrol.eval_wait.regular.duration.count    : 0
+kvflowcontrol.eval_wait.elastic.requests.waiting  : 0
+kvflowcontrol.eval_wait.elastic.requests.admitted : 0
+kvflowcontrol.eval_wait.elastic.requests.errored  : 0
+kvflowcontrol.eval_wait.elastic.requests.bypassed : 0
+kvflowcontrol.eval_wait.elastic.duration.count    : 0
+
+# Start a high priority evaluation. It should not complete due to lack of
+# tokens.
+wait_for_eval name=a range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=false waited=false err=<nil>
+
+# Start a low priority evaluation. It should also not complete.
+wait_for_eval name=b range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=false waited=false err=<nil>
+  name=b pri=low-pri  done=false waited=false err=<nil>
+
+# Add high priority tokens to the first store. This is not enough for quorum.
+adjust_tokens
+  store_id=1 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+# Cancel the context for the high priority evaluation 'a'.
+cancel_context range_id=1 name=a
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=false waited=false err=<nil>
+
+# Add high priority tokens to the second store. 'b' is elastic so it should not
+# complete despite having a quorum of streams with available tokens.
+adjust_tokens
+  store_id=2 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=false waited=false err=<nil>
+
+# Add high priority tokens to the third store. Now all stores have positive
+# tokens and 'b' should complete.
+adjust_tokens
+  store_id=3 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+
+# Change the replica set: replace replica 3 with a new replica 4.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=4 replica_id=4 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n4,s4):4]
+
+adjust_tokens
+  store_id=1 pri=HighPri tokens=-1
+----
+t1/s1: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+# Start a new high priority evaluation 'c'. It should not complete due to lack
+# of quorum.
+wait_for_eval name=c range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=false waited=false err=<nil>
+
+# Add high priority tokens back to the first store, restoring quorum.
+adjust_tokens
+  store_id=1 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+# Check the state. The high priority evaluation 'c' should now complete.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+
+# Test behavior with a non-voter replica.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+  store_id=4 replica_id=4 type=NON_VOTER state=StateReplicate next=1
+----
+r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER]
+
+# Start a new high priority evaluation 'd'.
+wait_for_eval name=d range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+
+# Remove tokens from s3, s1 and s2 have tokens which is enough for quorum.
+adjust_tokens
+  store_id=3 pri=HighPri tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+# Check the state. The high priority evaluation 'd' should complete despite the
+# non-voter replica lacking tokens.
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+
+# Start a low priority evaluation. This should wait for all replica streams,
+# including the non-voter stream to have tokens available.
+wait_for_eval name=e range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=false waited=false err=<nil>
+
+# Add tokens to s3 (voter) stream. The low priority evaluation should still not
+# complete, as the non-voter stream (s4) does not have tokens.
+adjust_tokens
+  store_id=3 pri=LowPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=false waited=false err=<nil>
+
+# Add tokens to s4 (non-voter) stream. The low priority evaluation should now
+# complete.
+adjust_tokens
+  store_id=4 pri=LowPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+
+# Now remove the tokens we just added to end up back with s3/s4 not having
+# elastic (or regular) tokens.
+adjust_tokens
+  store_id=3 pri=LowPri tokens=-1
+  store_id=4 pri=LowPri tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+# Test behavior when changing leaseholder.
+set_leaseholder range_id=1 replica_id=2
+----
+r1: [(n1,s1):1,(n2,s2):2*,(n3,s3):3,(n4,s4):4NON_VOTER]
+
+# Start a new high priority evaluation 'e'. This evaluation completes
+# immediately because there are already sufficient tokens for the new
+# leaseholder.
+wait_for_eval name=f range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=high-pri done=true  waited=true  err=<nil>
+
+# Start another evaluation on a new range, which will intersect some of the
+# stores of the first range. The evaluation on the first range will not
+# complete until all streams have tokens, whereas the high priority evaluation
+# on the second range will complete once a quorum has available tokens.
+set_replicas
+range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=2 replica_id=2 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=5 type=VOTER_FULL state=StateReplicate next=1
+range_id=2 tenant_id=1 local_replica_id=1 next_raft_index=1
+  store_id=1 replica_id=1 type=VOTER_FULL state=StateReplicate next=1
+  store_id=3 replica_id=3 type=VOTER_FULL state=StateReplicate next=1
+  store_id=5 replica_id=5 type=VOTER_FULL state=StateReplicate next=1
+----
+r1: [(n1,s1):1,(n2,s2):2*,(n3,s3):5]
+r2: [(n1,s1):1*,(n3,s3):3,(n5,s5):5]
+
+set_leaseholder range_id=1 replica_id=4
+----
+r1: [(n1,s1):1,(n2,s2):2,(n3,s3):5]
+r2: [(n1,s1):1*,(n3,s3):3,(n5,s5):5]
+
+wait_for_eval name=g range_id=1 pri=LowPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=high-pri done=true  waited=true  err=<nil>
+  name=g pri=low-pri  done=false waited=false err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+
+wait_for_eval name=h range_id=2 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=high-pri done=true  waited=true  err=<nil>
+  name=g pri=low-pri  done=false waited=false err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+  name=h pri=high-pri done=false waited=false err=<nil>
+
+adjust_tokens
+  store_id=5 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=high-pri done=true  waited=true  err=<nil>
+  name=g pri=low-pri  done=false waited=false err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+  name=h pri=high-pri done=true  waited=true  err=<nil>
+
+# Adding elastic tokens to s3 should complete the low priority evaluation 'f',
+# as all stores now have elastic tokens available.
+adjust_tokens
+  store_id=3 pri=LowPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=high-pri done=true  waited=true  err=<nil>
+  name=g pri=low-pri  done=true  waited=true  err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+  name=h pri=high-pri done=true  waited=true  err=<nil>
+
+metrics
+----
+kvflowcontrol.eval_wait.regular.requests.waiting  : 0
+kvflowcontrol.eval_wait.regular.requests.admitted : 4
+kvflowcontrol.eval_wait.regular.requests.errored  : 1
+kvflowcontrol.eval_wait.regular.requests.bypassed : 0
+kvflowcontrol.eval_wait.regular.duration.count    : 5
+kvflowcontrol.eval_wait.elastic.requests.waiting  : 0
+kvflowcontrol.eval_wait.elastic.requests.admitted : 3
+kvflowcontrol.eval_wait.elastic.requests.errored  : 0
+kvflowcontrol.eval_wait.elastic.requests.bypassed : 0
+kvflowcontrol.eval_wait.elastic.duration.count    : 3
+
+# Adjust the tokens so that r1 doesn't have tokens on s3 or s1, then transfer
+# s3 the lease for r1.
+adjust_tokens
+  store_id=3 pri=LowPri  tokens=-1
+  store_id=1 pri=HighPri tokens=-1
+----
+t1/s1: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+set_leaseholder range_id=1 replica_id=5
+----
+r1: [(n1,s1):1,(n2,s2):2,(n3,s3):5*]
+r2: [(n1,s1):1*,(n3,s3):3,(n5,s5):5]
+
+# Start another evaluation 'i' on r1. It should not complete as the leaseholder
+# (s3) doesn't have available tokens and the leader (s1) doesn't have tokens.
+wait_for_eval name=i range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=high-pri done=true  waited=true  err=<nil>
+  name=g pri=low-pri  done=true  waited=true  err=<nil>
+  name=i pri=high-pri done=false waited=false err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+  name=h pri=high-pri done=true  waited=true  err=<nil>
+
+# Add tokens to s3, this should not complete 'h' as the leader of r1 (s1) does
+# not have tokens.
+adjust_tokens
+  store_id=3 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+# Start another evaluation 'j' on r1, it should also not complete until the
+# leader (s1) has tokens, despite both the leaseholder (s3) and a quorum
+# (s2,s3) having tokens available. Similar to above.
+wait_for_eval name=j range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=high-pri done=true  waited=true  err=<nil>
+  name=g pri=low-pri  done=true  waited=true  err=<nil>
+  name=i pri=high-pri done=false waited=false err=<nil>
+  name=j pri=high-pri done=false waited=false err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+  name=h pri=high-pri done=true  waited=true  err=<nil>
+
+# Finally, add tokens to s1 to complete both evaluations 'h' and 'i'.
+adjust_tokens
+  store_id=1 pri=HighPri tokens=1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+check_state
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=high-pri done=true  waited=true  err=<nil>
+  name=g pri=low-pri  done=true  waited=true  err=<nil>
+  name=i pri=high-pri done=true  waited=true  err=<nil>
+  name=j pri=high-pri done=true  waited=true  err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+  name=h pri=high-pri done=true  waited=true  err=<nil>
+
+# No tokens on s3.
+adjust_tokens
+  store_id=3 pri=HighPri tokens=-1
+----
+t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B
+
+# Start an evaluation 'k' on r1, that does not complete since the leaseholder
+# (s3) has no tokens.
+wait_for_eval name=k range_id=1 pri=HighPri
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=high-pri done=true  waited=true  err=<nil>
+  name=g pri=low-pri  done=true  waited=true  err=<nil>
+  name=i pri=high-pri done=true  waited=true  err=<nil>
+  name=j pri=high-pri done=true  waited=true  err=<nil>
+  name=k pri=high-pri done=false waited=false err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+  name=h pri=high-pri done=true  waited=true  err=<nil>
+
+# Close all the RangeControllers. Evaluation 'k' is done, but specifies waited
+# is false, and error is nil.
+close_rcs
+----
+range_id=1 tenant_id={1} local_replica_id=1
+  name=a pri=high-pri done=true  waited=false err=context canceled
+  name=b pri=low-pri  done=true  waited=true  err=<nil>
+  name=c pri=high-pri done=true  waited=true  err=<nil>
+  name=d pri=high-pri done=true  waited=true  err=<nil>
+  name=e pri=low-pri  done=true  waited=true  err=<nil>
+  name=f pri=high-pri done=true  waited=true  err=<nil>
+  name=g pri=low-pri  done=true  waited=true  err=<nil>
+  name=i pri=high-pri done=true  waited=true  err=<nil>
+  name=j pri=high-pri done=true  waited=true  err=<nil>
+  name=k pri=high-pri done=true  waited=false err=<nil>
+range_id=2 tenant_id={1} local_replica_id=1
+  name=h pri=high-pri done=true  waited=true  err=<nil>
+
+metrics
+----
+kvflowcontrol.eval_wait.regular.requests.waiting  : 0
+kvflowcontrol.eval_wait.regular.requests.admitted : 6
+kvflowcontrol.eval_wait.regular.requests.errored  : 1
+kvflowcontrol.eval_wait.regular.requests.bypassed : 1
+kvflowcontrol.eval_wait.regular.duration.count    : 8
+kvflowcontrol.eval_wait.elastic.requests.waiting  : 0
+kvflowcontrol.eval_wait.elastic.requests.admitted : 3
+kvflowcontrol.eval_wait.elastic.requests.errored  : 0
+kvflowcontrol.eval_wait.elastic.requests.bypassed : 0
+kvflowcontrol.eval_wait.elastic.duration.count    : 3

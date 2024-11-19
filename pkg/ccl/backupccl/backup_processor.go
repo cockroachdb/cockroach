@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -412,7 +409,7 @@ func runBackupProcessor(
 		progCh:   progCh,
 		settings: &flowCtx.Cfg.Settings.SV,
 	}
-	storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest)
+	storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest, cloud.WithClientName("backup"))
 	if err != nil {
 		return err
 	}
@@ -615,7 +612,7 @@ func runBackupProcessor(
 								if recording != nil {
 									log.Errorf(ctx, "failed export request for span %s\n trace:\n%s", span.span, recording)
 								}
-								return errors.Wrap(exportRequestErr, "export request timeout")
+								return errors.Wrap(exportRequestErr, "KV storage layer did not respond to BACKUP within timeout")
 							}
 							// BatchTimestampBeforeGCError is returned if the ExportRequest
 							// attempts to read below the range's GC threshold.

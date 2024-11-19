@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { SqlTxnResult } from "@cockroachlabs/cluster-ui/dist/types/api";
@@ -17,12 +12,8 @@ import { cockroach } from "src/js/protos";
 import { API_PREFIX, STATUS_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
-const {
-  SettingsResponse,
-  TableStatsResponse,
-  TableIndexStatsResponse,
-  NodesResponse,
-} = cockroach.server.serverpb;
+const { SettingsResponse, TableIndexStatsResponse, NodesResponse } =
+  cockroach.server.serverpb;
 
 // These test-time functions provide typesafe wrappers around fetchMock,
 // stubbing HTTP responses from the admin API.
@@ -35,7 +26,7 @@ const {
 //   describe("The thing I'm testing", function() {
 //     it("works like this", function() {
 //       // 1. Set up a fake response from the /databases endpoint.
-//       fakeApi.stubDatabases({
+//       fakeApi.stuatabases({
 //         databases: ["one", "two", "three"],
 //       });
 //
@@ -70,20 +61,6 @@ export function stubNodesUI(
   response: cockroach.server.serverpb.INodesResponseExternal,
 ) {
   stubGet(`/nodes_ui`, NodesResponse.encode(response), STATUS_PREFIX);
-}
-
-export function stubTableStats(
-  database: string,
-  table: string,
-  response: cockroach.server.serverpb.ITableStatsResponse,
-) {
-  stubGet(
-    `/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(
-      table,
-    )}/stats`,
-    TableStatsResponse.encode(response),
-    API_PREFIX,
-  );
 }
 
 export function stubIndexStats(

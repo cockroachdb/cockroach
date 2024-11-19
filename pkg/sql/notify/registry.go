@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 )
 
 // channelQueueSize is a cluster setting that sets the per-channel buffer size
@@ -128,8 +129,9 @@ fill:
 
 // queryRowExer is a subset of isql.InternalExecutor to avoid dependency cycles.
 type queryRowExer interface {
-	QueryRowEx(ctx context.Context,
-		opName string,
+	QueryRowEx(
+		ctx context.Context,
+		opName redact.RedactableString,
 		txn *kv.Txn,
 		session sessiondata.InternalExecutorOverride,
 		stmt string,
@@ -305,7 +307,7 @@ func (r *ListenerRegistry) runRangefeed(ctx context.Context) {
 	ctx, _ = r.stopper.WithCancelOnQuiesce(ctx) // this ctx is passed to spawned tasks so dont cancel it
 
 	// if the table doesnt exist, wait until it does
-	if !r.settings.Version.IsActive(ctx, clusterversion.V24_3_ListenNotifyQueue) {
+	if !r.settings.Version.IsActive(ctx, clusterversion.V25_1_ListenNotifyQueue) {
 		ticker := r.timeSource.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -314,7 +316,7 @@ func (r *ListenerRegistry) runRangefeed(ctx context.Context) {
 				return
 			case <-ticker.Ch():
 			}
-			if r.settings.Version.IsActive(ctx, clusterversion.V24_3_ListenNotifyQueue) {
+			if r.settings.Version.IsActive(ctx, clusterversion.V25_1_ListenNotifyQueue) {
 				break
 			}
 		}
@@ -331,8 +333,12 @@ func (r *ListenerRegistry) runRangefeed(ctx context.Context) {
 	}
 	oid := tree.MustBeDOid(res[0])
 	prefix := r.codec.TablePrefix(uint32(oid.Oid))
-	spans := []roachpb.Span{{Key: prefix, EndKey: prefix.PrefixEnd()}}
 	ch := make(chan kvcoord.RangeFeedMessage, 1024)
+
+	span := roachpb.Span{
+		Key:    prefix,
+		EndKey: prefix.PrefixEnd(),
+	}
 
 	startTs := atomic.Value{}
 	startTs.Store(r.clock.Now())
@@ -341,7 +347,10 @@ func (r *ListenerRegistry) runRangefeed(ctx context.Context) {
 	err = r.stopper.RunAsyncTask(ctx, "listener_registry_rangefeed", func(ctx context.Context) {
 		for ctx.Err() == nil {
 			log.Infof(ctx, "starting rangefeed")
-			if err := r.sender.RangeFeed(ctx, spans, startTs.Load().(hlc.Timestamp), ch); err != nil {
+			spansTimes := []kvcoord.SpanTimePair{
+				{Span: span, StartAfter: startTs.Load().(hlc.Timestamp)},
+			}
+			if err := r.sender.RangeFeed(ctx, spansTimes, ch); err != nil {
 				log.Warningf(ctx, "notifications rangefeed failed: %v", err)
 			}
 			r.Metrics.RangefeedRestarts.Inc(1)

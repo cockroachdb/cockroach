@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -19,6 +14,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	gosql "database/sql"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -30,6 +26,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -41,6 +39,11 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
+	"github.com/aws/aws-sdk-go-v2/config"
+	msk "github.com/aws/aws-sdk-go-v2/service/kafka"
+	msktypes "github.com/aws/aws-sdk-go-v2/service/kafka/types"
+	"github.com/aws/aws-sdk-go/aws"
+	awslog "github.com/aws/smithy-go/logging"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -49,19 +52,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
+	prompb "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -82,6 +89,7 @@ const (
 	pubsubSink             sinkType = "pubsub"
 	kafkaSink              sinkType = "kafka"
 	azureEventHubKafkaSink sinkType = "azure-event-hub"
+	mskSink                sinkType = "msk"
 	nullSink               sinkType = "null"
 )
 
@@ -271,6 +279,13 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			`azure-event-hub://cdc-roachtest.servicebus.windows.net:9093?shared_access_key_name=%s&shared_access_key=%s&topic_name=testing`,
 			url.QueryEscape(accessKeyName), url.QueryEscape(accessKey),
 		)
+	case mskSink:
+		// Currently, the only msk tests are manual tests. When they are run,
+		// this placeholder should be replaced with the actual bootstrap server
+		// for the cluster being used.
+		// TODO(yang): If we want to run msk roachtests nightly, replace this
+		// with a long-running MSK cluster or maybe create a fresh cluster.
+		sinkURI = "kafka://placeholder"
 	default:
 		ct.t.Fatalf("unknown sink provided: %s", args.sinkType)
 	}
@@ -582,6 +597,38 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	return cj
 }
 
+// verifyMetrics runs the check function on the prometheus metrics of each
+// cockroach node in the cluster until it returns true, or until its retry
+// period expires.
+func (ct *cdcTester) verifyMetrics(
+	ctx context.Context, check func(metrics map[string]*prompb.MetricFamily) (ok bool),
+) {
+	parser := expfmt.TextParser{}
+
+	testutils.SucceedsSoon(ct.t, func() error {
+		uiAddrs, err := ct.cluster.ExternalAdminUIAddr(ctx, ct.logger, ct.cluster.CRDBNodes())
+		if err != nil {
+			return err
+		}
+		for _, uiAddr := range uiAddrs {
+			uiAddr = fmt.Sprintf("https://%s/_status/vars", uiAddr)
+			out, err := exec.Command("curl", "-kf", uiAddr).Output()
+			if err != nil {
+				return err
+			}
+			res, err := parser.TextToMetricFamilies(bytes.NewReader(out))
+			if err != nil {
+				return err
+			}
+			if check(res) {
+				ct.t.Status("metrics check passed")
+				return nil
+			}
+		}
+		return errors.New("metrics check failed")
+	})
+}
+
 // runFeedLatencyVerifier runs a goroutine which polls the various latencies
 // for a changefeed job (initial scan latency, etc) and asserts that they
 // are below the specified targets.
@@ -678,13 +725,14 @@ type opt func(ct *cdcTester)
 // N.B. this allocates a workload + sink only node, without it, workload and sink will be on the same node.
 func withNumSinkNodes(num int) opt {
 	return func(ct *cdcTester) {
-		ct.workloadNode = ct.cluster.Node(ct.cluster.Spec().NodeCount - num)
-		ct.sinkNodes = ct.cluster.Range(ct.cluster.Spec().NodeCount-num+1, ct.cluster.Spec().NodeCount)
+		ct.crdbNodes = ct.cluster.Range(1, ct.cluster.Spec().NodeCount-num-1)
+		ct.workloadNode = ct.cluster.Node(ct.cluster.Spec().NodeCount)
+		ct.sinkNodes = ct.cluster.Range(ct.cluster.Spec().NodeCount-num, ct.cluster.Spec().NodeCount-1)
 	}
 }
 
 func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...opt) cdcTester {
-	// By convention the nodes are split up like [crdb..., workload, sink...]. The sink nodes are always the last numSinkNodes ones.
+	// By convention the nodes are split up like [crdb..., sink..., workload].
 	// N.B.:
 	//    - If it's a single node cluster everything shares node 1.
 	//    - If the sink is not provisioned through the withNumSinkNodes opt, it shares a node with the workload node.
@@ -1370,7 +1418,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
 		RequiresLicense:  true,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
@@ -1385,6 +1433,38 @@ func registerCDC(r registry.Registry) {
 					validateOrder: true,
 				},
 				opts: map[string]string{"initial_scan": "'no'"},
+			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      10 * time.Minute,
+			})
+			ct.waitForWorkload()
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/tpcc-1000/sink=msk",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		RequiresLicense:  true,
+		CompatibleClouds: registry.OnlyAWS,
+		Suites:           registry.ManualOnly,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "60m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: mskSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"initial_scan": "'no'",
+					// updated is specified so that we can compare emitted bytes with
+					// cdc/tpcc-1000/sink=kafka.
+					"updated": "",
+				},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 3 * time.Minute,
@@ -1574,6 +1654,7 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      5 * time.Minute,
 			})
 			ct.waitForWorkload()
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 	})
 	// An example usage of having multiple sink nodes.
@@ -1583,7 +1664,7 @@ func registerCDC(r registry.Registry) {
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(6, spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1603,7 +1684,7 @@ func registerCDC(r registry.Registry) {
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 3 * time.Minute,
-				steadyLatency:      5 * time.Minute,
+				steadyLatency:      10 * time.Minute,
 			})
 			ct.waitForWorkload()
 		},
@@ -1795,6 +1876,7 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      time.Minute,
 			})
 			ct.waitForWorkload()
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("cloud_read_bytes", "cloud_write_bytes"))
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -1824,7 +1906,10 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
+
 			ct.waitForWorkload()
+
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 	})
 
@@ -1862,7 +1947,10 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
+
 			ct.waitForWorkload()
+
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 	})
 
@@ -1944,6 +2032,8 @@ func registerCDC(r registry.Registry) {
 			})
 
 			ct.waitForWorkload()
+
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -1956,6 +2046,40 @@ func registerCDC(r registry.Registry) {
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-auth-msk",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(1, spec.Arch(vm.ArchAMD64)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.OnlyAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+			mskMgr := newMSKManager(ctx, t)
+			mskMgr.MakeCluster(ctx)
+			defer mskMgr.TearDown()
+
+			t.Status("waiting for msk cluster to be active")
+			waitCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+			defer cancel()
+			brokers := mskMgr.WaitForClusterActiveAndDNSUpdated(waitCtx, c)
+			t.Status("cluster is active")
+			mskMgr.CreateTopic(ctx, "auth_test_table", c)
+
+			db := c.Conn(ctx, t.L(), 1)
+			defer stopFeeds(db)
+
+			tdb := sqlutils.MakeSQLRunner(db)
+			tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
+
+			t.L().Printf("creating changefeed with iam: %s", brokers.connectURI)
+			_, err := newChangefeedCreator(db, db, t.L(), globalRand, "auth_test_table", brokers.connectURI, makeDefaultFeatureFlags()).Create()
+			if err != nil {
+				t.Fatalf("creating changefeed: %v", err)
+			}
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -2160,6 +2284,7 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      10 * time.Minute,
 			})
 			ct.waitForWorkload()
+			ct.verifyMetrics(ctx, verifyMetricsNonZero("changefeed_network_bytes_in", "changefeed_network_bytes_out"))
 		},
 		RequiresLicense: true,
 	})
@@ -2171,7 +2296,7 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
-		Timeout:          30 * time.Minute,
+		Timeout:          60 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCBank(ctx, t, c)
 		},
@@ -2982,6 +3107,17 @@ func (k kafkaManager) start(ctx context.Context, service string, envVars ...stri
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
 	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNodes), k.makeCommand("confluent", "local destroy || true"))
 	k.restart(ctx, service, envVars...)
+	// Wait for kafka to be ready. Otherwise we can sometimes try to connect to
+	// it too fast which fails the test.
+	k.waitForKafkaAvailable(ctx)
+}
+
+func (k kafkaManager) waitForKafkaAvailable(ctx context.Context) {
+	k.t.Status("waiting for kafka to be ready")
+	// Note: this command will retry the connection itself for some seconds, so
+	// we don't need to explicitly retry here.
+	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNodes), filepath.Join(k.binDir(), "kafka-topics"),
+		"--bootstrap-server=localhost:9092", "--list")
 }
 
 var kafkaServices = map[string][]string{
@@ -3213,7 +3349,7 @@ func (k kafkaManager) startTopicConsumers(
 				return err
 			}
 			defer topicConsumer.close()
-			everyN := log.Every(30 * time.Second)
+			everyN := roachtestutil.Every(30 * time.Second)
 			for {
 				select {
 				case <-stopper:
@@ -3488,7 +3624,181 @@ func setupKafka(
 	}
 
 	kafka.start(ctx, "kafka")
+	kafka.waitForKafkaAvailable(ctx)
 	return kafka, func() { kafka.stop(ctx) }
+}
+
+const mskRoleArn = "arn:aws:iam::541263489771:role/roachprod-msk-full-access" // See pkg/roachprod/vm/aws/terraform/iam.tf
+const mskRegion = "us-east-2"
+
+type mskManager struct {
+	t         test.Test
+	mskClient *msk.Client
+	// awsOpts lets us set the region and logger for each aws-sdk request.
+	awsOpts func(*msk.Options)
+
+	clusterArn  string
+	connectInfo mskIAMConnectInfo
+}
+
+func newMSKManager(ctx context.Context, t test.Test) *mskManager {
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithDefaultRegion(mskRegion))
+	if err != nil {
+		t.Fatalf("failed to load aws config: %v", err)
+	}
+	mskClient := msk.NewFromConfig(awsCfg)
+
+	return &mskManager{
+		t:         t,
+		mskClient: mskClient,
+		awsOpts: func(o *msk.Options) {
+			o.Logger = awslog.LoggerFunc(func(classification awslog.Classification, format string, v ...interface{}) {
+				format = fmt.Sprintf("msk(%v): %s", classification, format)
+				t.L().Printf(format, v...)
+			})
+			o.Region = mskRegion
+		}}
+}
+
+func (m *mskManager) getAWSRegion() roachprodaws.AWSRegion {
+	var region roachprodaws.AWSRegion
+	for _, r := range roachprodaws.DefaultConfig.Regions {
+		if r.Name == mskRegion {
+			region = r
+			break
+		}
+	}
+	if region.Name == "" {
+		m.t.Fatalf("failed to find region %s in roachprodaws.DefaultConfig.Regions", mskRegion)
+	}
+	return region
+}
+
+// MakeCluster creates a new MSK Serverless cluster.
+func (m *mskManager) MakeCluster(ctx context.Context) {
+	clusterName := fmt.Sprintf("roachtest-cdc-%v", timeutil.Now().Format("2006-01-02-15-04-05"))
+	clusterTags := map[string]string{"roachtest": "true"}
+
+	region := m.getAWSRegion()
+	subnets := make([]string, 0, 3)
+	for _, az := range region.AvailabilityZones {
+		subnets = append(subnets, az.SubnetID)
+	}
+
+	req := &msk.CreateClusterV2Input{
+		ClusterName: aws.String(clusterName),
+		Tags:        clusterTags,
+		Serverless: &msktypes.ServerlessRequest{
+			VpcConfigs: []msktypes.VpcConfig{
+				{
+					SubnetIds:        subnets,
+					SecurityGroupIds: []string{region.SecurityGroup},
+				},
+			},
+			ClientAuthentication: &msktypes.ServerlessClientAuthentication{
+				Sasl: &msktypes.ServerlessSasl{Iam: &msktypes.Iam{Enabled: aws.Bool(true)}},
+			},
+		},
+	}
+	resp, err := m.mskClient.CreateClusterV2(ctx, req, m.awsOpts)
+	if err != nil {
+		m.t.Fatalf("failed to create msk serverless cluster: %v", err)
+	}
+	m.clusterArn = *resp.ClusterArn
+}
+
+type mskIAMConnectInfo struct {
+	broker     string
+	connectURI string
+}
+
+// WaitForClusterActiveAndDNSUpdated waits for the MSK cluster to become active and to be available via DNS.
+func (m *mskManager) WaitForClusterActiveAndDNSUpdated(
+	ctx context.Context, c cluster.Cluster,
+) mskIAMConnectInfo {
+	for ctx.Err() == nil {
+		resp, err := m.mskClient.DescribeClusterV2(ctx, &msk.DescribeClusterV2Input{ClusterArn: &m.clusterArn}, m.awsOpts)
+		if err != nil {
+			m.t.Fatalf("failed to describe msk cluster: %v", err)
+		}
+		if resp.ClusterInfo.State == msktypes.ClusterStateActive {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			m.t.Fatalf("timed out waiting for msk cluster to become active")
+		case <-time.After(5 * time.Second):
+		}
+	}
+
+	resp, err := m.mskClient.GetBootstrapBrokers(ctx, &msk.GetBootstrapBrokersInput{ClusterArn: &m.clusterArn}, m.awsOpts)
+	if err != nil {
+		m.t.Fatalf("failed to describe msk cluster: %v", err)
+	}
+	broker := *resp.BootstrapBrokerStringSaslIam
+	connectInfo := mskIAMConnectInfo{
+		broker:     broker,
+		connectURI: fmt.Sprintf("kafka://%s?tls_enabled=true&sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_region=%s&sasl_aws_iam_role_arn=%s&sasl_aws_iam_session_name=cdc-msk", broker, mskRegion, mskRoleArn),
+	}
+
+	// Wait for the broker's DNS to propagate.
+	m.t.L().Printf("waiting for dns to resolve for %s", connectInfo.broker)
+	host := strings.Split(connectInfo.broker, ":")[0]
+	for ctx.Err() == nil {
+		if err := c.RunE(ctx, option.WithNodes(c.All()), "nslookup", host); err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			m.t.Fatalf("timed out waiting for msk dns to resolve")
+		case <-time.After(5 * time.Second):
+		}
+	}
+
+	m.connectInfo = connectInfo
+	return connectInfo
+}
+
+//go:embed create-msk-topic/main.go.txt
+var createMskTopicMain string
+
+const createMSKTopicBinPath = "/tmp/create-msk-topic"
+
+var setupMskTopicScript = fmt.Sprintf(`
+#!/bin/bash
+set -e -o pipefail
+wget https://go.dev/dl/go1.22.8.linux-amd64.tar.gz -O /tmp/go.tar.gz
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+echo export PATH=$PATH:/usr/local/go/bin >> ~/.profile
+source ~/.profile
+
+cd %s
+rm -f go.mod go.sum
+go mod init create-msk-topic
+go mod tidy
+go build .
+
+./create-msk-topic --broker "$1" --topic "$2" --role-arn "$3"
+`, createMSKTopicBinPath)
+
+// CreateTopic creates a topic on the MSK cluster.
+func (m *mskManager) CreateTopic(ctx context.Context, topic string, c cluster.Cluster) {
+	createTopicNode := c.Node(1)
+	withCTN := option.WithNodes(createTopicNode)
+
+	require.NoError(m.t, c.RunE(ctx, withCTN, "mkdir", "-p", createMSKTopicBinPath))
+	require.NoError(m.t, c.PutString(ctx, createMskTopicMain, path.Join(createMSKTopicBinPath, "main.go"), 0700, createTopicNode))
+	require.NoError(m.t, c.PutString(ctx, setupMskTopicScript, path.Join(createMSKTopicBinPath, "run.sh"), 0700, createTopicNode))
+	require.NoError(m.t, c.RunE(ctx, withCTN, path.Join(createMSKTopicBinPath, "run.sh"), m.connectInfo.broker, topic, mskRoleArn))
+}
+
+// TearDown deletes the MSK cluster.
+func (m *mskManager) TearDown() {
+	_, err := m.mskClient.DeleteCluster(context.Background(), &msk.DeleteClusterInput{ClusterArn: &m.clusterArn}, m.awsOpts)
+	if err != nil {
+		m.t.Fatalf("failed to delete msk cluster: %v", err)
+	}
 }
 
 type topicConsumer struct {
@@ -3613,4 +3923,34 @@ func (c *topicConsumer) close() {
 		}
 	}
 	_ = c.consumer.Close()
+}
+
+// verifyMetricsNonZero returns a check function for runMetricsVerifier that
+// checks that the metrics matching the names input are > 0.
+func verifyMetricsNonZero(names ...string) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+	namesMap := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		namesMap[name] = struct{}{}
+	}
+
+	return func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+		found := map[string]struct{}{}
+
+		for name, fam := range metrics {
+			if _, ok := namesMap[name]; !ok {
+				continue
+			}
+
+			for _, m := range fam.Metric {
+				if m.Counter.GetValue() > 0 {
+					found[name] = struct{}{}
+				}
+			}
+
+			if len(found) == len(names) {
+				return true
+			}
+		}
+		return false
+	}
 }

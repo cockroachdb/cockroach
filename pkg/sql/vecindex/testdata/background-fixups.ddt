@@ -1,0 +1,12 @@
+# Load 1000 512-dimension features with background fixups enabled. Validate the
+# resulting tree. Note that using background fixups means that the index build
+# is non-deterministic, so there are limited validations we can do.
+
+new-index dims=512 min-partition-size=2 max-partition-size=8 quality-samples=4 beam-size=2 load-features=500 background-fixups hide-tree
+----
+Created index with 500 vectors with 512 dimensions.
+
+# Traverse the complete tree and ensure that all 500 vectors are present.
+validate-tree
+----
+Validated index with 500 vectors.

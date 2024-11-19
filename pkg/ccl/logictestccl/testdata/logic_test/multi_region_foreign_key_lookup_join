@@ -190,7 +190,7 @@ vectorized: true
 │ table: parent_rbr@parent_rbr_pkey
 │ equality: (crdb_region, c_p_id) = (crdb_region, p_id)
 │ equality cols are key
-│ pred: column14 = p_int
+│ pred: column18 = p_int
 │
 └── • render
     │

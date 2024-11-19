@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package mixedversion
 
@@ -26,6 +21,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
+
+// systemTag is the roachprod tag applied to the cockroach process
+// associated with the storage cluster. This is necessary in
+// separate-process deployments where, when performing a rolling
+// restart, we want to be able to stop *only* the process for the
+// system tenant on a node. By default, roachtest's `Stop` function
+// will stop every cockroach process.
+const systemTag = "mixedversion-system"
+
+// startTimeout is the maximum amount of time we will wait for a node
+// to start up (including restarts). Especially useful in cases where
+// we wait for a 3x replication after a restart, to fail early in
+// situations where the cluster is not recovering.
+var startTimeout = 30 * time.Minute
 
 // installFixturesStep is the step that copies the fixtures from
 // `pkg/cmd/roachtest/fixtures` for a specific version into the nodes'
@@ -51,10 +60,11 @@ func (s installFixturesStep) Run(
 // startStep is the step that starts the cluster from a specific
 // `version`.
 type startStep struct {
-	rt         test.Test
-	version    *clusterupgrade.Version
-	initTarget int
-	settings   []install.ClusterSettingOption
+	rt                 test.Test
+	version            *clusterupgrade.Version
+	initTarget         int
+	waitForReplication bool
+	settings           []install.ClusterSettingOption
 }
 
 func (s startStep) Background() shouldStop { return nil }
@@ -77,11 +87,19 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *H
 	clusterSettings := append(
 		append([]install.ClusterSettingOption{}, s.settings...),
 		install.BinaryOption(binaryPath),
+		install.TagOption(systemTag),
 	)
 
-	opts := startOpts(option.WithInitTarget(s.initTarget))
+	customStartOpts := []option.StartStopOption{option.WithInitTarget(s.initTarget)}
+	if s.waitForReplication {
+		customStartOpts = append(customStartOpts, option.WaitForReplication())
+	}
+
+	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+
 	return clusterupgrade.StartWithSettings(
-		ctx, l, h.runner.cluster, systemNodes, opts, clusterSettings...,
+		startCtx, l, h.runner.cluster, systemNodes, startOpts(customStartOpts...), clusterSettings...,
 	)
 }
 
@@ -104,7 +122,7 @@ func (s startSharedProcessVirtualClusterStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
 	l.Printf("starting shared process virtual cluster %s", s.name)
-	startOpts := option.StartSharedVirtualClusterOpts(s.name, option.WithInitTarget(s.initTarget))
+	startOpts := option.StartSharedVirtualClusterOpts(s.name, startStopOpts(option.WithInitTarget(s.initTarget))...)
 
 	if err := h.runner.cluster.StartServiceForVirtualClusterE(
 		ctx, l, startOpts, install.MakeClusterSettings(s.settings...),
@@ -116,6 +134,84 @@ func (s startSharedProcessVirtualClusterStep) Run(
 	// until we are able to connect to the tenant on every node before
 	// moving on. The test runner infrastructure relies on that ability.
 	return waitForSharedProcess(ctx, l, h, h.Tenant.Descriptor.Nodes)
+}
+
+// startSeparateProcessVirtualCluster step creates a new separate-process
+// virtual cluster with the given name, and starts it.
+type startSeparateProcessVirtualClusterStep struct {
+	name     string
+	rt       test.Test
+	version  *clusterupgrade.Version
+	settings []install.ClusterSettingOption
+}
+
+func (s startSeparateProcessVirtualClusterStep) Background() shouldStop { return nil }
+
+func (s startSeparateProcessVirtualClusterStep) Description() string {
+	return fmt.Sprintf(
+		"start separate process virtual cluster %s with binary version %s",
+		s.name, s.version,
+	)
+}
+
+func (s startSeparateProcessVirtualClusterStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+	l.Printf("starting separate process virtual cluster %s at version %s", s.name, s.version)
+	startOpts := option.StartVirtualClusterOpts(
+		s.name,
+		h.Tenant.Descriptor.Nodes,
+		startStopOpts(option.StorageCluster(h.System.Descriptor.Nodes))...,
+	)
+
+	binaryPath := clusterupgrade.BinaryPathForVersion(s.rt, s.version, "cockroach")
+	settings := install.MakeClusterSettings(append(s.settings, install.BinaryOption(binaryPath))...)
+
+	if err := h.runner.cluster.StartServiceForVirtualClusterE(ctx, l, startOpts, settings); err != nil {
+		return err
+	}
+
+	h.runner.cluster.SetDefaultVirtualCluster(s.name)
+	return nil
+}
+
+type restartVirtualClusterStep struct {
+	virtualCluster string
+	version        *clusterupgrade.Version
+	rt             test.Test
+	node           int
+	settings       []install.ClusterSettingOption
+}
+
+func (s restartVirtualClusterStep) Background() shouldStop { return nil }
+
+func (s restartVirtualClusterStep) Description() string {
+	return fmt.Sprintf(
+		"restart %s server on node %d with binary version %s",
+		s.virtualCluster, s.node, s.version,
+	)
+}
+
+func (s restartVirtualClusterStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	const maxWait = 300 // 5 minutes
+
+	l.Printf("restarting node %d (tenant %s) into version %s", s.node, s.virtualCluster, s.version)
+	node := h.runner.cluster.Node(s.node)
+
+	h.ExpectDeath()
+	stopOpts := option.StopVirtualClusterOpts(s.virtualCluster, node, option.Graceful(maxWait))
+	if err := h.runner.cluster.StopServiceForVirtualClusterE(ctx, l, stopOpts); err != nil {
+		return errors.Wrap(err, "failed to stop cockroach process for tenant")
+	}
+
+	// Assume the binary already exists on the node as this step should
+	// only be scheduled after the storage cluster has already upgraded.
+	binaryPath := clusterupgrade.BinaryPathForVersion(s.rt, s.version, "cockroach")
+	startOpts := option.StartVirtualClusterOpts(s.virtualCluster, node, startStopOpts()...)
+	settings := install.MakeClusterSettings(append(s.settings, install.BinaryOption(binaryPath))...)
+	return h.runner.cluster.StartServiceForVirtualClusterE(ctx, l, startOpts, settings)
 }
 
 // waitForStableClusterVersionStep implements the process of waiting
@@ -133,8 +229,8 @@ func (s waitForStableClusterVersionStep) Background() shouldStop { return nil }
 
 func (s waitForStableClusterVersionStep) Description() string {
 	return fmt.Sprintf(
-		"wait for %s tenant on nodes %v to reach cluster version %s",
-		s.virtualClusterName, s.nodes, quoteVersionForPresentation(s.desiredVersion),
+		"wait for all nodes (%v) to acknowledge cluster version %s on %s tenant",
+		s.nodes, quoteVersionForPresentation(s.desiredVersion), s.virtualClusterName,
 	)
 }
 
@@ -179,40 +275,64 @@ func (s preserveDowngradeOptionStep) Run(
 // restartWithNewBinaryStep restarts a certain `node` with a new
 // cockroach binary. Any existing `cockroach` process will be stopped,
 // then the new binary will be uploaded and the `cockroach` process
-// will restart using the new binary.
+// will restart using the new binary. This step only applies to the
+// system tenant. For the (separate-process) multitenant equivalent,
+// see `restartVirtualClusterStep`.
 type restartWithNewBinaryStep struct {
-	version              *clusterupgrade.Version
-	rt                   test.Test
-	node                 int
-	settings             []install.ClusterSettingOption
-	initTarget           int
-	sharedProcessStarted bool
+	version            *clusterupgrade.Version
+	rt                 test.Test
+	node               int
+	settings           []install.ClusterSettingOption
+	initTarget         int
+	waitForReplication bool
+	tenantRunning      bool // whether the test tenant is running when this step is called
+	deploymentMode     DeploymentMode
 }
 
 func (s restartWithNewBinaryStep) Background() shouldStop { return nil }
 
 func (s restartWithNewBinaryStep) Description() string {
-	return fmt.Sprintf("restart node %d with binary version %s", s.node, s.version.String())
+	var systemDesc string
+	if s.deploymentMode == SeparateProcessDeployment {
+		systemDesc = " system server on"
+	}
+
+	return fmt.Sprintf(
+		"restart%s node %d with binary version %s",
+		systemDesc, s.node, s.version,
+	)
 }
 
 func (s restartWithNewBinaryStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
+	customStartOpts := []option.StartStopOption{option.WithInitTarget(s.initTarget)}
+	if s.waitForReplication {
+		customStartOpts = append(customStartOpts, option.WaitForReplication())
+	}
+
+	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+
+	settings := append([]install.ClusterSettingOption{
+		install.TagOption(systemTag),
+	}, s.settings...)
+
 	h.ExpectDeath()
 	if err := clusterupgrade.RestartNodesWithNewBinary(
-		ctx,
+		startCtx,
 		s.rt,
 		l,
 		h.runner.cluster,
 		h.runner.cluster.Node(s.node),
-		startOpts(option.WithInitTarget(s.initTarget)),
+		startOpts(customStartOpts...),
 		s.version,
-		s.settings...,
+		settings...,
 	); err != nil {
 		return err
 	}
 
-	if s.sharedProcessStarted {
+	if s.deploymentMode == SharedProcessDeployment && s.tenantRunning {
 		// If we are in shared-process mode and the tenant is already
 		// running at this point, we wait for the server on the restarted
 		// node to be up before moving on.
@@ -243,55 +363,6 @@ func (s allowUpgradeStep) Run(
 ) error {
 	return serviceByName(h, s.virtualClusterName).Exec(
 		rng, "RESET CLUSTER SETTING cluster.preserve_downgrade_option",
-	)
-}
-
-// setTenantClusterVersionStep will `set` the `version` setting on the
-// tenant with the associated name. Used in older versions where
-// auto-upgrading does not work reliably; in those cases, we block
-// and wait for the migrations to run before proceeding.
-type setTenantClusterVersionStep struct {
-	nodes              option.NodeListOption
-	targetVersion      string
-	virtualClusterName string
-}
-
-func (s setTenantClusterVersionStep) Background() shouldStop { return nil }
-
-func (s setTenantClusterVersionStep) Description() string {
-	return fmt.Sprintf(
-		"run upgrades on tenant %s by explicitly setting cluster version to %s",
-		s.virtualClusterName, quoteVersionForPresentation(s.targetVersion),
-	)
-}
-
-func (s setTenantClusterVersionStep) Run(
-	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
-) error {
-	node, db := h.RandomDB(rng)
-
-	targetVersion := s.targetVersion
-	if s.targetVersion == clusterupgrade.CurrentVersionString {
-		l.Printf("querying binary version on node %d", node)
-		bv, err := clusterupgrade.BinaryVersion(ctx, db)
-		if err != nil {
-			return err
-		}
-
-		targetVersion = fmt.Sprintf("%d.%d", bv.Major, bv.Minor)
-		if !bv.IsFinal() {
-			targetVersion += fmt.Sprintf("-%d", bv.Internal)
-		}
-	}
-
-	l.Printf(
-		"setting version on tenant %s to %s via node %d",
-		s.virtualClusterName, targetVersion, node,
-	)
-
-	stmt := fmt.Sprintf("SET CLUSTER SETTING version = '%s'", targetVersion)
-	return serviceByName(h, s.virtualClusterName).ExecWithGateway(
-		rng, h.runner.cluster.Node(node), stmt,
 	)
 }
 
@@ -341,6 +412,7 @@ type setClusterSettingStep struct {
 	name               string
 	value              interface{}
 	virtualClusterName string
+	systemVisible      bool
 }
 
 func (s setClusterSettingStep) Background() shouldStop { return nil }
@@ -355,6 +427,16 @@ func (s setClusterSettingStep) Description() string {
 func (s setClusterSettingStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
+	// We set the cluster setting on the corresponding `virtualClusterName`.
+	// However, if `systemVisible` is true, it means the setting
+	// is only settable via the system interface.
+	var tenantPrefix string
+	serviceName := s.virtualClusterName
+	if s.systemVisible {
+		tenantPrefix = fmt.Sprintf("ALTER TENANT %q ", s.virtualClusterName)
+		serviceName = install.SystemInterfaceName
+	}
+
 	var stmt string
 	var args []interface{}
 	// We do a type switch on common types to avoid errors when using
@@ -362,21 +444,63 @@ func (s setClusterSettingStep) Run(
 	// private cluster settings.
 	switch val := s.value.(type) {
 	case string:
-		stmt = fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", s.name, val)
+		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = '%s'", tenantPrefix, s.name, val)
 	case bool:
-		stmt = fmt.Sprintf("SET CLUSTER SETTING %s = %t", s.name, val)
+		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = %t", tenantPrefix, s.name, val)
 	case int:
-		stmt = fmt.Sprintf("SET CLUSTER SETTING %s = %d", s.name, val)
+		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = %d", tenantPrefix, s.name, val)
 	default:
 		// If not using any of these types, do a best-effort attempt using
 		// a placeholder.
-		stmt = fmt.Sprintf("SET CLUSTER SETTING %s = $1", s.name)
+		stmt = fmt.Sprintf("%sSET CLUSTER SETTING %s = $1", tenantPrefix, s.name)
 		args = []interface{}{val}
 	}
 
-	return serviceByName(h, s.virtualClusterName).ExecWithGateway(
+	return serviceByName(h, serviceName).ExecWithGateway(
 		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt, args...,
 	)
+}
+
+// setClusterVersionStep sets the special `version` cluster setting to
+// the provided version.
+type setClusterVersionStep struct {
+	v                  *clusterupgrade.Version
+	virtualClusterName string
+}
+
+func (s setClusterVersionStep) Background() shouldStop { return nil }
+
+func (s setClusterVersionStep) Description() string {
+	value := versionToClusterVersion(s.v)
+	if !s.v.IsCurrent() {
+		value = fmt.Sprintf("'%s'", value)
+	}
+
+	return fmt.Sprintf(
+		"set `version` to %s on %s tenant",
+		value, s.virtualClusterName,
+	)
+}
+
+func (s setClusterVersionStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	service := serviceByName(h, s.virtualClusterName)
+	binaryVersion := versionToClusterVersion(s.v)
+	if s.v.IsCurrent() {
+		node, db := service.RandomDB(rng)
+		l.Printf("fetching binary version via n%d", node)
+
+		bv, err := clusterupgrade.BinaryVersion(ctx, db)
+		if err != nil {
+			return errors.Wrapf(err, "getting binary version on n%d", node)
+		}
+
+		binaryVersion = bv.String()
+	}
+
+	l.Printf("setting cluster version to '%s'", binaryVersion)
+	return service.Exec(rng, "SET CLUSTER SETTING version = $1", binaryVersion)
 }
 
 // resetClusterSetting resets cluster setting `name`.
@@ -507,13 +631,24 @@ func quoteVersionForPresentation(v string) string {
 }
 
 // startOpts returns the start options used when starting (or
-// restarting) cockroach processes in mixedversion tests.  We disable
+// restarting) cockroach processes in mixedversion tests. We disable
 // regular backups as some tests check for running jobs and the
 // scheduled backup may make things non-deterministic. In the future,
 // we should change the default and add an API for tests to opt-out of
-// the default scheduled backup if necessary.
+// the default scheduled backup if necessary. We disable WAL failover
+// because some versions before v24.1 will early exit since they don't
+// understand the `--wal-failover` flag.
 func startOpts(opts ...option.StartStopOption) option.StartOpts {
 	return option.NewStartOpts(
-		append([]option.StartStopOption{option.NoBackupSchedule}, opts...)...,
+		startStopOpts(opts...)...,
 	)
+}
+
+// startStopOpts does the same as `startOpts` but returns StartStopOptions
+// instead. This is required when starting virtual clusters.
+func startStopOpts(opts ...option.StartStopOption) []option.StartStopOption {
+	return append([]option.StartStopOption{
+		option.NoBackupSchedule,
+		option.DisableWALFailover,
+	}, opts...)
 }

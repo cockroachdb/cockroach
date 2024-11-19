@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package multiregionccl_test
 
@@ -346,7 +343,7 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 				}
 				cache := ds.tc.Server(idx).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
 				tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
-				entry, err := cache.TestingGetCached(ctx, tablePrefix, false /* inverted */)
+				entry, err := cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LAG_BY_CLUSTER_SETTING)
 				if err != nil {
 					return err.Error()
 				}
@@ -388,7 +385,7 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 						return errors.New(`could not find replica`)
 					}
 					for _, queueName := range []string{"split", "replicate", "raftsnapshot"} {
-						_, processErr, err := store.Enqueue(
+						processErr, err := store.Enqueue(
 							ctx, queueName, repl, true /* skipShouldQueue */, false, /* async */
 						)
 						if processErr != nil {

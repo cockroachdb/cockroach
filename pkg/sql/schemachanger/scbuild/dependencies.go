@@ -1,18 +1,14 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuild
 
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -61,6 +57,9 @@ type Dependencies interface {
 	// Statements returns the statements behind this schema change.
 	Statements() []string
 
+	// EvalCtx returns the eval.Context for the schema change statement.
+	EvalCtx() *eval.Context
+
 	// SemaCtx returns the tree.SemaContext for the schema change statement.
 	SemaCtx() *tree.SemaContext
 
@@ -80,6 +79,10 @@ type Dependencies interface {
 
 	// ZoneConfigGetter returns a zone config reader.
 	ZoneConfigGetter() scdecomp.ZoneConfigGetter
+
+	// GetDefaultZoneConfig is used to get the default zone config inside the
+	// server.
+	GetDefaultZoneConfig() *zonepb.ZoneConfig
 
 	// ClientNoticeSender returns a eval.ClientNoticeSender.
 	ClientNoticeSender() eval.ClientNoticeSender

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { createHashHistory, createMemoryHistory } from "history";
 import merge from "lodash/merge";
@@ -313,7 +308,9 @@ describe("node data selectors without addresses", function () {
 
     it("returns empty collection for empty state", function () {
       const store = createAdminUIStore(createHashHistory());
-      expect(nodeDisplayNameByIDSelectorWithoutAddress(store.getState())).toEqual({});
+      expect(
+        nodeDisplayNameByIDSelectorWithoutAddress(store.getState()),
+      ).toEqual({});
     });
   });
   describe("store IDs by node ID", function () {
@@ -365,24 +362,27 @@ describe("selectCommissionedNodeStatuses", function () {
     [id: string]: LivenessStatus;
   }): AdminUIState {
     const store = createAdminUIStore(createMemoryHistory());
-    return merge<AdminUIState, RecursivePartial<AdminUIState>>(store.getState(), {
-      cachedData: {
-        nodes: {
-          data: nodeStatuses,
-          inFlight: false,
-          valid: true,
-          unauthorized: false,
-        },
-        liveness: {
-          data: {
-            statuses: livenessStatuses,
+    return merge<AdminUIState, RecursivePartial<AdminUIState>>(
+      store.getState(),
+      {
+        cachedData: {
+          nodes: {
+            data: nodeStatuses,
+            inFlight: false,
+            valid: true,
+            unauthorized: false,
           },
-          inFlight: false,
-          valid: true,
-          unauthorized: false,
+          liveness: {
+            data: {
+              statuses: livenessStatuses,
+            },
+            inFlight: false,
+            valid: true,
+            unauthorized: false,
+          },
         },
       },
-    })
+    );
   }
 
   it("selects all nodes when liveness status missing", function () {

@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // This file includes test-only helper methods added to types in
 // package storage. These methods are only linked in to tests in this
@@ -37,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -57,6 +53,10 @@ import (
 
 func (s *Store) Transport() *RaftTransport {
 	return s.cfg.Transport
+}
+
+func (s *Store) StoreLivenessTransport() *storeliveness.Transport {
+	return s.cfg.StoreLivenessTransport
 }
 
 func (s *Store) FindTargetAndTransferLease(
@@ -160,10 +160,14 @@ func (s *Store) SplitQueuePurgatoryLength() int {
 	return s.splitQueue.PurgatoryLength()
 }
 
-// LeaseQueuePurgatoryLength returns the number of replicas in lease queue
-// purgatory.
-func (s *Store) LeaseQueuePurgatoryLength() int {
-	return s.leaseQueue.PurgatoryLength()
+// LeaseQueuePurgatory returns a map of RangeIDs representing the purgatory.
+func (s *Store) LeaseQueuePurgatory() map[roachpb.RangeID]struct{} {
+	defer s.leaseQueue.baseQueue.lockProcessing()()
+	m := make(map[roachpb.RangeID]struct{}, len(s.leaseQueue.baseQueue.mu.purgatory))
+	for k := range s.leaseQueue.baseQueue.mu.purgatory {
+		m[k] = struct{}{}
+	}
+	return m
 }
 
 // SetRaftLogQueueActive enables or disables the raft log queue.
@@ -345,10 +349,10 @@ func (r *Replica) Campaign(ctx context.Context) {
 }
 
 // ForceCampaign force-campaigns the replica.
-func (r *Replica) ForceCampaign(ctx context.Context) {
+func (r *Replica) ForceCampaign(ctx context.Context, raftStatus raft.BasicStatus) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.forceCampaignLocked(ctx)
+	r.forceCampaignLocked(ctx, raftStatus)
 }
 
 // LastAssignedLeaseIndexRLocked is like LastAssignedLeaseIndex, but requires
@@ -445,7 +449,7 @@ func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 func (r *Replica) GetRaftLogSize() (int64, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.raftLogSize, r.mu.raftLogSizeTrusted
+	return r.shMu.raftLogSize, r.shMu.raftLogSizeTrusted
 }
 
 // GetCachedLastTerm returns the cached last term value. May return
@@ -453,7 +457,7 @@ func (r *Replica) GetRaftLogSize() (int64, bool) {
 func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.lastTermNotDurable
+	return r.shMu.lastTermNotDurable
 }
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call

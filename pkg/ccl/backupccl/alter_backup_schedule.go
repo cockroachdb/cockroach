@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -27,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -242,8 +240,7 @@ func emitAlteredSchedule(
 	for i, incDest := range stmt.Options.IncrementalStorage {
 		incDests[i] = tree.AsStringWithFlags(incDest, tree.FmtBareStrings|tree.FmtShowFullURIs)
 	}
-	if err := emitSchedule(job, stmt, to, nil, /* incrementalFrom */
-		kmsURIs, incDests, resultsCh); err != nil {
+	if err := emitSchedule(job, stmt, to, kmsURIs, incDests, resultsCh); err != nil {
 		return err
 	}
 	return nil
@@ -464,6 +461,13 @@ func processFullBackupRecurrence(
 		s.incStmt = &tree.Backup{}
 		*s.incStmt = *s.fullStmt
 		s.incStmt.AppendToLatest = true
+		// Pre 23.2 schedules did not have a cluster ID, so if we are altering a
+		// schedule that was created before 23.2, we need to set the cluster ID on
+		// the newly created incremental manually.
+		schedDetails := *s.fullJob.ScheduleDetails()
+		if schedDetails.ClusterID.Equal(uuid.Nil) {
+			schedDetails.ClusterID = p.ExtendedEvalContext().ClusterID
+		}
 
 		rec := s.fullJob.ScheduleExpr()
 		incRecurrence, err := schedulebase.ComputeScheduleRecurrence(env.Now(), &rec)
@@ -476,7 +480,7 @@ func processFullBackupRecurrence(
 			p.User(),
 			s.fullJob.ScheduleLabel(),
 			incRecurrence,
-			*s.fullJob.ScheduleDetails(),
+			schedDetails,
 			jobspb.InvalidScheduleID,
 			s.fullArgs.UpdatesLastBackupMetric,
 			s.incStmt,

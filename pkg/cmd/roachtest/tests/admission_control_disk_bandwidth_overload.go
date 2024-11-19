@@ -1,21 +1,13 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -42,7 +34,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "admission-control/disk-bandwidth-limiter",
 		Owner:            registry.OwnerAdmissionControl,
-		Timeout:          time.Hour,
+		Timeout:          3 * time.Hour,
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAzure,
 		// TODO(aaditya): change to weekly once the test stabilizes.
@@ -74,48 +66,14 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			require.NoError(t, err)
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 
-			setAdmissionControl(ctx, t, c, true)
+			roachtestutil.SetAdmissionControl(ctx, t, c, true)
 
-			// TODO(aaditya): This function shares some of the logic with roachtestutil.DiskStaller. Consider merging the two.
-			setBandwidthLimit := func(nodes option.NodeListOption, rw string, bw int, max bool) error {
-				dataMount := "/mnt/data1"
-				res, err := c.RunWithDetailsSingleNode(context.TODO(), t.L(), option.WithNodes(nodes[:1]),
-					fmt.Sprintf("lsblk | grep %s | awk '{print $2}'", dataMount),
-				)
-				if err != nil {
-					t.Fatalf("error when determining block device: %s", err)
-				}
-				parts := strings.Split(strings.TrimSpace(res.Stdout), ":")
-				if len(parts) != 2 {
-					t.Fatalf("unexpected output from lsblk: %s", res.Stdout)
-				}
-				major, err := strconv.Atoi(parts[0])
-				if err != nil {
-					t.Fatalf("error when determining block device: %s", err)
-				}
-				minor, err := strconv.Atoi(parts[1])
-				if err != nil {
-					t.Fatalf("error when determining block device: %s", err)
-				}
-
-				cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", roachtestutil.SystemInterfaceSystemdUnitName()+".service", "io.max")
-				bytesPerSecondStr := "max"
-				if !max {
-					bytesPerSecondStr = fmt.Sprintf("%d", bw)
-				}
-				return c.RunE(ctx, option.WithNodes(nodes), "sudo", "/bin/bash", "-c", fmt.Sprintf(
-					`'echo %d:%d %s=%s > %s'`,
-					major,
-					minor,
-					rw,
-					bytesPerSecondStr,
-					cockroachIOController,
-				))
-			}
-
-			if err := setBandwidthLimit(c.CRDBNodes(), "wbps", 128<<20 /* 128MiB */, false); err != nil {
-				t.Fatal(err)
-			}
+			const provisionedBandwidth = 128 << 20 // 128 MiB
+			t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", provisionedBandwidth))
+			staller := roachtestutil.MakeCgroupDiskStaller(t, c,
+				false /* readsToo */, false /* logsToo */)
+			staller.Setup(ctx)
+			staller.Slow(ctx, c.CRDBNodes(), provisionedBandwidth)
 
 			// TODO(aaditya): Extend this test to also limit reads once we have a
 			// mechanism to pace read traffic in AC.
@@ -128,22 +86,28 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 				"./cockroach workload init kv --drop --insert-count=400 "+
-					"--max-block-bytes=4096 --min-block-bytes=4096"+foregroundDB+url)
+					"--max-block-bytes=1024 --min-block-bytes=1024"+foregroundDB+url)
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 				"./cockroach workload init kv --drop --insert-count=400 "+
 					"--max-block-bytes=4096 --min-block-bytes=4096"+backgroundDB+url)
 
 			// Run foreground kv workload, QoS="regular".
-			duration := 40 * time.Minute
+			duration := 90 * time.Minute
 			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				t.Status(fmt.Sprintf("starting foreground kv workload thread (<%s)", time.Minute))
 				dur := " --duration=" + duration.String()
+				labels := map[string]string{
+					"concurrency":  "2",
+					"splits":       "1000",
+					"read-percent": "50",
+				}
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := "./cockroach workload run kv --histograms=perf/stats.json --concurrency=2 " +
-					"--splits=1000 --read-percent=50 --min-block-bytes=4096 --max-block-bytes=4096 " +
-					"--txn-qos='regular' --tolerate-errors" + foregroundDB + dur + url
+				cmd := fmt.Sprintf("./cockroach workload run kv %s--concurrency=2 "+
+					"--splits=1000 --read-percent=50 --min-block-bytes=1024 --max-block-bytes=1024 "+
+					"--txn-qos='regular' --tolerate-errors %s %s %s",
+					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), foregroundDB, dur, url)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil
 			})
@@ -153,15 +117,19 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				t.Status(fmt.Sprintf("starting background kv workload thread (<%s)", time.Minute))
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := "./cockroach workload run kv --histograms=perf/stats.json --concurrency=1024 " +
-					"--read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 " +
-					"--txn-qos='background' --tolerate-errors" + backgroundDB + dur + url
+				labels := map[string]string{
+					"concurrency":  "1024",
+					"read-percent": "0",
+				}
+				cmd := fmt.Sprintf("./cockroach workload run kv %s --concurrency=1024 "+
+					"--read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 "+
+					"--txn-qos='background' --tolerate-errors %s %s %s", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), backgroundDB, dur, url)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil
 			})
 
-			t.Status(fmt.Sprintf("waiting for workload to start and ramp up (<%s)", 10*time.Minute))
-			time.Sleep(10 * time.Minute)
+			t.Status(fmt.Sprintf("waiting for workload to start and ramp up (<%s)", 30*time.Minute))
+			time.Sleep(60 * time.Minute)
 
 			db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 			defer db.Close()
@@ -175,11 +143,12 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			}
 
 			t.Status(fmt.Sprintf("setting bandwidth limit, and waiting for it to take effect. (<%s)", 2*time.Minute))
-			time.Sleep(2 * time.Minute)
+			time.Sleep(5 * time.Minute)
 
 			m.Go(func(ctx context.Context) error {
 				t.Status(fmt.Sprintf("starting monitoring thread (<%s)", time.Minute))
 				writeBWMetric := divQuery("rate(sys_host_disk_write_bytes[1m])", 1<<20 /* 1MiB */)
+				readBWMetric := divQuery("rate(sys_host_disk_read_bytes[1m])", 1<<20 /* 1MiB */)
 				getMetricVal := func(query string, label string) (float64, error) {
 					point, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), query)
 					if err != nil {
@@ -210,13 +179,21 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				numSuccesses := 0
 				for i := 0; i < numIterations; i++ {
 					time.Sleep(collectionIntervalSeconds * time.Second)
-					val, err := getMetricVal(writeBWMetric, "node")
+					writeVal, err := getMetricVal(writeBWMetric, "node")
 					if err != nil {
 						numErrors++
 						continue
 					}
-					if val > bandwidthThreshold {
-						t.Fatalf("write bandwidth %f over last exceeded threshold", val)
+					readVal, err := getMetricVal(readBWMetric, "node")
+					if err != nil {
+						numErrors++
+						continue
+					}
+					totalBW := writeVal + readVal
+					// TODO(aaditya): We should be asserting on total bandwidth once reads
+					// are being paced.
+					if writeVal > bandwidthThreshold {
+						t.Fatalf("write bandwidth %f exceeded threshold of %f, read bandwidth: %f, total bandwidth: %f", writeVal, bandwidthThreshold, readVal, totalBW)
 					}
 					numSuccesses++
 				}

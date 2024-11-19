@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -85,7 +82,7 @@ func TestProgressTracker(t *testing.T) {
 		},
 	} {
 		restoreTime := hlc.Timestamp{}
-		pt, err := makeProgressTracker(requiredSpans, persistedSpans, true, 0, restoreTime)
+		pt, err := makeProgressTracker(requiredSpans, persistedSpans, 0, restoreTime)
 		require.NoError(t, err, "step %d", i)
 
 		done, err := pt.ingestUpdate(ctx, mockUpdate(step.update, step.completeUpTo))

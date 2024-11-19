@@ -1,15 +1,10 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import moment from "moment-timezone";
-import { Action } from "redux";
+import { Action, AnyAction } from "redux";
 
 import nextState from "src/util/nextState";
 
@@ -152,7 +147,7 @@ export interface QueryManagerState {
  */
 export function queryManagerReducer(
   state: QueryManagerState = {},
-  action: QueryAction,
+  action: AnyAction,
 ): QueryManagerState {
   switch (action.type) {
     case QUERY_BEGIN:
@@ -162,7 +157,7 @@ export function queryManagerReducer(
         ...state,
         [action.payload.id]: managedQueryReducer(
           state[action.payload.id],
-          action,
+          action as QueryAction,
         ),
       };
     default:

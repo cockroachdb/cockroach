@@ -425,6 +425,8 @@ TABLE ok1
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok1_pkey
       ├── a int not null
       ├── b int not null
@@ -472,6 +474,8 @@ TABLE ok2
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok2_pkey
       ├── a int not null
       ├── b int not null
@@ -533,6 +537,8 @@ TABLE ok3
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok3_pkey
       ├── a int not null
       ├── b int not null
@@ -584,6 +590,8 @@ TABLE ok4
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok4_pkey
       ├── a int not null
       ├── b int not null
@@ -633,6 +641,8 @@ TABLE ok5
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok5_pkey
       ├── a int not null
       ├── b int not null
@@ -703,6 +713,8 @@ TABLE ok6
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok6_pkey
       ├── a int not null
       └── b int not null
@@ -739,6 +751,8 @@ TABLE ok7
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok7_pkey
       ├── a int not null
       └── b int not null
@@ -796,6 +810,8 @@ TABLE ok8
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok8_pkey
       ├── a int not null
       └── b int not null
@@ -840,6 +856,8 @@ TABLE ok9
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok9_pkey
       ├── a int not null
       └── b int not null
@@ -886,6 +904,8 @@ TABLE ok10
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok10_pkey
       ├── a int not null
       └── b int not null
@@ -962,6 +982,8 @@ TABLE ok11
  ├── c int not null
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok11_pkey
       ├── a int not null
       ├── b int not null
@@ -1012,6 +1034,8 @@ TABLE ok12
  ├── c int
  ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
  ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX ok12_pkey
       ├── a int not null
       ├── b int not null

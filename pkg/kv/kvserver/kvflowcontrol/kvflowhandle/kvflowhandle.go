@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvflowhandle
 
@@ -162,8 +157,8 @@ func (h *Handle) deductTokensForInner(
 		return nil // unused return value in production code
 	}
 
-	if h.knobs.OverrideTokenDeduction != nil {
-		tokens = h.knobs.OverrideTokenDeduction()
+	if fn := h.knobs.OverrideTokenDeduction; fn != nil {
+		tokens = fn(tokens)
 	}
 
 	for _, c := range h.mu.connections {

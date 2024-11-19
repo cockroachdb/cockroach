@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package aws provides functionality for the aws provider.
 package aws
@@ -15,7 +10,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
@@ -62,7 +56,7 @@ func Init() error {
 		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
 	const noCredentials = "missing AWS credentials, expected ~/.aws/credentials file or AWS_ACCESS_KEY_ID env var"
 
-	configVal := awsConfigValue{awsConfig: *defaultConfig}
+	configVal := awsConfigValue{awsConfig: *DefaultConfig}
 	providerInstance.Config = &configVal.awsConfig
 	providerInstance.IAMProfile = "roachprod-testing"
 
@@ -398,7 +392,7 @@ const (
 	defaultMachineType    = "m6i.xlarge"
 )
 
-var defaultConfig = func() (cfg *awsConfig) {
+var DefaultConfig = func() (cfg *awsConfig) {
 	cfg = new(awsConfig)
 	if err := json.Unmarshal(configJson, cfg); err != nil {
 		panic(errors.Wrap(err, "failed to embedded configuration"))
@@ -406,7 +400,7 @@ var defaultConfig = func() (cfg *awsConfig) {
 	return cfg
 }()
 
-// defaultZones is the list of availability zones used by default for
+// DefaultZones is the list of availability zones used by default for
 // cluster creation. If the geo flag is specified, nodes are
 // distributed between zones.
 //
@@ -415,7 +409,7 @@ var defaultConfig = func() (cfg *awsConfig) {
 // doesn't support multi-regional buckets, thus resulting in material
 // egress cost if the test loads from a different region. See
 // https://github.com/cockroachdb/cockroach/issues/105968.
-var defaultZones = []string{
+var DefaultZones = []string{
 	"us-east-2a",
 	"us-west-2b",
 	"eu-west-2b",
@@ -482,7 +476,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("aws availability zones to use for cluster creation. If zones are formatted\n"+
 			"as AZ:N where N is an integer, the zone will be repeated N times. If > 1\n"+
 			"zone specified, the cluster will be spread out evenly by zone regardless\n"+
-			"of geo (default [%s])", strings.Join(defaultZones, ",")))
+			"of geo (default [%s])", strings.Join(DefaultZones, ",")))
 	flags.StringVar(&o.ImageAMI, ProviderName+"-image-ami",
 		o.ImageAMI, "Override image AMI to use.  See https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/describe-images.html")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
@@ -504,7 +498,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
 	flags.StringVar(&providerInstance.Profile, ProviderName+"-profile", providerInstance.Profile,
 		"Profile to manage cluster in")
-	configFlagVal := awsConfigValue{awsConfig: *defaultConfig}
+	configFlagVal := awsConfigValue{awsConfig: *DefaultConfig}
 	providerInstance.Config = &configFlagVal.awsConfig
 	flags.Var(&configFlagVal, ProviderName+"-config",
 		"Path to json for aws configuration, defaults to predefined configuration")
@@ -582,7 +576,7 @@ func (p *Provider) editLabels(
 		if remove {
 			tagArgs = append(tagArgs, fmt.Sprintf("Key=%s", key))
 		} else {
-			tagArgs = append(tagArgs, fmt.Sprintf("Key=%s,Value=%s", key, vm.SanitizeLabel(value)))
+			tagArgs = append(tagArgs, fmt.Sprintf("Key=%s,Value=%s", key, value))
 		}
 	}
 	args = append(args, tagArgs...)
@@ -608,7 +602,8 @@ func (p *Provider) editLabels(
 	return g.Wait()
 }
 
-// AddLabels adds the given labels to the given VMs.
+// AddLabels adds (or updates) the given labels to the given VMs.
+// N.B. If a VM contains a label with the same key, its value will be updated.
 func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
 	return p.editLabels(l, vms, labels, false)
 }
@@ -657,7 +652,11 @@ func (p *Provider) Create(
 	}
 
 	if len(expandedZones) == 0 {
-		expandedZones = defaultZones
+		if opts.GeoDistributed {
+			expandedZones = DefaultZones
+		} else {
+			expandedZones = DefaultZones[:1]
+		}
 	}
 
 	// We need to make sure that the SSH keys have been distributed to all regions.
@@ -673,25 +672,11 @@ func (p *Provider) Create(
 		return errors.Errorf("Please specify a valid region.")
 	}
 
-	var zones []string // contains an az corresponding to each entry in names
-	if opts.GeoDistributed {
-		// Distribute the nodes amongst availability zones if geo distributed.
-		nodeZones := vm.ZonePlacement(len(expandedZones), len(names))
-		zones = make([]string, len(nodeZones))
-		for i, z := range nodeZones {
-			zones[i] = expandedZones[z]
-		}
-	} else {
-		// Only use one zone in the region if we're not creating a geo cluster.
-		regionZones, err := p.regionZones(regions[0], expandedZones)
-		if err != nil {
-			return err
-		}
-		// Select a random AZ from the first region.
-		zone := regionZones[rand.Intn(len(regionZones))]
-		for range names {
-			zones = append(zones, zone)
-		}
+	// Distribute the nodes amongst availability zones.
+	nodeZones := vm.ZonePlacement(len(expandedZones), len(names))
+	zones := make([]string, len(nodeZones))
+	for i, z := range nodeZones {
+		zones[i] = expandedZones[z]
 	}
 
 	var g errgroup.Group
@@ -937,30 +922,12 @@ func (p *Provider) allRegions(zones []string) (regions []string, err error) {
 			return nil, fmt.Errorf("unknown availability zone %v, please provide a "+
 				"correct value or update your config accordingly", z)
 		}
-		if _, have := byName[az.region.Name]; !have {
-			byName[az.region.Name] = struct{}{}
-			regions = append(regions, az.region.Name)
+		if _, have := byName[az.Region.Name]; !have {
+			byName[az.Region.Name] = struct{}{}
+			regions = append(regions, az.Region.Name)
 		}
 	}
 	return regions, nil
-}
-
-// regionZones returns all AWS availability zones which have been correctly
-// configured within the given region.
-func (p *Provider) regionZones(region string, allZones []string) (zones []string, _ error) {
-	r := p.Config.getRegion(region)
-	if r == nil {
-		return nil, fmt.Errorf("region %s not found", region)
-	}
-	for _, z := range allZones {
-		for _, az := range r.AvailabilityZones {
-			if az.name == z {
-				zones = append(zones, z)
-				break
-			}
-		}
-	}
-	return zones, nil
 }
 
 func (p *Provider) getVolumesForInstance(
@@ -1209,7 +1176,7 @@ func (p *Provider) runInstance(
 	opts vm.CreateOpts,
 	providerOpts *ProviderOpts,
 ) error {
-	az, ok := p.Config.azByName[zone]
+	az, ok := p.Config.AZByName[zone]
 	if !ok {
 		return fmt.Errorf("no region in %v corresponds to availability zone %v",
 			p.Config.regionNames(), zone)
@@ -1286,7 +1253,7 @@ func (p *Provider) runInstance(
 		}
 		return *fl
 	}
-	imageID := withFlagOverride(az.region.AMI_X86_64, &providerOpts.ImageAMI)
+	imageID := withFlagOverride(az.Region.AMI_X86_64, &providerOpts.ImageAMI)
 	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "6gd.") == 1 ||
 		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1
 	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
@@ -1294,14 +1261,14 @@ func (p *Provider) runInstance(
 	}
 	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 	if useArmAMI {
-		imageID = withFlagOverride(az.region.AMI_ARM64, &providerOpts.ImageAMI)
+		imageID = withFlagOverride(az.Region.AMI_ARM64, &providerOpts.ImageAMI)
 		// N.B. use arbitrary instanceIdx to suppress the same info for every other instance being created.
 		if instanceIdx == 0 {
 			l.Printf("Using ARM64 AMI: %s for machine type: %s", imageID, machineType)
 		}
 	}
 	if opts.Arch == string(vm.ArchFIPS) {
-		imageID = withFlagOverride(az.region.AMI_FIPS, &providerOpts.ImageAMI)
+		imageID = withFlagOverride(az.Region.AMI_FIPS, &providerOpts.ImageAMI)
 		if instanceIdx == 0 {
 			l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", imageID, machineType)
 		}
@@ -1313,9 +1280,9 @@ func (p *Provider) runInstance(
 		"--instance-type", machineType,
 		"--image-id", imageID,
 		"--key-name", keyName,
-		"--region", az.region.Name,
-		"--security-group-ids", az.region.SecurityGroup,
-		"--subnet-id", az.subnetID,
+		"--region", az.Region.Name,
+		"--security-group-ids", az.Region.SecurityGroup,
+		"--subnet-id", az.SubnetID,
 		"--tag-specifications", vmTagSpecs, volumeTagSpecs,
 		"--user-data", "file://" + filename,
 	}
@@ -1334,7 +1301,7 @@ func (p *Provider) runInstance(
 	}
 
 	if providerOpts.UseSpot {
-		return runSpotInstance(l, p, args, az.region.Name)
+		return runSpotInstance(l, p, args, az.Region.Name)
 		//todo(babusrithar): Add fallback to on-demand instances if spot instances are not available.
 	}
 	runInstancesOutput := RunInstancesOutput{}

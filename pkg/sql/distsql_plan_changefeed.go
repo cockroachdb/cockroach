@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -170,7 +165,8 @@ func PlanCDCExpression(
 		return cdcPlan, errors.AssertionFailedf("unable to determine result columns")
 	}
 
-	if len(p.curPlan.subqueryPlans) > 0 || len(p.curPlan.cascades) > 0 || len(p.curPlan.checkPlans) > 0 {
+	if len(p.curPlan.subqueryPlans) > 0 || len(p.curPlan.cascades) > 0 ||
+		len(p.curPlan.checkPlans) > 0 || len(p.curPlan.triggers) > 0 {
 		return cdcPlan, errors.AssertionFailedf("unexpected query structure")
 	}
 
@@ -456,8 +452,9 @@ func newFamilyTableDescriptor(
 	}
 
 	// Add system columns -- those are always available.
-	includeSet.Add(colinfo.MVCCTimestampColumnID)
-	includeSet.Add(colinfo.TableOIDColumnID)
+	for _, col := range colinfo.AllSystemColumnDescs {
+		includeSet.Add(col.ID)
+	}
 
 	return &familyTableDescriptor{
 		TableDescriptor: original,

@@ -46,5 +46,9 @@ go_library(
     embed = [":streampb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/repstream/streampb",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/syncutil"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
 )

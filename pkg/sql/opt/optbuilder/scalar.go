@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -249,7 +244,9 @@ func (b *Builder) buildScalar(
 		for i := range t.Whens {
 			condExpr := t.Whens[i].Cond.(tree.TypedExpr)
 			cond := b.buildScalar(condExpr, inScope, nil, nil, colRefs)
-			valExpr, ok := eval.ReType(t.Whens[i].Val.(tree.TypedExpr), valType)
+			// TODO(mgartner): Rather than use WithoutTypeModifiers here,
+			// consider typing the CaseExpr without a type modifier.
+			valExpr, ok := eval.ReType(t.Whens[i].Val.(tree.TypedExpr), valType.WithoutTypeModifiers())
 			if !ok {
 				panic(pgerror.Newf(
 					pgcode.DatatypeMismatch,
@@ -263,7 +260,7 @@ func (b *Builder) buildScalar(
 		// Add the ELSE expression to the end of whens as a raw scalar expression.
 		var orElse opt.ScalarExpr
 		if t.Else != nil {
-			elseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType)
+			elseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType.WithoutTypeModifiers())
 			if !ok {
 				panic(pgerror.Newf(
 					pgcode.DatatypeMismatch,
@@ -289,7 +286,7 @@ func (b *Builder) buildScalar(
 			// The type of the CoalesceExpr might be different than the inputs (e.g.
 			// when they are NULL). Force all inputs to be the same type, so that we
 			// build coalesce operator with the correct type.
-			expr, ok := eval.ReType(t.TypedExprAt(i), typ)
+			expr, ok := eval.ReType(t.TypedExprAt(i), typ.WithoutTypeModifiers())
 			if !ok {
 				panic(pgerror.Newf(
 					pgcode.DatatypeMismatch,
@@ -339,7 +336,7 @@ func (b *Builder) buildScalar(
 		ifTrueExpr := reType(t.True.(tree.TypedExpr), valType)
 		ifTrue := b.buildScalar(ifTrueExpr, inScope, nil, nil, colRefs)
 		whens := memo.ScalarListExpr{b.factory.ConstructWhen(memo.TrueSingleton, ifTrue)}
-		orElseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType)
+		orElseExpr, ok := eval.ReType(t.Else.(tree.TypedExpr), valType.WithoutTypeModifiers())
 		if !ok {
 			panic(pgerror.Newf(
 				pgcode.DatatypeMismatch,
@@ -594,7 +591,7 @@ func (b *Builder) buildFunction(
 			var ds cat.DataSource
 			if seqIdentifier.IsByID() {
 				flags := cat.Flags{
-					AvoidDescriptorCaches: b.insideViewDef || b.insideFuncDef,
+					AvoidDescriptorCaches: b.insideViewDef || b.insideFuncDef || b.insideTriggerDef,
 				}
 				ds, _, err = b.catalog.ResolveDataSourceByID(b.ctx, flags, cat.StableID(seqIdentifier.SeqID))
 				if err != nil {

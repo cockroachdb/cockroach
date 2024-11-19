@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colexecutils
 
@@ -33,7 +28,7 @@ func BoolOrUnknownToSelOp(
 		// can simply plan a zero operator.
 		return NewZeroOp(input), nil
 	default:
-		return nil, errors.Errorf("unexpectedly %s is neither bool nor unknown", typs[vecIdx])
+		return nil, errors.AssertionFailedf("unexpectedly %s is neither bool nor unknown", typs[vecIdx].SQLStringForError())
 	}
 }
 

@@ -1,18 +1,14 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -23,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/errors"
 )
 
 // analyzeOrderBy analyzes an Ordering physical property from the ORDER BY
@@ -269,6 +267,12 @@ func (b *Builder) analyzeExtraArgument(
 		// Ensure we can order on the given column(s).
 		ensureColumnOrderable(e)
 		if !nullsDefaultOrder {
+			if buildutil.CrdbTestBuild && containsSubquery(e) {
+				panic(errors.UnimplementedError(
+					errors.IssueLink{IssueURL: build.MakeIssueURL(129956)},
+					"subqueries in ORDER BY with non-default NULLS ordering is not supported"),
+				)
+			}
 			metadataName := fmt.Sprintf("nulls_ordering_%s", e.String())
 			extraColsScope.addColumn(
 				scopeColName("").WithMetadataName(metadataName),
@@ -278,6 +282,31 @@ func (b *Builder) analyzeExtraArgument(
 		extraColsScope.addColumn(scopeColName(""), e)
 	}
 }
+
+func containsSubquery(expr tree.Expr) bool {
+	var v subqueryVisitor
+	tree.WalkExprConst(&v, expr)
+	return v.foundSubquery
+}
+
+type subqueryVisitor struct {
+	foundSubquery bool
+}
+
+var _ tree.Visitor = &subqueryVisitor{}
+
+func (s *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if s.foundSubquery {
+		return false, expr
+	}
+	if _, ok := expr.(*subquery); ok {
+		s.foundSubquery = true
+		return false, expr
+	}
+	return true, expr
+}
+
+func (s *subqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // hasDefaultNullsOrder returns whether the provided ordering uses the default
 // ordering for NULLs. The default order in Cockroach if null_ordered_last=False
@@ -300,7 +329,7 @@ func ensureColumnOrderable(e tree.TypedExpr) {
 		typ = typ.ArrayContents()
 	}
 	switch typ.Family() {
-	case types.TSQueryFamily, types.TSVectorFamily:
+	case types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily:
 		panic(unimplementedWithIssueDetailf(92165, "", "can't order by column type %s", typ.SQLString()))
 	}
 }

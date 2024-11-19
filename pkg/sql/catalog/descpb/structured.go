@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package descpb
 
@@ -73,6 +68,9 @@ type IndexID = catid.IndexID
 
 // ConstraintID is a custom type for TableDescriptor constraint IDs.
 type ConstraintID = catid.ConstraintID
+
+// TriggerID is a custom type for TableDescriptor trigger IDs.
+type TriggerID = catid.TriggerID
 
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint64
@@ -228,6 +226,11 @@ func (desc *TableDescriptor) IsView() bool {
 // MaterializedView implements the TableDescriptor interface.
 func (desc *TableDescriptor) MaterializedView() bool {
 	return desc.IsMaterializedView
+}
+
+// IsReadOnly implements the TableDescriptor interface.
+func (desc *TableDescriptor) IsReadOnly() bool {
+	return desc.IsMaterializedView || desc.GetExternal() != nil
 }
 
 // IsPhysicalTable implements the TableDescriptor interface.

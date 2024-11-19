@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package encoding exposes some utilities for encoding data as bytes.
 package encoding
@@ -898,6 +893,16 @@ func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
 			outBytes = outBytes + strconv.Quote(UnsafeConvertBytesToString(tempB[:i])) + "/"
 		case escapedJSONArray:
 			outBytes = outBytes + "Arr/"
+			if i+2 >= len(tempB) {
+				// The key ends in an escaped JSON array byte, which is used in
+				// spans to scan over non-empty arrays.
+				return outBytes, nil, nil
+			}
+		case escaped00:
+			if i+2 >= len(tempB) {
+				// The key ends in an escaped NULL byte.
+				return outBytes, nil, nil
+			}
 		default:
 			return "", nil, errors.Errorf("malformed escape in buffer %#x", b)
 
@@ -3743,4 +3748,20 @@ func BytesPrevish(b []byte, length int) []byte {
 	buf[bLen-1]--
 	copy(buf[bLen:], bytes.Repeat([]byte{0xff}, length-bLen))
 	return buf
+}
+
+// unsafeWrapper is implementation of SafeFormatter. This is used to mark
+// arguments as unsafe for redaction. This would make sure that redact.Unsafe() is implementing SafeFormatter interface
+// without affecting invocations.
+// TODO(aa-joshi): This is a temporary solution to mark arguments as unsafe. We should move/update this into cockroachdb/redact package.
+type unsafeWrapper struct {
+	a any
+}
+
+func (uw unsafeWrapper) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Print(redact.Unsafe(uw.a))
+}
+
+func Unsafe(args any) any {
+	return unsafeWrapper{a: args}
 }

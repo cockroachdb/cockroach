@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -16,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -42,7 +39,9 @@ func registerGossip(r registry.Registry) {
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=*=1")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
-		err := WaitFor3XReplication(ctx, t, t.L(), c.Conn(ctx, t.L(), 1))
+		conn := c.Conn(ctx, t.L(), 1)
+		defer conn.Close()
+		err := roachtestutil.WaitFor3XReplication(ctx, t.L(), conn)
 		require.NoError(t, err)
 
 		gossipNetworkAccordingTo := func(node int) (nodes []int) {
@@ -129,8 +128,18 @@ SELECT node_id
 					return
 				}
 				const sleepDur = 1 * time.Second
+				timer := time.AfterFunc(2*time.Second, func() {
+					// This is an attempt to debug a rare issue in which either the `Printf`
+					// or the `time.Sleep()` surprisingly take >>20s which causes the test
+					// to fail.
+					//
+					// See https://github.com/cockroachdb/cockroach/issues/130737#issuecomment-2352473436.
+					_, _ = fmt.Fprintf(os.Stderr, "%s", allstacks.Get())
+					t.L().Printf("sleep took too long, dumped stacks to Stderr")
+				})
 				t.L().Printf("sleeping for %s (%.0fs)\n", sleepDur, timeutil.Since(start).Seconds())
 				time.Sleep(sleepDur)
+				timer.Stop()
 			}
 		}
 
@@ -160,7 +169,7 @@ SELECT node_id
 type gossipUtil struct {
 	waitTime   time.Duration
 	urlMap     map[int]string
-	conn       func(ctx context.Context, l *logger.Logger, i int, opts ...func(*option.ConnOption)) *gosql.DB
+	conn       func(ctx context.Context, l *logger.Logger, i int, opts ...option.OptionFunc) *gosql.DB
 	httpClient *roachtestutil.RoachtestHTTPClient
 }
 
@@ -295,7 +304,7 @@ func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
 	deadline := timeutil.Now().Add(time.Minute)
 
 	for i := 1; timeutil.Now().Before(deadline); i++ {
-		WaitForReady(ctx, t, c, c.All())
+		roachtestutil.WaitForReady(ctx, t, c, c.All())
 		if err := g.check(ctx, c, g.hasPeers(c.Spec().NodeCount), t.L()); err != nil {
 			t.Fatal(err)
 		}
@@ -330,7 +339,7 @@ func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	deadline := timeutil.Now().Add(time.Minute)
 
 	for i := 1; timeutil.Now().Before(deadline); i++ {
-		WaitForReady(ctx, t, c, c.All())
+		roachtestutil.WaitForReady(ctx, t, c, c.All())
 		g.checkConnectedAndFunctional(ctx, t, c)
 		t.L().Printf("%d: OK\n", i)
 
@@ -467,7 +476,7 @@ SELECT count(replicas)
 	// current infrastructure which doesn't know about cockroach nodes started on
 	// non-standard ports.
 	g := newGossipUtil(ctx, t, c)
-	g.conn = func(ctx context.Context, l *logger.Logger, i int, opts ...func(*option.ConnOption)) *gosql.DB {
+	g.conn = func(ctx context.Context, l *logger.Logger, i int, _ ...option.OptionFunc) *gosql.DB {
 		if i != 1 {
 			return c.Conn(ctx, l, i)
 		}

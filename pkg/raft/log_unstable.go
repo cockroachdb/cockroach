@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -17,20 +17,23 @@
 
 package raft
 
-import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
+	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+)
 
 // unstable is a suffix of the raft log pending to be written to Storage. The
 // "log" can be represented by a snapshot, and/or a contiguous slice of entries.
 //
 // The possible states:
-//  1. Both the snapshot and the entries logSlice are empty. This means the log
-//     is fully in Storage. The logSlice.prev is the lastEntryID of the log.
-//  2. The snapshot is empty, and the logSlice is non-empty. The state up to
-//     (including) logSlice.prev is in Storage, and the logSlice is pending.
-//  3. The snapshot is non-empty, and the logSlice is empty. The snapshot
+//  1. Both the snapshot and the entries LogSlice are empty. This means the log
+//     is fully in Storage. The LogSlice.prev is the lastEntryID of the log.
+//  2. The snapshot is empty, and the LogSlice is non-empty. The state up to
+//     (including) LogSlice.prev is in Storage, and the LogSlice is pending.
+//  3. The snapshot is non-empty, and the LogSlice is empty. The snapshot
 //     overrides the entire log in Storage.
-//  4. Both the snapshot and logSlice are non-empty. The snapshot immediately
-//     precedes the entries, i.e. logSlice.prev == snapshot.lastEntryID. This
+//  4. Both the snapshot and LogSlice are non-empty. The snapshot immediately
+//     precedes the entries, i.e. LogSlice.prev == snapshot.lastEntryID. This
 //     state overrides the entire log in Storage.
 //
 // The type serves two roles. First, it holds on to the latest snapshot / log
@@ -47,7 +50,7 @@ import pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 // no strict requirement on the order of acknowledgement delivery.
 //
 // TODO(pav-kv): describe the order requirements in more detail when accTerm
-// (logSlice.term) is integrated into the protocol.
+// (LogSlice.term) is integrated into the protocol.
 //
 // Note that the in-memory prefix of the log can contain entries at indices less
 // than Storage.LastIndex(). This means that the next write to storage might
@@ -61,31 +64,31 @@ type unstable struct {
 	// snapshot is the pending unstable snapshot, if any.
 	//
 	// Invariant: snapshot == nil ==> !snapshotInProgress
-	// Invariant: snapshot != nil ==> snapshot.lastEntryID == logSlice.prev
+	// Invariant: snapshot != nil ==> snapshot.lastEntryID == LogSlice.prev
 	//
 	// The last invariant enforces the order of handling a situation when there is
 	// both a snapshot and entries. The snapshot write must be acknowledged first,
-	// before entries are acknowledged and the logSlice moves forward.
+	// before entries are acknowledged and the LogSlice moves forward.
 	snapshot *pb.Snapshot
 
-	// logSlice is the suffix of the raft log that is not yet written to storage.
+	// LogSlice is the suffix of the raft log that is not yet written to storage.
 	// If all the entries are written, or covered by the pending snapshot, then
-	// logSlice.entries is empty.
+	// LogSlice.entries is empty.
 	//
-	// Invariant: snapshot != nil ==> logSlice.prev == snapshot.lastEntryID
-	// Invariant: snapshot == nil ==> logSlice.prev is in Storage
-	// Invariant: logSlice.lastEntryID() is the end of the log at all times
+	// Invariant: snapshot != nil ==> LogSlice.prev == snapshot.lastEntryID
+	// Invariant: snapshot == nil ==> LogSlice.prev is in Storage
+	// Invariant: LogSlice.lastEntryID() is the end of the log at all times
 	//
-	// Invariant: logSlice.term, a.k.a. the "last accepted term", is the term of
+	// Invariant: LogSlice.term, a.k.a. the "last accepted term", is the term of
 	// the leader whose append (either entries or snapshot) we accepted last. Our
 	// state is consistent with the leader log at this term.
-	logSlice
+	LogSlice
 
 	// snapshotInProgress is true if the snapshot is being written to storage.
 	//
 	// Invariant: snapshotInProgress ==> snapshot != nil
 	snapshotInProgress bool
-	// entryInProgress is the index of the last entry in logSlice already present
+	// entryInProgress is the index of the last entry in LogSlice already present
 	// in, or being written to storage.
 	//
 	// Invariant: prev.index <= entryInProgress <= lastIndex()
@@ -96,11 +99,11 @@ type unstable struct {
 	// together with the entries.
 	entryInProgress uint64
 
-	logger Logger
+	logger raftlogger.Logger
 }
 
-func newUnstable(last entryID, logger Logger) unstable {
-	// To initialize the last accepted term (logSlice.term) correctly, we make
+func newUnstable(last entryID, logger raftlogger.Logger) unstable {
+	// To initialize the last accepted term (LogSlice.term) correctly, we make
 	// sure its invariant is true: the log is a prefix of the term's leader's log.
 	// This can be achieved by conservatively initializing to the term of the last
 	// log entry.
@@ -116,7 +119,7 @@ func newUnstable(last entryID, logger Logger) unstable {
 	// leader Term) gives us more information about the log, and then allows
 	// bumping its commit index sooner than when the next MsgApp arrives.
 	return unstable{
-		logSlice:        logSlice{term: last.term, prev: last},
+		LogSlice:        LogSlice{term: last.term, prev: last},
 		entryInProgress: last.index,
 		logger:          logger,
 	}
@@ -129,14 +132,6 @@ func (u *unstable) maybeFirstIndex() (uint64, bool) {
 		return u.snapshot.Metadata.Index + 1, true
 	}
 	return 0, false
-}
-
-// maybeTerm returns the term of the entry at index i, if there is any.
-func (u *unstable) maybeTerm(i uint64) (uint64, bool) {
-	if i < u.prev.index || i > u.lastIndex() {
-		return 0, false
-	}
-	return u.termAt(i), true
 }
 
 // nextEntries returns the unstable entries that are not already in the process
@@ -172,34 +167,34 @@ func (u *unstable) acceptInProgress() {
 //
 // The method makes sure the entries can not be overwritten by an in-progress
 // log append. See the related comment in newStorageAppendRespMsg.
-func (u *unstable) stableTo(mark logMark) {
-	if mark.term != u.term {
+func (u *unstable) stableTo(mark LogMark) {
+	if mark.Term != u.term {
 		// The last accepted term has changed. Ignore. This is possible if part or
 		// all of the unstable log was replaced between that time that a set of
 		// entries started to be written to stable storage and when they finished.
 		u.logger.Infof("mark (term,index)=(%d,%d) mismatched the last accepted "+
-			"term %d in unstable log; ignoring ", mark.term, mark.index, u.term)
+			"term %d in unstable log; ignoring ", mark.Term, mark.Index, u.term)
 		return
 	}
-	if u.snapshot != nil && mark.index == u.snapshot.Metadata.Index {
+	if u.snapshot != nil && mark.Index == u.snapshot.Metadata.Index {
 		// Index matched unstable snapshot, not unstable entry. Ignore.
-		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", mark.index)
+		u.logger.Infof("entry at index %d matched unstable snapshot; ignoring", mark.Index)
 		return
 	}
-	if mark.index <= u.prev.index || mark.index > u.lastIndex() {
+	if mark.Index <= u.prev.index || mark.Index > u.lastIndex() {
 		// Unstable entry missing. Ignore.
-		u.logger.Infof("entry at index %d missing from unstable log; ignoring", mark.index)
+		u.logger.Infof("entry at index %d missing from unstable log; ignoring", mark.Index)
 		return
 	}
 	if u.snapshot != nil {
 		u.logger.Panicf("mark %+v acked earlier than the snapshot(in-progress=%t): %s",
 			mark, u.snapshotInProgress, DescribeSnapshot(*u.snapshot))
 	}
-	u.logSlice = u.forward(mark.index)
+	u.LogSlice = u.forward(mark.Index)
 	// TODO(pav-kv): why can mark.index overtake u.entryInProgress? Probably bugs
 	// in tests using the log writes incorrectly, e.g. TestLeaderStartReplication
 	// takes nextUnstableEnts() without acceptInProgress().
-	u.entryInProgress = max(u.entryInProgress, mark.index)
+	u.entryInProgress = max(u.entryInProgress, mark.Index)
 	u.shrinkEntriesArray()
 }
 
@@ -251,7 +246,7 @@ func (u *unstable) restore(s snapshot) bool {
 	term := max(u.term, s.term)
 
 	u.snapshot = &s.snap
-	u.logSlice = logSlice{term: term, prev: s.lastEntryID()}
+	u.LogSlice = LogSlice{term: term, prev: s.lastEntryID()}
 	u.snapshotInProgress = false
 	u.entryInProgress = u.prev.index
 	return true
@@ -259,7 +254,7 @@ func (u *unstable) restore(s snapshot) bool {
 
 // append adds the given log slice to the end of the log. Returns false if this
 // can not be done.
-func (u *unstable) append(a logSlice) bool {
+func (u *unstable) append(a LogSlice) bool {
 	if a.term < u.term {
 		return false // append from an outdated log
 	} else if a.prev != u.lastEntryID() {
@@ -270,7 +265,7 @@ func (u *unstable) append(a logSlice) bool {
 	return true
 }
 
-func (u *unstable) truncateAndAppend(a logSlice) bool {
+func (u *unstable) truncateAndAppend(a LogSlice) bool {
 	if a.term < u.term {
 		return false // append from an outdated log
 	}
@@ -312,7 +307,7 @@ func (u *unstable) truncateAndAppend(a logSlice) bool {
 	// Truncate the log and append new entries. Regress the entryInProgress mark
 	// to reflect that the truncated entries are no longer considered in progress.
 	if a.prev.index <= u.prev.index {
-		u.logSlice = a // replace the entire logSlice with the latest append
+		u.LogSlice = a // replace the entire LogSlice with the latest append
 		// TODO(pav-kv): clean up the logging message. It will change all datadriven
 		// test outputs, so do it in a contained PR.
 		u.logger.Infof("replace the unstable entries from index %d", a.prev.index+1)
@@ -327,35 +322,4 @@ func (u *unstable) truncateAndAppend(a logSlice) bool {
 	}
 	u.entryInProgress = min(u.entryInProgress, a.prev.index)
 	return true
-}
-
-// slice returns the entries from the unstable log with indexes in the range
-// [lo, hi). The entire range must be stored in the unstable log or the method
-// will panic. The returned slice can be appended to, but the entries in it must
-// not be changed because they are still shared with unstable.
-//
-// TODO(pavelkalinnikov): this, and similar []pb.Entry slices, may bubble up all
-// the way to the application code through Ready struct. Protect other slices
-// similarly, and document how the client can use them.
-func (u *unstable) slice(lo uint64, hi uint64) []pb.Entry {
-	u.mustCheckOutOfBounds(lo, hi)
-	// NB: use the full slice expression to limit what the caller can do with the
-	// returned slice. For example, an append will reallocate and copy this slice
-	// instead of corrupting the neighbouring u.entries.
-	offset := u.prev.index + 1
-	return u.entries[lo-offset : hi-offset : hi-offset]
-}
-
-// mustCheckOutOfBounds checks that [lo, hi) interval is included in
-// (u.prev.index, u.lastIndex()].
-// Equivalently, u.prev.index + 1 <= lo <= hi <= u.lastIndex() + 1.
-//
-// TODO(pav-kv): the callers check this already. Remove.
-func (u *unstable) mustCheckOutOfBounds(lo, hi uint64) {
-	if lo > hi {
-		u.logger.Panicf("invalid unstable.slice %d > %d", lo, hi)
-	}
-	if last := u.lastIndex(); lo <= u.prev.index || hi > last+1 {
-		u.logger.Panicf("unstable.slice[%d,%d) out of bound (%d,%d]", lo, hi, u.prev.index, last)
-	}
 }

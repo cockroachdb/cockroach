@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package mixedversion
 
@@ -30,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -41,44 +37,6 @@ import (
 )
 
 type (
-	// backgroundEvent is the struct sent by background steps when they
-	// finish (successfully or not).
-	backgroundEvent struct {
-		Name            string
-		Err             error
-		TriggeredByTest bool
-	}
-
-	backgroundRunner struct {
-		group     ctxgroup.Group
-		ctx       context.Context
-		events    chan backgroundEvent
-		logger    *logger.Logger
-		stopFuncs []StopFunc
-	}
-
-	serviceFailureDetails struct {
-		descriptor     *ServiceDescriptor
-		binaryVersions []roachpb.Version
-		// Cluster versions before and after the failure occurred. Before
-		// each step is executed, the test runner will cache each node's
-		// view of the cluster version; after a failure occurs, we'll try
-		// to read the cluster version from every node again. This context
-		// is added to the failure message displayed to the user with the
-		// intention of highlighting whether the cluster version changed
-		// during the failure, which is useful for test failures that
-		// happen while the upgrade is finalizing.
-		clusterVersionsBefore []roachpb.Version
-		clusterVersionsAfter  []roachpb.Version
-	}
-
-	testFailureDetails struct {
-		seed          int64
-		testContext   *Context
-		systemService *serviceFailureDetails
-		tenantService *serviceFailureDetails
-	}
-
 	// crdbMonitor is a thin wrapper around the roachtest monitor API
 	// (cluster.NewMonitor) that produces error events through a channel
 	// whenever an unexpected node death happens. It also allows us to
@@ -113,7 +71,7 @@ type (
 		tenantService *serviceRuntime
 		logger        *logger.Logger
 
-		background *backgroundRunner
+		background task.Manager
 		monitor    *crdbMonitor
 
 		// ranUserHooks keeps track of whether the runner has run any
@@ -183,7 +141,7 @@ func newTestRunner(
 		systemService: systemService,
 		tenantService: tenantService,
 		cluster:       c,
-		background:    newBackgroundRunner(ctx, l),
+		background:    task.NewManager(ctx, l),
 		monitor:       newCRDBMonitor(ctx, c, maps.Keys(allCRDBNodes)),
 		ranUserHooks:  &ranUserHooks,
 	}
@@ -195,11 +153,19 @@ func (tr *testRunner) run() (retErr error) {
 	stepsErr := make(chan error)
 	defer func() { tr.teardown(stepsErr, retErr != nil) }()
 	defer func() {
-		// If the test failed an we haven't run any user hooks up to this
-		// point, redirect the failure to Test Eng, as this indicates a
-		// setup problem that should be investigated separately.
-		if retErr != nil && !tr.ranUserHooks.Load() {
-			retErr = registry.ErrorWithOwner(registry.OwnerTestEng, retErr)
+		if retErr != nil {
+			// If the test failed, and we haven't run any user hooks up to this point,
+			// redirect the failure to Test Eng, as this indicates a setup problem
+			// that should be investigated separately.
+			if !tr.ranUserHooks.Load() {
+				retErr = registry.ErrorWithOwner(registry.OwnerTestEng, retErr)
+			}
+
+			// If this test run had a tag assigned, wrap the error with that
+			// tag to make it more immediately clear which run failed.
+			if tr.tag != "" {
+				retErr = errors.Wrapf(retErr, "%s", tr.tag)
+			}
 		}
 	}()
 
@@ -317,7 +283,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 	if err := panicAsError(l, func() error {
 		return ss.impl.Run(ctx, l, ss.rng, tr.newHelper(ctx, l, ss.context))
 	}); err != nil {
-		if isContextCanceled(ctx) {
+		if task.IsContextCanceled(ctx) {
 			l.Printf("step terminated (context canceled)")
 			// Avoid creating a `stepError` (which involves querying binary
 			// and cluster versions) when the context was canceled as the
@@ -335,9 +301,9 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss *singleStep, l *logg
 }
 
 func (tr *testRunner) startBackgroundStep(ss *singleStep, l *logger.Logger, stopChan shouldStop) {
-	stop := tr.background.Start(ss.impl.Description(), func(ctx context.Context) error {
+	stop := tr.background.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
 		return tr.runSingleStep(ctx, ss, l)
-	})
+	}, task.Logger(l), task.Name(ss.impl.Description()))
 
 	// We start a goroutine to listen for user-requests to stop the
 	// background function.
@@ -372,61 +338,28 @@ func (tr *testRunner) stepError(
 }
 
 // testFailure generates a `testFailure` for failures that happened
-// due to the given error.  It logs the error to the logger passed,
+// due to the given error. It logs the error to the logger passed,
 // and renames the underlying file to include the "FAILED" prefix to
 // help in debugging.
 func (tr *testRunner) testFailure(
 	ctx context.Context, err error, l *logger.Logger, testContext *Context,
 ) error {
-	detailsForService := func(service *serviceRuntime) *serviceFailureDetails {
-		return &serviceFailureDetails{
-			descriptor:            service.descriptor,
-			binaryVersions:        loadAtomicVersions(service.binaryVersions),
-			clusterVersionsBefore: loadAtomicVersions(service.clusterVersions),
-			clusterVersionsAfter:  loadAtomicVersions(service.clusterVersions),
-		}
+	lines := []string{
+		"test failed:",
+		fmt.Sprintf("test random seed: %d (use COCKROACH_RANDOM_SEED to reproduce)\n", tr.plan.seed),
 	}
 
-	var systemDetails *serviceFailureDetails
-	var tenantDetails *serviceFailureDetails
-	for _, service := range tr.allServices() {
-		if service.descriptor.Name == install.SystemInterfaceName {
-			systemDetails = detailsForService(service)
-		} else {
-			tenantDetails = detailsForService(service)
-		}
-	}
-
-	currentClusterVersions := func(service *serviceRuntime) []roachpb.Version {
-		if tr.connCacheInitialized(service) {
-			if err := tr.refreshClusterVersions(ctx, service); err == nil {
-				return loadAtomicVersions(service.clusterVersions)
-			} else {
-				tr.logger.Printf(
-					"failed to fetch cluster versions for service %s after failure: %s",
-					service.descriptor.Name, err,
-				)
-			}
-		}
-
-		return loadAtomicVersions(service.clusterVersions)
-	}
-
-	systemDetails.clusterVersionsAfter = currentClusterVersions(tr.systemService)
-	if tenantDetails != nil {
-		tenantDetails.clusterVersionsAfter = currentClusterVersions(tr.tenantService)
-	}
-
-	tf := &testFailureDetails{
-		seed:          tr.plan.seed,
-		testContext:   testContext,
-		systemService: systemDetails,
-		tenantService: tenantDetails,
+	if testContext != nil {
+		lines = append(lines, versionsTable(
+			tr.plan.deploymentMode,
+			tr.systemService, tr.tenantService,
+			testContext.System, testContext.Tenant,
+		))
 	}
 
 	// failureErr wraps the original error, adding mixed-version state
 	// information as error details.
-	failureErr := errors.WithDetailf(err, "%s", tf.Format())
+	failureErr := errors.WithDetailf(err, "%s", strings.Join(lines, "\n"))
 
 	// Print the test failure on the step's logger for convenience, and
 	// to reduce cross referencing of logs.
@@ -453,7 +386,7 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 	// termination is marked `TriggeredByTest` (not necessary for
 	// correctness, just for clarity).
 	tr.logger.Printf("stopping background functions")
-	tr.background.Terminate()
+	tr.background.Terminate(tr.logger)
 
 	tr.logger.Printf("stopping node monitor")
 	if err := tr.monitor.Stop(); err != nil {
@@ -467,7 +400,7 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 	// artifacts, which would be confusing.
 	if testFailed {
 		tr.logger.Printf("waiting for all steps to finish after context cancelation")
-		waitForChannel(stepsChan, "test steps", tr.logger)
+		task.WaitForChannel(stepsChan, "test steps", tr.logger)
 	}
 
 	tr.logger.Printf("closing database connections")
@@ -479,41 +412,109 @@ func (tr *testRunner) logStep(prefix string, step *singleStep, l *logger.Logger)
 	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID, step.impl.Description())
 }
 
-// logVersions writes the current cached versions of the binary and
-// cluster versions on each node. The cached versions should exist for
-// all steps but the first one (when we start the cluster itself).
 func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
-	binaryVersions := loadAtomicVersions(tr.systemService.binaryVersions)
-	systemClusterVersions := loadAtomicVersions(tr.systemService.clusterVersions)
+	tbl := versionsTable(
+		tr.plan.deploymentMode,
+		tr.systemService, tr.tenantService,
+		testContext.System, testContext.Tenant,
+	)
+
+	if tbl != "" {
+		l.Printf("current cluster configuration:\n%s", tbl)
+	}
+}
+
+// versionsTable returns a string with a table representation of the
+// current cached versions of the binary and cluster versions on each
+// node, for both system and tenant services.
+func versionsTable(
+	deploymentMode DeploymentMode,
+	systemRuntime, tenantRuntime *serviceRuntime,
+	systemContext, tenantContext *ServiceContext,
+) string {
+	systemBinaryVersions := loadAtomicVersions(systemRuntime.binaryVersions)
+	systemClusterVersions := loadAtomicVersions(systemRuntime.clusterVersions)
+
+	if systemBinaryVersions == nil || systemClusterVersions == nil {
+		return ""
+	}
+
 	var tenantClusterVersions []roachpb.Version
-	if tr.tenantService != nil {
-		tenantClusterVersions = loadAtomicVersions(tr.tenantService.clusterVersions)
+	if tenantRuntime != nil {
+		tenantClusterVersions = loadAtomicVersions(tenantRuntime.clusterVersions)
 	}
 
-	releasedVersions := make([]*clusterupgrade.Version, 0, len(testContext.System.Descriptor.Nodes))
-	for _, node := range testContext.System.Descriptor.Nodes {
-		nv, err := testContext.NodeVersion(node)
-		handleInternalError(err)
-		releasedVersions = append(releasedVersions, nv)
+	serviceReleasedVersions := func(service *ServiceContext) []*clusterupgrade.Version {
+		releasedVersions := make([]*clusterupgrade.Version, 0, len(service.Descriptor.Nodes))
+		for _, node := range service.Descriptor.Nodes {
+			nv, err := service.NodeVersion(node)
+			handleInternalError(err)
+			releasedVersions = append(releasedVersions, nv)
+		}
+
+		return releasedVersions
 	}
 
-	if binaryVersions == nil || systemClusterVersions == nil {
-		return
+	systemReleasedVersions := serviceReleasedVersions(systemContext)
+	var tenantReleasedVersions []*clusterupgrade.Version
+	var tenantBinaryVersions []roachpb.Version
+	if deploymentMode == SeparateProcessDeployment {
+		tenantBinaryVersions = loadAtomicVersions(tenantRuntime.binaryVersions)
+		tenantReleasedVersions = serviceReleasedVersions(tenantContext)
 	}
 
-	tw := newTableWriter(testContext.System.Descriptor.Nodes)
-	tw.AddRow("released versions", toString(releasedVersions)...)
-	tw.AddRow("logical binary versions", toString(binaryVersions)...)
+	withLabel := func(name, label string) string {
+		return fmt.Sprintf("%s (%s)", name, label)
+	}
 
-	tw.AddRow("cluster versions (system)", toString(systemClusterVersions)...)
-	if len(tenantClusterVersions) > 0 {
+	withSystemLabel := func(name string, perTenant bool) string {
+		if !perTenant {
+			return name
+		}
+
+		return withLabel(name, install.SystemInterfaceName)
+	}
+
+	tw := newTableWriter(systemContext.Descriptor.Nodes)
+
+	// Released (e.g., v24.1.4) and logical (e.g., '24.1') binary
+	// versions are only per-tenant if we are in an separate-process
+	// deployment: otherwise, they are shared properties of system and
+	// tenants.
+	tw.AddRow(
+		withSystemLabel("released versions", deploymentMode == SeparateProcessDeployment),
+		toString(systemReleasedVersions)...,
+	)
+	tw.AddRow(
+		withSystemLabel("binary versions", deploymentMode == SeparateProcessDeployment),
+		toString(systemBinaryVersions)...,
+	)
+	// Cluster versions are per-tenant in any multitenant deployment.
+	tw.AddRow(
+		withSystemLabel("cluster versions", deploymentMode != SystemOnlyDeployment),
+		toString(systemClusterVersions)...,
+	)
+
+	if tenantRuntime != nil {
+		if deploymentMode == SeparateProcessDeployment {
+			tw.AddRow(
+				withLabel("released versions", tenantRuntime.descriptor.Name),
+				toString(tenantReleasedVersions)...,
+			)
+
+			tw.AddRow(
+				withLabel("binary versions", tenantRuntime.descriptor.Name),
+				toString(tenantBinaryVersions)...,
+			)
+		}
+
 		tw.AddRow(
-			fmt.Sprintf("cluster versions (%s)", tr.tenantService.descriptor.Name),
+			withLabel("cluster versions", tenantRuntime.descriptor.Name),
 			toString(tenantClusterVersions)...,
 		)
 	}
 
-	l.Printf("current cluster configuration:\n%s", tw.String())
+	return tw.String()
 }
 
 // loggerFor creates a logger instance to be used by a test step. Logs
@@ -525,9 +526,7 @@ func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
 	name = fmt.Sprintf("%d_%s", step.ID, name)
 	prefix := filepath.Join(tr.tag, logPrefix, name)
 
-	// Use the root logger here as the `prefix` passed will already
-	// include the full path from the root, including the tag.
-	return prefixedLogger(tr.logger.RootLogger(), prefix)
+	return prefixedLoggerWithFilename(tr.logger, prefix, filepath.Join(logPrefix, name))
 }
 
 // refreshBinaryVersions updates the `binaryVersions` field for every
@@ -535,7 +534,7 @@ func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
 // cluster. We use the `atomic` package here as this function may be
 // called by two steps that are running concurrently.
 func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *serviceRuntime) error {
-	newBinaryVersions := make([]roachpb.Version, len(tr.systemService.descriptor.Nodes))
+	newBinaryVersions := make([]roachpb.Version, len(service.descriptor.Nodes))
 	connectionCtx, cancel := context.WithTimeout(ctx, internalQueryTimeout)
 	defer cancel()
 
@@ -544,7 +543,10 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 		group.GoCtx(func(ctx context.Context) error {
 			bv, err := clusterupgrade.BinaryVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
-				return fmt.Errorf("failed to get binary version for node %d: %w", node, err)
+				return fmt.Errorf(
+					"failed to get binary version for node %d (%s): %w",
+					node, service.descriptor.Name, err,
+				)
 			}
 
 			newBinaryVersions[j] = bv
@@ -573,7 +575,10 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 		group.GoCtx(func(ctx context.Context) error {
 			cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
-				return fmt.Errorf("failed to get cluster version for node %d: %w", node, err)
+				return fmt.Errorf(
+					"failed to get cluster version for node %d (%s): %w",
+					node, service.descriptor.Name, err,
+				)
 			}
 
 			newClusterVersions[j] = cv
@@ -590,6 +595,8 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 }
 
 func (tr *testRunner) refreshServiceData(ctx context.Context, service *serviceRuntime) error {
+	isSystem := service == tr.systemService
+
 	// Update the runner's view of the cluster's binary and cluster
 	// versions for given service before every non-initialization
 	// `singleStep` is executed.
@@ -597,7 +604,7 @@ func (tr *testRunner) refreshServiceData(ctx context.Context, service *serviceRu
 		return err
 	}
 
-	if service == tr.systemService {
+	if isSystem || tr.plan.deploymentMode == SeparateProcessDeployment {
 		if err := tr.refreshBinaryVersions(ctx, service); err != nil {
 			return err
 		}
@@ -607,7 +614,22 @@ func (tr *testRunner) refreshServiceData(ctx context.Context, service *serviceRu
 		return err
 	}
 
-	tr.monitor.Init()
+	// We only want to start the monitor once we know every relevant
+	// cockroach binary is running. This is due to a limitation on the
+	// roachprod monitor: it is only able to monitor cockroach processes
+	// that are running at the time the monitor is created.
+	//
+	// For system-only and separate-process deployments, we can
+	// initialize the monitor right away, since this function is only
+	// called once the storage cluster is running. For separate-process
+	// deployments, we start the monitor if this function is called with
+	// the tenant service. The system is always started first, so when
+	// this function is called with the tenant service, we know that
+	// every relevant cockroach binary is running at this point.
+	if tr.plan.deploymentMode != SeparateProcessDeployment || !isSystem {
+		tr.monitor.Init()
+	}
+
 	return nil
 }
 
@@ -637,13 +659,6 @@ func (tr *testRunner) maybeInitConnections(service *serviceRuntime) error {
 
 	service.connCache.cache = cc
 	return nil
-}
-
-func (tr *testRunner) connCacheInitialized(service *serviceRuntime) bool {
-	service.connCache.mu.Lock()
-	defer service.connCache.mu.Unlock()
-
-	return service.connCache.cache != nil
 }
 
 func (tr *testRunner) newHelper(
@@ -773,117 +788,6 @@ func (cm *crdbMonitor) Stop() error {
 	return cm.monitor.WaitE()
 }
 
-func newBackgroundRunner(ctx context.Context, l *logger.Logger) *backgroundRunner {
-	g := ctxgroup.WithContext(ctx)
-	return &backgroundRunner{
-		group:  g,
-		ctx:    ctx,
-		logger: l,
-		events: make(chan backgroundEvent),
-	}
-}
-
-// Start will run the function `fn` in a goroutine. Any errors
-// returned by that function are observable by reading from the
-// channel returned by the `Events()` function. Returns a function
-// that can be called to stop the background function (canceling the
-// context passed to it).
-func (br *backgroundRunner) Start(name string, fn func(context.Context) error) context.CancelFunc {
-	bgCtx, cancel := context.WithCancel(br.ctx)
-	var expectedContextCancelation bool
-	br.group.Go(func() error {
-		err := fn(bgCtx)
-		event := backgroundEvent{
-			Name:            name,
-			Err:             err,
-			TriggeredByTest: err != nil && isContextCanceled(bgCtx) && expectedContextCancelation,
-		}
-
-		select {
-		case br.events <- event:
-			// exit goroutine
-		case <-br.ctx.Done():
-			// Test already finished, exit goroutine.
-			return nil
-		}
-
-		return err
-	})
-
-	stopBgFunc := func() {
-		expectedContextCancelation = true
-		cancel()
-	}
-	// Collect all stopFuncs so that we can explicitly stop all
-	// background functions when the test finishes.
-	br.stopFuncs = append(br.stopFuncs, stopBgFunc)
-	return stopBgFunc
-}
-
-// Terminate will call the stop functions for every background function
-// started during the test. This includes background functions created
-// during test runtime (using `helper.Background()`), as well as
-// background steps declared in the test setup (using
-// `BackgroundFunc`, `Workload`, et al). Returns when all background
-// functions have returned.
-func (br *backgroundRunner) Terminate() {
-	for _, stop := range br.stopFuncs {
-		stop()
-	}
-
-	doneCh := make(chan error)
-	go func() {
-		defer close(doneCh)
-		_ = br.group.Wait()
-	}()
-
-	waitForChannel(doneCh, "background functions", br.logger)
-}
-
-func (br *backgroundRunner) CompletedEvents() <-chan backgroundEvent {
-	return br.events
-}
-
-func (tfd *testFailureDetails) Format() string {
-	lines := []string{
-		"test failed:",
-		fmt.Sprintf("test random seed: %d\n", tfd.seed),
-	}
-
-	tw := newTableWriter(tfd.systemService.descriptor.Nodes)
-	if tfd.testContext != nil {
-		releasedVersions := make([]*clusterupgrade.Version, 0, len(tfd.testContext.System.Descriptor.Nodes))
-		for _, node := range tfd.testContext.System.Descriptor.Nodes {
-			nv, err := tfd.testContext.NodeVersion(node)
-			handleInternalError(err)
-			releasedVersions = append(releasedVersions, nv)
-		}
-		tw.AddRow("released versions", toString(releasedVersions)...)
-	}
-
-	tw.AddRow("logical binary versions", toString(tfd.systemService.binaryVersions)...)
-	for _, service := range []*serviceFailureDetails{tfd.systemService, tfd.tenantService} {
-		if service == nil {
-			continue
-		}
-
-		tw.AddRow(
-			fmt.Sprintf("cluster versions before failure (%s)", service.descriptor.Name),
-			toString(service.clusterVersionsBefore)...,
-		)
-
-		if cv := service.clusterVersionsAfter; cv != nil {
-			tw.AddRow(
-				fmt.Sprintf("cluster versions after failure (%s)", service.descriptor.Name),
-				toString(cv)...,
-			)
-		}
-	}
-
-	lines = append(lines, tw.String())
-	return strings.Join(lines, "\n")
-}
-
 // tableWriter is a thin wrapper around the `tabwriter` package used
 // by the test runner to display logical and released binary versions
 // in a tabular format.
@@ -949,37 +853,23 @@ func loadAtomicVersions(v *atomic.Value) []roachpb.Version {
 	return v.Load().([]roachpb.Version)
 }
 
-// panicAsError ensures that the any panics that might happen while
-// the function passed runs are captured and returned as regular
-// errors. A stack trace is included in the logs when that happens to
-// facilitate debugging.
+// panicAsError ensures that any panics that might happen while the function
+// passed runs are captured and returned as regular errors. A stack trace is
+// included in the logs when that happens to facilitate debugging.
 func panicAsError(l *logger.Logger, f func() error) (retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
-			l.Printf("panic stack trace:\n%s", string(debug.Stack()))
-			retErr = fmt.Errorf("panic (stack trace above): %v", r)
+			retErr = logPanicToErr(l, r)
 		}
 	}()
 	return f()
 }
 
-// waitForChannel waits for the given channel `ch` to close; returns
-// when that happens. If the channel does not close within 5 minutes,
-// the function logs a message and returns.
-//
-// The main use-case for this function is waiting for user-provided
-// hooks to return after the context passed to them is canceled. We
-// want to allow some time for them to finish, but we also don't want
-// to block indefinitely if a function inadvertently ignores context
-// cancelation.
-func waitForChannel(ch chan error, desc string, l *logger.Logger) {
-	maxWait := 5 * time.Minute
-	select {
-	case <-ch:
-		// return
-	case <-time.After(maxWait):
-		l.Printf("waited for %s for %s to finish, giving up", maxWait, desc)
-	}
+// logPanicToErr logs the panic stack trace and returns an error with the
+// panic message.
+func logPanicToErr(l *logger.Logger, r interface{}) error {
+	l.Printf("panic stack trace:\n%s", string(debug.Stack()))
+	return fmt.Errorf("panic (stack trace above): %v", r)
 }
 
 func toString[T fmt.Stringer](xs []T) []string {
@@ -989,15 +879,4 @@ func toString[T fmt.Stringer](xs []T) []string {
 	}
 
 	return result
-}
-
-// isContextCanceled returns a boolean indicating whether the context
-// passed is canceled.
-func isContextCanceled(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
 }

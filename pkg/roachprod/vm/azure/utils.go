@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package azure
 
@@ -25,20 +20,31 @@ type azureStartupArgs struct {
 	RemoteUser           string // The uname for /data* directories.
 	AttachedDiskLun      *int   // Use attached disk, with specified LUN; Use local ssd if nil.
 	DisksInitializedFile string // File to touch when disks are initialized.
+	OSInitializedFile    string // File to touch when OS is initialized.
+	StartupLogs          string // File to redirect startup script output logs.
+	DiskControllerNVMe   bool   // Interface data disk via NVMe
 }
 
 const azureStartupTemplate = `#!/bin/bash
 
 # Script for setting up a Azure machine for roachprod use.
-set -xe
+# ensure any failure fails the entire script
+set -eux
+
+# Redirect output to stdout/err and a log file
+exec &> >(tee -a {{ .StartupLogs }})
+
+# Log the startup of the script with a timestamp
+echo "startup script starting: $(date -u)"
 mount_opts="defaults"
 
-{{if .AttachedDiskLun}}
+devices=()
+{{if .DiskControllerNVMe}}
+# Setup nvme network storage, need to remove nvme OS disk from the device list.
+devices=($(realpath -qe /dev/disk/by-id/nvme-* | grep -v "nvme0n1" | sort -u))
+{{else if .AttachedDiskLun}}
 # Setup network attached storage
 devices=("/dev/disk/azure/scsi1/lun{{.AttachedDiskLun}}")
-{{else}}
-# Setup local storage.
-devices=($(realpath -qe /dev/disk/by-id/nvme-* | sort -u))
 {{end}}
 
 if (( ${#devices[@]} == 0 ));
@@ -92,6 +98,11 @@ EOF
 # See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
 sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 
+# Uninstall unattended-upgrades
+systemctl stop unattended-upgrades
+sudo rm -rf /var/log/unattended-upgrades
+apt-get purge -y unattended-upgrades
+
 # Enable core dumps
 cat <<EOF > /etc/security/limits.d/core_unlimited.conf
 * soft core unlimited
@@ -113,6 +124,7 @@ sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
 sudo service ssh restart
 
 touch {{ .DisksInitializedFile }}
+touch {{ .OSInitializedFile }}
 `
 
 // evalStartupTemplate evaluates startup template defined above and returns

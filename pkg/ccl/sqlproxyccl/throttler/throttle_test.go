@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package throttler
 
@@ -12,11 +9,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTriggerThrottle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
+
 	type testCase struct {
 		backoffBefore time.Duration
 		backoffAfter  time.Duration
@@ -69,6 +71,9 @@ func TestTriggerThrottle(t *testing.T) {
 }
 
 func TestIsThrottled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
+
 	now := timeutil.Now()
 
 	l := newThrottle(time.Second)
@@ -105,6 +110,9 @@ func TestIsThrottled(t *testing.T) {
 }
 
 func TestDisableThrottle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
+
 	now := timeutil.Now()
 	l := newThrottle(time.Second)
 

@@ -1,0 +1,315 @@
+# Test backing up and restoring a database with triggers.
+new-cluster name=s
+----
+
+exec-sql
+CREATE DATABASE db1;
+----
+
+exec-sql
+USE db1;
+----
+
+exec-sql
+CREATE SCHEMA sc1;
+----
+
+exec-sql
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE TYPE sc1.enum1 AS ENUM('Good');
+----
+
+exec-sql
+CREATE SEQUENCE sc1.sq1;
+----
+
+exec-sql
+CREATE FUNCTION sc1.f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT := 0;
+    foobar sc1.enum1;
+  BEGIN
+    SELECT a FROM sc1.tbl1;
+    SELECT 'Good'::sc1.enum1;
+    RAISE NOTICE '%', nextval('sc1.sq1');
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-sql
+CREATE PROCEDURE p_nested(a sc1.enum1) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'a: %', a;
+    SELECT nextval('sc1.sq1');
+  END
+$$;
+----
+
+exec-sql
+CREATE SCHEMA sc2;
+----
+
+exec-sql
+CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE FUNCTION sc2.f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    x INT;
+  BEGIN
+    SELECT a INTO x FROM sc1.tbl1 LIMIT 1;
+    RAISE NOTICE 'x: %', x;
+    CALL p_nested('Good'::sc1.enum1);
+    RETURN NEW;
+  END
+$$;
+----
+
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1' OR relname = 'tbl2'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+
+exec-sql
+CREATE TRIGGER tr1 AFTER INSERT ON sc1.tbl1 FOR EACH ROW EXECUTE FUNCTION sc1.f1();
+----
+
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1' OR relname = 'tbl2'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+tbl1 "tr1"
+
+exec-sql
+CREATE TRIGGER tr2 AFTER INSERT ON sc2.tbl2 FOR EACH ROW EXECUTE FUNCTION sc2.f2();
+----
+
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1' OR relname = 'tbl2'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+tbl1 "tr1"
+tbl2 "tr2"
+
+query-sql
+SELECT nextval('sc1.sq1'::REGCLASS)
+----
+1
+
+exec-sql
+INSERT INTO sc1.tbl1 VALUES (123)
+----
+NOTICE: 2
+
+query-sql
+SELECT nextval('sc1.sq1'::REGCLASS)
+----
+3
+
+exec-sql
+INSERT INTO sc2.tbl2 VALUES (123)
+----
+NOTICE: x: 123
+NOTICE: a: Good
+
+query-sql
+SELECT nextval('sc1.sq1'::REGCLASS)
+----
+5
+
+exec-sql
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
+)
+SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
+ORDER BY database_name, parent_schema_name, object_name
+----
+<nil> <nil> db1 database false
+db1 <nil> public schema false
+db1 <nil> sc1 schema false
+db1 <nil> sc2 schema false
+db1 public p_nested function false
+db1 sc1 _enum1 type false
+db1 sc1 enum1 type false
+db1 sc1 f1 function false
+db1 sc1 sq1 table false
+db1 sc1 tbl1 table false
+db1 sc2 f2 function false
+db1 sc2 tbl2 table false
+
+exec-sql
+DROP DATABASE db1
+----
+
+exec-sql
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
+----
+
+exec-sql
+USE db1_new
+----
+
+# Make sure dependency IDs are rewritten.
+# Note that technically this only tests forward-reference IDs in depended-on
+# objects are rewritten. But since we have cross-references validation, so this
+# also means back-references in UDF descriptor are good.
+exec-sql
+DROP SEQUENCE sc1.sq1
+----
+pq: cannot drop sequence sq1 because other objects depend on it
+
+exec-sql
+DROP FUNCTION sc1.f1
+----
+pq: cannot drop function "f1" because other objects ([db1_new.sc1.tbl1]) still depend on it
+
+exec-sql
+DROP FUNCTION sc2.f2
+----
+pq: cannot drop function "f2" because other objects ([db1_new.sc2.tbl2]) still depend on it
+
+exec-sql
+DROP PROCEDURE p_nested
+----
+pq: cannot drop function "p_nested" because other objects ([db1_new.sc2.tbl2, db1_new.sc2.f2]) still depend on it
+
+exec-sql
+DROP TABLE sc1.tbl1
+----
+pq: cannot drop table tbl1 because other objects depend on it
+
+exec-sql
+ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
+----
+pq: cannot rename relation "sc1.tbl1" because view "tbl2" depends on it
+HINT: consider dropping "tbl2" first.
+
+exec-sql
+ALTER TABLE sc1.tbl1 SET SCHEMA sc2;
+----
+pq: cannot set schema on relation "tbl1" because view "tbl2" depends on it
+HINT: consider dropping "tbl2" first.
+
+exec-sql
+DROP TYPE sc1.enum1
+----
+pq: cannot drop type "enum1" because other objects ([db1_new.sc1.tbl1 db1_new.public.p_nested db1_new.sc2.tbl2 db1_new.sc2.f2]) still depend on it
+
+query-sql
+SELECT nextval('sc1.sq1'::REGCLASS)
+----
+6
+
+exec-sql
+INSERT INTO sc1.tbl1 VALUES (124)
+----
+NOTICE: 7
+
+query-sql
+SELECT nextval('sc1.sq1'::REGCLASS)
+----
+8
+
+exec-sql
+INSERT INTO sc2.tbl2 VALUES (124)
+----
+NOTICE: x: 123
+NOTICE: a: Good
+
+query-sql
+SELECT nextval('sc1.sq1'::REGCLASS)
+----
+10
+
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1' OR relname = 'tbl2'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+tbl1 "tr1"
+tbl2 "tr2"
+
+# ==============================================================================
+# Test a partial RESTORE, with missing routine dependencies.
+# ==============================================================================
+
+exec-sql
+BACKUP DATABASE db1_new INTO 'nodelocal://1/test/'
+----
+
+exec-sql
+CREATE DATABASE db2;
+----
+
+exec-sql expect-error-regex=(cannot restore table "tbl1" without referenced function [0-9]+ \(or "skip_missing_udfs" option\))
+RESTORE TABLE sc1.tbl1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db2';
+----
+regex matches error
+
+exec-sql
+RESTORE TABLE sc1.tbl1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db2', skip_missing_udfs;
+----
+
+exec-sql
+USE db2
+----
+
+# The table will be restored without the trigger, since the trigger's function
+# is missing.
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1' OR relname = 'tbl2'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----

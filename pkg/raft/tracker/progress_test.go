@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -20,15 +20,18 @@ package tracker
 import (
 	"testing"
 
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestProgressString(t *testing.T) {
+func TestProgressStringAndSafeFormat(t *testing.T) {
 	ins := NewInflights(1, 0)
 	ins.Add(123, 1)
 	pr := &Progress{
-		Match:              1,
-		Next:               2,
+		MatchCommit:        1,
+		SentCommit:         2,
+		Match:              3,
+		Next:               4,
 		State:              StateSnapshot,
 		PendingSnapshot:    123,
 		RecentActive:       false,
@@ -36,8 +39,14 @@ func TestProgressString(t *testing.T) {
 		IsLearner:          true,
 		Inflights:          ins,
 	}
-	const exp = `StateSnapshot match=1 next=2 learner paused pendingSnap=123 inactive inflight=1[full]`
+	const exp = "StateSnapshot match=3 next=4 sentCommit=2 matchCommit=1 learner paused " +
+		"pendingSnap=123 inactive inflight=1[full]"
+	// String.
 	assert.Equal(t, exp, pr.String())
+	// Redactable string.
+	assert.EqualValues(t, exp, redact.Sprint(pr))
+	// Redacted string.
+	assert.EqualValues(t, exp, redact.Sprint(pr).Redact())
 }
 
 func TestProgressIsPaused(t *testing.T) {

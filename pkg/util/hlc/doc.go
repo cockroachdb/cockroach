@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 /*
 Package hlc implements the Hybrid Logical Clock outlined in "Logical Physical
@@ -29,6 +24,12 @@ message that they receive to update their local clock.
 
 There are currently three channels through which HLC timestamps are passed
 between nodes in a cluster:
+
+  - Store Liveness (bidirectional): stores attach clock readings to all messages.
+    Whenever a store receives a messages, it forwards its clock to the clock
+    reading included in the message.
+
+    Ref: (storeliveness.MessageBatch).Timestamp.
 
   - Raft (unidirectional): proposers of Raft commands (i.e. leaseholders) attach
     clock readings to some of these command (e.g. lease transfers, range merges),
@@ -141,6 +142,29 @@ turn out to exist in the future of the local HLC when the intent gets resolved.
     restarting at a timestamp above the local clock back then because we had yet
     to separate the "clock timestamp" domain from the "transaction timestamp"
     domain.
+
+  - Store Liveness Support Disjointness (Store Liveness channel). One of the key
+    Store Liveness properties, the Support Disjointness Invariant, states that
+    no two support intervals with different epochs should overlap. This helps
+    establish the Lease Disjointness Invariant at the leasing layer. To be able
+    to guarantee the Support Disjointness Invariant, Store Liveness ensures that
+    a store does not request support for a new epoch before it considers the
+    previous epoch's support as expired according to its own clock. This needs
+    to happen in at least two cases:
+
+    (1) When a store restarts and increments its own epoch, it waits out any
+    previously requested support, as described in (storeliveness.RequesterMeta).
+    MaxRequested. This case does not need clock propagation.
+
+    (2) When a store learns that a supporter has withdrawn support for an
+    epoch, it needs to forward its clock to the supporter's clock to ensure
+    that any future support at a higher epoch does not overlap with the
+    previous one. For an example, see (storeliveness.MessageBatch).Timestamp.
+
+    Even though Store Liveness needs clock readings only on HeartbeatResponse
+    messages, they are included on all messages, which has the added benefit of
+    helping stores' clocks stay more closely synchronized, so they can provide
+    and withdraw support in a timely manner.
 
 # Strict monotonicity
 

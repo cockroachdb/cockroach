@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -18,13 +18,12 @@
 package rafttest
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBasicProgress(t *testing.T) {
@@ -38,10 +37,10 @@ func TestBasicProgress(t *testing.T) {
 		nodes = append(nodes, n)
 	}
 
-	waitLeader(nodes)
+	l := waitLeader(nodes)
 
 	for i := 0; i < 100; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")), i)
 	}
 
 	if !waitCommitConverge(nodes, 100) {
@@ -54,9 +53,6 @@ func TestBasicProgress(t *testing.T) {
 }
 
 func TestRestart(t *testing.T) {
-	// TODO(pav-kv): de-flake it. See https://github.com/etcd-io/raft/issues/181.
-	skip.UnderStress(t, "the test is flaky")
-
 	peers := []raft.Peer{{ID: 1, Context: nil}, {ID: 2, Context: nil}, {ID: 3, Context: nil}, {ID: 4, Context: nil}, {ID: 5, Context: nil}}
 	nt := newRaftNetwork(1, 2, 3, 4, 5)
 
@@ -71,19 +67,19 @@ func TestRestart(t *testing.T) {
 	k1, k2 := (l+1)%5, (l+2)%5
 
 	for i := 0; i < 30; i++ {
-		nodes[l].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
 	nodes[k1].stop()
 	for i := 0; i < 30; i++ {
-		nodes[(l+3)%5].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
 	nodes[k2].stop()
 	for i := 0; i < 30; i++ {
-		nodes[(l+4)%5].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
 	nodes[k2].restart()
 	for i := 0; i < 30; i++ {
-		nodes[l].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
 	nodes[k1].restart()
 
@@ -107,24 +103,24 @@ func TestPause(t *testing.T) {
 		nodes = append(nodes, n)
 	}
 
-	waitLeader(nodes)
+	l := waitLeader(nodes)
 
 	for i := 0; i < 30; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
-	nodes[1].pause()
+	nodes[(l+1)%5].pause()
 	for i := 0; i < 30; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
-	nodes[2].pause()
+	nodes[(l+2)%5].pause()
 	for i := 0; i < 30; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
-	nodes[2].resume()
+	nodes[(l+2)%5].resume()
 	for i := 0; i < 30; i++ {
-		nodes[0].Propose(context.TODO(), []byte("somedata"))
+		require.NoError(t, nodes[l].propose([]byte("somedata")))
 	}
-	nodes[1].resume()
+	nodes[(l+1)%5].resume()
 
 	if !waitCommitConverge(nodes, 120) {
 		t.Errorf("commits failed to converge!")
@@ -136,15 +132,14 @@ func TestPause(t *testing.T) {
 }
 
 func waitLeader(ns []*node) int {
-	var l map[pb.PeerID]struct{}
-	var lindex int
-
+	l := make(map[pb.PeerID]struct{})
 	for {
-		l = make(map[pb.PeerID]struct{})
+		clear(l)
+		lindex := -1
 
 		for i, n := range ns {
-			lead := n.Status().HardState.Lead
-			if lead != 0 {
+			lead := n.status().HardState.Lead
+			if lead != raft.None {
 				l[lead] = struct{}{}
 				if n.id == lead {
 					lindex = i
@@ -152,7 +147,7 @@ func waitLeader(ns []*node) int {
 			}
 		}
 
-		if len(l) == 1 {
+		if len(l) == 1 && lindex != -1 {
 			return lindex
 		}
 	}
@@ -166,7 +161,7 @@ func waitCommitConverge(ns []*node, target uint64) bool {
 		var good int
 
 		for _, n := range ns {
-			commit := n.Node.Status().HardState.Commit
+			commit := n.status().HardState.Commit
 			c[commit] = struct{}{}
 			if commit > target {
 				good++

@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package allocatorimpl
 
@@ -16,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -23,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -2019,6 +2016,7 @@ func (a *Allocator) ValidLeaseTargets(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	opts allocator.TransferLeaseOptions,
 ) []roachpb.ReplicaDescriptor {
@@ -2082,6 +2080,8 @@ func (a *Allocator) ValidLeaseTargets(
 
 		candidates = append(validSnapshotCandidates, excludeReplicasInNeedOfSnapshots(
 			ctx, status, leaseRepl.GetFirstIndex(), candidates)...)
+		candidates = excludeReplicasInNeedOfCatchup(
+			ctx, leaseRepl.SendStreamStats, candidates)
 	}
 
 	// Determine which store(s) is preferred based on user-specified preferences.
@@ -2190,6 +2190,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 	exclReplsInNeedOfSnapshots bool,
@@ -2222,6 +2223,8 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	if exclReplsInNeedOfSnapshots {
 		preferred = excludeReplicasInNeedOfSnapshots(
 			ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
+		preferred = excludeReplicasInNeedOfCatchup(
+			ctx, leaseRepl.SendStreamStats, preferred)
 	}
 	if len(preferred) == 0 {
 		return false
@@ -2280,6 +2283,7 @@ func (a *Allocator) TransferLeaseTarget(
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,
 	forceDecisionWithoutStats bool,
@@ -2648,6 +2652,7 @@ func (a *Allocator) ShouldTransferLease(
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
 		GetFirstIndex() kvpb.RaftIndex
+		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,
 ) TransferLeaseDecision {
@@ -3044,6 +3049,63 @@ func excludeReplicasInNeedOfSnapshots(
 			)
 			continue
 		}
+		replicas[filled] = repl
+		filled++
+	}
+	return replicas[:filled]
+}
+
+// sendStreamStatsPool is a pool of RangeSendStreamStats objects, used to avoid
+// churning memory when computing lease transfer decisions.
+var sendStreamStatsPool = sync.Pool{
+	New: func() interface{} {
+		return &rac2.RangeSendStreamStats{}
+	},
+}
+
+// excludeReplicasInNeedOfCatchup filters out the `replicas` that may be in
+// need of a catchup messages before able to apply the lease, based on the
+// provided RangeSendStreamStats.
+func excludeReplicasInNeedOfCatchup(
+	ctx context.Context,
+	sendStreamStats func(*rac2.RangeSendStreamStats),
+	replicas []roachpb.ReplicaDescriptor,
+) []roachpb.ReplicaDescriptor {
+	if sendStreamStats == nil {
+		// When we don't have stats, we can't make an informed decision about which
+		// replicas are behind. We'll just return the replicas as is. This can
+		// occur if the current leaseholder is not yet the raft leader, or only
+		// recently became one (concurrent to the lease transfer decision).
+		return replicas
+	}
+	stats := sendStreamStatsPool.Get().(*rac2.RangeSendStreamStats)
+	stats.Clear()
+	defer sendStreamStatsPool.Put(stats)
+	sendStreamStats(stats)
+	filled := 0
+	for _, repl := range replicas {
+		if replicaSendStreamStats, ok := stats.ReplicaSendStreamStats(repl.ReplicaID); ok &&
+			(!replicaSendStreamStats.IsStateReplicate || replicaSendStreamStats.HasSendQueue) {
+			log.KvDistribution.VEventf(ctx, 5,
+				"not considering %v as a potential candidate for a lease transfer "+
+					"because the replica requires catchup: "+
+					"replica=(%v) range=%v",
+				repl, replicaSendStreamStats, stats)
+			continue
+		} else if ok {
+			log.KvDistribution.VEventf(ctx, 6,
+				"replica %v is up-to-date and does not require catchup "+
+					"replica=(%v) range=%v",
+				repl, replicaSendStreamStats, stats)
+		} else {
+			log.KvDistribution.VEventf(ctx, 4,
+				"replica %v is not in the send stream stats range=%v",
+				repl, stats)
+		}
+		// We are also not excluding any replicas which weren't included in the
+		// stats here. If they weren't included it indicates that they were either
+		// recently added or removed and in either case we don't know enough to
+		// preclude them as lease transfer targets.
 		replicas[filled] = repl
 		filled++
 	}

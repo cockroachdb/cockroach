@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { SQLPrivilege } from "../../support/types";
 
@@ -15,14 +10,6 @@ describe("health check: authenticated user", () => {
     cy.getUserWithExactPrivileges([SQLPrivilege.ADMIN]);
     cy.fixture("users").then((users) => {
       cy.login(users[0].username, users[0].password);
-    });
-
-    // Ensure that something reasonable renders at / when authenticated, making
-    // just enough assertions to ensure the right page loaded. If this test
-    // fails, the server probably isn't running or authentication is broken.
-    cy.visit({
-      url: "/",
-      failOnStatusCode: true,
     });
 
     // Ensure the Cluster ID appears
@@ -35,7 +22,6 @@ describe("health check: authenticated user", () => {
     cy.findByText("Capacity Usage", { selector: "h3>span" });
     cy.findByText("Node Status");
     cy.findByText("Replication Status");
-    cy.findByText("Nodes (1)");
 
     // Check for sidebar contents
     cy.findByRole("navigation").within(() => {

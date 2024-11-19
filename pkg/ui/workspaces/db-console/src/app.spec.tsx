@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // stubComponentInModule functions must be called before any other import in this test file to make sure
 // components are stubbed and then stubbed instances of components are imported as part of regular module
@@ -14,17 +9,13 @@
 // eslint-disable-next-line import/order
 import { stubComponentInModule } from "./test-utils/mockComponent";
 
+stubComponentInModule(
+  "@cockroachlabs/cluster-ui",
+  "DatabasesPageV2",
+  "DatabaseDetailsPageV2",
+);
 stubComponentInModule("src/views/cluster/containers/nodeGraphs", "default");
 stubComponentInModule("src/views/cluster/containers/events", "EventPage");
-stubComponentInModule("src/views/databases/databasesPage", "DatabasesPage");
-stubComponentInModule(
-  "src/views/databases/databaseDetailsPage",
-  "DatabaseDetailsPage",
-);
-stubComponentInModule(
-  "src/views/databases/databaseTablePage",
-  "DatabaseTablePage",
-);
 stubComponentInModule(
   "src/views/cluster/containers/dataDistribution",
   "default",
@@ -57,6 +48,10 @@ stubComponentInModule("src/views/tracez_v2/snapshotPage", "default");
 stubComponentInModule(
   "src/views/app/components/tenantDropdown/tenantDropdown",
   "default",
+);
+stubComponentInModule(
+  "src/views/shared/components/alertBar/alertBar",
+  "ThrottleNotificationBar",
 );
 
 // NOTE: All imports should go after `stubComponentInModule` functions calls.
@@ -277,32 +272,16 @@ describe("Routing to", () => {
     /* databases */
   }
   describe("'/databases' path", () => {
-    test("routes to <DatabasesPage> component", () => {
+    test("routes to <DatabasesPageV2> component", () => {
       navigateToPath("/databases");
-      screen.getByTestId("DatabasesPage");
+      screen.getByTestId("DatabasesPageV2");
     });
   });
 
-  describe("'/databases/tables' path", () => {
-    test("redirected to '/databases'", () => {
-      navigateToPath("/databases/tables");
-      expect(history.location.pathname).toBe("/databases");
-    });
-  });
-
-  describe("'/databases/grants' path", () => {
-    test("redirected to '/databases'", () => {
-      navigateToPath("/databases/grants");
-      expect(history.location.pathname).toBe("/databases");
-    });
-  });
-
-  describe("'/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}' path", () => {
-    test("redirected to '/database/:${databaseNameAttr}/table/:${tableNameAttr}'", () => {
-      navigateToPath("/databases/database/some-db-name/table/some-table-name");
-      expect(history.location.pathname).toBe(
-        "/database/some-db-name/table/some-table-name",
-      );
+  describe("'/databases/:${databaseId} path", () => {
+    test("routes to <DatabaseDetailsPageV2> component", () => {
+      navigateToPath("/databases/1");
+      screen.getByTestId("DatabaseDetailsPageV2");
     });
   });
 
@@ -310,27 +289,6 @@ describe("Routing to", () => {
     test("redirected to '/databases'", () => {
       navigateToPath("/database");
       expect(history.location.pathname).toBe("/databases");
-    });
-  });
-
-  describe("'/database/:${databaseNameAttr}' path", () => {
-    test("routes to <DatabaseDetailsPage> component", () => {
-      navigateToPath("/database/some-db-name");
-      screen.getByTestId("DatabaseDetailsPage");
-    });
-  });
-
-  describe("'/database/:${databaseNameAttr}/table' path", () => {
-    test("redirected to '/databases/:${databaseNameAttr}'", () => {
-      navigateToPath("/database/some-db-name/table");
-      expect(history.location.pathname).toBe("/database/some-db-name");
-    });
-  });
-
-  describe("'/database/:${databaseNameAttr}/table/:${tableNameAttr}' path", () => {
-    test("routes to <DatabaseTablePage> component", () => {
-      navigateToPath("/database/some-db-name/table/some-table-name");
-      screen.getByTestId("DatabaseTablePage");
     });
   });
 

@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2021 The etcd Authors
 //
@@ -19,9 +19,11 @@ package rafttest
 
 import (
 	"fmt"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/datadriven"
 )
 
 // isVoter checks whether node id is in the voter list within st.
@@ -46,8 +48,18 @@ func (env *InteractionEnv) handleRaftState() error {
 		} else {
 			voterStatus = "(Non-Voter)"
 		}
-		fmt.Fprintf(env.Output, "%d: %s %s Term:%d Lead:%d\n",
-			st.ID, st.RaftState, voterStatus, st.Term, st.Lead)
+		fmt.Fprintf(env.Output, "%d: %s %s Term:%d Lead:%d LeadEpoch:%d\n",
+			st.ID, st.RaftState, voterStatus, st.Term, st.Lead, st.LeadEpoch)
 	}
+	return nil
+}
+
+// handlePrintFortificationState pretty-prints the support map being tracked by a raft
+// peer.
+func (env *InteractionEnv) handlePrintFortificationState(
+	t *testing.T, d datadriven.TestData,
+) error {
+	idx := firstAsNodeIdx(t, d)
+	fmt.Fprint(env.Output, env.Nodes[idx].TestingFortificationStateString())
 	return nil
 }

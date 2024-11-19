@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2019 The etcd Authors
 //
@@ -19,10 +19,10 @@ package tracker
 
 import (
 	"slices"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"golang.org/x/exp/maps"
 )
 
 // ProgressTracker tracks the progress made by each peer in the currently active
@@ -123,12 +123,8 @@ func (p *ProgressTracker) QuorumActive() bool {
 
 // VoterNodes returns a sorted slice of voters.
 func (p *ProgressTracker) VoterNodes() []pb.PeerID {
-	m := p.config.Voters.IDs()
-	nodes := make([]pb.PeerID, 0, len(m))
-	for id := range m {
-		nodes = append(nodes, id)
-	}
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i] < nodes[j] })
+	nodes := maps.Keys(p.config.Voters.IDs())
+	slices.Sort(nodes)
 	return nodes
 }
 
@@ -137,10 +133,19 @@ func (p *ProgressTracker) LearnerNodes() []pb.PeerID {
 	if len(p.config.Learners) == 0 {
 		return nil
 	}
-	nodes := make([]pb.PeerID, 0, len(p.config.Learners))
-	for id := range p.config.Learners {
-		nodes = append(nodes, id)
-	}
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i] < nodes[j] })
+	nodes := maps.Keys(p.config.Learners)
+	slices.Sort(nodes)
 	return nodes
+}
+
+// WithBasicProgress is a helper to introspect the BasicProgress for this node
+// and its peers.
+func (p *ProgressTracker) WithBasicProgress(visitor func(id pb.PeerID, pr BasicProgress)) {
+	for id, p := range p.progress {
+		visitor(id, BasicProgress{
+			Match: p.Match,
+			Next:  p.Next,
+			State: p.State,
+		})
+	}
 }

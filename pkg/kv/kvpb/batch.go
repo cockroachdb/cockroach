@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvpb
 
@@ -410,25 +405,25 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 	panic(fmt.Sprintf("unreachable. Batch requests: %s", TruncatedRequestsString(ba.Requests, 1024)))
 }
 
-// hasFlag returns true iff one of the requests within the batch contains the
-// specified flag.
-func (ba *BatchRequest) hasFlag(flag flag) bool {
+// hasFlag returns true iff at least one of the requests within the batch
+// contains at least one of the specified flags.
+func (ba *BatchRequest) hasFlag(flags flag) bool {
 	for _, union := range ba.Requests {
-		if (union.GetInner().flags() & flag) != 0 {
+		if (union.GetInner().flags() & flags) != 0 {
 			return true
 		}
 	}
 	return false
 }
 
-// hasFlagForAll returns true iff all of the requests within the batch contains
-// the specified flag.
-func (ba *BatchRequest) hasFlagForAll(flag flag) bool {
+// hasFlagForAll returns true iff all of the requests within the batch contain
+// all of the specified flags.
+func (ba *BatchRequest) hasFlagForAll(flags flag) bool {
 	if len(ba.Requests) == 0 {
 		return false
 	}
 	for _, union := range ba.Requests {
-		if (union.GetInner().flags() & flag) == 0 {
+		if (union.GetInner().flags() & flags) != flags {
 			return false
 		}
 	}

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package install
 
@@ -46,6 +41,10 @@ var storeDirRe = regexp.MustCompile(`{store-dir(:[0-9]+)?}`)
 var logDirRe = regexp.MustCompile(`{log-dir(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var certsDirRe = regexp.MustCompile(`{certs-dir}`)
 
+type ExpanderConfig struct {
+	DefaultVirtualCluster string
+}
+
 // expander expands a string which contains templated parameters for cluster
 // attributes like pgurl, pghost, pgport, uiport, store-dir, and log-dir with
 // the corresponding values.
@@ -59,11 +58,11 @@ type expander struct {
 }
 
 // expanderFunc is a function which may expand a string with a templated value.
-type expanderFunc func(context.Context, *logger.Logger, *SyncedCluster, string) (expanded string, didExpand bool, err error)
+type expanderFunc func(context.Context, *logger.Logger, *SyncedCluster, ExpanderConfig, string) (expanded string, didExpand bool, err error)
 
 // expand will expand arg if it contains an expander template.
 func (e *expander) expand(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, arg string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, cfg ExpanderConfig, arg string,
 ) (string, error) {
 	var err error
 	s := parameterRe.ReplaceAllStringFunc(arg, func(s string) string {
@@ -80,7 +79,7 @@ func (e *expander) expand(
 			e.maybeExpandCertsDir,
 		}
 		for _, f := range expanders {
-			v, expanded, fErr := f(ctx, l, c, s)
+			v, expanded, fErr := f(ctx, l, c, cfg, s)
 			if fErr != nil {
 				err = fErr
 				return ""
@@ -127,12 +126,15 @@ func (e *expander) maybeExpandMap(
 }
 
 // extractVirtualClusterInfo extracts the virtual cluster name and
-// instance from the given group match, if available. If no
-// information is provided, the system interface is assumed and if no
-// instance is provided, the first instance is assumed.
-func extractVirtualClusterInfo(matches []string) (string, int, error) {
+// instance from the given group match, if available. If no default or
+// custom tenant is provided, an empty string is returned. During
+// service discovery, this will mean that the service for the system
+// tenant is used.
+func extractVirtualClusterInfo(
+	matches []string, defaultVirtualCluster string,
+) (string, int, error) {
 	// Defaults if the passed in group match is empty.
-	var virtualClusterName string
+	virtualClusterName := defaultVirtualCluster
 	var sqlInstance int
 
 	// Extract the cluster name and instance matches.
@@ -158,7 +160,7 @@ func extractVirtualClusterInfo(matches []string) (string, int, error) {
 
 // maybeExpandPgURL is an expanderFunc for {pgurl:<nodeSpec>[:virtualCluster[:sqlInstance]]}
 func (e *expander) maybeExpandPgURL(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, cfg ExpanderConfig, s string,
 ) (string, bool, error) {
 	var err error
 	m := pgURLRe.FindStringSubmatch(s)
@@ -169,7 +171,7 @@ func (e *expander) maybeExpandPgURL(
 	if e.pgURLs == nil {
 		e.pgURLs = make(map[string]map[Node]string)
 	}
-	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:])
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:], cfg.DefaultVirtualCluster)
 	if err != nil {
 		return "", false, err
 	}
@@ -191,13 +193,13 @@ func (e *expander) maybeExpandPgURL(
 
 // maybeExpandPgHost is an expanderFunc for {pghost:<nodeSpec>}
 func (e *expander) maybeExpandPgHost(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, cfg ExpanderConfig, s string,
 ) (string, bool, error) {
 	m := pgHostRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false, nil
 	}
-	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:])
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:], cfg.DefaultVirtualCluster)
 	if err != nil {
 		return "", false, err
 	}
@@ -235,13 +237,13 @@ func (e *expander) maybeExpandPgHost(
 
 // maybeExpandPgURL is an expanderFunc for {pgport:<nodeSpec>}
 func (e *expander) maybeExpandPgPort(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, cfg ExpanderConfig, s string,
 ) (string, bool, error) {
 	m := pgPortRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false, nil
 	}
-	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:])
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:], cfg.DefaultVirtualCluster)
 	if err != nil {
 		return "", false, err
 	}
@@ -263,7 +265,7 @@ func (e *expander) maybeExpandPgPort(
 
 // maybeExpandPgURL is an expanderFunc for {uiport:<nodeSpec>}
 func (e *expander) maybeExpandUIPort(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, _ ExpanderConfig, s string,
 ) (string, bool, error) {
 	m := uiPortRe.FindStringSubmatch(s)
 	if m == nil {
@@ -286,7 +288,7 @@ func (e *expander) maybeExpandUIPort(
 // where storeIndex is optional and defaults to 1. Note that storeIndex is the
 // store's index on multi-store nodes, not the store ID.
 func (e *expander) maybeExpandStoreDir(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, _ ExpanderConfig, s string,
 ) (string, bool, error) {
 	m := storeDirRe.FindStringSubmatch(s)
 	if m == nil {
@@ -305,13 +307,13 @@ func (e *expander) maybeExpandStoreDir(
 
 // maybeExpandLogDir is an expanderFunc for "{log-dir}"
 func (e *expander) maybeExpandLogDir(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, cfg ExpanderConfig, s string,
 ) (string, bool, error) {
 	m := logDirRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false, nil
 	}
-	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[1:])
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[1:], cfg.DefaultVirtualCluster)
 	if err != nil {
 		return "", false, err
 	}
@@ -320,7 +322,7 @@ func (e *expander) maybeExpandLogDir(
 
 // maybeExpandCertsDir is an expanderFunc for "{certs-dir}"
 func (e *expander) maybeExpandCertsDir(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, _ ExpanderConfig, s string,
 ) (string, bool, error) {
 	if !certsDirRe.MatchString(s) {
 		return s, false, nil

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.util.log.eventpb;
@@ -55,6 +50,14 @@ message SetZoneConfig {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The string representation of the resolved old zone config. This is not
+  // necessarily the same as the zone config that was previously set -- as it
+  // includes the resolved values of the zone config options. In other words,
+  // a zone config that hasn't been properly "set" yet (and inherits from its
+  // parent) will have a resolved_old_config that has details of the values
+  // it inherits from its parent. This is particularly useful to get a proper
+  // diff between the old and new zone config.
+  string resolved_old_config = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // RemoveZoneConfig is recorded when a zone config is removed.

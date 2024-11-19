@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -98,9 +93,6 @@ var c2cPromMetrics = map[string]clusterstats.ClusterStat{
 	"LogicalMegabytes": {
 		LabelName: "node",
 		Query:     "physical_replication_logical_bytes / 1e6"},
-	"PhysicalMegabytes": {
-		LabelName: "node",
-		Query:     "physical_replication_sst_bytes / 1e6"},
 	"PhysicalReplicatedMegabytes": {
 		LabelName: "node",
 		Query:     "capacity_used / 1e6"},
@@ -528,8 +520,7 @@ func (rd *replicationDriver) setupC2C(
 	workloadNode := c.WorkloadNode()
 
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
-	srcStartOps := option.NewStartOpts(option.NoBackupSchedule)
-	srcStartOps.RoachprodOpts.InitTarget = 1
+	srcStartOps := option.NewStartOpts(option.NoBackupSchedule, option.WithInitTarget(1))
 
 	roachtestutil.SetDefaultAdminUIPort(c, &srcStartOps.RoachprodOpts)
 	srcClusterSetting := install.MakeClusterSettings()
@@ -561,14 +552,12 @@ func (rd *replicationDriver) setupC2C(
 
 	overrideSrcAndDestTenantTTL(t, srcSQL, destSQL, rd.rs.overrideTenantTTL)
 
-	deprecatedCreateTenantAdminRole(t, "src-system", srcSQL)
-	deprecatedCreateTenantAdminRole(t, "dst-system", destSQL)
-
 	srcTenantID, destTenantID := 3, 3
 	srcTenantName := "src-tenant"
 	destTenantName := "destination-tenant"
 
-	deprecatedCreateInMemoryTenant(ctx, t, c, srcTenantName, srcCluster, true)
+	startOpts := option.StartSharedVirtualClusterOpts(srcTenantName, option.StorageCluster(srcCluster), option.NoBackupSchedule)
+	c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, srcClusterSetting)
 
 	pgURL, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
 	require.NoError(t, err)
@@ -919,7 +908,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	// the probability that the producer returns a topology with more than one node in it,
 	// else the node shutdown tests can flake.
 	if rd.rs.srcNodes >= 3 {
-		require.NoError(rd.t, WaitFor3XReplication(ctx, rd.t, rd.t.L(), rd.setup.src.db))
+		require.NoError(rd.t, roachtestutil.WaitFor3XReplication(ctx, rd.t.L(), rd.setup.src.db))
 	}
 
 	rd.t.L().Printf("begin workload on src cluster")
@@ -951,7 +940,11 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.t.Status("starting replication stream")
 	rd.metrics.initalScanStart = newMetricSnapshot(metricSnapper, timeutil.Now())
 	ingestionJobID := rd.startReplicationStream(ctx)
-	removeTenantRateLimiters(rd.t, rd.setup.dst.sysSQL, rd.setup.dst.name)
+	rd.setup.dst.sysSQL.Exec(
+		rd.t,
+		`ALTER TENANT $1 GRANT CAPABILITY exempt_from_rate_limiting=true`,
+		rd.setup.dst.name,
+	)
 
 	// latency verifier queries may error during a node shutdown event; therefore
 	// tolerate errors if we anticipate node deaths.
@@ -1022,8 +1015,12 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.metrics.cutoverEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
 
 	rd.t.L().Printf("starting the destination tenant")
-	conn := deprecatedStartInMemoryTenant(ctx, rd.t, rd.c, rd.setup.dst.name, rd.setup.dst.gatewayNodes)
-	conn.Close()
+	startOpts := option.StartSharedVirtualClusterOpts(
+		rd.setup.dst.name,
+		option.StorageCluster(rd.setup.dst.gatewayNodes),
+		option.WithInitTarget(rd.setup.dst.gatewayNodes[0]),
+	)
+	rd.c.StartServiceForVirtualCluster(ctx, rd.t.L(), startOpts, install.MakeClusterSettings())
 
 	rd.metrics.export(rd.t, len(rd.setup.src.nodes))
 
@@ -1122,7 +1119,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            3 * time.Hour,
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
-			clouds:             registry.AllExceptAzure,
+			clouds:             registry.AllClouds,
 			suites:             registry.Suites(registry.Nightly),
 		},
 		{
@@ -1647,7 +1644,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 				<-shutdownSetupDone
 
 				// Eagerly listen to cutover signal to exercise node shutdown during actual cutover.
-				rrd.setup.dst.sysSQL.Exec(t, `SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval='5s'`)
+				rrd.setup.dst.sysSQL.Exec(t, `SET CLUSTER SETTING bulkio.stream_ingestion.failover_signal_poll_interval='5s'`)
 
 				// While executing a node shutdown on either the src or destination
 				// cluster, ensure the destination cluster's stream ingestion job

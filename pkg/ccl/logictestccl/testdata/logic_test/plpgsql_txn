@@ -873,7 +873,7 @@ CREATE PROCEDURE p() LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-skipif config local-read-committed
+skipif config weak-iso-level-configs
 query T noticetrace
 CALL p();
 ----
@@ -895,7 +895,7 @@ NOTICE: read committed
 NOTICE: ROLLBACK;
 NOTICE: serializable
 
-skipif config local-read-committed
+skipif config weak-iso-level-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL;
 ----

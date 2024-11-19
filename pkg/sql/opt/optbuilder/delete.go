@@ -1,16 +1,12 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -92,6 +88,9 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	// All columns from the delete table will be projected.
 	mb.buildInputForDelete(inScope, del.Table, del.Where, del.Using, del.Limit, del.OrderBy)
 
+	// Project row-level BEFORE triggers for DELETE.
+	mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, false /* cascade */)
+
 	// Build the final delete statement, including any returned expressions.
 	if resultsNeeded(del.Returning) {
 		mb.buildDelete(del.Returning.(*tree.ReturningExprs))
@@ -106,6 +105,8 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildDelete(returning *tree.ReturningExprs) {
 	mb.buildFKChecksAndCascadesForDelete()
+
+	mb.buildRowLevelAfterTriggers(opt.DeleteOp)
 
 	// Project partial index DEL boolean columns.
 	mb.projectPartialIndexDelCols()

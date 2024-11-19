@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -32,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -49,7 +43,7 @@ const (
 
 	// kafkaBufferMessageSize is the number of messages from kafka
 	// we allow to be buffered in memory before validating them.
-	kafkaBufferMessageSize = 8192
+	kafkaBufferMessageSize = 1 << 16 // 64 KiB
 )
 
 var (
@@ -72,7 +66,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Name:             "cdc/mixed-versions",
 		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
-		Timeout:          120 * time.Minute,
+		Timeout:          3 * time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
@@ -246,7 +240,7 @@ func (cmvt *cdcMixedVersionTester) setupValidator(
 func (cmvt *cdcMixedVersionTester) runKafkaConsumer(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
-	everyN := log.Every(30 * time.Second)
+	everyN := roachtestutil.Every(30 * time.Second)
 
 	// This runs until the test finishes, which will be signaled via
 	// context cancellation. We rely on consumer.Next() to check
@@ -426,9 +420,8 @@ func (cmvt *cdcMixedVersionTester) muxRangeFeedSupported(
 ) (bool, option.NodeListOption, error) {
 	// changefeed.mux_rangefeed.enabled was added in 22.2 and deleted in 24.1.
 	return canMixedVersionUseDeletedClusterSetting(h,
-		false, /* isSystem */
 		clusterupgrade.MustParseVersion("v22.2.0"),
-		clusterupgrade.MustParseVersion("v24.1.0-alpha.00000000"),
+		clusterupgrade.MustParseVersion("v24.1.0"),
 	)
 }
 
@@ -448,21 +441,17 @@ func (cmvt *cdcMixedVersionTester) distributionStrategySupported(
 	return h.ClusterVersionAtLeast(r, v241CV)
 }
 
-// canMixedVersionUseDeletedClusterSetting returns whether a mixed-version
-// cluster can use a deleted cluster setting. If it returns true, it will
-// also return the subset of nodes that understand the setting.
+// canMixedVersionUseDeletedClusterSetting returns whether a
+// mixed-version cluster can use a deleted (system) cluster
+// setting. If it returns true, it will also return the subset of
+// nodes that understand the setting.
 func canMixedVersionUseDeletedClusterSetting(
 	h *mixedversion.Helper,
-	isSystem bool,
 	addedVersion *clusterupgrade.Version,
 	deletedVersion *clusterupgrade.Version,
 ) (bool, option.NodeListOption, error) {
 	fromVersion := h.System.FromVersion
 	toVersion := h.System.ToVersion
-	if !isSystem {
-		fromVersion = h.DefaultService().FromVersion
-		toVersion = h.DefaultService().ToVersion
-	}
 
 	// Cluster setting was deleted at or before the from version so no nodes
 	// know about the setting.
@@ -475,7 +464,7 @@ func canMixedVersionUseDeletedClusterSetting(
 	// all the nodes on that version will know about the setting.
 	if toVersion.AtLeast(deletedVersion) {
 		if fromVersion.AtLeast(addedVersion) {
-			fromVersionNodes := h.Context().NodesInPreviousVersion()
+			fromVersionNodes := h.System.NodesInPreviousVersion()
 			if len(fromVersionNodes) > 0 {
 				return true, fromVersionNodes, nil
 			}
@@ -487,11 +476,11 @@ func canMixedVersionUseDeletedClusterSetting(
 	// at least the added version will know about the setting.
 
 	if fromVersion.AtLeast(addedVersion) {
-		return true, h.Context().Descriptor.Nodes, nil
+		return true, h.System.Descriptor.Nodes, nil
 	}
 
 	if toVersion.AtLeast(addedVersion) {
-		toVersionNodes := h.Context().NodesInNextVersion()
+		toVersionNodes := h.System.NodesInNextVersion()
 		if len(toVersionNodes) > 0 {
 			return true, toVersionNodes, nil
 		}
@@ -512,6 +501,9 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// 23.1. That mistake was then fixed (#110676) but, to simplify
 		// this test, we only create changefeeds in more recent versions.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
+		// We limit the number of upgrades to be performed in the test run because
+		// the test takes a significant amount of time to complete.
+		mixedversion.MaxUpgrades(3),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)

@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvpb
 
@@ -2525,15 +2520,13 @@ func (s *ScanStats) String() string {
 
 // RangeFeedEventSink is an interface for sending a single rangefeed event.
 type RangeFeedEventSink interface {
-	// Context returns the context for this stream.
-	Context() context.Context
-	// Send blocks until it sends the RangeFeedEvent, the stream is done, or the
-	// stream breaks. Send must be safe to call on the same stream in different
-	// goroutines.
-	Send(*RangeFeedEvent) error
-	// SendIsThreadSafe is a no-op declaration method. It is a contract that the
-	// interface has a thread-safe Send method.
-	SendIsThreadSafe()
+	// SendUnbuffered blocks until it sends the RangeFeedEvent, the stream is
+	// done, or the stream breaks. Send must be safe to call on the same stream in
+	// different goroutines.
+	SendUnbuffered(*RangeFeedEvent) error
+	// SendUnbufferedIsThreadSafe is a no-op declaration method. It is a contract
+	// that the interface has a thread-safe Send method.
+	SendUnbufferedIsThreadSafe()
 }
 
 // RangeFeedEventProducer is an adapter for receiving rangefeed events with either
@@ -2552,4 +2545,20 @@ func (writeOptions *WriteOptions) GetOriginID() uint32 {
 		return 0
 	}
 	return writeOptions.OriginID
+}
+
+func (writeOptions *WriteOptions) GetOriginTimestamp() hlc.Timestamp {
+	if writeOptions == nil {
+		return hlc.Timestamp{}
+	}
+	return writeOptions.OriginTimestamp
+}
+
+func (r *ConditionalPutRequest) Validate() error {
+	if !r.OriginTimestamp.IsEmpty() {
+		if r.AllowIfDoesNotExist {
+			return errors.AssertionFailedf("invalid ConditionalPutRequest: AllowIfDoesNotExist and non-empty OriginTimestamp are incompatible")
+		}
+	}
+	return nil
 }

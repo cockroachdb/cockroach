@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package types
 
@@ -100,6 +95,7 @@ import (
 // | VARCHAR(N)        | STRING         | T_varchar     | 0         | N     |
 // | CHAR              | STRING         | T_bpchar      | 0         | 1     |
 // | CHAR(N)           | STRING         | T_bpchar      | 0         | N     |
+// | BPCHAR            | STRING         | T_bpchar      | 0         | 0     |
 // | "char"            | STRING         | T_char        | 0         | 0     |
 // | NAME              | STRING         | T_name        | 0         | 0     |
 // |                   |                |               |           |       |
@@ -119,6 +115,7 @@ import (
 // | FLOAT4            | FLOAT          | T_float4      | 0         | 0     |
 // |                   |                |               |           |       |
 // | BIT               | BIT            | T_bit         | 0         | 1     |
+// | BIT(0)            | BIT            | T_bit         | 0         | 0     |
 // | BIT(N)            | BIT            | T_bit         | 0         | N     |
 // | VARBIT            | BIT            | T_varbit      | 0         | 0     |
 // | VARBIT(N)         | BIT            | T_varbit      | 0         | N     |
@@ -324,6 +321,14 @@ var (
 	// compatibility with PostgreSQL.
 	String = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_text, Locale: &emptyLocale}}
+
+	// BPChar is a CHAR type with an unspecified width. "BP" stands for
+	// "blank padded".
+	//
+	// It is reported as BPCHAR in SHOW CREATE and "character" in introspection
+	// for compatibility with PostgreSQL.
+	BPChar = &T{InternalType: InternalType{
+		Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale}}
 
 	// VarChar is equivalent to String, but has a differing OID (T_varchar),
 	// which makes it show up differently when displayed. It is reported as
@@ -720,20 +725,12 @@ var (
 
 // Unexported wrapper types.
 var (
-	// typeBit is the SQL BIT type. It is not exported to avoid confusion with
-	// the VarBit type, and confusion over whether its default Width is
-	// unspecified or is 1. More commonly used instead is the VarBit type.
+	// typeBit is the SQL BIT type with an unspecified width. It is not exported
+	// to avoid confusion with the VarBit type, and confusion over whether its
+	// default Width is unspecified or is 1. More commonly used instead is the
+	// VarBit type.
 	typeBit = &T{InternalType: InternalType{
 		Family: BitFamily, Oid: oid.T_bit, Locale: &emptyLocale}}
-
-	// typeBpChar is a CHAR type with an unspecified width. "bp" stands for
-	// "blank padded". It is not exported to avoid confusion with QChar, as well
-	// as confusion over CHAR's default width of 1.
-	//
-	// It is reported as CHAR in SHOW CREATE and "character" in introspection for
-	// compatibility with PostgreSQL.
-	typeBpChar = &T{InternalType: InternalType{
-		Family: StringFamily, Oid: oid.T_bpchar, Locale: &emptyLocale}}
 
 	// typeQChar is a "char" type with an unspecified width. It is not exported
 	// to avoid confusion with QChar. The "char" type should always have a width
@@ -942,7 +939,7 @@ func MakeVarChar(width int32) *T {
 // the given max # characters (0 = unspecified number).
 func MakeChar(width int32) *T {
 	if width == 0 {
-		return typeBpChar
+		return BPChar
 	}
 	if width < 0 {
 		panic(errors.AssertionFailedf("width %d cannot be negative", width))
@@ -1624,6 +1621,9 @@ func (t *T) Name() string {
 		case oid.T_text:
 			return "string"
 		case oid.T_bpchar:
+			if t.Width() == 0 {
+				return "bpchar"
+			}
 			return "char"
 		case oid.T_char:
 			// Yes, that's the name. The ways of PostgreSQL are inscrutable.
@@ -1929,17 +1929,27 @@ func (t *T) InformationSchemaName() string {
 func (t *T) SQLString() string {
 	switch t.Family() {
 	case BitFamily:
-		o := t.Oid()
-		typName := "BIT"
-		if o == oid.T_varbit {
-			typName = "VARBIT"
+		switch t.Oid() {
+		case oid.T_bit:
+			typName := "BIT"
+			// BIT(1) pretty-prints as just BIT.
+			// BIT(0) represents a BIT type with unspecified length. This is a
+			// divergence from Postgres which does not allow this type and has
+			// no way to represent it in SQL. It is required in order for it to
+			// be correctly serialized into SQL and evaluated during distributed
+			// query execution. VARBIT cannot be used because it has a different
+			// OID.
+			if t.Width() != 1 {
+				typName = fmt.Sprintf("%s(%d)", typName, t.Width())
+			}
+			return typName
+		default:
+			typName := "VARBIT"
+			if t.Width() > 0 {
+				typName = fmt.Sprintf("%s(%d)", typName, t.Width())
+			}
+			return typName
 		}
-		// BIT(1) pretty-prints as just BIT.
-		if (o != oid.T_varbit && t.Width() > 1) ||
-			(o == oid.T_varbit && t.Width() > 0) {
-			typName = fmt.Sprintf("%s(%d)", typName, t.Width())
-		}
-		return typName
 	case IntFamily:
 		switch t.Width() {
 		case 16:
@@ -2954,6 +2964,9 @@ func (t *T) stringTypeSQL() string {
 	case oid.T_varchar:
 		typName = "VARCHAR"
 	case oid.T_bpchar:
+		if t.Width() == 0 {
+			return "BPCHAR"
+		}
 		typName = "CHAR"
 	case oid.T_char:
 		// Yes, that's the name. The ways of PostgreSQL are inscrutable.

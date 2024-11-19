@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -1111,7 +1106,7 @@ func (r *Replica) collectSpans(
 	latchSpans, lockSpans = spanset.New(), lockspanset.New()
 	r.mu.RLock()
 	desc := r.descRLocked()
-	liveCount := r.mu.state.Stats.LiveCount
+	liveCount := r.shMu.state.Stats.LiveCount
 	r.mu.RUnlock()
 	// TODO(bdarnell): need to make this less global when local
 	// latches are used more heavily. For example, a split will

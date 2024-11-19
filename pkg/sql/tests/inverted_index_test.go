@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests_test
 
@@ -21,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 const numRandomJSONs = 1000
@@ -42,14 +37,14 @@ func TestInvertedIndex(t *testing.T) {
 	db.Exec(t, "CREATE DATABASE IF NOT EXISTS test")
 	db.Exec(t, "CREATE TABLE test.jsons (i INT PRIMARY KEY, j JSONB)")
 
-	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 
 	// Grab a bunch of random JSONs. We insert half before we add the inverted
 	// index and half after.
 	jsons := make([]json.JSON, numRandomJSONs)
 	for i := 0; i < numRandomJSONs; i++ {
 		var err error
-		jsons[i], err = json.Random(jsonComplexity, r)
+		jsons[i], err = json.Random(jsonComplexity, rng)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -87,7 +82,7 @@ func TestInvertedIndex(t *testing.T) {
 	perm := rand.Perm(len(jsons))
 	for i := 0; i < docsToUpdate; i++ {
 		var err error
-		jsons[perm[i]], err = json.Random(jsonComplexity, r)
+		jsons[perm[i]], err = json.Random(jsonComplexity, rng)
 		if err != nil {
 			t.Fatal(err)
 		}

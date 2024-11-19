@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -43,10 +38,6 @@ func Test_processReleaseData(t *testing.T) {
 			Latest:      "23.1.1",
 			Predecessor: "22.2",
 			Withdrawn:   []string{"23.1.0"},
-		},
-		"23.2": {
-			Latest:      "23.2.0-beta.1",
-			Predecessor: "23.1",
 		},
 	}
 	require.Equal(t, expectedReleaseData, processReleaseData(data))

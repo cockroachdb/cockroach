@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -48,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -57,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -113,6 +108,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
+	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -399,9 +395,6 @@ type sqlServerArgs struct {
 	// grpc is the RPC service.
 	grpc *grpcServer
 
-	// eventsExporter communicates with the Observability Service.
-	eventsExporter obs.EventsExporterInterface
-
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.
 	externalStorageBuilder *externalStorageBuilder
@@ -653,6 +646,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			},
 			jobAdoptionStopFile,
 			jobsKnobs,
+			cfg.CidrLookup,
 		)
 	}
 	cfg.registry.AddMetricStruct(jobRegistry.MetricsStruct())
@@ -1055,10 +1049,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeProber:                rangeprober.NewRangeProber(cfg.db),
 		DescIDGenerator:            descidgen.NewGenerator(cfg.Settings, codec, cfg.db),
 		RangeStatsFetcher:          rangeStatsFetcher,
-		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
 		CidrLookup:                 cfg.BaseConfig.CidrLookup,
+		LicenseEnforcer:            cfg.SQLConfig.LicenseEnforcer,
 	}
 
 	if codec.ForSystemTenant() {
@@ -1147,6 +1141,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	var tableStatsTestingKnobs *stats.TableStatsTestingKnobs
 	if tableStatsKnobs := cfg.TestingKnobs.TableStatsKnobs; tableStatsKnobs != nil {
 		tableStatsTestingKnobs = tableStatsKnobs.(*stats.TableStatsTestingKnobs)
+	}
+	if tableMetadataKnobs := cfg.TestingKnobs.TableMetadata; tableMetadataKnobs != nil {
+		execCfg.TableMetadataKnobs = tableMetadataKnobs.(*tablemetadatacacheutil.TestingKnobs)
 	}
 
 	// Set up internal memory metrics for use by internal SQL executors.
@@ -1277,19 +1274,20 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				})
 		}
 		systemDeps = upgrade.SystemDeps{
-			Cluster:       c,
-			DB:            cfg.internalDB,
-			Settings:      cfg.Settings,
-			JobRegistry:   jobRegistry,
-			Stopper:       cfg.stopper,
-			KeyVisKnobs:   keyVisKnobs,
-			SQLStatsKnobs: sqlStatsKnobs,
+			Cluster:            c,
+			DB:                 cfg.internalDB,
+			Settings:           cfg.Settings,
+			JobRegistry:        jobRegistry,
+			Stopper:            cfg.stopper,
+			KeyVisKnobs:        keyVisKnobs,
+			SQLStatsKnobs:      sqlStatsKnobs,
+			TenantInfoAccessor: cfg.tenantConnect,
 		}
 
 		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgradebase.TestingKnobs)
 		upgradeMgr = upgrademanager.NewManager(
 			systemDeps, leaseMgr, cfg.circularInternalExecutor, jobRegistry, codec,
-			cfg.Settings, clusterIDForSQL, knobs,
+			cfg.Settings, clusterIDForSQL, knobs, execCfg.LicenseEnforcer,
 		)
 		execCfg.UpgradeJobDeps = upgradeMgr
 		execCfg.VersionUpgradeHook = upgradeMgr.Migrate
@@ -1763,6 +1761,8 @@ func (s *SQLServer) preStart(
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
 
+	s.startLicenseEnforcer(ctx, knobs)
+
 	s.execCfg.PGListenerRegistry.Start(ctx)
 
 	// Report a warning if the server is being shut down via the stopper
@@ -1912,6 +1912,37 @@ func (s *SQLServer) SQLInstanceID() base.SQLInstanceID {
 // testing.
 func (s *SQLServer) StartDiagnostics(ctx context.Context) {
 	s.diagnosticsReporter.PeriodicallyReportDiagnostics(ctx, s.stopper)
+}
+
+func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.TestingKnobs) {
+	// Start the license enforcer. This is only started for the system tenant since
+	// it requires access to the system keyspace. For secondary tenants, this struct
+	// is shared to provide access to the values cached from the KV read.
+	licenseEnforcer := s.execCfg.LicenseEnforcer
+	opts := []license.Option{
+		license.WithDB(s.internalDB),
+		license.WithSystemTenant(s.execCfg.Codec.ForSystemTenant()),
+		license.WithTelemetryStatusReporter(s.diagnosticsReporter),
+	}
+	if s.tenantConnect != nil {
+		opts = append(opts, license.WithMetadataAccessor(s.tenantConnect))
+	}
+	if knobs.LicenseTestingKnobs != nil {
+		opts = append(opts, license.WithTestingKnobs(knobs.LicenseTestingKnobs.(*license.TestingKnobs)))
+	}
+	err := startup.RunIdempotentWithRetry(ctx, s.stopper.ShouldQuiesce(), "license enforcer start",
+		func(ctx context.Context) error {
+			return licenseEnforcer.Start(ctx, s.cfg.Settings, opts...)
+		})
+	// This is not a critical component. If it fails to start, we log a warning
+	// rather than prevent the entire server from starting.
+	if err != nil {
+		log.Warningf(ctx, "failed to start the license enforcer: %v", err)
+	}
+}
+
+func (s *SQLServer) disableLicenseEnforcement(ctx context.Context) {
+	s.execCfg.LicenseEnforcer.Disable(ctx)
 }
 
 // AnnotateCtx annotates the given context with the server tracer and tags.
@@ -2124,6 +2155,10 @@ func (s *SQLServer) ExecutorConfig() *sql.ExecutorConfig {
 // InternalExecutor returns an executor for internal SQL queries.
 func (s *SQLServer) InternalExecutor() isql.Executor {
 	return s.internalExecutor
+}
+
+func (s *SQLServer) PGServer() *pgwire.Server {
+	return s.pgServer
 }
 
 // MetricsRegistry returns the application-level metrics registry.

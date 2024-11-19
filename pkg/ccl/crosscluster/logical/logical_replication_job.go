@@ -1,21 +1,18 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/physical"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -27,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/lib/pq/oid"
 )
 
@@ -158,7 +158,7 @@ func (r *logicalReplicationResumer) ingest(
 	}
 
 	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
-	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.srcTableIDsToDestMeta)
+	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.destTableBySrcID)
 	if err := dlqClient.Create(ctx); err != nil {
 		return errors.Wrap(err, "failed to create dead letter queue")
 	}
@@ -207,11 +207,6 @@ func (r *logicalReplicationResumer) ingest(
 	}()
 
 	execPlan := func(ctx context.Context) error {
-
-		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
-			log.Warningf(ctx, "received unexpected producer meta: %v", meta)
-			return nil
-		}
 		rh := rowHandler{
 			replicatedTimeAtStart: replicatedTimeAtStart,
 			frontier:              frontier,
@@ -219,11 +214,12 @@ func (r *logicalReplicationResumer) ingest(
 			settings:              &execCfg.Settings.SV,
 			job:                   r.job,
 			frontierUpdates:       heartbeatSender.FrontierUpdates,
+			rangeStats:            newRangeStatsCollector(planInfo.writeProcessorCount),
 		}
 		rowResultWriter := sql.NewCallbackResultWriter(rh.handleRow)
 		distSQLReceiver := sql.MakeDistSQLReceiver(
 			ctx,
-			sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
+			sql.NewMetadataCallbackWriter(rowResultWriter, rh.handleMeta),
 			tree.Rows,
 			execCfg.RangeDescriptorCache,
 			nil, /* txn */
@@ -292,9 +288,10 @@ type logicalReplicationPlanner struct {
 }
 
 type logicalReplicationPlanInfo struct {
-	sourceSpans           []roachpb.Span
-	streamAddress         []string
-	srcTableIDsToDestMeta map[descpb.ID]dstTableMetadata
+	sourceSpans         []roachpb.Span
+	streamAddress       []string
+	destTableBySrcID    map[descpb.ID]dstTableMetadata
+	writeProcessorCount int
 }
 
 func makeLogicalReplicationPlanner(
@@ -331,7 +328,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		progress = p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 		payload  = p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
 		info     = logicalReplicationPlanInfo{
-			srcTableIDsToDestMeta: make(map[descpb.ID]dstTableMetadata),
+			destTableBySrcID: make(map[descpb.ID]dstTableMetadata),
 		}
 	)
 	asOf := progress.ReplicatedTime
@@ -357,10 +354,16 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		defaultFnOID = catid.FuncIDToOID(catid.DescID(defaultFnID))
 	}
 
-	tablesMd := make(map[int32]execinfrapb.TableReplicationMetadata)
+	crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(plan.SourceTypes)
+	tableMetadataByDestID := make(map[int32]execinfrapb.TableReplicationMetadata)
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
 		for _, pair := range payload.ReplicationPairs {
 			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
+			cpy := tabledesc.NewBuilder(&srcTableDesc).BuildCreatedMutableTable()
+			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, crossClusterResolver); err != nil {
+				return err
+			}
+			srcTableDesc = *cpy.TableDesc()
 
 			// Look up fully qualified destination table name
 			dstTableDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(pair.DstDescriptorID))
@@ -383,14 +386,14 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 				fnOID = defaultFnOID
 			}
 
-			tablesMd[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
+			tableMetadataByDestID[pair.DstDescriptorID] = execinfrapb.TableReplicationMetadata{
 				SourceDescriptor:              srcTableDesc,
 				DestinationParentDatabaseName: dbDesc.GetName(),
 				DestinationParentSchemaName:   scDesc.GetName(),
 				DestinationTableName:          dstTableDesc.GetName(),
 				DestinationFunctionOID:        uint32(fnOID),
 			}
-			info.srcTableIDsToDestMeta[descpb.ID(pair.SrcDescriptorID)] = dstTableMetadata{
+			info.destTableBySrcID[descpb.ID(pair.SrcDescriptorID)] = dstTableMetadata{
 				database: dbDesc.GetName(),
 				schema:   scDesc.GetName(),
 				table:    dstTableDesc.GetName(),
@@ -418,11 +421,12 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		payload.ReplicationStartTime,
 		progress.ReplicatedTime,
 		progress.Checkpoint,
-		tablesMd,
+		tableMetadataByDestID,
 		p.job.ID(),
 		streampb.StreamID(payload.StreamID),
-		payload.FilterRangefeed,
+		payload.Discard,
 		payload.Mode,
+		payload.MetricsLabel,
 	)
 	if err != nil {
 		return nil, nil, info, err
@@ -448,6 +452,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 					LogicalReplicationWriter: &sp,
 				},
 			})
+			info.writeProcessorCount++
 		}
 	}
 
@@ -474,7 +479,25 @@ type rowHandler struct {
 	job                   *jobs.Job
 	frontierUpdates       chan hlc.Timestamp
 
+	rangeStats rangeStatsByProcessorID
+
 	lastPartitionUpdate time.Time
+}
+
+func (rh *rowHandler) handleMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+	if meta.BulkProcessorProgress == nil {
+		log.VInfof(ctx, 2, "received non progress producer meta: %v", meta)
+		return nil
+	}
+
+	var stats streampb.StreamEvent_RangeStats
+	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &stats); err != nil {
+		return errors.Wrap(err, "unable to unmarshal progress details")
+	}
+
+	rh.rangeStats.Add(meta.BulkProcessorProgress.ProcessorID, &stats)
+
+	return nil
 }
 
 func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
@@ -516,18 +539,42 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			progress := md.Progress
 			prog := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 			prog.Checkpoint.ResolvedSpans = frontierResolvedSpans
-			if rh.replicatedTimeAtStart.Less(replicatedTime) {
+
+			// TODO (msbutler): add ldr initial and lagging range timeseries metrics.
+			aggRangeStats, fractionCompleted, status := rh.rangeStats.RollupStats()
+			progress.RunningStatus = status
+
+			if replicatedTime.IsSet() {
 				prog.ReplicatedTime = replicatedTime
 				// The HighWater is for informational purposes
 				// only.
 				progress.Progress = &jobspb.Progress_HighWater{
 					HighWater: &replicatedTime,
 				}
+			} else if fractionCompleted > 0 && fractionCompleted < 1 {
+				// If 0, the coordinator has not gotten a complete range stats update
+				// from all nodes yet.
+				//
+				// If 1, the job is all caught up.
+				progress.Progress = &jobspb.Progress_FractionCompleted{
+					FractionCompleted: fractionCompleted,
+				}
 			}
-			progress.RunningStatus = fmt.Sprintf("logical replication running: %s", replicatedTime.GoTime())
 			ju.UpdateProgress(progress)
 			if md.RunStats != nil && md.RunStats.NumRuns > 1 {
 				ju.UpdateRunStats(1, md.RunStats.LastRun)
+			}
+			if l := rh.job.Details().(jobspb.LogicalReplicationDetails).MetricsLabel; l != "" {
+				rh.metrics.LabeledReplicatedTime.Update(map[string]string{"label": l}, replicatedTime.GoTime().Unix())
+
+				if aggRangeStats.RangeCount != 0 {
+					rh.metrics.LabeledScanningRanges.Update(map[string]string{"label": l}, aggRangeStats.ScanningRangeCount)
+					rh.metrics.LabeledCatchupRanges.Update(map[string]string{"label": l}, aggRangeStats.LaggingRangeCount)
+				}
+			}
+			if aggRangeStats.RangeCount != 0 {
+				rh.metrics.ScanningRanges.Update(aggRangeStats.ScanningRangeCount)
+				rh.metrics.CatchupRanges.Update(aggRangeStats.LaggingRangeCount)
 			}
 			return nil
 		}); err != nil {
@@ -538,8 +585,6 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-
-	rh.metrics.ReplicatedTimeSeconds.Update(replicatedTime.GoTime().Unix())
 	return nil
 }
 
@@ -599,8 +644,17 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, _ error,
 ) error {
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
-	metrics := execCfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics)
-	metrics.ReplicatedTimeSeconds.Update(0)
+
+	// Remove the LDR job ID from the destination table descriptors.
+	details := r.job.Details().(jobspb.LogicalReplicationDetails)
+	destTableIDs := make([]uint32, 0, len(details.ReplicationPairs))
+	for _, pair := range details.ReplicationPairs {
+		destTableIDs = append(destTableIDs, uint32(pair.DstDescriptorID))
+	}
+	if err := replicationutils.UnlockLDRTables(ctx, execCfg, destTableIDs, r.job.ID()); err != nil {
+		return err
+	}
+
 	r.completeProducerJob(ctx, execCfg.InternalDB)
 	return nil
 }
@@ -662,6 +716,7 @@ func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
 }
 
 func init() {
+	m := MakeMetrics(base.DefaultHistogramWindowInterval())
 	jobs.RegisterConstructor(
 		jobspb.TypeLogicalReplication,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
@@ -669,7 +724,8 @@ func init() {
 				job: job,
 			}
 		},
-		jobs.WithJobMetrics(MakeMetrics(base.DefaultHistogramWindowInterval())),
+		jobs.WithJobMetrics(m),
+		jobs.WithResolvedMetric(m.(*Metrics).ReplicatedTimeSeconds),
 		jobs.UsesTenantCostControl,
 	)
 }

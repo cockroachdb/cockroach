@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -81,11 +76,12 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 			},
 		},
 	}
-	var settingsCache []roachpb.KeyValue
+	var expectedSettingsCache []roachpb.KeyValue
 	ts := serverutils.StartServerOnly(t, serverArgs)
 	closedts.TargetDuration.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
 	closedts.SideTransportCloseInterval.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
 	kvserver.RangeFeedRefreshInterval.Override(ctx, &ts.ClusterSettings().SV, 10*time.Millisecond)
+	const expectedSettingsCount = 3
 	testutils.SucceedsSoon(t, func() error {
 		store, err := ts.GetStores().(*kvserver.Stores).GetStore(1)
 		if err != nil {
@@ -95,10 +91,18 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if len(settings) == 0 {
-			return errors.New("empty settings loaded from store")
+
+		// Previously, we checked if len(settings) > 0, which led to a race
+		// condition where, in rare cases (under --race), the settings watcher
+		// had not yet received some settings through rangefeed. If we exit this
+		// function and assign expectedSettingsCount with those incomplete
+		// settings, the settings watcher may receive the remaining settings
+		// before we stop the server. See issue #124419 for more details.
+		if len(settings) < expectedSettingsCount {
+			return errors.Newf("unexpected count of settings: expected %d, found %d",
+				expectedSettingsCount, len(settings))
 		}
-		settingsCache = settings
+		expectedSettingsCache = settings
 		return nil
 	})
 	ts.Stopper().Stop(context.Background())
@@ -141,11 +145,11 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		if initialBoot {
 			return errors.New("server should not require initialization")
 		}
-		if !assert.ObjectsAreEqual(state.initialSettingsKVs, settingsCache) {
+		if !assert.ObjectsAreEqual(expectedSettingsCache, state.initialSettingsKVs) {
 			return errors.Newf(`initial state settings KVs does not match expected settings
 Expected: %+v
 Actual:   %+v
-`, settingsCache, state.initialSettingsKVs)
+`, expectedSettingsCache, state.initialSettingsKVs)
 		}
 		return nil
 	})

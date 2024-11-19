@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -24,47 +19,18 @@ import (
 func (p *planner) SetSessionCharacteristics(
 	ctx context.Context, n *tree.SetSessionCharacteristics,
 ) (planNode, error) {
-	originalLevel := n.Modes.Isolation
-	upgradedLevel := false
-	upgradedDueToLicense := false
 	allowReadCommitted := allowReadCommittedIsolation.Get(&p.execCfg.Settings.SV)
-	allowSnapshot := allowSnapshotIsolation.Get(&p.execCfg.Settings.SV)
+	allowRepeatableRead := allowRepeatableReadIsolation.Get(&p.execCfg.Settings.SV)
 	hasLicense := base.CCLDistributionAndEnterpriseEnabled(p.ExecCfg().Settings)
 	if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
 		// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
-		switch n.Modes.Isolation {
-		case tree.UnspecifiedIsolation:
-		// Nothing to do.
-		case tree.ReadUncommittedIsolation:
-			upgradedLevel = true
-			fallthrough
-		case tree.ReadCommittedIsolation:
-			level := tree.SerializableIsolation
-			if allowReadCommitted && hasLicense {
-				level = tree.ReadCommittedIsolation
-			} else {
-				upgradedLevel = true
-				if allowReadCommitted && !hasLicense {
-					upgradedDueToLicense = true
-				}
+		if n.Modes.Isolation != tree.UnspecifiedIsolation {
+			level, upgraded, upgradedDueToLicense := n.Modes.Isolation.UpgradeToEnabledLevel(
+				allowReadCommitted, allowRepeatableRead, hasLicense)
+			if f := p.sessionDataMutatorIterator.upgradedIsolationLevel; upgraded && f != nil {
+				f(ctx, n.Modes.Isolation, upgradedDueToLicense)
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
-		case tree.RepeatableReadIsolation:
-			upgradedLevel = true
-			fallthrough
-		case tree.SnapshotIsolation:
-			level := tree.SerializableIsolation
-			if allowSnapshot && hasLicense {
-				level = tree.SnapshotIsolation
-			} else {
-				upgradedLevel = true
-				if allowSnapshot && !hasLicense {
-					upgradedDueToLicense = true
-				}
-			}
-			m.SetDefaultTransactionIsolationLevel(level)
-		default:
-			m.SetDefaultTransactionIsolationLevel(n.Modes.Isolation)
 		}
 
 		// Note: We also support SET DEFAULT_TRANSACTION_PRIORITY TO ' .... '.
@@ -115,10 +81,6 @@ func (p *planner) SetSessionCharacteristics(
 	default:
 		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 			"unsupported default deferrable mode: %s", n.Modes.Deferrable)
-	}
-
-	if f := p.sessionDataMutatorIterator.upgradedIsolationLevel; upgradedLevel && f != nil {
-		f(ctx, originalLevel, upgradedDueToLicense)
 	}
 
 	return newZeroNode(nil /* columns */), nil

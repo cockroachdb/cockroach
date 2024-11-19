@@ -1,19 +1,13 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"fmt"
 	"io"
 	"math/rand"
@@ -23,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -149,11 +144,53 @@ func parseTSInput(t *testing.T, input string, w tsWriter) {
 	require.NoError(t, err)
 }
 
+func parseDDInput(t *testing.T, input string, w *datadogWriter) {
+	var data *DatadogSeries
+	var source, storeNodeKey string
+
+	for _, s := range strings.Split(input, "\n") {
+		nameValueTimestamp := strings.Split(s, " ")
+		sl := reCrStoreNode.FindStringSubmatch(nameValueTimestamp[0])
+		if len(sl) != 0 {
+			storeNodeKey = sl[1]
+			if storeNodeKey == "node" {
+				storeNodeKey += "_id"
+			}
+		}
+		metricName := sl[2]
+
+		// Advance to a new struct anytime name or source changes
+		if data == nil ||
+			(data != nil && data.Metric != metricName ||
+				(data != nil && source != nameValueTimestamp[1])) {
+			if data != nil {
+				err := w.emitDataDogMetrics([]DatadogSeries{*data})
+				require.NoError(t, err)
+			}
+			data = &DatadogSeries{
+				Metric: metricName,
+			}
+			source = nameValueTimestamp[1]
+			data.Tags = append(data.Tags, fmt.Sprintf("%s:%s", storeNodeKey, nameValueTimestamp[1]))
+		}
+		value, err := strconv.ParseFloat(nameValueTimestamp[2], 64)
+		require.NoError(t, err)
+		ts, err := strconv.ParseInt(nameValueTimestamp[3], 10, 64)
+		require.NoError(t, err)
+		data.Points = append(data.Points, DatadogPoint{
+			Value:     value,
+			Timestamp: ts,
+		})
+	}
+	err := w.emitDataDogMetrics([]DatadogSeries{*data})
+	require.NoError(t, err)
+}
+
 func TestTsDumpFormatsDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer testutils.TestingHook(&newUploadID, func(cluster string) string {
-		return fmt.Sprintf("%s-1234", cluster)
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
 	})()
 
 	datadriven.Walk(t, "testdata/tsdump", func(t *testing.T, path string) {
@@ -165,12 +202,12 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 				var testReqs []*http.Request
 				var series int
 				d.ScanArgs(t, "series-threshold", &series)
-				w = makeDatadogWriter(context.Background(), "https://example.com/data", false, "api-key", series, func(req *http.Request) error {
+				var ddwriter = makeDatadogWriter("https://example.com/data", false, "api-key", series, func(req *http.Request) error {
 					testReqs = append(testReqs, req)
 					return nil
 				})
 
-				parseTSInput(t, d.Input, w)
+				parseDDInput(t, d.Input, ddwriter)
 
 				out := strings.Builder{}
 				for _, tr := range testReqs {

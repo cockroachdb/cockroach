@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package schemadesc
 
@@ -143,6 +138,15 @@ func (sdb *schemaDescriptorBuilder) StripDanglingBackReferences(
 func (sdb *schemaDescriptorBuilder) StripNonExistentRoles(
 	roleExists func(role username.SQLUsername) bool,
 ) error {
+	// Remove any non-existent roles from default privileges.
+	defaultPrivs := sdb.original.GetDefaultPrivileges()
+	if defaultPrivs != nil {
+		err := sdb.stripNonExistentRolesOnDefaultPrivs(sdb.original.DefaultPrivileges.DefaultPrivilegesPerRole, roleExists)
+		if err != nil {
+			return err
+		}
+	}
+
 	// If the owner doesn't exist, change the owner to admin.
 	if !roleExists(sdb.maybeModified.GetPrivileges().Owner()) {
 		sdb.maybeModified.Privileges.OwnerProto = username.AdminRoleName().EncodeProto()
@@ -158,6 +162,54 @@ func (sdb *schemaDescriptorBuilder) StripNonExistentRoles(
 	}
 	if len(newPrivs) != len(sdb.maybeModified.Privileges.Users) {
 		sdb.maybeModified.Privileges.Users = newPrivs
+		sdb.changes.Add(catalog.StrippedNonExistentRoles)
+	}
+	return nil
+}
+
+func (sdb *schemaDescriptorBuilder) stripNonExistentRolesOnDefaultPrivs(
+	defaultPrivs []catpb.DefaultPrivilegesForRole, roleExists func(role username.SQLUsername) bool,
+) error {
+	hasChanges := false
+	newDefaultPrivs := make([]catpb.DefaultPrivilegesForRole, 0, len(defaultPrivs))
+	for _, dp := range defaultPrivs {
+		// Skip adding if we are dealing with an explicit role and the role does
+		// not exist.
+		if dp.IsExplicitRole() && !roleExists(dp.GetExplicitRole().UserProto.Decode()) {
+			hasChanges = true
+			continue
+		}
+
+		newDefaultPrivilegesPerObject := make(map[privilege.TargetObjectType]catpb.PrivilegeDescriptor, len(dp.DefaultPrivilegesPerObject))
+
+		for objTyp, privDesc := range dp.DefaultPrivilegesPerObject {
+			newUserPrivs := make([]catpb.UserPrivileges, 0, len(privDesc.Users))
+			for _, userPriv := range privDesc.Users {
+				// Only add users where the role exists.
+				if roleExists(userPriv.UserProto.Decode()) {
+					newUserPrivs = append(newUserPrivs, userPriv)
+				} else {
+					hasChanges = true
+				}
+			}
+			// If we have not filtered out all user privileges, update the privilege
+			// descriptor with our newUserPrivs -- along with our map.
+			if len(newUserPrivs) != 0 {
+				privDesc.Users = newUserPrivs
+				newDefaultPrivilegesPerObject[objTyp] = privDesc
+			}
+		}
+
+		// If we have not filtered out our map of default privileges, update the
+		// default privileges for role and add that to our list of newDefaultPrivs.
+		if len(newDefaultPrivilegesPerObject) != 0 {
+			dp.DefaultPrivilegesPerObject = newDefaultPrivilegesPerObject
+			newDefaultPrivs = append(newDefaultPrivs, dp)
+		}
+	}
+
+	if hasChanges {
+		sdb.maybeModified.DefaultPrivileges.DefaultPrivilegesPerRole = newDefaultPrivs
 		sdb.changes.Add(catalog.StrippedNonExistentRoles)
 	}
 	return nil

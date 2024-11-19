@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package vector
 
@@ -19,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/num32"
 )
 
 // MaxDim is the maximum number of dimensions a vector can have.
@@ -66,6 +62,15 @@ func ParseVector(input string) (T, error) {
 	}
 
 	return vector, nil
+}
+
+// AsSet returns this vector a set of one vector.
+func (v T) AsSet() Set {
+	return Set{
+		Dims:  len(v),
+		Count: 1,
+		Data:  v[:len(v):len(v)],
+	}
 }
 
 // String implements the fmt.Stringer interface.
@@ -133,24 +138,12 @@ func Decode(b []byte) (ret T, err error) {
 	return ret, nil
 }
 
-func checkDims(t T, t2 T) error {
-	if len(t) != len(t2) {
-		return pgerror.Newf(pgcode.DataException, "different vector dimensions %d and %d", len(t), len(t2))
-	}
-	return nil
-}
-
 // L1Distance returns the L1 (Manhattan) distance between t and t2.
 func L1Distance(t T, t2 T) (float64, error) {
 	if err := checkDims(t, t2); err != nil {
 		return 0, err
 	}
-	var distance float32
-	for i := range len(t) {
-		diff := t[i] - t2[i]
-		distance += float32(math.Abs(float64(diff)))
-	}
-	return float64(distance), nil
+	return float64(num32.L1Distance(t, t2)), nil
 }
 
 // L2Distance returns the Euclidean distance between t and t2.
@@ -158,29 +151,38 @@ func L2Distance(t T, t2 T) (float64, error) {
 	if err := checkDims(t, t2); err != nil {
 		return 0, err
 	}
-	var distance float32
-	for i := range len(t) {
-		diff := t[i] - t2[i]
-		distance += diff * diff
-	}
 	// TODO(queries): check for overflow and validate intermediate result if needed.
-	return math.Sqrt(float64(distance)), nil
+	// NOTE: This does not use the num32.L2Distance function because it needs to
+	// return a float64 value.
+	return math.Sqrt(float64(num32.L2SquaredDistance(t, t2))), nil
 }
 
-// CosDistance returns the cosine distance between t and t2.
+// CosDistance returns the cosine distance between t and t2. This represents the
+// similarity between the two vectors, ranging from 0 (most similar) to 2 (least
+// similar). Only the angle between the vectors matters; the norms (magnitudes)
+// are irrelevant.
 func CosDistance(t T, t2 T) (float64, error) {
 	if err := checkDims(t, t2); err != nil {
 		return 0, err
 	}
-	var distance, normA, normB float32
-	for i := range len(t) {
-		distance += t[i] * t2[i]
+
+	// Compute the cosine of the angle between the two vectors as their dot
+	// product divided by the product of their norms:
+	//      t·t2
+	//  -----------
+	//  ||t|| ||t2||
+	var dot, normA, normB float32
+	for i := range t {
+		dot += t[i] * t2[i]
 		normA += t[i] * t[i]
 		normB += t2[i] * t2[i]
 	}
-	// Use sqrt(a * b) over sqrt(a) * sqrt(b)
-	similarity := float64(distance) / math.Sqrt(float64(normA)*float64(normB))
-	/* Keep in range */
+
+	// Use sqrt(a * b) over sqrt(a) * sqrt(b) to compute norms.
+	similarity := float64(dot) / math.Sqrt(float64(normA)*float64(normB))
+
+	// Cosine distance = 1 - cosine similarity. Ensure that similarity always
+	// stays within [-1, 1] despite any floating point arithmetic error.
 	if similarity > 1 {
 		similarity = 1
 	} else if similarity < -1 {
@@ -194,11 +196,7 @@ func InnerProduct(t T, t2 T) (float64, error) {
 	if err := checkDims(t, t2); err != nil {
 		return 0, err
 	}
-	var distance float32
-	for i := range len(t) {
-		distance += t[i] * t2[i]
-	}
-	return float64(distance), nil
+	return float64(num32.Dot(t, t2)), nil
 }
 
 // NegInnerProduct returns the negative inner product of t1 and t2.
@@ -214,6 +212,8 @@ func Norm(t T) float64 {
 		norm += float64(t[i]) * float64(t[i])
 	}
 	// TODO(queries): check for overflow and validate intermediate result if needed.
+	// NOTE: This does not use the num32.Norm function because it needs to return
+	// a float64 value.
 	return math.Sqrt(norm)
 }
 
@@ -285,4 +285,11 @@ func Random(rng *rand.Rand) T {
 		}
 	}
 	return v
+}
+
+func checkDims(t T, t2 T) error {
+	if len(t) != len(t2) {
+		return pgerror.Newf(pgcode.DataException, "different vector dimensions %d and %d", len(t), len(t2))
+	}
+	return nil
 }

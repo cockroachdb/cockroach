@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package fmtsafe
 
@@ -125,12 +120,16 @@ var requireConstFmt = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Fatalf":   true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Panicf":   true,
 
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Debugf":   true,
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Infof":    true,
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Warningf": true,
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Errorf":   true,
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Fatalf":   true,
-	"(github.com/cockroachdb/cockroach/pkg/raft.Logger).Panicf":   true,
+	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace.traceValue).logf": true,
+
+	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2.LogTracker).errorf": true,
+
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Debugf":   true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Infof":    true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Warningf": true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Errorf":   true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Fatalf":   true,
+	"(github.com/cockroachdb/cockroach/pkg/raft/raftlogger.Logger).Panicf":   true,
 
 	"(google.golang.org/grpc/grpclog.Logger).Infof":    true,
 	"(google.golang.org/grpc/grpclog.Logger).Warningf": true,
@@ -169,6 +168,8 @@ var requireConstFmt = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvnemesis.logLogger).Logf": true,
 
 	"(github.com/cockroachdb/cockroach/pkg/kv/kvpb.TestPrinter).Printf": true,
+
+	"(*github.com/cockroachdb/cockroach/pkg/cloud/amazon.awsLogAdapter).Logf": true,
 
 	// Error things are populated in the init() message.
 }

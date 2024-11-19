@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package leases
 
@@ -183,9 +178,6 @@ func Status(ctx context.Context, nl NodeLiveness, i StatusInput) kvserverpb.Leas
 				// to replace it.
 				knownSuccessor := i.RaftStatus.Term > lease.Term && i.RaftStatus.Lead != raft.None
 				if !knownSuccessor {
-					// TODO(nvanbenschoten): we could introduce a new INDETERMINATE state
-					// for this case, instead of using ERROR. This would look a bit less
-					// unexpected.
 					status.State = kvserverpb.LeaseState_ERROR
 					status.ErrInfo = "leader lease is not held locally, cannot determine validity"
 					return status

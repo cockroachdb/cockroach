@@ -1,3 +1,6 @@
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
+//
 // Copyright 2023 The etcd Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +28,7 @@ func (env *InteractionEnv) handleSetRandomizedElectionTimeout(
 	t *testing.T, d datadriven.TestData,
 ) error {
 	idx := firstAsNodeIdx(t, d)
-	var timeout int
+	var timeout int64
 	d.ScanArgs(t, "timeout", &timeout)
 	require.NotZero(t, timeout)
 

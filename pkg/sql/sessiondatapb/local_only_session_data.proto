@@ -1,18 +1,14 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.sql.sessiondatapb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb";
 
 import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 
 // LocalOnlySessionData contains the serializable components of session
 // parameters that only influence execution on the gateway nodes.
@@ -305,7 +301,7 @@ message LocalOnlySessionData {
   int64 transaction_timeout = 81 [(gogoproto.casttype) = "time.Duration"];
   // SystemIdentityProto is the original name of the client presented to pgwire
   // before it was mapped to a SQL identifier.
-  string system_identity_proto = 82 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+  string system_identity_proto = 82;
   // DescriptorValidationMode indicates whether to validate the descriptors at
   // read and write time, at read time only, or never.
   int64 descriptor_validation_mode = 83 [(gogoproto.casttype) = "DescriptorValidationMode"];
@@ -545,6 +541,28 @@ message LocalOnlySessionData {
   // hoisting a volatile expression that is conditionally executed by a CASE,
   // COALESCE, or IFERR expression.
   bool optimizer_use_conditional_hoist_fix = 138;
+  // OptimizerPushLimitIntoProjectFilteredScan, when true, indicates that the
+  // optimizer should push limit expressions into projects of filtered scans.
+  bool optimizer_push_limit_into_project_filtered_scan = 139;
+  // OriginTimestampForLogicalDataReplication is the mvcc timestamp the data
+  // written in this session were originally written with before being
+  // replicated via Logical Data Replication.
+  util.hlc.Timestamp origin_timestamp_for_logical_data_replication = 140 [(gogoproto.nullable) = false];
+  // BypassPCRReaderCatalogAOST disables the AOST used by all user queries on
+  // the PCR reader catalog.
+  bool bypass_pcr_reader_catalog_aost = 141  [(gogoproto.customname) = "BypassPCRReaderCatalogAOST"];
+  // UnsafeAllowTriggersModifyingCascades, when true, allows row-level BEFORE
+  // triggers to modify or filter rows that are being updated or deleted as
+  // part of a cascading foreign key action. This is unsafe because it can
+  // lead to constraint violations.
+  bool unsafe_allow_triggers_modifying_cascades = 142;
+  // DisableVecUnionEagerCancellation disables the eager cancellation that is
+  // performed by the vectorized engine when transitioning into the draining
+  // state in some cases.
+  bool disable_vec_union_eager_cancellation = 143;
+  // RecursionDepthLimit is the maximum depth that nested trigger-function calls
+  // can reach.
+  int64 recursion_depth_limit = 144;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

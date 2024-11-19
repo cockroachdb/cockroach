@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import classNames from "classnames/bind";
 import hljs from "highlight.js/lib/core";
@@ -40,7 +35,7 @@ export class Highlight extends React.Component<SqlBoxProps> {
 
   renderZone = (): React.ReactElement => {
     const { zone } = this.props;
-    const zoneConfig = zone.zoneConfigResp.zone_config;
+    const zoneConfig = zone.zone_config;
     return (
       <span className={cx("sql-highlight", "hljs")}>
         <span className="hljs-keyword">CONFIGURE ZONE USING</span>

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package roachprod
 
@@ -36,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
@@ -210,7 +206,7 @@ func newCluster(
 
 // userClusterNameRegexp returns a regexp that matches all clusters owned by the
 // current user.
-func userClusterNameRegexp(l *logger.Logger) (*regexp.Regexp, error) {
+func userClusterNameRegexp(l *logger.Logger, optionalUsername string) (*regexp.Regexp, error) {
 	// In general, we expect that users will have the same
 	// account name across the services they're using,
 	// but we still want to function even if this is not
@@ -220,7 +216,11 @@ func userClusterNameRegexp(l *logger.Logger) (*regexp.Regexp, error) {
 	if err != nil {
 		return nil, err
 	}
-	pattern := ""
+
+	var pattern string
+	if optionalUsername != "" {
+		pattern += fmt.Sprintf(`(^%s-)`, regexp.QuoteMeta(optionalUsername))
+	}
 	for _, account := range accounts {
 		if !seenAccounts[account] {
 			seenAccounts[account] = true
@@ -365,7 +365,7 @@ func List(
 	if clusterNamePattern == "" {
 		if listMine {
 			var err error
-			listPattern, err = userClusterNameRegexp(l)
+			listPattern, err = userClusterNameRegexp(l, opts.Username)
 			if err != nil {
 				return cloud.Cloud{}, err
 			}
@@ -740,10 +740,15 @@ const DefaultBackupSchedule = `RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WI
 // DefaultStartOpts returns a StartOpts populated with default values.
 func DefaultStartOpts() install.StartOpts {
 	return install.StartOpts{
-		EncryptedStores:    false,
-		NumFilesLimit:      config.DefaultNumFilesLimit,
-		SkipInit:           false,
-		StoreCount:         1,
+		EncryptedStores: false,
+		NumFilesLimit:   config.DefaultNumFilesLimit,
+		SkipInit:        false,
+		StoreCount:      1,
+		// When a node has 1 store, --wal-failover=among-stores has no effect
+		// but is harmless. If a node has multiple stores, it'll allow failover
+		// of WALs between stores. This allows us to exercise WAL failover and
+		// helps insulate us from test failures from disk stalls in roachtests.
+		WALFailover:        "among-stores",
 		VirtualClusterID:   2,
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: DefaultBackupSchedule,
@@ -1387,7 +1392,11 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 // Destroy TODO
 func Destroy(
-	l *logger.Logger, destroyAllMine bool, destroyAllLocal bool, clusterNames ...string,
+	l *logger.Logger,
+	optionalUsername string,
+	destroyAllMine bool,
+	destroyAllLocal bool,
+	clusterNames ...string,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return errors.Wrap(err, "problem loading clusters")
@@ -1404,7 +1413,7 @@ func Destroy(
 		if destroyAllLocal {
 			return errors.New("--all-mine cannot be combined with --all-local")
 		}
-		destroyPattern, err := userClusterNameRegexp(l)
+		destroyPattern, err := userClusterNameRegexp(l, optionalUsername)
 		if err != nil {
 			return err
 		}
@@ -1501,6 +1510,8 @@ func cleanupFailedCreate(l *logger.Logger, clusterName string) error {
 	return cloud.DestroyCluster(l, c)
 }
 
+// AddLabels adds (or updates) the given labels to the VMs corresponding to the given cluster.
+// N.B. If a VM contains a label with the same key, its value will be updated.
 func AddLabels(l *logger.Logger, clusterName string, labels map[string]string) error {
 	c, err := getClusterFromCache(l, clusterName)
 	if err != nil {
@@ -1768,13 +1779,13 @@ type LogsOpts struct {
 }
 
 // Logs TODO
-func Logs(l *logger.Logger, clusterName, dest, username string, logsOpts LogsOpts) error {
+func Logs(l *logger.Logger, clusterName, dest string, logsOpts LogsOpts) error {
 	c, err := getClusterFromCache(l, clusterName)
 	if err != nil {
 		return err
 	}
 	return c.Logs(
-		l, logsOpts.Dir, dest, username, logsOpts.Filter, logsOpts.ProgramFilter,
+		l, logsOpts.Dir, dest, logsOpts.Filter, logsOpts.ProgramFilter,
 		logsOpts.Interval, logsOpts.From, logsOpts.To, logsOpts.Out,
 	)
 }
@@ -2798,7 +2809,7 @@ func LoadBalancerIP(
 func Deploy(
 	ctx context.Context,
 	l *logger.Logger,
-	clusterName, applicationName, version string,
+	clusterName, applicationName, version, pathToBinary string,
 	pauseDuration time.Duration,
 	sig int,
 	wait bool,
@@ -2807,7 +2818,7 @@ func Deploy(
 ) error {
 	// Stage supports `workload` as well, so it needs to be excluded here. This
 	// list contains a subset that only pulls the cockroach binary.
-	supportedApplicationNames := []string{"cockroach", "release", "customized"}
+	supportedApplicationNames := []string{"cockroach", "release", "customized", "local"}
 	if !slices.Contains(supportedApplicationNames, applicationName) {
 		return errors.Errorf("unsupported application name %s, supported names are %v", applicationName, supportedApplicationNames)
 	}
@@ -2822,7 +2833,16 @@ func Deploy(
 	if err != nil {
 		return err
 	}
-	err = Stage(ctx, l, clusterName, "", "", stageDir, applicationName, version)
+
+	if applicationName == "local" {
+		if pathToBinary == "" {
+			return errors.Errorf("%s application requires a path to the binary", applicationName)
+		}
+		err = c.Put(ctx, l, c.TargetNodes(), pathToBinary, filepath.Join(stageDir, "cockroach"))
+	} else {
+		err = Stage(ctx, l, clusterName, "", "", stageDir, applicationName, version)
+	}
+
 	if err != nil {
 		return err
 	}
@@ -2964,4 +2984,67 @@ func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloud.Cluster, 
 	}
 
 	return c, nil
+}
+
+// FetchLogs downloads the logs from the cluster using `roachprod get`.
+// The logs will be placed in the "destination" directory.
+// The command times out after the fetchLogsTimeout time.
+func FetchLogs(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName, destination string,
+	fetchLogsTimeout time.Duration,
+) error {
+	c, err := getClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	l.Printf("fetching logs")
+
+	// Don't hang forever if we can't fetch the logs.
+	return timeutil.RunWithTimeout(ctx, "fetch logs", fetchLogsTimeout,
+		func(ctx context.Context) error {
+			// Find all log directories, which might include logs for
+			// external-process virtual clusters.
+			listLogDirsCmd := "find logs* -maxdepth 0 -type d"
+			results, err := c.RunWithDetails(ctx, l, install.WithNodes(c.Nodes), "", listLogDirsCmd)
+			if err != nil {
+				return err
+			}
+
+			logDirs := make(map[string]struct{})
+			for _, r := range results {
+				if r.Err != nil {
+					l.Printf("will not fetch logs for n%d due to error: %v", r.Node, r.Err)
+				}
+
+				for _, logDir := range strings.Fields(r.Stdout) {
+					logDirs[logDir] = struct{}{}
+				}
+			}
+
+			for logDir := range logDirs {
+				dirPath := filepath.Join(destination, logDir, "unredacted")
+				if err := os.MkdirAll(filepath.Dir(dirPath), 0755); err != nil {
+					return err
+				}
+
+				if err := c.Get(ctx, l, c.Nodes, logDir /* src */, dirPath /* dest */); err != nil {
+					l.Printf("failed to fetch log directory %s: %v", logDir, err)
+					if ctx.Err() != nil {
+						return errors.Wrap(err, "cluster.FetchLogs")
+					}
+				}
+			}
+
+			if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(c.Nodes), "", fmt.Sprintf("mkdir -p logs/redacted && %s debug merge-logs --redact logs/*.log > logs/redacted/combined.log", test.DefaultCockroachPath)); err != nil {
+				l.Printf("failed to redact logs: %v", err)
+				if ctx.Err() != nil {
+					return err
+				}
+			}
+			dest := filepath.Join(destination, "logs/cockroach.log")
+			return errors.Wrap(c.Get(ctx, l, c.Nodes, "logs/redacted/combined.log" /* src */, dest), "cluster.FetchLogs")
+		})
 }

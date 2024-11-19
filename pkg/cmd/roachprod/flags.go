@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -47,6 +42,7 @@ var (
 	grafanaArch           string
 	grafanaDumpDir        string
 	jaegerConfigNodes     string
+	listCost              bool
 	listDetails           bool
 	listJSON              bool
 	listMine              bool
@@ -107,6 +103,8 @@ var (
 	fluentBitConfig fluentbit.Config
 
 	opentelemetryConfig opentelemetry.Config
+
+	fetchLogsTimeout time.Duration
 )
 
 func initFlags() {
@@ -119,6 +117,10 @@ func initFlags() {
 		term.IsTerminal(int(os.Stdout.Fd())), "enable fast DNS resolution via the standard Go net package")
 	rootCmd.PersistentFlags().StringVarP(&config.EmailDomain, "email-domain", "",
 		config.DefaultEmailDomain, "email domain for users")
+	rootCmd.PersistentFlags().BoolVar(&config.UseSharedUser,
+		"use-shared-user", true,
+		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
+			config.SharedUser, config.OSUser.Username))
 
 	createCmd.Flags().DurationVarP(&createVMOpts.Lifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
@@ -156,9 +158,11 @@ func initFlags() {
 		if vm.Providers[providerName].Active() {
 			providerOptsContainer[providerName].ConfigureCreateFlags(createCmd.Flags())
 
-			for _, cmd := range []*cobra.Command{
-				destroyCmd, extendCmd, listCmd, syncCmd, gcCmd, setupSSHCmd, startCmd, pgurlCmd, adminurlCmd,
-			} {
+			for _, cmd := range rootCmd.Commands() {
+				if cmd == createCmd {
+					// createCmd is handled below
+					continue
+				}
 				providerOptsContainer[providerName].ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
 			}
 
@@ -179,6 +183,10 @@ func initFlags() {
 	extendCmd.Flags().DurationVarP(&extendLifetime,
 		"lifetime", "l", 12*time.Hour, "Lifetime of the cluster")
 
+	listCmd.Flags().BoolVarP(&listCost,
+		"cost", "c", os.Getenv("ROACHPROD_COST_ESTIMATES") == "true",
+		"Show cost estimates",
+	)
 	listCmd.Flags().BoolVarP(&listDetails,
 		"details", "d", false, "Show cluster details")
 	listCmd.Flags().BoolVar(&listJSON,
@@ -228,7 +236,7 @@ func initFlags() {
 	startCmd.Flags().IntVarP(&numRacks,
 		"racks", "r", 0, "the number of racks to partition the nodes into")
 	startCmd.Flags().StringArrayVarP(&startOpts.ExtraArgs,
-		"args", "a", nil, "node arguments")
+		"args", "a", nil, `node arguments (example: --args "--cache=25%" --args "--max-sql-memory=25%")`)
 	startCmd.Flags().StringArrayVarP(&nodeEnv,
 		"env", "e", config.DefaultEnvVars(), "node environment variables")
 	startCmd.Flags().BoolVar(&startOpts.EncryptedStores,
@@ -273,6 +281,8 @@ func initFlags() {
 	deployCmd.Flags().DurationVar(&pause, "pause", pause, "duration to pause between node restarts")
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
+	syncCmd.Flags().StringArrayVarP(&listOpts.IncludeProviders, "clouds", "c",
+		make([]string, 0), "Specify the cloud providers when syncing. Important: Use this flag only if you are certain that you want to sync with a specific cloud. All DNS host entries for other clouds will be erased from the DNS zone.")
 
 	wipeCmd.Flags().BoolVar(&wipePreserveCerts, "preserve-certs", false, "do not wipe certificates")
 
@@ -291,9 +301,9 @@ func initFlags() {
 	logsCmd.Flags().StringVar(&logsFilter,
 		"filter", "", "re to filter log messages")
 	logsCmd.Flags().Var(flagutil.Time(&logsFrom),
-		"from", "time from which to stream logs")
+		"from", "time from which to stream logs (e.g., 2024-09-07T16:05:06Z)")
 	logsCmd.Flags().Var(flagutil.Time(&logsTo),
-		"to", "time to which to stream logs")
+		"to", "time to which to stream logs (e.g., 2024-09-07T17:05:06Z); if ommitted, command streams without returning")
 	logsCmd.Flags().DurationVar(&logsInterval,
 		"interval", 200*time.Millisecond, "interval to poll logs from host")
 	logsCmd.Flags().StringVar(&logsDir,
@@ -403,7 +413,7 @@ func initFlags() {
 		cmd.Flags().BoolVar(&urlOpen, "open", false, "Open the url in a browser")
 	}
 
-	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
+	for _, cmd := range []*cobra.Command{createCmd, listCmd, destroyCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
 			"Username to run under, detect if blank")
 	}
@@ -478,4 +488,6 @@ func initFlags() {
 		"dashboard-uid", "", "grafana dashboard UID")
 	grafanaAnnotationCmd.Flags().Int64SliceVar(&grafanaTimeRange,
 		"time-range", []int64{}, "grafana annotation time range in epoch time")
+	fetchLogsCmd.Flags().DurationVarP(&fetchLogsTimeout,
+		"timeout", "t", 5*time.Minute, "Timeout for fetching the logs from the cluster nodes")
 }

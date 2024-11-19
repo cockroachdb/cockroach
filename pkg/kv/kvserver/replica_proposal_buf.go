@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -130,7 +125,8 @@ type admitEntHandle struct {
 type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
 	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
-	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raft.StateType)
+	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raftpb.StateType)
+	registerForTracing(*ProposalData, raftpb.Entry) bool
 }
 
 // A proposer is an object that uses a propBuf to coordinate Raft proposals.
@@ -144,7 +140,7 @@ type proposer interface {
 	leaseAppliedIndex() kvpb.LeaseAppliedIndex
 	enqueueUpdateCheck()
 	closedTimestampTarget() hlc.Timestamp
-	shouldCampaignOnRedirect(raftGroup proposerRaft) bool
+	shouldCampaignOnRedirect(raftGroup proposerRaft, leaseType roachpb.LeaseType) bool
 
 	// The following require the proposer to hold an exclusive lock.
 	withGroupLocked(func(proposerRaft) error) error
@@ -260,7 +256,7 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 	}
 
 	if log.V(4) {
-		log.Infof(p.ctx, "submitting proposal %x", p.idKey)
+		log.Infof(p.Context(), "submitting proposal %x", p.idKey)
 	}
 
 	// Insert the proposal into the buffer's array. The buffer now takes ownership
@@ -576,7 +572,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				Data: p.encodedCommand,
 			})
 			nextProp++
-			log.VEvent(p.ctx, 2, "flushing proposal to Raft")
+			log.VEvent(p.Context(), 2, "flushing proposal to Raft")
 
 			// We don't want deduct flow tokens for reproposed commands, and of
 			// course for proposals that didn't integrate with kvflowcontrol.
@@ -586,7 +582,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			} else {
 				admitHandles = append(admitHandles, admitEntHandle{
 					handle: p.raftAdmissionMeta,
-					pCtx:   p.ctx,
+					pCtx:   p.Context(),
 				})
 			}
 		}
@@ -663,7 +659,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 
 			// TODO(nvanbenschoten): move this to replica_range_lease.go when we
 			// support build-time verification for lease acquisition. See #118435.
-			if p.Request.IsSingleRequestLeaseRequest() && b.p.shouldCampaignOnRedirect(raftGroup) {
+			if p.Request.IsSingleRequestLeaseRequest() && b.p.shouldCampaignOnRedirect(raftGroup, nextLease.Type()) {
 				const format = "campaigning because Raft leader (id=%d) not live in node liveness map"
 				lead := raftGroup.BasicStatus().Lead
 				if logCampaignOnRejectLease.ShouldLog() {
@@ -874,26 +870,34 @@ func proposeBatch(
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
 		for _, p := range props {
-			if p.ctx != nil {
-				log.Event(p.ctx, "entry dropped")
-			}
+			log.Event(p.Context(), "entry dropped")
 		}
 		p.onErrProposalDropped(ents, props, raftGroup.BasicStatus().RaftState)
 		return nil //nolint:returnerrcheck
 	}
-	if err == nil {
-		// Now that we know what raft log position[1] this proposal is to end up
-		// in, deduct flow tokens for it. This is done without blocking (we've
-		// already waited for available flow tokens pre-evaluation). The tokens
-		// will later be returned once we're informed of the entry being
-		// admitted below raft.
-		//
-		// [1]: We're relying on an undocumented side effect of upstream raft
-		//      API where it populates the index and term for the passed in
-		//      slice of entries. See etcd-io/raft#57.
-		maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
+	if err != nil {
+		return err
 	}
-	return err
+	// Now that we know what raft log position[1] this proposal is to end up
+	// in, deduct flow tokens for it. This is done without blocking (we've
+	// already waited for available flow tokens pre-evaluation). The tokens
+	// will later be returned once we're informed of the entry being
+	// admitted below raft.
+	//
+	// [1]: We're relying on an undocumented side effect of upstream raft
+	//      API where it populates the index and term for the passed in
+	//      slice of entries. See etcd-io/raft#57.
+	maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
+
+	// Register the proposal with rafttrace. This will add the trace to the raft
+	// lifecycle. We trace at most one entry per batch, so break after the first
+	// one is successfully registered.
+	for i := range ents {
+		if p.registerForTracing(props[i], ents[i]) {
+			break
+		}
+	}
+	return nil
 }
 
 func maybeDeductFlowTokens(
@@ -1169,7 +1173,7 @@ func (rp *replicaProposer) destroyed() destroyStatus {
 }
 
 func (rp *replicaProposer) leaseAppliedIndex() kvpb.LeaseAppliedIndex {
-	return rp.mu.state.LeaseAppliedIndex
+	return rp.shMu.state.LeaseAppliedIndex
 }
 
 func (rp *replicaProposer) enqueueUpdateCheck() {
@@ -1178,6 +1182,10 @@ func (rp *replicaProposer) enqueueUpdateCheck() {
 
 func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
 	return (*Replica)(rp).closedTimestampTargetRLocked()
+}
+
+func (rp *replicaProposer) registerForTracing(p *ProposalData, e raftpb.Entry) bool {
+	return (*Replica)(rp).mu.raftTracer.MaybeRegister(p.Context(), e)
 }
 
 func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {
@@ -1190,17 +1198,17 @@ func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error
 }
 
 func (rp *replicaProposer) onErrProposalDropped(
-	ents []raftpb.Entry, _ []*ProposalData, stateType raft.StateType,
+	ents []raftpb.Entry, _ []*ProposalData, stateType raftpb.StateType,
 ) {
 	n := int64(len(ents))
 	rp.store.metrics.RaftProposalsDropped.Inc(n)
-	if stateType == raft.StateLeader {
+	if stateType == raftpb.StateLeader {
 		rp.store.metrics.RaftProposalsDroppedLeader.Inc(n)
 	}
 }
 
 func (rp *replicaProposer) leaseDebugRLocked() string {
-	return rp.mu.state.Lease.String()
+	return rp.shMu.state.Lease.String()
 }
 
 func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
@@ -1221,14 +1229,16 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	rp.mu.proposals[p.idKey] = p
 }
 
-func (rp *replicaProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool {
+func (rp *replicaProposer) shouldCampaignOnRedirect(
+	raftGroup proposerRaft, leaseType roachpb.LeaseType,
+) bool {
 	r := (*Replica)(rp)
 	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
 	return shouldCampaignOnLeaseRequestRedirect(
 		raftGroup.BasicStatus(),
 		livenessMap,
 		r.descRLocked(),
-		r.shouldUseExpirationLeaseRLocked(),
+		leaseType,
 		r.store.Clock().Now(),
 	)
 }

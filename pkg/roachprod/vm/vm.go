@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package vm
 
@@ -60,6 +55,9 @@ const (
 	// need to be re-initialized on every start. The presence of this file
 	// automatically implies the presence of OSInitializedFile.
 	DisksInitializedFile = "/mnt/data1/" + InitializedFile
+	// StartupLogs is a log file that is created on a VM to redirect startup script
+	// output logs.
+	StartupLogs = "/var/log/roachprod_startup.log"
 )
 
 // UnimplementedError is returned when a method is not implemented by a
@@ -441,6 +439,7 @@ type VolumeCreateOpts struct {
 }
 
 type ListOptions struct {
+	Username             string // if set, <username>-.* clusters are detected as 'mine'
 	IncludeVolumes       bool
 	IncludeEmptyClusters bool
 	ComputeEstimatedCost bool
@@ -484,10 +483,11 @@ type Provider interface {
 	// Return the account name associated with the provider
 	FindActiveAccount(l *logger.Logger) (string, error)
 	List(l *logger.Logger, opts ListOptions) (List, error)
-	// The name of the Provider, which will also surface in the top-level Providers map.
-
+	// AddLabels adds (or updates) the given labels to the given VMs.
+	// N.B. If a VM contains a label with the same key, its value will be updated.
 	AddLabels(l *logger.Logger, vms List, labels map[string]string) error
 	RemoveLabels(l *logger.Logger, vms List, labels []string) error
+	// The name of the Provider, which will also surface in the top-level Providers map.
 	Name() string
 
 	// Active returns true if the provider is properly installed and capable of
@@ -754,7 +754,7 @@ func DNSSafeName(name string) string {
 	return regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
 }
 
-// SanitizeLabel returns a version of the string that can be used as a label.
+// SanitizeLabel returns a version of the string that can be used as a (resource) label.
 // This takes the lowest common denominator of the label requirements;
 // GCE: "The value can only contain lowercase letters, numeric characters, underscores and dashes.
 // The value can be at most 63 characters long"
@@ -771,4 +771,13 @@ func SanitizeLabel(label string) string {
 	// Remove any leading or trailing hyphens
 	label = strings.Trim(label, "-")
 	return label
+}
+
+// SanitizeLabelValues returns the same set of keys with sanitized values.
+func SanitizeLabelValues(labels map[string]string) map[string]string {
+	sanitized := map[string]string{}
+	for k, v := range labels {
+		sanitized[k] = SanitizeLabel(v)
+	}
+	return sanitized
 }

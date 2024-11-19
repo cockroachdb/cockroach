@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -154,6 +149,7 @@ type StoreRebalancer struct {
 	processTimeoutFn        func(replica CandidateReplica) time.Duration
 	objectiveProvider       RebalanceObjectiveProvider
 	subscribedToSpanConfigs func() bool
+	disabled                func() bool
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
@@ -195,6 +191,10 @@ func NewStoreRebalancer(
 				return false
 			}
 			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
+		},
+		disabled: func() bool {
+			return LoadBasedRebalancingMode.Get(&st.SV) == LBRebalancingOff ||
+				rq.store.cfg.TestingKnobs.DisableStoreRebalancer
 		},
 	}
 	sr.AddLogTag("store-rebalancer", nil)
@@ -313,15 +313,13 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				timer.Read = true
 				timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&sr.st.SV)))
 			}
-
+			if sr.disabled() {
+				continue
+			}
 			// Once the rebalance mode and rebalance objective are defined for
 			// this loop, they are immutable and do not change. This avoids
 			// inconsistency where the rebalance objective changes and very
 			// different or contradicting actions are then taken.
-			mode := sr.RebalanceMode()
-			if mode == LBRebalancingOff {
-				continue
-			}
 			if !sr.subscribedToSpanConfigs() {
 				continue
 			}
@@ -331,7 +329,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 
 			hottestRanges := sr.replicaRankings.TopLoad(objective.ToDimension())
 			options := sr.scorerOptions(ctx, objective.ToDimension())
-			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, mode)
+			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			sr.rebalanceStore(ctx, rctx)
 		}
 	})

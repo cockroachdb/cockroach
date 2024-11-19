@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # This command is used by bazel as the workspace_status_command
 # to implement build stamping with git information.
 

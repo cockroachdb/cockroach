@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package descs provides abstractions for dealing with sets of descriptors.
 // It is utilized during schema changes and by catalog.Accessor implementations.
@@ -33,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,6 +121,10 @@ type Collection struct {
 	// repairs.
 	skipValidationOnWrite bool
 
+	// readerCatalogSetup indicates that replicated descriptors can be modified
+	// by this collection.
+	readerCatalogSetup bool
+
 	// deletedDescs that will not need to wait for new lease versions.
 	deletedDescs catalog.DescriptorIDSet
 
@@ -179,6 +180,12 @@ func (tc *Collection) GetMaxTimestampBound() hlc.Timestamp {
 // a transaction commit.
 func (tc *Collection) SkipValidationOnWrite() {
 	tc.skipValidationOnWrite = true
+}
+
+// SetReaderCatalogSetup indicates this collection is being used to
+// modify reader catalogs.
+func (tc *Collection) SetReaderCatalogSetup() {
+	tc.readerCatalogSetup = true
 }
 
 // ReleaseSpecifiedLeases releases the leases for the descriptors with ids in
@@ -282,6 +289,15 @@ func (tc *Collection) WriteDescToBatch(
 		return errors.AssertionFailedf("cannot write descriptor with an empty ID: %v", desc)
 	}
 	desc.MaybeIncrementVersion()
+	// Replicated PCR descriptors cannot be modified unless the collection
+	// is setup for updating them.
+	if !tc.readerCatalogSetup && desc.GetReplicatedPCRVersion() != 0 {
+		return pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			"replicated %s %s (%d) cannot be mutated",
+			desc.GetObjectTypeString(),
+			desc.GetName(),
+			desc.GetID())
+	}
 	if !tc.skipValidationOnWrite && tc.validationModeProvider.ValidateDescriptorsOnWrite() {
 		if err := validate.Self(tc.version, desc); err != nil {
 			return err
@@ -727,6 +743,13 @@ func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, 
 	return ret.Catalog, nil
 }
 
+// GetDescriptorsInSpans returns all descriptors within a given span.
+func (tc *Collection) GetDescriptorsInSpans(
+	ctx context.Context, txn *kv.Txn, spans []roachpb.Span,
+) (nstree.Catalog, error) {
+	return tc.cr.ScanDescriptorsInSpans(ctx, txn, spans)
+}
+
 // GetAllComments gets all comments for all descriptors in the given database.
 // This method never returns the underlying catalog, since it will be incomplete and only
 // contain comments.
@@ -1107,6 +1130,25 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 		return nil, err
 	}
 	return ret, nil
+}
+
+// GetAllDatabaseDescriptorsMap returns the results of
+// GetAllDatabaseDescriptors but as a map with the database ID as the
+// key.
+func (tc *Collection) GetAllDatabaseDescriptorsMap(
+	ctx context.Context, txn *kv.Txn,
+) (map[descpb.ID]catalog.DatabaseDescriptor, error) {
+	descriptors, err := tc.GetAllDatabaseDescriptors(ctx, txn)
+	result := map[descpb.ID]catalog.DatabaseDescriptor{}
+	if err != nil {
+		return nil, err
+	}
+
+	for _, descriptor := range descriptors {
+		result[descriptor.GetID()] = descriptor
+	}
+
+	return result, nil
 }
 
 // GetSchemasForDatabase returns the schemas for a given database

@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package streamclient
 
@@ -120,7 +117,9 @@ func (sc testStreamClient) Subscribe(
 
 	events := make(chan crosscluster.Event, 2)
 	events <- crosscluster.MakeKVEventFromKVs([]roachpb.KeyValue{sampleKV})
-	events <- crosscluster.MakeCheckpointEvent([]jobspb.ResolvedSpan{sampleResolvedSpan})
+	events <- crosscluster.MakeCheckpointEvent(&streampb.StreamEvent_StreamCheckpoint{
+		ResolvedSpans: []jobspb.ResolvedSpan{sampleResolvedSpan},
+	})
 	close(events)
 
 	return &testStreamSubscription{
@@ -316,7 +315,7 @@ func ExampleClient() {
 					fmt.Printf("delRange: %s@%d\n", delRange.Span.String(), delRange.Timestamp.WallTime)
 				case crosscluster.CheckpointEvent:
 					minTS := hlc.MaxTimestamp
-					for _, rs := range event.GetResolvedSpans() {
+					for _, rs := range event.GetCheckpoint().ResolvedSpans {
 						if rs.Timestamp.Less(minTS) {
 							minTS = rs.Timestamp
 						}

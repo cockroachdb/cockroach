@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package eval
 
@@ -608,8 +603,8 @@ func (ec *Context) GetClusterTimestamp() (*tree.DDecimal, error) {
 	// multiple timestamps. Prevent this with a gate at the SQL level and return
 	// a pgerror until we decide how this will officially behave. See #103245.
 	if ec.TxnIsoLevel.ToleratesWriteSkew() {
-		treeIso := tree.IsolationLevelFromKVTxnIsolationLevel(ec.TxnIsoLevel)
-		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "unsupported in %s isolation", treeIso.String())
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"unsupported in %s isolation", tree.FromKVIsoLevel(ec.TxnIsoLevel).String())
 	}
 
 	ts, err := ec.Txn.CommitTimestamp()
@@ -920,7 +915,7 @@ type ReplicationStreamManager interface {
 		successfulIngestion bool,
 	) error
 
-	DebugGetProducerStatuses(ctx context.Context) []*streampb.DebugProducerStatus
+	DebugGetProducerStatuses(ctx context.Context) []streampb.DebugProducerStatus
 	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
 
 	PlanLogicalReplication(

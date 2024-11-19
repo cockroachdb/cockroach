@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package distinguishedname
 
@@ -17,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/errors"
 	"github.com/go-ldap/ldap/v3"
 )
@@ -91,4 +87,28 @@ func ParseDNFromCertificate(cert *x509.Certificate) (*ldap.DN, error) {
 	}
 
 	return subjectDN, nil
+}
+
+// ExtractCNAsSQLUsername looks for the common name (CN) field of the given
+// distinguished name and converts it to a SQLUsername. If the CN field is not
+// present, the function returns an empty SQLUsername and a "not found" flag.
+func ExtractCNAsSQLUsername(dn *ldap.DN) (_ username.SQLUsername, found bool, _ error) {
+	var sqlRoleString string
+rdn_loop:
+	for _, rdn := range dn.RDNs {
+		for _, attr := range rdn.Attributes {
+			if strings.EqualFold(attr.Type, "cn") {
+				sqlRoleString = attr.Value
+				break rdn_loop
+			}
+		}
+	}
+	sqlRole, err := username.MakeSQLUsernameFromUserInput(sqlRoleString, username.PurposeValidation)
+	if err != nil {
+		return username.EmptyRoleName(), false, err
+	}
+	if sqlRole.IsEmptyRole() {
+		return username.EmptyRoleName(), false, nil
+	}
+	return sqlRole, true, err
 }

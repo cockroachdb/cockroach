@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree
 
@@ -32,9 +27,11 @@ type LogicalReplicationOptions struct {
 	// Mapping of table name to UDF name
 	UserFunctions   map[UnresolvedName]RoutineName
 	Cursor          Expr
+	MetricsLabel    Expr
 	Mode            Expr
 	DefaultFunction Expr
-	FilterRangefeed *DBool
+	Discard         Expr
+	SkipSchemaCheck *DBool
 }
 
 var _ Statement = &CreateLogicalReplicationStream{}
@@ -125,10 +122,23 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&k)
 		}
 	}
-	if lro.FilterRangefeed != nil && *lro.FilterRangefeed {
+	if lro.Discard != nil {
 		maybeAddSep()
-		ctx.WriteString("IGNORE_CDC_IGNORED_TTL_DELETES")
+		ctx.WriteString("DISCARD = ")
+		ctx.FormatNode(lro.Discard)
 	}
+
+	if lro.SkipSchemaCheck != nil && *lro.SkipSchemaCheck {
+		maybeAddSep()
+		ctx.WriteString("SKIP SCHEMA CHECK")
+	}
+
+	if lro.MetricsLabel != nil {
+		maybeAddSep()
+		ctx.WriteString("LABEL = ")
+		ctx.FormatNode(lro.MetricsLabel)
+	}
+
 }
 
 func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions) error {
@@ -168,12 +178,27 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 		}
 	}
 
-	if o.FilterRangefeed != nil {
-		if other.FilterRangefeed != nil {
-			return errors.New("IGNORE_TTL_DELETES option specified multiple times")
+	if o.Discard != nil {
+		if other.Discard != nil {
+			return errors.New("DISCARD option specified multiple times")
 		}
 	} else {
-		o.FilterRangefeed = other.FilterRangefeed
+		o.Discard = other.Discard
+	}
+	if o.SkipSchemaCheck != nil {
+		if other.SkipSchemaCheck != nil {
+			return errors.New("SKIP SCHEMA CHECK option specified multiple times")
+		}
+	} else {
+		o.SkipSchemaCheck = other.SkipSchemaCheck
+	}
+
+	if o.MetricsLabel != nil {
+		if other.MetricsLabel != nil {
+			return errors.New("LABEL option specified multiple times")
+		}
+	} else {
+		o.MetricsLabel = other.MetricsLabel
 	}
 
 	return nil
@@ -186,5 +211,7 @@ func (o LogicalReplicationOptions) IsDefault() bool {
 		o.Mode == options.Mode &&
 		o.DefaultFunction == options.DefaultFunction &&
 		o.UserFunctions == nil &&
-		o.FilterRangefeed == options.FilterRangefeed
+		o.Discard == options.Discard &&
+		o.SkipSchemaCheck == options.SkipSchemaCheck &&
+		o.MetricsLabel == options.MetricsLabel
 }

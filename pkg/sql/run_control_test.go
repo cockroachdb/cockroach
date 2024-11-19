@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql_test
 
@@ -14,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"math/rand"
 	"net/url"
 	"strings"
 	"sync"
@@ -42,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -63,7 +58,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 
 	var queryLatency *time.Duration
 	sem := make(chan struct{}, 1)
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 	tc := serverutils.StartCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -1021,6 +1016,10 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 				require.NoError(t, err)
 				// Test implicit transactions first.
 				blockSchemaChange.Swap(true)
+				defer func() {
+					close(waitForTimeout)
+					blockSchemaChange.Swap(false)
+				}()
 				if implicitTxn {
 					_, err := conn.DB.ExecContext(ctx, "ALTER TABLE t1 ADD COLUMN j INT DEFAULT 32")
 					require.ErrorContains(t, err, sqlerrors.QueryTimeoutError.Error())
@@ -1035,8 +1034,6 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 					err = txn.Commit()
 					require.NoError(t, err)
 				}
-				close(waitForTimeout)
-				blockSchemaChange.Swap(false)
 			})
 	}
 }

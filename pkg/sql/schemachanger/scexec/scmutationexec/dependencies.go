@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scmutationexec
 
@@ -83,11 +78,18 @@ type ImmediateMutationStateUpdater interface {
 	// InitSequence initializes a sequence.
 	InitSequence(id descpb.ID, startVal int64)
 
-	// UpdateZoneConfig updates a zone config.
+	// UpdateZoneConfig upserts a zone config.
 	UpdateZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig)
 
-	// UpdateSubzoneConfig updates subzone zone configs.
-	UpdateSubzoneConfig(tableid descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan)
+	// UpdateSubzoneConfig upserts a subzone config.
+	UpdateSubzoneConfig(
+		tableid descpb.ID,
+		subzone zonepb.Subzone,
+		subzoneSpans []zonepb.SubzoneSpan,
+	)
+
+	// DeleteZoneConfig deletes the zone config for the given ID.
+	DeleteZoneConfig(id descpb.ID)
 
 	// Reset schedules a reset of the in-txn catalog state
 	// to undo the modifications from earlier stages.

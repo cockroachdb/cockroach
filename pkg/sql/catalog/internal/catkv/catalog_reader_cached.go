@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package catkv
 
@@ -16,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -225,6 +221,15 @@ func (c *cachedCatalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.
 	return read, nil
 }
 
+// ScanDescriptorsInSpans is part of the CatalogReader interface.
+func (c *cachedCatalogReader) ScanDescriptorsInSpans(
+	ctx context.Context, txn *kv.Txn, spans []roachpb.Span,
+) (nstree.Catalog, error) {
+	// TODO (brian.dillmann@): explore caching these calls.
+	// https://github.com/cockroachdb/cockroach/issues/134666
+	return c.cr.ScanDescriptorsInSpans(ctx, txn, spans)
+}
+
 // ScanNamespaceForDatabases is part of the CatalogReader interface.
 func (c *cachedCatalogReader) ScanNamespaceForDatabases(
 	ctx context.Context, txn *kv.Txn,
@@ -379,18 +384,19 @@ func (c *cachedCatalogReader) GetByNames(
 ) (nstree.Catalog, error) {
 	numUncached := 0
 	// Move any uncached name keys to the front of the slice.
-	for i, ni := range nameInfos {
-		if c.byNameState[ni].hasGetNamespaceEntries || c.hasScanAll {
+	for i := range nameInfos {
+		ni := &nameInfos[i]
+		if c.byNameState[*ni].hasGetNamespaceEntries || c.hasScanAll {
 			continue
 		}
-		if id, ts := c.systemDatabaseCache.lookupDescriptorID(c.version, &ni); id != descpb.InvalidID {
-			c.cache.UpsertNamespaceEntry(&ni, id, ts)
-			s := c.byNameState[ni]
+		if id, ts := c.systemDatabaseCache.lookupDescriptorID(c.version, ni); id != descpb.InvalidID {
+			c.cache.UpsertNamespaceEntry(ni, id, ts)
+			s := c.byNameState[*ni]
 			s.hasGetNamespaceEntries = true
-			c.setByNameState(ni, s)
+			c.setByNameState(*ni, s)
 			continue
 		}
-		nameInfos[i], nameInfos[numUncached] = nameInfos[numUncached], ni
+		nameInfos[i], nameInfos[numUncached] = nameInfos[numUncached], *ni
 		numUncached++
 	}
 	if numUncached > 0 && !c.hasScanAll {

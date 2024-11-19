@@ -96,11 +96,7 @@ doc](https://github.com/cockroachdb/cockroach/blob/master/docs/design.md).
 
 ## Licensing
 
-Current CockroachDB code is released under a combination of two licenses, the [Business Source License (BSL)](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html#bsl) and the [Cockroach Community License (CCL)](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html#ccl).
-
-When contributing to a CockroachDB feature, you can find the relevant license in the comments at the top of each file.
-
-For more information, see the [Licensing FAQs](https://www.cockroachlabs.com/docs/stable/licensing-faqs.html).
+All versions released after November 18, 2024, including patch fixes for prior versions 23.1 onward, are published under the [CockroachDB Software License (CSL)](./LICENSE). Source code in a given file is licensed under the CSL and the copyright belongs to The Cockroach Authors unless otherwise noted in the file or in a LICENSE or README file located in the same or parent directory of the file.
 
 ## Comparison with Other Databases
 

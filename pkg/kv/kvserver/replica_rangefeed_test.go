@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver_test
 
@@ -21,14 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	clientrf "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -71,17 +63,13 @@ func (s *testStream) SetHeader(metadata.MD) error  { panic("unimplemented") }
 func (s *testStream) SendHeader(metadata.MD) error { panic("unimplemented") }
 func (s *testStream) SetTrailer(metadata.MD)       { panic("unimplemented") }
 
-func (s *testStream) Context() context.Context {
-	return s.ctx
-}
-
 func (s *testStream) Cancel() {
 	s.cancel()
 }
 
-func (s *testStream) SendIsThreadSafe() {}
+func (s *testStream) SendUnbufferedIsThreadSafe() {}
 
-func (s *testStream) Send(e *kvpb.RangeFeedEvent) error {
+func (s *testStream) SendUnbuffered(e *kvpb.RangeFeedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.events = append(s.mu.events, e)
@@ -94,9 +82,9 @@ func (s *testStream) Events() []*kvpb.RangeFeedEvent {
 	return s.mu.events
 }
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
+// SendError implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
-func (s *testStream) Disconnect(error *kvpb.Error) {
+func (s *testStream) SendError(error *kvpb.Error) {
 	s.done <- error
 }
 
@@ -116,7 +104,7 @@ func (s *testStream) WaitForError(t *testing.T) error {
 func waitRangeFeed(
 	t *testing.T, store *kvserver.Store, req *kvpb.RangeFeedRequest, stream *testStream,
 ) error {
-	if err := store.RangeFeed(req, stream); err != nil {
+	if _, err := store.RangeFeed(stream.ctx, req, stream, nil /* perConsumerCatchupLimiter */); err != nil {
 		return err
 	}
 	return stream.WaitForError(t)
@@ -739,61 +727,6 @@ func TestReplicaRangefeedOriginIDFiltering(t *testing.T) {
 	})
 }
 
-func TestScheduledProcessorKillSwitch(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	kvserver.RangefeedSchedulerDisabled = true
-	defer func() { kvserver.RangefeedSchedulerDisabled = false }()
-
-	ctx := context.Background()
-	ts, err := serverutils.NewServer(base.TestServerArgs{
-		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-	})
-	require.NoError(t, err, "failed to start test server")
-	require.NoError(t, ts.Start(ctx), "start server")
-	defer ts.Stopper().Stop(ctx)
-
-	db := ts.SystemLayer().SQLConn(t)
-	_, err = db.Exec("set cluster setting kv.rangefeed.enabled = t")
-	require.NoError(t, err, "can't enable rangefeeds")
-	_, err = db.Exec("set cluster setting kv.rangefeed.scheduler.enabled = t")
-	require.NoError(t, err, "can't enable rangefeed scheduler")
-
-	sr, err := ts.ScratchRange()
-	require.NoError(t, err, "can't create scratch range")
-	f := ts.RangeFeedFactory().(*clientrf.Factory)
-	rf, err := f.RangeFeed(ctx, "test-feed", []roachpb.Span{{Key: sr, EndKey: sr.PrefixEnd()}},
-		hlc.Timestamp{},
-		func(ctx context.Context, value *kvpb.RangeFeedValue) {},
-	)
-	require.NoError(t, err, "failed to start rangefeed")
-	defer rf.Close()
-
-	rd, err := ts.LookupRange(sr)
-	require.NoError(t, err, "failed to get descriptor for scratch range")
-
-	stores := ts.GetStores().(*kvserver.Stores)
-	_ = stores.VisitStores(func(s *kvserver.Store) error {
-		repl, err := s.GetReplica(rd.RangeID)
-		require.NoError(t, err, "failed to find scratch range replica in store")
-		var proc rangefeed.Processor
-		// Note that we can't rely on checkpoint or event because client rangefeed
-		// call can return and emit first checkpoint and data before processor is
-		// actually attached to replica.
-		testutils.SucceedsSoon(t, func() error {
-			proc = kvserver.TestGetReplicaRangefeedProcessor(repl)
-			if proc == nil {
-				return errors.New("scratch range must have processor")
-			}
-			return nil
-		})
-		require.IsType(t, (*rangefeed.LegacyProcessor)(nil), proc,
-			"kill switch didn't prevent scheduled processor creation")
-		return nil
-	})
-}
-
 func TestReplicaRangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1097,7 +1030,7 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 				return err
 			}
 			raftStatus := repl.RaftStatus()
-			if raftStatus != nil && raftStatus.RaftState == raft.StateFollower {
+			if raftStatus != nil && raftStatus.RaftState == raftpb.StateFollower {
 				return nil
 			}
 			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1), false /* bypassSafetyChecks */)
@@ -1448,7 +1381,7 @@ func TestReplicaRangefeedPushesTransactions(t *testing.T) {
 			span := roachpb.Span{
 				Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
 			}
-			rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, []roachpb.Span{span}, ts1, rangeFeedCh)
+			rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, []kvcoord.SpanTimePair{{Span: span, StartAfter: ts1}}, rangeFeedCh)
 		}()
 	}
 
@@ -1601,7 +1534,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 		span := roachpb.Span{
 			Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
 		}
-		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, []roachpb.Span{span}, ts1, rangeFeedCh)
+		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, []kvcoord.SpanTimePair{{Span: span, StartAfter: ts1}}, rangeFeedCh)
 	}()
 
 	// Wait for a checkpoint above ts.
@@ -1802,7 +1735,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 	}
 	startRangefeed := func() {
 		span := rangefeedSpan
-		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, []roachpb.Span{span}, ts1, rangeFeedCh)
+		rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, []kvcoord.SpanTimePair{{Span: span, StartAfter: ts1}}, rangeFeedCh)
 	}
 
 	// Wait for a checkpoint above ts.
@@ -1842,13 +1775,24 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 	// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
 	// eligible to acquire a new lease.
 	log.Infof(ctx, "test expiring lease")
-	nl := n2.NodeLiveness().(*liveness.NodeLiveness)
-	resumeHeartbeats := nl.PauseAllHeartbeatsForTest()
-	n2Liveness, ok := nl.Self()
+	nl2 := n2.NodeLiveness().(*liveness.NodeLiveness)
+	resumeHeartbeats := nl2.PauseAllHeartbeatsForTest()
+	n2Liveness, ok := nl2.Self()
 	require.True(t, ok)
 	manualClock.Increment(n2Liveness.Expiration.ToTimestamp().Add(1, 0).WallTime - manualClock.UnixNano())
 	atomic.StoreInt64(&rejectExtraneousRequests, 1)
-	// Ask another node to increment n2's liveness record.
+
+	// Ask another node to increment n2's liveness record, but first, wait until
+	// n1's liveness state is the same as n2's. Otherwise, the epoch below might
+	// get rejected because of mismatching liveness records.
+	testutils.SucceedsSoon(t, func() error {
+		nl1 := n1.NodeLiveness().(*liveness.NodeLiveness)
+		n2LivenessFromN1, _ := nl1.GetLiveness(n2.NodeID())
+		if n2Liveness != n2LivenessFromN1.Liveness {
+			return errors.Errorf("waiting for node 2 liveness to converge on both nodes 1 and 2")
+		}
+		return nil
+	})
 	require.NoError(t, n1.NodeLiveness().(*liveness.NodeLiveness).IncrementEpoch(ctx, n2Liveness))
 
 	resumeHeartbeats()

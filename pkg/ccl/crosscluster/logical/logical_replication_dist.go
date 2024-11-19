@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
@@ -32,11 +29,12 @@ func constructLogicalReplicationWriterSpecs(
 	initialScanTimestamp hlc.Timestamp,
 	previousReplicatedTimestamp hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
-	tableMd map[int32]execinfrapb.TableReplicationMetadata,
+	tableMetadataByDestID map[int32]execinfrapb.TableReplicationMetadata,
 	jobID jobspb.JobID,
 	streamID streampb.StreamID,
-	filterRangefeed bool,
+	discard jobspb.LogicalReplicationDetails_Discard,
 	mode jobspb.LogicalReplicationDetails_ApplyMode,
+	metricsLabel string,
 ) (map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, error) {
 	spanGroup := roachpb.SpanGroup{}
 	baseSpec := execinfrapb.LogicalReplicationWriterSpec{
@@ -46,9 +44,10 @@ func constructLogicalReplicationWriterSpecs(
 		InitialScanTimestamp:        initialScanTimestamp,
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
 		StreamAddress:               string(streamAddress),
-		TableMetadata:               tableMd,
-		FilterRangefeed:             filterRangefeed,
+		TableMetadataByDestID:       tableMetadataByDestID,
+		Discard:                     discard,
 		Mode:                        mode,
+		MetricsLabel:                metricsLabel,
 	}
 
 	writerSpecs := make(map[base.SQLInstanceID][]execinfrapb.LogicalReplicationWriterSpec, len(destSQLInstances))

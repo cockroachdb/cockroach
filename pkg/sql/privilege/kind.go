@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package privilege
 
@@ -66,7 +61,8 @@ const (
 	CREATEDB                 Kind = 34
 	CONTROLJOB               Kind = 35
 	REPAIRCLUSTER            Kind = 36
-	largestKind                   = REPAIRCLUSTER
+	TRIGGER                  Kind = 37
+	largestKind                   = TRIGGER
 )
 
 var isDeprecatedKind = map[Kind]bool{
@@ -152,6 +148,8 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "CONTROLJOB"
 	case REPAIRCLUSTER:
 		return "REPAIRCLUSTERMETADATA"
+	case TRIGGER:
+		return "TRIGGER"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}

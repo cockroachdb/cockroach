@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvflowcontroller
 
@@ -230,10 +225,10 @@ func (c *Controller) Inspect(ctx context.Context) []kvflowinspectpb.Stream {
 	c.mu.buckets.Range(func(stream kvflowcontrol.Stream, b *bucket) bool {
 		b.mu.RLock()
 		streams = append(streams, kvflowinspectpb.Stream{
-			TenantID:               stream.TenantID,
-			StoreID:                stream.StoreID,
-			AvailableRegularTokens: int64(b.tokensLocked(regular)),
-			AvailableElasticTokens: int64(b.tokensLocked(elastic)),
+			TenantID:                   stream.TenantID,
+			StoreID:                    stream.StoreID,
+			AvailableEvalRegularTokens: int64(b.tokensLocked(regular)),
+			AvailableEvalElasticTokens: int64(b.tokensLocked(elastic)),
 		})
 		b.mu.RUnlock()
 		return true
@@ -253,10 +248,10 @@ func (c *Controller) InspectStream(
 ) kvflowinspectpb.Stream {
 	tokens := c.getTokensForStream(stream)
 	return kvflowinspectpb.Stream{
-		TenantID:               stream.TenantID,
-		StoreID:                stream.StoreID,
-		AvailableRegularTokens: int64(tokens.regular),
-		AvailableElasticTokens: int64(tokens.elastic),
+		TenantID:                   stream.TenantID,
+		StoreID:                    stream.StoreID,
+		AvailableEvalRegularTokens: int64(tokens.regular),
+		AvailableEvalElasticTokens: int64(tokens.elastic),
 	}
 }
 

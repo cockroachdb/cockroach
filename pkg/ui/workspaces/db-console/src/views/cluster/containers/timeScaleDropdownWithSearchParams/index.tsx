@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import {
   defaultTimeScaleOptions,
@@ -91,6 +86,7 @@ const TimeScaleDropdownWithSearchParams = (
 
     // Passing an empty array of dependencies will cause this effect
     // to only run on the initial render.
+    /* eslint react-hooks/exhaustive-deps: "off" */
   }, []);
 
   const onTimeScaleChange = (timeScale: TimeScale) => {
@@ -125,11 +121,11 @@ const scaleSelector = createSelector(
 );
 
 type MapStateToProps = {
-  currentScale: TimeScale
+  currentScale: TimeScale;
 };
 
 type MapDispatchToProps = {
-  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>
+  setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
 };
 
 export default connect<

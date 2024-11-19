@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package props
 
@@ -28,6 +23,55 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
+
+func TestEqEstimate(t *testing.T) {
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	emptyHist := &Histogram{}
+	emptyHist.Init(&evalCtx, opt.ColumnID(1), []cat.HistogramBucket{})
+
+	if eq := emptyHist.EqEstimate(ctx, tree.NewDInt(0)); eq != 0 {
+		t.Errorf("expected %f but found %f", 0.0, eq)
+	}
+
+	//   0  1  3  3   4  5   0  0   40  35
+	// <--- 1 --- 10 --- 25 --- 30 ---- 42
+	histData := []cat.HistogramBucket{
+		{NumRange: 0, DistinctRange: 0, NumEq: 1, UpperBound: tree.NewDInt(1)},
+		{NumRange: 3, DistinctRange: 2, NumEq: 3, UpperBound: tree.NewDInt(10)},
+		{NumRange: 4, DistinctRange: 2, NumEq: 5, UpperBound: tree.NewDInt(25)},
+		{NumRange: 0, DistinctRange: 0, NumEq: 0, UpperBound: tree.NewDInt(30)},
+		{NumRange: 40, DistinctRange: 7, NumEq: 35, UpperBound: tree.NewDInt(42)},
+	}
+	h := &Histogram{}
+	h.Init(&evalCtx, opt.ColumnID(1), histData)
+
+	testData := []struct {
+		datum    tree.Datum
+		expected float64
+	}{
+		{tree.NewDInt(1), 1},
+		{tree.NewDInt(9), 3.0 / 2},
+		{tree.NewDInt(10), 3},
+		{tree.NewDInt(11), 4.0 / 2},
+		{tree.NewDInt(25), 5},
+		{tree.NewDInt(28), 0},
+		{tree.NewDInt(30), 0},
+		{tree.NewDInt(35), 40.0 / 7},
+		{tree.NewDInt(42), 35},
+		// Use an all-bucket average for values outside the bounds of the
+		// histogram.
+		{tree.NewDInt(0), h.ValuesCount() / h.DistinctValuesCount()},
+		{tree.NewDInt(43), h.ValuesCount() / h.DistinctValuesCount()},
+	}
+
+	for i, tc := range testData {
+		if eq := h.EqEstimate(ctx, tc.datum); eq != tc.expected {
+			t.Errorf("testcase %d: expected %f but found %f", i, tc.expected, eq)
+		}
+	}
+}
 
 func TestCanFilter(t *testing.T) {
 	ctx := context.Background()
@@ -139,27 +183,34 @@ func TestHistogram(t *testing.T) {
 	if distinct != expected {
 		t.Fatalf("expected %f but found %f", expected, distinct)
 	}
+	maxFrequency, expected := h.MaxFrequency(), float64(35)
+	if maxFrequency != expected {
+		t.Fatalf("expected %f but found %f", expected, maxFrequency)
+	}
 
 	testData := []struct {
-		constraint  string
-		buckets     []cat.HistogramBucket
-		count       float64
-		maxDistinct float64
-		distinct    float64
+		constraint   string
+		buckets      []cat.HistogramBucket
+		count        float64
+		maxDistinct  float64
+		distinct     float64
+		maxFrequency float64
 	}{
 		{
-			constraint:  "/1: [/0 - /0]",
-			buckets:     []cat.HistogramBucket{},
-			count:       0,
-			maxDistinct: 0,
-			distinct:    0,
+			constraint:   "/1: [/0 - /0]",
+			buckets:      []cat.HistogramBucket{},
+			count:        0,
+			maxDistinct:  0,
+			distinct:     0,
+			maxFrequency: 0,
 		},
 		{
-			constraint:  "/1: [/50 - /100]",
-			buckets:     []cat.HistogramBucket{},
-			count:       0,
-			maxDistinct: 0,
-			distinct:    0,
+			constraint:   "/1: [/50 - /100]",
+			buckets:      []cat.HistogramBucket{},
+			count:        0,
+			maxDistinct:  0,
+			distinct:     0,
+			maxFrequency: 0,
 		},
 		{
 			constraint: "/1: [ - /1] [/11 - /24] [/30 - /45]",
@@ -172,9 +223,10 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(30)},
 				{NumRange: 40, NumEq: 35, DistinctRange: 7, UpperBound: tree.NewDInt(42)},
 			},
-			count:       80,
-			maxDistinct: 17,
-			distinct:    11.14,
+			count:        80,
+			maxDistinct:  17,
+			distinct:     11.14,
+			maxFrequency: 35,
 		},
 		{
 			constraint: "/1: [/5 - /10] [/15 - /32] [/34 - /36] [/38 - ]",
@@ -192,9 +244,10 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(37)},
 				{NumRange: 14.55, NumEq: 35, DistinctRange: 2.55, UpperBound: tree.NewDInt(42)},
 			},
-			count:       80.46,
-			maxDistinct: 16.73,
-			distinct:    12.13,
+			count:        80.46,
+			maxDistinct:  16.73,
+			distinct:     12.13,
+			maxFrequency: 35,
 		},
 		{
 			constraint: "/1: [ - /41]",
@@ -207,9 +260,10 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(30)},
 				{NumRange: 36.36, NumEq: 3.64, DistinctRange: 6.36, UpperBound: tree.NewDInt(41)},
 			},
-			count:       56,
-			maxDistinct: 21,
-			distinct:    14.36,
+			count:        56,
+			maxDistinct:  21,
+			distinct:     14.36,
+			maxFrequency: 5,
 		},
 		{
 			constraint: "/1: [/1 - ]",
@@ -222,9 +276,10 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(30)},
 				{NumRange: 40, NumEq: 35, DistinctRange: 7, UpperBound: tree.NewDInt(42)},
 			},
-			count:       91,
-			maxDistinct: 22,
-			distinct:    15,
+			count:        91,
+			maxDistinct:  22,
+			distinct:     15,
+			maxFrequency: 35,
 		},
 		{
 			constraint: "/1: [/40 - /40]",
@@ -233,9 +288,10 @@ func TestHistogram(t *testing.T) {
 			buckets: []cat.HistogramBucket{
 				{NumRange: 0, NumEq: 5.71, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
 			},
-			count:       5.71,
-			maxDistinct: 1,
-			distinct:    1,
+			count:        5.71,
+			maxDistinct:  1,
+			distinct:     1,
+			maxFrequency: 5.71,
 		},
 		{
 			constraint: "/1: [/0 - /100]",
@@ -248,9 +304,10 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, DistinctRange: 0, NumEq: 0, UpperBound: tree.NewDInt(30)},
 				{NumRange: 40, DistinctRange: 7, NumEq: 35, UpperBound: tree.NewDInt(42)},
 			},
-			count:       91,
-			maxDistinct: 22,
-			distinct:    15,
+			count:        91,
+			maxDistinct:  22,
+			distinct:     15,
+			maxFrequency: 35,
 		},
 
 		// Tests with multiple columns.
@@ -265,9 +322,10 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(30)},
 				{NumRange: 40, NumEq: 35, DistinctRange: 7, UpperBound: tree.NewDInt(42)},
 			},
-			count:       80,
-			maxDistinct: 17,
-			distinct:    11.14,
+			count:        80,
+			maxDistinct:  17,
+			distinct:     11.14,
+			maxFrequency: 35,
 		},
 		{
 			constraint: "/2/1: [/3 - /3/1] [/3/11 - /3/24] [/3/30 - /3/45]",
@@ -280,9 +338,10 @@ func TestHistogram(t *testing.T) {
 				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: tree.NewDInt(30)},
 				{NumRange: 40, NumEq: 35, DistinctRange: 7, UpperBound: tree.NewDInt(42)},
 			},
-			count:       80,
-			maxDistinct: 17,
-			distinct:    11.14,
+			count:        80,
+			maxDistinct:  17,
+			distinct:     11.14,
+			maxFrequency: 35,
 		},
 		{
 			constraint: "/2/1/3: [/1/40/2 - /1/40/3]",
@@ -291,9 +350,10 @@ func TestHistogram(t *testing.T) {
 			buckets: []cat.HistogramBucket{
 				{NumRange: 0, NumEq: 5.71, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
 			},
-			count:       5.71,
-			maxDistinct: 1,
-			distinct:    1,
+			count:        5.71,
+			maxDistinct:  1,
+			distinct:     1,
+			maxFrequency: 5.71,
 		},
 		{
 			constraint: "/2/1/3: [/1/40/2 - /1/40/2] [/1/40/4 - /1/40/4] [/1/40/6 - /1/40/6]",
@@ -302,9 +362,10 @@ func TestHistogram(t *testing.T) {
 			buckets: []cat.HistogramBucket{
 				{NumRange: 0, NumEq: 5.71, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
 			},
-			count:       5.71,
-			maxDistinct: 1,
-			distinct:    1,
+			count:        5.71,
+			maxDistinct:  1,
+			distinct:     1,
+			maxFrequency: 5.71,
 		},
 	}
 
@@ -329,6 +390,10 @@ func TestHistogram(t *testing.T) {
 			distinct := roundVal(filtered.DistinctValuesCount())
 			if testData[i].distinct != distinct {
 				t.Fatalf("expected %f but found %f", testData[i].distinct, distinct)
+			}
+			maxFrequency := roundVal(filtered.MaxFrequency())
+			if testData[i].maxFrequency != maxFrequency {
+				t.Fatalf("expected %f but found %f", testData[i].maxFrequency, maxFrequency)
 			}
 			roundHistogram(filtered)
 			if !reflect.DeepEqual(testData[i].buckets, filtered.buckets) {
@@ -1143,8 +1208,6 @@ func BenchmarkHistogram(b *testing.B) {
 		return &c
 	}
 
-	selectivity := MakeSelectivity(0.5)
-
 	for _, typ := range typs {
 		b.Run(typ.Name(), func(b *testing.B) {
 			for _, bucketCount := range bucketCounts {
@@ -1152,11 +1215,6 @@ func BenchmarkHistogram(b *testing.B) {
 					h := Histogram{}
 					h.Init(&evalCtx, opt.ColumnID(1), makeBuckets(typ, bucketCount))
 					c := makeConstraint(typ, bucketCount)
-					b.Run("ValuesCount", func(b *testing.B) {
-						for i := 0; i < b.N; i++ {
-							h.ValuesCount()
-						}
-					})
 					b.Run("DistinctValuesCount", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							h.DistinctValuesCount()
@@ -1165,11 +1223,6 @@ func BenchmarkHistogram(b *testing.B) {
 					b.Run("Filter", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							h.Filter(ctx, c)
-						}
-					})
-					b.Run("ApplySelectivity", func(b *testing.B) {
-						for i := 0; i < b.N; i++ {
-							h.ApplySelectivity(selectivity)
 						}
 					})
 				})

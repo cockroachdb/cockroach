@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
@@ -119,40 +116,66 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaStreamBatchRowsHist = metric.Metadata{
-		Name:        "logical_replication.flush_row_count",
-		Help:        "Number of rows in a given flush",
-		Measurement: "Rows",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaStreamBatchBytesHist = metric.Metadata{
-		Name:        "logical_replication.flush_bytes",
-		Help:        "Number of bytes in a given flush",
-		Measurement: "Logical bytes",
-		Unit:        metric.Unit_BYTES,
-	}
-	metaStreamBatchNanosHist = metric.Metadata{
-		Name:        "logical_replication.flush_hist_nanos",
-		Help:        "Time spent flushing messages across all replication streams",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaOptimisticInsertConflictCount = metric.Metadata{
-		Name:        "logical_replication.optimistic_insert_conflict_count",
-		Help:        "Total number of times the optimistic insert encountered a conflict",
-		Measurement: "Events",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaKVWriteFallbackCount = metric.Metadata{
-		Name:        "logical_replication.kv_write_fallback_count",
-		Help:        "Total number of times the kv write path could not handle a row update and fell back to SQL instead",
-		Measurement: "Events",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaDistSQLReplanCount = metric.Metadata{
 		Name:        "logical_replication.replan_count",
 		Help:        "Total number of dist sql replanning events",
 		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaKVUpdateTooOld = metric.Metadata{
+		Name:        "logical_replication.kv.update_too_old",
+		Help:        "Total number of updates that were not applied because they were too old",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaKVValueRefreshes = metric.Metadata{
+		Name:        "logical_replication.kv.value_refreshes",
+		Help:        "Total number of batches that refreshed the previous value",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaScanningRanges = metric.Metadata{
+		Name:        "logical_replication.scanning_ranges",
+		Help:        "Source side ranges undergoing an initial scan (innacurate with multiple LDR jobs)",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaCatchupRanges = metric.Metadata{
+		Name:        "logical_replication.catchup_ranges",
+		Help:        "Source side ranges undergoing catch up scans (innacurate with multiple LDR jobs)",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	// Labeled metrics.
+	metaLabeledReplicatedTime = metric.Metadata{
+		Name:        "logical_replication.replicated_time_by_label",
+		Help:        "Replicated time of the logical replication stream by label",
+		Measurement: "Seconds",
+		Unit:        metric.Unit_SECONDS,
+	}
+	metaLabeledEventsIngetsted = metric.Metadata{
+		Name:        "logical_replication.events_ingested_by_label",
+		Help:        "Events ingested by all replication jobs by label",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLabeledEventsDLQed = metric.Metadata{
+		Name:        "logical_replication.events_dlqed_by_label",
+		Help:        "Row update events sent to DLQ by label",
+		Measurement: "Failures",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLabeledScanningRanges = metric.Metadata{
+		Name:        "logical_replication.scanning_ranges_by_label",
+		Help:        "Source side ranges undergoing an initial scan",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLabeledCatchupRanges = metric.Metadata{
+		Name:        "logical_replication.catchup_ranges_by_label",
+		Help:        "Source side ranges undergoing catch up scans",
+		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -183,16 +206,22 @@ type Metrics struct {
 	RetriedApplySuccesses *metric.Counter
 	RetriedApplyFailures  *metric.Counter
 
+	ScanningRanges *metric.Gauge
+	CatchupRanges  *metric.Gauge
+
 	// Internal numbers that are useful for determining why a stream is behaving
 	// a specific way.
 	CheckpointEvents *metric.Counter
-	// TODO(dt): are these stream batch size or latency numbers useful?
-	StreamBatchRowsHist           metric.IHistogram
-	StreamBatchBytesHist          metric.IHistogram
-	StreamBatchNanosHist          metric.IHistogram
-	OptimisticInsertConflictCount *metric.Counter
-	KVWriteFallbackCount          *metric.Counter
-	ReplanCount                   *metric.Counter
+	ReplanCount      *metric.Counter
+	KVValueRefreshes *metric.Counter
+	KVUpdateTooOld   *metric.Counter
+
+	// Labeled export-only metrics.
+	LabeledReplicatedTime *metric.GaugeVec
+	LabeledEventsIngested *metric.CounterVec
+	LabeledEventsDLQed    *metric.CounterVec
+	LabeledScanningRanges *metric.GaugeVec
+	LabeledCatchupRanges  *metric.GaugeVec
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -227,27 +256,20 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		InitialApplyFailures:  metric.NewCounter(metaInitialApplyFailures),
 		RetriedApplySuccesses: metric.NewCounter(metaRetriedApplySuccesses),
 		RetriedApplyFailures:  metric.NewCounter(metaRetriedApplyFailures),
-		CheckpointEvents:      metric.NewCounter(metaCheckpointEvents),
-		StreamBatchRowsHist: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaStreamBatchRowsHist,
-			Duration:     histogramWindow,
-			BucketConfig: metric.DataCount16MBuckets,
-		}),
-		StreamBatchBytesHist: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaStreamBatchBytesHist,
-			Duration:     histogramWindow,
-			BucketConfig: metric.MemoryUsage64MBBuckets,
-		}),
-		StreamBatchNanosHist: metric.NewHistogram(metric.HistogramOptions{
-			Mode:         metric.HistogramModePrometheus,
-			Metadata:     metaStreamBatchNanosHist,
-			Duration:     histogramWindow,
-			BucketConfig: metric.IOLatencyBuckets,
-		}),
-		OptimisticInsertConflictCount: metric.NewCounter(metaOptimisticInsertConflictCount),
-		KVWriteFallbackCount:          metric.NewCounter(metaKVWriteFallbackCount),
-		ReplanCount:                   metric.NewCounter(metaDistSQLReplanCount),
+
+		CheckpointEvents: metric.NewCounter(metaCheckpointEvents),
+		ReplanCount:      metric.NewCounter(metaDistSQLReplanCount),
+		KVUpdateTooOld:   metric.NewCounter(metaKVUpdateTooOld),
+		KVValueRefreshes: metric.NewCounter(metaKVValueRefreshes),
+
+		ScanningRanges: metric.NewGauge(metaScanningRanges),
+		CatchupRanges:  metric.NewGauge(metaCatchupRanges),
+
+		// Labeled export-only metrics.
+		LabeledReplicatedTime: metric.NewExportedGaugeVec(metaLabeledReplicatedTime, []string{"label"}),
+		LabeledEventsIngested: metric.NewExportedCounterVec(metaLabeledEventsIngetsted, []string{"label"}),
+		LabeledEventsDLQed:    metric.NewExportedCounterVec(metaLabeledEventsDLQed, []string{"label"}),
+		LabeledScanningRanges: metric.NewExportedGaugeVec(metaLabeledScanningRanges, []string{"label"}),
+		LabeledCatchupRanges:  metric.NewExportedGaugeVec(metaLabeledCatchupRanges, []string{"label"}),
 	}
 }

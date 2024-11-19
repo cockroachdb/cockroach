@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package security
 
@@ -35,11 +30,13 @@ import (
 const (
 	// Make certs valid a day before to handle clock issues, specifically
 	// boot2docker: https://github.com/boot2docker/boot2docker/issues/69
-	validFrom                = -time.Hour * 24
-	maxPathLength            = 1
-	caCommonName             = "Cockroach CA"
-	tenantURISANPrefixString = "crdb://"
-	tenantURISANFormatString = tenantURISANPrefixString + "tenant/%d/user/%s"
+	validFrom                    = -time.Hour * 24
+	maxPathLength                = 1
+	caCommonName                 = "Cockroach CA"
+	tenantURISANSchemeString     = "crdb"
+	tenantNamePrefixString       = "tenant-name"
+	tenantURISANFormatString     = tenantURISANSchemeString + "://" + "tenant/%d/user/%s"
+	tenantNameURISANFormatString = tenantURISANSchemeString + "://" + tenantNamePrefixString + "/%s/user/%s"
 
 	// TenantsOU is the OrganizationalUnit that determines a client certificate should be treated as a tenant client
 	// certificate (as opposed to a KV node client certificate).
@@ -253,7 +250,8 @@ func GenerateClientCert(
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
 	user username.SQLUsername,
-	tenantID []roachpb.TenantID,
+	tenantIDs []roachpb.TenantID,
+	tenantNames []roachpb.TenantName,
 ) ([]byte, error) {
 
 	// TODO(marc): should we add extra checks?
@@ -275,11 +273,17 @@ func GenerateClientCert(
 	// Set client-specific fields.
 	// Client authentication only.
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
-	urls, err := MakeTenantURISANs(user, tenantID)
+	tenantIDURLs, err := MakeTenantURISANs(user, tenantIDs)
 	if err != nil {
 		return nil, err
 	}
-	template.URIs = append(template.URIs, urls...)
+	tenantNameURLs, err := MakeTenantNameURISANs(user, tenantNames)
+	if err != nil {
+		return nil, err
+	}
+	template.URIs = append(template.URIs, tenantIDURLs...)
+	template.URIs = append(template.URIs, tenantNameURLs...)
+
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
 	if err != nil {
 		return nil, err
@@ -334,13 +338,34 @@ func MakeTenantURISANs(
 	return urls, nil
 }
 
-// URISANHasCRDBPrefix indicates whether a URI string has the tenant URI SAN prefix.
-func URISANHasCRDBPrefix(rawlURI string) bool {
-	return strings.HasPrefix(rawlURI, tenantURISANPrefixString)
+// MakeTenantNameURISANs constructs the tenant name SAN URI for the client certificate.
+func MakeTenantNameURISANs(
+	username username.SQLUsername, tenantNames []roachpb.TenantName,
+) ([]*url.URL, error) {
+	urls := make([]*url.URL, 0, len(tenantNames))
+	for _, tenantName := range tenantNames {
+		uri, err := url.Parse(fmt.Sprintf(tenantNameURISANFormatString, tenantName, username.Normalized()))
+		if err != nil {
+			return nil, err
+		}
+		urls = append(urls, uri)
+	}
+	return urls, nil
 }
 
-// ParseTenantURISAN extracts the user and tenant ID contained within a tenant URI SAN.
-func ParseTenantURISAN(rawURL string) (roachpb.TenantID, string, error) {
+// isCRDBSANURI indicates whether the URI uses CRDB scheme.
+func isCRDBSANURI(uri *url.URL) bool {
+	return uri.Scheme == tenantURISANSchemeString
+}
+
+// isTenantNameSANURI indicates whether the URI is using tenant name to identify the tenant.
+func isTenantNameSANURI(uri *url.URL) bool {
+	return uri.Host == tenantNamePrefixString
+}
+
+// parseTenantURISAN extracts the user and tenant ID contained within a tenant URI SAN.
+func parseTenantURISAN(uri *url.URL) (roachpb.TenantID, string, error) {
+	rawURL := uri.String()
 	r := strings.NewReader(rawURL)
 	var tID uint64
 	var username string
@@ -349,4 +374,17 @@ func ParseTenantURISAN(rawURL string) (roachpb.TenantID, string, error) {
 		return roachpb.TenantID{}, "", errors.Errorf("invalid tenant URI SAN %s", rawURL)
 	}
 	return roachpb.MustMakeTenantID(tID), username, nil
+}
+
+// parseTenantNameURISAN extracts the user and tenant name contained within a tenant URI SAN.
+func parseTenantNameURISAN(uri *url.URL) (roachpb.TenantName, string, error) {
+	if !isCRDBSANURI(uri) || !isTenantNameSANURI(uri) {
+		return roachpb.TenantName(""), "", errors.Errorf("invalid tenant-name URI SAN %q", uri.String())
+	}
+	parts := strings.Split(uri.Path, "/")
+	if len(parts) != 4 {
+		return roachpb.TenantName(""), "", errors.Errorf("invalid tenant-name URI SAN %q", uri.String())
+	}
+	tenantName, username := parts[1], parts[3]
+	return roachpb.TenantName(tenantName), username, nil
 }

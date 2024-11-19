@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sctestutils
 
@@ -32,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -69,6 +65,7 @@ func WithBuilderDependenciesFromTestServer(
 		Descriptors() *descs.Collection
 		SessionData() *sessiondata.SessionData
 		SemaCtx() *tree.SemaContext
+		EvalContext() *eval.Context
 		resolver.SchemaResolver
 		scbuild.AuthorizationAccessor
 		scbuild.AstFormatter
@@ -89,6 +86,7 @@ func WithBuilderDependenciesFromTestServer(
 	// changer will allow non-fully implemented operations.
 	planner.SessionData().NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 	planner.SessionData().EnableUniqueWithoutIndexConstraints = true
+	planner.SessionData().AlterColumnTypeGeneralEnabled = true
 	fn(scdeps.NewBuilderDependencies(
 		execCfg.NodeInfo.LogicalClusterID(),
 		execCfg.Codec,
@@ -108,6 +106,8 @@ func WithBuilderDependenciesFromTestServer(
 		planner, /* nodesStatusInfo */
 		planner, /* regionProvider */
 		planner.SemaCtx(),
+		planner.EvalContext(),
+		execCfg.DefaultZoneConfig,
 	))
 }
 

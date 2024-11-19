@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -47,9 +42,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/fifo"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"github.com/cockroachdb/fifo"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
@@ -106,6 +101,28 @@ var IngestSplitEnabled = settings.RegisterBoolSetting(
 		"storage.ingest_split.enabled", true), /* defaultValue */
 	settings.WithPublic,
 )
+
+// columnarBlocksEnabled controls whether columnar-blocks are enabled in Pebble.
+var columnarBlocksEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"storage.columnar_blocks.enabled",
+	"set to true to enable columnar-blocks to store KVs in a columnar format",
+	metamorphic.ConstantWithTestBool(
+		"storage.columnar_blocks.enabled", true /* defaultValue */),
+	settings.WithPublic,
+)
+
+// deleteCompactionsCanExcise controls whether delete compactions can
+// apply rangedels/rangekeydels on sstables they partially apply to, through
+// an excise operation, instead of just applying the rangedels/rangekeydels
+// that fully delete sstables.
+var deleteCompactionsCanExcise = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"storage.delete_compaction_excise.enabled",
+	"set to false to direct Pebble to not partially excise sstables in delete-only compactions",
+	metamorphic.ConstantWithTestBool(
+		"storage.delete_compaction_excise.enabled", true), /* defaultValue */
+	settings.WithPublic)
 
 // IngestAsFlushable controls whether ingested sstables that overlap the
 // memtable may be lazily ingested: written to the WAL and enqueued in the list
@@ -390,10 +407,40 @@ func ShouldUseEFOS(settings *settings.Values) bool {
 	return UseEFOS.Get(settings) || UseExciseForSnapshots.Get(settings)
 }
 
-// EngineSuffixCompare implements pebble.Comparer.CompareSuffixes. It compares
-// cockroach suffixes (which are composed of the version and a trailing sentinel
-// byte); the version can be an MVCC timestamp or a lock key.
-func EngineSuffixCompare(a, b []byte) int {
+// EngineRangeSuffixCompare implements pebble.Comparer.CompareRangeSuffixes. It
+// compares cockroach suffixes (which are composed of the version and a trailing
+// sentinel byte); the version can be an MVCC timestamp or a lock key. It is
+// more strict than EnginePointSuffixCompare due to historical reasons; see
+// https://github.com/cockroachdb/cockroach/issues/130533
+func EngineRangeSuffixCompare(a, b []byte) int {
+	if len(a) == 0 || len(b) == 0 {
+		// Empty suffixes sort before non-empty suffixes.
+		return cmp.Compare(len(a), len(b))
+	}
+	// Here we are not using normalizeEngineKeyVersionForCompare for historical
+	// reasons, summarized in
+	// https://github.com/cockroachdb/cockroach/issues/130533.
+
+	// Check and strip off sentinel bytes.
+	if buildutil.CrdbTestBuild && len(a) != int(a[len(a)-1]) {
+		panic(errors.AssertionFailedf("malformed suffix: %x", a))
+	}
+	if buildutil.CrdbTestBuild && len(b) != int(b[len(b)-1]) {
+		panic(errors.AssertionFailedf("malformed suffix: %x", b))
+	}
+	return bytes.Compare(b[:len(b)-1], a[:len(a)-1])
+}
+
+// EnginePointSuffixCompare compares suffixes of Cockroach point keys (which are
+// composed of the version and a trailing version-length byte); the version can
+// be an MVCC timestamp or a lock key. EnginePointSuffixCompare differs from
+// EngineSuffixCompare, because EnginePointSuffixCompare normalizes the
+// suffixes. Ideally we'd have one function that implemented the semantics of
+// EnginePointSuffixCompare, but due to historical reasons, range key suffix
+// comparisons must not perform normalization.
+//
+// See https://github.com/cockroachdb/cockroach/issues/130533
+func EnginePointSuffixCompare(a, b []byte) int {
 	// NB: For performance, this routine manually splits the key into the
 	// user-key and version components rather than using DecodeEngineKey. In
 	// most situations, use DecodeEngineKey or GetKeyPartFromEngineKey or
@@ -413,7 +460,10 @@ func checkEngineKey(k []byte) {
 		panic(errors.AssertionFailedf("empty key"))
 	}
 	if int(k[len(k)-1]) >= len(k) {
-		panic(errors.AssertionFailedf("malformed key sentinel byte: %x", k))
+		panic(errors.AssertionFailedf("malformed key terminator byte: %x", k))
+	}
+	if k[len(k)-1] == 1 {
+		panic(errors.AssertionFailedf("invalid key terminator byte 1"))
 	}
 }
 
@@ -444,8 +494,6 @@ func EngineKeySplit(k []byte) int {
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
 func EngineKeyCompare(a, b []byte) int {
-	// TODO(radu): Pebble sometimes passes empty "keys" and we have to tolerate
-	// them until we fix that.
 	if len(a) == 0 || len(b) == 0 {
 		return cmp.Compare(len(a), len(b))
 	}
@@ -481,8 +529,6 @@ func EngineKeyCompare(a, b []byte) int {
 // EngineKeyEqual checks for equality of cockroach keys, including the version
 // (which could be MVCC timestamps).
 func EngineKeyEqual(a, b []byte) bool {
-	// TODO(radu): Pebble sometimes passes empty "keys" and we have to tolerate
-	// them until we fix that.
 	if len(a) == 0 || len(b) == 0 {
 		return len(a) == len(b)
 	}
@@ -574,10 +620,11 @@ func normalizeEngineSuffixForCompare(a []byte) []byte {
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var EngineComparer = &pebble.Comparer{
-	Split:           EngineKeySplit,
-	CompareSuffixes: EngineSuffixCompare,
-	Compare:         EngineKeyCompare,
-	Equal:           EngineKeyEqual,
+	Split:                EngineKeySplit,
+	CompareRangeSuffixes: EngineRangeSuffixCompare,
+	ComparePointSuffixes: EnginePointSuffixCompare,
+	Compare:              EngineKeyCompare,
+	Equal:                EngineKeyEqual,
 
 	AbbreviatedKey: func(k []byte) uint64 {
 		key, ok := GetKeyPartFromEngineKey(k)
@@ -794,8 +841,10 @@ const MinimumSupportedFormatVersion = pebble.FormatSyntheticPrefixSuffix
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
 	opts := &pebble.Options{
-		Comparer: EngineComparer,
-		FS:       vfs.Default,
+		Comparer:   EngineComparer,
+		FS:         vfs.Default,
+		KeySchema:  keySchema.Name,
+		KeySchemas: sstable.MakeKeySchemas(KeySchemas...),
 		// A value of 2 triggers a compaction when there is 1 sub-level.
 		L0CompactionThreshold: 2,
 		L0StopWritesThreshold: 1000,
@@ -842,6 +891,10 @@ func DefaultPebbleOptions() *pebble.Options {
 		Lower: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
 		Upper: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()}),
 	}
+	// Disable multi-level compaction heuristic for now. See #134423
+	// for why this was disabled, and what needs to be changed to reenable it.
+	// This issue tracks re-enablement: https://github.com/cockroachdb/pebble/issues/4139
+	opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
 
 	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
@@ -1189,14 +1242,14 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		// Pebble has better guards against this.
 		return cfg.sharedStorage != nil || !IngestAsFlushable.Get(&cfg.settings.SV)
 	}
-	// Multi-level compactions were discovered to cause excessively large
-	// compactions that can have adverse affects. We disable these types of
-	// compactions for now.
-	// See https://github.com/cockroachdb/pebble/issues/3120
-	// TODO(travers): Re-enable, once the issues are resolved.
-	cfg.opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
 	cfg.opts.Experimental.IngestSplit = func() bool {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
+	}
+	cfg.opts.Experimental.EnableColumnarBlocks = func() bool {
+		return columnarBlocksEnabled.Get(&cfg.settings.SV)
+	}
+	cfg.opts.Experimental.EnableDeleteOnlyCompactionExcises = func() bool {
+		return deleteCompactionsCanExcise.Get(&cfg.settings.SV)
 	}
 
 	auxDir := cfg.opts.FS.PathJoin(cfg.env.Dir, base.AuxiliaryDir)
@@ -1716,8 +1769,8 @@ func (p *Pebble) ScanInternal(
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
-	// TODO(sumeer): set CategoryAndQoS.
-	return p.db.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
+	// TODO(sumeer): set category.
+	return p.db.ScanInternal(ctx, sstable.CategoryUnknown, rawLower, rawUpper, visitPointKey,
 		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
@@ -1842,6 +1895,13 @@ func (p *Pebble) ClearMVCCIteratorRange(start, end roachpb.Key, pointKeys, range
 func (p *Pebble) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	if err := rangeKey.Validate(); err != nil {
 		return err
+	}
+	// If the range key holds an encoded timestamp as it was read from storage,
+	// write the tombstone to clear it using the same encoding of the timestamp.
+	// See #129592.
+	if len(rangeKey.EncodedTimestampSuffix) > 0 {
+		return p.ClearEngineRangeKey(
+			rangeKey.StartKey, rangeKey.EndKey, rangeKey.EncodedTimestampSuffix)
 	}
 	return p.ClearEngineRangeKey(
 		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
@@ -2316,7 +2376,7 @@ func (p *Pebble) IngestAndExciseFiles(
 		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
 		End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
 	}
-	return p.db.IngestAndExcise(ctx, paths, shared, external, rawSpan, sstsContainExciseTombstone)
+	return p.db.IngestAndExcise(ctx, paths, shared, external, rawSpan)
 }
 
 // IngestExternalFiles implements the Engine interface.
@@ -2512,7 +2572,8 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
-	clusterversion.V24_1: pebble.FormatSyntheticPrefixSuffix,
+	clusterversion.V24_2: pebble.FormatSyntheticPrefixSuffix,
+	clusterversion.V24_3: pebble.FormatColumnarBlocks,
 }
 
 // pebbleFormatVersionKeys contains the keys in the map above, in descending order.
@@ -2534,7 +2595,7 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 	// pebbleFormatVersionKeys are sorted in descending order; find the first one
 	// that is not newer than clusterVersion.
 	for _, k := range pebbleFormatVersionKeys {
-		if clusterVersion.AtLeast(k.FenceVersion()) {
+		if clusterVersion.AtLeast(k.Version().FenceVersion()) {
 			return pebbleFormatVersionMap[k]
 		}
 	}
@@ -2883,7 +2944,7 @@ func (p *pebbleReadOnly) ConsistentIterators() bool {
 // PinEngineStateForIterators implements the Engine interface.
 func (p *pebbleReadOnly) PinEngineStateForIterators(readCategory fs.ReadCategory) error {
 	if p.iter == nil {
-		o := &pebble.IterOptions{CategoryAndQoS: fs.GetCategoryAndQoS(readCategory)}
+		o := &pebble.IterOptions{Category: readCategory.PebbleCategory()}
 		if p.durability == GuaranteedDurability {
 			o.OnlyReadGuaranteedDurable = true
 		}
@@ -3101,8 +3162,8 @@ func (p *pebbleSnapshot) ScanInternal(
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
-	// TODO(sumeer): set CategoryAndQoS.
-	return p.snapshot.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
+	// TODO(sumeer): set category.
+	return p.snapshot.ScanInternal(ctx, sstable.CategoryUnknown, rawLower, rawUpper, visitPointKey,
 		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 
@@ -3225,8 +3286,8 @@ func (p *pebbleEFOS) ScanInternal(
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
-	// TODO(sumeer): set CategoryAndQoS.
-	return p.efos.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
+	// TODO(sumeer): set category.
+	return p.efos.ScanInternal(ctx, sstable.CategoryUnknown, rawLower, rawUpper, visitPointKey,
 		visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)
 }
 

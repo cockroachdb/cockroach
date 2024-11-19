@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -50,10 +45,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -71,7 +66,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
@@ -108,6 +102,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
+	tablemetadatacache_util "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -139,7 +134,7 @@ func init() {
 	builtins.ExecuteQueryViaJobExecContext = func(
 		evalCtx *eval.Context,
 		ctx context.Context,
-		opName string,
+		opName redact.RedactableString,
 		txn *kv.Txn,
 		override sessiondata.InternalExecutorOverride,
 		stmt string,
@@ -592,7 +587,11 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	func() map[sessiondatapb.VectorizeExecMode]string {
 		m := make(map[sessiondatapb.VectorizeExecMode]string, len(sessiondatapb.VectorizeExecMode_name))
 		for k := range sessiondatapb.VectorizeExecMode_name {
-			// Note that VectorizeExecMode.String() remaps "unset" to "on".
+			// Note that for historical reasons, VectorizeExecMode.String() remaps
+			// both "unset" and "201auto" to "on", so we end up with a map like:
+			// 0: on, 1: on, 2: on, 3: experimental_always, 4: off. This means that
+			// after SET CLUSTER SETTING sql.defaults.vectorize = 'on'; we could have
+			// 0, 1, or 2 in system.settings and must handle all three cases as 'on'.
 			m[sessiondatapb.VectorizeExecMode(k)] = sessiondatapb.VectorizeExecMode(k).String()
 		}
 		return m
@@ -633,7 +632,9 @@ var SerialNormalizationMode = settings.RegisterEnumSetting(
 var disallowFullTableScans = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	`sql.defaults.disallow_full_table_scans.enabled`,
-	"setting to true rejects queries that have planned a full table scan",
+	"setting to true rejects queries that have planned a full table scan; set "+
+		"large_full_scan_rows > 0 to allow small full table scans estimated to "+
+		"read fewer than large_full_scan_rows",
 	false,
 	settings.WithPublic)
 
@@ -709,10 +710,11 @@ var txnRowsReadErr = settings.RegisterIntSetting(
 var largeFullScanRows = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"sql.defaults.large_full_scan_rows",
-	"default value for large_full_scan_rows session setting which determines "+
-		"the maximum table size allowed for a full scan when disallow_full_table_scans "+
-		"is set to true",
-	1000.0,
+	"default value for large_full_scan_rows session variable which determines "+
+		"the table size at which full scans are considered large and disallowed "+
+		"when disallow_full_table_scans is set to true; set to 0 to reject all "+
+		"full table or full index scans when disallow_full_table_scans is true",
+	0,
 	settings.WithPublic)
 
 var costScansWithDefaultColSize = settings.RegisterBoolSetting(
@@ -835,7 +837,7 @@ var (
 	// Below are the metadata for the statement started counters.
 	MetaQueryStarted = metric.Metadata{
 		Name:        "sql.query.started.count",
-		Help:        "Number of SQL queries started",
+		Help:        "Number of SQL operations started including queries, and transaction control statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -884,6 +886,12 @@ var (
 	MetaDeleteStarted = metric.Metadata{
 		Name:        "sql.delete.started.count",
 		Help:        "Number of SQL DELETE statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaCRUDStarted = metric.Metadata{
+		Name:        "sql.crud_query.started.count",
+		Help:        "Number of SQL SELECT, INSERT, UPDATE, DELETE statements started",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -951,7 +959,7 @@ var (
 	// Below are the metadata for the statement executed counters.
 	MetaQueryExecuted = metric.Metadata{
 		Name:        "sql.query.count",
-		Help:        "Number of SQL queries executed",
+		Help:        "Number of SQL operations started including queries, and transaction control statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1000,6 +1008,12 @@ var (
 	MetaDeleteExecuted = metric.Metadata{
 		Name:        "sql.delete.count",
 		Help:        "Number of SQL DELETE statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaCRUDExecuted = metric.Metadata{
+		Name:        "sql.crud_query.count",
+		Help:        "Number of SQL SELECT, INSERT, UPDATE, DELETE statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1306,6 +1320,7 @@ type ExecutorConfig struct {
 	ExternalConnectionTestingKnobs       *externalconn.TestingKnobs
 	EventLogTestingKnobs                 *EventLogTestingKnobs
 	InsightsTestingKnobs                 *insights.TestingKnobs
+	TableMetadataKnobs                   *tablemetadatacache_util.TestingKnobs
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
 	HistogramWindowInterval time.Duration
@@ -1457,9 +1472,6 @@ type ExecutorConfig struct {
 	// RangeStatsFetcher is used to fetch RangeStats.
 	RangeStatsFetcher eval.RangeStatsFetcher
 
-	// EventsExporter is the client for the Observability Service.
-	EventsExporter obs.EventsExporterInterface
-
 	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
 	NodeDescs kvclient.NodeDescStore
 
@@ -1471,6 +1483,9 @@ type ExecutorConfig struct {
 
 	// CidrLookup is used to look up the tag name for a given IP address.
 	CidrLookup *cidr.Lookup
+
+	// LicenseEnforcer is used to enforce the license profiles.
+	LicenseEnforcer *license.Enforcer
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
@@ -1603,7 +1618,7 @@ type ExecutorTestingKnobs struct {
 	// query (i.e. no subqueries). The physical plan is only safe for use for the
 	// lifetime of this function. Note that returning a nil function is
 	// unsupported and will lead to a panic.
-	TestingSaveFlows func(stmt string) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error
+	TestingSaveFlows func(stmt string) SaveFlowsFunc
 
 	// DeterministicExplain, if set, will result in overriding fields in EXPLAIN
 	// and EXPLAIN ANALYZE that can vary between runs (like elapsed times).
@@ -1674,6 +1689,10 @@ type ExecutorTestingKnobs struct {
 	// due to some other condition. We can't set the probability to 0 since
 	// that would disable the feature entirely.
 	DisableProbabilisticSampling bool
+
+	// AfterArbiterRead, if set, will be called after each row read from an arbiter index
+	// for an UPSERT or INSERT.
+	AfterArbiterRead func()
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -1865,6 +1884,8 @@ type StreamingTestingKnobs struct {
 	SkipSpanConfigReplication bool
 
 	SpanConfigRangefeedCacheKnobs *rangefeedcache.TestingKnobs
+
+	FailureRate uint32
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
@@ -2263,8 +2284,9 @@ type SessionArgs struct {
 	User                        username.SQLUsername
 	IsSuperuser                 bool
 	IsSSL                       bool
+	AuthenticationMethod        redact.SafeString
 	ReplicationMode             sessiondatapb.ReplicationMode
-	SystemIdentity              username.SQLUsername
+	SystemIdentity              string
 	SessionDefaults             SessionDefaults
 	CustomOptionSessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
@@ -3286,6 +3308,10 @@ func (m *sessionDataMutator) SetPartiallyDistributedPlansDisabled(val bool) {
 	m.data.PartiallyDistributedPlansDisabled = val
 }
 
+func (m *sessionDataMutator) SetDisableVecUnionEagerCancellation(val bool) {
+	m.data.DisableVecUnionEagerCancellation = val
+}
+
 func (m *sessionDataMutator) SetRequireExplicitPrimaryKeys(val bool) {
 	m.data.RequireExplicitPrimaryKeys = val
 }
@@ -3864,6 +3890,22 @@ func (m *sessionDataMutator) SetOptimizerUsePolymorphicParameterFix(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerUseConditionalHoistFix(val bool) {
 	m.data.OptimizerUseConditionalHoistFix = val
+}
+
+func (m *sessionDataMutator) SetOptimizerPushLimitIntoProjectFilteredScan(val bool) {
+	m.data.OptimizerPushLimitIntoProjectFilteredScan = val
+}
+
+func (m *sessionDataMutator) SetBypassPCRReaderCatalogAOST(val bool) {
+	m.data.BypassPCRReaderCatalogAOST = val
+}
+
+func (m *sessionDataMutator) SetUnsafeAllowTriggersModifyingCascades(val bool) {
+	m.data.UnsafeAllowTriggersModifyingCascades = val
+}
+
+func (m *sessionDataMutator) SetRecursionDepthLimit(val int) {
+	m.data.RecursionDepthLimit = int64(val)
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

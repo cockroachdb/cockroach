@@ -41,9 +41,9 @@ ok
 
 status 1
 ----
-1: StateReplicate match=11 next=12
-2: StateReplicate match=11 next=12
-3: StateProbe match=0 next=11 paused inactive
+1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+3: StateProbe match=0 next=11 sentCommit=10 matchCommit=0 paused inactive
 
 # Add the node that will receive a snapshot (it has no state at all, does not
 # even have a config).
@@ -55,38 +55,37 @@ INFO newRaft 3 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastter
 
 # Time passes on the leader so that it will try the previously missing follower
 # again.
+# TODO(ibrahim): Consider not constructing a snapshot in the first place if we
+# can't send it.
 tick-heartbeat 1
 ----
-ok
+DEBUG ignore sending snapshot to 3 since it is not recently active
 
 process-ready 1
 ----
 Ready MustSync=false:
 Messages:
-1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
-1->3 MsgHeartbeat Term:1 Log:0/0
+1->3 MsgFortifyLeader Term:1 Log:0/0
 
-# Iterate until no more work is done by the new peer. It receives the heartbeat
-# and responds.
+# Iterate until no more work is done by the new peer.
 stabilize 3
 ----
 > 3 receiving messages
-  1->3 MsgHeartbeat Term:1 Log:0/0
-  INFO 3 [term: 0] received a MsgHeartbeat message with higher term from 1 [term: 1]
+  1->3 MsgFortifyLeader Term:1 Log:0/0
+  INFO 3 [term: 0] received a MsgFortifyLeader message with higher term from 1 [term: 1], new leader indicated, advancing term
   INFO 3 became follower at term 1
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Commit:0 Lead:1 LeadEpoch:0
+  HardState Term:1 Commit:0 Lead:1 LeadEpoch:1
   Messages:
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
 
-# The leader in turn will realize that n3 needs a snapshot, which it initiates.
 stabilize 1
 ----
 > 1 receiving messages
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  DEBUG 1 [firstindex: 12, commit: 11] sent snapshot[index: 11, term: 1] to 3 [StateProbe match=0 next=11]
-  DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=12 paused pendingSnap=11]
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  DEBUG 1 [firstindex: 12, commit: 11] sent snapshot[index: 11, term: 1] to 3 [StateProbe match=0 next=11 sentCommit=10 matchCommit=0]
+  DEBUG 1 paused sending replication messages to 3 [StateSnapshot match=0 next=12 sentCommit=11 matchCommit=0 paused pendingSnap=11]
 > 1 handling Ready
   Ready MustSync=false:
   Messages:
@@ -95,9 +94,9 @@ stabilize 1
 
 status 1
 ----
-1: StateReplicate match=11 next=12
-2: StateReplicate match=11 next=12
-3: StateSnapshot match=0 next=12 paused pendingSnap=11
+1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+3: StateSnapshot match=0 next=12 sentCommit=11 matchCommit=0 paused pendingSnap=11
 
 # Follower applies the snapshot. Note how it reacts with a MsgAppResp upon completion.
 # The snapshot fully catches the follower up (i.e. there are no more log entries it
@@ -114,7 +113,7 @@ stabilize 3
   INFO 3 [commit: 11] restored snapshot [index: 11, term: 1]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Commit:11 Lead:1 LeadEpoch:0
+  HardState Term:1 Commit:11 Lead:1 LeadEpoch:1
   Snapshot Index:11 Term:1 ConfState:Voters:[1 2 3] VotersOutgoing:[] Learners:[] LearnersNext:[] AutoLeave:false
   Messages:
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
@@ -125,22 +124,10 @@ stabilize 1
 ----
 > 1 receiving messages
   3->1 MsgAppResp Term:1 Log:0/11 Commit:11
-  DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=11 next=12 paused pendingSnap=11]
+  DEBUG 1 recovered from needing snapshot, resumed sending replication messages to 3 [StateSnapshot match=11 next=12 sentCommit=11 matchCommit=11 paused pendingSnap=11]
 
 status 1
 ----
-1: StateReplicate match=11 next=12
-2: StateReplicate match=11 next=12
-3: StateReplicate match=11 next=12
-
-# Let things settle.
-stabilize
-----
-> 2 receiving messages
-  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
-> 2 handling Ready
-  Ready MustSync=false:
-  Messages:
-  2->1 MsgHeartbeatResp Term:1 Log:0/0
-> 1 receiving messages
-  2->1 MsgHeartbeatResp Term:1 Log:0/0
+1: StateReplicate match=11 next=12 sentCommit=10 matchCommit=10
+2: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11
+3: StateReplicate match=11 next=12 sentCommit=11 matchCommit=11

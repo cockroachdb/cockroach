@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package keys
 
@@ -301,6 +296,12 @@ var (
 	// BootstrapVersionKey is the key at which clusters bootstrapped with a version
 	// > 1.0 persist the version at which they were bootstrapped.
 	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
+	// ClusterInitGracePeriodTimestamp is used for license enforcement. It marks the timestamp
+	// set during cluster initialization, by which a license must be installed to avoid
+	// throttling. The value is stored as the number of seconds since the Unix epoch.
+	ClusterInitGracePeriodTimestamp = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("lic-gpi-ts")))
+	// TrialLicenseExpiry is used to track the expiry of any trial license (past or present)
+	TrialLicenseExpiry = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("lic-tle")))
 	//
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("node-idgen")))

@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rangefeed
 
@@ -301,6 +296,7 @@ func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 //
 // NB: startTS is exclusive; the first possible event will be at startTS.Next().
 func (p *ScheduledProcessor) Register(
+	streamCtx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -309,17 +305,23 @@ func (p *ScheduledProcessor) Register(
 	withOmitRemote bool,
 	stream Stream,
 	disconnectFn func(),
-) (bool, *Filter) {
+) (bool, Disconnector, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
-	r := newBufferedRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-	)
+	var r registration
+	if _, ok := stream.(BufferedStream); ok {
+		log.Fatalf(context.Background(),
+			"unimplemented: unbuffered registrations for rangefeed, see #126560")
+	} else {
+		r = newBufferedRegistration(
+			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
+		)
+	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
 		if p.stopping {
@@ -358,15 +360,15 @@ func (p *ScheduledProcessor) Register(
 			// If we can't schedule internally, processor is already stopped which
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
-			r.disconnect(kvpb.NewError(err))
+			r.Disconnect(kvpb.NewError(err))
 			p.reg.Unregister(ctx, r)
 		}
 		return f
 	})
 	if filter != nil {
-		return true, filter
+		return true, r, filter
 	}
-	return false, nil
+	return false, nil, nil
 }
 
 func (p *ScheduledProcessor) unregisterClient(r registration) bool {
@@ -496,6 +498,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		case <-ctx.Done():
+			p.Metrics.RangefeedProcessorQueueTimeout.Inc(1)
 			p.sendStop(newErrBufferCapacityExceeded())
 			return false
 		}
@@ -525,6 +528,7 @@ func (p *ScheduledProcessor) enqueueEventInternal(
 			case <-ctx.Done():
 				// Sending on the eventC channel would have blocked.
 				// Instead, tear down the processor and return immediately.
+				p.Metrics.RangefeedProcessorQueueTimeout.Inc(1)
 				p.sendStop(newErrBufferCapacityExceeded())
 				return false
 			}

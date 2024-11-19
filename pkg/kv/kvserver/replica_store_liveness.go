@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -16,7 +11,6 @@ import (
 	"fmt"
 	"hash/fnv"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
@@ -24,9 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-var raftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
+// RaftLeaderFortificationFractionEnabled controls the fraction of ranges for
+// which the raft leader fortification protocol is enabled.
+var RaftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"kv.raft.leader_fortification.fraction_enabled",
 	"controls the fraction of ranges for which the raft leader fortification "+
@@ -36,6 +33,8 @@ var raftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
 		"by extension, use Leader leases for all ranges which do not require "+
 		"expiration-based leases. Set to a value between 0.0 and 1.0 to gradually "+
 		"roll out Leader leases across the ranges in a cluster.",
+	// TODO(nvanbenschoten): make this a metamorphic constant once raft leader
+	// fortification and leader leases are sufficiently stable.
 	envutil.EnvOrDefaultFloat64("COCKROACH_LEADER_FORTIFICATION_FRACTION_ENABLED", 0.0),
 	settings.FloatInRange(0.0, 1.0),
 	settings.WithPublic,
@@ -52,7 +51,7 @@ func (r *replicaRLockedStoreLiveness) getStoreIdent(
 	replicaID raftpb.PeerID,
 ) (slpb.StoreIdent, bool) {
 	r.mu.AssertRHeld()
-	desc, ok := r.mu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
+	desc, ok := r.shMu.state.Desc.GetReplicaDescriptorByID(roachpb.ReplicaID(replicaID))
 	if !ok {
 		return slpb.StoreIdent{}, false
 	}
@@ -63,46 +62,34 @@ func (r *replicaRLockedStoreLiveness) getStoreIdent(
 func (r *replicaRLockedStoreLiveness) SupportFor(replicaID raftpb.PeerID) (raftpb.Epoch, bool) {
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
-		return 0, false
-	}
-	// TODO(arul): we can remove this once we start to assign storeLiveness in the
-	// Store constructor.
-	if r.store.storeLiveness == nil {
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Warningf(ctx, "store not found for replica %d in SupportFor", replicaID)
 		return 0, false
 	}
 	epoch, ok := r.store.storeLiveness.SupportFor(storeID)
-	if !ok {
-		return 0, false
-	}
-	return raftpb.Epoch(epoch), true
+	return raftpb.Epoch(epoch), ok
 }
 
 // SupportFrom implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFrom(
 	replicaID raftpb.PeerID,
-) (raftpb.Epoch, hlc.Timestamp, bool) {
+) (raftpb.Epoch, hlc.Timestamp) {
 	storeID, ok := r.getStoreIdent(replicaID)
 	if !ok {
-		return 0, hlc.Timestamp{}, false
+		ctx := r.AnnotateCtx(context.TODO())
+		log.Warningf(ctx, "store not found for replica %d in SupportFrom", replicaID)
+		return 0, hlc.Timestamp{}
 	}
-	epoch, exp, ok := r.store.storeLiveness.SupportFrom(storeID)
-	if !ok {
-		return 0, hlc.Timestamp{}, false
-	}
-	return raftpb.Epoch(epoch), exp, true
+	epoch, exp := r.store.storeLiveness.SupportFrom(storeID)
+	return raftpb.Epoch(epoch), exp
 }
 
 // SupportFromEnabled implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFromEnabled() bool {
-	// TODO(mira): this version check is incorrect. For one, it doesn't belong
-	// here. Instead, the version should be checked when deciding to enable
-	// StoreLiveness or not. Then, the check here should only check whether store
-	// liveness is enabled.
-	storeLivenessEnabled := r.store.ClusterSettings().Version.IsActive(context.TODO(), clusterversion.V24_3_StoreLivenessEnabled)
-	if !storeLivenessEnabled {
+	if !r.store.storeLiveness.SupportFromEnabled(context.TODO()) {
 		return false
 	}
-	fracEnabled := raftLeaderFortificationFractionEnabled.Get(&r.store.ClusterSettings().SV)
+	fracEnabled := RaftLeaderFortificationFractionEnabled.Get(&r.store.ClusterSettings().SV)
 	fortifyEnabled := raftFortificationEnabledForRangeID(fracEnabled, r.RangeID)
 	return fortifyEnabled
 }
@@ -130,5 +117,7 @@ func raftFortificationEnabledForRangeID(fracEnabled float64, rangeID roachpb.Ran
 
 // SupportExpired implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportExpired(ts hlc.Timestamp) bool {
-	return ts.Less(r.store.Clock().Now())
+	// A support expiration timestamp equal to the current time is considered
+	// expired, to be consistent with support withdrawal in Store Liveness.
+	return ts.LessEq(r.store.Clock().Now())
 }

@@ -1,10 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package ccl
 
@@ -38,21 +35,18 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 )
 
 func init() {
-	// Let CheckEnterpriseEnabled know that all the ccl code is linked in.
-	utilccl.AllCCLCodeImported = true
-
 	// Set up license-related hooks from OSS to CCL. The implementation of the
 	// functions we bind is in utilccl, but license checks only work once
 	// utilccl.AllCCLCodeImported is set, above; that's why this hookup is done in
 	// this `ccl` pkg.
 	base.CheckEnterpriseEnabled = utilccl.CheckEnterpriseEnabled
 	base.LicenseType = utilccl.GetLicenseType
-	base.UpdateMetricOnLicenseChange = utilccl.UpdateMetricOnLicenseChange
-	server.ApplyTenantLicense = utilccl.ApplyTenantLicense
+	base.GetLicenseTTL = utilccl.GetLicenseTTL
+	license.RegisterCallbackOnLicenseChange = utilccl.RegisterCallbackOnLicenseChange
 }
 
 // TestingEnableEnterprise allows overriding the license check in tests.

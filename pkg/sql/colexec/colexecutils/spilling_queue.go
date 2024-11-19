@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colexecutils
 
@@ -163,7 +158,7 @@ func NewRewindableSpillingQueue(args *NewSpillingQueueArgs) *SpillingQueue {
 // spilling queue will account for memory used by the in-memory copies).
 func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 	if q.rewindable && q.rewindableState.numItemsDequeued > 0 {
-		colexecerror.InternalError(errors.Errorf("attempted to Enqueue to rewindable SpillingQueue after Dequeue has been called"))
+		colexecerror.InternalError(errors.AssertionFailedf("attempted to Enqueue to rewindable SpillingQueue after Dequeue has been called"))
 	}
 
 	n := batch.Length()
@@ -561,7 +556,7 @@ func (q *SpillingQueue) Close(ctx context.Context) error {
 // Rewind rewinds the spilling queue.
 func (q *SpillingQueue) Rewind(ctx context.Context) error {
 	if !q.rewindable {
-		return errors.Newf("unexpectedly Rewind() called when spilling queue is not rewindable")
+		return errors.AssertionFailedf("unexpectedly Rewind() called when spilling queue is not rewindable")
 	}
 	if q.diskQueue != nil {
 		if err := q.diskQueue.(colcontainer.RewindableQueue).Rewind(ctx); err != nil {

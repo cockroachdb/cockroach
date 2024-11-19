@@ -186,9 +186,6 @@ statement ok
 GRANT CREATE ON DATABASE d TO testuser
 
 statement ok
-GRANT testuser TO root
-
-statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT SELECT ON TABLES to testuser, testuser2
 
 user testuser
@@ -269,6 +266,7 @@ d              public       t8          testuser   CREATE          false
 d              public       t8          testuser   DELETE          false
 d              public       t8          testuser   DROP            false
 d              public       t8          testuser   INSERT          false
+d              public       t8          testuser   TRIGGER         false
 d              public       t8          testuser   UPDATE          false
 d              public       t8          testuser   ZONECONFIG      false
 d              public       t8          testuser2  BACKUP          false
@@ -277,6 +275,7 @@ d              public       t8          testuser2  CREATE          false
 d              public       t8          testuser2  DELETE          false
 d              public       t8          testuser2  DROP            false
 d              public       t8          testuser2  INSERT          false
+d              public       t8          testuser2  TRIGGER         false
 d              public       t8          testuser2  UPDATE          false
 d              public       t8          testuser2  ZONECONFIG      false
 
@@ -286,7 +285,7 @@ user testuser2
 statement ok
 USE d
 
-statement error pq: must be a member of root
+statement error pq: must be an admin or member of root
 ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT SELECT ON TABLES TO testuser
 
 # Ensure you can ALTER DEFAULT PRIVILEGES for multiple roles.
@@ -363,3 +362,22 @@ ALTER DEFAULT PRIVILEGES FOR ROLE public REVOKE SELECT ON TABLES FROM testuser2,
 # Can specify PUBLIC as a grantee.
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM public
+
+# Admins can ALTER DEFAULT PRIVILEGES for any role.
+user root
+
+# Confirm that root is not a member of testuser. We avoid using pg_has_role
+# to check, since that has a special case for all admin users.
+query TTB
+SELECT role, inheriting_member, member_is_explicit
+FROM crdb_internal.kv_inherited_role_members
+WHERE inheriting_member = 'root'
+ORDER BY role
+----
+admin  root  true
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT ALL ON TABLES TO testuser2
+
+statement ok
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser2

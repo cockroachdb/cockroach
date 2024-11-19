@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -20,9 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -99,6 +96,17 @@ func registerRebalanceLoad(r registry.Registry) {
 				mixedversion.ClusterSettingOption(
 					install.ClusterSettingsOption(settings.ClusterSettings),
 				),
+				// This test does not currently work with shared-process
+				// deployments (#129389), so we do not run it in
+				// separate-process mode either to reduce noise. We should
+				// reevaluate once the test works in shared-process.
+				mixedversion.EnabledDeploymentModes(
+					mixedversion.SystemOnlyDeployment,
+					mixedversion.SharedProcessDeployment,
+				),
+
+				// Only use the latest version of each release to work around #127029.
+				mixedversion.AlwaysUseLatestPredecessors,
 			)
 			mvt.OnStartup("maybe enable split/scatter on tenant",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
@@ -252,7 +260,7 @@ func rebalanceByLoad(
 	db := c.Conn(ctx, l, 1)
 	defer db.Close()
 
-	require.NoError(t, WaitFor3XReplication(ctx, t, l, db))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, l, db))
 
 	var m *errgroup.Group
 	m, ctx = errgroup.WithContext(ctx)
@@ -336,9 +344,10 @@ func makeStoreCPUFn(
 	tsQueries := make([]tsQuery, numNodes)
 	for i := range tsQueries {
 		tsQueries[i] = tsQuery{
-			name:      "cr.node.sys.cpu.combined.percent-normalized",
+			name:      "cr.node.sys.cpu.host.combined.percent-normalized",
 			queryType: total,
 			sources:   []string{fmt.Sprintf("%d", i+1)},
+			tenantID:  roachpb.SystemTenantID,
 		}
 	}
 
@@ -363,6 +372,14 @@ func makeStoreCPUFn(
 			}
 			// Take the latest CPU data point only.
 			cpu := result.Datapoints[len(result.Datapoints)-1].Value
+			// The datapoint is a float representing a percentage in [0,1.0]. Assert
+			// as much to avoid any surprises.
+			if cpu < 0 || cpu > 1 {
+				return nil, errors.Newf(
+					"node idx %d has core count normalized CPU utilization ts datapoint "+
+						"not in [0\\%,100\\%] (impossible!): %v [resp=%+v]", node, cpu, resp)
+			}
+
 			nodeIdx := node * storesPerNode
 			for storeOffset := 0; storeOffset < storesPerNode; storeOffset++ {
 				// The values will be a normalized float in [0,1.0], scale to a

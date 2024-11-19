@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package explain_test
 
@@ -51,7 +46,7 @@ func explainGist(gist string, catalog cat.Catalog) string {
 	if err != nil {
 		panic(err)
 	}
-	err = explain.Emit(context.Background(), explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
+	err = explain.Emit(context.Background(), &eval.Context{}, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
 	if err != nil {
 		panic(err)
 	}
@@ -80,7 +75,7 @@ func plan(ot *opttester.OptTester, t *testing.T) string {
 	}
 	flags := explain.Flags{HideValues: true, Deflake: explain.DeflakeAll, OnlyShape: true}
 	ob := explain.NewOutputBuilder(flags)
-	err = explain.Emit(context.Background(), explainPlan.(*explain.Plan), ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
+	err = explain.Emit(context.Background(), &eval.Context{}, explainPlan.(*explain.Plan), ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" })
 	if err != nil {
 		t.Error(err)
 	}

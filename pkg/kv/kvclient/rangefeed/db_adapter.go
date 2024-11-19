@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rangefeed
 
@@ -77,7 +72,14 @@ func (dbc *dbAdapter) RangeFeed(
 	eventC chan<- kvcoord.RangeFeedMessage,
 	opts ...kvcoord.RangeFeedOption,
 ) error {
-	return dbc.distSender.RangeFeed(ctx, spans, startFrom, eventC, opts...)
+	timedSpans := make([]kvcoord.SpanTimePair, 0, len(spans))
+	for _, sp := range spans {
+		timedSpans = append(timedSpans, kvcoord.SpanTimePair{
+			Span:       sp,
+			StartAfter: startFrom,
+		})
+	}
+	return dbc.distSender.RangeFeed(ctx, timedSpans, eventC, opts...)
 }
 
 // RangeFeedFromFrontier is part of the DB interface.
@@ -87,7 +89,18 @@ func (dbc *dbAdapter) RangeFeedFromFrontier(
 	eventC chan<- kvcoord.RangeFeedMessage,
 	opts ...kvcoord.RangeFeedOption,
 ) error {
-	return dbc.distSender.RangeFeedFromFrontier(ctx, frontier, eventC, opts...)
+	timedSpans := make([]kvcoord.SpanTimePair, 0, frontier.Len())
+	frontier.Entries(
+		func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+			timedSpans = append(timedSpans, kvcoord.SpanTimePair{
+				// Clone the span as the rangefeed progress tracker will manipulate the
+				// original frontier.
+				Span:       sp.Clone(),
+				StartAfter: ts,
+			})
+			return false
+		})
+	return dbc.distSender.RangeFeed(ctx, timedSpans, eventC, opts...)
 }
 
 // Scan is part of the DB interface.

@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package roachpb
 
@@ -14,7 +9,9 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -69,6 +66,16 @@ func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 		p.Printf("%d.%d", v.Major, v.Minor)
 		return
 	}
+	// NB: Internal may be -1. This is the case for all fence versions for final
+	// versions of a release. Handle it specially to avoid printing the -1, which
+	// is confusable with the `-` separator.
+	if v.Internal < 0 {
+		if buildutil.CrdbTestBuild && v.Internal != -1 {
+			panic(errors.Newf("%s should not have Internal less than -1", v))
+		}
+		p.Printf("%d.%d-upgrading-final-step", v.Major, v.Minor)
+		return
+	}
 	// If the version is offset, remove the offset and add it back to the result. We want
 	// 1000023.1-upgrading-to-1000023.2-step-002, not 1000023.1-upgrading-to-23.2-step-002.
 	noOffsetVersion := v
@@ -94,22 +101,52 @@ func (v Version) IsFinal() bool {
 	return v.Internal == 0
 }
 
+// IsFence returns true if this is a fence version.
+//
+// A version is a fence version iff Internal is odd.
+func (v Version) IsFence() bool {
+	// NB: Internal may be -1. This is the case for all fence versions for final
+	// versions of a release.
+	return v.Internal%2 != 0
+}
+
 // PrettyPrint returns the value in a format that makes it apparent whether or
 // not it is a fence version.
 func (v Version) PrettyPrint() string {
-	// If we're a version greater than v20.2 and have an odd internal version,
-	// we're a fence version. See fenceVersionFor in pkg/upgrade to understand
-	// what these are.
-	fenceVersion := !v.LessEq(Version{Major: 20, Minor: 2}) && (v.Internal%2) == 1
-	if !fenceVersion {
+	if !v.IsFence() {
 		return v.String()
 	}
 	return fmt.Sprintf("%v(fence)", v)
 }
 
+// FenceVersion is the fence version -- the internal immediately prior -- for
+// the given version.
+//
+// Fence versions allow the upgrades infrastructure to safely step through
+// consecutive cluster versions in the presence of Nodes (running any binary
+// version) being added to the cluster. See the upgrademanager package for
+// intended usage.
+//
+// Fence versions (and the upgrades infrastructure entirely) were introduced in
+// the 21.1 release cycle. In the same release cycle, we introduced the
+// invariant that new user-defined versions (users being crdb engineers) must
+// always have even-numbered Internal versions, thus reserving the odd numbers
+// to slot in fence versions for each cluster version. See top-level
+// documentation in the clusterversion package for more details.
+func (v Version) FenceVersion() Version {
+	if v.IsFence() {
+		panic(errors.Newf("%s already is a fence version", v))
+	}
+	// NB: Internal may be -1 after this. This is the case for all final versions
+	// for a release.
+	fenceV := v
+	fenceV.Internal--
+	return fenceV
+}
+
 var (
 	verPattern = regexp.MustCompile(
-		`^(?P<major>[0-9]+)\.(?P<minor>[0-9]+)(|(-|-upgrading(|-to-[0-9]+.[0-9]+)-step-)(?P<internal>[0-9]+))$`,
+		`^(?P<major>[0-9]+)\.(?P<minor>[0-9]+)(|-upgrading-final-step|(-|-upgrading(|-to-[0-9]+.[0-9]+)-step-)(?P<internal>[-0-9]+))$`,
 	)
 	verPatternMajorIdx    = verPattern.SubexpIndex("major")
 	verPatternMinorIdx    = verPattern.SubexpIndex("minor")
@@ -138,9 +175,14 @@ func ParseVersion(s string) (Version, error) {
 		return int32(n)
 	}
 	v := Version{
-		Major:    toInt(matches[verPatternMajorIdx]),
-		Minor:    toInt(matches[verPatternMinorIdx]),
-		Internal: toInt(matches[verPatternInternalIdx]),
+		Major: toInt(matches[verPatternMajorIdx]),
+		Minor: toInt(matches[verPatternMinorIdx]),
+	}
+	// NB: Internal is -1 for all fence versions for final versions of a release.
+	if strings.Contains(s, "-upgrading-final-step") {
+		v.Internal = -1
+	} else {
+		v.Internal = toInt(matches[verPatternInternalIdx])
 	}
 	if err != nil {
 		return Version{}, errors.Wrapf(err, "invalid version %s", s)
@@ -193,12 +235,15 @@ var successorSeries = map[ReleaseSeries]ReleaseSeries{
 	{23, 2}: {24, 1},
 	{24, 1}: {24, 2},
 	{24, 2}: {24, 3},
+	{24, 3}: {25, 1},
 }
 
 // ReleaseSeries obtains the release series for the given version. Specifically:
 //   - if the version is final (Internal=0), the ReleaseSeries has the same major/minor.
 //   - if the version is a transitional version during upgrade (e.g. v23.1-8),
-//     the result is the next final version (e.g. v23.1).
+//     the result is the next final version (e.g. v23.2).
+//   - if the internal version is -1 (which is the case for the fence
+//     version of a final version), the result has the same major/minor.
 //
 // For non-final versions (which indicate an update to the next series), this
 // requires knowledge of the next series; unknown non-final versions will return
@@ -209,6 +254,14 @@ var successorSeries = map[ReleaseSeries]ReleaseSeries{
 func (v Version) ReleaseSeries() (s ReleaseSeries, ok bool) {
 	base := ReleaseSeries{v.Major, v.Minor}
 	if v.IsFinal() {
+		return base, true
+	}
+	// NB: Internal may be -1. This is the case for all fence versions for final
+	// versions of a release.
+	if v.Internal < 0 {
+		if buildutil.CrdbTestBuild && v.Internal != -1 {
+			panic(errors.Newf("%s should not have Internal less than -1", v))
+		}
 		return base, true
 	}
 	s, ok = base.Successor()

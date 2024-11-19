@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -16,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -23,12 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -561,4 +561,50 @@ func TestShowChangefeedJobsAuthorization(t *testing.T) {
 
 	// Only enterprise sinks create jobs.
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestShowChangefeedJobsDefaultFilter verifies that "SHOW JOBS" AND "SHOW CHANGEFEED JOBS"
+// use the same age filter (12 hours).
+func TestShowChangefeedJobsDefaultFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		countChangefeedJobs := func() (count int) {
+			query := `select count(*) from [SHOW CHANGEFEED JOBS]`
+			sqlDB.QueryRow(t, query).Scan(&count)
+			return count
+		}
+		changefeedJobExists := func(id catpb.JobID) bool {
+			rows := sqlDB.Query(t, `SHOW CHANGEFEED JOB $1`, id)
+			defer rows.Close()
+			return rows.Next()
+		}
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		waitForJobStatus(sqlDB, t, foo.(cdctest.EnterpriseTestFeed).JobID(), jobs.StatusRunning)
+		require.Equal(t, 1, countChangefeedJobs())
+
+		// The job is not visible after closed (and its finished time is older than 12 hours).
+		closeFeed(t, foo)
+		require.Equal(t, 0, countChangefeedJobs())
+
+		// We can still see the job if we explicitly ask for it.
+		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+		require.True(t, changefeedJobExists(jobID))
+	}
+
+	updateKnobs := func(opts *feedTestOptions) {
+		opts.knobsFn = func(knobs *base.TestingKnobs) {
+			knobs.JobsTestingKnobs.(*jobs.TestingKnobs).StubTimeNow = func() time.Time {
+				return timeutil.Now().Add(-13 * time.Hour)
+			}
+		}
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"), updateKnobs)
 }

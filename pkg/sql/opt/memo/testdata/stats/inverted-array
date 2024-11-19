@@ -6,10 +6,10 @@ CREATE TABLE t (
 )
 ----
 
-# Histogram boundaries are for JSON values `{}`, `{1}`, `{2}`, `{3}`. The
-# row_count is lower than the sum of the histogram buckets num_eq's because some
-# rows can have multiple inverted index entries, for example `{1, 2}`. There
-# are:
+# Histogram boundaries are for arrays with values 1, 2, and 3, including some
+# empty arrays. The row_count is lower than the sum of the histogram buckets
+# num_eq's because some rows can have multiple inverted index entries, for
+# example `{1, 2}`. There are:
 #
 #   - 1000 rows total
 #   - 10 empty arrays
@@ -68,19 +68,17 @@ index-join t
       ├── columns: k:1(int!null)
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
-      │    └── union spans: ["", ""]
+      │    └── union spans: [, NULL/NULL)
       ├── stats: [rows=1020]
       ├── key: (1)
       └── scan t@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
-           │    └── spans: ["", ""]
+           │    └── spans: [, NULL/NULL)
            ├── flags: force-index=a_idx
-           ├── stats: [rows=1020, distinct(1)=1000, null(1)=0, distinct(5)=4, null(5)=0]
-           │   histogram(5)=  0    10    0   990    0    10    0    10
-           │                <--- '\x43' --- '\x89' --- '\x8a' --- '\x8b'
-           ├── key: (1)
-           └── fd: (1)-->(5)
+           └── stats: [rows=1020, distinct(1)=1000, null(1)=0, distinct(5)=4, null(5)=0]
+               histogram(5)=  0    10    0   990    0    10    0    10
+                            <--- '\x43' --- '\x89' --- '\x8a' --- '\x8b'
 
 # An inverted index scan is preferred for a more selective filter.
 opt
@@ -95,7 +93,7 @@ index-join t
  └── scan t@a_idx,inverted
       ├── columns: k:1(int!null)
       ├── inverted constraint: /5/1
-      │    └── spans: ["\x8a", "\x8a"]
+      │    └── spans: [2, 2]
       ├── stats: [rows=10, distinct(5)=1, null(5)=0]
       │   histogram(5)=  0    10    0    0
       │                <--- '\x8a' --- '\x8b'
@@ -116,18 +114,16 @@ index-join t
       ├── columns: k:1(int!null)
       ├── inverted expression: /5
       │    ├── tight: true, unique: false
-      │    └── union spans: ["\x8a", "\x8c")
+      │    └── union spans: [2, 4)
       ├── stats: [rows=20]
       ├── key: (1)
       └── scan t@a_idx,inverted
            ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
            ├── inverted constraint: /5/1
-           │    └── spans: ["\x8a", "\x8c")
-           ├── stats: [rows=20, distinct(1)=19.6078, null(1)=0, distinct(5)=2, null(5)=0]
-           │   histogram(5)=  0    10    0    10
-           │                <--- '\x8a' --- '\x8b'
-           ├── key: (1)
-           └── fd: (1)-->(5)
+           │    └── spans: [2, 4)
+           └── stats: [rows=20, distinct(1)=19.6078, null(1)=0, distinct(5)=2, null(5)=0]
+               histogram(5)=  0    10    0    10
+                            <--- '\x8a' --- '\x8b'
 
 # The inverted index is used when checking if an array column is contained by
 # an empty array. An additional filter is required.
@@ -148,7 +144,7 @@ select
  │    └── scan t@a_idx,inverted
  │         ├── columns: k:1(int!null)
  │         ├── inverted constraint: /5/1
- │         │    └── spans: ["C", "C"]
+ │         │    └── spans: [[], []]
  │         ├── flags: force-index=a_idx
  │         ├── stats: [rows=10, distinct(5)=1, null(5)=0]
  │         │   histogram(5)=  0    10    0    0
@@ -178,21 +174,19 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["C", "C"]
- │         │         └── ["\x8a", "\x8a"]
+ │         │         ├── [[], []]
+ │         │         └── [2, 2]
  │         ├── stats: [rows=20]
  │         ├── key: (1)
  │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["C", "C"]
- │              │         └── ["\x8a", "\x8a"]
- │              ├── stats: [rows=20, distinct(1)=19.6078, null(1)=0, distinct(5)=2, null(5)=0]
- │              │   histogram(5)=  0    10    0    10    0    0
- │              │                <--- '\x43' --- '\x8a' --- '\x8b'
- │              ├── key: (1)
- │              └── fd: (1)-->(5)
+ │              │         ├── [[], []]
+ │              │         └── [2, 2]
+ │              └── stats: [rows=20, distinct(1)=19.6078, null(1)=0, distinct(5)=2, null(5)=0]
+ │                  histogram(5)=  0    10    0    10    0    0
+ │                               <--- '\x43' --- '\x8a' --- '\x8b'
  └── filters
       └── a:2 <@ ARRAY[2] [type=bool, outer=(2), immutable]
 
@@ -217,21 +211,19 @@ select
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
- │         │         ├── ["C", "C"]
- │         │         └── ["\x8a", "\x8c")
+ │         │         ├── [[], []]
+ │         │         └── [2, 4)
  │         ├── stats: [rows=30]
  │         ├── key: (1)
  │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["C", "C"]
- │              │         └── ["\x8a", "\x8c")
- │              ├── stats: [rows=30, distinct(1)=29.4118, null(1)=0, distinct(5)=3, null(5)=0]
- │              │   histogram(5)=  0    10    0    10    0    10
- │              │                <--- '\x43' --- '\x8a' --- '\x8b'
- │              ├── key: (1)
- │              └── fd: (1)-->(5)
+ │              │         ├── [[], []]
+ │              │         └── [2, 4)
+ │              └── stats: [rows=30, distinct(1)=29.4118, null(1)=0, distinct(5)=3, null(5)=0]
+ │                  histogram(5)=  0    10    0    10    0    10
+ │                               <--- '\x43' --- '\x8a' --- '\x8b'
  └── filters
       └── (a:2 <@ ARRAY[2]) OR (a:2 <@ ARRAY[3]) [type=bool, outer=(2), immutable]
 
@@ -256,27 +248,25 @@ select
  │         ├── columns: k:1(int!null)
  │         ├── inverted expression: /5
  │         │    ├── tight: false, unique: false
- │         │    ├── union spans: ["C", "C"]
+ │         │    ├── union spans: [[], []]
  │         │    └── INTERSECTION
  │         │         ├── span expression
  │         │         │    ├── tight: false, unique: false
- │         │         │    └── union spans: ["\x8a", "\x8a"]
+ │         │         │    └── union spans: [2, 2]
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
- │         │              └── union spans: ["\x8b", "\x8b"]
+ │         │              └── union spans: [3, 3]
  │         ├── stats: [rows=30]
  │         ├── key: (1)
  │         └── scan t@a_idx,inverted
  │              ├── columns: k:1(int!null) a_inverted_key:5(encodedkey!null)
  │              ├── inverted constraint: /5/1
  │              │    └── spans
- │              │         ├── ["C", "C"]
- │              │         └── ["\x8a", "\x8c")
- │              ├── stats: [rows=30, distinct(1)=29.4118, null(1)=0, distinct(5)=3, null(5)=0]
- │              │   histogram(5)=  0    10    0    10    0    10
- │              │                <--- '\x43' --- '\x8a' --- '\x8b'
- │              ├── key: (1)
- │              └── fd: (1)-->(5)
+ │              │         ├── [[], []]
+ │              │         └── [2, 4)
+ │              └── stats: [rows=30, distinct(1)=29.4118, null(1)=0, distinct(5)=3, null(5)=0]
+ │                  histogram(5)=  0    10    0    10    0    10
+ │                               <--- '\x43' --- '\x8a' --- '\x8b'
  └── filters
       ├── a:2 <@ ARRAY[2] [type=bool, outer=(2), immutable]
       └── a:2 <@ ARRAY[3] [type=bool, outer=(2), immutable]

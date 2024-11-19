@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -516,11 +511,14 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:    "alter_proc",
-		stmt:    "alter_proc_stmt",
-		inline:  []string{"alter_proc_rename_stmt", "alter_proc_owner_stmt", "alter_proc_set_schema_stmt", "function_with_paramtypes", "func_params", "func_params_list"},
-		unlink:  []string{"proc_name", "proc_new_name"},
-		replace: map[string]string{"db_object_name": "proc_name", "'RENAME' 'TO' name": "'RENAME' 'TO' proc_new_name"},
+		name:   "alter_proc",
+		stmt:   "alter_proc_stmt",
+		inline: []string{"alter_proc_rename_stmt", "alter_proc_owner_stmt", "alter_proc_set_schema_stmt", "function_with_paramtypes", "func_params", "func_params_list"},
+		unlink: []string{"proc_name", "proc_new_name"},
+		replace: map[string]string{
+			"db_object_name":     "proc_name",
+			"'RENAME' 'TO' name": "'RENAME' 'TO' proc_new_name",
+		},
 		nosplit: true,
 	},
 	{
@@ -848,19 +846,20 @@ var specs = []stmtSpec{
 	{
 		name:   "create_proc",
 		stmt:   "create_proc_stmt",
-		inline: []string{"opt_or_replace", "opt_routine_param_with_default_list", "routine_param_with_default_list", "routine_param_with_default", "opt_create_routine_opt_list", "create_routine_opt_list", "create_routine_opt_item", "routine_as", "opt_link_sym", "create_routine_opt_item", "routine_return_stmt"},
+		inline: []string{"opt_or_replace", "opt_routine_param_with_default_list", "routine_param_with_default_list", "routine_param_with_default", "opt_create_routine_opt_list", "common_routine_opt_item", "create_routine_opt_list", "create_routine_opt_item", "routine_as", "opt_link_sym", "create_routine_opt_item", "routine_return_stmt"},
 		unlink: []string{"routine_body_str"},
 		replace: map[string]string{
-			"'DEFAULT'":                        "",
-			"common_routine_opt_item":          "",
-			"'AS'":                             "'AS' routine_body_str",
-			"opt_routine_body":                 "",
-			"non_reserved_word_or_sconst":      "( 'SQL' | 'PLPGSQL' )",
-			"'RETURN'":                         "",
-			"( 'SCONST' ) ( ',' 'SCONST' |  )": "",
-			"'='":                              "",
-			"a_expr":                           "",
-			"'ATOMIC'":                         ""},
+			"'DEFAULT'":        "",
+			"'AS'":             "'AS' routine_body_str",
+			"opt_routine_body": "",
+			"'CALLED' 'ON' 'NULL' 'INPUT' | 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT' | 'STRICT' | 'IMMUTABLE' | 'STABLE' | 'VOLATILE' |": "",
+			"| 'LEAKPROOF' | 'NOT' 'LEAKPROOF'": "",
+			"non_reserved_word_or_sconst":       "( 'SQL' | 'PLPGSQL' )",
+			"'RETURN'":                          "",
+			"( 'SCONST' ) ( ',' 'SCONST' |  )":  "",
+			"'='":                               "",
+			"a_expr":                            "",
+			"'ATOMIC'":                          ""},
 		nosplit: true,
 	},
 	{
@@ -868,6 +867,22 @@ var specs = []stmtSpec{
 		inline:  []string{"locality"},
 		replace: map[string]string{" name": "column_name"},
 		unlink:  []string{"column_name"},
+	},
+	{
+		name:   "create_trigger",
+		stmt:   "create_trigger_stmt",
+		inline: []string{"opt_or_replace", "trigger_action_time", "trigger_event_list", "opt_trigger_transition_list", "trigger_for_each", "trigger_when", "function_or_procedure", "trigger_event", "trigger_transition_list", "trigger_for_opt_each", "trigger_for_type", "name_list", "trigger_transition", "transition_is_new", "transition_is_row", "opt_as", "table_alias_name"},
+		unlink: []string{"trigger_create_name"},
+		replace: map[string]string{
+			"'TRIGGER' name":   "'TRIGGER' trigger_create_name",
+			"| 'INSTEAD' 'OF'": "",
+			"( 'REFERENCING' ( ( ( ( 'NEW' | 'OLD' ) ( 'ROW' | 'TABLE' ) ( 'AS' |  ) ( name ) ) ) ( ( ( ( 'NEW' | 'OLD' ) ( 'ROW' | 'TABLE' ) ( 'AS' |  ) ( name ) ) ) )* ) |  )": "",
+			"| 'STATEMENT'":                       "",
+			"( 'OR' 'REPLACE' |  )":               "",
+			"'OF' ( ( name ) ( ( ',' name ) )* )": "",
+			"| 'TRUNCATE'":                        "",
+			"| 'PROCEDURE'":                       ""},
+		nosplit: true,
 	},
 	{
 		name: "create_type",
@@ -999,6 +1014,17 @@ var specs = []stmtSpec{
 		stmt:   "drop_table_stmt",
 		inline: []string{"opt_drop_behavior"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'TABLE'")},
+	},
+	{
+		name:   "drop_trigger",
+		stmt:   "drop_trigger_stmt",
+		inline: []string{"opt_drop_behavior"},
+		unlink: []string{"trigger_name"},
+		replace: map[string]string{
+			" name":        " trigger_name",
+			"'CASCADE' | ": "",
+		},
+		nosplit: true,
 	},
 	{
 		name:    "drop_type",

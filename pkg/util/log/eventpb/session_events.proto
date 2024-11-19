@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.util.log.eventpb;
@@ -126,6 +121,10 @@ enum AuthFailReason {
   // NO_REPLICATION_ROLEOPTION occurs when the connection requires a replication role option,
   // but the user does not have it.
   NO_REPLICATION_ROLEOPTION = 8;
+  // AUTHORIZATION_ERROR is used for errors during the authorization phase. For
+  // example, this would include issues with mapping LDAP groups to SQL roles
+  // and granting those roles to the user.
+  AUTHORIZATION_ERROR = 9;
 }
 
 // ClientAuthenticationFailed is reported when a client session
@@ -142,7 +141,7 @@ message ClientAuthenticationFailed {
   // The detailed error for the authentication failure.
   string detail = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
   // The authentication method used.
-  string method = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string method = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.SafeString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // ClientAuthenticationOk is reported when a client session
@@ -155,7 +154,7 @@ message ClientAuthenticationOk {
   CommonConnectionDetails conn = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSessionDetails session = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The authentication method used.
-  string method = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string method = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.SafeString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // ClientAuthenticationInfo is reported for intermediate
@@ -168,7 +167,7 @@ message ClientAuthenticationInfo {
   CommonConnectionDetails conn = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSessionDetails session = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The authentication method used, once known.
-  string method = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string method = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.SafeString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The authentication progress message.
   string info = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
 }

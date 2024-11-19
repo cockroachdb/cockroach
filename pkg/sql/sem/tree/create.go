@@ -7,13 +7,8 @@
 //
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // This code was derived from https://github.com/youtube/vitess.
 
@@ -1865,9 +1860,9 @@ const (
 // LikeTableOptAll is the full LikeTableOpt bitmap.
 const LikeTableOptAll = ^likeTableOptInvalid
 
-// Has returns true if the receiver has the other options bits set.
+// Has returns true if the receiver has all of the given option bits set.
 func (o LikeTableOpt) Has(other LikeTableOpt) bool {
-	return int(o)&int(other) != 0
+	return int(o)&int(other) == int(other)
 }
 
 func (o LikeTableOpt) String() string {
@@ -2184,7 +2179,6 @@ func (node *CreateExternalConnection) Format(ctx *FmtCtx) {
 type CreateTenant struct {
 	IfNotExists bool
 	TenantSpec  *TenantSpec
-	Like        *LikeTenantSpec
 }
 
 // Format implements the NodeFormatter interface.
@@ -2194,20 +2188,6 @@ func (node *CreateTenant) Format(ctx *FmtCtx) {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
 	ctx.FormatNode(node.TenantSpec)
-	ctx.FormatNode(node.Like)
-}
-
-// LikeTenantSpec represents a LIKE clause in CREATE VIRTUAL CLUSTER.
-type LikeTenantSpec struct {
-	OtherTenant *TenantSpec
-}
-
-func (node *LikeTenantSpec) Format(ctx *FmtCtx) {
-	if node.OtherTenant == nil {
-		return
-	}
-	ctx.WriteString(" LIKE ")
-	ctx.FormatNode(node.OtherTenant)
 }
 
 // CreateTenantFromReplication represents a CREATE VIRTUAL CLUSTER...FROM REPLICATION
@@ -2228,14 +2208,13 @@ type CreateTenantFromReplication struct {
 	ReplicationSourceAddress Expr
 
 	Options TenantReplicationOptions
-
-	Like *LikeTenantSpec
 }
 
 // TenantReplicationOptions  options for the CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
 type TenantReplicationOptions struct {
-	Retention        Expr
-	ExpirationWindow Expr
+	Retention          Expr
+	ExpirationWindow   Expr
+	EnableReaderTenant *DBool
 }
 
 var _ NodeFormatter = &TenantReplicationOptions{}
@@ -2249,9 +2228,6 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 	// NB: we do not anonymize the tenant name because we assume that tenant names
 	// do not contain sensitive information.
 	ctx.FormatNode(node.TenantSpec)
-	if node.Like != nil {
-		ctx.FormatNode(node.Like)
-	}
 
 	if node.ReplicationSourceAddress != nil {
 		ctx.WriteString(" FROM REPLICATION OF ")
@@ -2306,6 +2282,10 @@ func (o *TenantReplicationOptions) Format(ctx *FmtCtx) {
 			ctx.WriteByte(')')
 		}
 	}
+	if o.EnableReaderTenant != nil {
+		maybeAddSep()
+		ctx.WriteString("READ VIRTUAL CLUSTER")
+	}
 }
 
 // CombineWith merges other TenantReplicationOptions into this struct.
@@ -2327,6 +2307,14 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 		o.ExpirationWindow = other.ExpirationWindow
 	}
 
+	if o.EnableReaderTenant != nil {
+		if other.EnableReaderTenant != nil {
+			return errors.New("READ VIRTUAL CLUSTER option specified multiple times")
+		} else {
+			o.EnableReaderTenant = other.EnableReaderTenant
+		}
+	}
+
 	return nil
 }
 
@@ -2334,7 +2322,8 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 func (o TenantReplicationOptions) IsDefault() bool {
 	options := TenantReplicationOptions{}
 	return o.Retention == options.Retention &&
-		o.ExpirationWindow == options.ExpirationWindow
+		o.ExpirationWindow == options.ExpirationWindow &&
+		o.EnableReaderTenant == options.EnableReaderTenant
 }
 
 func (o TenantReplicationOptions) ExpirationWindowSet() bool {

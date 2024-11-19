@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package mixedversion
 
@@ -81,15 +76,7 @@ func TestTestPlanner(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "planner"), func(t *testing.T, path string) {
 		defer withTestBuildVersion("v24.3.0")()
 		resetMutators()
-		// Unless specified, treat every test as a system-only deployment
-		// test. Tests can use the deployment-mode option in the
-		// mixed-version-test directive to change the deployment mode.
-		defaultOpts := []CustomOption{
-			EnabledDeploymentModes(SystemOnlyDeployment),
-			DisableSkipVersionUpgrades,
-		}
-
-		mvt := newTest(defaultOpts...)
+		mvt := newTest()
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Cmd == "plan" {
@@ -123,7 +110,7 @@ func TestTestPlanner(t *testing.T) {
 					planMutators = append(planMutators, m)
 				}
 			case "mixed-version-test":
-				mvt = createDataDrivenMixedVersionTest(t, d.CmdArgs, defaultOpts)
+				mvt = createDataDrivenMixedVersionTest(t, d.CmdArgs)
 			case "on-startup":
 				mvt.OnStartup(d.CmdArgs[0].Vals[0], dummyHook)
 			case "in-mixed-version":
@@ -339,6 +326,18 @@ func newRand() *rand.Rand {
 
 func newTest(options ...CustomOption) *Test {
 	testOptions := defaultTestOptions()
+	// Enforce some default options by default in tests; those that test
+	// multitenant deployments or skip-version upgrades specifically
+	// should pass the corresponding option explicitly.
+	defaultTestOverrides := []CustomOption{
+		EnabledDeploymentModes(SystemOnlyDeployment),
+		DisableSkipVersionUpgrades,
+	}
+
+	for _, fn := range defaultTestOverrides {
+		fn(&testOptions)
+	}
+
 	for _, fn := range options {
 		fn(&testOptions)
 	}
@@ -392,10 +391,8 @@ func testPredecessorFunc(
 // createDataDrivenMixedVersionTest creates a `*Test` instance based
 // on the parameters passed to the `mixed-version-test` datadriven
 // directive.
-func createDataDrivenMixedVersionTest(
-	t *testing.T, args []datadriven.CmdArg, defaultOpts []CustomOption,
-) *Test {
-	opts := append([]CustomOption{}, defaultOpts...)
+func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *Test {
+	var opts []CustomOption
 	var predecessors []*clusterupgrade.Version
 	var isLocal *bool
 

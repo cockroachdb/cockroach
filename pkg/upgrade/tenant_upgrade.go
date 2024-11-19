@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package upgrade
 
@@ -18,7 +13,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -33,17 +30,20 @@ import (
 // TenantDeps are the dependencies of upgrades which perform actions at the
 // SQL layer.
 type TenantDeps struct {
-	KVDB         *kv.DB
-	Codec        keys.SQLCodec
-	Settings     *cluster.Settings
-	DB           descs.DB
-	LeaseManager *lease.Manager
-	JobRegistry  *jobs.Registry
-	SessionData  *sessiondata.SessionData
-	ClusterID    uuid.UUID
+	KVDB            *kv.DB
+	Codec           keys.SQLCodec
+	Settings        *cluster.Settings
+	DB              descs.DB
+	LeaseManager    *lease.Manager
+	JobRegistry     *jobs.Registry
+	SessionData     *sessiondata.SessionData
+	ClusterID       uuid.UUID
+	LicenseEnforcer *license.Enforcer
 
 	// TODO(ajwerner): Remove this in favor of the descs.DB above.
 	InternalExecutor isql.Executor
+
+	TenantInfoAccessor mtinfo.ReadFromTenantInfoAccessor
 
 	TestingKnobs              *upgradebase.TestingKnobs
 	SchemaResolverConstructor func( // A constructor that returns a schema resolver for `descriptors` in `currDb`.

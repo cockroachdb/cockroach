@@ -392,7 +392,7 @@ vectorized: true
       table: data@data_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0ld9uozoQxu_PU1hzlUhGYCD_uErV9kiRmrYnpNKRVlHlhilFJThrm-1WVd59ZbJtgS1sghQu0IzB3_z8aWy_gfqeQgCX_99enc2uSe9iFi7D_676JLy8ujxfEpVverxPCf8R9x769COvjpN_FzdzEnHNgUImIrzmG1QQfAMGFFyg4AEFHygMYEVhK8UalRLS_PJWTJhFPyFwKCTZNtdmeEVhLSRC8AY60SlCAEv-kOICeYTSdoBChJonaVHGlJ6a1_32GV-BwrlI802mAsIpeQAK4ZabzLIZ4VlEGBH6CSWsdhRErj9rKs1jhICVIGcXEDg7ejjnWRxLjLkW0h5UMcO7eW_K-obHRK6Jzm_urpdF3ATj1mAGjTCfDHkmZIQSowrAateOy5y_84Z38_uZIfZMtsAsQhmQKaNk6tpTj-7D97RxUV5tUaxqMTu8FVi3VrCZZbudmoEdQ1pyd3iKZhhWYNzDbXM72uZattfJNvcY0pJto1PYNqrAeIfb5nW0zbNsv5Nt3jGkJdvGp7BtXIHxD7fN72ibb9mDTrb5x5CWbJucwrbJMdfHAtVWZAprJ_fXlZxaJYuZIx6jGPf3gRK5XOOtFOvi3316UwgVAxEqvf_K9skse_-ktES--bj9ykqsVcmtKLGy0qCu5LYzHQPltUr5zUqsruR3Xd6wrjRoVRo2M7l1pWFXplFdadSqNG5m8upK465M47rSpL0NnGYo_4_ebG_zFqqJ2TqPqXi5TyIIwPn9WF-83h8wE3iszP4Nn8RLIbt83Zrd98hThRTm_BkvUKPcJFmidLKGQMscd7t_fgUAAP___OSkWA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lV9vmzAUxd_3KdB9SiQjYkP-8ZSq7aRITdIlqTRpiio33KZRCWa2WVdV-e6TydoCLTQgJQ-Wr4Fzfj654BdQv0Pw4fLn9dXZeGq1LsaL5eLHVdtaXF5dni8tlexavE0s_mfTumuTtzq_bn2fzyZWwDUHApEIcMp3qMD_BRQIMCDgAgEPCHRhRSCWYo1KCWlueUkfGAd_we8Q2EZxos3yisBaSAT_BfRWhwg-LPldiHPkAUqnAwQC1HwbpjbGemSG2_gRn4HAuQiTXaR8ixPrDggsYm4q26EWjwKLWkI_oITVnoBI9Lun0nyD4NMM5PgC_M6eHM95ttlI3HAtpNPNYy5uJq0RbRseM2Nmdj67mS7TeRkMK8B0S2HeGZJIyAAlBjmA1b4al3a-5l3cTG7Hhtg11RyjAKVvjSixRswZuaW7cAu7oLUynQpbxA6leb5ZolPrESNmNJNSf6_oT3P-9Pjeo816z6G2wxp1Xy3SzN_ZO0X39XIw7PjYWMPYmO24jWJjdUgzsfVPEVs_B-MeH5vbMDbXdrxGsbl1SDOxDU4R2yAH4x0fm9cwNs92uo1i8-qQZmIbniK2YZ1v6xxVLCKFhaPic6dOwcmm5kzBYIOHA0iJRK7xWop1eu-hnKVC6UKASh-u0kMxjl4vKS2R796O26wSrVRiOSWaVeoWlVilklvORD9AudXbYzX251VKdSuoikrdpkn1ikq9SqV-ORMrKvWbMvWLSoNKpWE5k1tUGjZlGnzozS_avKLPvQ9ajRt9aF7D-1A83W4D8KHz_2d_Mrz-wDzAN8p8CxYP4imVXT7H5k2-56FCAhP-iBeoUe620Vbp7Rp8LRPc77_9CwAA__-9UeGo
 
 query T
 EXPLAIN (DISTSQL) SELECT avg(c), sum(c), avg(d), sum(d) FROM data
@@ -1021,15 +1021,15 @@ query T
 EXPLAIN (opt,verbose) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b
 ----
 group-by (streaming)
- ├── columns: b:2 count:5
+ ├── columns: b:2 count:7
  ├── grouping columns: b:2
  ├── internal-ordering: +2 opt(1)
  ├── stats: [rows=9.561793, distinct(2)=9.56179, null(2)=0]
  ├── cost: 29.145618
  ├── key: (2)
- ├── fd: (2)-->(5)
+ ├── fd: (2)-->(7)
  ├── distribution: test
- ├── prune: (5)
+ ├── prune: (7)
  ├── scan data2
  │    ├── columns: a:1 b:2
  │    ├── constraint: /1/2: [/1 - /1]
@@ -1042,7 +1042,7 @@ group-by (streaming)
  │    ├── prune: (2)
  │    └── interesting orderings: (+2 opt(1))
  └── aggregations
-      └── count-rows [as=count_rows:5]
+      └── count-rows [as=count_rows:7]
 
 query T
 EXPLAIN (verbose) SELECT b, count(*), corr(a, b) FROM data2 WHERE a=1 GROUP BY b

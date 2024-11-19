@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package security
 
@@ -375,6 +370,7 @@ func CreateClientPair(
 	overwrite bool,
 	user username.SQLUsername,
 	tenantIDs []roachpb.TenantID,
+	tenantNames []roachpb.TenantName,
 	wantPKCS8Key bool,
 ) error {
 	if len(caKeyPath) == 0 {
@@ -411,7 +407,7 @@ func CreateClientPair(
 		return errors.Wrap(err, "could not generate new client key")
 	}
 
-	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user, tenantIDs)
+	clientCert, err := GenerateClientCert(caCert, caPrivateKey, clientKey.Public(), lifetime, user, tenantIDs, tenantNames)
 	if err != nil {
 		return errors.Wrap(err, "error creating client certificate and key")
 	}

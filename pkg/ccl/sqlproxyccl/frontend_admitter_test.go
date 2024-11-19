@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlproxyccl
 
@@ -16,6 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -37,6 +35,7 @@ func tlsConfig() (*tls.Config, error) {
 
 func TestFrontendAdmitWithNoBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
 	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
@@ -53,6 +52,7 @@ func TestFrontendAdmitWithNoBytes(t *testing.T) {
 
 func TestFrontendAdmitWithClientSSLDisableAndCustomParam(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
 	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
@@ -87,6 +87,7 @@ func TestFrontendAdmitWithClientSSLDisableAndCustomParam(t *testing.T) {
 
 func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
 	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
@@ -124,6 +125,7 @@ func TestFrontendAdmitWithClientSSLRequire(t *testing.T) {
 // expected.
 func TestFrontendAdmitRequireEncryption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
 	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))
@@ -151,6 +153,7 @@ func TestFrontendAdmitRequireEncryption(t *testing.T) {
 // TestFrontendAdmitWithCancel sends CancelRequest.
 func TestFrontendAdmitWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srvPipe := net.Pipe()
 	srv := &fakeTCPConn{
@@ -177,6 +180,7 @@ func TestFrontendAdmitWithCancel(t *testing.T) {
 // TestFrontendAdmitWithSSLAndCancel sends SSLRequest followed by CancelRequest.
 func TestFrontendAdmitWithSSLAndCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srvPipe := net.Pipe()
 	srv := &fakeTCPConn{
@@ -212,6 +216,7 @@ func TestFrontendAdmitWithSSLAndCancel(t *testing.T) {
 
 func TestFrontendAdmitSessionRevivalToken(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
 	require.NoError(t, srv.SetReadDeadline(timeutil.Now().Add(3e9)))

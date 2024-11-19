@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2019 The etcd Authors
 //
@@ -20,7 +20,7 @@ package confchange
 import (
 	"math/rand"
 	"reflect"
-	"sort"
+	"slices"
 	"testing"
 	"testing/quick"
 
@@ -108,7 +108,7 @@ func TestRestore(t *testing.T) {
 			cs.VotersOutgoing,
 			cs.LearnersNext,
 		} {
-			sort.Slice(sl, func(i, j int) bool { return sl[i] < sl[j] })
+			slices.Sort(sl)
 		}
 
 		cs2 := chg.Config.ConfState()

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -19,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -72,7 +68,7 @@ func registerTPCDSVec(r registry.Registry) {
 		t.Status("restoring TPCDS dataset for Scale Factor 1")
 		if _, err := clusterConn.Exec(
 			`
-RESTORE DATABASE tpcds FROM 'gs://cockroach-fixtures-us-east1/workload/tpcds/scalefactor=1/backup?AUTH=implicit'
+RESTORE DATABASE tpcds FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpcds/scalefactor=1/backup?AUTH=implicit'
 WITH unsafe_restore_incompatible_version;
 `,
 		); err != nil {
@@ -84,7 +80,7 @@ WITH unsafe_restore_incompatible_version;
 		}
 		scatterTables(t, clusterConn, tpcdsTables)
 		t.Status("waiting for full replication")
-		err := WaitFor3XReplication(ctx, t, t.L(), clusterConn)
+		err := roachtestutil.WaitFor3XReplication(ctx, t.L(), clusterConn)
 		require.NoError(t, err)
 
 		// TODO(yuzefovich): it seems like if cmpconn.CompareConns hits a

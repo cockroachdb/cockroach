@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -32,7 +27,7 @@ const (
 	crossFlag          = "cross"
 	cockroachTargetOss = "//pkg/cmd/cockroach-oss:cockroach-oss"
 	cockroachTarget    = "//pkg/cmd/cockroach:cockroach"
-	nogoDisableFlag    = "--//build/toolchains:nogo_disable_flag"
+	nogoDisableFlag    = "--norun_validations"
 	geosTarget         = "//c-deps:libgeos"
 	devTarget          = "//pkg/cmd/dev:dev"
 )
@@ -88,6 +83,7 @@ var buildTargetMapping = map[string]string{
 	"dev":                  devTarget,
 	"docgen":               "//pkg/cmd/docgen:docgen",
 	"docs-issue-gen":       "//pkg/cmd/docs-issue-generation:docs-issue-generation",
+	"drt-run":              "//pkg/cmd/drt-run:drt-run",
 	"execgen":              "//pkg/sql/colexec/execgen/cmd/execgen:execgen",
 	"gofmt":                "@com_github_cockroachdb_gostdlib//cmd/gofmt:gofmt",
 	"goimports":            "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports:goimports",
@@ -95,11 +91,11 @@ var buildTargetMapping = map[string]string{
 	"geos":                 geosTarget,
 	"langgen":              "//pkg/sql/opt/optgen/cmd/langgen:langgen",
 	"libgeos":              geosTarget,
-	"obsservice":           "//pkg/obsservice/cmd/obsservice:obsservice",
 	"optgen":               "//pkg/sql/opt/optgen/cmd/optgen:optgen",
 	"optfmt":               "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
 	"oss":                  cockroachTargetOss,
 	"reduce":               "//pkg/cmd/reduce:reduce",
+	"drtprod":              "//pkg/cmd/drtprod:drtprod",
 	"roachprod":            "//pkg/cmd/roachprod:roachprod",
 	"roachprod-stress":     "//pkg/cmd/roachprod-stress:roachprod-stress",
 	"roachprod-microbench": "//pkg/cmd/roachprod-microbench:roachprod-microbench",
@@ -188,7 +184,7 @@ func (d *dev) crossBuild(
 	volume string,
 	dockerArgs []string,
 ) error {
-	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=ci", "-c", "opt")
+	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=nolintonbuild", "-c", "opt")
 	configArgs := getConfigArgs(bazelArgs)
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, dockerArgs)
 	if err != nil {

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
@@ -19,7 +14,6 @@ import {
   TransactionRestartsToolTip,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 import { Metric, Axis } from "src/views/shared/components/metricQuery";
-
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
@@ -143,12 +137,12 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="SQL Statements"
+      title="SQL Queries Per Second"
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`A ten-second moving average of the # of SELECT, INSERT, UPDATE, and
-          DELETE statements successfully executed per second ${tooltipSelection}.`}
+          DELETE statements, and the sum of all four, successfully executed per second ${tooltipSelection}.`}
       showMetricsInTooltip={true}
     >
       <Axis label="queries">
@@ -170,6 +164,11 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.sql.delete.count"
           title="Deletes"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.crud_query.count"
+          title="Total Queries"
           nonNegativeRate
         />
       </Axis>
@@ -521,11 +520,6 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.txn.restarts.writetooold"
           title="Write Too Old"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.txn.restarts.writetoooldmulti"
-          title="Write Too Old (multiple)"
           nonNegativeRate
         />
         <Metric

@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -45,6 +42,7 @@ func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
 	ctx := context.Background()
 
 	skip.UnderRace(t, "multi-node, multi-tenant test too slow under race")
+	skip.UnderDeadlock(t, "too slow under deadlock detector")
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
@@ -147,7 +145,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 
 	// tenant now has a fully ingested, paused import, so back them up.
 	const dst = "userfile:///t"
-	if _, err := sqlDB.DB.ExecContext(ctx, `BACKUP TENANT 10 TO $1`, dst); err != nil {
+	if _, err := sqlDB.DB.ExecContext(ctx, `BACKUP TENANT 10 INTO $1`, dst); err != nil {
 		t.Fatal(err)
 	}
 	// Destroy the tenant, then restore it.
@@ -158,7 +156,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 	if _, err := sqlDB.DB.ExecContext(ctx, "DROP TENANT [10] IMMEDIATE"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.DB.ExecContext(ctx, "RESTORE TENANT 10 FROM $1", dst); err != nil {
+	if _, err := sqlDB.DB.ExecContext(ctx, "RESTORE TENANT 10 FROM LATEST IN $1", dst); err != nil {
 		t.Fatal(err)
 	}
 

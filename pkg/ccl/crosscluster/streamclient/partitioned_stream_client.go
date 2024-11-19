@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package streamclient
 
@@ -121,6 +118,21 @@ func (p *partitionedStreamClient) Heartbeat(
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// The heartbeat function is called in a loop with the same connection. If
+	// that connection closes, attempt to re-establish it to prevent the hearbeat
+	// loop from failing repeatedly.
+	if p.mu.srcConn.IsClosed() {
+		conn, err := pgx.ConnectConfig(ctx, p.pgxConfig)
+		if err != nil {
+			return streampb.StreamReplicationStatus{}, errors.Wrapf(err, "error reconnecting to replication stream %d", streamID)
+		}
+		p.mu.srcConn = conn
+		if err := p.mu.srcConn.Ping(ctx); err != nil {
+			return streampb.StreamReplicationStatus{}, errors.Wrapf(err, "error pinging on reconnecting replication stream %d", streamID)
+		}
+	}
+
 	row := p.mu.srcConn.QueryRow(ctx,
 		`SELECT crdb_internal.replication_stream_progress($1, $2)`, streamID, consumed.String())
 	var rawStatus []byte
@@ -256,6 +268,7 @@ func (p *partitionedStreamClient) Subscribe(
 	sps.WithDiff = cfg.withDiff
 	sps.WithFiltering = cfg.withFiltering
 	sps.Type = streampb.ReplicationType_PHYSICAL
+	sps.Config.BatchByteSize = cfg.batchByteSize
 	if p.logical {
 		sps.Type = streampb.ReplicationType_LOGICAL
 	}
@@ -300,6 +313,7 @@ type LogicalReplicationPlan struct {
 	Topology      Topology
 	SourceSpans   []roachpb.Span
 	DescriptorMap map[int32]descpb.TableDescriptor
+	SourceTypes   []*descpb.TypeDescriptor
 }
 
 func (p *partitionedStreamClient) PlanLogicalReplication(
@@ -344,10 +358,16 @@ func (p *partitionedStreamClient) PlanLogicalReplication(
 		descMap[int32(desc.ID)] = desc
 	}
 
+	sourceTypes := make([]*descpb.TypeDescriptor, len(streamSpec.TypeDescriptors))
+	for i, desc := range streamSpec.TypeDescriptors {
+		sourceTypes[i] = &desc
+	}
+
 	return LogicalReplicationPlan{
 		Topology:      topology,
 		SourceSpans:   streamSpec.TableSpans,
 		DescriptorMap: descMap,
+		SourceTypes:   sourceTypes,
 	}, nil
 }
 

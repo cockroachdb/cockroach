@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package pgwirebase
 
@@ -921,6 +916,16 @@ type PGNumeric struct {
 // for a timestamp. To create a timestamp from this value, it takes the microseconds
 // delta and adds it to PGEpochJDate.
 func pgBinaryToTime(i int64) time.Time {
+	// Postgres uses math.MaxInt64 microseconds as the "infinity" timestamp, see:
+	// https://github.com/postgres/postgres/blob/9380e5f129d2a160ecc2444f61bb7cb97fd51fbb/src/include/datatype/timestamp.h#L151
+	if i == math.MaxInt64 {
+		return pgdate.TimeInfinity
+	}
+	// Postgres uses math.MinInt64 microseconds as the "-infinity" timestamp, see:
+	// https://github.com/postgres/postgres/blob/9380e5f129d2a160ecc2444f61bb7cb97fd51fbb/src/include/datatype/timestamp.h#L150
+	if i == math.MinInt64 {
+		return pgdate.TimeNegativeInfinity
+	}
 	return duration.AddMicros(PGEpochJDate, i)
 }
 

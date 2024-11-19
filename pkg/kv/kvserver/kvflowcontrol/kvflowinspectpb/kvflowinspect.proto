@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.kv.kvserver.kvflowcontrol.kvflowinspectpb;
@@ -77,19 +72,38 @@ message Handle {
 message ConnectedStream {
   Stream stream = 1 [(gogoproto.nullable) = false];
   repeated TrackedDeduction tracked_deductions = 2 [(gogoproto.nullable) = false];
+  // TotalEvalDeductedTokens represents the total number of tokens deducted for
+  // evaluation, for this connected stream. Only populated on versions >= 24.3.
+  int64 total_eval_deducted_tokens = 3;
+  // TotalSendDeductedTokens represents the total number of tokens deducted
+  // before sending, for this connected stream. Only populated on versions >=
+  // 24.3.
+  int64 total_send_deducted_tokens = 4;
 }
 
 // Stream represents a given kvflowcontrol.Stream and the number of tokens
-// available for it (as maintained by the node-level kvflowcontrol.Controller).
+// available for it (as maintained by the node-level kvflowcontrol.Controller,
+// or in >= v24.3, by the node level StreamTokenCounterProvider).
 message Stream {
+  option (gogoproto.goproto_stringer) = false;
   roachpb.TenantID tenant_id = 1 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "TenantID"];
   uint64 store_id = 2 [
     (gogoproto.customname) = "StoreID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
-  int64 available_regular_tokens = 3;
-  int64 available_elastic_tokens = 4;
+  // AvailableEvalRegularTokens represents the currently available tokens for
+  // regular replication traffic, deducted for evaluation.
+  int64 available_eval_regular_tokens = 3;
+  // AvailableEvalElasticTokens represents the currently available tokens for
+  // elastic replication traffic, deducted for evaluation.
+  int64 available_eval_elastic_tokens = 4;
+  // AvailableSendRegularTokens represents the currently available tokens for
+  // regular replication traffic, deducted before sending.
+  int64 available_send_regular_tokens = 5;
+  // AvailableSendElasticTokens represents the currently available tokens for
+  // elastic replication traffic, deducted before sending.
+  int64 available_send_elastic_tokens = 6;
 }
 
 // TrackedDeductions represents a tracked token deduction, as typically done by

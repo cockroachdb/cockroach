@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -14,8 +9,8 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -35,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -340,18 +336,28 @@ func fireAfter(ctx context.Context, duration time.Duration, fn func()) {
 // rather than utilizing the values recorded in the histogram, and can be
 // recorded in the perfBuf by utilizing the returned tickByName(name) function.
 func createDecommissionBenchPerfArtifacts(
-	opNames ...string,
-) (reg *histogram.Registry, tickByName func(name string), perfBuf *bytes.Buffer) {
+	t test.Test, c cluster.Cluster, opNames ...string,
+) (
+	reg *histogram.Registry,
+	tickByName func(name string),
+	perfBuf *bytes.Buffer,
+	exporter exporter.Exporter,
+) {
+
+	exporter = roachtestutil.CreateWorkloadHistogramExporter(t, c)
+
 	// Create a histogram registry for recording multiple decommission metrics,
 	// following the "bulk job" form of measuring performance.
 	// See runDecommissionBench for more explanation.
-	reg = histogram.NewRegistry(
+	reg = histogram.NewRegistryWithExporter(
 		defaultTimeout,
 		histogram.MockWorkloadName,
+		exporter,
 	)
 
 	perfBuf = bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(perfBuf)
+	writer := io.Writer(perfBuf)
+	exporter.Init(&writer)
 
 	registeredOpNames := make(map[string]struct{})
 	for _, opName := range opNames {
@@ -362,12 +368,12 @@ func createDecommissionBenchPerfArtifacts(
 	tickByName = func(name string) {
 		reg.Tick(func(tick histogram.Tick) {
 			if _, ok := registeredOpNames[name]; ok && tick.Name == name {
-				_ = jsonEnc.Encode(tick.Snapshot())
+				_ = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 			}
 		})
 	}
 
-	return reg, tickByName, perfBuf
+	return reg, tickByName, perfBuf, exporter
 }
 
 // setupDecommissionBench performs the initial cluster setup needed prior to
@@ -400,7 +406,7 @@ func setupDecommissionBench(
 		// import can saturate snapshots and leave underreplicated system ranges
 		// struggling.
 		// See GH issue #101532 for longer term solution.
-		if err := WaitForReplication(ctx, t, t.L(), db, 3, atLeastReplicationFactor); err != nil {
+		if err := roachtestutil.WaitForReplication(ctx, t.L(), db, 3, roachtestutil.AtLeastReplicationFactor); err != nil {
 			t.Fatal(err)
 		}
 
@@ -439,7 +445,7 @@ func setupDecommissionBench(
 		}
 
 		// Wait for initial up-replication.
-		err := WaitFor3XReplication(ctx, t, t.L(), db)
+		err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 		require.NoError(t, err)
 	}
 }
@@ -493,23 +499,24 @@ func uploadPerfArtifacts(
 	benchSpec decommissionBenchSpec,
 	pinnedNode, workloadNode int,
 	perfBuf *bytes.Buffer,
+	exporter exporter.Exporter,
 ) {
 	// Store the perf artifacts on the pinned node so that the test
 	// runner copies it into an appropriate directory path.
-	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-	if err := c.RunE(ctx, option.WithNodes(c.Node(pinnedNode)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-		t.L().Errorf("failed to create perf dir: %+v", err)
+
+	destFileName, err := roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, exporter, c.Node(pinnedNode))
+	if err != nil {
+		t.L().Errorf("error creating perf stats file: %s", err)
+		return
 	}
-	if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(pinnedNode)); err != nil {
-		t.L().Errorf("failed to upload perf artifacts to node: %s", err.Error())
-	}
+	dest := filepath.Join(t.PerfArtifactsDir(), destFileName)
 
 	// Get the workload perf artifacts and move them to the pinned node, so that
 	// they can be used to display the workload operation rates during decommission.
 	if !benchSpec.noLoad {
-		workloadStatsSrc := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-		localWorkloadStatsPath := filepath.Join(t.ArtifactsDir(), "workload_stats.json")
-		workloadStatsDest := filepath.Join(t.PerfArtifactsDir(), "workload_stats.json")
+		workloadStatsSrc := filepath.Join(t.PerfArtifactsDir(), destFileName)
+		localWorkloadStatsPath := filepath.Join(t.ArtifactsDir(), "workload_"+destFileName)
+		workloadStatsDest := filepath.Join(t.PerfArtifactsDir(), "workload_"+destFileName)
 		if err := c.Get(
 			ctx, t.L(), workloadStatsSrc, localWorkloadStatsPath, c.Node(workloadNode),
 		); err != nil {
@@ -613,8 +620,8 @@ func runDecommissionBench(
 		benchSpec.warehouses,
 	)
 	workloadCmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
-		"--histograms=%s/stats.json --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
-		testTimeout, t.PerfArtifactsDir(), rampDuration, benchSpec.nodes)
+		"%s --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
+		testTimeout, roachtestutil.GetWorkloadHistogramArgs(t, c, nil), rampDuration, benchSpec.nodes)
 
 	// In the case that we want to simulate high read amplification, we use kv0
 	// to run a write-heavy workload known to be difficult for compactions to keep
@@ -622,8 +629,8 @@ func runDecommissionBench(
 	if benchSpec.slowWrites {
 		workloadCmd = fmt.Sprintf("./cockroach workload run kv --init --concurrency=%d --splits=1000 "+
 			"--read-percent=50 --min-block-bytes=8192 --max-block-bytes=8192 --duration=%s "+
-			"--histograms=%s/stats.json --ramp=%s --tolerate-errors {pgurl:1-%d}", benchSpec.nodes*64,
-			testTimeout, t.PerfArtifactsDir(), rampDuration, benchSpec.nodes)
+			"%s --ramp=%s --tolerate-errors {pgurl:1-%d}", benchSpec.nodes*64,
+			testTimeout, roachtestutil.GetWorkloadHistogramArgs(t, c, nil), rampDuration, benchSpec.nodes)
 	}
 
 	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
@@ -661,7 +668,8 @@ func runDecommissionBench(
 	// long-running metrics measured by the elapsed time between each tick,
 	// as opposed to the histograms of workload operation latencies or other
 	// recorded values that are typically output in a "tick" each second.
-	reg, tickByName, perfBuf := createDecommissionBenchPerfArtifacts(
+	reg, tickByName, perfBuf, exporter := createDecommissionBenchPerfArtifacts(
+		t, c,
 		decommissionMetric,
 		estimatedMetric,
 		bytesUsedMetric,
@@ -727,7 +735,7 @@ func runDecommissionBench(
 		t.Fatal(err)
 	}
 
-	uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf)
+	uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf, exporter)
 }
 
 // runDecommissionBenchLong initializes a cluster with TPCC and attempts to
@@ -758,8 +766,8 @@ func runDecommissionBenchLong(
 		benchSpec.warehouses,
 	)
 	workloadCmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
-		"--histograms=%s/stats.json --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
-		testTimeout, t.PerfArtifactsDir(), rampDuration, benchSpec.nodes)
+		"%s --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
+		testTimeout, roachtestutil.GetWorkloadHistogramArgs(t, c, nil), rampDuration, benchSpec.nodes)
 
 	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
 
@@ -795,7 +803,7 @@ func runDecommissionBenchLong(
 	// long-running metrics measured by the elapsed time between each tick,
 	// as opposed to the histograms of workload operation latencies or other
 	// recorded values that are typically output in a "tick" each second.
-	reg, tickByName, perfBuf := createDecommissionBenchPerfArtifacts(
+	reg, tickByName, perfBuf, exporter := createDecommissionBenchPerfArtifacts(t, c,
 		decommissionMetric, upreplicateMetric, bytesUsedMetric,
 	)
 
@@ -853,7 +861,7 @@ func runDecommissionBenchLong(
 		t.Fatal(err)
 	}
 
-	uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf)
+	uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf, exporter)
 }
 
 // runSingleDecommission picks a random node and attempts to decommission that

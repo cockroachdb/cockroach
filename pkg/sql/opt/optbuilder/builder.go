@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -15,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
@@ -142,6 +138,10 @@ type Builder struct {
 	// are disabled and only statements whitelisted are allowed.
 	insideFuncDef bool
 
+	// If set, we are processing a trigger definition; in this case catalog caches
+	// are disabled.
+	insideTriggerDef bool
+
 	// insideUDF is true when the current expressions are being built within a
 	// UDF.
 	insideUDF bool
@@ -184,6 +184,17 @@ type Builder struct {
 	// subqueryNameIdx helps generate unique subquery names during star
 	// expansion.
 	subqueryNameIdx int
+
+	// checkPrivilegeUser helps identify the username.SQLUsername for privilege
+	// checks performed. For routines that are specified with SECURITY
+	// DEFINER, the owner of the routine is checked. Otherwise, the check is
+	// against the user of the current session.
+	checkPrivilegeUser username.SQLUsername
+
+	// builtTriggerFuncs caches already-built trigger functions for a table. It is
+	// necessary to cache these functions since triggers can recursively reference
+	// one another.
+	builtTriggerFuncs map[cat.StableID][]cachedTriggerFunc
 }
 
 // New creates a new Builder structure initialized with the given
@@ -197,13 +208,14 @@ func New(
 	stmt tree.Statement,
 ) *Builder {
 	return &Builder{
-		factory:        factory,
-		stmt:           stmt,
-		ctx:            ctx,
-		verboseTracing: log.ExpensiveLogEnabled(ctx, 2),
-		semaCtx:        semaCtx,
-		evalCtx:        evalCtx,
-		catalog:        catalog,
+		factory:            factory,
+		stmt:               stmt,
+		ctx:                ctx,
+		verboseTracing:     log.ExpensiveLogEnabled(ctx, 2),
+		semaCtx:            semaCtx,
+		evalCtx:            evalCtx,
+		catalog:            catalog,
+		checkPrivilegeUser: catalog.GetCurrentUser(),
 	}
 }
 

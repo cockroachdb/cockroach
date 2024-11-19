@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package ldapccl
 
@@ -13,181 +10,128 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/go-ldap/ldap/v3"
 )
 
 const (
-	counterPrefix           = "auth.ldap."
-	beginAuthCounterName    = counterPrefix + "begin_auth"
+	beginAuthNCounterName   = counterPrefix + "begin_authentication"
 	loginSuccessCounterName = counterPrefix + "login_success"
-	enableCounterName       = counterPrefix + "enable"
 )
 
 var (
-	beginAuthUseCounter    = telemetry.GetCounterOnce(beginAuthCounterName)
+	beginAuthNUseCounter   = telemetry.GetCounterOnce(beginAuthNCounterName)
 	loginSuccessUseCounter = telemetry.GetCounterOnce(loginSuccessCounterName)
-	enableUseCounter       = telemetry.GetCounterOnce(enableCounterName)
 )
 
-// ldapAuthenticator is an object that is used to enable ldap connection
-// validation that are used as part of the CRDB client auth flow.
-//
-// The implementation uses the `go-ldap/ldap/` client package and is supported
-// through a number of cluster settings defined in `ldapccl/settings.go`. These
-// settings specify how the ldap auth attempt should be executed and if this
-// feature is enabled.
-type ldapAuthenticator struct {
-	mu struct {
-		syncutil.RWMutex
-		// conf contains all the values that come from cluster settings.
-		conf ldapAuthenticatorConf
-		// util contains connection object required for interfacing with ldap server.
-		util ILDAPUtil
-		// enabled represents the present state of if this feature is enabled. It
-		// is set to true once ldap util is initialized.
-		enabled bool
-	}
-	// clusterUUID is used to check the validity of the enterprise license. It is
-	// set once at initialization.
-	clusterUUID uuid.UUID
-}
-
-// ldapAuthenticatorConf contains all the values to configure LDAP
-// authentication. These values are copied from the matching cluster settings or
-// from hba conf options for LDAP entry.
-type ldapAuthenticatorConf struct {
-	domainCACert        string
-	clientTLSCert       string
-	clientTLSKey        string
-	ldapServer          string
-	ldapPort            string
-	ldapBaseDN          string
-	ldapBindDN          string
-	ldapBindPassword    string
-	ldapSearchFilter    string
-	ldapSearchAttribute string
-}
-
-// reloadConfig locks mutex and then refreshes the values in conf from the cluster settings.
-func (authenticator *ldapAuthenticator) reloadConfig(ctx context.Context, st *cluster.Settings) {
-	authenticator.mu.Lock()
-	defer authenticator.mu.Unlock()
-	authenticator.reloadConfigLocked(ctx, st)
-}
-
-// reloadConfig refreshes the values in conf from the cluster settings without locking the mutex.
-func (authenticator *ldapAuthenticator) reloadConfigLocked(
-	ctx context.Context, st *cluster.Settings,
-) {
-	conf := ldapAuthenticatorConf{
-		domainCACert:  LDAPDomainCACertificate.Get(&st.SV),
-		clientTLSCert: LDAPClientTLSCertSetting.Get(&st.SV),
-		clientTLSKey:  LDAPClientTLSKeySetting.Get(&st.SV),
-	}
-	authenticator.mu.conf = conf
-
-	var err error
-	authenticator.mu.util, err = NewLDAPUtil(ctx, authenticator.mu.conf)
-	if err != nil {
-		log.Warningf(ctx, "LDAP authentication: unable to initialize LDAP connection: %v", err)
-		return
-	}
-
-	if !authenticator.mu.enabled {
-		telemetry.Inc(enableUseCounter)
-	}
-	authenticator.mu.enabled = true
-	log.Infof(ctx, "initialized LDAP authenticator")
-}
-
-// setLDAPConfigOptions extracts hba conf parameters required for connecting and
-// querying LDAP server from hba conf entry and sets them for LDAP authenticator.
-func (authenticator *ldapAuthenticator) setLDAPConfigOptions(entry *hba.Entry) error {
-	conf := ldapAuthenticatorConf{
-		domainCACert: authenticator.mu.conf.domainCACert,
-	}
-	for _, opt := range entry.Options {
-		switch opt[0] {
-		case "ldapserver":
-			conf.ldapServer = opt[1]
-		case "ldapport":
-			conf.ldapPort = opt[1]
-		case "ldapbasedn":
-			conf.ldapBaseDN = opt[1]
-		case "ldapbinddn":
-			conf.ldapBindDN = opt[1]
-		case "ldapbindpasswd":
-			conf.ldapBindPassword = opt[1]
-		case "ldapsearchfilter":
-			conf.ldapSearchFilter = opt[1]
-		case "ldapsearchattribute":
-			conf.ldapSearchAttribute = opt[1]
-		default:
-			return errors.Newf("invalid LDAP option provided in hba conf: %s", opt[0])
-		}
-	}
-	authenticator.mu.conf = conf
-	return nil
-}
-
-// validateLDAPOptions checks the ldap authenticator config values for validity.
-func (authenticator *ldapAuthenticator) validateLDAPOptions() error {
-	const ldapOptionsErrorMsg = "ldap params in HBA conf missing"
-	if authenticator.mu.conf.ldapServer == "" {
-		return errors.New(ldapOptionsErrorMsg + " ldap server")
-	}
-	if authenticator.mu.conf.ldapPort == "" {
-		return errors.New(ldapOptionsErrorMsg + " ldap port")
-	}
-	if authenticator.mu.conf.ldapBaseDN == "" {
-		return errors.New(ldapOptionsErrorMsg + " base DN")
-	}
-	if authenticator.mu.conf.ldapBindDN == "" {
-		return errors.New(ldapOptionsErrorMsg + " bind DN")
-	}
-	if authenticator.mu.conf.ldapBindPassword == "" {
-		return errors.New(ldapOptionsErrorMsg + " bind password")
-	}
-	if authenticator.mu.conf.ldapSearchFilter == "" {
-		return errors.New(ldapOptionsErrorMsg + " search filter")
-	}
-	if authenticator.mu.conf.ldapSearchAttribute == "" {
-		return errors.New(ldapOptionsErrorMsg + " search attribute")
-	}
-	return nil
-}
-
-// ValidateLDAPLogin validates an attempt to bind to an LDAP server.
+// FetchLDAPUserDN fetches the LDAP server DN for the sql user authenticating via LDAP.
 // In particular, it checks that:
 // * The cluster has an enterprise license.
 // * The active cluster version is 24.2 for this feature.
-// * LDAP authentication is enabled after settings were reloaded.
+// * LDAP authManager is enabled after settings were reloaded.
 // * The auth attempt is not for a reserved user.
 // * The hba conf entry options could be parsed to obtain ldap server params.
 // * All ldap server params are valid.
-// * LDAPs connection can be established with configured server.
 // * Configured bind DN and password can be used to search for the sql user DN on ldap server.
-// * The obtained user DN could be used to bind with the password from sql connection string.
+// It returns the retrievedUserDN which is the DN associated with the user in
+// LDAP server, authError (which is the error sql clients will see in case of
+// failures) and detailedError (which is the internal error from ldap clients
+// that might contain sensitive information we do not want to send to sql
+// clients but still want to log it). We do not want to send any information
+// back to client which was not provided by the client.
+func (authManager *ldapAuthManager) FetchLDAPUserDN(
+	ctx context.Context,
+	st *cluster.Settings,
+	user username.SQLUsername,
+	entry *hba.Entry,
+	_ *identmap.Conf,
+) (retrievedUserDN *ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
+	if err := utilccl.CheckEnterpriseEnabled(st, "LDAP authentication"); err != nil {
+		return nil, "", err
+	}
+	if !st.Version.IsActive(ctx, clusterversion.V24_2) {
+		return nil, "", pgerror.Newf(pgcode.FeatureNotSupported, "LDAP authentication is only supported after v24.2 upgrade is finalized")
+	}
+
+	authManager.mu.Lock()
+	defer authManager.mu.Unlock()
+	if !authManager.mu.enabled {
+		return nil, "", errors.Newf("LDAP authentication: not enabled")
+	}
+
+	if user.IsRootUser() || user.IsReserved() {
+		return nil, "", errors.WithDetailf(
+			errors.Newf("LDAP authentication: invalid identity"),
+			"cannot use LDAP auth to login to a reserved user %s", user.Normalized())
+	}
+
+	if err := authManager.setLDAPConfigOptions(entry); err != nil {
+		return nil, redact.Sprintf("error parsing hba conf options for LDAP: %v", err),
+			errors.Newf("LDAP authentication: unable to parse hba conf options")
+	}
+
+	// Establish a LDAPs connection with the set LDAP server and port
+	err := authManager.mu.util.MaybeInitLDAPsConn(ctx, authManager.mu.conf)
+	if err != nil {
+		return nil, redact.Sprintf("error when trying to create LDAP connection: %v", err),
+			errors.Newf("LDAP authentication: unable to establish LDAP connection")
+	}
+
+	// Bind with ldap service user DN and passwd for performing the search for ldap user.
+	if err := authManager.mu.util.Bind(ctx, authManager.mu.conf.ldapBindDN, authManager.mu.conf.ldapBindPassword); err != nil {
+		return nil, redact.Sprintf("error binding ldap service account: %v", err),
+			errors.Newf("LDAP authentication: error binding as LDAP service user with configured credentials")
+	}
+
+	// Fetch the ldap server Distinguished Name using sql username as search value
+	// for  ldap search attribute
+	userDN, err := authManager.mu.util.Search(ctx, authManager.mu.conf, user.Normalized())
+	if err != nil {
+		return nil, redact.Sprintf("error when searching for user in LDAP server: %v", err),
+			errors.WithDetailf(
+				errors.Newf("LDAP authentication: unable to find LDAP user distinguished name"),
+				"cannot find provided user %s on LDAP server", user.Normalized())
+	}
+
+	retrievedUserDN, err = distinguishedname.ParseDN(lexbase.NormalizeName(userDN))
+	if err != nil {
+		return nil, redact.Sprintf("error parsing user DN %s obtained from LDAP server: %v", userDN, err),
+			errors.WithDetailf(
+				errors.Newf("LDAP authentication: unable to parse LDAP user distinguished name"),
+				"cannot find provided user %s on LDAP server", user.Normalized())
+	}
+
+	return retrievedUserDN, "", nil
+}
+
+// ValidateLDAPLogin validates an attempt to bind provided user DN to configured LDAP server.
+// In particular, it checks that:
+// * The cluster has an enterprise license.
+// * The active cluster version is 24.2 for this feature.
+// * LDAP authManager is enabled after settings were reloaded.
+// * The hba conf entry options could be parsed to obtain ldap server params.
+// * All ldap server params are valid.
+// * LDAPs connection can be established with configured server.
+// * The provided user DN could be used to bind with the password from sql connection string.
 // It returns authError (which is the error sql clients will see in case of
 // failures) and detailedError (which is the internal error from ldap clients
 // that might contain sensitive information we do not want to send to sql
 // clients but still want to log it). We do not want to send any information
 // back to client which was not provided by the client.
-func (authenticator *ldapAuthenticator) ValidateLDAPLogin(
+func (authManager *ldapAuthManager) ValidateLDAPLogin(
 	ctx context.Context,
 	st *cluster.Settings,
+	ldapUserDN *ldap.DN,
 	user username.SQLUsername,
 	ldapPwd string,
 	entry *hba.Entry,
@@ -200,52 +144,31 @@ func (authenticator *ldapAuthenticator) ValidateLDAPLogin(
 		return "", pgerror.Newf(pgcode.FeatureNotSupported, "LDAP authentication is only supported after v24.2 upgrade is finalized")
 	}
 
-	authenticator.mu.Lock()
-	defer authenticator.mu.Unlock()
+	authManager.mu.Lock()
+	defer authManager.mu.Unlock()
 
-	if !authenticator.mu.enabled {
+	if !authManager.mu.enabled {
 		return "", errors.Newf("LDAP authentication: not enabled")
 	}
-	telemetry.Inc(beginAuthUseCounter)
+	telemetry.Inc(beginAuthNUseCounter)
 
-	if user.IsRootUser() || user.IsReserved() {
-		return "", errors.WithDetailf(
-			errors.Newf("LDAP authentication: invalid identity"),
-			"cannot use LDAP auth to login to a reserved user %s", user.Normalized())
-	}
-
-	if err := authenticator.setLDAPConfigOptions(entry); err != nil {
+	if err := authManager.setLDAPConfigOptions(entry); err != nil {
 		return redact.Sprintf("error parsing hba conf options for LDAP: %v", err),
 			errors.Newf("LDAP authentication: unable to parse hba conf options")
 	}
 
-	if err := authenticator.validateLDAPOptions(); err != nil {
-		return redact.Sprintf("error validating hba conf options for LDAP: %v", err),
-			errors.Newf("LDAP authentication: unable to validate authenticator options")
-	}
-
 	// Establish a LDAPs connection with the set LDAP server and port
-	err := authenticator.mu.util.InitLDAPsConn(ctx, authenticator.mu.conf)
+	err := authManager.mu.util.MaybeInitLDAPsConn(ctx, authManager.mu.conf)
 	if err != nil {
 		return redact.Sprintf("error when trying to create LDAP connection: %v", err),
 			errors.Newf("LDAP authentication: unable to establish LDAP connection")
 	}
 
-	// Fetch the ldap server Distinguished Name using sql username as search value
-	// for  ldap search attribute
-	userDN, err := authenticator.mu.util.Search(ctx, authenticator.mu.conf, user.Normalized())
-	if err != nil {
-		return redact.Sprintf("error when searching for user in LDAP server: %v", err),
-			errors.WithDetailf(
-				errors.Newf("LDAP authentication: unable to find LDAP user distinguished name"),
-				"cannot find provided user %s on LDAP server", user.Normalized())
-	}
-
 	// Bind as the user to verify their password
-	err = authenticator.mu.util.Bind(ctx, userDN, ldapPwd)
+	err = authManager.mu.util.Bind(ctx, ldapUserDN.String(), ldapPwd)
 	if err != nil {
 		return redact.Sprintf("error when binding as user %s with DN(%s) in LDAP server: %v",
-				user.Normalized(), userDN, err,
+				user.Normalized(), ldapUserDN, err,
 			),
 			errors.WithDetailf(
 				errors.Newf("LDAP authentication: unable to bind as LDAP user"),
@@ -254,25 +177,4 @@ func (authenticator *ldapAuthenticator) ValidateLDAPLogin(
 
 	telemetry.Inc(loginSuccessUseCounter)
 	return "", nil
-}
-
-// ConfigureLDAPAuth initializes and returns a ldapAuthenticator. It also sets up listeners so
-// that the ldapAuthenticator's config is updated when the cluster settings values change.
-var ConfigureLDAPAuth = func(
-	serverCtx context.Context,
-	ambientCtx log.AmbientContext,
-	st *cluster.Settings,
-	clusterUUID uuid.UUID,
-) pgwire.LDAPVerifier {
-	authenticator := ldapAuthenticator{}
-	authenticator.clusterUUID = clusterUUID
-	authenticator.reloadConfig(serverCtx, st)
-	LDAPDomainCACertificate.SetOnChange(&st.SV, func(ctx context.Context) {
-		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
-	})
-	return &authenticator
-}
-
-func init() {
-	pgwire.ConfigureLDAPAuth = ConfigureLDAPAuth
 }

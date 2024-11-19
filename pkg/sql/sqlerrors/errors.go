@@ -1,23 +1,20 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package sqlerrors exports errors which can occur in the sql package.
 package sqlerrors
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -50,6 +47,21 @@ func NewSchemaChangeOnLockedTableErr(tableName string) error {
 		"To unlock the table, try \"ALTER TABLE %v SET (schema_locked = false);\" "+
 			"\nAfter schema change completes, we recommend setting it back to true with "+
 			"\"ALTER TABLE %v SET (schema_locked = true);\"", tableName, tableName)
+}
+
+// NewDisallowedSchemaChangeOnLDRTableErr creates an error that indicates that
+// the schema change is disallowed because the table is being used by a
+// logical data replication job.
+func NewDisallowedSchemaChangeOnLDRTableErr(tableName string, jobIDs []catpb.JobID) error {
+	ids := make([]string, len(jobIDs))
+	for i, v := range jobIDs {
+		ids[i] = strconv.Itoa(int(v))
+	}
+	return pgerror.Newf(
+		pgcode.FeatureNotSupported,
+		"this schema change is disallowed on table %s because it is referenced by "+
+			"one or more logical replication jobs [%s]", tableName, strings.Join(ids, ", "),
+	)
 }
 
 // NewTransactionAbortedError creates an error for trying to run a command in
@@ -295,6 +307,12 @@ func NewDependentBlocksOpError(op, objType, objName, dependentType, dependentNam
 		"consider dropping %q first.", dependentName)
 }
 
+func NewAlterColTypeInCombinationNotSupportedError() error {
+	return unimplemented.NewWithIssuef(
+		49351, "ALTER COLUMN TYPE cannot be used in combination "+
+			"with other ALTER TABLE commands")
+}
+
 const PrimaryIndexSwapDetail = `CRDB's implementation for "ADD COLUMN", "DROP COLUMN", and "ALTER PRIMARY KEY" will drop the old/current primary index and create a new one.`
 
 // NewColumnReferencedByPrimaryKeyError is returned when attempting to drop a
@@ -408,6 +426,12 @@ func NewUndefinedUserError(user username.SQLUsername) error {
 func NewUndefinedConstraintError(constraintName, tableName string) error {
 	return pgerror.Newf(pgcode.UndefinedObject,
 		"constraint %q of relation %q does not exist", constraintName, tableName)
+}
+
+// NewUndefinedTriggerError returns a missing constraint error.
+func NewUndefinedTriggerError(triggerName, tableName string) error {
+	return pgerror.Newf(pgcode.UndefinedObject,
+		"trigger %q of relation %q does not exist", triggerName, tableName)
 }
 
 // NewRangeUnavailableError creates an unavailable range error.

@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvcoord
 
@@ -219,7 +214,7 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 	stream := &activeMuxRangeFeed{
 		// TODO(msbutler): It's sad that there's a bunch of repeat metadata.
 		// Deduplicate once old style rangefeed code is banished from the codebase.
-		activeRangeFeed:         newActiveRangeFeed(span, startAfter, m.registry, m.metrics, parentRangefeedMetadata),
+		activeRangeFeed:         newActiveRangeFeed(span, startAfter, m.registry, m.metrics, parentRangefeedMetadata, token.Desc().RangeID),
 		rSpan:                   rs,
 		startAfter:              startAfter,
 		token:                   token,
@@ -288,10 +283,15 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 
 		for !s.transport.IsExhausted() {
 			args := makeRangeFeedRequest(
-				s.Span, s.token.Desc().RangeID, m.cfg.overSystemTable, s.startAfter, m.cfg.withDiff, m.cfg.withFiltering, m.cfg.withMatchingOriginIDs)
+				s.Span, s.token.Desc().RangeID, m.cfg.overSystemTable, s.startAfter, m.cfg.withDiff, m.cfg.withFiltering, m.cfg.withMatchingOriginIDs, m.cfg.consumerID)
 			args.Replica = s.transport.NextReplica()
 			args.StreamID = streamID
 			s.ReplicaDescriptor = args.Replica
+
+			s.activeRangeFeed.Lock()
+			s.activeRangeFeed.NodeID = args.Replica.NodeID
+			s.activeRangeFeed.Unlock()
+
 			rpcClient, err := s.transport.NextInternalClient(ctx)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "RPC error connecting to replica %s: %s", args.Replica, err)

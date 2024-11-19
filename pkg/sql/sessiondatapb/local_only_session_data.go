@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sessiondatapb
 
@@ -290,13 +285,10 @@ const (
 	// session default_transaction_quality_of_service value.
 	SystemLow = QoSLevel(admissionpb.LowPri)
 
-	// TTLStatsLow denotes a QoS level used internally by the TTL feature, which
-	// is not settable as a session default_transaction_quality_of_service value.
-	TTLStatsLow = QoSLevel(admissionpb.TTLLowPri)
-
-	// TTLLow denotes a QoS level used internally by the TTL feature, which is not
-	// settable as a session default_transaction_quality_of_service value.
-	TTLLow = QoSLevel(admissionpb.TTLLowPri)
+	// BulkLow denotes a QoS level used internally by the bulk operations (like
+	// LDR ingestion and TTL), which is not settable as a session
+	// default_transaction_quality_of_service value.
+	BulkLow = QoSLevel(admissionpb.BulkLowPri)
 
 	// UserLow denotes an end user QoS level lower than the default.
 	UserLow = QoSLevel(admissionpb.UserLowPri)
@@ -341,8 +333,8 @@ const (
 	// QoS level.
 	SystemLowName = "minimum"
 
-	// TTLLowName is the string value to display indicating a TTLLow QoS level.
-	TTLLowName = "ttl_low"
+	// BulkLowName is the string value to display indicating a BulkLow QoS level.
+	BulkLowName = "bulk_low"
 
 	// LockingNormalName is the string value to display indicating a
 	// LockingNormal QoS level.
@@ -359,13 +351,13 @@ const (
 // those cases.
 var (
 	SystemLowQoS = SystemLow
-	TTLLowQoS    = TTLLow
+	BulkLowQoS   = BulkLow
 	UserLowQoS   = UserLow
 )
 
 var qosLevelsDict = map[QoSLevel]string{
 	SystemLow:     SystemLowName,
-	TTLLow:        TTLLowName,
+	BulkLow:       BulkLowName,
 	UserLow:       UserLowName,
 	Normal:        NormalName,
 	LockingNormal: LockingNormalName,

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package gce
 
@@ -101,6 +96,7 @@ func Init() error {
 	providerInstance.Projects = []string{defaultDefaultProject}
 	projectFromEnv := os.Getenv("GCE_PROJECT")
 	if projectFromEnv != "" {
+		fmt.Printf("WARNING: `GCE_PROJECT` is deprecated; please, use `ROACHPROD_GCE_DEFAULT_PROJECT` instead")
 		providerInstance.Projects = []string{projectFromEnv}
 	}
 	providerInstance.ServiceAccount = os.Getenv("GCE_SERVICE_ACCOUNT")
@@ -218,7 +214,7 @@ func (jsonVM *jsonVM) toVM(
 	cpuPlatform := jsonVM.CPUPlatform
 	zone := lastComponent(jsonVM.Zone)
 	remoteUser := config.SharedUser
-	if !opts.useSharedUser {
+	if !config.UseSharedUser {
 		// N.B. gcloud uses the local username to log into instances rather
 		// than the username on the authenticated Google account but we set
 		// up the shared user at cluster creation time. Allow use of the
@@ -316,9 +312,9 @@ func DefaultProviderOpts() *ProviderOpts {
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
+		PDVolumeCount:        1,
 		TerminateOnMigration: false,
 		UseSpot:              false,
-		useSharedUser:        true,
 		preemptible:          false,
 	}
 }
@@ -340,6 +336,7 @@ type ProviderOpts struct {
 	SSDCount         int
 	PDVolumeType     string
 	PDVolumeSize     int
+	PDVolumeCount    int
 	UseMultipleDisks bool
 	// use spot instances (i.e., latest version of preemptibles which can run > 24 hours)
 	UseSpot bool
@@ -356,9 +353,6 @@ type ProviderOpts struct {
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
 	TerminateOnMigration bool
-	// useSharedUser indicates that the shared user rather than the personal
-	// user should be used to ssh into the remote machines.
-	useSharedUser bool
 	// use preemptible instances
 	preemptible bool
 }
@@ -958,7 +952,7 @@ type ProjectsVal struct {
 	AcceptMultipleProjects bool
 }
 
-// defaultZones is the list of  zones used by default for cluster creation.
+// DefaultZones is the list of  zones used by default for cluster creation.
 // If the geo flag is specified, nodes are distributed between zones.
 // These are GCP zones available according to this page:
 // https://cloud.google.com/compute/docs/regions-zones#available
@@ -968,7 +962,7 @@ type ProjectsVal struct {
 // ARM64 builds), but we randomize the specific zone. This is to avoid
 // "zone exhausted" errors in one particular zone, especially during
 // nightly roachtest runs.
-func defaultZones(arch string) []string {
+func DefaultZones(arch string) []string {
 	zones := []string{"us-east1-b", "us-east1-c", "us-east1-d"}
 	if vm.ParseArch(arch) == vm.ArchARM64 {
 		// T2A instances are only available in us-central1 in NA.
@@ -1062,6 +1056,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Type of the persistent disk volume, only used if local-ssd=false")
 	flags.IntVar(&o.PDVolumeSize, ProviderName+"-pd-volume-size", 500,
 		"Size in GB of persistent disk volume, only used if local-ssd=false")
+	flags.IntVar(&o.PDVolumeCount, ProviderName+"-pd-volume-count", 1,
+		"Number of persistent disk volumes, only used if local-ssd=false")
 	flags.BoolVar(&o.UseMultipleDisks, ProviderName+"-enable-multiple-stores",
 		false, "Enable the use of multiple stores by creating one store directory per disk. "+
 			"Default is to raid0 stripe all disks.")
@@ -1070,7 +1066,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		fmt.Sprintf("Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone\n"+
 			"will be repeated N times. If > 1 zone specified, nodes will be geo-distributed\n"+
 			"regardless of geo (default [%s])",
-			strings.Join(defaultZones(string(vm.ArchAMD64)), ",")))
+			strings.Join(DefaultZones(string(vm.ArchAMD64)), ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
 		"use preemptible GCE instances (lifetime cannot exceed 24h)")
 	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot", false,
@@ -1098,11 +1094,6 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 		},
 		ProviderName+"-project", /* name */
 		usage)
-
-	flags.BoolVar(&o.useSharedUser,
-		ProviderName+"-use-shared-user", true,
-		fmt.Sprintf("use the shared user %q for ssh rather than your user %q",
-			config.SharedUser, config.OSUser.Username))
 
 	// Flags about DNS override the default values in
 	// providerInstance.dnsProvider.
@@ -1199,7 +1190,7 @@ func (p *Provider) editLabels(
 		if remove {
 			tagArgs = append(tagArgs, key)
 		} else {
-			tagArgs = append(tagArgs, fmt.Sprintf("%s=%s", key, vm.SanitizeLabel(value)))
+			tagArgs = append(tagArgs, fmt.Sprintf("%s=%s", key, value))
 		}
 	}
 	tagArgsString := strings.Join(tagArgs, ",")
@@ -1225,7 +1216,8 @@ func (p *Provider) editLabels(
 	return g.Wait()
 }
 
-// AddLabels adds the given labels to the given VMs.
+// AddLabels adds (or updates) the given labels to the given VMs.
+// N.B. If a VM contains a label with the same key, its value will be updated.
 func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]string) error {
 	return p.editLabels(l, vms, labels, false /* remove */)
 }
@@ -1285,9 +1277,9 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 	}
 	if len(zones) == 0 {
 		if opts.GeoDistributed {
-			zones = defaultZones(opts.Arch)
+			zones = DefaultZones(opts.Arch)
 		} else {
-			zones = []string{defaultZones(opts.Arch)[0]}
+			zones = []string{DefaultZones(opts.Arch)[0]}
 		}
 	}
 	if providerOpts.useArmAMI() {
@@ -1401,15 +1393,18 @@ func (p *Provider) computeInstanceArgs(
 			extraMountOpts = fmt.Sprintf("%s,nobarrier", extraMountOpts)
 		}
 	} else {
-		pdProps := []string{
-			fmt.Sprintf("type=%s", providerOpts.PDVolumeType),
-			fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
-			"auto-delete=yes",
+		// create the "PDVolumeCount" number of persistent disks with the same configuration
+		for i := 0; i < providerOpts.PDVolumeCount; i++ {
+			pdProps := []string{
+				fmt.Sprintf("type=%s", providerOpts.PDVolumeType),
+				fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
+				"auto-delete=yes",
+			}
+			// TODO(pavelkalinnikov): support disk types with "provisioned-throughput"
+			// option, such as Hyperdisk Throughput:
+			// https://cloud.google.com/compute/docs/disks/add-hyperdisk#hyperdisk-throughput.
+			args = append(args, "--create-disk", strings.Join(pdProps, ","))
 		}
-		// TODO(pavelkalinnikov): support disk types with "provisioned-throughput"
-		// option, such as Hyperdisk Throughput:
-		// https://cloud.google.com/compute/docs/disks/add-hyperdisk#hyperdisk-throughput.
-		args = append(args, "--create-disk", strings.Join(pdProps, ","))
 		// Enable DISCARD commands for persistent disks, as is advised in:
 		// https://cloud.google.com/compute/docs/disks/optimizing-pd-performance#formatting_parameters.
 		extraMountOpts = "discard"
@@ -1691,7 +1686,7 @@ func (p *Provider) Create(
 			return err
 		}
 	}
-	return propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD)
+	return propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD, providerOpts.PDVolumeCount)
 }
 
 // computeGrowDistribution computes the distribution of new nodes across the
@@ -1813,7 +1808,8 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 		}
 		labelsJoined += fmt.Sprintf("%s=%s", key, value)
 	}
-	return propagateDiskLabels(l, project, labelsJoined, zoneToHostNames, len(vms[0].LocalDisks) != 0)
+	return propagateDiskLabels(l, project, labelsJoined, zoneToHostNames, len(vms[0].LocalDisks) != 0,
+		len(vms[0].NonBootAttachedVolumes))
 }
 
 type jsonBackendService struct {
@@ -2296,6 +2292,7 @@ func propagateDiskLabels(
 	labels string,
 	zoneToHostNames map[string][]string,
 	useLocalSSD bool,
+	pdVolumeCount int,
 ) error {
 	var g errgroup.Group
 
@@ -2325,16 +2322,23 @@ func propagateDiskLabels(
 			})
 
 			if !useLocalSSD {
+				// The persistent disks are already created. The disks are suffixed with an offset
+				// which starts from 1. A total of "pdVolumeCount" disks are created.
 				g.Go(func() error {
-					persistentDiskArgs := append([]string(nil), argsPrefix...)
-					persistentDiskArgs = append(persistentDiskArgs, zoneArg...)
-					// N.B. additional persistent disks are suffixed with the offset, starting at 1.
-					persistentDiskArgs = append(persistentDiskArgs, fmt.Sprintf("%s-1", hostName))
-					cmd := exec.Command("gcloud", persistentDiskArgs...)
+					// the loop is run inside the go-routine to ensure that we do not run all the gcloud commands.
+					// For a 150 node with 4 disks, we have seen that the gcloud command cannot handle so many concurrent
+					// commands.
+					for offset := 1; offset <= pdVolumeCount; offset++ {
+						persistentDiskArgs := append([]string(nil), argsPrefix...)
+						persistentDiskArgs = append(persistentDiskArgs, zoneArg...)
+						// N.B. additional persistent disks are suffixed with the offset, starting at 1.
+						persistentDiskArgs = append(persistentDiskArgs, fmt.Sprintf("%s-%d", hostName, offset))
+						cmd := exec.Command("gcloud", persistentDiskArgs...)
 
-					output, err := cmd.CombinedOutput()
-					if err != nil {
-						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", persistentDiskArgs, output)
+						output, err := cmd.CombinedOutput()
+						if err != nil {
+							return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", persistentDiskArgs, output)
+						}
 					}
 					return nil
 				})
@@ -2838,7 +2842,8 @@ func populateCostPerHour(l *logger.Logger, vms vm.List) error {
 				}
 				series, cpus, memory, err := decodeCustomType()
 				if err != nil {
-					l.Errorf("Error estimating VM costs (will continue without): %v", err)
+					l.Errorf("Error estimating VM costs, "+
+						"continuing without (consider ROACHPROD_NO_COST_ESTIMATES=true): %v", err)
 					continue
 				}
 				workload.ComputeVmWorkload.MachineType = &cloudbilling.MachineType{

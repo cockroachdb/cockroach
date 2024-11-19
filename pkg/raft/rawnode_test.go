@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -18,58 +18,19 @@
 package raft
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// rawNodeAdapter is essentially a lint that makes sure that RawNode implements
-// "most of" Node. The exceptions (some of which are easy to fix) are listed
-// below.
-type rawNodeAdapter struct {
-	*RawNode
-}
-
-var _ Node = (*rawNodeAdapter)(nil)
-
-// TransferLeadership is to test when node specifies lead, which is pointless, can just be filled in.
-func (a *rawNodeAdapter) TransferLeadership(_ context.Context, _, transferee pb.PeerID) {
-	a.RawNode.TransferLeader(transferee)
-}
-
-// ForgetLeader takes a context, RawNode doesn't need it.
-func (a *rawNodeAdapter) ForgetLeader(context.Context) error { return a.RawNode.ForgetLeader() }
-
-// Stop when node has a goroutine, RawNode doesn't need this.
-func (a *rawNodeAdapter) Stop() {}
-
-// Status retirns RawNode's status as *Status.
-func (a *rawNodeAdapter) Status() Status { return a.RawNode.Status() }
-
-// Advance is when RawNode takes a Ready. It doesn't really have to do that I think? It can hold on
-// to it internally. But maybe that approach is frail.
-func (a *rawNodeAdapter) Advance() { a.RawNode.Advance(Ready{}) }
-
-// Ready when RawNode returns a Ready, not a chan of one.
-func (a *rawNodeAdapter) Ready() <-chan Ready { return nil }
-
-// Node takes more contexts. Easy enough to fix.
-
-func (a *rawNodeAdapter) Campaign(context.Context) error             { return a.RawNode.Campaign() }
-func (a *rawNodeAdapter) Step(_ context.Context, m pb.Message) error { return a.RawNode.Step(m) }
-func (a *rawNodeAdapter) Propose(_ context.Context, data []byte) error {
-	return a.RawNode.Propose(data)
-}
-func (a *rawNodeAdapter) ProposeConfChange(_ context.Context, cc pb.ConfChangeI) error {
-	return a.RawNode.ProposeConfChange(cc)
-}
 
 // TestRawNodeStep ensures that RawNode.Step ignore local message.
 func TestRawNodeStep(t *testing.T) {
@@ -90,7 +51,7 @@ func TestRawNodeStep(t *testing.T) {
 			rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s))
 			require.NoError(t, err, "#%d", i)
 			msgt := pb.MessageType(i)
-			err = rawNode.Step(pb.Message{Type: msgt})
+			err = rawNode.Step(pb.Message{Type: msgt, From: 2})
 			// LocalMsg should be ignored.
 			if IsLocalMsg(msgt) {
 				assert.Equal(t, ErrStepLocalMsg, err, "#%d", i)
@@ -271,9 +232,7 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 			// down to the bits. Note that this comes from the Storage, which
 			// will not reflect any unstable entries that we'll only be presented
 			// with in the next Ready.
-			lastIndex, err = s.LastIndex()
-			require.NoError(t, err)
-
+			lastIndex = s.LastIndex()
 			entries, err := s.Entries(lastIndex-1, lastIndex+1, noLimit)
 			require.NoError(t, err)
 			require.Len(t, entries, 2)
@@ -338,6 +297,13 @@ func TestRawNodeProposeAndConfChange(t *testing.T) {
 // TestRawNodeJointAutoLeave tests the configuration change auto leave even leader
 // lost leadership.
 func TestRawNodeJointAutoLeave(t *testing.T) {
+	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
+		func(t *testing.T, storeLivenessEnabled bool) {
+			testRawNodeJointAutoLeave(t, storeLivenessEnabled)
+		})
+}
+
+func testRawNodeJointAutoLeave(t *testing.T, storeLivenessEnabled bool) {
 	testCc := pb.ConfChangeV2{Changes: []pb.ConfChangeSingle{
 		{Type: pb.ConfChangeAddLearnerNode, NodeID: 2},
 	},
@@ -350,7 +316,19 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	exp2Cs := pb.ConfState{Voters: []pb.PeerID{1}, Learners: []pb.PeerID{2}}
 
 	s := newTestMemoryStorage(withPeers(1))
-	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, s, withFortificationDisabled()))
+
+	var fabric *raftstoreliveness.LivenessFabric
+	var rawNode *RawNode
+	var err error
+	if storeLivenessEnabled {
+		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
+		rawNode, err = NewRawNode(newTestConfig(1, 10, 1, s,
+			withStoreLiveness(fabric.GetStoreLiveness(1))))
+	} else {
+		rawNode, err = NewRawNode(newTestConfig(1, 10, 1, s,
+			withStoreLiveness(raftstoreliveness.Disabled{})))
+	}
+
 	require.NoError(t, err)
 
 	rawNode.Campaign()
@@ -373,18 +351,25 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 				cc = &ccc
 			}
 			if cc != nil {
-				// Force it step down.
+				// Force it to step down.
 				rawNode.Step(pb.Message{Type: pb.MsgHeartbeatResp, From: 1, Term: rawNode.raft.Term + 1})
+				require.Equal(t, pb.StateFollower, rawNode.raft.state)
+				if storeLivenessEnabled {
+					// And also wait for defortification.
+					for range rawNode.raft.heartbeatTimeout {
+						rawNode.Tick()
+					}
+				}
 				cs = rawNode.ApplyConfChange(cc)
 			}
 		}
 		rawNode.Advance(rd)
 		// Once we are the leader, propose a command and a ConfChange.
-		if !proposed && rd.HardState.Lead == rawNode.raft.id {
+		if !proposed && rawNode.raft.state == pb.StateLeader {
 			require.NoError(t, rawNode.Propose([]byte("somedata")))
 			ccdata, err = testCc.Marshal()
 			require.NoError(t, err)
-			rawNode.ProposeConfChange(testCc)
+			require.NoError(t, rawNode.ProposeConfChange(testCc))
 			proposed = true
 		}
 	}
@@ -393,9 +378,7 @@ func TestRawNodeJointAutoLeave(t *testing.T) {
 	// down to the bits. Note that this comes from the Storage, which
 	// will not reflect any unstable entries that we'll only be presented
 	// with in the next Ready.
-	lastIndex, err = s.LastIndex()
-	require.NoError(t, err)
-
+	lastIndex = s.LastIndex()
 	entries, err := s.Entries(lastIndex-1, lastIndex+1, noLimit)
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
@@ -491,9 +474,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	require.NoError(t, err)
 	proposeConfChangeAndApply(cc2)
 
-	lastIndex, err := s.LastIndex()
-	require.NoError(t, err)
-
+	lastIndex := s.LastIndex()
 	// the last three entries should be: ConfChange cc1, cc1, cc2
 	entries, err := s.Entries(lastIndex-2, lastIndex+1, noLimit)
 	require.NoError(t, err)
@@ -520,7 +501,7 @@ func TestRawNodeStart(t *testing.T) {
 		{Term: 1, Index: 3, Data: []byte("foo")}, // non-empty entry
 	}
 	want := Ready{
-		SoftState:        &SoftState{RaftState: StateLeader},
+		SoftState:        &SoftState{RaftState: pb.StateLeader},
 		HardState:        pb.HardState{Term: 1, Commit: 3, Vote: 1, Lead: 1, LeadEpoch: 1},
 		Entries:          nil, // emitted & checked in intermediate Ready cycle
 		CommittedEntries: entries,
@@ -528,7 +509,7 @@ func TestRawNodeStart(t *testing.T) {
 	}
 
 	storage := NewMemoryStorage()
-	storage.ents[0].Index = 1
+	storage.ls = LogSlice{term: 1, prev: entryID{index: 1, term: 1}}
 
 	// TODO(tbg): this is a first prototype of what bootstrapping could look
 	// like (without the annoying faux ConfChanges). We want to persist a
@@ -547,19 +528,13 @@ func TestRawNodeStart(t *testing.T) {
 	}
 	bootstrap := func(storage appenderStorage, cs pb.ConfState) error {
 		require.NotEmpty(t, cs.Voters, "no voters specified")
-		fi, err := storage.FirstIndex()
-		require.NoError(t, err)
+		fi, li := storage.FirstIndex(), storage.LastIndex()
 		require.GreaterOrEqual(t, fi, uint64(2), "FirstIndex >= 2 is prerequisite for bootstrap")
+		require.Equal(t, fi, li+1, "the log must be empty")
 
-		_, err = storage.Entries(fi, fi, math.MaxUint64)
-		// TODO(tbg): match exact error
-		require.Error(t, err, "should not have been able to load first index")
-
-		li, err := storage.LastIndex()
+		entries, err := storage.Entries(fi, li+1, math.MaxUint64)
 		require.NoError(t, err)
-
-		_, err = storage.Entries(li, li, math.MaxUint64)
-		require.Error(t, err, "should not have been able to load last index")
+		require.Empty(t, entries, "should not have been able to load any entries")
 
 		hs, ics, err := storage.InitialState()
 		require.NoError(t, err)
@@ -632,17 +607,17 @@ func TestRawNodeRestart(t *testing.T) {
 	assert.Equal(t, uint64(1), rawNode.raft.Term)
 	assert.Equal(t, uint64(1), rawNode.raft.raftLog.committed)
 	assert.Equal(t, pb.PeerID(1), rawNode.raft.lead)
-	assert.True(t, rawNode.raft.state == StateFollower)
+	assert.True(t, rawNode.raft.state == pb.StateFollower)
 	assert.Equal(t, pb.Epoch(1), rawNode.raft.leadEpoch)
 
 	// Ensure we campaign after the election timeout has elapsed.
-	for i := 0; i < rawNode.raft.randomizedElectionTimeout; i++ {
+	for i := int64(0); i < rawNode.raft.randomizedElectionTimeout; i++ {
 		// TODO(arul): consider getting rid of this hack to reset the epoch so that
 		// we can call an election without panicking.
 		rawNode.raft.leadEpoch = 0
 		rawNode.raft.tick()
 	}
-	assert.Equal(t, StateCandidate, rawNode.raft.state)
+	assert.Equal(t, pb.StateCandidate, rawNode.raft.state)
 	assert.Equal(t, uint64(2), rawNode.raft.Term) // this should in-turn bump the term
 }
 
@@ -693,7 +668,7 @@ func TestRawNodeStatus(t *testing.T) {
 	rn.Advance(rd)
 	status := rn.Status()
 	require.Equal(t, pb.PeerID(1), status.Lead)
-	require.Equal(t, StateLeader, status.RaftState)
+	require.Equal(t, pb.StateLeader, status.RaftState)
 	require.Equal(t, *rn.raft.trk.Progress(1), status.Progress[1])
 
 	expCfg := quorum.Config{Voters: quorum.JointConfig{
@@ -722,34 +697,32 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 	s := &ignoreSizeHintMemStorage{
 		MemoryStorage: newTestMemoryStorage(withPeers(1)),
 	}
-	persistedHardState := pb.HardState{
+	s.hardState = pb.HardState{
 		Term:   1,
 		Vote:   1,
 		Commit: 10,
 	}
-
-	s.hardState = persistedHardState
-	s.ents = make([]pb.Entry, 10)
+	entries := make([]pb.Entry, 10)
 	var size uint64
-	for i := range s.ents {
+	for i := range entries {
 		ent := pb.Entry{
 			Term:  1,
 			Index: uint64(i + 1),
 			Type:  pb.EntryNormal,
 			Data:  []byte("a"),
 		}
-
-		s.ents[i] = ent
+		entries[i] = ent
 		size += uint64(ent.Size())
 	}
+	s.ls = LogSlice{term: 1, entries: entries}
 
 	cfg := newTestConfig(1, 10, 1, s)
 	// Set a MaxSizePerMsg that would suggest to Raft that the last committed entry should
 	// not be included in the initial rd.CommittedEntries. However, our storage will ignore
 	// this and *will* return it (which is how the Commit index ended up being 10 initially).
-	cfg.MaxSizePerMsg = size - uint64(s.ents[len(s.ents)-1].Size()) - 1
+	cfg.MaxSizePerMsg = size - uint64(entries[len(entries)-1].Size()) - 1
 
-	s.ents = append(s.ents, pb.Entry{
+	s.ls.entries = append(s.ls.entries, pb.Entry{
 		Term:  1,
 		Index: uint64(11),
 		Type:  pb.EntryNormal,
@@ -770,11 +743,13 @@ func TestRawNodeCommitPaginationAfterRestart(t *testing.T) {
 		highestApplied = rd.CommittedEntries[n-1].Index
 		rawNode.Advance(rd)
 		rawNode.Step(pb.Message{
-			Type:   pb.MsgHeartbeat,
-			To:     1,
-			From:   2, // illegal, but we get away with it
-			Term:   1,
-			Commit: 11,
+			Type:    pb.MsgApp,
+			To:      1,
+			From:    2, // illegal, but we get away with it
+			Term:    1,
+			LogTerm: 1,
+			Index:   11,
+			Commit:  11,
 		})
 	}
 }
@@ -899,7 +874,7 @@ func BenchmarkStatus(b *testing.B) {
 			peers[i] = pb.PeerID(i + 1)
 		}
 		cfg := newTestConfig(1, 3, 1, newTestMemoryStorage(withPeers(peers...)))
-		cfg.Logger = discardLogger
+		cfg.Logger = raftlogger.DiscardLogger
 		r := newRaft(cfg)
 		r.becomeFollower(1, 1)
 		r.becomeCandidate()
@@ -1020,7 +995,7 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...pb.PeerID) {
 	s := newTestMemoryStorage(withPeers(peers...))
 	cfg := newTestConfig(1, 10, 1, s)
 	if !debug {
-		cfg.Logger = discardLogger // avoid distorting benchmark output
+		cfg.Logger = raftlogger.DiscardLogger // avoid distorting benchmark output
 	}
 	rn, err := NewRawNode(cfg)
 	if err != nil {

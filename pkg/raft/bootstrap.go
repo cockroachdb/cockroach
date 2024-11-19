@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -18,9 +18,8 @@
 package raft
 
 import (
-	"errors"
-
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/errors"
 )
 
 // Bootstrap initializes the RawNode for first use by appending configuration
@@ -34,10 +33,8 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	if len(peers) == 0 {
 		return errors.New("must provide at least one peer to Bootstrap")
 	}
-	lastIndex, err := rn.raft.raftLog.storage.LastIndex()
-	if err != nil {
-		return err
-	} else if lastIndex != 0 {
+	lastIndex := rn.raft.raftLog.storage.LastIndex()
+	if lastIndex != 0 {
 		return errors.New("can't bootstrap a nonempty Storage")
 	}
 
@@ -49,7 +46,7 @@ func (rn *RawNode) Bootstrap(peers []Peer) error {
 	// TODO(tbg): remove StartNode and give the application the right tools to
 	// bootstrap the initial membership in a cleaner way.
 	rn.raft.becomeFollower(1, None)
-	app := logSlice{term: 1, entries: make([]pb.Entry, 0, len(peers))}
+	app := LogSlice{term: 1, entries: make([]pb.Entry, 0, len(peers))}
 	for i, peer := range peers {
 		cc := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: peer.ID, Context: peer.Context}
 		data, err := cc.Marshal()

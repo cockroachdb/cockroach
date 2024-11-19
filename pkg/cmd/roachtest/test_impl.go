@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -16,12 +11,14 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -77,6 +74,9 @@ type testImpl struct {
 	// l is the logger that the test will use for its output.
 	l *logger.Logger
 
+	// taskManager manages tasks (goroutines) for tests.
+	taskManager task.Manager
+
 	runner string
 	// runnerID is the test's main goroutine ID.
 	runnerID int64
@@ -121,6 +121,11 @@ type testImpl struct {
 		// TODO(test-eng): this should just be an in-mem (ring) buffer attached to
 		// `t.L()`.
 		output []byte
+
+		// extraParams are test-specific parameters that will be added to the Github issue as
+		// parameters if there is a failure. They will additionally be logged in the test itself
+		// in case github issue posting is disabled.
+		extraParams map[string]string
 	}
 	// Map from version to path to the cockroach binary to be used when
 	// mixed-version test wants a binary for that binary. If a particular version
@@ -133,6 +138,9 @@ type testImpl struct {
 	// If true, go coverage is enabled and the BAZEL_COVER_DIR env var will be set
 	// when starting nodes.
 	goCoverEnabled bool
+	// If true, the stats exporter will export metrics in openmetrics format.
+	// else the exporter will export in the JSON format.
+	exportOpenmetrics bool
 }
 
 func newFailure(squashedErr error, errs []error) failure {
@@ -189,6 +197,10 @@ func (t *testImpl) Cockroach() string {
 	return t.randomizedCockroach
 }
 
+func (t *testImpl) ExportOpenmetrics() bool {
+	return t.exportOpenmetrics
+}
+
 func (t *testImpl) RuntimeAssertionsCockroach() string {
 	return t.cockroachEA
 }
@@ -224,6 +236,10 @@ func (t *testImpl) Helper() {}
 
 func (t *testImpl) Name() string {
 	return t.spec.Name
+}
+
+func (t *testImpl) Owner() string {
+	return string(t.spec.Owner)
 }
 
 func (t *testImpl) SnapshotPrefix() string {
@@ -272,6 +288,26 @@ func (t *testImpl) status(ctx context.Context, id int64, args ...interface{}) {
 // status message is erased.
 func (t *testImpl) Status(args ...interface{}) {
 	t.status(context.TODO(), t.runnerID, args...)
+}
+
+// AddParam adds a parameter to the test. This parameter will be logged both in
+// the github issue if one is created and in the artifacts directory. This is useful if a test
+// has metamorphic properties as it makes it easier to spot the differences between runs
+// without digging into the logs (i.e. mixed version test deployment mode). It also helps
+// debugging when the test failure is not posted to github (i.e. qualification runs).
+func (t *testImpl) AddParam(label, value string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.mu.extraParams == nil {
+		t.mu.extraParams = make(map[string]string)
+	}
+	t.mu.extraParams[label] = value
+}
+
+func (t *testImpl) getExtraParams() map[string]string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.mu.extraParams
 }
 
 // IsDebug returns true if the test is in a debug state.
@@ -542,20 +578,64 @@ func failuresMatchingError(failures []failure, refError any) bool {
 	return false
 }
 
-// failuresSpecifyOwner checks if any of the errors in any of the
-// given failures is a failure that is associated with an owner. If
-// such an error is found, it is returned; otherwise, nil is returned.
-func failuresSpecifyOwner(failures []failure) *registry.ErrorWithOwnership {
-	var ref registry.ErrorWithOwnership
+var transientErrorRegex = regexp.MustCompile(`TRANSIENT_ERROR\((.+)\)`)
+
+// transientErrorOwnershipFallback string matches for `TRANSIENT_ERROR` in the provided
+// failures and returns a new ErrorWithOwnership if it does. It iterates through each failure,
+// checking both the squashedErr and list of errors for `TRANSIENT_ERROR`.
+//
+// This is needed as the `require` package does not preserve the error object needed
+// for us to properly check if it is a transient error using `failuresMatchingError`.
+// Note the match is additionally guarded by the unique substring which denotes that
+// the error originated from the require package. If we see somewhere else that does not
+// preserve the error object, we want to investigate whether it can be fixed before resorting
+// to this fallback. See: #131094
+func transientErrorOwnershipFallback(failures []failure) *registry.ErrorWithOwnership {
+	const unexpectedErrPrefix = "Received unexpected error:"
+	var errWithOwner registry.ErrorWithOwnership
+	isTransient := func(err error) bool {
+		// Both squashedErr and errors should be non nil in actual roachtest failures,
+		// but for testing we sometimes only set one for simplicity.
+		if err == nil {
+			return false
+		}
+		// The require package prepends this message to `require.NoError` failures.
+		// We may see `TRANSIENT_ERROR` without this prefix, but don't mark it as
+		// a flake as we may be able to fix the code that doesn't preserve the error.
+		if !strings.Contains(err.Error(), unexpectedErrPrefix) {
+			return false
+		}
+
+		if match := transientErrorRegex.FindString(err.Error()); match != "" {
+			problemCause := strings.TrimPrefix(match, "TRANSIENT_ERROR(")
+			problemCause = strings.TrimSuffix(problemCause, ")")
+			// The cause will be used to create the github issue creation, so we don't want
+			// it to be blank. Instead, return false and let us investigate what is creating
+			// a transient error with no cause.
+			if problemCause == "" {
+				return false
+			}
+
+			errWithOwner = registry.ErrorWithOwner(
+				registry.OwnerTestEng, err,
+				registry.WithTitleOverride(problemCause),
+				registry.InfraFlake,
+			)
+			return true
+		}
+
+		return false
+	}
+
 	for _, f := range failures {
 		for _, err := range f.errors {
-			if errors.As(err, &ref) {
-				return &ref
+			if isTransient(err) {
+				return &errWithOwner
 			}
 		}
 
-		if errors.As(f.squashedErr, &ref) {
-			return &ref
+		if isTransient(f.squashedErr) {
+			return &errWithOwner
 		}
 	}
 
@@ -595,6 +675,21 @@ func (t *testImpl) IsBuildVersion(minVersion string) bool {
 	// greater than "v2.1.0-alpha.x".
 	vers = version.MustParse(minVersion + "-0")
 	return t.BuildVersion().AtLeast(vers)
+}
+
+func panicHandler(_ context.Context, name string, l *logger.Logger, r interface{}) error {
+	return fmt.Errorf("test task %s panicked: %v", name, r)
+}
+
+// GoWithCancel runs the given function in a goroutine and returns a
+// CancelFunc that can be used to cancel the function.
+func (t *testImpl) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelFunc {
+	return t.taskManager.GoWithCancel(fn, task.PanicHandler(panicHandler), task.OptionList(opts...))
+}
+
+// Go is like GoWithCancel but without a cancel function.
+func (t *testImpl) Go(fn task.Func, opts ...task.Option) {
+	_ = t.GoWithCancel(fn, task.OptionList(opts...))
 }
 
 // TeamCityEscape escapes a string for use as <value> in a key='<value>' attribute

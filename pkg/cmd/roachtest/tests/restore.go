@@ -1,23 +1,17 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -37,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -173,7 +166,7 @@ func registerRestore(r registry.Registry) {
 				done := ctx.Done()
 				jobID := <-jobIDCh
 
-				jobProgressTick := time.NewTicker(time.Minute * 1)
+				jobProgressTick := time.NewTicker(time.Second * 5)
 				defer jobProgressTick.Stop()
 				for {
 					if pauseIndex == len(pauseAtProgress) {
@@ -1130,30 +1123,31 @@ func exportToRoachperf(
 	ctx context.Context, t test.Test, c cluster.Cluster, testName string, metric int64,
 ) {
 
+	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+
 	// The easiest way to record a precise metric for roachperf is to caste it as a duration,
 	// in seconds in the histogram's upper bound.
-	reg := histogram.NewRegistry(
-		time.Duration(metric)*time.Second,
-		histogram.MockWorkloadName,
-	)
-	bytesBuf := bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(bytesBuf)
+	reg := histogram.NewRegistryWithExporter(time.Duration(metric)*time.Second, histogram.MockWorkloadName, exporter)
 
+	bytesBuf := bytes.NewBuffer([]byte{})
+	writer := io.Writer(bytesBuf)
+
+	exporter.Init(&writer)
+	var err error
 	// Ensure the histogram contains the name of the roachtest
 	reg.GetHandle().Get(testName)
 
 	// Serialize the histogram into the buffer
 	reg.Tick(func(tick histogram.Tick) {
-		_ = jsonEnc.Encode(tick.Snapshot())
+		err = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 	})
-	// Upload the perf artifacts to any one of the nodes so that the test
-	// runner copies it into an appropriate directory path.
-	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-	if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-		log.Errorf(ctx, "failed to create perf dir: %+v", err)
+
+	if err != nil {
+		return
 	}
-	if err := c.PutString(ctx, bytesBuf.String(), dest, 0755, c.Node(1)); err != nil {
-		log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+	if _, err = roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, bytesBuf, exporter, c.Node(1)); err != nil {
+		t.L().Errorf("error creating stats file: %s", err)
+		return
 	}
 }
 

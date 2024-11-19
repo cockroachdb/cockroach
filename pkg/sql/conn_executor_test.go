@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql_test
 
@@ -428,7 +423,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	for _, s := range []string{
-		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true;`,
+		`SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true;`,
 		`CREATE DATABASE t;`,
 		`CREATE TABLE t.test (x FLOAT);`,
 	} {
@@ -439,7 +434,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 
 	for _, isoLevel := range []tree.IsolationLevel{
 		tree.ReadCommittedIsolation,
-		tree.SnapshotIsolation,
+		tree.RepeatableReadIsolation,
 		tree.SerializableIsolation,
 	} {
 		t.Run(isoLevel.String(), func(t *testing.T) {

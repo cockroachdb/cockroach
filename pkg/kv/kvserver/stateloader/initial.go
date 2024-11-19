@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package stateloader
 
@@ -22,13 +17,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// raftInitialLog{Index,Term} are the starting points for the raft log. We
+// RaftInitialLog{Index,Term} are the starting points for the raft log. We
 // bootstrap the raft membership by synthesizing a snapshot as if there were
 // some discarded prefix to the log, so we must begin the log at an arbitrary
 // index greater than 1.
 const (
-	raftInitialLogIndex = 10
-	raftInitialLogTerm  = 5
+	RaftInitialLogIndex = 10
+	RaftInitialLogTerm  = 5
 )
 
 // WriteInitialReplicaState sets up a new Range, but without writing an
@@ -51,8 +46,8 @@ func WriteInitialReplicaState(
 	rsl := Make(desc.RangeID)
 	var s kvserverpb.ReplicaState
 	s.TruncatedState = &kvserverpb.RaftTruncatedState{
-		Term:  raftInitialLogTerm,
-		Index: raftInitialLogIndex,
+		Term:  RaftInitialLogTerm,
+		Index: RaftInitialLogIndex,
 	}
 	s.RaftAppliedIndex = s.TruncatedState.Index
 	s.RaftAppliedIndexTerm = s.TruncatedState.Term

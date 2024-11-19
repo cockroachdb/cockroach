@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package delegate
 
@@ -19,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
+
+const ageFilter = `(finished IS NULL OR finished > now() - '12h':::interval)`
 
 func constructSelectQuery(n *tree.ShowJobs) string {
 	var baseQuery strings.Builder
@@ -75,9 +72,9 @@ func constructSelectQuery(n *tree.ShowJobs) string {
 
 		// The query intends to present:
 		// - first all the running jobs sorted in order of start time,
-		// - then all completed jobs sorted in order of completion time.
+		// - then all completed jobs sorted in order of completion time (no more than 12 hours).
 		whereClause = fmt.Sprintf(
-			`WHERE %s AND (finished IS NULL OR finished > now() - '12h':::interval)`, typePredicate)
+			`WHERE %s AND %s`, typePredicate, ageFilter)
 		// The "ORDER BY" clause below exploits the fact that all
 		// running jobs have finished = NULL.
 		orderbyClause = `ORDER BY COALESCE(finished, now()) DESC, started DESC`

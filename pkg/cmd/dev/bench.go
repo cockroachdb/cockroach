@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -36,8 +31,8 @@ Note that by default we explicitly restrict the benchmark to running on a single
 This behavior can be overridden with --test-args='-test.cpu N'`,
 		Example: `
 	dev bench pkg/sql/parser --filter=BenchmarkParse
-	dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --count=2 --bench-time=10x --bench-mem
-	dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --ignore-cache --test-args='-test.cpuprofile=cpu.out -test.memprofile=mem.out'`,
+	dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --count=2 --bench-time=10x
+	dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --ignore-cache --test-args='-test.cpuprofile=cpu.out -test.memprofile=mem.out' --bench-mem=false`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
@@ -47,13 +42,13 @@ This behavior can be overridden with --test-args='-test.cpu N'`,
 	benchCmd.Flags().BoolP(vFlag, "v", false, "show benchmark process output")
 	benchCmd.Flags().BoolP(showLogsFlag, "", false, "show crdb logs in-line")
 	benchCmd.Flags().Int(countFlag, 1, "run benchmark n times")
-	benchCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached benchmark runs")
+	benchCmd.Flags().Bool(ignoreCacheFlag, true, "ignore cached benchmark runs")
 	// We use a string flag for benchtime instead of a duration; the go test
 	// runner accepts input of the form "Nx" to run the benchmark N times (see
 	// `go help testflag`).
 	benchCmd.Flags().String(benchTimeFlag, "", "duration to run each benchmark for")
-	benchCmd.Flags().Bool(benchMemFlag, false, "print memory allocations for benchmarks")
-	benchCmd.Flags().Bool(streamOutputFlag, false, "stream bench output during run")
+	benchCmd.Flags().Bool(benchMemFlag, true, "print memory allocations for benchmarks")
+	benchCmd.Flags().Bool(streamOutputFlag, true, "stream bench output during run")
 	benchCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
 	benchCmd.Flags().Bool(runSepProcessTenantFlag, false, "run separate process tenant benchmarks (these may freeze due to tenant limits)")
 

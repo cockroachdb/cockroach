@@ -325,4 +325,69 @@ DROP FUNCTION f_called_by_b2;
 DROP TABLE t1_with_b_2_ref;
 
 statement ok
+SET ROLE testuser;
+
+# Check to ensure ownership is validated properly during a drop. This is a
+# regression test to ensure we populate a proper pgcode for our error.
+statement error pgcode 42501 must be owner of function f_b
+DROP FUNCTION f_b();
+
+statement ok
+SET ROLE root;
+
+statement ok
 DROP FUNCTION f_b;
+
+statement ok
+CREATE FUNCTION f_char(c CHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(BPCHAR)
+
+statement ok
+CREATE FUNCTION f_char(c CHAR(2)) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(BPCHAR)
+
+statement ok
+CREATE FUNCTION f_char(c BPCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(BPCHAR)
+
+statement ok
+CREATE FUNCTION f_char(c BPCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(CHAR)
+
+statement ok
+CREATE FUNCTION f_char(c BPCHAR) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_char(CHAR(2))
+
+statement ok
+CREATE FUNCTION f_bit(c BIT) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_bit(BIT(0))
+
+statement ok
+CREATE FUNCTION f_bit(c BIT(2)) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_bit(BIT(0))
+
+statement ok
+CREATE FUNCTION f_bit(c BIT(0)) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_bit(BIT(0))
+
+statement ok
+CREATE FUNCTION f_bit(c BIT(0)) RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement ok
+DROP FUNCTION f_bit(BIT(2))

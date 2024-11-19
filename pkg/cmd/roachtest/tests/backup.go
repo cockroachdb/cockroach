@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -15,12 +10,11 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,11 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -222,7 +216,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			dest := loadBackupData(ctx, t, c)
-			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
+			backupQuery := `BACKUP bank.bank INTO 'nodelocal://1/` + dest + `' WITH DETACHED`
 			startBackup := func(c cluster.Cluster, l *logger.Logger) (jobID jobspb.JobID, err error) {
 				gatewayDB := c.Conn(ctx, l, gatewayNode)
 				defer gatewayDB.Close()
@@ -247,7 +241,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			dest := loadBackupData(ctx, t, c)
-			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
+			backupQuery := `BACKUP bank.bank INTO 'nodelocal://1/` + dest + `' WITH DETACHED`
 			startBackup := func(c cluster.Cluster, l *logger.Logger) (jobID jobspb.JobID, err error) {
 				gatewayDB := c.Conn(ctx, l, gatewayNode)
 				defer gatewayDB.Close()
@@ -292,21 +286,28 @@ func fingerprint(ctx context.Context, conn *gosql.DB, db, table string) (string,
 
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
 // artifact directory and returns a method that when invoked records a tick.
-func initBulkJobPerfArtifacts(testName string, timeout time.Duration) (func(), *bytes.Buffer) {
+func initBulkJobPerfArtifacts(
+	timeout time.Duration, t test.Test, e exporter.Exporter,
+) (func(), *bytes.Buffer) {
 	// Register a named histogram to track the total time the bulk job took.
 	// Roachperf uses this information to display information about this
 	// roachtest.
-	reg := histogram.NewRegistry(
+
+	reg := histogram.NewRegistryWithExporter(
 		timeout,
 		histogram.MockWorkloadName,
+		e,
 	)
-	reg.GetHandle().Get(testName)
+	reg.GetHandle().Get(t.Name())
 
 	bytesBuf := bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(bytesBuf)
+	writer := io.Writer(bytesBuf)
+
+	e.Init(&writer)
+
 	tick := func() {
 		reg.Tick(func(tick histogram.Tick) {
-			_ = jsonEnc.Encode(tick.Snapshot())
+			_ = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 		})
 	}
 
@@ -334,7 +335,8 @@ func registerBackup(r registry.Registry) {
 				rows = 100
 			}
 			dest := importBankData(ctx, rows, t, c)
-			tick, perfBuf := initBulkJobPerfArtifacts("backup/2TB", 2*time.Hour)
+			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+			tick, perfBuf := initBulkJobPerfArtifacts(2*time.Hour, t, exporter)
 
 			m := c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
@@ -355,14 +357,8 @@ func registerBackup(r registry.Registry) {
 				}
 				tick()
 
-				// Upload the perf artifacts to any one of the nodes so that the test
-				// runner copies it into an appropriate directory path.
-				dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-				if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-					log.Errorf(ctx, "failed to create perf dir: %+v", err)
-				}
-				if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
-					log.Errorf(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+				if _, err := roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, exporter, c.Node(1)); err != nil {
+					return err
 				}
 				return nil
 			})
@@ -511,7 +507,7 @@ func registerBackup(r registry.Registry) {
 					}
 
 					kmsOptions := fmt.Sprintf("KMS=('%s', '%s')", kmsURIA, kmsURIB)
-					_, err := conn.ExecContext(ctx, `BACKUP bank.bank TO '`+backupPath+`' WITH `+kmsOptions)
+					_, err := conn.ExecContext(ctx, `BACKUP bank.bank INTO '`+backupPath+`' WITH `+kmsOptions)
 					return err
 				})
 				m.Wait()
@@ -521,7 +517,7 @@ func registerBackup(r registry.Registry) {
 				m.Go(func(ctx context.Context) error {
 					t.Status(`restore using KMSURIA`)
 					if _, err := conn.ExecContext(ctx,
-						`RESTORE bank.bank FROM $1 WITH into_db=restoreA, kms=$2`,
+						`RESTORE TABLE bank.bank FROM LATEST IN $1 WITH into_db=restoreA, kms=$2`,
 						backupPath, kmsURIA,
 					); err != nil {
 						return err
@@ -529,7 +525,7 @@ func registerBackup(r registry.Registry) {
 
 					t.Status(`restore using KMSURIB`)
 					if _, err := conn.ExecContext(ctx,
-						`RESTORE bank.bank FROM $1 WITH into_db=restoreB, kms=$2`,
+						`RESTORE TABLE bank.bank FROM LATEST IN $1 WITH into_db=restoreB, kms=$2`,
 						backupPath, kmsURIB,
 					); err != nil {
 						return err
@@ -629,12 +625,10 @@ func runBackupMVCCRangeTombstones(
 
 	// Configure cluster.
 	t.Status("configuring cluster")
-	_, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`)
-	require.NoError(t, err)
-	_, err = conn.Exec(`SET CLUSTER SETTING server.debug.default_vmodule = 'txn=2,sst_batcher=4,revert=2'`)
+	_, err := conn.Exec(`SET CLUSTER SETTING server.debug.default_vmodule = 'txn=2,sst_batcher=4,revert=2'`)
 	require.NoError(t, err)
 	// Wait for ranges to upreplicate.
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 	// Create the orders table. It's about 16 GB across 8 files.
 	t.Status("creating table")

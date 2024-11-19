@@ -1,10 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupresolver
 
@@ -253,7 +250,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("%d/%s/%s", i, test.sessionDatabase, test.pattern), func(t *testing.T) {
-			sql := fmt.Sprintf(`BACKUP %s TO 'ignored'`, test.pattern)
+			sql := fmt.Sprintf(`BACKUP %s INTO 'ignored'`, test.pattern)
 			stmt, err := parser.ParseOne(sql)
 			if err != nil {
 				t.Fatal(err)

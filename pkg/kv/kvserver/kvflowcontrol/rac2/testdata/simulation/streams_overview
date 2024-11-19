@@ -1,0 +1,190 @@
+# Walk through the basics of the datadriven syntax for stream tests. These
+# tests deal directly with streams, instead of a group of streams represented
+# by replica replication streams.
+init
+----
+
+# Set up a worker deducting flow tokens at 2MiB/s over 100 reqs/s for regular
+# write work to two stores, s1 and s2. With 16MiB or regular tokens, we expect
+# it to get depleted in 8s. The remaining 8s of incoming work ends up getting
+# queued.
+timeline
+t=[0s,16s) class=regular stream=t1/s1 adjust=-2MiB/s rate=100/s
+t=[0s,16s) class=regular stream=t1/s2 adjust=-2MiB/s rate=100/s
+----
+
+# Schedule the return of flow tokens at t=20s in similar increments.
+timeline
+t=[20s,36s) class=regular stream=t1/s1 adjust=+2MiB/s rate=100/s
+t=[20s,36s) class=regular stream=t1/s2 adjust=+2MiB/s rate=100/s
+----
+
+simulate t=[0s,40s)
+----
+
+# There two replication streams, so we initially have 16*2=32MiB of regular
+# flow tokens and 8*2=16MiB of elastic flow tokens. Since we're not returning
+# flow tokens until t=20s, we deplete them at t=8s. Also note that despite this
+# being regular traffic, we deduct elastic flow tokens for coarse intra-tenant
+# prioritization -- those tokens get depleted at t=4s. Both are deducted at
+# 4MiB/s (2MiB/s for each stream) until we have 0MiB regular tokens and -16MiB
+# elastic tokens.
+plot t=[0s,20s)
+kvflowcontrol.tokens.eval.{regular,elastic}.available unit=MiB
+kvflowcontrol.tokens.eval.{regular,elastic}.deducted  unit=MiB/s rate=true
+----
+----
+  32.0 ┼╮
+  28.8 ┤╰─╮
+  25.6 ┤  ╰╮
+  22.4 ┤   ╰─╮
+  19.2 ┤     ╰─╮
+  16.0 ┼╮      ╰╮
+  12.8 ┤╰─╮     ╰─╮
+   9.6 ┤  ╰╮      ╰╮
+   6.4 ┤   ╰─╮     ╰─╮
+   3.2 ┤     ╰─╮     ╰╮
+  -0.0 ┤       ╰╮     ╰────────────────────────
+  -3.2 ┤        ╰─╮
+  -6.4 ┤          ╰╮
+  -9.6 ┤           ╰─╮
+ -12.8 ┤             ╰╮
+ -16.0 ┤              ╰────────────────────────
+        tokens.eval.{regular,elastic}.available (MiB)
+
+
+ 4.0 ┤ ╭─────────────╮
+ 3.7 ┤ │             │
+ 3.5 ┤ │             ╰╮
+ 3.2 ┤ │              │
+ 2.9 ┤ │              │
+ 2.7 ┤ │              │
+ 2.4 ┤ │              │
+ 2.1 ┤ │              │
+ 1.9 ┤ │              │
+ 1.6 ┤ │              │
+ 1.3 ┤ │              ╰╮
+ 1.1 ┤ │               │
+ 0.8 ┤ │               │
+ 0.5 ┤ │               │
+ 0.3 ┤ │               │
+ 0.0 ┼─╯               ╰─────────────────────
+      rate(tokens.eval.{regular,elastic}.deducted) (MiB/s)
+----
+----
+
+# Plot the rates at which we (i) admit work when there are flow tokens
+# available, and (ii) enqueue work when there are none. Since we're generating
+# 100 requests/s for two streams, we observe an aggregate admission rate of
+# ~200/s, and then later 200/s of waiting requests growth. There are no
+# errors.
+plot t=[0s,20s)
+kvflowcontrol.eval_wait.regular.requests.{admitted,waiting} unit=reqs/s rate=true
+kvflowcontrol.eval_wait.{regular,elastic}.requests.errored  unit=reqs/s rate=true
+----
+----
+ 200 ┤ ╭─────────────╮ ╭─────────────╮
+ 187 ┤ │             │ │             │
+ 173 ┤ │             ╰╮│             │
+ 160 ┤ │              ││             │
+ 147 ┤ │              ││             │
+ 133 ┤ │              ╭╯             ╰╮
+ 120 ┤ │              │               │
+ 107 ┤ │              │               │
+  93 ┤ │              │               │
+  80 ┤ │              │               │
+  67 ┤ │              │╮              │
+  53 ┤ │              ││              │
+  40 ┤ │              ││              │
+  27 ┤ │             ╭╯│              ╰╮
+  13 ┤ │             │ │               │
+   0 ┼───────────────╯ ╰───────────────╰─────
+      rate(eval_wait.regular.requests.{admitted,waiting}) (reqs/s)
+
+
+ 0.0 ┼───────────────────────────────────────
+      rate(eval_wait.{regular,elastic}.requests.errored) (reqs/s)
+----
+----
+
+# Confirm that there are two streams underneath, both of which eventually get
+# blocked for {regular,elastic} traffic, with the latter happening first.
+plot t=[0s,20s)
+kvflowcontrol.streams.eval.regular.total_count             unit=streams
+kvflowcontrol.streams.eval.{regular,elastic}.blocked_count unit=streams
+----
+----
+ 2.0 ┼───────────────────────────────────────
+      streams.eval.regular.total_count (streams)
+
+
+ 2.0 ┤       ╭───────────────────────────────
+ 1.9 ┤       │       │
+ 1.7 ┤       │       │
+ 1.6 ┤       │       │
+ 1.5 ┤       │       │
+ 1.3 ┤       │       │
+ 1.2 ┤       │       │
+ 1.1 ┤       │       │
+ 0.9 ┤       │       │
+ 0.8 ┤       │       │
+ 0.7 ┤       │       │
+ 0.5 ┤       │       │
+ 0.4 ┤       │       │
+ 0.3 ┤       │       │
+ 0.1 ┤       │       │
+ 0.0 ┼───────╯───────╯
+      streams.eval.{regular,elastic}.blocked_count (streams)
+----
+----
+
+# Observe what happens once flow tokens are returned -- we start admitting work
+# at ~200/s, which matches the rate at which we're reducing the number of
+# waiting requests. By t=36s we'll have returned all {regular,elastic} flow
+# tokens, including for the requests that had to wait for admission.
+plot t=[18s,40s)
+kvflowcontrol.eval_wait.regular.requests.{admitted,waiting} unit=reqs/s rate=true
+kvflowcontrol.tokens.eval.{regular,elastic}.available       unit=MiB
+----
+----
+  200 ┤     ╭───────────╮
+  175 ┤     │           ╰╮
+  150 ┤    ╭╯            │
+  125 ┤    │             │
+  100 ┤    │             │
+   75 ┤    │             │
+   50 ┤   ╭╯             ╰╮
+   25 ┤   │               │
+    0 ┼───╮               ╭───────────────────
+  -25 ┤   │               │
+  -50 ┤   ╰╮             ╭╯
+  -75 ┤    │             │
+ -100 ┤    │             │
+ -125 ┤    │             │
+ -150 ┤    ╰╮            │
+ -175 ┤     │           ╭╯
+ -200 ┤     ╰───────────╯
+       rate(eval_wait.regular.requests.{admitted,waiting}) (reqs/s)
+
+
+  32.0 ┤                               ╭───────
+  28.8 ┤                             ╭─╯
+  25.6 ┤                            ╭╯
+  22.4 ┤                           ╭╯
+  19.2 ┤                         ╭─╯
+  16.0 ┤                        ╭╯     ╭───────
+  12.8 ┤                      ╭─╯    ╭─╯
+   9.6 ┤                     ╭╯     ╭╯
+   6.4 ┤                   ╭─╯     ╭╯
+   3.2 ┤                  ╭╯     ╭─╯
+  -0.0 ┼──────────────────╯     ╭╯
+  -3.2 ┤                      ╭─╯
+  -6.4 ┤                     ╭╯
+  -9.6 ┤                   ╭─╯
+ -12.8 ┤                  ╭╯
+ -16.0 ┼──────────────────╯
+        tokens.eval.{regular,elastic}.available (MiB)
+----
+----
+
+# vim:ft=conf

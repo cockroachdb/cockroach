@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -33,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -44,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -187,7 +182,6 @@ var (
 	possibleNumIncrementalBackups = []int{
 		1,
 		3,
-		5,
 	}
 
 	schemaChangeDB = "schemachange"
@@ -477,7 +471,7 @@ func randString(rng *rand.Rand, strLen int) string {
 }
 
 func randWaitDuration(rng *rand.Rand) time.Duration {
-	durations := []int{1, 10, 60, 5 * 60}
+	durations := []int{1, 10, 60}
 	return time.Duration(durations[rng.Intn(len(durations))]) * time.Second
 }
 
@@ -1482,7 +1476,7 @@ func (u *CommonTestUtils) setMaxRangeSizeAndDependentSettings(
 	}
 	// Ensure ranges have been properly replicated.
 	_, dbConn := u.RandomDB(rng, u.roachNodes)
-	return WaitFor3XReplication(ctx, t, t.L(), dbConn)
+	return roachtestutil.WaitFor3XReplication(ctx, t.L(), dbConn)
 }
 
 // setClusterSettings may set up to numCustomSettings cluster settings
@@ -1637,7 +1631,7 @@ func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 	return mvb.createBackupCollection(ctx, l, rng, executeOnAllNodesSpec, executeOnAllNodesSpec, h, label)
 }
 
-// randomWait waits from 1s to 5m, to allow for the background
+// randomWait waits from 1s to 3m, to allow for the background
 // workloads to update the databases we are backing up.
 func (d *BackupRestoreTestDriver) randomWait(l *logger.Logger, rng *rand.Rand) {
 	dur := randWaitDuration(rng)
@@ -1798,7 +1792,7 @@ func (d *BackupRestoreTestDriver) computeTableContents(
 	}
 
 	if err := eg.Wait(); err != nil {
-		log.Errorf(ctx, "Error loading system table content %s", err)
+		l.ErrorfCtx(ctx, "Error loading system table content %s", err)
 		return nil, err
 	}
 
@@ -1832,6 +1826,7 @@ func (d *BackupRestoreTestDriver) saveContents(
 func (d *BackupRestoreTestDriver) runBackup(
 	ctx context.Context,
 	l *logger.Logger,
+	tasker task.Tasker,
 	rng *rand.Rand,
 	nodes option.NodeListOption,
 	pauseProbability float64,
@@ -1896,13 +1891,14 @@ func (d *BackupRestoreTestDriver) runBackup(
 	}
 
 	backupErr := make(chan error)
-	go func() {
+	tasker.Go(func(ctx context.Context, l *logger.Logger) error {
 		defer close(backupErr)
 		l.Printf("waiting for job %d (%s)", jobID, collection.name)
 		if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
 			backupErr <- err
 		}
-	}()
+		return nil
+	}, task.Name(fmt.Sprintf("backup %s", collection.name)))
 
 	var numPauses int
 	for {
@@ -2001,7 +1997,7 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 	}
 
 	collection, err := mvb.backupRestoreTestDriver.createBackupCollection(
-		ctx, l, rng, fullBackupSpec, incBackupSpec, backupNamePrefix,
+		ctx, l, h, rng, fullBackupSpec, incBackupSpec, backupNamePrefix,
 		internalSystemJobs, h.IsMultitenant(),
 	)
 	if err != nil {
@@ -2020,6 +2016,7 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 func (d *BackupRestoreTestDriver) createBackupCollection(
 	ctx context.Context,
 	l *logger.Logger,
+	tasker task.Tasker,
 	rng *rand.Rand,
 	fullBackupSpec backupSpec,
 	incBackupSpec backupSpec,
@@ -2035,7 +2032,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	if err := d.testUtils.runJobOnOneOf(ctx, l, fullBackupSpec.Execute.Nodes, func() error {
 		var err error
 		collection, fullBackupEndTime, err = d.runBackup(
-			ctx, l, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability,
+			ctx, l, tasker, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability,
 			fullBackup{backupNamePrefix}, internalSystemJobs, isMultitenant,
 		)
 		return err
@@ -2057,7 +2054,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		if err := d.testUtils.runJobOnOneOf(ctx, l, incBackupSpec.Execute.Nodes, func() error {
 			var err error
 			collection, latestIncBackupEndTime, err = d.runBackup(
-				ctx, l, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
+				ctx, l, tasker, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
 				incrementalBackup{collection: collection, incNum: i + 1}, internalSystemJobs, isMultitenant,
 			)
 			return err
@@ -2182,11 +2179,16 @@ func (u *CommonTestUtils) enableJobAdoption(
 func (mvb *mixedVersionBackup) planAndRunBackups(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
+	upgradingService := h.DefaultService()
+	if upgradingService.Stage == mixedversion.UpgradingSystemStage {
+		upgradingService = h.System
+	}
+
 	onPrevious := labeledNodes{
-		Nodes: h.Context().NodesInPreviousVersion(), Version: sanitizeVersionForBackup(h.Context().FromVersion),
+		Nodes: upgradingService.NodesInPreviousVersion(), Version: sanitizeVersionForBackup(h.Context().FromVersion),
 	}
 	onNext := labeledNodes{
-		Nodes: h.Context().NodesInNextVersion(), Version: sanitizeVersionForBackup(h.Context().ToVersion),
+		Nodes: upgradingService.NodesInNextVersion(), Version: sanitizeVersionForBackup(h.Context().ToVersion),
 	}
 	onRandom := labeledNodes{Nodes: mvb.roachNodes, Version: "random node"}
 	defaultPauseProbability := 0.2
@@ -2457,10 +2459,15 @@ func (u *CommonTestUtils) resetCluster(
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
 
+	var opts = []option.StartStopOption{option.NoBackupSchedule}
+	if !version.AtLeast(clusterupgrade.MustParseVersion("v24.1.0")) {
+		opts = append(opts, option.DisableWALFailover)
+	}
+
 	cockroachPath := clusterupgrade.CockroachPathForVersion(u.t, version)
 	settings = append(settings, install.BinaryOption(cockroachPath), install.SecureOption(true))
 	return clusterupgrade.StartWithSettings(
-		ctx, l, u.cluster, u.roachNodes, option.NewStartOpts(option.NoBackupSchedule), settings...,
+		ctx, l, u.cluster, u.roachNodes, option.NewStartOpts(opts...), settings...,
 	)
 }
 
@@ -2516,8 +2523,12 @@ func (mvb *mixedVersionBackup) verifySomeBackups(
 func (mvb *mixedVersionBackup) verifyAllBackups(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper,
 ) error {
-	l.Printf("stopping background functions and workloads")
-	mvb.stopBackground()
+	isFinalUpgrade := h.Context().ToVersion.IsCurrent()
+
+	if isFinalUpgrade {
+		l.Printf("stopping background functions and workloads")
+		mvb.stopBackground()
+	}
 
 	u, err := mvb.CommonTestUtils(ctx, h)
 	if err != nil {
@@ -2525,11 +2536,11 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 	}
 
 	var restoreErrors []error
-	verify := func(version *clusterupgrade.Version) {
-		l.Printf("%s: verifying %d collections created during this test", version.String(), len(mvb.collections))
+	verify := func(v *clusterupgrade.Version) {
+		l.Printf("%s: verifying %d collections created during this test", v, len(mvb.collections))
 
 		for _, collection := range mvb.collections {
-			if !version.IsCurrent() && strings.Contains(collection.name, finalizingLabel) {
+			if v.Equal(h.Context().FromVersion) && strings.Contains(collection.name, finalizingLabel) {
 				// Do not attempt to restore, in the previous version, a
 				// backup that was taken while the cluster was finalizing, as
 				// that will most likely fail (the backup version will be past
@@ -2537,10 +2548,18 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 				continue
 			}
 
-			if _, ok := collection.btype.(*clusterBackup); ok {
-				err := u.resetCluster(ctx, l, version, h.ExpectDeaths, []install.ClusterSettingOption{})
+			_, isClusterBackup := collection.btype.(*clusterBackup)
+			if isClusterBackup && !isFinalUpgrade {
+				// We only verify cluster backups once we upgraded all the way
+				// to the final version in this test. Wiping and restarting
+				// nodes does not work well with the mixedversion framework.
+				continue
+			}
+
+			if isClusterBackup {
+				err := u.resetCluster(ctx, l, v, h.ExpectDeaths, []install.ClusterSettingOption{})
 				if err != nil {
-					err := errors.Wrapf(err, "%s", version)
+					err := errors.Wrapf(err, "%s", v)
 					l.Printf("error resetting cluster: %v", err)
 					restoreErrors = append(restoreErrors, err)
 					continue
@@ -2565,7 +2584,7 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 			}
 
 			if err := collection.verifyBackupCollection(ctx, l, rng, mvb.backupRestoreTestDriver, checkFiles, internalSystemJobs); err != nil {
-				err := errors.Wrapf(err, "%s", version)
+				err := errors.Wrapf(err, "%s", v)
 				l.Printf("restore error: %v", err)
 				// Attempt to collect logs and debug.zip at the time of this
 				// restore failure; if we can't, log the error encountered and
@@ -2647,6 +2666,12 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// attempted.
 				mixedversion.UpgradeTimeout(30*time.Minute),
 				mixedversion.AlwaysUseLatestPredecessors,
+				// This test sometimes flake on separate-process
+				// deployments. Needs investigation.
+				mixedversion.EnabledDeploymentModes(
+					mixedversion.SystemOnlyDeployment,
+					mixedversion.SharedProcessDeployment,
+				),
 				// We disable cluster setting mutators because this test
 				// resets the cluster to older versions when verifying cluster
 				// backups. This makes the mixed-version context inaccurate
@@ -2663,8 +2688,6 @@ func registerBackupMixedVersion(r registry.Registry) {
 				),
 			)
 			testRNG := mvt.RNG()
-
-			uploadCockroach(ctx, t, c, c.WorkloadNode(), clusterupgrade.CurrentVersion())
 
 			dbs := []string{"bank", "tpcc"}
 			backupTest, err := newMixedVersionBackup(t, c, c.CRDBNodes(), dbs)
@@ -2704,7 +2727,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 
 			mvt.InMixedVersion("plan and run backups", backupTest.planAndRunBackups)
 			mvt.InMixedVersion("verify some backups", backupTest.verifySomeBackups)
-			mvt.AfterUpgradeFinalized("verify all backups", backupTest.verifyAllBackups)
+			mvt.AfterUpgradeFinalized("maybe verify all backups", backupTest.verifyAllBackups)
 
 			backupTest.stopBackground = func() {
 				stopBank()

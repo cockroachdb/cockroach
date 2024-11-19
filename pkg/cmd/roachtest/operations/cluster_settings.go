@@ -1,13 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
-//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package operations
 
@@ -80,15 +74,12 @@ func setClusterSetting(
 }
 
 func registerClusterSettings(r registry.Registry) {
-	timeSupplier := func() time.Time {
-		return timeutil.Now()
-	}
 	ops := []clusterSettingOp{
 		// Converts all leases to expiration. Tradeoff between lower throughput and higher availability.
 		// Weekly cycle.
 		{
 			Name:      "kv.expiration_leases_only.enabled",
-			Generator: timeBasedValues(timeSupplier, []string{"true", "false"}, 24*7*time.Minute),
+			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 24*7*time.Hour),
 			Owner:     registry.OwnerKV,
 		},
 		// When running multi-store with `--wal-failover=among-stores`, this configures
@@ -96,10 +87,16 @@ func registerClusterSettings(r registry.Registry) {
 		// 20-minute cycle.
 		{
 			Name: "storage.wal_failover.unhealthy_op_threshold",
-			Generator: timeBasedRandomValue(timeSupplier, 20*time.Minute, func(rng *rand.Rand) string {
+			Generator: timeBasedRandomValue(timeutil.Now, 20*time.Minute, func(rng *rand.Rand) string {
 				return fmt.Sprintf("%d", rng.Intn(246)+5)
 			}),
 			Owner: registry.OwnerStorage,
+		},
+		{
+			// Observe if there is any unexpected impact with running the job periodically.
+			Name:      "obs.tablemetadata.automatic_updates.enabled",
+			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 12*time.Hour),
+			Owner:     registry.OwnerObservability,
 		},
 	}
 	sanitizeOpName := func(name string) string {
@@ -107,11 +104,12 @@ func registerClusterSettings(r registry.Registry) {
 	}
 	for _, op := range ops {
 		r.AddOperation(registry.OperationSpec{
-			Name:             "cluster-settings/scheduled/" + sanitizeOpName(op.Name),
-			Owner:            op.Owner,
-			Timeout:          5 * time.Minute,
-			CompatibleClouds: registry.AllClouds,
-			Dependencies:     []registry.OperationDependency{registry.OperationRequiresNodes},
+			Name:               "cluster-settings/scheduled/" + sanitizeOpName(op.Name),
+			Owner:              op.Owner,
+			Timeout:            5 * time.Minute,
+			CompatibleClouds:   registry.AllClouds,
+			CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
+			Dependencies:       []registry.OperationDependency{registry.OperationRequiresNodes},
 			Run: func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {
 				return setClusterSetting(ctx, o, c, op)
 			},

@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package row
 
@@ -73,7 +68,10 @@ func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
 		Value: *value.(*roachpb.Value),
 	})
 }
-
+func (c KVInserter) CPutWithOriginTimestamp(
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
+) {
+}
 func (c KVInserter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte)        {}
 func (c KVInserter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {}
 func (c KVInserter) PutBytes(kys []roachpb.Key, values [][]byte)               {}
@@ -367,6 +365,7 @@ func NewDatumRowConverter(
 		nil, /* txn */
 		evalCtx.Codec,
 		tableDesc,
+		nil, /* uniqueWithTombstoneIndexes */
 		cols,
 		&tree.DatumAlloc{},
 		&evalCtx.Settings.SV,
@@ -565,6 +564,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		}),
 		insertRow,
 		pm,
+		nil,   /* OriginTimestampCPutHelper */
 		true,  /* ignoreConflicts */
 		false, /* traceKV */
 	); err != nil {

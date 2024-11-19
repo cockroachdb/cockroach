@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -20,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -48,9 +44,22 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if !mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
 			continue
 		}
+
+		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
+		// partitions of a unique index with implicit partitioning columns.
+		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
+			if !mb.tab.Unique(i).CanUseTombstones() {
+				panic(unimplemented.NewWithIssue(126592,
+					"unique without index constraint under non-serializable isolation levels"))
+			}
+			mb.uniqueWithTombstoneIndexes.Add(i)
+			continue
+		}
+
 		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
 		// NOTHING clause, we don't need to plan a check (ON CONFLICT ... DO UPDATE
 		// does not go through this code path; that's handled by
@@ -58,6 +67,7 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 		if mb.uniqueConstraintIsArbiter(i) {
 			continue
 		}
+
 		if h.init(mb, i) {
 			uniqueChecksItem, fastPathUniqueChecksItem := h.buildInsertionCheck(buildFastPathCheck)
 			if fastPathUniqueChecksItem == nil {
@@ -89,12 +99,23 @@ func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if !mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
 			continue
 		}
 		// If this constraint doesn't include the updated columns we don't need to
 		// plan a check.
 		if !mb.uniqueColsUpdated(i) {
+			continue
+		}
+		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
+		// partitions of a unique index with implicit partitioning columns.
+		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
+			if !mb.tab.Unique(i).CanUseTombstones() {
+				panic(unimplemented.NewWithIssue(126592,
+					"unique without index constraint under non-serializable isolation levels"))
+			}
+			mb.uniqueWithTombstoneIndexes.Add(i)
 			continue
 		}
 		if h.init(mb, i) {
@@ -124,13 +145,24 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if !mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
+			continue
+		}
+		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
+		// partitions of a unique index with implicit partitioning columns.
+		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
+			if !mb.tab.Unique(i).CanUseTombstones() {
+				panic(unimplemented.NewWithIssue(126592,
+					"unique without index constraint under non-serializable isolation levels"))
+			}
+			mb.uniqueWithTombstoneIndexes.Add(i)
 			continue
 		}
 		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
 		// UPDATE clause and not updated by the DO UPDATE clause, we don't need to
 		// plan a check (ON CONFLICT ... DO NOTHING does not go through this code
-		// path; that's handled by buildUniqueChecksForInsert). Note that that if
+		// path; that's handled by buildUniqueChecksForInsert). Note that if
 		// the constraint is partial and columns referenced in the predicate are
 		// updated, we'll still plan the check (this is handled correctly by
 		// mb.uniqueColsUpdated).
@@ -149,11 +181,16 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 	telemetry.Inc(sqltelemetry.UniqueChecksUseCounter)
 }
 
-// hasUniqueWithoutIndexConstraints returns true if there are any
-// UNIQUE WITHOUT INDEX constraints on the table.
+// hasUniqueWithoutIndexConstraints returns true if there are any UNIQUE WITHOUT
+// INDEX constraints on the table for which uniqueness is not guaranteed by
+// another index. Currently, UNIQUE WITHOUT INDEX constraints that are
+// synthesized for unique, hash-sharded indexes in the opt catalog are the only
+// constraints that are guaranteed by another index, i.e., the physical unique,
+// hash-sharded index they are synthesized from.
 func (mb *mutationBuilder) hasUniqueWithoutIndexConstraints() bool {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
-		if mb.tab.Unique(i).WithoutIndex() {
+		u := mb.tab.Unique(i)
+		if u.WithoutIndex() && !u.UniquenessGuaranteedByAnotherIndex() {
 			return true
 		}
 	}

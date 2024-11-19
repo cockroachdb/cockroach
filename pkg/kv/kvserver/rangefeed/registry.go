@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rangefeed
 
@@ -22,16 +17,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+// Disconnector defines an interface for disconnecting a registration. It is
+// returned to node.MuxRangefeed to allow node level stream manager to
+// disconnect a registration.
+type Disconnector interface {
+	// Disconnect disconnects the registration with the provided error. Safe to
+	// run multiple times, but subsequent errors would be discarded.
+	Disconnect(pErr *kvpb.Error)
+	// IsDisconnected returns whether the registration has been disconnected.
+	// Disconnected is a permanent state; once IsDisconnected returns true, it
+	// always returns true
+	IsDisconnected() bool
+}
+
 // registration defines an interface for registration that can be added to a
 // processor registry. Implemented by bufferedRegistration.
 type registration interface {
+	Disconnector
+
 	// publish sends the provided event to the registration. It is up to the
 	// registration implementation to decide how to handle the event and how to
 	// prevent missing events.
 	publish(ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
-	// disconnect disconnects the registration with the provided error. Safe to
-	// run multiple times, but subsequent errors would be discarded.
-	disconnect(pErr *kvpb.Error)
 	// runOutputLoop runs the output loop for the registration. The output loop is
 	// meant to be run in a separate goroutine.
 	runOutputLoop(ctx context.Context, forStacks roachpb.RangeID)
@@ -67,6 +74,7 @@ type registration interface {
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
+	streamCtx        context.Context
 	span             roachpb.Span
 	withDiff         bool
 	withFiltering    bool
@@ -384,7 +392,7 @@ func (reg *registry) forOverlappingRegs(
 		r := i.(registration)
 		dis, pErr := fn(r)
 		if dis {
-			r.disconnect(pErr)
+			r.Disconnect(pErr)
 			toDelete = append(toDelete, i)
 		}
 		return false

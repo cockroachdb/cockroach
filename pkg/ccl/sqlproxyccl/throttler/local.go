@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package throttler
 
@@ -18,7 +15,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var errRequestDenied = errors.New("request denied")
+var (
+	errRequestDeniedAtLogin   = errors.New("throttler refused connection due to too many failed authentication attempts")
+	errRequestDeniedAfterAuth = errors.New("throttler refused connection after authentication")
+)
 
 type timeNow func() time.Time
 
@@ -75,6 +75,8 @@ func NewLocalService(opts ...LocalOption) Service {
 	return s
 }
 
+var _ Service = (*localService)(nil)
+
 func (s *localService) lockedGetThrottle(connection ConnectionTags) *throttle {
 	l, ok := s.mu.throttleCache.Get(connection)
 	if ok && l != nil {
@@ -89,18 +91,22 @@ func (s *localService) lockedInsertThrottle(connection ConnectionTags) *throttle
 	return l
 }
 
-func (s *localService) LoginCheck(connection ConnectionTags) (time.Time, error) {
+// LoginCheck implements the Service interface.
+func (s *localService) LoginCheck(
+	ctx context.Context, connection ConnectionTags,
+) (time.Time, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	now := s.clock()
 	throttle := s.lockedGetThrottle(connection)
 	if throttle != nil && throttle.isThrottled(now) {
-		return now, errRequestDenied
+		return now, errRequestDeniedAtLogin
 	}
 	return now, nil
 }
 
+// ReportAttempt implements the Service interface.
 func (s *localService) ReportAttempt(
 	ctx context.Context, connection ConnectionTags, throttleTime time.Time, status AttemptStatus,
 ) error {
@@ -113,7 +119,7 @@ func (s *localService) ReportAttempt(
 	}
 
 	if throttle.isThrottled(throttleTime) {
-		return errRequestDenied
+		return errRequestDeniedAfterAuth
 	}
 
 	switch {

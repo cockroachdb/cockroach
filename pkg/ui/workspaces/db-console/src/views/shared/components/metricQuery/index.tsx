@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 /**
  * MetricQuery Components
@@ -28,6 +23,9 @@
  * parent components to read the information expressed by these components and
  * combine it with the result of a query to create some renderable output.
  */
+
+// We use the `Metric` and `Axis` classes data containers, not for rendering.
+/* eslint react/require-render-return: "off" */
 
 import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client-ccl";

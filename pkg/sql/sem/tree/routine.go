@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree
 
@@ -129,6 +124,11 @@ type RoutineExpr struct {
 	// Procedure is true if the routine is a procedure being invoked by CALL.
 	Procedure bool
 
+	// TriggerFunc is true if this routine is a trigger function. Note that it is
+	// only set for the outermost routine, and not any sub-routines used to
+	// implement the PL/pgSQL body.
+	TriggerFunc bool
+
 	// BlockStart is true if this routine marks the start of a PL/pgSQL block with
 	// an exception handler. It determines when to initialize the state shared
 	// between sub-routines for the block.
@@ -155,6 +155,7 @@ func NewTypedRoutineExpr(
 	generator bool,
 	tailCall bool,
 	procedure bool,
+	triggerFunc bool,
 	blockStart bool,
 	blockState *BlockState,
 	cursorDeclaration *RoutineOpenCursor,
@@ -170,6 +171,7 @@ func NewTypedRoutineExpr(
 		Generator:         generator,
 		TailCall:          tailCall,
 		Procedure:         procedure,
+		TriggerFunc:       triggerFunc,
 		BlockStart:        blockStart,
 		BlockState:        blockState,
 		CursorDeclaration: cursorDeclaration,
@@ -190,7 +192,8 @@ func (node *RoutineExpr) ResolvedType() *types.T {
 
 // Format is part of the Expr interface.
 func (node *RoutineExpr) Format(ctx *FmtCtx) {
-	ctx.Printf("%s(", node.Name)
+	ctx.FormatName(node.Name)
+	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Args)
 	ctx.WriteByte(')')
 }

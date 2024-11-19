@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.sql.schemachanger.scpb;
@@ -15,6 +10,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb
 import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/sem/semenumpb/constraint.proto";
+import "sql/sem/semenumpb/trigger.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
@@ -64,6 +60,11 @@ message ElementProto {
     CompositeType composite_type = 8;
     Function function = 9;
 
+    // Zero-level elements.
+    // These elements do not own a corresponding descriptor in the catalog,
+    // but do not have a parent.
+    NamedRangeZoneConfig named_range_zone_config = 220;
+
     // Relation elements.
     ColumnFamily column_family = 20 [(gogoproto.moretags) = "parent:\"Table\""];
     Column column = 21 [(gogoproto.moretags) = "parent:\"Table, View\""];
@@ -83,6 +84,9 @@ message ElementProto {
     TableData table_data = 131 [(gogoproto.customname) = "TableData", (gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
     TablePartitioning table_partitioning = 132 [(gogoproto.customname) = "TablePartitioning", (gogoproto.moretags) = "parent:\"Table\""];
     TableSchemaLocked table_schema_locked = 133 [(gogoproto.customname) = "TableSchemaLocked", (gogoproto.moretags) = "parent:\"Table\""];
+    LDRJobIDs ldr_job_ids = 134 [(gogoproto.customname) = "LDRJobIDs", (gogoproto.moretags) = "parent:\"Table\""];
+    PartitionZoneConfig partition_zone_config = 135 [(gogoproto.moretags) = "parent:\"TablePartitioning\""];
+    Trigger trigger = 136 [(gogoproto.moretags) = "parent:\"Table, View\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -102,7 +106,6 @@ message ElementProto {
 
     // Sequence elements.
     SequenceOption sequence_option = 37 [(gogoproto.moretags) = "parent:\"Sequence\""];
-
 
     // Index elements.
     IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
@@ -153,7 +156,17 @@ message ElementProto {
     // Type elements.
     TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType\""];
 
-    // Next element group start id: 200
+    // Trigger elements.
+    TriggerName trigger_name = 200 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerEnabled trigger_enabled = 201 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerTiming trigger_timing = 202 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerEvents trigger_events = 203 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerTransition trigger_transition = 204 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerWhen trigger_when = 205 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerFunctionCall trigger_function_call = 206 [(gogoproto.moretags) = "parent:\"Trigger\""];
+    TriggerDeps trigger_deps = 207 [(gogoproto.moretags) = "parent:\"Trigger\""];
+
+    // Next element group start id: 240
   }
 }
 
@@ -229,12 +242,27 @@ message ColumnType {
   // It can be used in a similar way to version gates to ensure compatibility
   // in mixed version state.
   ElementCreationMetadata element_creation_metadata= 11;
+  // If non-zero, the column will be added to the column family after the column with
+  // this ID. This is used for operations like 'ALTER COLUMN .. TYPE', where
+  // maintaining column family order is necessary when replacing columns.
+  uint32 column_family_order_follows_column_id = 12 [(gogoproto.customname) = "ColumnFamilyOrderFollowsColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
 }
 
 message ColumnComputeExpression {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Usage indicates that this expression is being added for. We need to identify
+  // usages, such as the the USING clause of an ALTER COLUMN .. TYPE operation,
+  // to properly order dependency rules.
+  enum Usage {
+    // REGULAR means its added by the user as an explicit compute expression.
+    REGULAR = 0;
+    // ALTER_TYPE_USING means it is part of the USING clause
+    // in an ALTER COLUMN ... TYPE operation.
+    ALTER_TYPE_USING = 1;
+  }
+  Usage usage = 5;
 }
 
 message ColumnFamily {
@@ -456,6 +484,70 @@ message ForeignKeyConstraintUnvalidated {
   cockroach.sql.sem.semenumpb.Match composite_key_match_method = 8 [(gogoproto.customname) = "CompositeKeyMatchMethod"];
 }
 
+message Trigger {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+}
+
+message TriggerName {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  string name = 3;
+}
+
+message TriggerEnabled {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  bool enabled = 3;
+}
+
+message TriggerTiming {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  cockroach.sql.sem.semenumpb.TriggerActionTime action_time = 3;
+  bool for_each_row = 4;
+}
+
+message TriggerEvent {
+  cockroach.sql.sem.semenumpb.TriggerEventType type = 1;
+  repeated string column_names = 2;
+}
+
+message TriggerEvents {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  repeated TriggerEvent events = 3;
+}
+
+message TriggerTransition {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  string new_transition_alias = 3;
+  string old_transition_alias = 4;
+}
+
+message TriggerWhen {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  string when_expr = 3;
+}
+
+message TriggerFunctionCall {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  uint32 func_id = 3 [(gogoproto.customname) = "FuncID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated string func_args = 4;
+  string func_body = 5;
+}
+
+message TriggerDeps {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
+  repeated uint32 uses_relation_ids = 3 [(gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_type_ids = 4 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_routine_ids = 5 [(gogoproto.customname) = "UsesRoutineIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
 message EnumType {
   uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 array_type_id = 2 [(gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
@@ -501,6 +593,17 @@ message UserPrivileges {
   string user_name = 2;
   uint64 privileges = 3;
   uint64 with_grant_option = 4;
+}
+
+message NamedRangeZoneConfig {
+  uint32 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.config.zonepb.ZoneConfig zone_config = 2;
+
+  // `seq_num` is used to differentiate different zone config elements tied to
+  // the same range. E.g. If we attempt to update a range's zone config,
+  // our solution is to drop the existing element and add a new element, with
+  // different `seq_num`.
+  uint32 seq_num = 3;
 }
 
 message TableLocalityGlobal {
@@ -682,15 +785,25 @@ message TableZoneConfig {
 message IndexZoneConfig {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  cockroach.config.zonepb.Subzone subzone = 3 [(gogoproto.nullable) = false];
+  repeated cockroach.config.zonepb.SubzoneSpan subzone_spans = 4 [(gogoproto.nullable) = false];
+  // `seq_num` is used to differentiate different subzone config elements tied
+  // to the same index. E.g. If we attempt to update an index subzone config,
+  // our solution is to drop the existing element and add a new element, with
+  // different `seq_num`.
+  uint32 seq_num = 5;
+}
+
+message PartitionZoneConfig {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   string partition_name = 3;
   cockroach.config.zonepb.Subzone subzone = 4 [(gogoproto.nullable) = false];
-  // `subzone_spans` is used solely for zone config writes. These spans are
-  // recreated for the table zone config during each configuration change.
   repeated cockroach.config.zonepb.SubzoneSpan subzone_spans = 5 [(gogoproto.nullable) = false];
   // `seq_num` is used to differentiate different subzone config elements tied
-  // to the same index/partition. E.g. If we attempt to update a(n)
-  // index/partition's subzone config, our solution is to drop the existing
-  // element and add a new element, with different `seq_num`.
+  // to the same partition. E.g. If we attempt to update a partition's subzone
+  // config, our solution is to drop the existing element and add a new element,
+  // with different `seq_num`.
   uint32 seq_num = 6;
 }
 
@@ -718,6 +831,12 @@ message TablePartitioning {
 // TableSchemaLocked models storage parameter `schema_locked` of a table.
 message TableSchemaLocked {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// LDRJobIDs models the field `ldr_job_ids` of a table descriptor.
+message LDRJobIDs {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated int64 job_ids = 2 [(gogoproto.customname) = "JobIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 }
 
 message Function {
@@ -788,4 +907,3 @@ message ElementCreationMetadata {
   bool in_23_1_or_later = 1;
   bool in_24_3_or_later = 2;
 }
-

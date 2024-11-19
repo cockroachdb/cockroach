@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package operations
 
@@ -78,6 +73,20 @@ func CheckDependencies(
 				return false, err
 			}
 			if count != 0 {
+				return false, nil
+			}
+		case registry.OperationRequiresLDRJobRunning:
+			conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
+			defer conn.Close()
+
+			jobsCur, err := conn.QueryContext(ctx, "(WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running' limit 1)")
+			if err != nil {
+				return false, err
+			}
+			jobsCur.Next()
+			var jobId string
+			_ = jobsCur.Scan(&jobId)
+			if jobId == "" {
 				return false, nil
 			}
 		default:

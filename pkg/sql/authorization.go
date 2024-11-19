@@ -1,18 +1,15 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -704,6 +701,79 @@ func MemberOfWithAdminOption(
 		}
 	}()
 	return memberships, nil
+}
+
+// EnsureUserOnlyBelongsToRoles grants all the roles in `roles` to `user` and,
+// revokes all other roles. This is intended to be used when there is an
+// external source of truth for role membership (e.g. an LDAP server), and we
+// need to keep role memberships in sync with that source of truth.
+func EnsureUserOnlyBelongsToRoles(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	user username.SQLUsername,
+	roles []username.SQLUsername,
+) error {
+	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		currentRoles, err := MemberOfWithAdminOption(ctx, execCfg, txn, user)
+		if err != nil {
+			return err
+		}
+
+		// Compute the differences between the current roles and the desired roles
+		// to determine which roles need to granted or revoked. This will ensure
+		// that if the actual roles and desired roles already match, then no work
+		// will be performed.
+		rolesToRevoke := make([]username.SQLUsername, 0, len(currentRoles))
+		rolesToGrant := make([]username.SQLUsername, 0, len(roles))
+		for role := range currentRoles {
+			if !slices.Contains(roles, role) {
+				rolesToRevoke = append(rolesToRevoke, role)
+			}
+		}
+		for _, role := range roles {
+			if _, ok := currentRoles[role]; !ok {
+				rolesToGrant = append(rolesToGrant, role)
+			}
+		}
+
+		if len(rolesToRevoke) > 0 {
+			revokeStmt := strings.Builder{}
+			revokeStmt.WriteString("REVOKE ")
+			for i, role := range rolesToRevoke {
+				if i > 0 {
+					revokeStmt.WriteString(", ")
+				}
+				revokeStmt.WriteString(role.SQLIdentifier())
+			}
+			revokeStmt.WriteString(" FROM ")
+			revokeStmt.WriteString(user.SQLIdentifier())
+			if _, err := txn.Exec(
+				ctx, "EnsureUserOnlyBelongsToRoles-revoke", txn.KV(), revokeStmt.String(),
+			); err != nil {
+				return err
+			}
+		}
+
+		if len(rolesToGrant) > 0 {
+			grantStmt := strings.Builder{}
+			grantStmt.WriteString("GRANT ")
+			for i, role := range rolesToGrant {
+				if i > 0 {
+					grantStmt.WriteString(", ")
+				}
+				grantStmt.WriteString(role.SQLIdentifier())
+			}
+			grantStmt.WriteString(" TO ")
+			grantStmt.WriteString(user.SQLIdentifier())
+			if _, err := txn.Exec(
+				ctx, "EnsureUserOnlyBelongsToRoles-grant", txn.KV(), grantStmt.String(),
+			); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 var defaultSingleQueryForRoleMembershipCache = metamorphic.ConstantWithTestBool(

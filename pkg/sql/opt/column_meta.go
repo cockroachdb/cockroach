@@ -1,18 +1,14 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package opt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // ColumnID uniquely identifies the usage of a column within the scope of a
@@ -69,6 +65,20 @@ func (cl ColList) Equals(other ColList) bool {
 // CopyAndMaybeRemapColumns copies this ColList, remapping any columns present
 // in the provided ColMap.
 func (cl ColList) CopyAndMaybeRemapColumns(m ColMap) (res ColList) {
+	return cl.remapColumnsImpl(m, true /* allowMissingEntries */)
+}
+
+// RemapColumns remaps this ColList using the provided ColMap. It panics if any
+// column in the list is not present in the ColMap.
+func (cl ColList) RemapColumns(m ColMap) (res ColList) {
+	return cl.remapColumnsImpl(m, false /* allowMissingEntries */)
+}
+
+// remapColumnsImpl handles the common logic of CopyAndMaybeRemapColumns and
+// RemapColumns. If allowMissingEntries is true, it allows the column to be
+// missing from the ColMap, and it will be copied as-is. If it is false, the
+// column must be present in the ColMap.
+func (cl ColList) remapColumnsImpl(m ColMap, allowMissingEntries bool) (res ColList) {
 	if len(cl) == 0 {
 		return nil
 	}
@@ -76,7 +86,11 @@ func (cl ColList) CopyAndMaybeRemapColumns(m ColMap) (res ColList) {
 	for i := range cl {
 		val, ok := m.Get(int(cl[i]))
 		if !ok {
-			res[i] = cl[i]
+			if allowMissingEntries {
+				res[i] = cl[i]
+			} else {
+				panic(errors.AssertionFailedf("column %d not in mapping %s\n", cl[i], m.String()))
+			}
 		} else {
 			res[i] = ColumnID(val)
 		}

@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -28,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -114,7 +110,7 @@ func (c *insertFastPathCheck) init(params runParams) error {
 
 	codec := params.ExecCfg().Codec
 	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc.GetID(), c.idx.GetID())
-	c.spanBuilder.Init(params.EvalContext(), codec, c.tabDesc, c.idx)
+	c.spanBuilder.InitAllowingExternalRowData(params.EvalContext(), codec, c.tabDesc, c.idx)
 	c.spanSplitter = span.MakeSplitter(c.tabDesc, c.idx, intsets.Fast{} /* neededColOrdinals */)
 
 	if len(c.InsertCols) > idx.numLaxKeyCols {
@@ -198,15 +194,11 @@ func (r *insertFastPathRun) addUniqChecks(
 				combinedRow = make(tree.Datums, len(templateRow))
 			}
 			copy(combinedRow, templateRow)
-			isInputRow := true
 			for j := 0; j < len(c.InsertCols); j++ {
 				// Datums from single-table constraints are already present in
 				// DatumsFromConstraint. Fill in other values from the input row.
 				if combinedRow[c.InsertCols[j]] == nil {
 					combinedRow[c.InsertCols[j]] = inputRow[c.InsertCols[j]]
-				}
-				if combinedRow[c.InsertCols[j]] != inputRow[c.InsertCols[j]] {
-					isInputRow = false
 				}
 			}
 			if !forTesting {
@@ -215,29 +207,14 @@ func (r *insertFastPathRun) addUniqChecks(
 					return nil, err
 				}
 				reqIdx := len(r.uniqBatch.Requests)
-				// Since predicate locks are not yet supported by the KV layer, we
-				// emulate them by writing a tombstone to the other partitions instead
-				// of scanning and locking. These tombstones are added to the insert
-				// batch instead of the uniqueness check batch because they do not
-				// require any post-processing (the KV generated conflict message is
-				// what we want).
-				if c.Locking.Form == tree.LockPredicate {
-					if !isInputRow {
-						if r.traceKV {
-							log.VEventf(ctx, 2, "CPut %s (LockPredicate)", span)
-						}
-						r.ti.putter.CPut(span.Key, nil, nil)
-					}
-				} else {
-					if r.traceKV {
-						log.VEventf(ctx, 2, "UniqScan %s", span)
-					}
-					r.uniqBatch.Requests = append(r.uniqBatch.Requests, kvpb.RequestUnion{})
-					// TODO(msirek): Batch-allocate the kvpb.ScanRequests outside the loop.
-					r.uniqBatch.Requests[reqIdx].MustSetInner(&kvpb.ScanRequest{
-						RequestHeader: kvpb.RequestHeaderFromSpan(span),
-					})
+				if r.traceKV {
+					log.VEventf(ctx, 2, "UniqScan %s", span)
 				}
+				r.uniqBatch.Requests = append(r.uniqBatch.Requests, kvpb.RequestUnion{})
+				// TODO(msirek): Batch-allocate the kvpb.ScanRequests outside the loop.
+				r.uniqBatch.Requests[reqIdx].MustSetInner(&kvpb.ScanRequest{
+					RequestHeader: kvpb.RequestHeaderFromSpan(span),
+				})
 				r.uniqSpanInfo = append(r.uniqSpanInfo, insertFastPathFKUniqSpanInfo{
 					check:  c,
 					rowIdx: rowIdx,
@@ -487,6 +464,14 @@ func (n *insertFastPathNode) BatchedNext(params runParams) (bool, error) {
 				return false, err
 			}
 		}
+
+		if buildutil.CrdbTestBuild {
+			// This testing knob allows us to suspend execution to force a race condition.
+			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
+				fn()
+			}
+		}
+
 		// Process the insertion for the current source row, potentially
 		// accumulating the result row for later.
 		if err := n.run.processSourceRow(params, inputRow); err != nil {

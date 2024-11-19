@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package lookupjoin
 
@@ -23,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/errors"
 )
 
 // Constraint is used to constrain a lookup join. There are two types of
@@ -169,7 +163,6 @@ func (b *ConstraintBuilder) Build(
 	// Extract the equality columns from the ON and derived FK filters.
 	leftEq, rightEq, eqFilterOrds :=
 		memo.ExtractJoinEqualityColumnsWithFilterOrds(b.leftCols, b.rightCols, b.allFilters)
-	rightEqSet := rightEq.ToSet()
 
 	// Retrieve the inequality columns from the ON and derived FK filters.
 	var rightCmp opt.ColList
@@ -194,7 +187,7 @@ func (b *ConstraintBuilder) Build(
 	// columns, but it avoids unnecessary work in most cases.
 	firstIdxCol := b.table.IndexColumnID(index, 0)
 	if _, ok := rightEq.Find(firstIdxCol); !ok {
-		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEqSet); !ok {
+		if _, ok := b.findComputedColJoinEquality(b.table, firstIdxCol, rightEq.ToSet()); !ok {
 			if !HasJoinFilterConstants(b.ctx, b.allFilters, firstIdxCol, b.evalCtx) {
 				if _, ok := rightCmp.Find(firstIdxCol); !ok {
 					return Constraint{}, false
@@ -230,44 +223,37 @@ func (b *ConstraintBuilder) Build(
 	colsAlloc := make(opt.ColList, numIndexKeyCols*2)
 	keyCols := colsAlloc[0:0:numIndexKeyCols]
 	rightSideCols := colsAlloc[numIndexKeyCols : numIndexKeyCols : numIndexKeyCols*2]
-	var inputProjections memo.ProjectionsExpr
-	var lookupExpr memo.FiltersExpr
-	var allLookupFilters memo.FiltersExpr
-	var filterOrdsToExclude intsets.Fast
 	foundLookupCols := false
-	lookupExprRequired := false
-	var remainingFilters memo.FiltersExpr
+	var (
+		inputProjections    memo.ProjectionsExpr
+		lookupExpr          memo.FiltersExpr
+		allLookupFilters    memo.FiltersExpr
+		remainingFilters    memo.FiltersExpr
+		filterOrdsToExclude intsets.Fast
+	)
+	// We do not want a suffix of the index columns to be constrained to
+	// multiple values by optional filters. This would only increase the number
+	// of lookup spans without making the constraint more selective. We keep
+	// track of the suffix length of indexed columns constrained in this way so
+	// that we can remove them after the loop.
+	optionalMultiValFilterSuffixLen := 0
 
-	// addEqualityColumns adds the given columns as an equality in keyCols if
-	// lookupExprRequired is false. Otherwise, the equality is added as an
-	// expression in lookupExpr. In both cases, rightCol is added to
-	// rightSideCols so the caller of Build can determine if the right equality
-	// columns form a key.
+	// addEqualityColumns adds the given columns as an equality in keyCols and
+	// rightSideCols.
 	addEqualityColumns := func(leftCol, rightCol opt.ColumnID) {
-		if !lookupExprRequired {
-			keyCols = append(keyCols, leftCol)
-		} else {
-			lookupExpr = append(lookupExpr, b.constructColEquality(leftCol, rightCol))
-		}
+		keyCols = append(keyCols, leftCol)
 		rightSideCols = append(rightSideCols, rightCol)
 	}
 
-	// convertToLookupExpr converts previously collected keyCols and
-	// rightSideCols to equality expressions in lookupExpr. It is used when it
-	// is discovered that a lookup expression is required to build a constraint,
-	// and keyCols and rightSideCols have already been collected. After building
-	// expressions, keyCols is reset to nil.
-	convertToLookupExpr := func() {
-		if lookupExprRequired {
-			// Return early if we've already converted the key columns to a
-			// lookup expression.
-			return
+	// rightEqIdenticalTypeCols is the set of columns in rightEq that have
+	// identical types to the corresponding columns in leftEq. This is used to
+	// determine if a computed column can be synthesized for a column in the
+	// index in order to allow a lookup join.
+	var rightEqIdenticalTypeCols opt.ColSet
+	for i := range rightEq {
+		if b.md.ColumnMeta(rightEq[i]).Type.Identical(b.md.ColumnMeta(leftEq[i]).Type) {
+			rightEqIdenticalTypeCols.Add(rightEq[i])
 		}
-		lookupExprRequired = true
-		for i := range keyCols {
-			lookupExpr = append(lookupExpr, b.constructColEquality(keyCols[i], rightSideCols[i]))
-		}
-		keyCols = nil
 	}
 
 	// All the lookup conditions must apply to the prefix of the index and so
@@ -281,6 +267,7 @@ func (b *ConstraintBuilder) Build(
 			filterOrdsToExclude.Add(eqFilterOrds[eqIdx])
 			foundEqualityCols = true
 			foundLookupCols = true
+			optionalMultiValFilterSuffixLen = 0
 			continue
 		}
 
@@ -290,7 +277,10 @@ func (b *ConstraintBuilder) Build(
 		// and construct a Project expression that wraps the join's input
 		// below. See findComputedColJoinEquality for the requirements to
 		// synthesize a computed column equality constraint.
-		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, rightEqSet); ok {
+		//
+		// NOTE: we must only consider equivalent columns with identical types,
+		// since column remapping is otherwise not valid.
+		if expr, ok := b.findComputedColJoinEquality(b.table, idxCol, rightEqIdenticalTypeCols); ok {
 			colMeta := b.md.ColumnMeta(idxCol)
 			compEqCol := b.md.AddColumn(fmt.Sprintf("%s_eq", colMeta.Alias), colMeta.Type)
 
@@ -310,6 +300,7 @@ func (b *ConstraintBuilder) Build(
 			derivedEquivCols.Add(idxCol)
 			foundEqualityCols = true
 			foundLookupCols = true
+			optionalMultiValFilterSuffixLen = 0
 			continue
 		}
 
@@ -322,28 +313,22 @@ func (b *ConstraintBuilder) Build(
 		// If a single constant value was found, project it in the input
 		// and use it as an equality column.
 		if ok && len(foundVals) == 1 {
-			idxColType := b.md.ColumnMeta(idxCol).Type
-			constColID := b.md.AddColumn(
-				fmt.Sprintf("lookup_join_const_col_@%d", idxCol),
-				idxColType,
-			)
+			typ := foundVals[0].ResolvedType()
+			constColID := b.md.AddColumn(fmt.Sprintf("lookup_join_const_col_@%d", idxCol), typ)
 			inputProjections = append(inputProjections, b.f.ConstructProjectionsItem(
-				b.f.ConstructConstVal(foundVals[0], idxColType),
+				b.f.ConstructConstVal(foundVals[0], typ),
 				constColID,
 			))
 			allLookupFilters = append(allLookupFilters, b.allFilters[allIdx])
 			addEqualityColumns(constColID, idxCol)
 			filterOrdsToExclude.Add(allIdx)
+			optionalMultiValFilterSuffixLen = 0
 			continue
 		}
 
 		// If multiple constant values were found, we must use a lookup
 		// expression.
 		if ok {
-			// Convert previously collected keyCols and rightSideCols to
-			// expressions in lookupExpr and clear keyCols.
-			convertToLookupExpr()
-
 			valsFilter := b.allFilters[allIdx]
 			if !isCanonicalFilter(valsFilter) {
 				// Disable normalization rules when constructing the lookup
@@ -355,7 +340,15 @@ func (b *ConstraintBuilder) Build(
 			}
 			lookupExpr = append(lookupExpr, valsFilter)
 			allLookupFilters = append(allLookupFilters, b.allFilters[allIdx])
-			filterOrdsToExclude.Add(allIdx)
+			if isOptional := allIdx >= len(onFilters); isOptional {
+				optionalMultiValFilterSuffixLen++
+			} else {
+				// There's no need to track optional filters for reducing the
+				// remaining filters because they are not present in the ON
+				// filters to begin with.
+				filterOrdsToExclude.Add(allIdx)
+			}
+
 			continue
 		}
 
@@ -365,18 +358,18 @@ func (b *ConstraintBuilder) Build(
 			rightCmp, inequalityFilterOrds, b.allFilters, idxCol, idxColIsDesc,
 		)
 		if foundStart {
-			convertToLookupExpr()
 			lookupExpr = append(lookupExpr, b.allFilters[startIdx])
 			allLookupFilters = append(allLookupFilters, b.allFilters[startIdx])
 			filterOrdsToExclude.Add(startIdx)
 			foundLookupCols = true
+			optionalMultiValFilterSuffixLen = 0
 		}
 		if foundEnd {
-			convertToLookupExpr()
 			lookupExpr = append(lookupExpr, b.allFilters[endIdx])
 			allLookupFilters = append(allLookupFilters, b.allFilters[endIdx])
 			filterOrdsToExclude.Add(endIdx)
 			foundLookupCols = true
+			optionalMultiValFilterSuffixLen = 0
 		}
 		if foundStart && foundEnd {
 			// The column is constrained above and below by an inequality; no further
@@ -389,12 +382,14 @@ func (b *ConstraintBuilder) Build(
 		// case that only the start or end bound could be constrained with
 		// an input column; in this case, it still may be possible to use a constant
 		// to form the other bound.
+		//
+		// We exclude optional filters from this search because an optional
+		// range filter will not make the lookup more selective.
 		rangeFilter, remaining, filterIdx := b.findJoinConstantRangeFilter(
-			b.allFilters, idxCol, idxColIsDesc, !foundStart, !foundEnd,
+			onFilters, idxCol, idxColIsDesc, !foundStart, !foundEnd,
 		)
 		if rangeFilter != nil {
 			// A constant range filter could be found.
-			convertToLookupExpr()
 			lookupExpr = append(lookupExpr, *rangeFilter)
 			allLookupFilters = append(allLookupFilters, b.allFilters[filterIdx])
 			filterOrdsToExclude.Add(filterIdx)
@@ -416,8 +411,20 @@ func (b *ConstraintBuilder) Build(
 		return Constraint{}, false
 	}
 
-	if len(keyCols) > 0 && len(lookupExpr) > 0 {
-		panic(errors.AssertionFailedf("expected lookup constraint to have either KeyCols or LookupExpr, not both"))
+	// Remove the suffix of index columns constrained to multiple values by
+	// optional filters.
+	if lookupExpr != nil && optionalMultiValFilterSuffixLen > 0 {
+		lookupExpr = lookupExpr[:len(lookupExpr)-optionalMultiValFilterSuffixLen]
+		allLookupFilters = allLookupFilters[:len(allLookupFilters)-optionalMultiValFilterSuffixLen]
+	}
+
+	// If a lookup expression is required, convert the equality columns to
+	// equalities in the lookup expression.
+	if len(lookupExpr) > 0 {
+		for i := range keyCols {
+			lookupExpr = append(lookupExpr, b.constructColEquality(keyCols[i], rightSideCols[i]))
+		}
+		keyCols = nil
 	}
 
 	c := Constraint{
@@ -451,6 +458,8 @@ func (b *ConstraintBuilder) Build(
 //  2. col is a computed column.
 //  3. Columns referenced in the computed expression are a subset of columns
 //     that already have equality constraints.
+//  4. The computed column expression is not composite-sensitive to the set of
+//     referenced columns.
 //
 // For example, consider the table and query:
 //
@@ -505,6 +514,14 @@ func (b *ConstraintBuilder) findComputedColJoinEquality(
 	}
 	expr, ok := tabMeta.ComputedColExpr(col)
 	if !ok {
+		return nil, false
+	}
+	if memo.CanBeCompositeSensitive(expr) {
+		// Composite-typed values might compare equally without being exactly the
+		// same (e.g. 2.0::DECIMAL vs 2.000::DECIMAL). We must ensure that the
+		// computed column expression produces equivalent (but not necessarily
+		// identical) results if its columns are swapped out with equivalent
+		// columns.
 		return nil, false
 	}
 	var sharedProps props.Shared

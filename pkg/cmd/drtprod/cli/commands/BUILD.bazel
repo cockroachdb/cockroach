@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "commands",
+    srcs = [
+        "rootcmd.go",
+        "yamlprocessor.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/drtprod/cli/commands",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/build",
+        "//pkg/cmd/drtprod/helpers",
+        "@com_github_spf13_cobra//:cobra",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "commands_test",
+    srcs = ["yamlprocessor_test.go"],
+    embed = [":commands"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

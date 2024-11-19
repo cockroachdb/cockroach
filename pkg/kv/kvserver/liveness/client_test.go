@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package liveness_test
 
@@ -372,4 +367,53 @@ func TestGetActiveNodes(t *testing.T) {
 		return nil
 	})
 	require.Equal(t, []roachpb.NodeID{1, 2, 3, 4}, getActiveNodes(nl1))
+}
+
+// TestLivenessRangeGetsPeriodicallyCompacted tests that the liveness range
+// gets compacted when we set the liveness range compaction interval.
+func TestLivenessRangeGetsPeriodicallyCompacted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	// Enable the liveness range compaction and set the interval to 1s to speed
+	// up the test.
+	c := tc.Server(0).SystemLayer().SQLConn(t)
+	_, err := c.ExecContext(ctx, "set cluster setting kv.liveness_range_compact.interval='1s'")
+	require.NoError(t, err)
+
+	// Get the original file number of the sstable for the liveness range. We
+	// expect to see this file number change as the liveness range gets compacted.
+	livenessFileNumberQuery := "WITH replicas(n) AS (SELECT unnest(replicas) FROM " +
+		"crdb_internal.ranges_no_leases WHERE range_id = 2), sstables AS (SELECT " +
+		"(crdb_internal.sstable_metrics(n, n, start_key, end_key)).* " +
+		"FROM crdb_internal.ranges_no_leases, replicas WHERE range_id = 2) " +
+		"SELECT file_num FROM sstables"
+
+	sqlDB := tc.ApplicationLayer(0).SQLConn(t)
+	var original_file_num string
+	testutils.SucceedsSoon(t, func() error {
+		rows := sqlDB.QueryRow(livenessFileNumberQuery)
+		if err := rows.Scan(&original_file_num); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	// Expect that the liveness file number changes.
+	testutils.SucceedsSoon(t, func() error {
+		var current_file_num string
+		rows := sqlDB.QueryRow(livenessFileNumberQuery)
+		if err := rows.Scan(&current_file_num); err != nil {
+			return err
+		}
+		if current_file_num == original_file_num {
+			return errors.Errorf("Liveness compaction hasn't happened yet")
+		}
+		return nil
+	})
 }

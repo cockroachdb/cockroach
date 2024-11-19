@@ -130,6 +130,26 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - Column:
+    columnId: 4.294967292e+09
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: true
+    isInaccessible: false
+    isSystemColumn: true
+    pgAttributeNum: 0
+    tableId: 108
+  Status: PUBLIC
+- Column:
+    columnId: 4.294967293e+09
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: true
+    isInaccessible: false
+    isSystemColumn: true
+    pgAttributeNum: 0
+    tableId: 108
+  Status: PUBLIC
+- Column:
     columnId: 4.294967294e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -164,6 +184,7 @@ ElementState:
     expr: x'80':::@100104
     referencedColumnIds: []
     tableId: 108
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds:
@@ -175,6 +196,7 @@ ElementState:
     expr: x'80':::@100106
     referencedColumnIds: []
     tableId: 108
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds:
@@ -207,6 +229,16 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - ColumnName:
+    columnId: 4.294967292e+09
+    name: crdb_internal_origin_timestamp
+    tableId: 108
+  Status: PUBLIC
+- ColumnName:
+    columnId: 4.294967293e+09
+    name: crdb_internal_origin_id
+    tableId: 108
+  Status: PUBLIC
+- ColumnName:
     columnId: 4.294967294e+09
     name: tableoid
     tableId: 108
@@ -235,6 +267,7 @@ ElementState:
     closedTypeIds:
     - 104
     - 105
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 2
     computeExpr: null
     elementCreationMetadata:
@@ -267,6 +300,7 @@ ElementState:
     closedTypeIds:
     - 104
     - 105
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4
     computeExpr: null
     elementCreationMetadata:
@@ -314,6 +348,7 @@ ElementState:
     closedTypeIds:
     - 106
     - 107
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 3
     computeExpr: null
     elementCreationMetadata:
@@ -344,6 +379,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 1
     computeExpr: null
     elementCreationMetadata:
@@ -373,6 +409,67 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
+    columnId: 4.294967292e+09
+    computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
+      in243OrLater: true
+    familyId: 0
+    isNullable: true
+    isVirtual: false
+    tableId: 108
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: DecimalFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 1700
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 0
+    typeName: DECIMAL
+  Status: PUBLIC
+- ColumnType:
+    closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
+    columnId: 4.294967293e+09
+    computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
+      in243OrLater: true
+    familyId: 0
+    isNullable: true
+    isVirtual: false
+    tableId: 108
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: IntFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 23
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 32
+    typeName: INT4
+  Status: PUBLIC
+- ColumnType:
+    closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
     computeExpr: null
     elementCreationMetadata:
@@ -402,6 +499,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
     computeExpr: null
     elementCreationMetadata:
@@ -431,6 +529,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 5
     computeExpr: null
     elementCreationMetadata:
@@ -800,6 +899,26 @@ ElementState:
     tableId: 111
   Status: PUBLIC
 - Column:
+    columnId: 4.294967292e+09
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: true
+    isInaccessible: false
+    isSystemColumn: true
+    pgAttributeNum: 0
+    tableId: 111
+  Status: PUBLIC
+- Column:
+    columnId: 4.294967293e+09
+    generatedAsIdentitySequenceOption: ""
+    generatedAsIdentityType: 0
+    isHidden: true
+    isInaccessible: false
+    isSystemColumn: true
+    pgAttributeNum: 0
+    tableId: 111
+  Status: PUBLIC
+- Column:
     columnId: 4.294967294e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
@@ -854,6 +973,7 @@ ElementState:
     expr: (3:::INT8, 'foo':::STRING)
     referencedColumnIds: []
     tableId: 111
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
@@ -863,6 +983,7 @@ ElementState:
     expr: (4:::INT8, 'foo':::STRING)
     referencedColumnIds: []
     tableId: 111
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
@@ -873,6 +994,7 @@ ElementState:
     referencedColumnIds:
     - 2
     tableId: 111
+    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
@@ -900,6 +1022,16 @@ ElementState:
 - ColumnName:
     columnId: 4
     name: cstored
+    tableId: 111
+  Status: PUBLIC
+- ColumnName:
+    columnId: 4.294967292e+09
+    name: crdb_internal_origin_timestamp
+    tableId: 111
+  Status: PUBLIC
+- ColumnName:
+    columnId: 4.294967293e+09
+    name: crdb_internal_origin_id
     tableId: 111
   Status: PUBLIC
 - ColumnName:
@@ -941,6 +1073,7 @@ ElementState:
     closedTypeIds:
     - 109
     - 110
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 3
     computeExpr: null
     elementCreationMetadata:
@@ -1019,6 +1152,7 @@ ElementState:
 - ColumnType:
     closedTypeIds:
     - 109
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 2
     computeExpr: null
     elementCreationMetadata:
@@ -1082,6 +1216,7 @@ ElementState:
 - ColumnType:
     closedTypeIds:
     - 109
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4
     computeExpr: null
     elementCreationMetadata:
@@ -1145,6 +1280,7 @@ ElementState:
 - ColumnType:
     closedTypeIds:
     - 109
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 5
     computeExpr: null
     elementCreationMetadata:
@@ -1207,6 +1343,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 1
     computeExpr: null
     elementCreationMetadata:
@@ -1236,6 +1373,67 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
+    columnId: 4.294967292e+09
+    computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
+      in243OrLater: true
+    familyId: 0
+    isNullable: true
+    isVirtual: false
+    tableId: 111
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: DecimalFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 1700
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 0
+    typeName: DECIMAL
+  Status: PUBLIC
+- ColumnType:
+    closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
+    columnId: 4.294967293e+09
+    computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
+      in243OrLater: true
+    familyId: 0
+    isNullable: true
+    isVirtual: false
+    tableId: 111
+    type:
+      arrayContents: null
+      arrayDimensions: []
+      arrayElemType: null
+      family: IntFamily
+      geoMetadata: null
+      intervalDurationField: null
+      locale: null
+      oid: 23
+      precision: 0
+      timePrecisionIsSet: false
+      tupleContents: []
+      tupleLabels: []
+      udtMetadata: null
+      visibleType: 0
+      width: 32
+    typeName: INT4
+  Status: PUBLIC
+- ColumnType:
+    closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
     computeExpr: null
     elementCreationMetadata:
@@ -1265,6 +1463,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
     computeExpr: null
     elementCreationMetadata:
@@ -1294,6 +1493,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 6
     computeExpr: null
     elementCreationMetadata:
@@ -1323,6 +1523,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
+    columnFamilyOrderFollowsColumnId: 0
     columnId: 7
     computeExpr: null
     elementCreationMetadata:

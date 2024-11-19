@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package opttester
 
@@ -24,9 +19,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"text/tabwriter"
 	"time"
@@ -74,6 +71,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/dustin/go-humanize"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -226,8 +224,9 @@ type Flags struct {
 	// the import command.
 	File string
 
-	// CascadeLevels limits the depth of recursive cascades for build-cascades.
-	CascadeLevels int
+	// PostQueryLevels limits the depth of recursive post-queries for
+	// build-post-queries.
+	PostQueryLevels int
 
 	// NoStableFolds controls whether constant folding for normalization includes
 	// stable operators.
@@ -270,6 +269,10 @@ type Flags struct {
 
 	// TxnIsoLevel is the isolation level to plan for.
 	TxnIsoLevel isolation.Level
+
+	// MaxStackBytes specifies the number of bytes to limit the stack size to.
+	// If it is zero, the stack size has the default Go limit.
+	MaxStackBytes int
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -352,10 +355,10 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //     attempts to use the placeholder fast path to obtain a fully optimized
 //     expression with placeholders.
 //
-//   - build-cascades [flags]
+//   - build-post-queries [flags]
 //
-//     Builds a query and then recursively builds cascading queries. Outputs all
-//     unoptimized plans.
+//     Builds a query and then recursively builds cascading queries and AFTER
+//     triggers. Outputs all unoptimized plans.
 //
 //   - optsteps [flags]
 //
@@ -526,8 +529,8 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //
 //   - inject-stats: the file path is relative to the test file.
 //
-//   - cascade-levels: used to limit the depth of recursive cascades for
-//     build-cascades.
+//   - post-query-levels: used to limit the depth of recursive cascades for
+//     build-post-queries.
 //
 //   - index-version: controls the version of the index descriptor created in
 //     the test catalog. This is used by the exec-ddl command for CREATE INDEX
@@ -560,6 +563,9 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //     full path or a relative path to testdata.
 //
 //   - isolation: sets the isolation level to plan for.
+//
+//   - max-stack: sets the maximum stack size for the goroutine that optimizes
+//     the query. See debug.SetMaxStack.
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
@@ -583,6 +589,26 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.evalCtx.Placeholders = nil
 	ot.evalCtx.TxnIsoLevel = ot.Flags.TxnIsoLevel
 
+	if ot.Flags.MaxStackBytes > 0 {
+		originalMaxStack := debug.SetMaxStack(ot.Flags.MaxStackBytes)
+		defer debug.SetMaxStack(originalMaxStack)
+		// Spawn a separate goroutine. A fresh stack makes tests using this
+		// setting more reliable.
+		var wg sync.WaitGroup
+		wg.Add(1)
+		var res string
+		go func() {
+			defer wg.Done()
+			res = ot.runCommandInternal(tb, d)
+		}()
+		wg.Wait()
+		return res
+	} else {
+		return ot.runCommandInternal(tb, d)
+	}
+}
+
+func (ot *OptTester) runCommandInternal(tb testing.TB, d *datadriven.TestData) string {
 	switch d.Cmd {
 	case "exec-ddl":
 		testCatalog, ok := ot.catalog.(*testcat.Catalog)
@@ -666,7 +692,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		return ot.FormatExpr(e)
 
-	case "build-cascades":
+	case "build-post-queries":
 		o := ot.makeOptimizer()
 		o.DisableOptimizations()
 		if err := ot.buildExpr(o.Factory()); err != nil {
@@ -674,13 +700,22 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		e := o.Memo().RootExpr()
 
-		var buildCascades func(e opt.Expr, tp treeprinter.Node, level int)
-		buildCascades = func(e opt.Expr, tp treeprinter.Node, level int) {
-			if ot.Flags.CascadeLevels != 0 && level > ot.Flags.CascadeLevels {
+		var buildPostQueries func(e opt.Expr, tp treeprinter.Node, level int)
+		buildPostQueries = func(e opt.Expr, tp treeprinter.Node, level int) {
+			if ot.Flags.PostQueryLevels != 0 && level > ot.Flags.PostQueryLevels {
 				return
 			}
 			if opt.IsMutationOp(e) {
 				p := e.Private().(*memo.MutationPrivate)
+				inputRel := e.Child(0).(memo.RelExpr).Relational()
+
+				// Cascades need a map from the original memo to the one they are being
+				// built from. Since we're using the same memo to build the cascades, we
+				// build an identity map for the mutation's input columns.
+				var colMap opt.ColMap
+				inputRel.OutputCols.ForEach(func(col opt.ColumnID) {
+					colMap.Set(int(col), int(col))
+				})
 
 				for _, c := range p.FKCascades {
 					// We use the same memo to build the cascade. This makes the entire
@@ -692,26 +727,45 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 						ot.catalog,
 						o.Factory(),
 						c.WithID,
-						e.Child(0).(memo.RelExpr).Relational(),
-						c.OldValues,
-						c.NewValues,
+						inputRel,
+						colMap,
 					)
 					if err != nil {
 						d.Fatalf(tb, "error building cascade: %+v", err)
 					}
 					n := tp.Child("cascade")
 					n.Child(strings.TrimRight(ot.FormatExpr(cascade), "\n"))
-					buildCascades(cascade, n, level+1)
+					buildPostQueries(cascade, n, level+1)
+				}
+				if t := p.AfterTriggers; t != nil {
+					// We use the same memo to build the triggers. This makes the entire
+					// tree easier to read (e.g. the column IDs won't overlap).
+					triggers, err := t.Builder.Build(
+						context.Background(),
+						&ot.semaCtx,
+						&ot.evalCtx,
+						ot.catalog,
+						o.Factory(),
+						t.WithID,
+						inputRel,
+						colMap,
+					)
+					if err != nil {
+						d.Fatalf(tb, "error building triggers: %+v", err)
+					}
+					n := tp.Child("after-triggers")
+					n.Child(strings.TrimRight(ot.FormatExpr(triggers), "\n"))
+					buildPostQueries(triggers, n, level+1)
 				}
 			}
 			for i := 0; i < e.ChildCount(); i++ {
-				buildCascades(e.Child(i), tp, level)
+				buildPostQueries(e.Child(i), tp, level)
 			}
 		}
 		tp := treeprinter.New()
 		root := tp.Child("root")
 		root.Child(strings.TrimRight(ot.FormatExpr(e), "\n"))
-		buildCascades(e, root, 1)
+		buildPostQueries(e, root, 1)
 
 		return tp.String()
 
@@ -1105,15 +1159,15 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		}
 		f.File = arg.Vals[0]
 
-	case "cascade-levels":
+	case "post-query-levels":
 		if len(arg.Vals) != 1 {
-			return fmt.Errorf("cascade-levels requires a single argument")
+			return fmt.Errorf("post-query-levels requires a single argument")
 		}
 		levels, err := strconv.ParseInt(arg.Vals[0], 10, 64)
 		if err != nil {
-			return errors.Wrap(err, "cascade-levels")
+			return errors.Wrap(err, "post-query-levels")
 		}
-		f.CascadeLevels = int(levels)
+		f.PostQueryLevels = int(levels)
 
 	case "index-version":
 		if len(arg.Vals) != 1 {
@@ -1164,10 +1218,20 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		level, ok := isolation.Level_value[arg.Vals[0]]
 		if !ok {
 			return fmt.Errorf(
-				"invalid isolation level (must be found in %v): %v", isolation.Level_value, arg.Vals[0],
+				"invalid isolation level %q, must be one of %s", arg.Vals[0], isolation.Levels(),
 			)
 		}
 		f.TxnIsoLevel = isolation.Level(level)
+
+	case "max-stack":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("max-stack requires one argument")
+		}
+		bytes, err := humanize.ParseBytes(arg.Vals[0])
+		if err != nil {
+			return err
+		}
+		f.MaxStackBytes = int(bytes)
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)

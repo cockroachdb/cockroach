@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -19,15 +14,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -93,7 +89,7 @@ func executeNodeShutdown(
 		// is in a healthy state before we start bringing any
 		// nodes down.
 		t.Status("waiting for cluster to be 3x replicated")
-		err := WaitFor3XReplication(ctx, t, t.L(), watcherDB)
+		err := roachtestutil.WaitFor3XReplication(ctx, t.L(), watcherDB)
 		if err != nil {
 			return err
 		}
@@ -174,23 +170,72 @@ func executeNodeShutdown(
 	return nil
 }
 
+type checkStatusFunc func(status jobs.Status) (success bool, unexpected bool)
+
+func WaitForStatus(
+	ctx context.Context,
+	db *gosql.DB,
+	jobID jobspb.JobID,
+	check checkStatusFunc,
+	maxWait time.Duration,
+) error {
+	startTime := timeutil.Now()
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	var status string
+	for {
+		select {
+		case <-ticker.C:
+			err := db.QueryRowContext(ctx, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status)
+			if err != nil {
+				return errors.Wrapf(err, "getting the job status %s", status)
+			}
+			success, unexpected := check(jobs.Status(status))
+			if unexpected {
+				return errors.Newf("unexpectedly found job %d in state %s", jobID, status)
+			}
+			if success {
+				return nil
+			}
+			if timeutil.Since(startTime) > maxWait {
+				return errors.Newf("job %d did not reach status %s after %s", jobID, status, maxWait)
+			}
+		case <-ctx.Done():
+			return errors.Wrapf(ctx.Err(), "context canceled while waiting for job to reach status %s", status)
+		}
+	}
+}
+
 func WaitForRunning(
 	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
 ) error {
-	return testutils.SucceedsWithinError(func() error {
-		var status jobs.Status
-		if err := db.QueryRowContext(ctx, "SELECT status FROM [SHOW JOB $1]", jobID).Scan(&status); err != nil {
-			return err
-		}
-		switch status {
-		case jobs.StatusPending:
-		case jobs.StatusRunning:
-		default:
-			return errors.Newf("job too fast! job got to state %s before the target node could be shutdown",
-				status)
-		}
-		return nil
-	}, maxWait)
+	return WaitForStatus(ctx, db, jobID,
+		func(status jobs.Status) (success bool, unexpected bool) {
+			switch status {
+			case jobs.StatusRunning:
+				return true, false
+			case jobs.StatusPending:
+				return false, false
+			default:
+				return false, true
+			}
+		}, maxWait)
+}
+
+func WaitForSucceeded(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return WaitForStatus(ctx, db, jobID,
+		func(status jobs.Status) (success bool, unexpected bool) {
+			switch status {
+			case jobs.StatusSucceeded:
+				return true, false
+			case jobs.StatusRunning:
+				return false, false
+			default:
+				return false, true
+			}
+		}, maxWait)
 }
 
 type jobRecord struct {

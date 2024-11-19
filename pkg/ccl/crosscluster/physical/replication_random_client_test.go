@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package physical
 
@@ -213,7 +210,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	receivedRevertRequest = make(chan struct{})
 	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval= '0.0005ms'`)
 	require.NoError(t, err)
-	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval='1s'`)
+	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.failover_signal_poll_interval='1s'`)
 	require.NoError(t, err)
 	streamAddr := getTestRandomClientURI(roachpb.MustMakeTenantID(oldTenantID), oldTenantName)
 	query := fmt.Sprintf(`CREATE TENANT "30" FROM REPLICATION OF "10" ON '%s'`, streamAddr)

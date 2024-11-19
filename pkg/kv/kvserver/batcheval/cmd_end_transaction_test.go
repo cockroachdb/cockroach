@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package batcheval
 
@@ -14,14 +9,19 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1677,4 +1678,127 @@ func TestResolveLocalLocks(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSplitTriggerWritesInitialReplicaState tests that a split trigger sets up
+// the split's right-hand side range by writing the initial replica state into
+// the evaluation write batch.
+func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	version := st.Version.LatestVersion()
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 10))
+	clock := hlc.NewClockForTesting(manual)
+
+	db := storage.NewDefaultInMemForTesting()
+	defer db.Close()
+	batch := db.NewBatch()
+	defer batch.Close()
+
+	rangeLeaseDuration := 99 * time.Nanosecond
+	startKey := roachpb.Key("0000")
+	endKey := roachpb.Key("9999")
+	desc := roachpb.RangeDescriptor{
+		RangeID:  99,
+		StartKey: roachpb.RKey(startKey),
+		EndKey:   roachpb.RKey(endKey),
+	}
+	desc.AddReplica(1, 1, roachpb.VOTER_FULL)
+	lease := roachpb.Lease{
+		Replica: desc.InternalReplicas[0],
+		// The range was using a leader lease. The split will need to swap this to
+		// an expiration-based lease.
+		Term:          10,
+		MinExpiration: hlc.Timestamp{WallTime: 100},
+	}
+	gcThreshold := hlc.Timestamp{WallTime: 4}
+	lastGCTimestamp := hlc.Timestamp{WallTime: 5}
+	gcHint := roachpb.GCHint{GCTimestamp: gcThreshold}
+	abortSpanTxnID := uuid.MakeV4()
+	as := abortspan.New(desc.RangeID)
+	sl := stateloader.Make(desc.RangeID)
+	rec := (&MockEvalCtx{
+		ClusterSettings:        st,
+		Desc:                   &desc,
+		Clock:                  clock,
+		AbortSpan:              as,
+		LastReplicaGCTimestamp: lastGCTimestamp,
+		RangeLeaseDuration:     rangeLeaseDuration,
+	}).EvalContext()
+
+	splitKey := roachpb.RKey("5555")
+	leftDesc, rightDesc := desc, desc
+	leftDesc.EndKey = splitKey
+	rightDesc.RangeID++
+	rightDesc.StartKey = splitKey
+	rightDesc.InternalReplicas = slices.Clone(leftDesc.InternalReplicas)
+	rightDesc.InternalReplicas[0].ReplicaID++
+	split := &roachpb.SplitTrigger{
+		LeftDesc:  leftDesc,
+		RightDesc: rightDesc,
+	}
+
+	// Write the range state that will be consulted and copied during the split.
+	err := as.Put(ctx, batch, nil, abortSpanTxnID, &roachpb.AbortSpanEntry{})
+	require.NoError(t, err)
+	err = sl.SetLease(ctx, batch, nil, lease)
+	require.NoError(t, err)
+	err = sl.SetGCThreshold(ctx, batch, nil, &gcThreshold)
+	require.NoError(t, err)
+	err = sl.SetGCHint(ctx, batch, nil, &gcHint)
+	require.NoError(t, err)
+	err = sl.SetVersion(ctx, batch, nil, &version)
+	require.NoError(t, err)
+
+	// Run the split trigger, which is normally run as a subset of EndTxn request
+	// evaluation.
+	_, _, err = splitTrigger(ctx, rec, batch, enginepb.MVCCStats{}, split, hlc.Timestamp{})
+	require.NoError(t, err)
+
+	// Verify that range state was migrated to the right-hand side properly.
+	asRight := abortspan.New(rightDesc.RangeID)
+	slRight := stateloader.Make(rightDesc.RangeID)
+	// The abort span should have been transferred over.
+	ok, err := asRight.Get(ctx, batch, abortSpanTxnID, &roachpb.AbortSpanEntry{})
+	require.NoError(t, err)
+	require.True(t, ok)
+	// The lease should be present, pointing at the replica in the right-hand side
+	// range, and switched to an expiration-based lease.
+	expLease := roachpb.Lease{
+		Replica:    rightDesc.InternalReplicas[0],
+		Expiration: &hlc.Timestamp{WallTime: manual.Now().Add(rangeLeaseDuration).UnixNano()},
+	}
+	loadedLease, err := slRight.LoadLease(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, expLease, loadedLease)
+	loadedGCThreshold, err := slRight.LoadGCThreshold(ctx, batch)
+	require.NoError(t, err)
+	require.NotNil(t, loadedGCThreshold)
+	require.Equal(t, gcThreshold, *loadedGCThreshold)
+	loadedGCHint, err := slRight.LoadGCHint(ctx, batch)
+	require.NoError(t, err)
+	require.NotNil(t, loadedGCHint)
+	require.Equal(t, gcHint, *loadedGCHint)
+	expTruncState := kvserverpb.RaftTruncatedState{
+		Term:  stateloader.RaftInitialLogTerm,
+		Index: stateloader.RaftInitialLogIndex,
+	}
+	loadedTruncState, err := slRight.LoadRaftTruncatedState(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, expTruncState, loadedTruncState)
+	loadedVersion, err := slRight.LoadVersion(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, version, loadedVersion)
+	expAppliedState := kvserverpb.RangeAppliedState{
+		RaftAppliedIndexTerm: stateloader.RaftInitialLogTerm,
+		RaftAppliedIndex:     stateloader.RaftInitialLogIndex,
+	}
+	loadedAppliedState, err := slRight.LoadRangeAppliedState(ctx, batch)
+	require.NoError(t, err)
+	require.NotNil(t, loadedAppliedState)
+	loadedAppliedState.RangeStats = kvserverpb.MVCCPersistentStats{} // ignore
+	require.Equal(t, &expAppliedState, loadedAppliedState)
 }

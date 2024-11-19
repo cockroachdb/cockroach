@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package log
 
@@ -140,7 +135,7 @@ func maybeRedactEntry(payload entryPayload, editor redactEditor) (res entryPaylo
 
 func init() {
 	// We consider booleans and numeric values to be always safe for
-	// reporting. A log call can opt out by using redact.Unsafe() around
+	// reporting. A log call can opt out by using encoding.Unsafe() around
 	// a value that would be otherwise considered safe.
 	redact.RegisterSafeType(reflect.TypeOf(true)) // bool
 	redact.RegisterSafeType(reflect.TypeOf(123))  // int

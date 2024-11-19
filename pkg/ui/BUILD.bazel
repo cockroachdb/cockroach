@@ -23,6 +23,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/util/httputil",
         "//pkg/util/log",
+        "//pkg/util/timeutil",
     ],
 )
 

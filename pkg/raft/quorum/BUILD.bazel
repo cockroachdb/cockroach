@@ -12,7 +12,11 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/raft/quorum",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/raft/raftpb"],
+    deps = [
+        "//pkg/raft/raftpb",
+        "//pkg/util/hlc",
+        "@org_golang_x_exp//maps",
+    ],
 )
 
 go_test(
@@ -21,12 +25,17 @@ go_test(
         "bench_test.go",
         "datadriven_test.go",
         "quick_test.go",
+        "quorum_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":quorum"],
     deps = [
         "//pkg/raft/raftpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

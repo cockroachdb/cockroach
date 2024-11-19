@@ -585,6 +585,7 @@ databases                                    NULL
 default_privileges                           NULL
 feature_usage                                NULL
 forward_dependencies                         NULL
+fully_qualified_names                        NULL
 gossip_alerts                                NULL
 gossip_liveness                              NULL
 gossip_network                               NULL
@@ -601,8 +602,11 @@ kv_catalog_namespace                         NULL
 kv_catalog_zones                             NULL
 kv_dropped_relations                         NULL
 kv_flow_control_handles                      NULL
+kv_flow_control_handles_v2                   NULL
 kv_flow_controller                           NULL
+kv_flow_controller_v2                        NULL
 kv_flow_token_deductions                     NULL
+kv_flow_token_deductions_v2                  NULL
 kv_inherited_role_members                    NULL
 kv_node_liveness                             NULL
 kv_node_status                               NULL
@@ -613,6 +617,7 @@ kv_store_status                              NULL
 kv_system_privileges                         NULL
 leases                                       NULL
 logical_replication_node_processors          NULL
+logical_replication_spans                    NULL
 lost_descriptors_with_data                   NULL
 node_build_info                              NULL
 node_contention_events                       NULL
@@ -642,6 +647,8 @@ statement_activity                           NULL
 statement_statistics                         NULL
 statement_statistics_persisted               NULL
 statement_statistics_persisted_v22_2         NULL
+store_liveness_support_for                   NULL
+store_liveness_support_from                  NULL
 super_regions                                NULL
 system_jobs                                  NULL
 table_columns                                NULL

@@ -25,8 +25,8 @@ user root
 # Run a cluster_logical_timestamp(), so that the transaction "observes its
 # commit timestamp" and so can't be refreshed, and the do an insert that will
 # cause the txn to be pushed.
-# cluster_logical_timestamp() is not supported in local-read-committed.
-skipif config local-read-committed
+# cluster_logical_timestamp() is not supported in weak-iso-level-configs.
+skipif config weak-iso-level-configs
 statement ok
 SELECT cluster_logical_timestamp(); INSERT INTO test_retry VALUES (1);
 

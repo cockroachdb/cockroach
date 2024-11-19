@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package bootstrap
 
@@ -103,11 +98,11 @@ func TestRoundTripInitialValuesStringRepresentation(t *testing.T) {
 		roundTripInitialValuesStringRepresentation(t, 0 /* tenantID */)
 	})
 	t.Run("tenant", func(t *testing.T) {
-		const dummyTenantID = 54321
+		const dummyTenantID = 109
 		roundTripInitialValuesStringRepresentation(t, dummyTenantID)
 	})
 	t.Run("tenants", func(t *testing.T) {
-		const dummyTenantID1, dummyTenantID2 = 54321, 12345
+		const dummyTenantID1, dummyTenantID2 = 109, 255
 		require.Equal(t,
 			InitialValuesToString(makeMetadataSchema(dummyTenantID1)),
 			InitialValuesToString(makeMetadataSchema(dummyTenantID2)),

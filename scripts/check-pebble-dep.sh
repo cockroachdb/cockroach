@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 
+# Copyright 2024 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 set -euo pipefail
 #set -x
 
-RELEASES="23.1 23.2 24.1 master"
-
+RELEASES="23.1 23.2 24.1 24.2 24.3 master"
 
 for REL in $RELEASES; do
   if [ "$REL" == "master" ]; then

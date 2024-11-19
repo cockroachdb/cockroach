@@ -1,4 +1,10 @@
 #!/bin/sh
+
+# Copyright 2016 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 #
 # Add leaktest.AfterTest(t) to all tests in the given files.
 # In addition to running this script, add a main_test.go file similar

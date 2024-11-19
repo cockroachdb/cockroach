@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -431,17 +426,20 @@ type planComponents struct {
 	mainRowCount int64
 
 	// cascades contains metadata for all cascades.
-	cascades []cascadeMetadata
+	cascades []postQueryMetadata
 
 	// checkPlans contains all the plans for queries that are to be executed after
 	// the main query (for example, foreign key checks).
 	checkPlans []checkPlan
+
+	// triggers contains metadata for all triggers.
+	triggers []postQueryMetadata
 }
 
-type cascadeMetadata struct {
-	exec.Cascade
-	// plan for the cascade. This plan is not populated upfront; it is created
-	// only when it needs to run, after the main query (and previous cascades).
+type postQueryMetadata struct {
+	exec.PostQuery
+	// plan for the cascade/triggers. This plan is not populated upfront; it is
+	// created only when it needs to run, after the main query.
 	plan planMaybePhysical
 }
 
@@ -462,6 +460,9 @@ func (p *planComponents) close(ctx context.Context) {
 	}
 	for i := range p.checkPlans {
 		p.checkPlans[i].plan.Close(ctx)
+	}
+	for i := range p.triggers {
+		p.triggers[i].plan.Close(ctx)
 	}
 }
 
@@ -646,20 +647,23 @@ const (
 	planFlagOptimized
 )
 
-func (pf planFlags) IsSet(flag planFlags) bool {
-	return (pf & flag) != 0
+// IsSet returns true if the receiver has all of the given flags set.
+func (pf planFlags) IsSet(flags planFlags) bool {
+	return (pf & flags) == flags
 }
 
-func (pf *planFlags) Set(flag planFlags) {
-	*pf |= flag
+// Set sets all of the given flags in the receiver.
+func (pf *planFlags) Set(flags planFlags) {
+	*pf |= flags
 }
 
-func (pf *planFlags) Unset(flag planFlags) {
-	*pf &^= flag
+// Unset unsets all of the given flags in the receiver.
+func (pf *planFlags) Unset(flags planFlags) {
+	*pf &^= flags
 }
 
 // IsDistributed returns true if either the fully or the partially distributed
 // flags is set.
 func (pf planFlags) IsDistributed() bool {
-	return pf.IsSet(planFlagFullyDistributed) || pf.IsSet(planFlagPartiallyDistributed)
+	return pf&(planFlagFullyDistributed|planFlagPartiallyDistributed) != 0
 }

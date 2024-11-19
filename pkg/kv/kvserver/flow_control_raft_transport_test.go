@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver_test
 
@@ -681,8 +676,11 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 						toNodeID := parseNodeID(t, d, "node")
 						toStoreID := parseStoreID(t, d, "store")
 						rangeID := parseRangeID(t, d, "range")
-						control.piggybacker.AddMsgAppRespForLeader(
-							toNodeID, toStoreID, rangeID, raftpb.Message{})
+						// TODO(pav-kv): test that these messages are actually sent in
+						// RaftMessageRequestBatch.
+						control.piggybacker.Add(toNodeID, kvflowcontrolpb.PiggybackedAdmittedState{
+							RangeID: rangeID, ToStoreID: toStoreID,
+						})
 						return ""
 
 					case "fallback-piggyback":
@@ -793,6 +791,6 @@ func TestFlowControlRaftTransportV2(t *testing.T) {
 type noopPiggybackedAdmittedResponseScheduler struct{}
 
 func (s noopPiggybackedAdmittedResponseScheduler) ScheduleAdmittedResponseForRangeRACv2(
-	ctx context.Context, msgs []kvflowcontrolpb.AdmittedResponseForRange,
+	context.Context, []kvflowcontrolpb.PiggybackedAdmittedState,
 ) {
 }

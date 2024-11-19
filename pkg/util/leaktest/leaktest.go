@@ -7,13 +7,8 @@
 //
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package leaktest provides tools to detect leaked goroutines in tests.
 // To use it, call "defer leaktest.AfterTest(t)()" at the beginning of each
@@ -64,6 +59,10 @@ func interestingGoroutines() map[int64]string {
 			strings.Contains(stack, "github.com/jackc/pgconn/internal/ctxwatch.(*ContextWatcher).Watch.func1") ||
 			// Ignore pq goroutine that watches for context cancellation.
 			strings.Contains(stack, "github.com/lib/pq.(*conn).watchCancel") ||
+			// Ignore TLS handshake related goroutine.
+			// TODO(pritesh-lahoti): Revisit this once Go is updated to 1.23, as this seems to have been
+			// fixed: https://github.com/golang/go/pull/62227.
+			strings.Contains(stack, "net/http.(*persistConn).addTLS") ||
 			// Seems to be gccgo specific.
 			(runtime.Compiler == "gccgo" && strings.Contains(stack, "testing.T.Parallel")) ||
 			// Ignore intentionally long-running logging goroutines that live for the

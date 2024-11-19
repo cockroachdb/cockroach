@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package physical
 
@@ -45,15 +42,16 @@ const (
 )
 
 var alterReplicationCutoverHeader = colinfo.ResultColumns{
-	{Name: "cutover_time", Typ: types.Decimal},
+	{Name: "failover_time", Typ: types.Decimal},
 }
 
 // ResolvedTenantReplicationOptions represents options from an
 // evaluated CREATE/ALTER VIRTUAL CLUSTER FROM REPLICATION command.
 type resolvedTenantReplicationOptions struct {
-	resumeTimestamp  hlc.Timestamp
-	retention        *int32
-	expirationWindow *time.Duration
+	resumeTimestamp    hlc.Timestamp
+	retention          *int32
+	expirationWindow   *time.Duration
+	enableReaderTenant bool
 }
 
 func evalTenantReplicationOptions(
@@ -89,6 +87,13 @@ func evalTenantReplicationOptions(
 		expirationWindow := time.Duration(dur.Nanos())
 		r.expirationWindow = &expirationWindow
 	}
+	if options.EnableReaderTenant != nil {
+		enabled, err := eval.Bool(ctx, options.EnableReaderTenant)
+		if err != nil {
+			return nil, err
+		}
+		r.enableReaderTenant = enabled
+	}
 	return r, nil
 }
 
@@ -108,6 +113,13 @@ func (r *resolvedTenantReplicationOptions) GetExpirationWindow() (time.Duration,
 
 func (r *resolvedTenantReplicationOptions) DestinationOptionsSet() bool {
 	return r != nil && (r.retention != nil || r.resumeTimestamp.IsSet())
+}
+
+func (r *resolvedTenantReplicationOptions) ReaderTenantEnabled() bool {
+	if r == nil || !r.enableReaderTenant {
+		return false
+	}
+	return true
 }
 
 func alterReplicationJobTypeCheck(
@@ -224,6 +236,7 @@ func alterReplicationJobHook(
 				srcTenant,
 				retentionTTLSeconds,
 				alterTenantStmt,
+				options,
 			)
 		}
 		jobRegistry := p.ExecCfg().JobRegistry
@@ -306,6 +319,7 @@ func alterTenantRestartReplication(
 	srcTenant string,
 	retentionTTLSeconds int32,
 	alterTenantStmt *tree.AlterTenantReplication,
+	options *resolvedTenantReplicationOptions,
 ) error {
 	dstTenantID, err := roachpb.MakeTenantID(tenInfo.ID)
 	if err != nil {
@@ -384,6 +398,11 @@ func alterTenantRestartReplication(
 		revertTo = tenInfo.PreviousSourceTenant.CutoverAsOf
 	}
 
+	readerID, err := createReaderTenant(ctx, p, tenInfo.Name, dstTenantID, options)
+	if err != nil {
+		return err
+	}
+
 	return errors.Wrap(createReplicationJob(
 		ctx,
 		p,
@@ -401,6 +420,7 @@ func alterTenantRestartReplication(
 			ReplicationSourceAddress:    alterTenantStmt.ReplicationSourceAddress,
 			Options:                     alterTenantStmt.Options,
 		},
+		readerID,
 	), "creating replication job")
 }
 
@@ -535,13 +555,13 @@ func alterTenantJobCutover(
 	}
 	progress := job.Progress()
 
+	replicatedTimeAtCutover := replicationutils.ReplicatedTimeFromProgress(&progress)
+	if replicatedTimeAtCutover.IsEmpty() {
+		replicatedTimeAtCutover = details.ReplicationStartTime
+	}
+
 	if alterTenantStmt.Cutover.Latest {
-		replicatedTime := replicationutils.ReplicatedTimeFromProgress(&progress)
-		if replicatedTime.IsEmpty() {
-			cutoverTime = details.ReplicationStartTime
-		} else {
-			cutoverTime = replicatedTime
-		}
+		cutoverTime = replicatedTimeAtCutover
 	}
 
 	// TODO(ssd): We could use the replication manager here, but
@@ -565,7 +585,7 @@ func alterTenantJobCutover(
 				cutoverTime, record.Timestamp)
 		}
 	}
-	if err := applyCutoverTime(ctx, job, txn, cutoverTime); err != nil {
+	if err := applyCutoverTime(ctx, job, txn, cutoverTime, replicatedTimeAtCutover); err != nil {
 		return hlc.Timestamp{}, err
 	}
 
@@ -575,21 +595,26 @@ func alterTenantJobCutover(
 // applyCutoverTime modifies the consumer job record with a cutover time and
 // unpauses the job if necessary.
 func applyCutoverTime(
-	ctx context.Context, job *jobs.Job, txn isql.Txn, cutoverTimestamp hlc.Timestamp,
+	ctx context.Context,
+	job *jobs.Job,
+	txn isql.Txn,
+	cutoverTimestamp hlc.Timestamp,
+	replicatedTimeAtCutover hlc.Timestamp,
 ) error {
 	log.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
 	return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		progress := md.Progress.GetStreamIngest()
 		details := md.Payload.GetStreamIngestion()
-		if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
+		if progress.ReplicationStatus == jobspb.ReplicationFailingOver {
 			return errors.Newf("job %d already started cutting over to timestamp %s",
 				job.ID(), progress.CutoverTime)
 		}
 
-		progress.ReplicationStatus = jobspb.ReplicationPendingCutover
+		progress.ReplicationStatus = jobspb.ReplicationPendingFailover
 		// Update the sentinel being polled by the stream ingestion job to
 		// check if a complete has been signaled.
 		progress.CutoverTime = cutoverTimestamp
+		progress.ReplicatedTimeAtCutover = replicatedTimeAtCutover
 		progress.RemainingCutoverSpans = roachpb.Spans{details.Span}
 		ju.UpdateProgress(md.Progress)
 		return ju.Unpaused(ctx, md)

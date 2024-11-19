@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import moment from "moment-timezone";
 import { channel } from "redux-saga";
@@ -87,23 +82,25 @@ describe("Query Management Saga", function () {
           });
       });
       it("correctly records error (and does not retry).", function () {
-        return expectSaga(queryManagerSaga)
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore
-          .withReducer(queryManagerReducer)
-          .dispatch(refresh(testQueryError))
-          .silentRun()
-          .then(runResult => {
-            expect(typeof runResult.storeState[testQueryError.id]).toBe(
-              "object",
-            );
-            expect(runResult.storeState[testQueryError.id].lastError).toEqual(
-              sentinelError,
-            );
-            expect(runResult.storeState[testQueryError.id].isRunning).toBe(
-              false,
-            );
-          });
+        return (
+          expectSaga(queryManagerSaga)
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            .withReducer(queryManagerReducer)
+            .dispatch(refresh(testQueryError))
+            .silentRun()
+            .then(runResult => {
+              expect(typeof runResult.storeState[testQueryError.id]).toBe(
+                "object",
+              );
+              expect(runResult.storeState[testQueryError.id].lastError).toEqual(
+                sentinelError,
+              );
+              expect(runResult.storeState[testQueryError.id].isRunning).toBe(
+                false,
+              );
+            })
+        );
       });
       it("immediately runs a saga if refresh is called even if AUTO_REFRESH wait is active", function () {
         return expectSaga(queryManagerSaga)
@@ -182,7 +179,6 @@ describe("Query Management Saga", function () {
           },
         };
         return expectSaga(queryManagerSaga)
-          // @ts-ignore
           .withReducer(queryManagerReducer)
           .dispatch(refresh(neverResolveQuery))
           .dispatch(refresh(testQueryCounter))

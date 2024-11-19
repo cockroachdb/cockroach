@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant-default-configs
+# LogicTest: !enterprise-configs
 
 query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id

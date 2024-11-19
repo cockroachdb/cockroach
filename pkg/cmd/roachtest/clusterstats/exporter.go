@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package clusterstats
 
@@ -14,14 +9,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
 
 // ClusterStat represents a filtered query by the given LabelName. For example,
@@ -90,7 +91,7 @@ type StatSummary struct {
 	Tag    string
 }
 
-// ClusterStatsRun holds the summary value for a test run as well as per
+// ClusterStatRun holds the summary value for a test run as well as per
 // stat information collected during the run. This struct is mirrored in
 // cockroachdb/roachperf for deserialization.
 type ClusterStatRun struct {
@@ -98,16 +99,86 @@ type ClusterStatRun struct {
 	Stats map[string]StatSummary `json:"stats"`
 }
 
-// serializeReport serializes the passed in statistics into a roachperf
-// parseable performance artifact format.
+// statsWriter writes the stats buffer to the file. This is used in unit test
+// to mock writing to the file in the cluster
+var statsWriter = writeStatsBufferToFile
+
+// SerializeOutRun serializes the passed in statistics into a roachperf
+// parseable performance artifact format or openmetrics format which is decided by isOpenMetrics parameter
 func (r *ClusterStatRun) SerializeOutRun(
+	ctx context.Context, t test.Test, c cluster.Cluster, isOpenMetrics bool,
+) error {
+	if isOpenMetrics {
+		return r.serializeOpenmetricsOutRun(ctx, t, c)
+	}
+	return r.serializeStandardOutRun(ctx, t, c)
+
+}
+
+func (r *ClusterStatRun) serializeStandardOutRun(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) error {
 	report, err := serializeReport(*r)
 	if err != nil {
 		return errors.Wrap(err, "failed to serialize perf artifacts")
 	}
-	return writeOutRoachPerf(ctx, t, c, report)
+	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+	return statsWriter(ctx, t, c, report, dest)
+}
+
+func (r *ClusterStatRun) serializeOpenmetricsOutRun(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) error {
+
+	labelString := GetOpenmetricsLabelString(t, c, nil)
+	report, err := serializeOpenmetricsReport(*r, &labelString)
+	if err != nil {
+		return errors.Wrap(err, "failed to serialize perf artifacts")
+	}
+	dest := filepath.Join(t.PerfArtifactsDir(), "openmetrics.om")
+	return statsWriter(ctx, t, c, report, dest)
+}
+
+func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.Buffer, error) {
+	var buffer bytes.Buffer
+
+	// Emit summary metrics from Total
+	for key, value := range r.Total {
+		buffer.WriteString(fmt.Sprintf("# TYPE %s gauge\n", util.SanitizeMetricName(key)))
+		buffer.WriteString(fmt.Sprintf("%s{%s} %f %d\n", util.SanitizeKey(key), *labelString, value, timeutil.Now().UTC().Unix()))
+	}
+
+	// Emit histogram metrics from Stats
+	for _, stat := range r.Stats {
+		buffer.WriteString(fmt.Sprintf("# TYPE %s gauge\n", util.SanitizeMetricName(stat.Tag)))
+		for i, timestamp := range stat.Time {
+			t := timeutil.Unix(0, timestamp)
+			buffer.WriteString(
+				fmt.Sprintf("%s{%s,agg_tag=\"%s\"} %f %d\n",
+					util.SanitizeValue(stat.Tag),
+					*labelString,
+					util.SanitizeValue(stat.AggTag),
+					stat.Value[i],
+					t.UTC().Unix()))
+		}
+		for tag, values := range stat.Tagged {
+			for i, timestamp := range stat.Time {
+				t := timeutil.Unix(0, timestamp)
+				buffer.WriteString(
+					fmt.Sprintf("%s{%s,tag=\"%s\",agg_tag=\"%s\"} %f %d\n",
+						util.SanitizeValue(stat.Tag),
+						*labelString,
+						tag,
+						util.SanitizeValue(stat.AggTag),
+						values[i],
+						t.UTC().Unix()))
+			}
+		}
+	}
+
+	buffer.WriteString("# EOF\n")
+
+	return &buffer, nil
 }
 
 // createReport returns a ClusterStatRun struct that encompases the results of
@@ -140,13 +211,9 @@ func (cs *clusterStatCollector) Export(
 	to time.Time,
 	queries []AggQuery,
 	benchmarkFns ...func(summaries map[string]StatSummary) (string, float64),
-) (*ClusterStatRun, error) {
+) (testRun *ClusterStatRun, err error) {
 	l := t.L()
-	summaries, err := cs.collectSummaries(ctx, l, Interval{From: from, To: to}, queries)
-	if err != nil {
-		l.ErrorfCtx(ctx, "unable to collect cluster stat summaries: %+v", err)
-		return nil, err
-	}
+	summaries := cs.collectSummaries(ctx, l, Interval{From: from, To: to}, queries)
 
 	summaryValues := make(map[string]float64)
 	for _, scalarFn := range benchmarkFns {
@@ -154,20 +221,17 @@ func (cs *clusterStatCollector) Export(
 		summaryValues[t] = result
 	}
 
-	testRun := createReport(summaries, summaryValues)
+	testRun = createReport(summaries, summaryValues)
 	if !dryRun {
-		err = testRun.SerializeOutRun(ctx, t, c)
+		err = testRun.SerializeOutRun(ctx, t, c, t.ExportOpenmetrics())
 	}
 	return testRun, err
 }
 
-// writeOutRoachPerf is a utility function that writes out a buffer to the
-// performance artifacts directory on the first node in a cluster.
-func writeOutRoachPerf(
-	ctx context.Context, t test.Test, c cluster.Cluster, buffer *bytes.Buffer,
+func writeStatsBufferToFile(
+	ctx context.Context, t test.Test, c cluster.Cluster, buffer *bytes.Buffer, dest string,
 ) error {
 	l := t.L()
-	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
 	if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
 		l.ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
 		return err
@@ -196,7 +260,7 @@ func serializeReport(testRun ClusterStatRun) (*bytes.Buffer, error) {
 // combines the results.
 func (cs *clusterStatCollector) collectSummaries(
 	ctx context.Context, l *logger.Logger, interval Interval, statQueries []AggQuery,
-) (map[string]StatSummary, error) {
+) map[string]StatSummary {
 	summaries := make(map[string]StatSummary)
 	for _, clusterStat := range statQueries {
 		clusterStat.Interval = interval
@@ -208,7 +272,7 @@ func (cs *clusterStatCollector) collectSummaries(
 			summaries[summary.Tag] = summary
 		}
 	}
-	return summaries, nil
+	return summaries
 }
 
 // getStatSummary collects the individual results and an aggregate for an
@@ -333,4 +397,51 @@ func (cs *clusterStatCollector) getStatSummary(
 		}
 	}
 	return ret, nil
+}
+
+// GetOpenmetricsLabelString creates a string that follows the openmetrics labels format
+func GetOpenmetricsLabelString(t test.Test, c cluster.Cluster, labels map[string]string) string {
+	return util.LabelMapToString(GetOpenmetricsLabelMap(t, c, labels))
+}
+
+// GetOpenmetricsLabelMap creates a map of label keys and values
+// It takes roachtest parameters and create relevant labels.
+// Test name is split and each split is added as a subtype
+func GetOpenmetricsLabelMap(
+	t test.Test, c cluster.Cluster, labels map[string]string,
+) map[string]string {
+	defaultMap := map[string]string{
+		"cloud": c.Cloud().String(),
+		"owner": string(t.Spec().(*registry.TestSpec).Owner),
+		"suite": t.Spec().(*registry.TestSpec).Suites.String(),
+	}
+
+	// Since the roachtest have / delimiter for subtests
+	// Partitioning the name by '/'
+	testNameArray := strings.Split(t.Name(), "/")
+	defaultMap["test"] = testNameArray[0]
+
+	subTestIterator := 1
+	for i := 1; i < len(testNameArray); i++ {
+		testSubName := testNameArray[i]
+
+		// If the partition has '=', add the key as a label itself
+		// and the value as its value
+		if strings.Contains(testSubName, "=") {
+			testLabels := strings.Split(testSubName, "=")
+			defaultMap[testLabels[0]] = testLabels[1]
+		} else {
+
+			// Add the subtest label with the iterator since there can be nested subtests
+			testSubType := fmt.Sprintf("subtest-%d", subTestIterator)
+			subTestIterator++
+			defaultMap[testSubType] = testSubName
+		}
+	}
+
+	// If the tests has passed some custom labels, copy them to the map created above
+	if labels != nil {
+		maps.Copy(defaultMap, labels)
+	}
+	return defaultMap
 }

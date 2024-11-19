@@ -1,18 +1,14 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/user"
@@ -258,7 +254,9 @@ func testsToRun(
 		// the test categorization must be complete in 30 seconds
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		updateSpecForSelectiveTests(ctx, specs)
+		updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
+			fmt.Fprintf(os.Stdout, format, args...)
+		})
 	}
 
 	var notSkipped []registry.TestSpec
@@ -300,32 +298,79 @@ func testsToRun(
 
 // updateSpecForSelectiveTests is responsible for updating the test spec skip and skip details
 // based on the test categorization criteria.
-func updateSpecForSelectiveTests(ctx context.Context, specs []registry.TestSpec) {
+// The following steps are performed in this function:
+//  1. Queries Snowflake for the test run data.
+//  2. The snowflake data sets "selected=true" based on the following criteria:
+//     a. the test that has failed at least once in last 30 days
+//     b. the test is newer than 20 days
+//     c. the test has not been run for more than 7 days
+//  2. The rest of the tests returned by snowflake are the successful tests marked as "selected=false".
+//  3. Now, an intersection of the tests that are selected by the build (specs) and tests returned by snowflake
+//     as successful is taken. This is done to select tests on the next criteria of selecting the 35% of
+//     the successful tests.
+//  4. The tests that meet the 35% criteria, are marked as "selected=true"
+//  5. All tests that are marked "selected=true" are considered for the test run.
+func updateSpecForSelectiveTests(
+	ctx context.Context, specs []registry.TestSpec, logFunc func(format string, args ...interface{}),
+) {
 	selectedTestsCount := 0
-	// run and select 35% of successful tests which gives a window of 3 days for all tests to run
-	selectedTests, err := testselector.CategoriseTests(ctx,
-		testselector.NewDefaultSelectTestsReq(35, roachtestflags.Cloud, roachtestflags.Suite))
+	allTests, err := testselector.CategoriseTests(ctx,
+		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
 	if err != nil {
-		fmt.Printf("running all tests! error selecting tests: %v\n", err)
+		logFunc("running all tests! error selecting tests: %v\n", err)
 		return
 	}
-	tdMap := make(map[string]*testselector.TestDetails)
-	for _, td := range selectedTests {
-		tdMap[td.Name] = td
+
+	// successfulTests are the tests considered by snowflake to not run, but, part of the testSpecs.
+	// So, it is an intersection of all tests that are part of the run and all tests that are returned
+	// by snowflake as successful.
+	// This is why we need the intersection:
+	// - testSpec contains all the tests that are currently considered as a part of the current run.
+	// - The list of tests returned by selector can contain tests may not be part of the test spec. This can
+	//   be because of tests getting decommissioned.
+	// Now, we want to take the tests common to both. These are the tests from which we need to select
+	// "successfulTestsSelectPct" percent tests to run.
+	successfulTests := make([]*testselector.TestDetails, 0)
+
+	// allTestsMap is maintained to check for the test details while skipping a test
+	allTestsMap := make(map[string]*testselector.TestDetails)
+	// all tests from specs are added as nil to the map
+	// this is used in identifying the tests that are part of the build
+	for _, test := range specs {
+		allTestsMap[test.Name] = nil
 	}
+	for i := 0; i < len(allTests); i++ {
+		td := allTests[i]
+		if _, ok := allTestsMap[td.Name]; ok && !td.Selected {
+			// adding only the unselected tests that are part of the specs
+			// These are tests that have been running successfully
+			successfulTests = append(successfulTests, td)
+		}
+		// populate the test details for the tests returned from snowflake
+		allTestsMap[td.Name] = td
+	}
+	// numberOfTestsToSelect is the number of tests to be selected from the successfulTests based on percentage selection
+	numberOfTestsToSelect := int(math.Ceil(float64(len(successfulTests)) * roachtestflags.SuccessfulTestsSelectPct))
+	for i := 0; i < numberOfTestsToSelect; i++ {
+		successfulTests[i].Selected = true
+	}
+	logFunc("%d selected out of %d successful tests.\n", numberOfTestsToSelect, len(successfulTests))
 	for i := range specs {
-		if testShouldBeSkipped(tdMap, specs[i], roachtestflags.Suite) {
-			specs[i].Skip = "test selector"
-			specs[i].SkipDetails = "test skipped because it is stable and selective-tests is set."
+		if testShouldBeSkipped(allTestsMap, specs[i], roachtestflags.Suite) {
+			if specs[i].Skip == "" {
+				// updating only if the test not already skipped
+				specs[i].Skip = "test selector"
+				specs[i].SkipDetails = "test skipped because it is stable and selective-tests is set."
+			}
 		} else {
 			selectedTestsCount++
 		}
-		if td, ok := tdMap[specs[i].Name]; ok {
+		if td, ok := allTestsMap[specs[i].Name]; ok && td != nil {
 			// populate the stats as obtained from the test selector
 			specs[i].SetStats(td.AvgDurationInMillis, td.LastFailureIsPreempt)
 		}
 	}
-	fmt.Printf("%d out of %d tests selected for the run!\n", selectedTestsCount, len(specs))
+	logFunc("%d out of %d tests selected for the run!\n", selectedTestsCount, len(specs))
 }
 
 // testShouldBeSkipped decides whether a test should be skipped based on test details and suite
@@ -341,8 +386,8 @@ func testShouldBeSkipped(
 		return false
 	}
 
-	td, ok := testNamesToRun[test.Name]
-	return ok && test.Skip == "" && !td.Selected
+	td := testNamesToRun[test.Name]
+	return td != nil && !td.Selected
 }
 
 func opsToRun(r testRegistryImpl, filter string) ([]registry.OperationSpec, error) {

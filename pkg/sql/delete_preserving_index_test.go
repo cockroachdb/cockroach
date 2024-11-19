@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql_test
 
@@ -248,13 +243,14 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 func TestDeletePreservingIndexEncodingUsesNormalDeletesInDeleteOnly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 
 	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
 
 	setupSQL := `
 CREATE DATABASE t;
@@ -312,13 +308,15 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (b);
 func TestDeletePreservingIndexEncodingWithEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 
 	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
+
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
+
 	setupSQL := `
 CREATE DATABASE t;
 CREATE TABLE t.test (
@@ -515,8 +513,6 @@ func TestMergeProcessor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	defer lease.TestingDisableTableLeases()()
-
 	params, _ := createTestServerParams()
 
 	type TestCase struct {
@@ -615,6 +611,7 @@ func TestMergeProcessor(t *testing.T) {
 	run := func(t *testing.T, test TestCase) {
 		server, tdb, kvDB := serverutils.StartServer(t, params)
 		defer server.Stopper().Stop(context.Background())
+		defer lease.TestingDisableTableLeases()()
 
 		// Run the initial setupSQL.
 		if _, err := tdb.Exec(test.setupSQL); err != nil {

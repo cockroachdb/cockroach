@@ -1,0 +1,118 @@
+#!/bin/bash
+
+# Sets up datadog for the workload cluster. This includes the port configurations fo all the known workloads.
+# NOTE - This uses WORKLOAD_CLUSTER environment variable, if not set the script fails
+
+if [ -z "${WORKLOAD_CLUSTER}" ]; then
+  echo "environment WORKLOAD_CLUSTER is not set"
+  exit 1
+fi
+
+dd_api_key="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
+
+if [ -z "${dd_api_key}" ]; then
+  echo "Missing Datadog API key!"
+  exit 1
+fi
+
+dd_site="us5.datadoghq.com"
+
+roachprod ssh $WORKLOAD_CLUSTER -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
+---
+receivers:
+  prometheus/workload:
+    config:
+      global:
+        scrape_interval: 30s
+      scrape_configs:
+      - job_name: workload1
+        honor_timestamps: false
+        metrics_path: /metrics
+        tls_config:
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        static_configs:
+        - targets:
+          - "localhost:2112"
+        relabel_configs:
+        - action: replace
+          replacement: 1
+          target_label: workload
+      - job_name: workload2
+        honor_timestamps: false
+        metrics_path: /metrics
+        tls_config:
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        static_configs:
+        - targets:
+          - "localhost:2113"
+        relabel_configs:
+        - action: replace
+          replacement: 2
+          target_label: workload
+      - job_name: workload3
+        honor_timestamps: false
+        metrics_path: /metrics
+        tls_config:
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        static_configs:
+        - targets:
+          - "localhost:2114"
+        relabel_configs:
+        - action: replace
+          replacement: 3
+          target_label: workload
+
+processors:
+  filter/workload:
+    metrics:
+      include:
+        match_type: regexp
+        expressions:
+        - workload_tpcc.*
+        - workload_kv_.*
+        - workload_tpch.*
+
+# The */datadog elements are defined in the primary configuration file.
+service:
+  pipelines:
+    metrics:
+      receivers:
+      - prometheus/workload
+      processors:
+      - memory_limiter/datadog
+      - filter/workload
+      - batch/datadog
+      - attributes/datadog
+      exporters:
+      - datadog
+EOF"
+
+roachprod ssh $WORKLOAD_CLUSTER -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
+export DD_SITE=${dd_site}
+export DD_API_KEY=${dd_api_key}
+export DD_TAGS=env:development,cluster${CLUSTER%:*},team:drt,service:drt-cockroachdb
+EOF"
+
+roachprod opentelemetry-start $WORKLOAD_CLUSTER \
+  --datadog-api-key "${dd_api_key}" \
+  --datadog-tags 'service:drt-cockroachdb,team:drt'
+
+roachprod fluent-bit-start $WORKLOAD_CLUSTER \
+  --datadog-api-key "${dd_api_key}" \
+  --datadog-service drt-cockroachdb \
+  --datadog-tags 'service:drt-cockroachdb,team:drt'
+
+echo
+echo "Updated $WORKLOAD_CLUSTER configuration to send telemetry data to Datadog."
+echo
+echo "If this was the first time this script was run against $WORKLOAD_CLUSTER then"
+echo "CockroachDB must be restarted to reload its logging configuration."
+echo
+
+exit 0

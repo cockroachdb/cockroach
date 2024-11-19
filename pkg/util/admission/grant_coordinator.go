@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package admission
 
@@ -60,16 +55,17 @@ type StoreGrantCoordinators struct {
 	l0TokensProduced            *metric.Counter
 
 	// These metrics are shared by WorkQueues across stores.
-	workQueueMetrics [admissionpb.NumWorkClasses]*WorkQueueMetrics
+	workQueueMetrics     [admissionpb.NumWorkClasses]*WorkQueueMetrics
+	snapshotQueueMetrics *SnapshotMetrics
 
 	gcMap syncutil.Map[roachpb.StoreID, GrantCoordinator]
 	// numStores is used to track the number of stores which have been added
 	// to the gcMap. This is used because the IntMap doesn't expose a size
 	// api.
-	numStores             int
-	pebbleMetricsProvider PebbleMetricsProvider
-	onLogEntryAdmitted    OnLogEntryAdmitted
-	closeCh               chan struct{}
+	numStores                      int
+	setPebbleMetricsProviderCalled bool
+	onLogEntryAdmitted             OnLogEntryAdmitted
+	closeCh                        chan struct{}
 
 	disableTickerForTesting bool // TODO(irfansharif): Fold into the testing knobs struct below.
 	knobs                   *TestingKnobs
@@ -80,12 +76,13 @@ type StoreGrantCoordinators struct {
 func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	startupCtx context.Context, pmp PebbleMetricsProvider, iotc IOThresholdConsumer,
 ) {
-	if sgc.pebbleMetricsProvider != nil {
+	if sgc.setPebbleMetricsProviderCalled {
 		panic(errors.AssertionFailedf("SetPebbleMetricsProvider called more than once"))
 	}
-	sgc.pebbleMetricsProvider = pmp
+	sgc.setPebbleMetricsProviderCalled = true
+	pebbleMetricsProvider := pmp
 	sgc.closeCh = make(chan struct{})
-	metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
+	metrics := pebbleMetricsProvider.GetPebbleMetrics()
 	for _, m := range metrics {
 		gc := sgc.initGrantCoordinator(m.StoreID)
 		// Defensive call to LoadAndStore even though Store ought to be sufficient
@@ -115,7 +112,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 			select {
 			default:
 				if remainingTicks == 0 {
-					metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
+					metrics := pebbleMetricsProvider.GetPebbleMetrics()
 					if len(metrics) != sgc.numStores {
 						log.Warningf(ctx,
 							"expected %d store metrics and found %d metrics", sgc.numStores, len(metrics))
@@ -146,6 +143,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 				})
 			case <-sgc.closeCh:
 				done = true
+				pebbleMetricsProvider.Close()
 			}
 		}
 		ticker.stop()
@@ -173,27 +171,31 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 	}
 	kvg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 	kvg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass] = kvg.coordMu.availableIOTokens[admissionpb.RegularWorkClass]
-	kvg.coordMu.elasticDiskBWTokensAvailable = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
+	kvg.coordMu.diskTokensAvailable.writeByteTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 
 	opts := makeWorkQueueOptions(KVWork)
 	// This is IO work, so override the usesTokens value.
 	opts.usesTokens = true
 	// TODO(sumeer): add per-store WorkQueue state for debug.zip and db console.
-	granters := [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted{
+	storeGranters := [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted{
 		&kvStoreTokenChildGranter{
-			workClass: admissionpb.RegularWorkClass,
-			parent:    kvg,
+			workType: admissionpb.RegularStoreWorkType,
+			parent:   kvg,
 		},
 		&kvStoreTokenChildGranter{
-			workClass: admissionpb.ElasticWorkClass,
-			parent:    kvg,
+			workType: admissionpb.ElasticStoreWorkType,
+			parent:   kvg,
 		},
+	}
+	snapshotGranter := &kvStoreTokenChildGranter{
+		workType: admissionpb.SnapshotIngestStoreWorkType,
+		parent:   kvg,
 	}
 
 	storeReq := sgc.makeStoreRequesterFunc(
 		sgc.ambientCtx,
 		storeID,
-		granters,
+		storeGranters,
 		sgc.settings,
 		sgc.workQueueMetrics,
 		opts,
@@ -206,13 +208,14 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 	requesters := storeReq.getRequesters()
 	kvg.regularRequester = requesters[admissionpb.RegularWorkClass]
 	kvg.elasticRequester = requesters[admissionpb.ElasticWorkClass]
+	kvg.snapshotRequester = makeSnapshotQueue(snapshotGranter, sgc.snapshotQueueMetrics)
 	coord.granters[KVWork] = kvg
 	coord.ioLoadListener = &ioLoadListener{
 		storeID:               storeID,
 		settings:              sgc.settings,
 		kvRequester:           storeReq,
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
-		diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
+		diskBandwidthLimiter:  newDiskBandwidthLimiter(),
 		kvGranter:             kvg,
 		l0CompactedBytes:      sgc.l0CompactedBytes,
 		l0TokensProduced:      sgc.l0TokensProduced,
@@ -225,6 +228,13 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 func (sgc *StoreGrantCoordinators) TryGetQueueForStore(storeID roachpb.StoreID) *StoreWorkQueue {
 	if granter, ok := sgc.gcMap.Load(storeID); ok {
 		return granter.queues[KVWork].(*StoreWorkQueue)
+	}
+	return nil
+}
+
+func (sgc *StoreGrantCoordinators) TryGetSnapshotQueueForStore(storeID roachpb.StoreID) requester {
+	if granter, ok := sgc.gcMap.Load(storeID); ok {
+		return granter.granters[KVWork].(*kvStoreTokenGranter).snapshotRequester
 	}
 	return nil
 }
@@ -457,10 +467,12 @@ func makeStoresGrantCoordinators(
 			admissionpb.NormalPri, admissionpb.LockingNormalPri)
 	elasticStoreWorkQueueMetrics :=
 		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", admissionpb.ElasticWorkClass), registry,
-			admissionpb.TTLLowPri, admissionpb.BulkNormalPri)
+			admissionpb.BulkLowPri, admissionpb.BulkNormalPri)
 	storeWorkQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
 		regularStoreWorkQueueMetrics, elasticStoreWorkQueueMetrics,
 	}
+	snapshotQueueMetrics := makeSnapshotQueueMetrics(registry)
+
 	makeStoreRequester := makeStoreWorkQueue
 	if opts.makeStoreRequesterFunc != nil {
 		makeStoreRequester = opts.makeStoreRequesterFunc
@@ -477,6 +489,7 @@ func makeStoresGrantCoordinators(
 		l0CompactedBytes:            metrics.L0CompactedBytes,
 		l0TokensProduced:            metrics.L0TokensProduced,
 		workQueueMetrics:            storeWorkQueueMetrics,
+		snapshotQueueMetrics:        snapshotQueueMetrics,
 		onLogEntryAdmitted:          onLogEntryAdmitted,
 		knobs:                       knobs,
 	}
@@ -985,9 +998,9 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 			case *slotGranter:
 				s.Printf("%s%s: used: %d, total: %d", curSep, kind, g.usedSlots, g.totalSlots)
 			case *kvStoreTokenGranter:
-				s.Printf(" io-avail: %d(%d), elastic-disk-bw-tokens-avail: %d", g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
+				s.Printf(" io-avail: %d(%d), disk-write-tokens-avail: %d", g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
 					g.coordMu.availableIOTokens[admissionpb.ElasticWorkClass],
-					g.coordMu.elasticDiskBWTokensAvailable)
+					g.coordMu.diskTokensAvailable.writeByteTokens)
 			}
 		case SQLStatementLeafStartWork, SQLStatementRootStartWork:
 			if coord.granters[i] != nil {

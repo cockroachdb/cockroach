@@ -36,6 +36,18 @@ DROP VIEW defaultdb.v1
   {columnId: 4.294967294e+09, name: tableoid, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: OidFamily, oid: 26}, typeName: OID}
+- [[Column:{DescID: 105, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, isHidden: true, isSystemColumn: true, tableId: 105}
+- [[ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, name: crdb_internal_origin_id, tableId: 105}
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: IntFamily, oid: 23, width: 32}, typeName: INT4}
+- [[Column:{DescID: 105, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, isHidden: true, isSystemColumn: true, tableId: 105}
+- [[ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, name: crdb_internal_origin_timestamp, tableId: 105}
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}
 
 setup
 CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1);
@@ -78,6 +90,18 @@ DROP VIEW defaultdb.v1 CASCADE
   {columnId: 4.294967294e+09, name: tableoid, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: OidFamily, oid: 26}, typeName: OID}
+- [[Column:{DescID: 105, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, isHidden: true, isSystemColumn: true, tableId: 105}
+- [[ColumnName:{DescID: 105, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, name: crdb_internal_origin_id, tableId: 105}
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: IntFamily, oid: 23, width: 32}, typeName: INT4}
+- [[Column:{DescID: 105, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, isHidden: true, isSystemColumn: true, tableId: 105}
+- [[ColumnName:{DescID: 105, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, name: crdb_internal_origin_timestamp, tableId: 105}
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}
 - [[Namespace:{DescID: 106, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 106, name: v2, schemaId: 101}
 - [[Owner:{DescID: 106}, ABSENT], PUBLIC]
@@ -114,6 +138,18 @@ DROP VIEW defaultdb.v1 CASCADE
   {columnId: 4.294967294e+09, name: tableoid, tableId: 106}
 - [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 106, type: {family: OidFamily, oid: 26}, typeName: OID}
+- [[Column:{DescID: 106, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, isHidden: true, isSystemColumn: true, tableId: 106}
+- [[ColumnName:{DescID: 106, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, name: crdb_internal_origin_id, tableId: 106}
+- [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 106, type: {family: IntFamily, oid: 23, width: 32}, typeName: INT4}
+- [[Column:{DescID: 106, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, isHidden: true, isSystemColumn: true, tableId: 106}
+- [[ColumnName:{DescID: 106, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, name: crdb_internal_origin_timestamp, tableId: 106}
+- [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 106, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}
 - [[Namespace:{DescID: 107, Name: v3, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 107, name: v3, schemaId: 101}
 - [[Owner:{DescID: 107}, ABSENT], PUBLIC]
@@ -150,6 +186,18 @@ DROP VIEW defaultdb.v1 CASCADE
   {columnId: 4.294967294e+09, name: tableoid, tableId: 107}
 - [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 107, type: {family: OidFamily, oid: 26}, typeName: OID}
+- [[Column:{DescID: 107, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, isHidden: true, isSystemColumn: true, tableId: 107}
+- [[ColumnName:{DescID: 107, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, name: crdb_internal_origin_id, tableId: 107}
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 107, type: {family: IntFamily, oid: 23, width: 32}, typeName: INT4}
+- [[Column:{DescID: 107, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, isHidden: true, isSystemColumn: true, tableId: 107}
+- [[ColumnName:{DescID: 107, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, name: crdb_internal_origin_timestamp, tableId: 107}
+- [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 107, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}
 - [[Namespace:{DescID: 108, Name: v4, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 108, name: v4, schemaId: 101}
 - [[Owner:{DescID: 108}, ABSENT], PUBLIC]
@@ -186,6 +234,18 @@ DROP VIEW defaultdb.v1 CASCADE
   {columnId: 4.294967294e+09, name: tableoid, tableId: 108}
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: OidFamily, oid: 26}, typeName: OID}
+- [[Column:{DescID: 108, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, isHidden: true, isSystemColumn: true, tableId: 108}
+- [[ColumnName:{DescID: 108, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, name: crdb_internal_origin_id, tableId: 108}
+- [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: IntFamily, oid: 23, width: 32}, typeName: INT4}
+- [[Column:{DescID: 108, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, isHidden: true, isSystemColumn: true, tableId: 108}
+- [[ColumnName:{DescID: 108, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, name: crdb_internal_origin_timestamp, tableId: 108}
+- [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}
 - [[Namespace:{DescID: 111, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 111, name: v5, schemaId: 101}
 - [[Owner:{DescID: 111}, ABSENT], PUBLIC]
@@ -228,3 +288,15 @@ DROP VIEW defaultdb.v1 CASCADE
   {columnId: 4.294967294e+09, name: tableoid, tableId: 111}
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294, TypeName: OID}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: OidFamily, oid: 26}, typeName: OID}
+- [[Column:{DescID: 111, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, isHidden: true, isSystemColumn: true, tableId: 111}
+- [[ColumnName:{DescID: 111, Name: crdb_internal_origin_id, ColumnID: 4294967293}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, name: crdb_internal_origin_id, tableId: 111}
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967293, TypeName: INT4}, ABSENT], PUBLIC]
+  {columnId: 4.294967293e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: IntFamily, oid: 23, width: 32}, typeName: INT4}
+- [[Column:{DescID: 111, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, isHidden: true, isSystemColumn: true, tableId: 111}
+- [[ColumnName:{DescID: 111, Name: crdb_internal_origin_timestamp, ColumnID: 4294967292}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, name: crdb_internal_origin_timestamp, tableId: 111}
+- [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967292, TypeName: DECIMAL}, ABSENT], PUBLIC]
+  {columnId: 4.294967292e+09, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: DecimalFamily, oid: 1700}, typeName: DECIMAL}

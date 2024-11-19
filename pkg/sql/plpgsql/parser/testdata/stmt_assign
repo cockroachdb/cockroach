@@ -89,6 +89,41 @@ _ := 100;
 END;
  -- identifiers removed
 
+# We support assignment with indirection.
+parse
+BEGIN
+  a.b := 100;
+END
+----
+BEGIN
+a.b := 100;
+END;
+ -- normalized!
+BEGIN
+a.b := (100);
+END;
+ -- fully parenthesized
+BEGIN
+a.b := _;
+END;
+ -- literals removed
+BEGIN
+_._ := 100;
+END;
+ -- identifiers removed
+
+# We do not currently support more than one indirection.
+error
+BEGIN
+  a.b.c := 100;
+END
+----
+at or near ".": syntax error
+DETAIL: source SQL:
+BEGIN
+  a.b.c := 100;
+     ^
+
 error
 DECLARE
 BEGIN

@@ -300,14 +300,15 @@ query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser
 ----
 database_name  schema_name  object_name  object_type  grantee   privilege_type  is_grantable
-test           public       NULL         schema       public     CREATE          false
-test           public       NULL         schema       public     USAGE           false
+test           public       NULL         schema       public    CREATE          false
+test           public       NULL         schema       public    USAGE           false
 test           public       t            table        testuser  BACKUP          true
 test           public       t            table        testuser  CHANGEFEED      true
 test           public       t            table        testuser  CREATE          true
 test           public       t            table        testuser  DROP            true
 test           public       t            table        testuser  INSERT          true
 test           public       t            table        testuser  SELECT          true
+test           public       t            table        testuser  TRIGGER         true
 test           public       t            table        testuser  UPDATE          true
 test           public       t            table        testuser  ZONECONFIG      true
 
@@ -566,14 +567,14 @@ statement ok
 GRANT SELECT ON TABLE t1 TO testuser2
 
 # Show a notice when revoking privileges from the owner.
-# Read committed emits extra notices, so skip it.
-skipif config local-read-committed
+# Weak isolation levels emit extra notices, so skip them.
+skipif config weak-iso-level-configs
 query T noticetrace
 REVOKE ALL PRIVILEGES ON TABLE t1 FROM testuser
 ----
 NOTICE: testuser is the owner of t1 and still has all privileges implicitly
 
-onlyif config local-read-committed
+onlyif config weak-iso-level-configs
 statement ok
 REVOKE ALL PRIVILEGES ON TABLE t1 FROM testuser
 

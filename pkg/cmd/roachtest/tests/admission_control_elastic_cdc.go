@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -18,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -68,11 +64,11 @@ func registerElasticControlForCDC(r registry.Registry) {
 				t.Status(fmt.Sprintf("initializing + running tpcc for %s (<%s)", workloadDuration, 10*time.Minute))
 			}
 
-			padDuration, err := time.ParseDuration(ifLocal(c, "5s", "5m"))
+			padDuration, err := time.ParseDuration(roachtestutil.IfLocal(c, "5s", "5m"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			stopFeedsDuration, err := time.ParseDuration(ifLocal(c, "5s", "1m"))
+			stopFeedsDuration, err := time.ParseDuration(roachtestutil.IfLocal(c, "5s", "1m"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -92,7 +88,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 
 					t.Status(fmt.Sprintf("configuring cluster (<%s)", 30*time.Second))
 					{
-						setAdmissionControl(ctx, t, c, true)
+						roachtestutil.SetAdmissionControl(ctx, t, c, true)
 
 						// Changefeeds depend on rangefeeds being enabled.
 						if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {

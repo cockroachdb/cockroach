@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -18,7 +18,6 @@
 package rafttest
 
 import (
-	"context"
 	"log"
 	"math/rand"
 	"sync"
@@ -27,98 +26,170 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 type node struct {
-	raft.Node
 	id     raftpb.PeerID
 	iface  iface
 	stopc  chan struct{}
 	pausec chan bool
 
-	// stable
-	storage *raft.MemoryStorage
+	mu struct {
+		sync.Mutex
+		rn *raft.RawNode
+	}
 
-	mu    sync.Mutex // guards state
-	state raftpb.HardState
+	// storage is the stable storage. Accessed exclusively by the Ready handling
+	// loop in run().
+	storage *raft.MemoryStorage
 }
 
 func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 	st := raft.NewMemoryStorage()
 	c := &raft.Config{
 		ID:                        id,
-		ElectionTick:              10,
+		ElectionTick:              50,
 		HeartbeatTick:             1,
 		Storage:                   st,
 		MaxSizePerMsg:             1024 * 1024,
 		MaxInflightMsgs:           256,
 		MaxUncommittedEntriesSize: 1 << 30,
 		StoreLiveness:             raftstoreliveness.AlwaysLive{},
+		CRDBVersion:               cluster.MakeTestingClusterSettings().Version,
 	}
-	rn := raft.StartNode(c, peers)
+	rn, err := raft.NewRawNode(c)
+	if err != nil {
+		panic(err)
+	}
+	if err := rn.Bootstrap(peers); err != nil {
+		panic(err)
+	}
 	n := &node{
-		Node:    rn,
 		id:      id,
-		storage: st,
 		iface:   iface,
 		pausec:  make(chan bool),
+		storage: st,
 	}
+	n.mu.rn = rn
 	n.start()
 	return n
 }
 
 func (n *node) start() {
 	n.stopc = make(chan struct{})
-	ticker := time.NewTicker(5 * time.Millisecond).C
 
+	hasReady := make(chan struct{}, 1)
+	maybeSignalLocked := func() {
+		if n.mu.rn.HasReady() {
+			select {
+			case hasReady <- struct{}{}:
+			default:
+			}
+		}
+	}
+
+	tick := func() {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		n.mu.rn.Tick()
+		maybeSignalLocked()
+	}
+	step := func(messages ...raftpb.Message) {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		for _, m := range messages {
+			_ = n.mu.rn.Step(m)
+		}
+		maybeSignalLocked()
+	}
+	getReady := func() (raft.Ready, bool) {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		if !n.mu.rn.HasReady() {
+			return raft.Ready{}, false
+		}
+		return n.mu.rn.Ready(), true
+	}
+	handleReady := func(rd raft.Ready) {
+		if !raft.IsEmptyHardState(rd.HardState) {
+			_ = n.storage.SetHardState(rd.HardState)
+		}
+		_ = n.storage.Append(rd.Entries)
+		// Simulate disk latency.
+		time.Sleep(time.Millisecond)
+		// Send messages, with a simulated latency.
+		for _, m := range rd.Messages {
+			m := m
+			go func() {
+				time.Sleep(time.Duration(rand.Int63n(10)) * time.Millisecond)
+				n.iface.send(m)
+			}()
+		}
+		func() {
+			n.mu.Lock()
+			defer n.mu.Unlock()
+			n.mu.rn.Advance(rd)
+			maybeSignalLocked()
+		}()
+	}
+
+	// An independently running Ready handling loop.
+	stopReady := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-hasReady:
+				if rd, ok := getReady(); ok {
+					handleReady(rd)
+				}
+			case <-stopReady:
+				close(stopReady)
+				return
+			}
+		}
+	}()
+	// A loop that handles ticks, messages, and lifetime commands like pause/stop.
+	ticker := time.NewTicker(5 * time.Millisecond).C
 	go func() {
 		for {
 			select {
 			case <-ticker:
-				n.Tick()
-			case rd := <-n.Ready():
-				if !raft.IsEmptyHardState(rd.HardState) {
-					n.mu.Lock()
-					n.state = rd.HardState
-					n.mu.Unlock()
-					n.storage.SetHardState(n.state)
-				}
-				n.storage.Append(rd.Entries)
-				time.Sleep(time.Millisecond)
-
-				// simulate async send, more like real world...
-				for _, m := range rd.Messages {
-					mlocal := m
-					go func() {
-						time.Sleep(time.Duration(rand.Int63n(10)) * time.Millisecond)
-						n.iface.send(mlocal)
-					}()
-				}
-				n.Advance()
+				tick()
 			case m := <-n.iface.recv():
-				go n.Step(context.TODO(), m)
+				step(m)
 			case <-n.stopc:
-				n.Stop()
 				log.Printf("raft.%d: stop", n.id)
-				n.Node = nil
+				stopReady <- struct{}{}
+				<-stopReady
 				close(n.stopc)
 				return
 			case p := <-n.pausec:
-				recvms := make([]raftpb.Message, 0)
+				var queue []raftpb.Message
 				for p {
 					select {
 					case m := <-n.iface.recv():
-						recvms = append(recvms, m)
+						queue = append(queue, m)
 					case p = <-n.pausec:
 					}
 				}
-				// step all pending messages
-				for _, m := range recvms {
-					n.Step(context.TODO(), m)
-				}
+				// Step all queued messages.
+				step(queue...)
 			}
 		}
 	}()
+}
+
+func (n *node) propose(data []byte) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.mu.rn.Propose(data)
+}
+
+func (n *node) status() raft.Status {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.mu.rn.Status()
 }
 
 // stop stops the node. stop a stopped node might panic.
@@ -145,8 +216,13 @@ func (n *node) restart() {
 		MaxInflightMsgs:           256,
 		MaxUncommittedEntriesSize: 1 << 30,
 		StoreLiveness:             raftstoreliveness.AlwaysLive{},
+		CRDBVersion:               cluster.MakeTestingClusterSettings().Version,
 	}
-	n.Node = raft.RestartNode(c)
+	rn, err := raft.NewRawNode(c)
+	if err != nil {
+		panic(err)
+	}
+	n.mu.rn = rn
 	n.start()
 	n.iface.connect()
 }

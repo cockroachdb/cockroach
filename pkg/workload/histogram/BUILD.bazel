@@ -17,6 +17,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/workload/histogram/exporter",
         "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_golang//prometheus/promauto",

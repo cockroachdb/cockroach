@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -273,7 +270,7 @@ func restoreMidSchemaChange(
 		if isSchemaOnly {
 			restoreQuery = restoreQuery + ", schema_only"
 		}
-		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP LATEST IN $1", localFoo))
+		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP FROM LATEST IN $1", localFoo))
 		sqlDB.Exec(t, restoreQuery, localFoo)
 		// Wait for all jobs to terminate. Some may fail since we don't restore
 		// adding spans.

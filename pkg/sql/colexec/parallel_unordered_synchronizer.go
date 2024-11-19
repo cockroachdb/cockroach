@@ -1,18 +1,14 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colexec
 
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -24,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -129,6 +127,14 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execopnode.
 	return s.inputs[nth].Root
 }
 
+func eagerCancellationDisabled(flowCtx *execinfra.FlowCtx) bool {
+	var sd *sessiondata.SessionData
+	if flowCtx.EvalCtx != nil { // EvalCtx can be nil in tests
+		sd = flowCtx.EvalCtx.SessionData()
+	}
+	return !flowCtx.Local || (sd != nil && sd.DisableVecUnionEagerCancellation)
+}
+
 // hasParallelUnorderedSync returns whether there is at least one parallel
 // unordered sync in the tree of operators rooted in op.
 func hasParallelUnorderedSync(op execopnode.OpNode) bool {
@@ -169,14 +175,16 @@ func NewParallelUnorderedSynchronizer(
 	// TODO(yuzefovich): we could allow eager cancellation in the distributed
 	// plans too, but only of inputs that don't have inboxes in the input tree.
 	var allowEagerCancellationOnDrain bool
-	if flowCtx.Local {
+	if !eagerCancellationDisabled(flowCtx) {
 		// If the plan is local, then the only requirement for allowing eager
 		// cancellation on drain is that there are no other parallel unordered
 		// syncs in the input trees. This is needed since the "child" sync won't
 		// be able to distinguish the benign context cancellation error from a
 		// true query execution error, so it can "poison" the query execution if
 		// the child sync hasn't transitioned into the draining mode when we
-		// perform the eager cancellation.
+		// perform the eager cancellation. The child sync also won't distinguish
+		// between the benign context cancellation and the flow cancellation, so
+		// it might not collect the metadata from its inputs when it should.
 		allowEagerCancellationOnDrain = true
 		for _, input := range inputs {
 			if hasParallelUnorderedSync(input.Root) {
@@ -467,6 +475,45 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 		}
 	}
 
+	bufferMeta := func(meta []execinfrapb.ProducerMetadata) {
+		if eagerCancellationDisabled(s.flowCtx) {
+			s.bufferedMeta = append(s.bufferedMeta, meta...)
+			return
+		}
+		// Given that the synchronizer is draining, it is safe to ignore all
+		// context cancellation errors in the metadata for local plans. This is
+		// the case because:
+		// - if the query should result in an error, then some other error was
+		// already propagated to the client, and this was the reason for why we
+		// transitioned into draining;
+		// - if the query should be successful, yet we have some pending context
+		// cancellation errors, then it must be the case that query execution
+		// was short-circuited (e.g. because of the LIMIT), so we can pretend
+		// the part of the execution that hit the pending error didn't happen
+		// since clearly it wasn't necessary to compute the query result.
+		//
+		// Note that we cannot ignore all errors here since some of them (like
+		// ReadWithinUncertaintyIntervalError) could poison the txn and need to
+		// be propagated to the client, so we only swallow the cancellation
+		// errors here.
+		// TODO(yuzefovich): the txn could be poisoned even by errors that we're
+		// swallowing. I think we could (and perhaps should) swallow all errors
+		// here.
+		for _, m := range meta {
+			if m.Err == nil ||
+				// This is ugly, but the context cancellation if observed in the
+				// KV layer can result in kvpb errors that don't satisfy
+				// errors.Is check (because they don't serialize the original
+				// error), so we have this string matching instead.
+				(!strings.Contains(m.Err.Error(), context.Canceled.Error()) &&
+					// If the cancellation is observed by the CancelChecker,
+					// then it propagates a QueryCanceledError.
+					!errors.Is(m.Err, cancelchecker.QueryCanceledError)) {
+				s.bufferedMeta = append(s.bufferedMeta, m)
+			}
+		}
+	}
+
 	// Non-blocking drain of batchCh. This is important mostly because of the
 	// following edge case: all n inputs have pushed batches to the batchCh, so
 	// there are currently n messages. Next notifies the last read input to
@@ -483,7 +530,7 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 			if msg == nil {
 				batchChDrained = true
 			} else if msg.meta != nil {
-				s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
+				bufferMeta(msg.meta)
 			}
 		default:
 			batchChDrained = true
@@ -502,7 +549,7 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 	// Drain the batchCh, this reads the metadata that was pushed.
 	for msg := <-s.batchCh; msg != nil; msg = <-s.batchCh {
 		if msg.meta != nil {
-			s.bufferedMeta = append(s.bufferedMeta, msg.meta...)
+			bufferMeta(msg.meta)
 		}
 	}
 
@@ -510,7 +557,7 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 	for exitLoop := false; !exitLoop; {
 		select {
 		case err := <-s.errCh:
-			s.bufferedMeta = append(s.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
+			bufferMeta([]execinfrapb.ProducerMetadata{{Err: err}})
 		default:
 			exitLoop = true
 		}

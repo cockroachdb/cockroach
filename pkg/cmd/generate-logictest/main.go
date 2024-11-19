@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -366,6 +361,22 @@ func generate() error {
 		if err != nil {
 			return err
 		}
+		err = t.addLogicTests("TestReadCommittedLogic", readCommittedCalc)
+		if err != nil {
+			return err
+		}
+		repeatableReadCalc := logictestbase.ConfigCalculator{
+			ConfigOverrides: []string{"local-repeatable-read"},
+			RunCCLConfigs:   true,
+		}
+		err = t.addCclLogicTests("TestRepeatableReadLogicCCL", repeatableReadCalc)
+		if err != nil {
+			return err
+		}
+		err = t.addLogicTests("TestRepeatableReadLogic", repeatableReadCalc)
+		if err != nil {
+			return err
+		}
 		tenantCalc := logictestbase.ConfigCalculator{
 			ConfigOverrides:       []string{"3node-tenant"},
 			ConfigFilterOverrides: []string{"3node-tenant-multiregion"},
@@ -380,6 +391,10 @@ func generate() error {
 			return err
 		}
 		err = t.addExecBuildLogicTests("TestReadCommittedExecBuild", readCommittedCalc)
+		if err != nil {
+			return err
+		}
+		err = t.addExecBuildLogicTests("TestRepeatableReadExecBuild", repeatableReadCalc)
 		if err != nil {
 			return err
 		}

@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rangefeed
 
@@ -29,10 +24,10 @@ import (
 )
 
 type benchmarkRangefeedOpts struct {
-	procType         procType
-	opType           opType
-	numRegistrations int
-	budget           int64
+	rangefeedTestType rangefeedTestType
+	opType            opType
+	numRegistrations  int
+	budget            int64
 }
 
 type opType string
@@ -52,10 +47,10 @@ func BenchmarkRangefeed(b *testing.B) {
 				name := fmt.Sprintf("procType=%s/opType=%s/numRegs=%d", procType, opType, numRegistrations)
 				b.Run(name, func(b *testing.B) {
 					runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
-						procType:         procType,
-						opType:           opType,
-						numRegistrations: numRegistrations,
-						budget:           math.MaxInt64,
+						rangefeedTestType: procType,
+						opType:            opType,
+						numRegistrations:  numRegistrations,
+						budget:            math.MaxInt64,
 					})
 				})
 			}
@@ -95,7 +90,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	span := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 
 	p, h, stopper := newTestProcessor(b, withSpan(span), withBudget(budget), withChanCap(b.N),
-		withEventTimeout(time.Hour), withProcType(opts.procType))
+		withEventTimeout(time.Hour), withRangefeedTestType(opts.rangefeedTestType))
 	defer stopper.Stop(ctx)
 
 	// Add registrations.
@@ -108,7 +103,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		// extra data.
 		const withFiltering = false
 		streams[i] = &noopStream{ctx: ctx, done: make(chan *kvpb.Error, 1)}
-		ok, _ := p.Register(span, hlc.MinTimestamp, nil,
+		ok, _, _ := p.Register(ctx, span, hlc.MinTimestamp, nil,
 			withDiff, withFiltering, false, /* withOmitRemote */
 			streams[i], nil)
 		require.True(b, ok)
@@ -197,22 +192,19 @@ type noopStream struct {
 	done   chan *kvpb.Error
 }
 
-func (s *noopStream) Context() context.Context {
-	return s.ctx
-}
-
-func (s *noopStream) Send(*kvpb.RangeFeedEvent) error {
+func (s *noopStream) SendUnbuffered(*kvpb.RangeFeedEvent) error {
 	s.events++
 	return nil
 }
 
-// Note that Send itself is not thread-safe, but it is written to be used only
-// in a single threaded environment in this test, ensuring thread-safety.
-func (s *noopStream) SendIsThreadSafe() {}
+// Note that SendUnbuffered itself is not thread-safe, but it is written to be
+// used only in a single threaded environment in this test, ensuring
+// thread-safety.
+func (s *noopStream) SendUnbufferedIsThreadSafe() {}
 
-// Disconnect implements the Stream interface. It mocks the disconnect behavior
+// SendError implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
-func (s *noopStream) Disconnect(error *kvpb.Error) {
+func (s *noopStream) SendError(error *kvpb.Error) {
 	s.done <- error
 }
 

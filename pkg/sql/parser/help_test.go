@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package parser
 
@@ -569,11 +564,11 @@ func TestContextualHelp(t *testing.T) {
 		{`EXPERIMENTAL SCRUB TABLE ??`, `SCRUB TABLE`},
 		{`EXPERIMENTAL SCRUB DATABASE ??`, `SCRUB DATABASE`},
 
-		{`BACKUP foo TO 'bar' ??`, `BACKUP`},
+		{`BACKUP foo INTO 'bar' ??`, `BACKUP`},
 		{`BACKUP DATABASE ??`, `BACKUP`},
-		{`BACKUP foo TO 'bar' AS OF SYSTEM ??`, `BACKUP`},
+		{`BACKUP foo INTO 'bar' AS OF SYSTEM ??`, `BACKUP`},
 
-		{`RESTORE foo FROM 'bar' ??`, `RESTORE`},
+		{`RESTORE foo FROM LATEST IN '/bar' ??`, `RESTORE`},
 		{`RESTORE DATABASE ??`, `RESTORE`},
 
 		{`IMPORT TABLE ??`, `IMPORT`},

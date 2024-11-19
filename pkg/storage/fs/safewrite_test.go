@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package fs
 
@@ -24,14 +19,14 @@ func TestSafeWriteToFile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Use an in-memory FS that strictly enforces syncs.
-	mem := vfs.NewStrictMem()
+	mem := vfs.NewCrashableMem()
 	syncDir := func(dir string) {
 		fdir, err := mem.OpenDir(dir)
 		require.NoError(t, err)
 		require.NoError(t, fdir.Sync())
 		require.NoError(t, fdir.Close())
 	}
-	readFile := func(filename string) []byte {
+	readFile := func(mem *vfs.MemFS, filename string) []byte {
 		f, err := mem.Open("foo/bar")
 		require.NoError(t, err)
 		b, err := io.ReadAll(f)
@@ -52,14 +47,14 @@ func TestSafeWriteToFile(t *testing.T) {
 
 	// Discard any unsynced writes to make sure we set up the test
 	// preconditions correctly.
-	mem.ResetToSyncedState()
-	require.Equal(t, []byte("Hello world"), readFile("foo/bar"))
+	crashFS := mem.CrashClone(vfs.CrashCloneCfg{})
+	require.Equal(t, []byte("Hello world"), readFile(crashFS, "foo/bar"))
 
 	// Use SafeWriteToFile to atomically, durably change the contents of the
 	// file.
-	require.NoError(t, SafeWriteToFile(mem, "foo", "foo/bar", []byte("Hello everyone"), UnspecifiedWriteCategory))
+	require.NoError(t, SafeWriteToFile(crashFS, "foo", "foo/bar", []byte("Hello everyone"), UnspecifiedWriteCategory))
 
 	// Discard any unsynced writes.
-	mem.ResetToSyncedState()
-	require.Equal(t, []byte("Hello everyone"), readFile("foo/bar"))
+	crashFS = crashFS.CrashClone(vfs.CrashCloneCfg{})
+	require.Equal(t, []byte("Hello everyone"), readFile(crashFS, "foo/bar"))
 }

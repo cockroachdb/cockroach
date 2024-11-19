@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree_test
 
@@ -19,28 +14,113 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsolationLevelFromKVTxnIsolationLevel(t *testing.T) {
+func TestToKVIsoLevel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		In  isolation.Level
-		Out tree.IsolationLevel
+		in  tree.IsolationLevel
+		out isolation.Level
 	}{
-		{
-			In:  isolation.Serializable,
-			Out: tree.SerializableIsolation,
-		},
-		{
-			In:  isolation.ReadCommitted,
-			Out: tree.ReadCommittedIsolation,
-		},
-		{
-			In:  isolation.Snapshot,
-			Out: tree.SnapshotIsolation,
-		},
+		{tree.ReadUncommittedIsolation, isolation.ReadCommitted},
+		{tree.ReadCommittedIsolation, isolation.ReadCommitted},
+		{tree.RepeatableReadIsolation, isolation.Snapshot},
+		{tree.SnapshotIsolation, isolation.Snapshot},
+		{tree.SerializableIsolation, isolation.Serializable},
 	}
 
 	for _, tc := range testCases {
-		require.Equal(t, tc.Out, tree.IsolationLevelFromKVTxnIsolationLevel(tc.In))
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tc.out, tc.in.ToKVIsoLevel())
+		})
+	}
+}
+
+func TestFromKVIsoLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		in  isolation.Level
+		out tree.IsolationLevel
+	}{
+		{isolation.ReadCommitted, tree.ReadCommittedIsolation},
+		{isolation.Snapshot, tree.RepeatableReadIsolation},
+		{isolation.Serializable, tree.SerializableIsolation},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tc.out, tree.FromKVIsoLevel(tc.in))
+		})
+	}
+}
+
+func TestUpgradeToEnabledLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const RU = tree.ReadUncommittedIsolation
+	const RC = tree.ReadCommittedIsolation
+	const RR = tree.RepeatableReadIsolation
+	const SI = tree.SnapshotIsolation
+	const SER = tree.SerializableIsolation
+
+	testCases := []struct {
+		in                      tree.IsolationLevel
+		allowRC                 bool
+		allowRR                 bool
+		license                 bool
+		expOut                  tree.IsolationLevel
+		expUpgraded             bool
+		expUpgradedDueToLicense bool
+	}{
+		{in: RU, allowRC: false, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RU, allowRC: true, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
+		{in: RU, allowRC: false, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
+		{in: RU, allowRC: true, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
+		{in: RU, allowRC: false, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RU, allowRC: true, allowRR: false, license: true, expOut: RC, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RU, allowRC: false, allowRR: true, license: true, expOut: RR, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RU, allowRC: true, allowRR: true, license: true, expOut: RC, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RC, allowRC: false, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RC, allowRC: true, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
+		{in: RC, allowRC: false, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
+		{in: RC, allowRC: true, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
+		{in: RC, allowRC: false, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RC, allowRC: true, allowRR: false, license: true, expOut: RC, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: RC, allowRC: false, allowRR: true, license: true, expOut: RR, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RC, allowRC: true, allowRR: true, license: true, expOut: RC, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: RR, allowRC: false, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RR, allowRC: true, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RR, allowRC: false, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
+		{in: RR, allowRC: true, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
+		{in: RR, allowRC: false, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RR, allowRC: true, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: RR, allowRC: false, allowRR: true, license: true, expOut: RR, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: RR, allowRC: true, allowRR: true, license: true, expOut: RR, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: SI, allowRC: false, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: SI, allowRC: true, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: SI, allowRC: false, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
+		{in: SI, allowRC: true, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
+		{in: SI, allowRC: false, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: SI, allowRC: true, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
+		{in: SI, allowRC: false, allowRR: true, license: true, expOut: RR, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: SI, allowRC: true, allowRR: true, license: true, expOut: RR, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: SER, allowRC: false, allowRR: false, license: false, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: SER, allowRC: true, allowRR: false, license: false, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: SER, allowRC: false, allowRR: true, license: false, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: SER, allowRC: true, allowRR: true, license: false, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: SER, allowRC: false, allowRR: false, license: true, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: SER, allowRC: true, allowRR: false, license: true, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: SER, allowRC: false, allowRR: true, license: true, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: SER, allowRC: true, allowRR: true, license: true, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			res, upgraded, upgradedDueToLicense := tc.in.UpgradeToEnabledLevel(
+				tc.allowRC, tc.allowRR, tc.license)
+			require.Equal(t, tc.expOut, res)
+			require.Equal(t, tc.expUpgraded, upgraded)
+			require.Equal(t, tc.expUpgradedDueToLicense, upgradedDueToLicense)
+		})
 	}
 }

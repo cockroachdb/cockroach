@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -20,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -46,7 +42,7 @@ var (
 	}
 )
 
-const numFullBackups = 5
+const numFullBackups = 3
 
 type roundTripSpecs struct {
 	name                 string
@@ -113,7 +109,7 @@ func backupRestoreRoundTrip(
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	})
 
-	c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings(envOption), c.CRDBNodes())
+	c.Start(ctx, t.L(), roachtestutil.MaybeUseMemoryBudget(t, 50), install.MakeClusterSettings(envOption), c.CRDBNodes())
 	m := c.NewMonitor(ctx, c.CRDBNodes())
 
 	m.Go(func(ctx context.Context) error {
@@ -172,7 +168,7 @@ func backupRestoreRoundTrip(
 			// Run backups.
 			t.L().Printf("starting backup %d", i+1)
 			collection, err := d.createBackupCollection(
-				ctx, t.L(), testRNG, bspec, bspec, "round-trip-test-backup",
+				ctx, t.L(), t, testRNG, bspec, bspec, "round-trip-test-backup",
 				true /* internalSystemsJobs */, false, /* isMultitenant */
 			)
 			if err != nil {

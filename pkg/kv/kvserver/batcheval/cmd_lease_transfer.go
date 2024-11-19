@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package batcheval
 
@@ -109,6 +104,12 @@ func TransferLease(
 	// before the TransferLease request acquired latches and before the
 	// previous lease was revoked).
 	newLease.Start.Forward(cArgs.EvalCtx.Clock().NowAsClockTimestamp())
+
+	// Forwarding the lease's start time is safe because we know that the
+	// lease's sequence number has been incremented. Assert this.
+	if newLease.Sequence <= prevLease.Sequence {
+		log.Fatalf(ctx, "lease sequence not incremented: prev=%s, new=%s", prevLease, newLease)
+	}
 
 	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, newLease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,

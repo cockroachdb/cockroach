@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -41,12 +36,10 @@ func postgisColumnsTablePopulator(
 	matchingFamily types.Family,
 ) func(context.Context, *planner, catalog.DatabaseDescriptor, func(...tree.Datum) error) error {
 	return func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(
-			ctx,
-			p,
-			dbContext,
-			hideVirtual,
-			func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				db, sc, table := descCtx.database, descCtx.schema, descCtx.table
 				if !table.IsPhysicalTable() {
 					return nil
 				}

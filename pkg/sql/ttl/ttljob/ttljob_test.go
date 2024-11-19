@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package ttljob_test
 
@@ -219,7 +214,7 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRowsJobOnly(
 		var progress jobspb.Progress
 		require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
 
-		actualNumExpiredRows := progress.UnwrapDetails().(jobspb.RowLevelTTLProgress).JobRowCount
+		actualNumExpiredRows := progress.UnwrapDetails().(jobspb.RowLevelTTLProgress).JobDeletedRowCount
 		require.Equal(t, int64(expectedNumExpiredRows), actualNumExpiredRows)
 		jobCount++
 	}
@@ -275,8 +270,9 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 			require.Equal(t, expectedProcessorRowCount, processorProgress.ProcessorRowCount)
 			expectedJobRowCount += expectedProcessorRowCount
 		}
-		require.Equal(t, expectedJobSpanCount, rowLevelTTLProgress.JobSpanCount)
-		require.Equal(t, expectedJobRowCount, rowLevelTTLProgress.JobRowCount)
+		require.Equal(t, expectedJobSpanCount, rowLevelTTLProgress.JobProcessedSpanCount)
+		require.Equal(t, expectedJobSpanCount, rowLevelTTLProgress.JobTotalSpanCount)
+		require.Equal(t, expectedJobRowCount, rowLevelTTLProgress.JobDeletedRowCount)
 		jobCount++
 	}
 	require.Equal(t, 1, jobCount)

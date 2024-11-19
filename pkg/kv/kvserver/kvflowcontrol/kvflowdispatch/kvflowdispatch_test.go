@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvflowdispatch
 
@@ -22,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -226,10 +222,20 @@ func (d dummyHandles) Lookup(id roachpb.RangeID) (kvflowcontrol.Handle, bool) {
 	return nil, false
 }
 
+func (d dummyHandles) LookupReplicationAdmissionHandle(
+	rangeID roachpb.RangeID,
+) (kvflowcontrol.ReplicationAdmissionHandle, bool) {
+	return d.Lookup(rangeID)
+}
+
 func (d dummyHandles) ResetStreams(ctx context.Context) {}
 
 func (d dummyHandles) Inspect() []roachpb.RangeID {
 	return nil
+}
+
+func (d dummyHandles) LookupInspect(id roachpb.RangeID) (kvflowinspectpb.Handle, bool) {
+	return kvflowinspectpb.Handle{}, false
 }
 
 var _ kvflowcontrol.Handles = dummyHandles{}

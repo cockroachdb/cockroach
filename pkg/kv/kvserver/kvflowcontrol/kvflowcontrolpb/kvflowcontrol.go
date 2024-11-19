@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvflowcontrolpb
 
@@ -60,4 +55,21 @@ func (a AdmittedResponseForRange) String() string {
 
 func (a AdmittedResponseForRange) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("admitted-response (s%s r%s %s)", a.LeaderStoreID, a.RangeID, a.Msg.String())
+}
+
+func (a AdmittedState) String() string {
+	return redact.StringWithoutMarkers(a)
+}
+
+func (a AdmittedState) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("admitted=t%d/%v", a.Term, a.Admitted)
+}
+
+func (a PiggybackedAdmittedState) String() string {
+	return redact.StringWithoutMarkers(a)
+}
+
+func (a PiggybackedAdmittedState) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[r%s,s%s,%d->%d] %s",
+		a.RangeID, a.ToStoreID, a.FromReplicaID, a.ToReplicaID, a.Admitted.String())
 }

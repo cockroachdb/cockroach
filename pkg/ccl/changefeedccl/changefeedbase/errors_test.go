@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedbase_test
 
@@ -40,16 +37,16 @@ func TestAsTerminalError(t *testing.T) {
 
 		// Regardless of the state of the node drain, or the type of error,
 		// context error takes precedence.
-		require.Regexp(t, context.Canceled,
-			changefeedbase.AsTerminalError(canceledCtx, nodeIsDraining, errors.New("ignored")))
-		require.Regexp(t, context.Canceled,
-			changefeedbase.AsTerminalError(canceledCtx, nodeIsNotDraining, errors.New("ignored")))
+		require.Regexp(t, context.Canceled.Error(),
+			changefeedbase.AsTerminalError(canceledCtx, nodeIsDraining, errors.New("ignored")).Error())
+		require.Regexp(t, context.Canceled.Error(),
+			changefeedbase.AsTerminalError(canceledCtx, nodeIsNotDraining, errors.New("ignored")).Error())
 	})
 
 	t.Run("node drain marked as job retry", func(t *testing.T) {
 		cause := errors.New("some error happened")
 		termErr := changefeedbase.AsTerminalError(context.Background(), nodeIsDraining, cause)
-		require.Regexp(t, cause.Error(), termErr)
+		require.Contains(t, cause.Error(), termErr.Error())
 		require.True(t, jobs.IsRetryJobError(termErr))
 	})
 
@@ -58,19 +55,19 @@ func TestAsTerminalError(t *testing.T) {
 		cause := changefeedbase.WithTerminalError(
 			changefeedbase.MarkRetryableError(errors.New("confusing error")))
 		termErr := changefeedbase.AsTerminalError(context.Background(), nodeIsNotDraining, cause)
-		require.Regexp(t, cause.Error(), termErr)
+		require.Contains(t, cause.Error(), termErr.Error())
 	})
 
 	t.Run("assertion failures are terminal", func(t *testing.T) {
 		// Assertion failures are terminal, even if marked as retry-able.
 		cause := changefeedbase.MarkRetryableError(errors.AssertionFailedf("though shall not pass"))
 		termErr := changefeedbase.AsTerminalError(context.Background(), nodeIsNotDraining, cause)
-		require.Regexp(t, cause.Error(), termErr)
+		require.Contains(t, cause.Error(), termErr.Error())
 	})
 
 	t.Run("gc error is terminal", func(t *testing.T) {
 		cause := changefeedbase.MarkRetryableError(&kvpb.BatchTimestampBeforeGCError{})
 		termErr := changefeedbase.AsTerminalError(context.Background(), nodeIsNotDraining, cause)
-		require.Regexp(t, cause.Error(), termErr)
+		require.Contains(t, cause.Error(), termErr.Error())
 	})
 }

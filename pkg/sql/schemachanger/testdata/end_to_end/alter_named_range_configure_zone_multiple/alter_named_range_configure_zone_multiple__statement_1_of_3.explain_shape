@@ -1,0 +1,7 @@
+/* setup */
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER RANGE default CONFIGURE ZONE USING num_replicas = 7;
+----
+Schema change plan for ALTER RANGE ‹default› CONFIGURE ZONE USING ‹num_replicas› = ‹7›;
+ └── execute 1 system table mutations transaction

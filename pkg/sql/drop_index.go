@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -70,7 +65,7 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 		}
 
 		// Disallow schema changes if this table's schema is locked.
-		if err = checkTableSchemaUnlocked(tableDesc); err != nil {
+		if err = checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
 			return nil, err
 		}
 
@@ -360,13 +355,7 @@ func (p *planner) dropIndexByName(
 
 	for _, s := range zone.Subzones {
 		if s.IndexID != uint32(idx.GetID()) {
-			_, err = GenerateSubzoneSpans(
-				p.ExecCfg().Settings,
-				p.ExecCfg().Codec,
-				tableDesc,
-				zone.Subzones,
-				false, /* newSubzones */
-			)
+			_, err = GenerateSubzoneSpans(p.ExecCfg().Codec, tableDesc, zone.Subzones)
 			if sqlerrors.IsCCLRequiredError(err) {
 				return sqlerrors.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
 					"because table %q has at least one remaining index or partition with a zone config",

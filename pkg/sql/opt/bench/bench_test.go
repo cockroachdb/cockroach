@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package bench
 
@@ -210,6 +205,30 @@ var schemas = []string{
 		a INT PRIMARY KEY,
 		b INT,
 		INDEX b_idx (b)
+	)
+	`,
+	`
+	CREATE TABLE comp
+	(
+		a INT,
+		b INT,
+		c INT,
+		d INT,
+		e INT,
+		f INT,
+		a1 INT AS (a+1) STORED,
+		b1 INT AS (b+1) STORED,
+		c1 INT AS (c+1) STORED,
+		d1 INT AS (d+1) VIRTUAL,
+		e1 INT AS (e+1) VIRTUAL,
+		f1 INT AS (f+1) VIRTUAL,
+		shard INT AS (mod(fnv32(crdb_internal.datums_to_bytes(a, b, c, d, e)), 8)) VIRTUAL,
+		CHECK (shard IN (0, 1, 2, 3, 4, 5, 6, 7)),
+		PRIMARY KEY (shard, a, b, c, d, e),
+		INDEX (a, b, a1),
+		INDEX (c1, a, c),
+		INDEX (f),
+		INDEX (d1, d, e)
 	)
 	`,
 	`
@@ -470,6 +489,16 @@ var queries = [...]benchQuery{
 		args: []interface{}{1, 2},
 	},
 	{
+		name:  "comp-pk",
+		query: "SELECT * FROM comp WHERE a = $1 AND b = $2 AND c = $3 AND d = $4 AND e = $5",
+		args:  []interface{}{1, 2, 3, 4, 5},
+	},
+	{
+		name:  "comp-insert-on-conflict",
+		query: "INSERT INTO comp VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (shard, a, b, c, d, e) DO UPDATE SET f = excluded.f + 1",
+		args:  []interface{}{1, 2, 3, 4, 5, 6},
+	},
+	{
 		name:  "single-col-histogram-range",
 		query: "SELECT * FROM single_col_histogram WHERE k >= $1",
 		args:  []interface{}{"'abc'"},
@@ -677,6 +706,11 @@ var queries = [...]benchQuery{
 		`,
 		args:    []interface{}{},
 		cleanup: "TRUNCATE TABLE customer",
+	},
+	{
+		name:  "const-agg",
+		query: `SELECT * FROM k GROUP BY id HAVING sum(a) > 100`,
+		args:  []interface{}{},
 	},
 }
 
@@ -1074,36 +1108,41 @@ func BenchmarkEndToEnd(b *testing.B) {
 
 	for _, query := range queriesToTest(b) {
 		b.Run(query.name, func(b *testing.B) {
-			b.Run("Simple", func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					sr.Exec(b, query.query, query.args...)
-					if query.cleanup != "" {
-						sr.Exec(b, query.cleanup)
-					}
-				}
-			})
-			b.Run("Prepared", func(b *testing.B) {
-				prepared, err := db.Prepare(query.query)
-				if err != nil {
-					b.Fatalf("%v", err)
-				}
-				for i := 0; i < b.N; i++ {
-					res, err := prepared.Exec(query.args...)
-					if err != nil {
-						b.Fatalf("%v", err)
-					}
-					if query.cleanup != "" {
-						sr.Exec(b, query.cleanup)
-					}
-					rows, err := res.RowsAffected()
-					if err != nil {
-						b.Fatalf("%v", err)
-					}
-					if rows > 0 {
-						b.ReportMetric(float64(rows), "rows/op")
-					}
-				}
-			})
+			for _, vectorize := range []string{"on", "off"} {
+				b.Run("vectorize="+vectorize, func(b *testing.B) {
+					sr.Exec(b, "SET vectorize="+vectorize)
+					b.Run("Simple", func(b *testing.B) {
+						for i := 0; i < b.N; i++ {
+							sr.Exec(b, query.query, query.args...)
+							if query.cleanup != "" {
+								sr.Exec(b, query.cleanup)
+							}
+						}
+					})
+					b.Run("Prepared", func(b *testing.B) {
+						prepared, err := db.Prepare(query.query)
+						if err != nil {
+							b.Fatalf("%v", err)
+						}
+						for i := 0; i < b.N; i++ {
+							res, err := prepared.Exec(query.args...)
+							if err != nil {
+								b.Fatalf("%v", err)
+							}
+							if query.cleanup != "" {
+								sr.Exec(b, query.cleanup)
+							}
+							rows, err := res.RowsAffected()
+							if err != nil {
+								b.Fatalf("%v", err)
+							}
+							if rows > 0 {
+								b.ReportMetric(float64(rows), "rows/op")
+							}
+						}
+					})
+				})
+			}
 		})
 	}
 }

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -628,7 +623,7 @@ func initFollowerReadsDB(
 				// If we're going to be killing nodes in a multi-region cluster, make
 				// sure system ranges have all upreplicated as expected as well. Do so
 				// using replication reports.
-				WaitForUpdatedReplicationReport(ctx, t, db)
+				roachtestutil.WaitForUpdatedReplicationReport(ctx, t, db)
 
 				var expAtRisk int
 				if topology.survival == zone {
@@ -791,7 +786,9 @@ func verifyHighFollowerReadRatios(
 		adminNode = i
 		break
 	}
-	adminURLs, err := c.ExternalAdminUIAddr(ctx, l, c.Node(adminNode))
+	adminURLs, err := c.ExternalAdminUIAddr(
+		ctx, l, c.Node(adminNode), option.VirtualClusterName(install.SystemInterfaceName),
+	)
 	require.NoError(t, err)
 
 	url := "https://" + adminURLs[0] + "/ts/query"
@@ -902,7 +899,9 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 	followerReadCounts := make([]int, c.Spec().NodeCount)
 	getFollowerReadCount := func(ctx context.Context, node int) func() error {
 		return func() error {
-			adminUIAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Node(node))
+			adminUIAddrs, err := c.ExternalAdminUIAddr(
+				ctx, t.L(), c.Node(node), option.VirtualClusterName(install.SystemInterfaceName),
+			)
 			if err != nil {
 				return err
 			}
@@ -980,7 +979,17 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	topology := topologySpec{multiRegion: false}
-	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness)
+	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
+		// This test does not currently work with shared-process
+		// deployments (#129546), so we do not run it in separate-process
+		// mode either to reduce noise. We should reevaluate once the test
+		// works in shared-process.
+		mixedversion.EnabledDeploymentModes(
+			mixedversion.SystemOnlyDeployment,
+			mixedversion.SharedProcessDeployment,
+		),
+		mixedversion.MinimumSupportedVersion("v23.2.0"),
+	)
 }
 
 // runFollowerReadsMixedVersionGlobalTableTest runs a multi-region follower-read
@@ -1000,6 +1009,21 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// Use a longer upgrade timeout to give the migrations enough time to finish
 		// considering the cross-region latency.
 		mixedversion.UpgradeTimeout(60*time.Minute),
+
+		// This test is flaky when upgrading from v23.1 to v23.2 for follower
+		// reads in shared-process deployments. There were a number of changes
+		// to tenant health checks since then which appear to have addressed
+		// this issue.
+		mixedversion.MinimumSupportedVersion("v23.2.0"),
+
+		// This test does not currently work with shared-process
+		// deployments (#129167), so we do not run it in separate-process
+		// mode either to reduce noise. We should reevaluate once the test
+		// works in shared-process.
+		mixedversion.EnabledDeploymentModes(
+			mixedversion.SystemOnlyDeployment,
+			mixedversion.SharedProcessDeployment,
+		),
 	)
 }
 

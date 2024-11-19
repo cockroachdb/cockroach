@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -75,6 +70,14 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 			}
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", scName)
 		}
+		hasOwnership, err := p.HasOwnership(ctx, sc)
+		if err != nil {
+			return nil, err
+		}
+		if !hasOwnership {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"must be owner of schema %s", tree.Name(sc.GetName()))
+		}
 
 		if scName == catconstants.PublicSchemaName {
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", scName)
@@ -84,14 +87,6 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 			return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", scName)
 		case catalog.SchemaUserDefined:
-			hasOwnership, err := p.HasOwnership(ctx, sc)
-			if err != nil {
-				return nil, err
-			}
-			if !hasOwnership {
-				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-					"must be owner of schema %s", tree.Name(sc.GetName()))
-			}
 			namesBefore := len(d.objectNamesToDelete)
 			fnsBefore := len(d.functionsToDelete)
 			if err := d.collectObjectsInSchema(ctx, p, db, sc); err != nil {

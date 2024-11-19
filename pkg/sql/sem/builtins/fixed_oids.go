@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package builtins
 
@@ -1842,10 +1837,10 @@ var builtinOidsArray = []string{
 	1867: `geography_recv(input: anyelement) -> geography`,
 	1868: `geography_out(geography: geography) -> bytes`,
 	1869: `geography_in(input: anyelement) -> geography`,
-	1870: `bpcharsend(char: char) -> bytes`,
-	1871: `bpcharrecv(input: anyelement) -> char`,
-	1872: `bpcharout(char: char) -> bytes`,
-	1873: `bpcharin(input: anyelement) -> char`,
+	1870: `bpcharsend(bpchar: bpchar) -> bytes`,
+	1871: `bpcharrecv(input: anyelement) -> bpchar`,
+	1872: `bpcharout(bpchar: bpchar) -> bytes`,
+	1873: `bpcharin(input: anyelement) -> bpchar`,
 	1874: `geometry_send(geometry: geometry) -> bytes`,
 	1875: `geometry_recv(input: anyelement) -> geometry`,
 	1876: `geometry_out(geometry: geometry) -> bytes`,
@@ -2291,30 +2286,30 @@ var builtinOidsArray = []string{
 	2321: `date(timestamptz: timestamptz) -> date`,
 	2322: `date(string: string) -> date`,
 	2323: `date(date: date) -> date`,
-	2324: `bpchar(uuid: uuid) -> char`,
-	2325: `bpchar(bit: bit) -> char`,
-	2326: `bpchar(box2d: box2d) -> char`,
-	2327: `bpchar(interval: interval) -> char`,
-	2328: `bpchar(decimal: decimal) -> char`,
-	2329: `bpchar(tuple: tuple) -> char`,
-	2330: `bpchar(date: date) -> char`,
-	2331: `bpchar(oid: oid) -> char`,
-	2332: `bpchar(geometry: geometry) -> char`,
-	2333: `bpchar(time: time) -> char`,
-	2334: `bpchar(tsvector: tsvector) -> char`,
-	2335: `bpchar(bool: bool) -> char`,
-	2336: `bpchar(int: int) -> char`,
-	2337: `bpchar(timestamp: timestamp) -> char`,
-	2338: `bpchar(timestamptz: timestamptz) -> char`,
-	2339: `bpchar(tsquery: tsquery) -> char`,
-	2340: `bpchar(float: float) -> char`,
-	2341: `bpchar(geography: geography) -> char`,
-	2342: `bpchar(inet: inet) -> char`,
-	2343: `bpchar(timetz: timetz) -> char`,
-	2344: `bpchar(void: void) -> char`,
-	2345: `bpchar(bytes: bytes) -> char`,
-	2346: `bpchar(jsonb: jsonb) -> char`,
-	2347: `bpchar(string: string) -> char`,
+	2324: `bpchar(uuid: uuid) -> bpchar`,
+	2325: `bpchar(bit: bit) -> bpchar`,
+	2326: `bpchar(box2d: box2d) -> bpchar`,
+	2327: `bpchar(interval: interval) -> bpchar`,
+	2328: `bpchar(decimal: decimal) -> bpchar`,
+	2329: `bpchar(tuple: tuple) -> bpchar`,
+	2330: `bpchar(date: date) -> bpchar`,
+	2331: `bpchar(oid: oid) -> bpchar`,
+	2332: `bpchar(geometry: geometry) -> bpchar`,
+	2333: `bpchar(time: time) -> bpchar`,
+	2334: `bpchar(tsvector: tsvector) -> bpchar`,
+	2335: `bpchar(bool: bool) -> bpchar`,
+	2336: `bpchar(int: int) -> bpchar`,
+	2337: `bpchar(timestamp: timestamp) -> bpchar`,
+	2338: `bpchar(timestamptz: timestamptz) -> bpchar`,
+	2339: `bpchar(tsquery: tsquery) -> bpchar`,
+	2340: `bpchar(float: float) -> bpchar`,
+	2341: `bpchar(geography: geography) -> bpchar`,
+	2342: `bpchar(inet: inet) -> bpchar`,
+	2343: `bpchar(timetz: timetz) -> bpchar`,
+	2344: `bpchar(void: void) -> bpchar`,
+	2345: `bpchar(bytes: bytes) -> bpchar`,
+	2346: `bpchar(jsonb: jsonb) -> bpchar`,
+	2347: `bpchar(string: string) -> bpchar`,
 	2348: `numeric(interval: interval) -> decimal`,
 	2349: `numeric(decimal: decimal) -> decimal`,
 	2350: `numeric(date: date) -> decimal`,
@@ -2389,7 +2384,7 @@ var builtinOidsArray = []string{
 	2419: `pg_lsn(pg_lsn: pg_lsn) -> pg_lsn`,
 	2420: `varchar(pg_lsn: pg_lsn) -> varchar`,
 	2421: `text(pg_lsn: pg_lsn) -> string`,
-	2422: `bpchar(pg_lsn: pg_lsn) -> char`,
+	2422: `bpchar(pg_lsn: pg_lsn) -> bpchar`,
 	2423: `name(pg_lsn: pg_lsn) -> name`,
 	2424: `char(pg_lsn: pg_lsn) -> "char"`,
 	2425: `max(arg1: pg_lsn) -> anyelement`,
@@ -2469,7 +2464,7 @@ var builtinOidsArray = []string{
 	2501: `refcursorrecv(input: anyelement) -> refcursor`,
 	2502: `refcursor(refcursor: refcursor) -> refcursor`,
 	2503: `refcursor(string: string) -> refcursor`,
-	2504: `bpchar(refcursor: refcursor) -> char`,
+	2504: `bpchar(refcursor: refcursor) -> bpchar`,
 	2505: `char(refcursor: refcursor) -> "char"`,
 	2506: `name(refcursor: refcursor) -> name`,
 	2507: `text(refcursor: refcursor) -> string`,
@@ -2592,7 +2587,7 @@ var builtinOidsArray = []string{
 	2624: `name(vector: vector) -> name`,
 	2625: `text(vector: vector) -> string`,
 	2626: `varchar(vector: vector) -> varchar`,
-	2627: `bpchar(vector: vector) -> char`,
+	2627: `bpchar(vector: vector) -> bpchar`,
 	2628: `vector(string: string) -> vector`,
 	2629: `vector(vector: vector) -> vector`,
 	2630: `cosine_distance(v1: vector, v2: vector) -> float`,
@@ -2607,6 +2602,10 @@ var builtinOidsArray = []string{
 	2639: `crdb_internal.start_replication_stream_for_tables(req: bytes) -> bytes`,
 	2640: `crdb_internal.clear_query_plan_cache() -> void`,
 	2641: `crdb_internal.clear_table_stats_cache() -> void`,
+	2642: `crdb_internal.get_fully_qualified_table_name(table_descriptor_id: int) -> string`,
+	2643: `crdb_internal.type_is_indexable(oid: oid) -> bool`,
+	2644: `crdb_internal.range_stats_with_errors(key: bytes) -> jsonb`,
+	2645: `crdb_internal.lease_holder_with_errors(key: bytes) -> jsonb`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

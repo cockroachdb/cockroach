@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -172,6 +167,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateIndex(ctx, n)
 	case *tree.CreateSchema:
 		return p.CreateSchema(ctx, n)
+	case *tree.CreateTrigger:
+		return p.CreateTrigger(ctx, n)
 	case *tree.CreateType:
 		return p.CreateType(ctx, n)
 	case *tree.CreateRole:
@@ -196,8 +193,6 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropDatabase(ctx, n)
 	case *tree.DropRoutine:
 		return p.DropFunction(ctx, n)
-	case *tree.DropTrigger:
-		return p.DropTrigger(ctx, n)
 	case *tree.DropIndex:
 		return p.DropIndex(ctx, n)
 	case *tree.DropOwnedBy:
@@ -212,6 +207,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropTable(ctx, n)
 	case *tree.DropTenant:
 		return p.DropTenant(ctx, n)
+	case *tree.DropTrigger:
+		return p.DropTrigger(ctx, n)
 	case *tree.DropType:
 		return p.DropType(ctx, n)
 	case *tree.DropView:
@@ -356,6 +353,7 @@ func init() {
 		&tree.CreateIndex{},
 		&tree.CreateSchema{},
 		&tree.CreateSequence{},
+		&tree.CreateTrigger{},
 		&tree.CreateType{},
 		&tree.CreateRole{},
 		&tree.Deallocate{},

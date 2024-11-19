@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package ttljob
 
@@ -26,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -198,7 +194,7 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 	}
 
 	type statsQuery struct {
-		opName string
+		opName redact.RedactableString
 		query  string
 		args   []interface{}
 		gauge  *aggmetric.Gauge
@@ -206,14 +202,14 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 	var statsQueries []statsQuery
 	if ttlKnobs := execCfg.TTLTestingKnobs; ttlKnobs != nil && ttlKnobs.ExtraStatsQuery != "" {
 		statsQueries = append(statsQueries, statsQuery{
-			opName: fmt.Sprintf("ttl extra stats query %s", relationName),
+			opName: redact.Sprintf("ttl extra stats query %s", relationName),
 			query:  ttlKnobs.ExtraStatsQuery,
 		},
 		)
 	}
 	statsQueries = append(statsQueries,
 		statsQuery{
-			opName: fmt.Sprintf("ttl num rows stats %s", relationName),
+			opName: redact.Sprintf("ttl num rows stats %s", relationName),
 			query: fmt.Sprintf(
 				`SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
 				details.TableID, aost.String(),
@@ -221,7 +217,7 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 			gauge: m.TotalRows,
 		},
 		statsQuery{
-			opName: fmt.Sprintf("ttl num expired rows stats %s", relationName),
+			opName: redact.Sprintf("ttl num expired rows stats %s", relationName),
 			query: fmt.Sprintf(
 				`SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s WHERE (`+string(ttlExpr)+`) < $1`,
 				details.TableID, aost.String(),

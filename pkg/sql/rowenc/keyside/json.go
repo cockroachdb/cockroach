@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package keyside
 
@@ -64,7 +59,7 @@ func decodeJSONKey(buf []byte, dir encoding.Direction) (json.JSON, []byte, error
 			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "could not decode JSON Number")
 		}
 		if len(buf) == 0 || !encoding.IsJSONKeyDone(buf, dir) {
-			return nil, nil, errors.New("cannot find JSON terminator")
+			return nil, nil, errors.AssertionFailedf("cannot find JSON terminator")
 		}
 		buf = buf[1:] // removing the terminator
 		jsonVal = json.FromDecimal(dec)
@@ -75,7 +70,7 @@ func decodeJSONKey(buf []byte, dir encoding.Direction) (json.JSON, []byte, error
 			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "could not decode JSON Number")
 		}
 		if len(buf) == 0 || !encoding.IsJSONKeyDone(buf, dir) {
-			return nil, nil, errors.New("cannot find JSON terminator")
+			return nil, nil, errors.AssertionFailedf("cannot find JSON terminator")
 		}
 		buf = buf[1:] // removing the terminator
 		jsonVal = json.FromDecimal(dec)
@@ -109,7 +104,7 @@ func decodeJSONString(buf []byte, dir encoding.Direction) (json.JSON, []byte, er
 			"the JSON String")
 	}
 	if len(buf) == 0 || !encoding.IsJSONKeyDone(buf, dir) {
-		return nil, nil, errors.New("cannot find JSON terminator")
+		return nil, nil, errors.AssertionFailedf("cannot find JSON terminator")
 	}
 	buf = buf[1:] // removing the terminator
 	jsonVal, err := json.MakeJSON(str)

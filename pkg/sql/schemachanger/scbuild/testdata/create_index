@@ -110,7 +110,7 @@ CREATE INDEX id4
   {columnId: 4, name: crdb_internal_id_name_shard_8, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4, TypeName: INT8}, PUBLIC], ABSENT]
   {columnId: 4, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isVirtual: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
-- [[ColumnComputeExpression:{DescID: 104, ColumnID: 4}, PUBLIC], ABSENT]
+- [[ColumnComputeExpression:{DescID: 104, ColumnID: 4, Usage: REGULAR}, PUBLIC], ABSENT]
   {columnId: 4, expr: 'mod(fnv32(md5(crdb_internal.datums_to_bytes(id, name))), 8:::INT8)', referencedColumnIds: [1, 2], tableId: 104}
 - [[ColumnNotNull:{DescID: 104, ColumnID: 4, IndexID: 1}, PUBLIC], ABSENT]
   {columnId: 4, indexIdForValidation: 1, tableId: 104}

@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package team involves processing team information based on a yaml
 // file containing team metadata.
@@ -41,14 +36,6 @@ type Team struct {
 	TriageColumnID int `yaml:"triage_column_id"`
 	// SilenceMentions is true if @-mentions should be supressed for this team.
 	SilenceMentions bool `yaml:"silence_mentions"`
-	// Email is the email address for this team.
-	//
-	// Currently unused.
-	Email string `yaml:"email"`
-	// Slack is the slack channel for this team.
-	//
-	// Currently unused.
-	Slack string `yaml:"slack"`
 }
 
 // Name returns the main Alias of the team.

@@ -1,49 +1,297 @@
-error
+parse
 DECLARE
 BEGIN
 FOR counter IN 1..5 LOOP
-  EXECUTE 'any command';
+  RAISE NOTICE 'The counter is %', counter;
 END LOOP;
 END
 ----
-----
-at or near "counter": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 DECLARE
 BEGIN
 FOR counter IN 1..5 LOOP
-    ^
-HINT: You have attempted to use a feature that is not yet implemented.
+RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+FOR counter IN (1)..(5) LOOP
+RAISE NOTICE 'The counter is %', (counter);
+END LOOP;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+FOR counter IN _.._ LOOP
+RAISE NOTICE '_', counter;
+END LOOP;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+FOR _ IN 1..5 LOOP
+RAISE NOTICE 'The counter is %', _;
+END LOOP;
+END;
+ -- identifiers removed
 
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
-
-
-error
+# Make sure labels work correctly.
+parse
 DECLARE
 BEGIN
 <<for_loop>>
 FOR counter IN 1..5 LOOP
-  EXECUTE 'any command';
+  RAISE NOTICE 'The counter is %', counter;
 END LOOP for_loop;
 END
 ----
-----
-at or near "counter": syntax error: unimplemented: this syntax
-DETAIL: source SQL:
 DECLARE
 BEGIN
 <<for_loop>>
 FOR counter IN 1..5 LOOP
-    ^
+RAISE NOTICE 'The counter is %', counter;
+END LOOP for_loop;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+<<for_loop>>
+FOR counter IN (1)..(5) LOOP
+RAISE NOTICE 'The counter is %', (counter);
+END LOOP for_loop;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+<<for_loop>>
+FOR counter IN _.._ LOOP
+RAISE NOTICE '_', counter;
+END LOOP for_loop;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+<<_>>
+FOR _ IN 1..5 LOOP
+RAISE NOTICE 'The counter is %', _;
+END LOOP _;
+END;
+ -- identifiers removed
+
+# The bounds can be arbitrary expressions.
+parse
+DECLARE
+BEGIN
+FOR counter IN (SELECT min(x) FROM xy)..(SELECT max(x) FROM xy) LOOP
+  RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+FOR counter IN (SELECT min(x) FROM xy)..(SELECT max(x) FROM xy) LOOP
+RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+FOR counter IN ((SELECT (min((x))) FROM xy))..((SELECT (max((x))) FROM xy)) LOOP
+RAISE NOTICE 'The counter is %', (counter);
+END LOOP;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+FOR counter IN (SELECT min(x) FROM xy)..(SELECT max(x) FROM xy) LOOP
+RAISE NOTICE '_', counter;
+END LOOP;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+FOR _ IN (SELECT _(_) FROM _)..(SELECT _(_) FROM _) LOOP
+RAISE NOTICE 'The counter is %', _;
+END LOOP;
+END;
+ -- identifiers removed
+
+# An extra dot here is interpreted as a decimal point.
+parse
+DECLARE
+BEGIN
+FOR counter IN 1...5 LOOP
+  RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+FOR counter IN 1...5 LOOP
+RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+FOR counter IN (1)..(.5) LOOP
+RAISE NOTICE 'The counter is %', (counter);
+END LOOP;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+FOR counter IN _.._ LOOP
+RAISE NOTICE '_', counter;
+END LOOP;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+FOR _ IN 1...5 LOOP
+RAISE NOTICE 'The counter is %', _;
+END LOOP;
+END;
+ -- identifiers removed
+
+# The step length can be specified.
+parse
+DECLARE
+BEGIN
+FOR counter IN 1..5 BY 2 LOOP
+  RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+FOR counter IN 1..5 BY 2 LOOP
+RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END;
+ -- normalized!
+DECLARE
+BEGIN
+FOR counter IN (1)..(5) BY (2) LOOP
+RAISE NOTICE 'The counter is %', (counter);
+END LOOP;
+END;
+ -- fully parenthesized
+DECLARE
+BEGIN
+FOR counter IN _.._ BY _ LOOP
+RAISE NOTICE '_', counter;
+END LOOP;
+END;
+ -- literals removed
+DECLARE
+BEGIN
+FOR _ IN 1..5 BY 2 LOOP
+RAISE NOTICE 'The counter is %', _;
+END LOOP;
+END;
+ -- identifiers removed
+
+# Invalid syntax in first expression.
+error
+DECLARE
+BEGIN
+FOR counter IN (SELEC 1)..5 LOOP
+  RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END
+----
+at or near "loop": at or near "1": syntax error
+DETAIL: source SQL:
+SET ROW ((SELEC 1))
+                ^
+--
+source SQL:
+DECLARE
+BEGIN
+FOR counter IN (SELEC 1)..5 LOOP
+                            ^
+HINT: try \h SET SESSION
+
+# Invalid syntax in second expression.
+error
+DECLARE
+BEGIN
+FOR counter IN 1..(SELEC 5) LOOP
+  RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END
+----
+at or near "loop": at or near "5": syntax error
+DETAIL: source SQL:
+SET ROW ((SELEC 5) )
+                ^
+--
+source SQL:
+DECLARE
+BEGIN
+FOR counter IN 1..(SELEC 5) LOOP
+                            ^
+HINT: try \h SET SESSION
+
+# Invalid syntax in step length.
+error
+DECLARE
+BEGIN
+FOR counter IN 1..5 BY (SELEC 2) LOOP
+  RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END
+----
+at or near "loop": at or near "2": syntax error
+DETAIL: source SQL:
+SET ROW ((SELEC 2) )
+                ^
+--
+source SQL:
+DECLARE
+BEGIN
+FOR counter IN 1..5 BY (SELEC 2) LOOP
+                                 ^
+HINT: try \h SET SESSION
+
+# Extra range bound.
+error
+DECLARE
+BEGIN
+FOR counter IN 1..5..10 LOOP
+  RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END
+----
+at or near "loop": at or near ".": syntax error
+DETAIL: source SQL:
+SET ROW (5..10 )
+          ^
+--
+source SQL:
+DECLARE
+BEGIN
+FOR counter IN 1..5..10 LOOP
+                        ^
+HINT: try \h SET SESSION
+
+# Too few dots, so the parser expects cursor or query loop.
+error
+DECLARE
+BEGIN
+FOR counter IN 1.5 LOOP
+  RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END
+----
+----
+at or near "in": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+FOR counter IN 1.5 LOOP
+            ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -57,21 +305,23 @@ We appreciate your feedback.
 ----
 ----
 
+# Nesting the dots should cause the parser to expect a cursor or query loop
+# instead.
 error
 DECLARE
 BEGIN
-FOR counter IN 1..5 LOOP
-  EXECUTE 'any command';
+FOR counter IN SELECT (1...5) LOOP
+  RAISE NOTICE 'The counter is %', counter;
 END LOOP;
 END
 ----
 ----
-at or near "counter": syntax error: unimplemented: this syntax
+at or near "in": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 DECLARE
 BEGIN
-FOR counter IN 1..5 LOOP
-    ^
+FOR counter IN SELECT (1...5) LOOP
+            ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is
@@ -95,12 +345,12 @@ END LOOP;
 RETURN;
 ----
 ----
-at or near "yr": syntax error: unimplemented: this syntax
+at or near "in": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 DECLARE
 BEGIN
 FOR yr IN SELECT * FROM generate_series(1,10,1) AS y_(y)
-    ^
+       ^
 HINT: You have attempted to use a feature that is not yet implemented.
 
 Please check the public issue tracker to check whether this problem is

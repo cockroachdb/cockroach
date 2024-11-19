@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -40,7 +35,7 @@ func registerSQLSmith(r registry.Registry) {
 		sqlsmith.RandTableSetupName: sqlsmith.Setups[sqlsmith.RandTableSetupName],
 		"tpch-sf1": func(r *rand.Rand) []string {
 			return []string{`
-RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup?AUTH=implicit'
+RESTORE TABLE tpch.* FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup?AUTH=implicit'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `}
 		},
@@ -61,7 +56,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 				stmts = append(
 					stmts,
 					fmt.Sprintf(`
-RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures-us-east1/workload/tpcc/%[2]s/%[1]s?AUTH=implicit'
+RESTORE TABLE tpcc.%s FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpcc/%[2]s/%[1]s?AUTH=implicit'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `,
 						t, version,
@@ -371,6 +366,26 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 // setupMultiRegionDatabase is used to set up a multi-region database.
 func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logStmt func(string)) {
 	t.Helper()
+
+	execStmt := func(stmt string) {
+		logStmt(stmt)
+		if _, err := conn.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// If we have a stmt timeout set on the session, then increase it 3x given
+	// that schema changes below can take non-trivial amount of time.
+	row := conn.QueryRow("SHOW statement_timeout")
+	var stmtTimeout int
+	if err := row.Scan(&stmtTimeout); err != nil {
+		t.Fatal(err)
+	} else if stmtTimeout != 0 {
+		t.L().Printf("temporarily increasing the statement timeout")
+		execStmt(fmt.Sprintf("SET statement_timeout = %d", 3*stmtTimeout))
+		defer execStmt(fmt.Sprintf("SET statement_timeout = %d", stmtTimeout))
+	}
+
 	regionsSet := make(map[string]struct{})
 	var region, zone string
 	rows, err := conn.Query("SHOW REGIONS FROM CLUSTER")
@@ -393,13 +408,6 @@ func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logSt
 
 	if len(regionList) == 0 {
 		t.Fatal(errors.New("no regions, cannot run multi-region config"))
-	}
-
-	execStmt := func(stmt string) {
-		logStmt(stmt)
-		if _, err := conn.Exec(stmt); err != nil {
-			t.Fatal(err)
-		}
 	}
 
 	for i, region := range regionList {

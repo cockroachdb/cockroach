@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package replicationtestutils
 
@@ -79,7 +76,18 @@ func ResolvedAtLeast(lo hlc.Timestamp) FeedEventPredicate {
 		if msg.Type() != crosscluster.CheckpointEvent {
 			return false
 		}
-		return lo.LessEq(minResolvedTimestamp(msg.GetResolvedSpans()))
+		return lo.LessEq(minResolvedTimestamp(msg.GetCheckpoint().ResolvedSpans))
+	}
+}
+
+// ContainsRangeStats makes a FeedEventPredicate that matches when the range
+// contains a checkpoint.
+func ContainsRangeStats() FeedEventPredicate {
+	return func(msg crosscluster.Event) bool {
+		if msg.Type() != crosscluster.CheckpointEvent {
+			return false
+		}
+		return msg.GetCheckpoint().RangeStats != nil
 	}
 }
 
@@ -141,7 +149,18 @@ func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp
 	rf.consumeUntil(ctx, ResolvedAtLeast(lo), func(err error) bool {
 		return false
 	})
-	return minResolvedTimestamp(rf.msg.GetResolvedSpans())
+	return minResolvedTimestamp(rf.msg.GetCheckpoint().ResolvedSpans)
+}
+
+// ObserveRangeStats consumes the feed until we recieve a checkpoint that
+// contains range stats. Returns the stats from the checkpoint.
+func (rf *ReplicationFeed) ObserveRangeStats(ctx context.Context) streampb.StreamEvent_RangeStats {
+	if !ContainsRangeStats()(rf.msg) {
+		rf.consumeUntil(ctx, ContainsRangeStats(), func(err error) bool {
+			return false
+		})
+	}
+	return *rf.msg.GetCheckpoint().RangeStats
 }
 
 // ObserveError consumes the feed until the feed is exhausted, and the final error should

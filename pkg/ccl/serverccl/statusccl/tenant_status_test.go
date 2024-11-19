@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package statusccl
 
@@ -122,6 +119,10 @@ func TestTenantStatusAPI(t *testing.T) {
 		testTenantRangesRPC(ctx, t, testHelper)
 	})
 
+	t.Run("ranges", func(t *testing.T) {
+		testRangesRPC(ctx, t, testHelper)
+	})
+
 	t.Run("tenant_auth_statement", func(t *testing.T) {
 		testTenantAuthOnStatements(ctx, t, testHelper)
 	})
@@ -221,6 +222,7 @@ func testTenantSpanStats(ctx context.Context, t *testing.T, helper serverccl.Ten
 
 		makeKey := func(keys ...[]byte) roachpb.Key {
 			return bytes.Join(keys, nil)
+
 		}
 
 		// Create a new range in this tenant.
@@ -1369,8 +1371,7 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper serverccl.
 	t.Run("tenant_cluster", func(t *testing.T) {
 		// Select a different tenant status server here so a pod-to-pod RPC will
 		// happen.
-		status :=
-			helper.TestCluster().TenantStatusSrv(2 /* idx */)
+		status := helper.TestCluster().TenantStatusSrv(2 /* idx */)
 		sqlConn := helper.TestCluster().TenantConn(0 /* idx */)
 		run(sqlConn, status, 1 /* coordinatorNodeID */)
 	})
@@ -1381,20 +1382,10 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 	tenantB := helper.ControlCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
 
 	// Wait for range splits to occur so we get more than just a single range during our tests.
-	testutils.SucceedsSoon(t, func() error {
-		resp, err := tenantA.TenantRanges(context.Background(), &serverpb.TenantRangesRequest{})
-		if err != nil {
-			return err
-		}
-		for _, ranges := range resp.RangesByLocality {
-			if len(ranges.Ranges) > 1 {
-				return nil
-			}
-		}
-		return errors.New("waiting for tenant range split")
-	})
+	waitForRangeSplit(t, tenantA)
+	waitForRangeSplit(t, tenantB)
 
-	t.Run("test tenant ranges respects tenant isolation", func(t *testing.T) {
+	t.Run("test TenantRanges respects tenant isolation", func(t *testing.T) {
 		tenIDA := helper.TestCluster().Tenant(0).GetRPCContext().TenantID
 		tenIDB := helper.ControlCluster().Tenant(0).GetRPCContext().TenantID
 		keySpanForA := keys.MakeTenantSpan(tenIDA)
@@ -1423,7 +1414,7 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 		}
 	})
 
-	t.Run("test tenant ranges pagination", func(t *testing.T) {
+	t.Run("test TenantRanges pagination", func(t *testing.T) {
 		ctx := context.Background()
 		resp1, err := tenantA.TenantRanges(ctx, &serverpb.TenantRangesRequest{
 			Limit: 1,
@@ -1462,6 +1453,54 @@ func testTenantRangesRPC(_ context.Context, t *testing.T, helper serverccl.Tenan
 			return nil
 		})
 
+	})
+}
+
+func testRangesRPC(_ context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
+	tenantA := helper.TestCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
+	tenantB := helper.ControlCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
+
+	req := &serverpb.RangesRequest{NodeId: "1"}
+
+	// Wait for range splits to occur so we get more than just a single range during our tests.
+	waitForRangeSplit(t, tenantA)
+	waitForRangeSplit(t, tenantB)
+
+	t.Run("test Ranges respects tenant isolation", func(t *testing.T) {
+		tenIDA := helper.TestCluster().Tenant(0).GetRPCContext().TenantID
+		tenIDB := helper.ControlCluster().Tenant(0).GetRPCContext().TenantID
+		keySpanForA := keys.MakeTenantSpan(tenIDA)
+		keySpanForB := keys.MakeTenantSpan(tenIDB)
+
+		resp, err := tenantA.Ranges(context.Background(), req)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Ranges)
+		for _, r := range resp.Ranges {
+			assertStartKeyInRange(t, r.Span.StartKey, keySpanForA.Key)
+			assertEndKeyInRange(t, r.Span.EndKey, keySpanForA.Key, keySpanForA.EndKey)
+		}
+
+		resp, err = tenantB.Ranges(context.Background(), req)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Ranges)
+		for _, r := range resp.Ranges {
+			assertStartKeyInRange(t, r.Span.StartKey, keySpanForB.Key)
+			assertEndKeyInRange(t, r.Span.EndKey, keySpanForB.Key, keySpanForB.EndKey)
+		}
+	})
+}
+
+func waitForRangeSplit(t *testing.T, tenant serverpb.TenantStatusServer) {
+	req := &serverpb.RangesRequest{NodeId: "1"}
+	testutils.SucceedsSoon(t, func() error {
+		resp, err := tenant.Ranges(context.Background(), req)
+		if err != nil {
+			return err
+		}
+		if len(resp.Ranges) <= 1 {
+			return errors.New("waiting for tenant range split")
+		}
+		return nil
 	})
 }
 

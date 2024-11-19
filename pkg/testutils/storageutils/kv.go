@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storageutils
 
@@ -88,9 +83,10 @@ func RangeKey(start, end string, ts int) storage.MVCCRangeKey {
 // RangeKeyWithTS creates an MVCCRangeKey for the given string key and timestamp.
 func RangeKeyWithTS(start, end string, ts hlc.Timestamp) storage.MVCCRangeKey {
 	return storage.MVCCRangeKey{
-		StartKey:  roachpb.Key(start),
-		EndKey:    roachpb.Key(end),
-		Timestamp: ts,
+		StartKey:               roachpb.Key(start),
+		EndKey:                 roachpb.Key(end),
+		Timestamp:              ts,
+		EncodedTimestampSuffix: storage.EncodeMVCCTimestampSuffix(ts),
 	}
 }
 

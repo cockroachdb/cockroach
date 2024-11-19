@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -24,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -196,7 +192,8 @@ func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultCol
 // processSourceRow processes one row from the source for insertion and, if
 // result rows are needed, saves it in the result row container.
 func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
-	if err := enforceNotNullConstraints(rowVals, r.insertCols); err != nil {
+	insertVals := rowVals[:len(r.insertCols)]
+	if err := enforceNotNullConstraints(insertVals, r.insertCols); err != nil {
 		return err
 	}
 
@@ -212,38 +209,35 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 		if err != nil {
 			return err
 		}
-
-		// Truncate rowVals so that it no longer includes partial index predicate
-		// values.
-		rowVals = rowVals[:len(r.insertCols)+r.checkOrds.Len()]
 	}
 
 	// Verify the CHECK constraint results, if any.
-	if !r.checkOrds.Empty() {
-		checkVals := rowVals[len(r.insertCols):]
+	if n := r.checkOrds.Len(); n > 0 {
+		// CHECK constraint results are after the insert columns.
+		offset := len(r.insertCols)
+		checkVals := rowVals[offset : offset+n]
 		if err := checkMutationInput(
 			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
 			r.ti.tableDesc(), r.checkOrds, checkVals,
 		); err != nil {
 			return err
 		}
-		rowVals = rowVals[:len(r.insertCols)]
 	}
 
 	// Error out the insert if the enforce_home_region session setting is on and
 	// the row's locality doesn't match the gateway region.
-	if err := r.regionLocalInfo.checkHomeRegion(rowVals); err != nil {
+	if err := r.regionLocalInfo.checkHomeRegion(insertVals); err != nil {
 		return err
 	}
 
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, rowVals, pm, r.traceKV); err != nil {
+	if err := r.ti.row(params.ctx, insertVals, pm, r.traceKV); err != nil {
 		return err
 	}
 
 	// If result rows need to be accumulated, do it.
 	if r.ti.rows != nil {
-		for i, val := range rowVals {
+		for i, val := range insertVals {
 			// The downstream consumer will want the rows in the order of
 			// the table descriptor, not that of insertCols. Reorder them
 			// and ignore non-public columns.
@@ -310,6 +304,13 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 				return false, err
 			}
 			break
+		}
+
+		if buildutil.CrdbTestBuild {
+			// This testing knob allows us to suspend execution to force a race condition.
+			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
+				fn()
+			}
 		}
 
 		// Process the insertion for the current source row, potentially

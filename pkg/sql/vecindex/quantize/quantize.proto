@@ -1,0 +1,61 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.sql.vecindex.quantize;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize";
+
+import "util/vector/vector.proto";
+import "gogoproto/gogo.proto";
+
+option (gogoproto.goproto_getters_all) = false;
+
+// RaBitQCodeSet is a set of RaBitQ quantization codes. Each code represents a
+// quantized vector.
+message RaBitQCodeSet {
+  // Count is the number of codes in the set.
+  int64 count = 1 [(gogoproto.casttype) = "int"];
+  // Width is the number of uint64 values that store a single code.
+  int64 width = 2 [(gogoproto.casttype) = "int"];
+  // Data is a uint64 slice that stores all the codes in the set. Codes are
+  // stored contiguously in row-wise order.
+  repeated uint64 data = 3;
+}
+
+// RaBitQuantizedVectorSet encodes a set of RaBitQ quantized vectors. This
+// includes enough information to estimate the distance from the original
+// full-size vectors to a user-provided query vector.
+message RaBitQuantizedVectorSet {
+  // Centroid is the average of vectors in the set, representing its "center of
+  // mass". Note that the centroid is computed when a vector set is created and
+  // is not updated when vectors are added or removed.
+  repeated float centroid = 1;
+  // Codes is a set of RaBitQ quantization codes, with one code per quantized
+  // vector in the set.
+  RaBitQCodeSet codes = 2 [(gogoproto.nullable) = false];
+  // CodeCounts records the count of "1" bits in each of the quantization codes.
+  repeated uint32 code_counts = 3;
+  // CentroidDistances is a slice of the exact distances of the original
+  // full-size vectors from the centroid.
+  repeated float centroidDistances = 4;
+  // DotProducts is a slice of the exact inner products between the original
+  // full-size vectors and their corresponding quantized vectors.
+  repeated float dotProducts = 5;
+}
+
+// UnQuantizedVectorSet trivially implements the QuantizedVectorSet interface,
+// storing the original full-size vectors without quantization. This is used in
+// testing and for the root partition, which is never quantized.
+message UnQuantizedVectorSet {
+  // Centroid is the average of vectors in the set, representing its "center of
+  // mass". Note that the centroid is computed when a vector set is created and
+  // is not updated when vectors are added or removed.
+  repeated float centroid = 1;
+  // CentroidDistances is a slice of the exact distances of the vectors in the
+  // set from the centroid.
+  repeated float centroidDistances = 2;
+  // Vectors is the set of original full-size vectors.
+  cockroach.util.vector.Set vectors = 3 [(gogoproto.nullable) = false];
+}

@@ -143,7 +143,7 @@ Schema change plan for CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹publi
       │    │    ├── PUBLIC      → WRITE_ONLY    Column:{DescID: 104 (t), ColumnID: 2 (j-)}
       │    │    ├── PUBLIC      → ABSENT        ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
       │    │    ├── DELETE_ONLY → ABSENT        Column:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr-)}
-      │    │    ├── PUBLIC      → ABSENT        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr-)}
+      │    │    ├── PUBLIC      → ABSENT        ColumnComputeExpression:{DescID: 104 (t), ColumnID: 4 (crdb_internal_idx_expr-), Usage: REGULAR}
       │    │    ├── PUBLIC      → ABSENT        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (crdb_internal_idx_expr-), TypeName: "INT8"}
       │    │    ├── PUBLIC      → VALIDATED     PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    ├── PUBLIC      → ABSENT        IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}

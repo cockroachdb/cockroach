@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package row
 
@@ -17,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -24,6 +20,7 @@ import (
 // encoding logic to kv.Batch.
 type Putter interface {
 	CPut(key, value interface{}, expValue []byte)
+	CPutWithOriginTimestamp(key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool)
 	Put(key, value interface{})
 	InitPut(key, value interface{}, failOnTombstones bool)
 	Del(key ...interface{})
@@ -47,6 +44,13 @@ var _ Putter = &TracePutter{}
 func (t *TracePutter) CPut(key, value interface{}, expValue []byte) {
 	log.VEventfDepth(t.Ctx, 1, 2, "CPut %v -> %v", key, value)
 	t.Putter.CPut(key, value, expValue)
+}
+
+func (t *TracePutter) CPutWithOriginTimestamp(
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
+) {
+	log.VEventfDepth(t.Ctx, 1, 2, "CPutWithOriginTimestamp %v -> %v @ %v", key, value, ts)
+	t.Putter.CPutWithOriginTimestamp(key, value, expValue, ts, shouldWinTie)
 }
 
 func (t *TracePutter) Put(key, value interface{}) {
@@ -183,6 +187,12 @@ func (s *SortingPutter) CPut(key, value interface{}, expValue []byte) {
 	s.Putter.CPut(key, value, expValue)
 }
 
+func (s *SortingPutter) CPutWithOriginTimestamp(
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
+) {
+	s.Putter.CPutWithOriginTimestamp(key, value, expValue, ts, shouldWinTie)
+}
+
 func (s *SortingPutter) Put(key, value interface{}) {
 	s.Putter.Put(key, value)
 }
@@ -274,6 +284,12 @@ type KVBatchAdapter struct {
 }
 
 var _ Putter = &KVBatchAdapter{}
+
+func (k *KVBatchAdapter) CPutWithOriginTimestamp(
+	key, value interface{}, expValue []byte, originTimestamp hlc.Timestamp, shouldWinTie bool,
+) {
+	k.Batch.CPutWithOriginTimestamp(key, value, expValue, originTimestamp, shouldWinTie)
+}
 
 func (k *KVBatchAdapter) CPut(key, value interface{}, expValue []byte) {
 	k.Batch.CPut(key, value, expValue)

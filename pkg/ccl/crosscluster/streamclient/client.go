@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package streamclient
 
@@ -129,6 +126,9 @@ type subscribeConfig struct {
 	// NB: Callers should note that initial scan results will not
 	// contain a diff.
 	withDiff bool
+
+	// batchByteSize requests the producer emit batches up to the specified size.
+	batchByteSize int64
 }
 
 type SubscribeOption func(*subscribeConfig)
@@ -150,6 +150,13 @@ func WithFiltering(filteringEnabled bool) SubscribeOption {
 func WithDiff(enableDiff bool) SubscribeOption {
 	return func(cfg *subscribeConfig) {
 		cfg.withDiff = enableDiff
+	}
+}
+
+// WithBatchSize requests the producer emit batches up to the specified size.
+func WithBatchSize(bytes int64) SubscribeOption {
+	return func(cfg *subscribeConfig) {
+		cfg.batchByteSize = bytes
 	}
 }
 

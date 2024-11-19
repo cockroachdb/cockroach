@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlproxyccl
 
@@ -16,11 +13,14 @@ import (
 	"net/http/pprof"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -28,9 +28,21 @@ import (
 	"github.com/prometheus/common/expfmt"
 )
 
-var (
-	awaitNoConnectionsInterval = time.Minute
-)
+// Variable to be swapped in tests.
+var awaitNoConnectionsInterval = time.Minute
+
+// maxErrorLogLimiterCacheSize defines the maximum cache size for the error log
+// limiter. We set it to 1M to align with the cache size of the connection
+// throttler (see pkg/ccl/sqlproxyccl/throttler). Based on testing, this
+// corresponds to roughly 200-300MB of memory usage when the cache is fully
+// utilized. However, in practice, since the limiter is only applied to
+// high-frequency errors, the cache will typically store only a small number of
+// entries (e.g., around 2-3MB for 10K entries).
+const maxErrorLogLimiterCacheSize = 1e6
+
+// errorLogLimiterDuration indicates how frequent an error should be logged
+// for a given (ip, tenant ID) pair.
+const errorLogLimiterDuration = 5 * time.Minute
 
 // Server is a TCP server that proxies SQL connections to a configurable
 // backend. It may also run an HTTP server to expose a health check and
@@ -43,6 +55,23 @@ type Server struct {
 	metricsRegistry *metric.Registry
 
 	prometheusExporter metric.PrometheusExporter
+
+	// errorLogLimiter is used to rate-limit the frequency at which *common*
+	// errors are logged. It ensures that repeated error messages for the same
+	// connection tag are logged at most once every 5 minutes (see
+	// errorLogLimiterDuration).
+	mu struct {
+		syncutil.Mutex
+		errorLogLimiter *cache.UnorderedCache // map[connTag]*log.EveryN
+	}
+}
+
+// connTag represents the key for errorLogLimiter.
+type connTag struct {
+	// ip is the IP address of the client.
+	ip string
+	// tenantID is the ID of the tenant database the client is connecting to.
+	tenantID string
 }
 
 // NewServer constructs a new proxy server and provisions metrics and health
@@ -68,6 +97,15 @@ func NewServer(ctx context.Context, stopper *stop.Stopper, options ProxyOptions)
 		metricsRegistry:    registry,
 		prometheusExporter: metric.MakePrometheusExporter(),
 	}
+
+	// Configure the error log limiter cache.
+	cacheConfig := cache.Config{
+		Policy: cache.CacheLRU,
+		ShouldEvict: func(size int, key, value interface{}) bool {
+			return size > maxErrorLogLimiterCacheSize
+		},
+	}
+	s.mu.errorLogLimiter = cache.NewUnorderedCache(cacheConfig)
 
 	// /_status/{healthz,vars} matches CRDB's healthcheck and metrics
 	// endpoints.
@@ -271,12 +309,43 @@ func (s *Server) serve(ctx context.Context, ln net.Listener, requireProxyProtoco
 
 		err = s.Stopper.RunAsyncTask(ctx, "proxy-con-serve", func(ctx context.Context) {
 			defer func() { _ = conn.Close() }()
+
 			s.metrics.CurConnCount.Inc(1)
 			defer s.metrics.CurConnCount.Dec(1)
-			remoteAddr := conn.RemoteAddr()
-			ctxWithTag := logtags.AddTag(ctx, "client", log.SafeOperational(remoteAddr))
-			if err := s.handler.handle(ctxWithTag, conn, requireProxyProtocol); err != nil {
-				log.Infof(ctxWithTag, "connection error: %v", err)
+
+			ctx = logtags.AddTag(ctx, "client", log.SafeOperational(conn.RemoteAddr()))
+
+			// Use a map to collect request-specific information at higher
+			// layers of the stack. This helps ensure that all relevant
+			// information is captured, providing better context for the error
+			// logs.
+			//
+			// We could improve this by creating a custom context.Context object
+			// to track all data related to the request (including migration
+			// history). For now, this approach is adequate.
+			reqTags := make(map[string]interface{})
+			ctx = contextWithRequestTags(ctx, reqTags)
+
+			err := s.handler.handle(ctx, conn, requireProxyProtocol)
+			if err != nil && !errors.Is(err, context.Canceled) {
+				// Ensure that context is tagged with request tags which are
+				// populated at higher layers of the stack.
+				for key, value := range reqTags {
+					ctx = logtags.AddTag(ctx, key, value)
+				}
+
+				// log.Infof automatically prints hints (one per line) that are
+				// associated with the input error object. This causes
+				// unnecessary log spam, especially when proxy hints are meant
+				// for the user. We will intentionally create a new error object
+				// without the hints just for logging purposes.
+				//
+				// TODO(jaylim-crl): Ensure that handle does not return user
+				// facing errors (i.e. one that contains hints).
+				if s.shouldLogError(ctx, err, conn, reqTags) {
+					errWithoutHints := errors.Newf("%s", err.Error()) // nolint:errwrap
+					log.Infof(ctx, "connection closed: %v", errWithoutHints)
+				}
 			}
 		})
 		if err != nil {
@@ -324,4 +393,82 @@ func (s *Server) AwaitNoConnections(ctx context.Context) <-chan struct{} {
 	})
 
 	return c
+}
+
+// shouldLogError returns true if an error should be logged, or false otherwise.
+// The goal is to only throttle high-frequency errors for every (IP, tenantID)
+// pair.
+func (s *Server) shouldLogError(
+	ctx context.Context, err error, conn net.Conn, reqTags map[string]interface{},
+) bool {
+	// Always log non high-frequency errors.
+	if !errors.Is(err, highFreqErrorMarker) {
+		return true
+	}
+
+	// Request hasn't been populated with a tenant ID yet, so log them.
+	tenantID, hasTenantID := reqTags["tenant"]
+	if !hasTenantID {
+		return true
+	}
+
+	// Tenant ID must be a string, or else there has to be a bug in the code.
+	// Instead of panicking, we'll skip throttling.
+	tenantIDStr, ok := tenantID.(string)
+	if !ok {
+		log.Errorf(
+			ctx,
+			"unexpected error: cannot extract tenant ID from request tags; found: %v",
+			tenantID,
+		)
+		return true
+	}
+
+	// Extract just the IP from the remote address. We'll log anyway if we get
+	// an error. This case cannot happen in practice since conn.RemoteAddr()
+	// will always return a valid IP.
+	ipAddr, _, err := addr.SplitHostPort(conn.RemoteAddr().String(), "")
+	if err != nil {
+		log.Errorf(
+			ctx,
+			"unexpected error: cannot extract remote IP from connection; found: %v",
+			conn.RemoteAddr().String(),
+		)
+		return true
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var limiter *log.EveryN
+	key := connTag{ip: ipAddr, tenantID: tenantIDStr}
+	c, ok := s.mu.errorLogLimiter.Get(key)
+	if ok && c != nil {
+		limiter = c.(*log.EveryN)
+	} else {
+		e := log.Every(errorLogLimiterDuration)
+		limiter = &e
+		s.mu.errorLogLimiter.Add(key, limiter)
+	}
+	return limiter.ShouldLog()
+}
+
+// requestTagsContextKey is the type of a context.Value key used to carry the
+// request tags map in a context.Context object.
+type requestTagsContextKey struct{}
+
+// contextWithRequestTags returns a context annotated with the provided request
+// tags map. Use requestTagsFromContext(ctx) to retrieve it back.
+func contextWithRequestTags(ctx context.Context, reqTags map[string]interface{}) context.Context {
+	return context.WithValue(ctx, requestTagsContextKey{}, reqTags)
+}
+
+// requestTagsFromContext retrieves the request tags map stored in the context
+// via contextWithRequestTags.
+func requestTagsFromContext(ctx context.Context) map[string]interface{} {
+	r := ctx.Value(requestTagsContextKey{})
+	if r == nil {
+		return nil
+	}
+	return r.(map[string]interface{})
 }

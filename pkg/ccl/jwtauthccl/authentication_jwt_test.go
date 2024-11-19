@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package jwtauthccl
 
@@ -42,9 +39,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/redact"
-	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/lestrrat-go/jwx/jwt"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,8 +69,8 @@ func createJWKS(t *testing.T) (jwk.Set, jwk.Key, jwk.Key) {
 	pubKey2, err := key2.PublicKey()
 	require.NoError(t, err)
 	set := jwk.NewSet()
-	set.Add(pubKey1)
-	set.Add(pubKey2)
+	require.NoError(t, set.AddKey(pubKey1))
+	require.NoError(t, set.AddKey(pubKey2))
 
 	return set, key1, key2
 }
@@ -81,7 +78,7 @@ func createJWKS(t *testing.T) (jwk.Set, jwk.Key, jwk.Key) {
 func createECDSAKey(t *testing.T, keyID string) jwk.Key {
 	raw, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	require.NoError(t, err)
-	key, err := jwk.New(raw)
+	key, err := jwk.FromRaw(raw)
 	require.NoError(t, err)
 	require.NoError(t, key.Set(jwk.KeyIDKey, keyID))
 	require.NoError(t, key.Set(jwk.AlgorithmKey, jwa.ES384))
@@ -91,7 +88,7 @@ func createECDSAKey(t *testing.T, keyID string) jwk.Key {
 func createRSAKey(t *testing.T, keyID string) jwk.Key {
 	raw, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	key, err := jwk.New(raw)
+	key, err := jwk.FromRaw(raw)
 	require.NoError(t, err)
 	require.NoError(t, key.Set(jwk.KeyIDKey, keyID))
 	require.NoError(t, key.Set(jwk.AlgorithmKey, jwa.RS256))
@@ -117,7 +114,7 @@ func createJWT(
 	if customClaimName != "" {
 		require.NoError(t, token.Set(customClaimName, customClaimValue))
 	}
-	signedTokenBytes, err := jwt.Sign(token, algorithm, key)
+	signedTokenBytes, err := jwt.Sign(token, jwt.WithKey(algorithm, key))
 	require.NoError(t, err)
 	return signedTokenBytes
 }
@@ -257,7 +254,7 @@ func TestJWTMultiKey(t *testing.T) {
 	publicKey, err := key.PublicKey()
 	require.NoError(t, err)
 	keySetWithOneKey := jwk.NewSet()
-	keySetWithOneKey.Add(publicKey)
+	require.NoError(t, keySetWithOneKey.AddKey(publicKey))
 	// Set the JWKS to only include jwk1.
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySetWithOneKey))
 
@@ -301,7 +298,7 @@ func TestExpiredToken(t *testing.T) {
 	// Validation fails with an invalid token error for tokens with an expiration date in the past.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid token")
-	require.EqualValues(t, "unable to parse token: exp not satisfied", errors.GetAllDetails(err)[0])
+	require.EqualValues(t, "unable to parse token: \"exp\" not satisfied", errors.GetAllDetails(err)[0])
 }
 
 func TestKeyIdMismatch(t *testing.T) {
@@ -493,17 +490,26 @@ func TestSingleClaim(t *testing.T) {
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
 
 	// Validation fails with a subject error when a user tries to log in with a user named
-	// "invalid" but the token is for the user "test2".
+	// "invalid" but the token is for the user "test1".
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
 
-	// Validation passes the subject check when the username matches the subject and then fails on the next
-	// check (audience field not matching).
+	// Validation is successful for a token with a matched principal.
+	retrievedUser, err := verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.NoError(t, err)
+	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username1), retrievedUser)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
-	require.ErrorContains(t, err, "JWT authentication: invalid audience")
-	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
+	require.NoError(t, err)
+
+	// Validation is successful for a token without a username provided, as a single principal is matched.
+	retrievedUser, err = verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
+	require.NoError(t, err)
+	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username1), retrievedUser)
+	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
+	require.NoError(t, err)
 }
 
 func TestMultipleClaim(t *testing.T) {
@@ -525,20 +531,32 @@ func TestMultipleClaim(t *testing.T) {
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
 
 	// Validation fails with a subject error when a user tries to log in with a user named
 	// "invalid" but the token is for the user "test2".
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
 
-	// Validation passes the subject check when the username matches the subject and then fails on the next
-	// check (audience field not matching).
+	// Validation is successful for a token with a matched principal - test1.
+	retrievedUser, err := verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.NoError(t, err)
+	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username1), retrievedUser)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
-	require.ErrorContains(t, err, "JWT authentication: invalid audience")
-	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
+	require.NoError(t, err)
+
+	// Validation is successful for a token with a matched principal - test2.
+	retrievedUser, err = verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(username2), token, identMap)
+	require.NoError(t, err)
+	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username2), retrievedUser)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username2), token, identMap)
-	require.ErrorContains(t, err, "JWT authentication: invalid audience")
-	require.EqualValues(t, "token issued with an audience of [test_cluster]", errors.GetAllDetails(err)[0])
+	require.NoError(t, err)
+
+	// Validation fails for a token without a username provided, as multiple principals are matched.
+	_, err = verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid principal")
+	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid principal")
 }
 
 func TestSubjectMappingCheck(t *testing.T) {
@@ -701,7 +719,7 @@ func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	// Create key from a file. This key will be used to sign the token.
 	// Matching public key available in jwks URI is used to verify token.
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	key, _ := keySet.Get(0)
+	key, _ := keySet.Key(0)
 	validIssuer := "https://accounts.idp1.com"
 	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
 
@@ -755,7 +773,7 @@ func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	// Create key from a file. This key will be used to sign the token.
 	// Matching public key available in jwks URI is used to verify token.
 	keySetUsedForSigning := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	key, _ := keySetUsedForSigning.Get(0)
+	key, _ := keySetUsedForSigning.Key(0)
 	validIssuer := "https://accounts.idp1.com"
 	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
 
@@ -897,7 +915,7 @@ func TestJWTAuthWithCustomCACert(t *testing.T) {
 	// Create a key to sign the token using testdata.
 	// The same will be fetched through the JWKS URI to verify the token.
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	key, _ := keySet.Get(0)
+	key, _ := keySet.Key(0)
 	issuer := testServerURL
 	token := createJWT(
 		t, username1, audience1, issuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
@@ -1016,7 +1034,7 @@ func TestJWTAuthClientTimeout(t *testing.T) {
 	// Create a key to sign the token using testdata.
 	// The same will be fetched through the JWKS URI to verify the token.
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	key, _ := keySet.Get(0)
+	key, _ := keySet.Key(0)
 	validIssuer := "https://accounts.idp1.com"
 	token := createJWT(
 		t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
@@ -1087,7 +1105,7 @@ func TestJWTAuthWithIssuerJWKSConfAutoFetchJWKS(t *testing.T) {
 	// Create a key to sign the token using testdata.
 	// The same will be fetched through the JWKS URI to verify the token.
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
-	key, _ := keySet.Get(0)
+	key, _ := keySet.Key(0)
 	issuer := testServerURL
 	token := createJWT(
 		t, username1, audience1, issuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")

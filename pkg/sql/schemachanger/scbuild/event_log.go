@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuild
 
@@ -65,6 +60,7 @@ func makeEventLogCallback(
 	var swallowedError error
 	defer scerrors.StartEventf(
 		b.Context,
+		0, /* level */
 		"event logging for declarative schema change targets built for %s",
 		redact.Safe(ts.Statements[loggedTargets[0].target.Metadata.StatementID].StatementTag),
 	).HandlePanicAndLogError(b.Context, &swallowedError)
@@ -131,7 +127,11 @@ func namespace(b buildCtx, id descpb.ID) (ns *scpb.Namespace) {
 }
 
 func fullyQualifiedName(b buildCtx, e scpb.Element) string {
-	ns := namespace(b, screl.GetDescID(e))
+	return fullyQualifiedNameFromID(b, screl.GetDescID(e))
+}
+
+func fullyQualifiedNameFromID(b buildCtx, id descpb.ID) string {
+	ns := namespace(b, id)
 	if ns.DatabaseID == descpb.InvalidID {
 		return ns.Name
 	}
@@ -181,6 +181,31 @@ func functionName(b buildCtx, e scpb.Element) string {
 	databaseNamespaceElem := namespace(b, schemaNamespaceElem.DatabaseID)
 	fnName := tree.MakeQualifiedRoutineName(databaseNamespaceElem.Name, schemaNamespaceElem.Name, fnNameElem.Name)
 	return fnName.FQString()
+}
+
+// triggerName returns the name of the trigger that element `e` belongs to.
+// `e` must therefore have a DescID and TriggerID attr and is a trigger-related
+// element.
+func triggerName(b buildCtx, e scpb.Element) string {
+	descID := screl.GetDescID(e)
+	triggerID, err := screl.Schema.GetAttribute(screl.TriggerID, e)
+	if err != nil {
+		panic(err)
+	}
+	var triggerNameElem *scpb.TriggerName
+	scpb.ForEachTriggerName(
+		b.QueryByID(descID),
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.TriggerName) {
+			if e.TriggerID == triggerID && (triggerNameElem == nil || target != scpb.ToAbsent) {
+				triggerNameElem = e
+			}
+		},
+	)
+	if triggerNameElem == nil {
+		panic(errors.AssertionFailedf("missing TriggerName element for table #%d and trigger ID #%s",
+			descID, triggerID))
+	}
+	return triggerNameElem.Name
 }
 
 // ownerName finds the owner of the descriptor that element `e` belongs to.
@@ -437,18 +462,48 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 				FunctionName: functionName(b, e),
 			}
 		}
-	case *scpb.DatabaseZoneConfig, *scpb.TableZoneConfig:
+	case *scpb.DatabaseZoneConfig, *scpb.TableZoneConfig, *scpb.IndexZoneConfig,
+		*scpb.PartitionZoneConfig, *scpb.NamedRangeZoneConfig:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
 			var zcDetails eventpb.CommonZoneConfigDetails
+			var oldConfig string
 			if pb.maybePayload != nil {
-				payload := pb.maybePayload.(*eventpb.SetZoneConfig)
-				zcDetails = eventpb.CommonZoneConfigDetails{
-					Target:  payload.Target,
-					Options: payload.Options,
+				if payload, ok := pb.maybePayload.(*eventpb.SetZoneConfig); ok {
+					zcDetails = eventpb.CommonZoneConfigDetails{
+						Target:  payload.Target,
+						Options: payload.Options,
+					}
+					oldConfig = payload.ResolvedOldConfig
 				}
 			}
 			return &eventpb.SetZoneConfig{
 				CommonZoneConfigDetails: zcDetails,
+				ResolvedOldConfig:       oldConfig,
+			}
+		} else {
+			var zcDetails eventpb.CommonZoneConfigDetails
+			if pb.maybePayload != nil {
+				if payload, ok := pb.maybePayload.(*eventpb.RemoveZoneConfig); ok {
+					zcDetails = eventpb.CommonZoneConfigDetails{
+						Target:  payload.Target,
+						Options: payload.Options,
+					}
+				}
+			}
+			return &eventpb.RemoveZoneConfig{
+				CommonZoneConfigDetails: zcDetails,
+			}
+		}
+	case *scpb.Trigger:
+		if pb.TargetStatus == scpb.Status_PUBLIC {
+			return &eventpb.CreateTrigger{
+				TableName:   fullyQualifiedNameFromID(b, e.TableID),
+				TriggerName: triggerName(b, e),
+			}
+		} else {
+			return &eventpb.DropTrigger{
+				TableName:   fullyQualifiedNameFromID(b, e.TableID),
+				TriggerName: triggerName(b, e),
 			}
 		}
 	}

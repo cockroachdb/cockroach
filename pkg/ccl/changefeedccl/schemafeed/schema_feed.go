@@ -1,10 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package schemafeed provides SchemaFeed, which can be used to track schema
 // updates.
@@ -483,36 +480,42 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 	// Always assume we need to resume polling until we've proven otherwise.
 	tf.mu.pollingPaused = false
 
-	if err := tf.targets.EachTableID(func(id descpb.ID) error {
+	if canPausePolling, err := tf.targets.EachTableIDWithBool(func(id descpb.ID) (bool, error) {
 		// Check if target table is schema-locked at the current frontier.
 		ld1, err := tf.leaseMgr.Acquire(ctx, frontier, id)
 		if err != nil {
-			return err
+			return false, err
 		}
 		defer ld1.Release(ctx)
 		desc1 := ld1.Underlying().(catalog.TableDescriptor)
 		if !desc1.IsSchemaLocked() {
-			return errors.Newf("desc %d not schema-locked at frontier %s", desc1.GetID(), frontier)
+			if log.V(2) {
+				log.Infof(ctx, "desc %d not schema-locked at frontier %s", desc1.GetID(), frontier)
+			}
+			return false, nil
 		}
 
 		if atOrBefore.LessEq(frontier) {
-			return nil
+			return true, nil
 		}
 
 		// Check if target table remains at the same version at atOrBefore.
 		ld2, err := tf.leaseMgr.Acquire(ctx, atOrBefore, id)
 		if err != nil {
-			return err
+			return false, err
 		}
 		defer ld2.Release(ctx)
 		desc2 := ld2.Underlying().(catalog.TableDescriptor)
 		if desc1.GetVersion() != desc2.GetVersion() {
-			return errors.Newf("desc %d version changed from version %d to %d between frontier %s and atOrBefore %s",
-				desc1.GetID(), desc1.GetVersion(), desc2.GetVersion(), frontier, atOrBefore)
+			if log.V(1) {
+				log.Infof(ctx,
+					"desc %d version changed from version %d to %d between frontier %s and atOrBefore %s",
+					desc1.GetID(), desc1.GetVersion(), desc2.GetVersion(), frontier, atOrBefore)
+			}
+			return false, nil
 		}
-
-		return nil
-	}); err != nil {
+		return true, nil
+	}); !canPausePolling || err != nil {
 		if errors.Is(err, catalog.ErrDescriptorDropped) {
 			// If a table is dropped and causes Acquire to fail, we mark it as a
 			// terminal error, so that we don't retry, and let the changefeed job

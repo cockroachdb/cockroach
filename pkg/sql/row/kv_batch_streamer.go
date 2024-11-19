@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package row
 
@@ -31,6 +26,7 @@ type txnKVStreamer struct {
 	streamer       *kvstreamer.Streamer
 	lockStrength   lock.Strength
 	lockDurability lock.Durability
+	rawMVCCValues  bool
 
 	// spans contains the last set of spans provided in SetupNextFetch. The
 	// original span is only needed when handling Get responses, so each span is
@@ -63,12 +59,14 @@ func newTxnKVStreamer(
 	acc *mon.BoundAccount,
 	kvPairsRead *int64,
 	batchRequestsIssued *int64,
+	rawMVCCValues bool,
 ) KVBatchFetcher {
 	f := &txnKVStreamer{
 		streamer:       streamer,
 		lockStrength:   GetKeyLockingStrength(lockStrength),
 		lockDurability: GetKeyLockingDurability(lockDurability),
 		acc:            acc,
+		rawMVCCValues:  rawMVCCValues,
 	}
 	f.kvBatchFetcherHelper.init(f.nextBatch, kvPairsRead, batchRequestsIssued)
 	return f
@@ -111,7 +109,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 		reqsScratch[i] = kvpb.RequestUnion{}
 	}
 	// TODO(yuzefovich): consider supporting COL_BATCH_RESPONSE scan format.
-	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.lockStrength, f.lockDurability, reqsScratch)
+	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.rawMVCCValues, f.lockStrength, f.lockDurability, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}

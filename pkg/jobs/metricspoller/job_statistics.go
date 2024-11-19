@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package metricspoller
 
@@ -77,6 +72,48 @@ func updatePausedMetrics(ctx context.Context, execCtx sql.JobExecContext) error 
 		if metrics.JobMetrics[v] != nil {
 			metrics.JobMetrics[v].CurrentlyPaused.Update(int64(metricUpdates[jobspb.Type(v)]))
 		}
+	}
+	return nil
+}
+
+// lowTSForTypeQuery finds the lowest non-null ts for all jobs of a given type.
+// min() ignores nulls; jobs of the type that do not have a ts are not included
+// in the result, e.g. a new changefeed that is still in initial scan would not
+// change the result of the query, but if after its initial scan it was several
+// minutes behind and was the most lagged changefeed, that would be reflected.
+const lowTSForTypeQuery = `SELECT min(high_water_timestamp) FROM crdb_internal.jobs WHERE job_type = $1 AND status IN ` + jobs.NonTerminalStatusTupleString
+
+// updateTSMetrics updates the metrics for jobs that have registered for ts
+// tracking.
+func updateTSMetrics(ctx context.Context, execCtx sql.JobExecContext) error {
+	for _, typ := range jobspb.Type_value {
+		m := execCtx.ExecCfg().JobRegistry.MetricsStruct().ResolvedMetrics[typ]
+		// If this job type does not register a resolved TS metric, skip it.
+		if m == nil {
+			continue
+		}
+
+		var ts hlc.Timestamp
+		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			if err := txn.KV().SetUserPriority(roachpb.MinUserPriority); err != nil {
+				return err
+			}
+			row, err := txn.QueryRowEx(
+				ctx, "poll-jobs-metrics-ts", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+				lowTSForTypeQuery, jobspb.Type(typ).String(),
+			)
+			// Feeding zero non-null rows to min() returns null; return and record
+			// a zero ts (i.e. no data.) in this case or an error case.
+			if err != nil || row == nil || row[0] == tree.DNull {
+				return err
+			}
+			d := *row[0].(*tree.DDecimal)
+			ts, err = hlc.DecimalToHLC(&d.Decimal)
+			return err
+		}); err != nil {
+			return errors.Wrap(err, "could not query jobs table")
+		}
+		m.Update(ts.GoTime().Unix())
 	}
 	return nil
 }

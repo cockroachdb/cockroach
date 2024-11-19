@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -127,11 +122,6 @@ func TestWALFailover(t *testing.T) {
 					version.Major += clusterversion.DevOffset
 				}
 				settings := cluster.MakeTestingClusterSettingsWithVersions(version, version, true /* initializeVersion */)
-
-				// Mock an enterpise license, or not if disable-enterprise is specified.
-				enterpriseEnabledFunc := base.CCLDistributionAndEnterpriseEnabled
-				base.CCLDistributionAndEnterpriseEnabled = func(st *cluster.Settings) bool { return !td.HasArg("disable-enterprise") }
-				defer func() { base.CCLDistributionAndEnterpriseEnabled = enterpriseEnabledFunc }()
 
 				engine, err := Open(context.Background(), openEnv, settings, WALFailover(cfg, envs, defaultFS, nil))
 				if err != nil {

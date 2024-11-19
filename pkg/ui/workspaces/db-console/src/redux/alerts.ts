@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 /**
  * Alerts is a collection of selectors which determine if there are any Alerts
@@ -61,6 +56,7 @@ export enum AlertLevel {
   WARNING,
   CRITICAL,
   SUCCESS,
+  INFORMATION,
 }
 
 export interface AlertInfo {
@@ -637,20 +633,6 @@ export const upgradeNotFinalizedWarningSelector = createSelector(
 
 /**
  * Selector which returns an array of all active alerts which should be
- * displayed in the overview list page, these should be non-critical alerts.
- */
-
-export const overviewListAlertsSelector = createSelector(
-  staggeredVersionWarningSelector,
-  clusterPreserveDowngradeOptionOvertimeSelector,
-  upgradeNotFinalizedWarningSelector,
-  (...alerts: Alert[]): Alert[] => {
-    return without(alerts, null, undefined);
-  },
-);
-
-/**
- * Selector which returns an array of all active alerts which should be
  * displayed in the alerts panel, which is embedded within the cluster overview
  * page; currently, this includes all non-critical alerts.
  */
@@ -690,21 +672,48 @@ export const dataFromServerAlertSelector = createSelector(
   },
 );
 
-const licenseTypeNames = new Map<
-  string,
-  "Trial" | "Enterprise" | "Non-Commercial" | "None"
->([
-  ["Evaluation", "Trial"],
+export type LicenseType =
+  | "Evaluation"
+  | "Trial"
+  | "Enterprise"
+  | "Non-Commercial"
+  | "None"
+  | "Free";
+
+const licenseTypeNames = new Map<string, LicenseType>([
+  ["Evaluation", "Evaluation"],
   ["Enterprise", "Enterprise"],
   ["NonCommercial", "Non-Commercial"],
   ["OSS", "None"],
   ["BSD", "None"],
+  ["Free", "Free"],
+  ["Trial", "Trial"],
 ]);
 
 // licenseTypeSelector returns user-friendly names of license types.
 export const licenseTypeSelector = createSelector(
   getDataFromServer,
   data => licenseTypeNames.get(data.LicenseType) || "None",
+);
+
+export const licenseUpdateDismissedLocalSetting = new LocalSetting(
+  "license_update_dismissed",
+  localSettingsSelector,
+  moment(0),
+);
+
+/**
+ * Selector which returns an array of all active alerts which should be
+ * displayed in the overview list page, these should be non-critical alerts.
+ */
+
+export const overviewListAlertsSelector = createSelector(
+  staggeredVersionWarningSelector,
+  clusterPreserveDowngradeOptionOvertimeSelector,
+  upgradeNotFinalizedWarningSelector,
+  (...alerts: Alert[]): Alert[] => {
+    return without(alerts, null, undefined);
+  },
 );
 
 // daysUntilLicenseExpiresSelector returns number of days remaining before license expires.

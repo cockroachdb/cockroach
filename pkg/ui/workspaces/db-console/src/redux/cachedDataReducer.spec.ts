@@ -1,14 +1,9 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
-import isError from "lodash/isError"
+import isError from "lodash/isError";
 import moment from "moment-timezone";
 import { Action } from "redux";
 
@@ -348,7 +343,10 @@ describe("PaginatedCachedDataReducer", function () {
   }
 
   class Response implements WithPaginationResponse {
-    constructor(public response: string, public next_page_token: string) {}
+    constructor(
+      public response: string,
+      public next_page_token: string,
+    ) {}
   }
 
   const apiEndpointMockFactory: (

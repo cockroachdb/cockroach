@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -14,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"maps"
 	"math"
 	"math/rand"
 	"os"
@@ -22,14 +18,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -94,10 +89,6 @@ type tpccOptions struct {
 	// If specified, called to stage+start cockroach. If not
 	// specified, defaults to uploading the default binary to
 	// all nodes, and starting it on all but the last node.
-	//
-	// TODO(tbg): for better coverage at scale of the migration process, we should
-	// also be doing a rolling-restart into the new binary while the cluster
-	// is running, but that feels like jamming too much into the tpcc setup.
 	Start func(context.Context, test.Test, cluster.Cluster)
 	// If specified, assigned to StartOpts.ExtraArgs when starting cockroach.
 	ExtraStartArgs                []string
@@ -202,7 +193,7 @@ func setupTPCC(
 			require.NoError(t, enableIsolationLevels(ctx, t, db))
 		}
 
-		require.NoError(t, WaitFor3XReplication(ctx, t, l, db))
+		require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, l, db))
 
 		estimatedSetupTimeStr := ""
 		if opts.EstimatedSetupTime != 0 {
@@ -290,7 +281,7 @@ func runTPCC(
 		// Make a copy of i for the goroutine.
 		i := i
 		m.Go(func(ctx context.Context) error {
-			// Only prefix stats.json with workload_i_ if we have multiple workloads,
+			// Only prefix stats file with workload_i_ if we have multiple workloads,
 			// in case other processes relied on previous behavior.
 			var statsPrefix string
 			if len(workloadInstances) > 1 {
@@ -299,11 +290,18 @@ func runTPCC(
 			l.Printf("running tpcc worker=%d warehouses=%d ramp=%s duration=%s on %s (<%s)",
 				i, opts.Warehouses, rampDur, opts.Duration, pgURLs[i], time.Minute)
 
-			histogramsPath := fmt.Sprintf("%s/%sstats.json", t.PerfArtifactsDir(), statsPrefix)
+			fileName := roachtestutil.GetBenchmarkMetricsFileName(t)
+			histogramsPath := fmt.Sprintf("%s/%s%s", t.PerfArtifactsDir(), statsPrefix, fileName)
+			var labelsMap map[string]string
+			if t.ExportOpenmetrics() {
+				labelsMap = getTpccLabels(opts.Warehouses, rampDur, opts.Duration, map[string]string{"database": opts.DB})
+			}
 			cmd := roachtestutil.NewCommand("%s workload run %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
 				MaybeFlag(opts.DB != "", "db", opts.DB).
 				Flag("warehouses", opts.Warehouses).
 				MaybeFlag(!opts.DisableHistogram, "histograms", histogramsPath).
+				MaybeFlag(t.ExportOpenmetrics(), "histogram-export-format", "openmetrics").
+				MaybeFlag(t.ExportOpenmetrics(), "openmetrics-labels", clusterstats.GetOpenmetricsLabelString(t, c, labelsMap)).
 				Flag("ramp", rampDur).
 				Flag("duration", opts.Duration).
 				Flag("prometheus-port", workloadInstances[i].prometheusPort).
@@ -392,6 +390,12 @@ func tpccMaxRate(warehouses int) int {
 func maxSupportedTPCCWarehouses(
 	buildVersion version.Version, cloud spec.Cloud, nodes spec.ClusterSpec,
 ) int {
+	if cloud == spec.Local {
+		// Arbitrary number since the limit depends on the machine, local TPCC runs
+		// are usually used for dry runs and not actual performance testing.
+		return 15
+	}
+
 	var v *version.Version
 	var warehouses int
 	hardware := fmt.Sprintf(`%s-%s`, cloud, &nodes)
@@ -418,9 +422,6 @@ func maxSupportedTPCCWarehouses(
 func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
 	headroomWarehouses := int(float64(maxWarehouses) * 0.7)
-	if c.IsLocal() {
-		headroomWarehouses = 10
-	}
 
 	// NB: this results in ~100GB of (actual) disk usage per node once things
 	// have settled down, and ~7.5k ranges. The import takes ~40 minutes.
@@ -433,6 +434,10 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, c.CRDBNodes(),
+		// We test only upgrades from 23.2 in this test because it uses
+		// the `workload fixtures import` command, which is only supported
+		// reliably multi-tenant mode starting from that version.
+		mixedversion.MinimumSupportedVersion("v23.2.0"),
 		mixedversion.MaxUpgrades(3),
 	)
 
@@ -488,11 +493,18 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 				workloadDur = 100 * time.Minute
 			}
 		}
+		histogramsPath := fmt.Sprintf("%s/%s", t.PerfArtifactsDir(), roachtestutil.GetBenchmarkMetricsFileName(t))
+		var labelsMap map[string]string
+		if t.ExportOpenmetrics() {
+			labelsMap = getTpccLabels(headroomWarehouses, rampDur, workloadDur/time.Millisecond, nil)
+		}
 		cmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
 			Arg("{pgurl%s}", c.CRDBNodes()).
 			Flag("duration", workloadDur).
 			Flag("warehouses", headroomWarehouses).
-			Flag("histograms", t.PerfArtifactsDir()+"/stats.json").
+			Flag("histograms", histogramsPath).
+			MaybeFlag(t.ExportOpenmetrics(), "histogram-export-format", "openmetrics").
+			MaybeFlag(t.ExportOpenmetrics(), "openmetrics-labels", clusterstats.GetOpenmetricsLabelString(t, c, labelsMap)).
 			Flag("ramp", rampDur).
 			Flag("prometheus-port", 2112).
 			Flag("pprofport", workloadPProfStartPort).
@@ -508,7 +520,6 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 	}
 
-	uploadCockroach(ctx, t, c, c.WorkloadNode(), clusterupgrade.CurrentVersion())
 	mvt.OnStartup("maybe enable tenant features", enableTenantFeatures)
 	mvt.OnStartup("load TPCC dataset", importTPCC)
 	mvt.OnStartup("load bank dataset", importLargeBank)
@@ -671,7 +682,7 @@ func registerTPCC(r registry.Registry) {
 				// Increase the vmodule level around transaction pushes so that if we do
 				// see a transaction retry error, we can debug it. This may affect perf,
 				// so we should not use this as a performance test.
-				ExtraStartArgs: []string{"--vmodule=cmd_push_txn=2,queue=2,transaction=2"},
+				ExtraStartArgs: []string{"--vmodule=cmd_push_txn=2,queue=2,transaction=2,lock_table_waiter=2,manager=2"},
 				WorkloadInstances: func() (ret []workloadInstance) {
 					isoLevels := []string{"read_uncommitted", "read_committed", "repeatable_read", "snapshot", "serializable"}
 					for i, isoLevel := range isoLevels {
@@ -1282,7 +1293,8 @@ type tpccBenchSpec struct {
 	// Encryption-At-Rest / EAR).
 	EncryptionEnabled bool
 	// ExpirationLeases enables use of expiration-based leases.
-	ExpirationLeases             bool
+	ExpirationLeases bool
+	// TODO(nvanbenschoten): add a leader lease variant.
 	EnableDefaultScheduledBackup bool
 	// SharedProcessMT, if true, indicates that the cluster should run in
 	// shared-process mode of multi-tenancy.
@@ -1464,7 +1476,7 @@ func loadTPCCBench(
 
 	// Load the corresponding fixture.
 	t.L().Printf("restoring tpcc fixture\n")
-	err := WaitFor3XReplication(ctx, t, t.L(), db)
+	err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 	require.NoError(t, err)
 	var pgurl string
 	if b.SharedProcessMT {
@@ -1531,9 +1543,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	// Cockroach nodes and a single load generator.
 	numLoadGroups := b.LoadConfig.numLoadNodes(b.Distribution)
 	numZones := len(b.Distribution.zones())
-	loadGroups := makeLoadGroups(c, numZones, b.Nodes, numLoadGroups)
-	roachNodes := loadGroups.roachNodes()
-	loadNodes := loadGroups.loadNodes()
+	loadGroups := roachtestutil.MakeLoadGroups(c, numZones, b.Nodes, numLoadGroups)
+	roachNodes := loadGroups.RoachNodes()
+	loadNodes := loadGroups.LoadNodes()
 	// Don't encrypt in tpccbench tests.
 	startOpts, settings := b.startOpts()
 	c.Start(ctx, t.L(), startOpts, settings, roachNodes)
@@ -1561,16 +1573,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			if err := c.Install(ctx, t.L(), loadNodes, "haproxy"); err != nil {
 				t.Fatal(err)
 			}
-			// cockroach gen haproxy does not support specifying a non root user
-			pgurl, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), install.CockroachNodeCertsDir, roachprod.PGURLOptions{
-				External: true,
-				Auth:     install.AuthRootCert,
-				Secure:   c.IsSecure(),
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			c.Run(ctx, option.WithNodes(loadNodes), fmt.Sprintf("./cockroach gen haproxy --url %s", pgurl[0]))
+			c.Run(ctx, option.WithNodes(loadNodes), "./cockroach gen haproxy --url {pgurl:1}")
 			// Increase the maximum connection limit to ensure that no TPC-C
 			// load gen workers get stuck during connection initialization.
 			// 10k warehouses requires at least 20,000 connections, so add a
@@ -1656,9 +1659,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			groupIdx := groupIdx
 			group := group
 			m.Go(func(ctx context.Context) error {
-				sqlGateways := group.roachNodes
+				sqlGateways := group.RoachNodes
 				if useHAProxy {
-					sqlGateways = group.loadNodes
+					sqlGateways = group.LoadNodes
 				}
 
 				extraFlags := ""
@@ -1680,39 +1683,45 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					extraFlags += " --method=simple"
 				}
 				t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
-				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", t.PerfArtifactsDir(), warehouses)
+				histogramsPath := fmt.Sprintf("%s/warehouses=%d/%s", t.PerfArtifactsDir(), warehouses, roachtestutil.GetBenchmarkMetricsFileName(t))
 				var tenantSuffix string
 				if b.SharedProcessMT {
 					tenantSuffix = fmt.Sprintf(":%s", appTenantName)
 				}
+
+				labels := getTpccLabels(warehouses, rampDur, loadDur, nil)
+
 				cmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=%d --active-warehouses=%d "+
-					"--tolerate-errors --ramp=%s --duration=%s%s --histograms=%s {pgurl%s%s}",
+					"--tolerate-errors --ramp=%s --duration=%s%s %s {pgurl%s%s}",
 					b.LoadWarehouses(c.Cloud()), warehouses, rampDur,
-					loadDur, extraFlags, histogramsPath, sqlGateways, tenantSuffix)
-				err := c.RunE(ctx, option.WithNodes(group.loadNodes), cmd)
+					loadDur, extraFlags, roachtestutil.GetWorkloadHistogramArgs(t, c, labels), sqlGateways, tenantSuffix)
+				err := c.RunE(ctx, option.WithNodes(group.LoadNodes), cmd)
 				loadDone <- timeutil.Now()
 				if err != nil {
 					// NB: this will let the line search continue at a lower warehouse
 					// count.
 					return errors.Wrapf(err, "error running tpcc load generator")
 				}
-				roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
-				if err := c.Get(
-					ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.loadNodes,
-				); err != nil {
-					// NB: this will let the line search continue. The reason we do this
-					// is because it's conceivable that we made it here, but a VM just
-					// froze up on us. The next search iteration will handle this state.
-					return err
+				if !t.ExportOpenmetrics() {
+					roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
+					if err := c.Get(
+						ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.LoadNodes,
+					); err != nil {
+						// NB: this will let the line search continue. The reason we do this
+						// is because it's conceivable that we made it here, but a VM just
+						// froze up on us. The next search iteration will handle this state.
+						return err
+					}
+					snapshots, err := histogram.DecodeSnapshots(roachtestHistogramsPath)
+					if err != nil {
+						// If we got this far, and can't decode data, it's not a case of
+						// overload but something that deserves failing the whole test.
+						t.Fatal(err)
+					}
+					result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
+					resultChan <- result
+					return nil
 				}
-				snapshots, err := histogram.DecodeSnapshots(roachtestHistogramsPath)
-				if err != nil {
-					// If we got this far, and can't decode data, it's not a case of
-					// overload but something that deserves failing the whole test.
-					t.Fatal(err)
-				}
-				result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
-				resultChan <- result
 				return nil
 			})
 		}
@@ -1844,4 +1853,20 @@ func setupPrometheusForRoachtest(
 		}
 	}
 	return cfg, cleanupFunc
+}
+
+func getTpccLabels(
+	warehouses int, rampDur time.Duration, duration time.Duration, extraLabels map[string]string,
+) map[string]string {
+	labels := map[string]string{
+		"warehouses": fmt.Sprintf("%d", warehouses),
+		"duration":   duration.String(),
+		"ramp":       rampDur.String(),
+	}
+
+	if extraLabels != nil {
+		maps.Copy(labels, extraLabels)
+	}
+
+	return labels
 }

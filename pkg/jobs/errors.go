@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package jobs
 
@@ -30,6 +25,8 @@ var errRetryJobSentinel = errors.New("retriable job error")
 
 // MarkAsRetryJobError marks an error as a retriable job error which
 // indicates that the registry should retry the job.
+// Note that if a job is _not_ in the NonCancelable state, it will _only_ be
+// retried if the error has been marked as a retry job error.
 func MarkAsRetryJobError(err error) error {
 	return errors.Mark(err, errRetryJobSentinel)
 }
@@ -42,8 +39,10 @@ func IsRetryJobError(err error) bool {
 // Registry does not retry a job that fails due to a permanent error.
 var errJobPermanentSentinel = errors.New("permanent job error")
 
-// MarkAsPermanentJobError marks an error as a permanent job error, which indicates
-// Registry to not retry the job when it fails due to this error.
+// MarkAsPermanentJobError marks an error as a permanent job error, which
+// indicates Registry to not retry the job when it fails due to this error.
+// Note that if a job is in the NonCancelable state, it will always be retried
+// _unless_ the error has been marked as permanent job error.
 func MarkAsPermanentJobError(err error) error {
 	return errors.Mark(err, errJobPermanentSentinel)
 }

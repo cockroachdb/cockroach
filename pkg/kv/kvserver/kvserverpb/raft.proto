@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.kv.kvserver.kvserverpb;
@@ -51,6 +46,16 @@ message RaftHeartbeat {
   // v22.1: Keep sending. Stop consulting.
   // v22.2: Remove field.
   bool lagging_followers_on_quiesce_accurate = 10;
+}
+
+// The traced entry from the leader along with the trace and span ID.
+message TracedEntry {
+  uint64 index = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+  uint64 trace_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
+  uint64 span_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "SpanID",
+      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.SpanID"];
 }
 
 // RaftMessageRequest is the request used to send raft messages using our
@@ -101,13 +106,19 @@ message RaftMessageRequest {
   bool using_rac2_protocol = 12;
   // LowPriorityOverride is read only when UsingRAC2Protocol is true, and is
   // set only if Message is a MsgApp. When true, it specifies that the
-  // priority of the Entries in the Message are overridden to be
-  // raftpb.LowPri.
+  // priority of the Entries in the Message that are subject to replication
+  // admission control are overridden to be raftpb.LowPri.
   bool low_priority_override = 13;
+  // AdmittedState annotates a MsgAppResp message with a vector of admitted log
+  // indices. Used only with RACv2.
+  kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedState admitted_state = 14 [(gogoproto.nullable) = false];
 
-  // AdmittedResponse is used in RACv2, for piggybacking MsgAppResp messages
-  // from a follower to a leader, that advance admitted for a follower.
-  repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedResponseForRange admitted_response = 14 [(gogoproto.nullable) = false];
+  // TracedEntry is a mapping from Raft index to trace and span ids for this
+  // request. They are set by the leaseholder and begin tracing on all
+  // replicas. Currently, traces are not returned to the leaseholder, but
+  // instead logged to a local log file.
+  repeated TracedEntry traced_entries = 15 [(gogoproto.nullable) = false];
+
   reserved 10;
 }
 
@@ -153,6 +164,10 @@ message RaftMessageRequestBatch {
   // provide a disjointness guarantee to leader leases.
   util.hlc.Timestamp now = 3 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // AdmittedStates contains admitted vector messages addressed to replicas
+  // located on the receiver node of this batch.
+  repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.PiggybackedAdmittedState admitted_states = 4 [(gogoproto.nullable) = false];
 }
 
 message RaftMessageResponseUnion {

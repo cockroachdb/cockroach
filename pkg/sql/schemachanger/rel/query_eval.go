@@ -1,17 +1,13 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rel
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -30,17 +26,39 @@ type evalContext struct {
 	// depth and cur relate to the join depth in the entities list.
 	depth, cur queryDepth
 
+	// Keeps track of stats for the query. Is reset each time a new query is run.
+	stats QueryStats
+
 	slots             []slot
+	slotResetCount    []int8 // Keeps track of the number of times a slot has been reset
 	filterSliceCaches map[int][]reflect.Value
 	curSubQuery       int
 }
 
+type QueryStats struct {
+	// StartTime is the timestamp when the query started.
+	StartTime time.Time
+	// ResultsFound tracks the number of results returned by the query.
+	ResultsFound int
+	// FirstUnsatisfiedClause is the index of the first clause in the query that
+	// wasn't satisfied. This is set when a query runs and no results are found
+	// (ResultsFound is zero). The index refers to an entry in []Query.clauses.
+	FirstUnsatisfiedClause int
+	// FiltersCheckStarted indicates whether the query completed all slots and
+	// began applying filters.
+	FiltersCheckStarted bool
+	// LastFilterChecked is the index of the last filter applied. This is valid
+	// only if FiltersCheckStarted is true.
+	LastFilterChecked int
+}
+
 func newEvalContext(q *Query) *evalContext {
 	return &evalContext{
-		q:     q,
-		depth: queryDepth(len(q.entities)),
-		slots: cloneSlots(q.slots),
-		facts: q.facts,
+		q:              q,
+		depth:          queryDepth(len(q.entities)),
+		slots:          cloneSlots(q.slots),
+		slotResetCount: make([]int8, len(q.slots)),
+		facts:          q.facts,
 	}
 }
 
@@ -112,6 +130,7 @@ func (ec *evalContext) iterateNext() error {
 		if ec.haveUnboundSlots() || ec.checkFilters() {
 			return nil
 		}
+		ec.stats.ResultsFound++
 		return ec.ri((*evalResult)(ec))
 	}
 
@@ -157,7 +176,10 @@ func (ec *evalContext) visit(e entity) error {
 	// evaluation and then unset them when we pop out of this stack frame.
 	var slotsFilled intsets.Fast
 	defer func() {
-		slotsFilled.ForEach(func(i int) { ec.slots[i].reset() })
+		slotsFilled.ForEach(func(i int) {
+			ec.slotResetCount[i]++
+			ec.slots[i].reset()
+		})
 	}()
 
 	// Fill in the slot corresponding to this entity. It should not be filled
@@ -227,10 +249,13 @@ func (ec *evalContext) haveUnboundSlots() bool {
 }
 
 func (ec *evalContext) checkFilters() (done bool) {
+	ec.stats.FiltersCheckStarted = true
+	ec.stats.LastFilterChecked = 0
 	for i := range ec.q.filters {
 		if done = ec.checkFilter(i); done {
 			return true
 		}
+		ec.stats.LastFilterChecked++
 	}
 	return false
 }
@@ -428,6 +453,7 @@ func (ec *evalContext) visitSubquery(query int) (done bool, _ error) {
 	defer sub.query.putEvalContext(sec)
 	defer func() { // reset the slots populated to run the subquery
 		sub.inputSlotMappings.ForEach(func(_, subSlot int) {
+			sec.slotResetCount[subSlot]++
 			sec.slots[subSlot].reset()
 		})
 	}()
@@ -475,3 +501,32 @@ func (ec *evalContext) findSlotVariable(src int) Var {
 }
 
 var errResultSetNotEmpty = errors.New("result set not empty")
+
+// findFirstClauseNotSatisfied returns a clause that wasn't satisfied in the
+// last query. There could be multiple clauses unsatisfied, this function
+// returns the earliest one, which should be investigated first when debugging
+// the rule. The index of the clause is returned, which can be used to lookup in
+// Query.Clauses().
+func (ec *evalContext) findFirstClauseNotSatisfied() (int, error) {
+	minUnsatisfiedClauseInx := len(ec.q.clauses)
+	for i := range ec.slots {
+		if ec.slots[i].empty() && ec.slotResetCount[i] == 0 {
+			minUnsatisfiedClauseInx = min(minUnsatisfiedClauseInx, ec.q.clauseIDs[i])
+		}
+	}
+
+	if minUnsatisfiedClauseInx < len(ec.q.clauses) {
+		return minUnsatisfiedClauseInx, nil
+	}
+
+	// If we found satisfied entries in all slots, it indicates that the filters,
+	// which are evaluated at the end, did not satisfy the query. Locate the last
+	// filter that was applied.
+	if !ec.stats.FiltersCheckStarted || ec.stats.LastFilterChecked >= len(ec.q.filters) {
+		return -1,
+			errors.AssertionFailedf("cound not find a clause that was not satisfied: "+
+				"FiltesCheckStarted=%t, LastFilterChecked=%d, len(filters)=%d",
+				ec.stats.FiltersCheckStarted, ec.stats.LastFilterChecked, len(ec.q.filters))
+	}
+	return ec.q.filters[ec.stats.LastFilterChecked].clauseID, nil
+}

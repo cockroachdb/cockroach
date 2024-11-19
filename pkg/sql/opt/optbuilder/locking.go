@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -275,11 +270,13 @@ func (b *Builder) analyzeLockArgs(
 	lockScope = inScope.push()
 	lockScope.cols = make([]scopeColumn, 0, pkCols.Len())
 
-	for i := range inScope.cols {
-		if pkCols.Contains(inScope.cols[i].id) {
-			lockScope.appendColumn(&inScope.cols[i])
+	// Make sure to check extra columns, since the primary key columns may not
+	// have been explicitly projected.
+	inScope.forEachColWithExtras(func(col *scopeColumn) {
+		if pkCols.Contains(col.id) {
+			lockScope.appendColumn(col)
 		}
-	}
+	})
 	return lockScope
 }
 
@@ -374,6 +371,43 @@ func (b *Builder) shouldBuildLockOp() bool {
 		b.evalCtx.SessionData().OptimizerUseLockOpForSerializable
 }
 
+// lockingSpecForTableScan adjusts the lockingSpec for a Scan depending on
+// whether locking will be implemented by a Lock operator, and also creates
+// lockBuilders as a side-effect.
+func (b *Builder) lockingSpecForTableScan(locking lockingSpec, tabMeta *opt.TableMeta) lockingSpec {
+	if locking.isSet() {
+		lb := newLockBuilder(tabMeta)
+		for _, item := range locking {
+			item.builders = append(item.builders, lb)
+		}
+	}
+	if b.shouldBuildLockOp() {
+		// If we're implementing FOR UPDATE / FOR SHARE with a Lock operator on top
+		// of the plan, then this can be an unlocked scan. But if the locking uses
+		// SKIP LOCKED or NOWAIT then we still need this unlocked scan to use SKIP
+		// LOCKED or NOWAIT behavior, respectively, even if it does not take any
+		// locks itself.
+		if waitPolicy := locking.get().WaitPolicy; waitPolicy != tree.LockWaitBlock &&
+			// In isolation levels weaker than Serializable, unlocked scans read
+			// underneath locks without blocking. For these weaker isolation levels we
+			// do not strictly need unlocked scans to use SKIP LOCKED or NOWAIT
+			// behavior. We keep the SKIP LOCKED behavior anyway as an optimization,
+			// but avoid NOWAIT in order to prevent false positive locking errors.
+			(b.evalCtx.TxnIsoLevel == isolation.Serializable ||
+				waitPolicy == tree.LockWaitSkipLocked) {
+			// Create a dummy lockingSpec to get just the lock wait behavior.
+			locking = lockingSpec{&lockingItem{
+				item: &tree.LockingItem{
+					WaitPolicy: waitPolicy,
+				},
+			}}
+		} else {
+			locking = nil
+		}
+	}
+	return locking
+}
+
 // buildLocking constructs one Lock operator for each data source that this
 // lockingItem applied to.
 func (b *Builder) buildLocking(item *lockingItem, inScope *scope) {
@@ -398,8 +432,8 @@ func (b *Builder) buildLock(lb *lockBuilder, locking opt.Locking, inScope *scope
 	newTabID := md.DuplicateTable(lb.table, b.factory.RemapCols)
 	newTab := md.Table(newTabID)
 	// Add remapped columns for the new table reference. For now we lock all
-	// column families of the primary index of the table, so include all ordinary
-	// and mutation columns.
+	// non-virtual columns of all families of the primary index of the table, so
+	// include all ordinary and mutation columns.
 	ordinals := tableOrdinals(newTab, columnKinds{
 		includeMutations: true,
 		includeSystem:    false,
@@ -407,7 +441,9 @@ func (b *Builder) buildLock(lb *lockBuilder, locking opt.Locking, inScope *scope
 	})
 	var lockCols opt.ColSet
 	for _, ord := range ordinals {
-		lockCols.Add(newTabID.ColumnID(ord))
+		if !tab.Column(ord).IsVirtualComputed() {
+			lockCols.Add(newTabID.ColumnID(ord))
+		}
 	}
 	private := &memo.LockPrivate{
 		Table:     newTabID,

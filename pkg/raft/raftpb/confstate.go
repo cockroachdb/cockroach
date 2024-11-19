@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2019 The etcd Authors
 //
@@ -20,7 +20,7 @@ package raftpb
 import (
 	"fmt"
 	"reflect"
-	"sort"
+	"slices"
 )
 
 // Equivalent returns a nil error if the inputs describe the same configuration.
@@ -30,7 +30,7 @@ func (cs ConfState) Equivalent(cs2 ConfState) error {
 	orig1, orig2 := cs1, cs2
 	s := func(sl *[]PeerID) {
 		*sl = append([]PeerID(nil), *sl...)
-		sort.Slice(*sl, func(i, j int) bool { return (*sl)[i] < (*sl)[j] })
+		slices.Sort(*sl)
 	}
 
 	for _, cs := range []*ConfState{&cs1, &cs2} {
@@ -44,4 +44,11 @@ func (cs ConfState) Equivalent(cs2 ConfState) error {
 		return fmt.Errorf("ConfStates not equivalent after sorting:\n%+#v\n%+#v\nInputs were:\n%+#v\n%+#v", cs1, cs2, orig1, orig2)
 	}
 	return nil
+}
+
+func (cs ConfState) Describe() string {
+	return fmt.Sprintf(
+		"Voters:%v VotersOutgoing:%v Learners:%v LearnersNext:%v AutoLeave:%v",
+		cs.Voters, cs.VotersOutgoing, cs.Learners, cs.LearnersNext, cs.AutoLeave,
+	)
 }

@@ -2217,10 +2217,8 @@ select
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
  │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
- │              ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(5)=1, null(5)=0]
- │              │   histogram(5)=
- │              ├── key: (2)
- │              └── fd: (2)-->(5)
+ │              └── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(5)=1, null(5)=0]
+ │                  histogram(5)=
  └── filters
       └── st_coveredby(geom:1, '0101000000000000000000F03F000000000000F03F') [type=bool, outer=(1), immutable, constraints=(/1: (/NULL - ])]
 
@@ -2603,10 +2601,10 @@ build
 SELECT * FROM a_check_hash WHERE crdb_internal_a_shard_8 > 6
 ----
 project
- ├── columns: i:1(int!null) crdb_internal_a_shard_8:2(int4!null) j:3(int)
+ ├── columns: i:1(int!null) j:3(int)
  ├── stats: [rows=125]
  ├── key: (1)
- ├── fd: (1,2)-->(3), (1)-->(2)
+ ├── fd: (1)-->(3)
  └── select
       ├── columns: i:1(int!null) crdb_internal_a_shard_8:2(int4!null) j:3(int) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
       ├── stats: [rows=125, distinct(2)=1, null(2)=0]

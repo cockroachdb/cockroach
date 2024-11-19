@@ -1,23 +1,20 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -135,7 +133,7 @@ func upToDateRaftStatus(repls []roachpb.ReplicaDescriptor) *raft.Status {
 	return &raft.Status{
 		BasicStatus: raft.BasicStatus{
 			HardState: raftpb.HardState{Commit: 100, Lead: 1},
-			SoftState: raft.SoftState{RaftState: raft.StateLeader},
+			SoftState: raft.SoftState{RaftState: raftpb.StateLeader},
 		},
 		Progress: prs,
 	}
@@ -303,8 +301,8 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 		return roachpb.ReplicaDescriptor{}, err
 	}
 
-	tc.repl.setDescRaftMuLocked(ctx, &newDesc)
 	tc.repl.raftMu.Lock()
+	tc.repl.setDescRaftMuLocked(ctx, &newDesc)
 	tc.repl.mu.RLock()
 	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.engine)
 	tc.repl.mu.RUnlock()
@@ -511,7 +509,7 @@ func TestReplicaContains(t *testing.T) {
 
 	// This test really only needs a hollow shell of a Replica.
 	r := &Replica{}
-	r.mu.state.Desc = desc
+	r.shMu.state.Desc = desc
 	r.rangeStr.store(0, desc)
 
 	if !r.ContainsKey(roachpb.Key("aa")) {
@@ -715,12 +713,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		<-transferSem
 		// Check that a transfer is indeed on-going.
 		tc.repl.mu.Lock()
-		repDesc, err := tc.repl.getReplicaDescriptorRLocked()
-		if err != nil {
-			tc.repl.mu.Unlock()
-			t.Fatal(err)
-		}
-		pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
+		pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress()
 		tc.repl.mu.Unlock()
 		if !pending {
 			t.Fatalf("expected transfer to be in progress, and it wasn't")
@@ -761,7 +754,7 @@ func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			tc.repl.mu.Lock()
 			defer tc.repl.mu.Unlock()
-			pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID)
+			pending := tc.repl.mu.pendingLeaseRequest.TransferInProgress()
 			if pending {
 				return errors.New("transfer pending")
 			}
@@ -862,13 +855,13 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 			},
 		},
 	}
-	tc.repl.mu.Lock()
+	tc.repl.mu.RLock()
 	fr := kvserverbase.CheckForcedErr(
 		ctx, raftlog.MakeCmdIDKey(), &raftCmd, false, /* isLocal */
-		&tc.repl.mu.state,
+		&tc.repl.shMu.state,
 	)
 	pErr := fr.ForcedError
-	tc.repl.mu.Unlock()
+	tc.repl.mu.RUnlock()
 	if _, isErr := pErr.GetDetail().(*kvpb.LeaseRejectedError); !isErr {
 		t.Fatal(pErr)
 	} else if !testutils.IsPError(pErr, "replica not part of range") {
@@ -6671,9 +6664,9 @@ func TestAppliedIndex(t *testing.T) {
 			t.Errorf("expected %d, got %d", sum, reply.NewValue)
 		}
 
-		tc.repl.mu.Lock()
-		newAppliedIndex := tc.repl.mu.state.RaftAppliedIndex
-		tc.repl.mu.Unlock()
+		tc.repl.mu.RLock()
+		newAppliedIndex := tc.repl.shMu.state.RaftAppliedIndex
+		tc.repl.mu.RUnlock()
 		if newAppliedIndex <= appliedIndex {
 			t.Errorf("appliedIndex did not advance. Was %d, now %d", appliedIndex, newAppliedIndex)
 		}
@@ -7210,6 +7203,85 @@ func TestReplicaDestroy(t *testing.T) {
 	require.Equal(t, expectedKeys, actualKeys)
 }
 
+// TestQuotaPoolDisabled tests that the no quota is acquired by proposals when
+// the quota pool enablement setting is disabled or the flow control mode is
+// set to kvflowcontrol.ApplyToAll and kvflowcontrol is enabled.
+func TestQuotaPoolDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "enableRaftProposalQuota", func(t *testing.T, quotaPoolSettingEnabled bool) {
+		testutils.RunValues(t, "flowControlMode",
+			[]kvflowcontrol.ModeT{
+				kvflowcontrol.ApplyToElastic,
+				kvflowcontrol.ApplyToAll,
+			}, func(t *testing.T, flowControlMode kvflowcontrol.ModeT) {
+				testutils.RunTrueAndFalse(t, "flowControlEnabled", func(t *testing.T, flowControlEnabled bool) {
+					ctx := context.Background()
+					propErr := errors.New("proposal error")
+					type magicKey struct{}
+
+					// We expect the quota pool to be enabled when both the quota pool
+					// setting is enabled and the flow control mode is set to
+					// ApplyToElastic or flow control is disabled.
+					expectEnabled := quotaPoolSettingEnabled &&
+						(flowControlMode == kvflowcontrol.ApplyToElastic || !flowControlEnabled)
+
+					tc := testContext{}
+					stopper := stop.NewStopper()
+					defer stopper.Stop(ctx)
+
+					tsc := TestStoreConfig(nil /* clock */)
+					enableRaftProposalQuota.Override(ctx, &tsc.Settings.SV, quotaPoolSettingEnabled)
+					kvflowcontrol.Mode.Override(ctx, &tsc.Settings.SV, flowControlMode)
+					kvflowcontrol.Enabled.Override(ctx, &tsc.Settings.SV, flowControlEnabled)
+					tsc.TestingKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
+						// Expect no quota allocation when the quota pool is disabled,
+						// otherwise expect some quota for our requests only (some ranges are
+						// also disabled selectively).
+						if v := args.Ctx.Value(magicKey{}); v != nil && expectEnabled {
+							require.NotNil(t, args.QuotaAlloc)
+							return kvpb.NewError(propErr)
+						} else if !expectEnabled {
+							require.Nil(t, args.QuotaAlloc)
+						}
+						return nil
+					}
+					tc.StartWithStoreConfig(ctx, t, stopper, tsc)
+
+					// Flush a write all the way through the Raft proposal pipeline to ensure
+					// that the replica becomes the Raft leader and sets up its quota pool.
+					iArgs := incrementArgs([]byte("a"), 1)
+					_, pErr := tc.SendWrapped(iArgs)
+					require.Nil(t, pErr)
+
+					// The quota pool shouldn't be initialized if the pool is disabled via
+					// either setting.
+					if expectEnabled {
+						require.NotNil(t, tc.repl.mu.proposalQuota)
+					} else {
+						require.Nil(t, tc.repl.mu.proposalQuota)
+					}
+
+					for i := 0; i < 10; i++ {
+						ctx = context.WithValue(ctx, magicKey{}, "foo")
+						ba := &kvpb.BatchRequest{}
+						pArg := putArgs(roachpb.Key("a"), make([]byte, 1<<10))
+						ba.Add(&pArg)
+						_, pErr := tc.Sender().Send(ctx, ba)
+						if expectEnabled {
+							if !testutils.IsPError(pErr, propErr.Error()) {
+								t.Fatalf("expected error %v, found %v", propErr, pErr)
+							}
+						} else {
+							require.Nil(t, pErr)
+						}
+					}
+				})
+			})
+	})
+}
+
 // TestQuotaPoolReleasedOnFailedProposal tests that the quota acquired by
 // proposals is released back into the quota pool if the proposal fails before
 // being submitted to Raft.
@@ -7226,6 +7298,10 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 	propErr := errors.New("proposal error")
 
 	tsc := TestStoreConfig(nil /* clock */)
+	// Override the kvflowcontrol.Mode setting to apply_to_elastic, as when
+	// apply_to_all is set (metamorphically), the quota pool will be disabled.
+	// See getQuotaPoolEnabledRLocked.
+	kvflowcontrol.Mode.Override(ctx, &tsc.Settings.SV, kvflowcontrol.ApplyToElastic)
 	tsc.TestingKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 		if v := args.Ctx.Value(magicKey{}); v != nil {
 			minQuotaSize = tc.repl.mu.proposalQuota.ApproximateQuota() + args.QuotaAlloc.Acquired()
@@ -7265,7 +7341,13 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+
+	// Override the kvflowcontrol.Mode setting to apply_to_elastic, as when
+	// apply_to_all is set (metamorphically), the quota pool will be disabled.
+	// See getQuotaPoolEnabledRLocked.
+	tsc := TestStoreConfig(nil /* clock */)
+	kvflowcontrol.Mode.Override(ctx, &tsc.Settings.SV, kvflowcontrol.ApplyToElastic)
+	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	repl, err := tc.store.GetReplica(1)
 	if err != nil {
@@ -7690,7 +7772,7 @@ func TestReplicaAbandonProposal(t *testing.T) {
 	dropProp := int32(1)
 	tc.repl.mu.Lock()
 	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
-		if v := p.ctx.Value(magicKey{}); v != nil {
+		if v := p.Context().Value(magicKey{}); v != nil {
 			cancel()
 			return atomic.LoadInt32(&dropProp) == 1, nil
 		}
@@ -7808,7 +7890,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 
 	tc.repl.mu.Lock()
 	tc.repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride kvpb.LeaseAppliedIndex) {
-		if v := p.ctx.Value(magicKey{}); v != nil {
+		if v := p.Context().Value(magicKey{}); v != nil {
 			if curAttempt := atomic.AddInt32(&c, 1); curAttempt == 1 {
 				return wrongLeaseIndex
 			}
@@ -7830,7 +7912,7 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	// Set the max lease index to that of the recently applied write.
 	// Two requests can't have the same lease applied index.
 	tc.repl.mu.RLock()
-	wrongLeaseIndex = tc.repl.mu.state.LeaseAppliedIndex
+	wrongLeaseIndex = tc.repl.shMu.state.LeaseAppliedIndex
 	if wrongLeaseIndex < 1 {
 		t.Fatal("committed a few batches, but still at lease index zero")
 	}
@@ -7912,7 +7994,7 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 	abandoned := make(map[kvserverbase.CmdIDKey]struct{}) // protected by repl.mu
 	tc.repl.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (drop bool, _ error) {
 		if _, ok := abandoned[p.idKey]; ok {
-			log.Infof(p.ctx, "abandoning command")
+			log.Infof(p.Context(), "abandoning command")
 			return true, nil
 		}
 		return false, nil
@@ -7984,7 +8066,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		if atomic.LoadInt32(&dropAll) == 1 {
 			return true, nil
 		}
-		if v := p.ctx.Value(magicKey{}); v != nil {
+		if v := p.Context().Value(magicKey{}); v != nil {
 			seenCmds = append(seenCmds, int(p.command.MaxLeaseIndex))
 		}
 		return false, nil
@@ -8016,7 +8098,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	}
 	origIndexes := make([]int, 0, num)
 	for _, p := range tc.repl.mu.proposals {
-		if v := p.ctx.Value(magicKey{}); v != nil {
+		if v := p.Context().Value(magicKey{}); v != nil {
 			origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
 		}
 	}
@@ -8049,7 +8131,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		t.Fatal("still pending commands")
 	}
 	lastAssignedIdx := tc.repl.mu.proposalBuf.LastAssignedLeaseIndexRLocked()
-	curIdx := tc.repl.mu.state.LeaseAppliedIndex
+	curIdx := tc.repl.shMu.state.LeaseAppliedIndex
 	if c := lastAssignedIdx - curIdx; c > 0 {
 		t.Errorf("no pending cmds, but have required index offset %d", c)
 	}
@@ -8107,7 +8189,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	r.mu.Unlock()
 
 	// We tick the replica 3*RaftReproposalTimeoutTicks.
-	for i := 0; i < 3*reproposalTicks; i++ {
+	for i := int64(0); i < 3*reproposalTicks; i++ {
 		// Add another pending command on each iteration.
 		id := fmt.Sprintf("%08d", i)
 		ba := &kvpb.BatchRequest{}
@@ -8163,7 +8245,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		// time, this will be 1 reproposal (the one at ticks=0 for the reproposal at
 		// ticks=reproposalTicks), then +reproposalTicks reproposals each time.
 		if (ticks % reproposalTicks) == 0 {
-			if exp := i + 2 - reproposalTicks; len(reproposed) != exp { // +1 to offset i, +1 for inclusive
+			if exp := i + 2 - reproposalTicks; int64(len(reproposed)) != exp { // +1 to offset i, +1 for inclusive
 				t.Fatalf("%d: expected %d reproposed commands, but found %d", i, exp, len(reproposed))
 			}
 		} else {
@@ -8913,11 +8995,15 @@ func TestReplicaMetrics(t *testing.T) {
 		// and 2 is ok.
 		status.HardState.Commit = 12
 		if lead == 1 {
-			status.SoftState.RaftState = raft.StateLeader
+			status.SoftState.RaftState = raftpb.StateLeader
 		} else {
-			status.SoftState.RaftState = raft.StateFollower
+			status.SoftState.RaftState = raftpb.StateFollower
 		}
 		status.HardState.Lead = lead
+		return status
+	}
+	leadSupportedStatus := func(leadSupportedUntil hlc.Timestamp) raft.LeadSupportStatus {
+		status := raft.LeadSupportStatus{LeadSupportUntil: leadSupportedUntil}
 		return status
 	}
 	desc := func(ids ...int) roachpb.RangeDescriptor {
@@ -8943,52 +9029,57 @@ func TestReplicaMetrics(t *testing.T) {
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 	testCases := []struct {
-		replicas    int32
-		storeID     roachpb.StoreID
-		desc        roachpb.RangeDescriptor
-		raftStatus  *raft.SparseStatus
-		liveness    livenesspb.NodeVitalityInterface
-		raftLogSize int64
-		expected    ReplicaMetrics
+		replicas            int32
+		storeID             roachpb.StoreID
+		desc                roachpb.RangeDescriptor
+		raftStatus          *raft.SparseStatus
+		liveness            livenesspb.NodeVitalityInterface
+		raftLogSize         int64
+		leaderSupportStatus raft.LeadSupportStatus
+		expected            ReplicaMetrics
 	}{
 		// The leader of a 1-replica range is up.
-		{1, 1, desc(1), status(1, progress(2)), live(1), 0,
+		{1, 1, desc(1), status(1, progress(2)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     10,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        10,
+				LeaderNotFortified: true,
 			}},
 		// The leader of a 2-replica range is up (only 1 replica present).
-		{2, 1, desc(1), status(1, progress(2)), live(1), 0,
+		{2, 1, desc(1), status(1, progress(2)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: true,
-				BehindCount:     10,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    true,
+				BehindCount:        10,
+				LeaderNotFortified: true,
 			}},
 		// The leader of a 2-replica range is up.
-		{2, 1, desc(1, 2), status(1, progress(2)), live(1), 0,
+		{2, 1, desc(1, 2), status(1, progress(2)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     true,
-				Underreplicated: true,
-				BehindCount:     10,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        true,
+				Underreplicated:    true,
+				BehindCount:        10,
+				LeaderNotFortified: true,
 			}},
 		// Both replicas of a 2-replica range are up to date.
-		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1, 2), 0,
+		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1, 2), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     20,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        20,
+				LeaderNotFortified: true,
 			}},
 		// Both replicas of a 2-replica range are up to date (local replica is not leader)
-		{2, 2, desc(1, 2), status(2, progress(2, 2)), live(1, 2), 0,
+		{2, 2, desc(1, 2), status(2, progress(2, 2)), live(1, 2), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    false,
@@ -8996,90 +9087,99 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// Both replicas of a 2-replica range are live, but follower is behind.
-		{2, 1, desc(1, 2), status(1, progress(2, 1)), live(1, 2), 0,
+		{2, 1, desc(1, 2), status(1, progress(2, 1)), live(1, 2), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     21,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        21,
+				LeaderNotFortified: true,
 			}},
 		// Both replicas of a 2-replica range are up to date, but follower is dead.
-		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1), 0,
+		{2, 1, desc(1, 2), status(1, progress(2, 2)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     true,
-				Underreplicated: true,
-				BehindCount:     20,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        true,
+				Underreplicated:    true,
+				BehindCount:        20,
+				LeaderNotFortified: true,
 			}},
 		// The leader of a 3-replica range is up.
-		{3, 1, desc(1, 2, 3), status(1, progress(1)), live(1), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(1)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     true,
-				Underreplicated: true,
-				BehindCount:     11,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        true,
+				Underreplicated:    true,
+				BehindCount:        11,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are up to date.
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2, 3), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     30,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        30,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are up to date (match = 0 is
 		// considered up to date).
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 0)), live(1, 2, 3), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 0)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     20,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        20,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are live but one replica is behind.
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 1)), live(1, 2, 3), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 1)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     31,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        31,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are live but two replicas are behind.
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 1, 1)), live(1, 2, 3), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 1, 1)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     32,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        32,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are up to date, but one replica is dead.
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1, 2), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: true,
-				BehindCount:     30,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    true,
+				BehindCount:        30,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are up to date, but two replicas are dead.
-		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1), 0,
+		{3, 1, desc(1, 2, 3), status(1, progress(2, 2, 2)), live(1), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     true,
-				Underreplicated: true,
-				BehindCount:     30,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        true,
+				Underreplicated:    true,
+				BehindCount:        30,
+				LeaderNotFortified: true,
 			}},
 		// All replicas of a 3-replica range are up to date, but two replicas are
 		// dead, including the leader.
-		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(2), 0,
+		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(2), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    true,
@@ -9088,7 +9188,7 @@ func TestReplicaMetrics(t *testing.T) {
 				BehindCount:     0,
 			}},
 		// Range has no leader, local replica is the range counter.
-		{3, 1, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0,
+		{3, 1, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    true,
@@ -9096,7 +9196,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// Range has no leader, local replica is the range counter.
-		{3, 3, desc(3, 2, 1), status(0, progress(2, 2, 2)), live(1, 2, 3), 0,
+		{3, 3, desc(3, 2, 1), status(0, progress(2, 2, 2)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    true,
@@ -9104,7 +9204,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// Range has no leader, local replica is not the range counter.
-		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0,
+		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    false,
@@ -9112,7 +9212,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// Range has no leader, local replica is not the range counter.
-		{3, 3, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0,
+		{3, 3, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3), 0, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
 				Leader:          false,
 				RangeCounter:    false,
@@ -9120,14 +9220,35 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// The leader of a 1-replica range is up and raft log is too large.
-		{1, 1, desc(1), status(1, progress(2)), live(1), 5 * cfg.RaftLogTruncationThreshold,
+		{1, 1, desc(1), status(1, progress(2)), live(1), 5 * cfg.RaftLogTruncationThreshold, leadSupportedStatus(hlc.Timestamp{}),
 			ReplicaMetrics{
-				Leader:          true,
-				RangeCounter:    true,
-				Unavailable:     false,
-				Underreplicated: false,
-				BehindCount:     10,
-				RaftLogTooLarge: true,
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        10,
+				RaftLogTooLarge:    true,
+				LeaderNotFortified: true,
+			}},
+		// The leader of a 1-replica range is up, and the leader support expired.
+		{1, 1, desc(1), status(1, progress(2)), live(1), 0, leadSupportedStatus(hlc.MinTimestamp),
+			ReplicaMetrics{
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        10,
+				LeaderNotFortified: true, // the support expired
+			}},
+		// The leader of a 1-replica range is up, and the support hasn't expired.
+		{1, 1, desc(1), status(1, progress(2)), live(1), 0, leadSupportedStatus(hlc.MaxTimestamp),
+			ReplicaMetrics{
+				Leader:             true,
+				RangeCounter:       true,
+				Unavailable:        false,
+				Underreplicated:    false,
+				BehindCount:        10,
+				LeaderNotFortified: false, // The support hasn't expired yet
 			}},
 	}
 
@@ -9151,6 +9272,8 @@ func TestReplicaMetrics(t *testing.T) {
 				ticking:            c.expected.Ticking,
 				raftLogSize:        c.raftLogSize,
 				raftLogSizeTrusted: true,
+				now:                tc.Clock().NowAsClockTimestamp(),
+				leadSupportStatus:  c.leaderSupportStatus,
 			})
 			require.Equal(t, c.expected, metrics)
 		})
@@ -9777,7 +9900,8 @@ type testQuiescer struct {
 	desc                   roachpb.RangeDescriptor
 	numProposals           int
 	pendingQuota           bool
-	ticksSinceLastProposal int
+	sendTokens             bool
+	ticksSinceLastProposal int64
 	status                 *raft.SparseStatus
 	lastIndex              kvpb.RaftIndex
 	raftReady              bool
@@ -9803,7 +9927,7 @@ func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
 }
 
 func (q *testQuiescer) isRaftLeaderRLocked() bool {
-	return q.status != nil && q.status.RaftState == raft.StateLeader
+	return q.status != nil && q.status.RaftState == raftpb.StateLeader
 }
 
 func (q *testQuiescer) raftSparseStatusRLocked() *raft.SparseStatus {
@@ -9830,7 +9954,11 @@ func (q *testQuiescer) hasPendingProposalQuotaRLocked() bool {
 	return q.pendingQuota
 }
 
-func (q *testQuiescer) ticksSinceLastProposalRLocked() int {
+func (q *testQuiescer) hasSendTokensRaftMuLockedReplicaMuLocked() bool {
+	return q.sendTokens
+}
+
+func (q *testQuiescer) ticksSinceLastProposalRLocked() int64 {
 	return q.ticksSinceLastProposal
 }
 
@@ -9851,7 +9979,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 
 	const logIndex = 10
 	const invalidIndex = 11
-	test := func(expected bool, transform func(q *testQuiescer) *testQuiescer) {
+	test := func(expected bool, transform func(q *testQuiescer)) {
 		t.Run("", func(t *testing.T) {
 			// A testQuiescer initialized so that shouldReplicaQuiesce will return
 			// true. The transform function is intended to perform one mutation to
@@ -9873,7 +10001,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 							Commit: logIndex,
 						},
 						SoftState: raft.SoftState{
-							RaftState: raft.StateLeader,
+							RaftState: raftpb.StateLeader,
 						},
 						Applied:        logIndex,
 						LeadTransferee: 0,
@@ -9905,8 +10033,9 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 					3: {IsLive: true},
 				},
 			}
-			q = transform(q)
-			_, lagging, ok := shouldReplicaQuiesce(context.Background(), q, q.leaseStatus, q.livenessMap, q.paused)
+			transform(q)
+			_, lagging, ok := shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
+				context.Background(), q, q.leaseStatus, q.livenessMap, q.paused)
 			require.Equal(t, expected, ok)
 			if ok {
 				// Any non-live replicas should be in the laggingReplicaSet.
@@ -9916,187 +10045,129 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 						expLagging = append(expLagging, l.Liveness)
 					}
 				}
-				sort.Sort(expLagging)
+				slices.SortFunc(expLagging, func(a, b livenesspb.Liveness) int {
+					return cmp.Compare(a.NodeID, b.NodeID)
+				})
 				require.Equal(t, expLagging, lagging)
 			}
 		})
 	}
 
-	test(true, func(q *testQuiescer) *testQuiescer {
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.numProposals = 1
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.pendingQuota = true
-		return q
-	})
-	test(true, func(q *testQuiescer) *testQuiescer {
+	test(true, func(q *testQuiescer) {})
+	test(false, func(q *testQuiescer) { q.numProposals = 1 })
+	test(false, func(q *testQuiescer) { q.pendingQuota = true })
+	test(false, func(q *testQuiescer) { q.sendTokens = true })
+	test(true, func(q *testQuiescer) {
 		q.ticksSinceLastProposal = quiesceAfterTicks // quiesce on quiesceAfterTicks
-		return q
 	})
-	test(true, func(q *testQuiescer) *testQuiescer {
+	test(true, func(q *testQuiescer) {
 		q.ticksSinceLastProposal = quiesceAfterTicks + 1 // quiesce above quiesceAfterTicks
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		q.ticksSinceLastProposal = quiesceAfterTicks - 1 // don't quiesce below quiesceAfterTicks
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		q.ticksSinceLastProposal = 0 // don't quiesce on 0
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		q.ticksSinceLastProposal = -1 // don't quiesce on negative (shouldn't happen)
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.mergeInProgress = true
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.isDestroyed = true
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status = nil
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status.RaftState = raft.StateFollower
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status.RaftState = raft.StateCandidate
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status.LeadTransferee = 1
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status.Commit = invalidIndex
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.status.Applied = invalidIndex
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.lastIndex = invalidIndex
-		return q
-	})
+	test(false, func(q *testQuiescer) { q.mergeInProgress = true })
+	test(false, func(q *testQuiescer) { q.isDestroyed = true })
+	test(false, func(q *testQuiescer) { q.status = nil })
+	test(false, func(q *testQuiescer) { q.status.RaftState = raftpb.StateFollower })
+	test(false, func(q *testQuiescer) { q.status.RaftState = raftpb.StateCandidate })
+	test(false, func(q *testQuiescer) { q.status.LeadTransferee = 1 })
+	test(false, func(q *testQuiescer) { q.status.Commit = invalidIndex })
+	test(false, func(q *testQuiescer) { q.status.Applied = invalidIndex })
+	test(false, func(q *testQuiescer) { q.lastIndex = invalidIndex })
 	for _, i := range []raftpb.PeerID{1, 2, 3} {
-		test(false, func(q *testQuiescer) *testQuiescer {
+		test(false, func(q *testQuiescer) {
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
-			return q
 		})
 	}
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		delete(q.status.Progress, q.status.ID)
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.storeID = 9
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.leaseStatus.State = kvserverpb.LeaseState_ERROR
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.leaseStatus.State = kvserverpb.LeaseState_UNUSABLE
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.leaseStatus.State = kvserverpb.LeaseState_PROSCRIBED
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
-		q.raftReady = true
-		return q
-	})
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) { q.storeID = 9 })
+
+	for _, leaseState := range []kvserverpb.LeaseState{
+		kvserverpb.LeaseState_ERROR,
+		kvserverpb.LeaseState_UNUSABLE,
+		kvserverpb.LeaseState_EXPIRED,
+		kvserverpb.LeaseState_PROSCRIBED,
+	} {
+		test(false, func(q *testQuiescer) { q.leaseStatus.State = leaseState })
+	}
+	test(false, func(q *testQuiescer) { q.raftReady = true })
+	test(false, func(q *testQuiescer) {
 		pr := q.status.Progress[2]
 		pr.State = tracker.StateProbe
 		q.status.Progress[2] = pr
-		return q
 	})
 	// Create a mismatch between the raft progress replica IDs and the
 	// replica IDs in the range descriptor.
 	for i := 0; i < 3; i++ {
-		test(false, func(q *testQuiescer) *testQuiescer {
+		test(false, func(q *testQuiescer) {
 			q.desc.InternalReplicas[i].ReplicaID = roachpb.ReplicaID(4 + i)
-			return q
 		})
 	}
 	// Pass a nil liveness map.
-	test(true, func(q *testQuiescer) *testQuiescer {
-		q.livenessMap = nil
-		return q
-	})
+	test(true, func(q *testQuiescer) { q.livenessMap = nil })
 	// Verify quiesce even when replica progress doesn't match, if
 	// the replica is on a non-live node.
 	for _, i := range []raftpb.PeerID{1, 2, 3} {
-		test(true, func(q *testQuiescer) *testQuiescer {
+		test(true, func(q *testQuiescer) {
 			nodeID := roachpb.NodeID(i)
 			q.livenessMap[nodeID] = livenesspb.IsLiveMapEntry{
 				Liveness: livenesspb.Liveness{NodeID: nodeID},
 				IsLive:   false,
 			}
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
-			return q
 		})
 	}
 	// Verify no quiescence when replica progress doesn't match, if
 	// given a nil liveness map.
 	for _, i := range []raftpb.PeerID{1, 2, 3} {
-		test(false, func(q *testQuiescer) *testQuiescer {
+		test(false, func(q *testQuiescer) {
 			q.livenessMap = nil
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
-			return q
 		})
 	}
 	// Verify no quiescence when replica progress doesn't match, if
 	// liveness map does not contain the lagging replica.
 	for _, i := range []raftpb.PeerID{1, 2, 3} {
-		test(false, func(q *testQuiescer) *testQuiescer {
+		test(false, func(q *testQuiescer) {
 			delete(q.livenessMap, roachpb.NodeID(i))
 			q.status.Progress[i] = tracker.Progress{Match: invalidIndex}
-			return q
 		})
 	}
 	// Verify no quiescence when a follower is paused.
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		q.paused = map[roachpb.ReplicaID]struct{}{
 			q.desc.Replicas().Descriptors()[0].ReplicaID: {},
 		}
-		return q
 	})
 	// Verify no quiescence with expiration-based leases, regardless
 	// of kv.expiration_leases_only.enabled.
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, true)
 		q.leaseStatus.Lease.Epoch = 0
 		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
 			WallTime: timeutil.Now().Add(time.Minute).Unix(),
 		}
-		return q
 	})
-	test(false, func(q *testQuiescer) *testQuiescer {
+	test(false, func(q *testQuiescer) {
 		ExpirationLeasesOnly.Override(context.Background(), &q.st.SV, false)
 		q.leaseStatus.Lease.Epoch = 0
 		q.leaseStatus.Lease.Expiration = &hlc.Timestamp{
 			WallTime: timeutil.Now().Add(time.Minute).Unix(),
 		}
-		return q
+	})
+	// Verify no quiescence with leader leases.
+	test(false, func(q *testQuiescer) {
+		q.leaseStatus.Lease.Epoch = 0
+		q.leaseStatus.Lease.Term = 1
 	})
 }
 
@@ -10305,7 +10376,7 @@ func TestReplicaRecomputeStats(t *testing.T) {
 
 	repl.raftMu.Lock()
 	repl.mu.Lock()
-	ms := repl.mu.state.Stats // intentionally mutated below
+	ms := repl.shMu.state.Stats // intentionally mutated below
 	disturbMS := enginepb.NewPopulatedMVCCStats(rnd, false)
 	disturbMS.ContainsEstimates = 0
 	ms.Add(*disturbMS)
@@ -11477,7 +11548,7 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 		},
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
-				RaftState: raft.StateFollower,
+				RaftState: raftpb.StateFollower,
 			},
 			HardState: raftpb.HardState{
 				Lead: 2,
@@ -11503,15 +11574,15 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 			p.leaseStatus.Lease.Replica.StoreID = 1
 		}},
 		"pre-candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StatePreCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StateCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"leader": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateLeader
+			p.raftStatus.SoftState.RaftState = raftpb.StateLeader
 			p.raftStatus.Lead = 1
 		}},
 		"unknown leader": {true, func(p *params) {
@@ -11574,11 +11645,11 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	type params struct {
-		raftStatus               raft.BasicStatus
-		livenessMap              livenesspb.IsLiveMap
-		desc                     *roachpb.RangeDescriptor
-		shouldUseExpirationLease bool
-		now                      hlc.Timestamp
+		raftStatus  raft.BasicStatus
+		livenessMap livenesspb.IsLiveMap
+		desc        *roachpb.RangeDescriptor
+		leaseType   roachpb.LeaseType
+		now         hlc.Timestamp
 	}
 
 	// Set up a base state that we can vary, representing this node n1 being a
@@ -11597,7 +11668,7 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 		},
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
-				RaftState: raft.StateFollower,
+				RaftState: raftpb.StateFollower,
 			},
 			HardState: raftpb.HardState{
 				Lead: 2,
@@ -11608,7 +11679,8 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 			2: livenesspb.IsLiveMapEntry{IsLive: false},
 			3: livenesspb.IsLiveMapEntry{IsLive: false},
 		},
-		now: hlc.Timestamp{Logical: 10},
+		leaseType: roachpb.LeaseEpoch,
+		now:       hlc.Timestamp{Logical: 10},
 	}
 
 	testcases := map[string]struct {
@@ -11617,22 +11689,25 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 	}{
 		"dead leader": {true, func(p *params) {}},
 		"pre-candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StatePreCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StateCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"leader": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateLeader
+			p.raftStatus.SoftState.RaftState = raftpb.StateLeader
 			p.raftStatus.Lead = 1
 		}},
 		"unknown leader": {true, func(p *params) {
 			p.raftStatus.Lead = raft.None
 		}},
 		"should use expiration lease": {false, func(p *params) {
-			p.shouldUseExpirationLease = true
+			p.leaseType = roachpb.LeaseExpiration
+		}},
+		"should use leader lease": {false, func(p *params) {
+			p.leaseType = roachpb.LeaseLeader
 		}},
 		"leader not in desc": {false, func(p *params) {
 			p.raftStatus.Lead = 4
@@ -11678,7 +11753,7 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 			}
 			tc.modify(&p)
 			require.Equal(t, tc.expect, shouldCampaignOnLeaseRequestRedirect(
-				p.raftStatus, p.livenessMap, p.desc, p.shouldUseExpirationLease, p.now))
+				p.raftStatus, p.livenessMap, p.desc, p.leaseType, p.now))
 		})
 	}
 }
@@ -11710,7 +11785,7 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 		},
 		raftStatus: raft.BasicStatus{
 			SoftState: raft.SoftState{
-				RaftState: raft.StateFollower,
+				RaftState: raftpb.StateFollower,
 			},
 			HardState: raftpb.HardState{
 				Lead: 2,
@@ -11730,15 +11805,15 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 	}{
 		"dead leader": {true, func(p *params) {}},
 		"pre-candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StatePreCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StatePreCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"candidate": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateCandidate
+			p.raftStatus.SoftState.RaftState = raftpb.StateCandidate
 			p.raftStatus.Lead = raft.None
 		}},
 		"leader": {false, func(p *params) {
-			p.raftStatus.SoftState.RaftState = raft.StateLeader
+			p.raftStatus.SoftState.RaftState = raftpb.StateLeader
 			p.raftStatus.Lead = 1
 		}},
 		"unknown leader": {false, func(p *params) {
@@ -11789,6 +11864,103 @@ func TestReplicaShouldForgetLeaderOnVoteRequest(t *testing.T) {
 			tc.modify(&p)
 			require.Equal(t, tc.expect, shouldForgetLeaderOnVoteRequest(
 				p.raftStatus, p.livenessMap, p.desc, p.now))
+		})
+	}
+}
+
+func TestReplicaShouldTransferRaftLeadershipToLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type params struct {
+		raftStatus              raft.SparseStatus
+		leaseStatus             kvserverpb.LeaseStatus
+		leaseAcquisitionPending bool
+		storeID                 roachpb.StoreID
+		draining                bool
+	}
+
+	// Set up a base state that we can vary, representing this node n1 being a
+	// leader and n2 being a follower that holds a valid lease and is caught up on
+	// its raft log. We should transfer leadership in this state.
+	const localID = 1
+	const remoteID = 2
+	base := params{
+		raftStatus: raft.SparseStatus{
+			BasicStatus: raft.BasicStatus{
+				SoftState: raft.SoftState{
+					RaftState: raftpb.StateLeader,
+				},
+				HardState: raftpb.HardState{
+					Lead:   localID,
+					Commit: 10,
+				},
+			},
+			Progress: map[raftpb.PeerID]tracker.Progress{
+				remoteID: {Match: 10},
+			},
+		},
+		leaseStatus: kvserverpb.LeaseStatus{
+			Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{
+				ReplicaID: remoteID,
+			}},
+			State: kvserverpb.LeaseState_VALID,
+		},
+		leaseAcquisitionPending: false,
+		storeID:                 localID,
+		draining:                false,
+	}
+
+	testcases := map[string]struct {
+		expect bool
+		modify func(*params)
+	}{
+		"leader": {
+			true, func(p *params) {},
+		},
+		"follower": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raftpb.StateFollower
+			p.raftStatus.Lead = remoteID
+		}},
+		"pre-candidate": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raftpb.StatePreCandidate
+			p.raftStatus.Lead = raft.None
+		}},
+		"candidate": {false, func(p *params) {
+			p.raftStatus.SoftState.RaftState = raftpb.StateCandidate
+			p.raftStatus.Lead = raft.None
+		}},
+		"invalid lease": {false, func(p *params) {
+			p.leaseStatus.State = kvserverpb.LeaseState_EXPIRED
+		}},
+		"local lease": {false, func(p *params) {
+			p.leaseStatus.Lease.Replica.ReplicaID = localID
+		}},
+		"lease request pending": {false, func(p *params) {
+			p.leaseAcquisitionPending = true
+		}},
+		"no progress": {false, func(p *params) {
+			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{}
+		}},
+		"insufficient progress": {false, func(p *params) {
+			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{remoteID: {Match: 9}}
+		}},
+		"no progress, draining": {true, func(p *params) {
+			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{}
+			p.draining = true
+		}},
+		"insufficient progress, draining": {true, func(p *params) {
+			p.raftStatus.Progress = map[raftpb.PeerID]tracker.Progress{remoteID: {Match: 9}}
+			p.draining = true
+		}},
+	}
+
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			p := base
+			tc.modify(&p)
+			require.Equal(t, tc.expect, shouldTransferRaftLeadershipToLeaseholderLocked(
+				p.raftStatus, p.leaseStatus, p.leaseAcquisitionPending, p.storeID, p.draining))
 		})
 	}
 }
@@ -13643,12 +13815,13 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		desc       *roachpb.RangeDescriptor
 		chgs       internalReplicationChanges
 		expTrigger string
+		expError   string
 	}
 
 	const noop = internalChangeType(0)
 	const none = roachpb.ReplicaType(-1)
 
-	mk := func(expTrigger string, typs ...typOp) testCase {
+	mkChanges := func(typs ...typOp) testCase {
 		chgs := make([]internalReplicationChange, 0, len(typs))
 		rDescs := make([]roachpb.ReplicaDescriptor, 0, len(typs))
 		for i, typ := range typs {
@@ -13670,33 +13843,43 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		}
 		desc := roachpb.NewRangeDescriptor(roachpb.RangeID(10), roachpb.RKeyMin, roachpb.RKeyMax, roachpb.MakeReplicaSet(rDescs))
 		return testCase{
-			desc:       desc,
-			chgs:       chgs,
-			expTrigger: expTrigger,
+			desc: desc,
+			chgs: chgs,
 		}
+	}
+	mkTrigger := func(expTrigger string, typs ...typOp) testCase {
+		tc := mkChanges(typs...)
+		tc.expTrigger = expTrigger
+		return tc
+	}
+	mkError := func(expError string, typs ...typOp) testCase {
+		tc := mkChanges(typs...)
+		tc.expError = expError
+		return tc
 	}
 
 	tcs := []testCase{
 		// Simple addition of learner.
-		mk(
+		mkTrigger(
 			"SIMPLE(l2) [(n200,s200):2LEARNER]: after=[(n100,s100):1 (n200,s200):2LEARNER] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 		),
 		// Simple addition of voter (necessarily via learner).
-		mk(
+		mkTrigger(
 			"SIMPLE(v2) [(n200,s200):2]: after=[(n100,s100):1 (n200,s200):2] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 		),
-		// Simple removal of voter.
-		mk(
-			"SIMPLE(r2) [(n200,s200):2]: after=[(n100,s100):1] next=3",
+		// Simple removal of voter. This is not allowed. We require a demotion to
+		// learner first.
+		mkError(
+			"cannot remove VOTER_FULL target n200,s200, not a LEARNER or NON_VOTER",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearner},
 		),
 		// Simple removal of learner.
-		mk(
+		mkTrigger(
 			"SIMPLE(r2) [(n200,s200):2LEARNER]: after=[(n100,s100):1] next=3",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypeRemoveLearner},
@@ -13705,39 +13888,49 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 		// All other cases below need to go through joint quorums (though some
 		// of them only due to limitations in etcd/raft).
 
-		// Addition of learner and removal of voter at same time.
-		mk(
-			"ENTER_JOINT(r2 l3) [(n200,s200):3LEARNER], [(n300,s300):2VOTER_OUTGOING]: after=[(n100,s100):1 (n300,s300):2VOTER_OUTGOING (n200,s200):3LEARNER] next=4",
+		// Addition of learner and voter at same time (necessarily via learner).
+		mkTrigger(
+			"ENTER_JOINT(l3 v2) [(n200,s200):3LEARNER (n300,s300):2VOTER_INCOMING]: after=[(n100,s100):1 (n300,s300):2VOTER_INCOMING (n200,s200):3LEARNER] next=4",
+			typOp{roachpb.VOTER_FULL, noop},
+			typOp{none, internalChangeTypeAddLearner},
+			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
+		),
+
+		// Addition of learner and removal of voter at same time. Again, not allowed
+		// due to removal of voter without demotion.
+		mkError(
+			"cannot remove VOTER_FULL target n300,s300, not a LEARNER or NON_VOTER",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{none, internalChangeTypeAddLearner},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearner},
 		),
 
 		// Promotion of two voters.
-		mk(
+		mkTrigger(
 			"ENTER_JOINT(v2 v3) [(n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING]: after=[(n100,s100):1 (n200,s200):2VOTER_INCOMING (n300,s300):3VOTER_INCOMING] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 			typOp{roachpb.LEARNER, internalChangeTypePromoteLearner},
 		),
 
-		// Removal of two voters.
-		mk(
-			"ENTER_JOINT(r2 r3) [(n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING]: after=[(n100,s100):1 (n200,s200):2VOTER_OUTGOING (n300,s300):3VOTER_OUTGOING] next=4",
+		// Removal of two voters. Again, not allowed due to removal of voter without
+		// demotion.
+		mkError(
+			"cannot remove VOTER_FULL target n200,s200, not a LEARNER or NON_VOTER",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearner},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeRemoveLearner},
 		),
 
 		// Demoting two voters.
-		mk(
+		mkTrigger(
 			"ENTER_JOINT(r2 l2 r3 l3) [(n200,s200):2VOTER_DEMOTING_LEARNER (n300,s300):3VOTER_DEMOTING_LEARNER]: after=[(n100,s100):1 (n200,s200):2VOTER_DEMOTING_LEARNER (n300,s300):3VOTER_DEMOTING_LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoterToLearner},
 			typOp{roachpb.VOTER_FULL, internalChangeTypeDemoteVoterToLearner},
 		),
 		// Leave joint config entered via demotion.
-		mk(
+		mkTrigger(
 			"LEAVE_JOINT: after=[(n100,s100):1 (n200,s200):2LEARNER (n300,s300):3LEARNER] next=4",
 			typOp{roachpb.VOTER_FULL, noop},
 			typOp{roachpb.VOTER_DEMOTING_LEARNER, noop},
@@ -13753,8 +13946,14 @@ func TestPrepareChangeReplicasTrigger(t *testing.T) {
 				tc.chgs,
 				nil, /* testingForceJointConfig */
 			)
-			require.NoError(t, err)
-			assert.Equal(t, tc.expTrigger, trigger.String())
+			if tc.expError == "" {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expTrigger, trigger.String())
+			} else {
+				require.Zero(t, tc.expTrigger)
+				require.Nil(t, trigger)
+				require.Regexp(t, tc.expError, err)
+			}
 		})
 	}
 }
@@ -14035,7 +14234,7 @@ func TestReplicaRateLimit(t *testing.T) {
 	cfg.TestingKnobs.DisableMergeWaitForReplicasInit = true
 	// Use time travel to control the rate limiter in this test. Set authorizer to
 	// engage the rate limiter, overriding the default allow-all policy in tests.
-	cfg.TestingKnobs.TenantRateKnobs.TimeSource = tc.manualClock
+	cfg.TestingKnobs.TenantRateKnobs.QuotaPoolOptions = []quotapool.Option{quotapool.WithTimeSource(tc.manualClock)}
 	cfg.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.New(cfg.Settings, nil)
 	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 

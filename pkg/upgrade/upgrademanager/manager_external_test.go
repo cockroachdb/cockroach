@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package upgrademanager_test
 
@@ -827,7 +822,7 @@ func TestMigrationFailure(t *testing.T) {
 	// Pick a random version in to fail at
 	versions := clusterversion.ListBetween(startVersion, endVersion)
 	failVersion := versions[rand.Intn(len(versions))]
-	fenceVersion := upgrade.FenceVersionFor(ctx, clusterversion.ClusterVersion{Version: failVersion}).Version
+	fenceVersion := failVersion.FenceVersion()
 	t.Logf("test will fail at version: %s", failVersion.String())
 
 	// Create a storage cluster for the tenant.

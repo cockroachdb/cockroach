@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -209,7 +204,9 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			{"intervalstyle", "iso_8601"},
 			{"large_full_scan_rows", "2000"},
 			{"locality_optimized_partitioned_index_scan", "off"},
-			{"null_ordered_last", "on"},
+			// TODO(#129956): Enable this once non-default NULLS ordering with
+			// subqueries is allowed in tests.
+			// {"null_ordered_last", "on"},
 			{"on_update_rehome_row_enabled", "off"},
 			{"opt_split_scan_limit", "1000"},
 			{"optimizer_use_histograms", "off"},
@@ -370,13 +367,21 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	t.Run("types", func(t *testing.T) {
 		r.Exec(t, "CREATE TYPE test_type1 AS ENUM ('hello','world');")
 		r.Exec(t, "CREATE TYPE test_type2 AS ENUM ('goodbye','earth');")
-		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 1;")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT 'hello'::test_type1;")
 		checkBundle(
-			t, fmt.Sprint(rows), "test_type1", nil, false, /* expectErrors */
-			base, plans, "distsql.html vec.txt vec-v.txt",
-		)
-		checkBundle(
-			t, fmt.Sprint(rows), "test_type2", nil, false, /* expectErrors */
+			t, fmt.Sprint(rows), "test_type1", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("test_type1")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type1' type in schema.sql")
+					}
+					reg = regexp.MustCompile("test_type2")
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("Found irrelevant user defined type 'test_type2' in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt",
 		)
 	})
@@ -421,6 +426,68 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				return nil
 			}, false /* expectErrors */, base, plans,
 			"distsql.html vec-v.txt vec.txt")
+	})
+
+	t.Run("different schema UDF", func(t *testing.T) {
+		r.Exec(t, "CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		r.Exec(t, "CREATE FUNCTION s.foo() RETURNS INT LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT s.foo();")
+		checkBundle(
+			t, fmt.Sprint(rows), "s.foo", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("s.foo")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 's.foo' function in schema.sql")
+					}
+					reg = regexp.MustCompile("^foo")
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("found irrelevant function 'foo' in schema.sql")
+					}
+					reg = regexp.MustCompile("s.a")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 's.a' in schema.sql")
+					}
+					reg = regexp.MustCompile("abc")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 'abc' in schema.sql")
+					}
+				}
+				return nil
+			},
+			false /* expectErrors */, base, plans,
+			"stats-defaultdb.public.abc.sql stats-defaultdb.s.a.sql distsql.html vec-v.txt vec.txt",
+		)
+	})
+
+	t.Run("different schema procedure", func(t *testing.T) {
+		r.Exec(t, "CREATE PROCEDURE bar() LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		r.Exec(t, "CREATE PROCEDURE s.bar() LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) CALL s.bar();")
+		checkBundle(
+			t, fmt.Sprint(rows), "s.bar", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("s.bar")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 's.bar' procedure in schema.sql")
+					}
+					reg = regexp.MustCompile("^bar")
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("Found irrelevant procedure 'bar' in schema.sql")
+					}
+					reg = regexp.MustCompile("s.a")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 's.a' in schema.sql")
+					}
+					reg = regexp.MustCompile("abc")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for relation 'abc' in schema.sql")
+					}
+				}
+				return nil
+			},
+			false /* expectErrors */, base, plans,
+			"stats-defaultdb.public.abc.sql stats-defaultdb.s.a.sql distsql.html vec-v.txt vec.txt",
+		)
 	})
 
 	t.Run("permission error", func(t *testing.T) {

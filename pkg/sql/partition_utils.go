@@ -1,23 +1,16 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -69,20 +62,8 @@ import (
 // TODO(benesch): remove the hasNewSubzones parameter when a statement to clear
 // all subzones at once is introduced.
 func GenerateSubzoneSpans(
-	st *cluster.Settings,
-	codec keys.SQLCodec,
-	tableDesc catalog.TableDescriptor,
-	subzones []zonepb.Subzone,
-	hasNewSubzones bool,
+	codec keys.SQLCodec, tableDesc catalog.TableDescriptor, subzones []zonepb.Subzone,
 ) ([]zonepb.SubzoneSpan, error) {
-	// Removing zone configs does not require a valid license.
-	if hasNewSubzones {
-		if err := base.CheckEnterpriseEnabled(st,
-			"replication zones on indexes or partitions"); err != nil {
-			return nil, err
-		}
-	}
-
 	// We already completely avoid creating subzone spans for dropped indexes.
 	// Whether this was intentional is a different story, but it turns out to be
 	// pretty sane. Dropped elements may refer to dropped types and we aren't

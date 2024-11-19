@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package base_test
 
@@ -36,6 +31,7 @@ func TestDefaultRaftConfig(t *testing.T) {
 	// Assert the config and various derived values.
 	leaseActive, leaseRenewal := cfg.RangeLeaseDurations()
 	nodeActive, nodeRenewal := cfg.NodeLivenessDurations()
+	storeActive, storeRenewal := cfg.StoreLivenessDurations()
 	raftElectionTimeout := cfg.RaftElectionTimeout()
 	raftReproposalTimeout := cfg.RaftTickInterval * time.Duration(cfg.RaftReproposalTimeoutTicks)
 	raftHeartbeatInterval := cfg.RaftTickInterval * time.Duration(cfg.RaftHeartbeatIntervalTicks)
@@ -49,6 +45,7 @@ func TestDefaultRaftConfig(t *testing.T) {
 		s += fmt.Sprintf("RangeLeaseDurations: active=%s renewal=%s\n", leaseActive, leaseRenewal)
 		s += fmt.Sprintf("RangeLeaseAcquireTimeout: %s\n", cfg.RangeLeaseAcquireTimeout())
 		s += fmt.Sprintf("NodeLivenessDurations: active=%s renewal=%s\n", nodeActive, nodeRenewal)
+		s += fmt.Sprintf("StoreLivenessDurations: active=%s renewal=%s\n", storeActive, storeRenewal)
 		s += fmt.Sprintf("SentinelGossipTTL: %s\n", cfg.SentinelGossipTTL())
 		echotest.Require(t, s, datapathutils.TestDataPath(t, "raft_config"))
 	}
@@ -58,6 +55,9 @@ func TestDefaultRaftConfig(t *testing.T) {
 		minRTT                = 10 * time.Millisecond
 		maxRTT                = 400 * time.Millisecond // max GCP inter-region RTT is ~350ms
 		maxElectionMultiplier = 2
+		// TODO(nvanbenschoten): don't hardcode this values, separate from the
+		// hardcoded value in storeliveness/config.go.
+		storeLivenessWithdrawalInterval = 100 * time.Millisecond
 	)
 
 	type interval struct {
@@ -79,14 +79,14 @@ func TestDefaultRaftConfig(t *testing.T) {
 
 		s := "// " + name + ":\n"
 		for _, ival := range formatted {
-			s += fmt.Sprintf("// %-46s [%5.2fs -%5.2fs]\n",
+			s += fmt.Sprintf("// %-58s [%5.2fs -%5.2fs]\n",
 				ival.name, ival.min.Seconds(), ival.max.Seconds())
 		}
 		return s
 	}
 
 	var s string
-	s += formatIntervals("Raft election", []interval{
+	s += formatIntervals("Raft election (fortification disabled)", []interval{
 		{
 			"Heartbeat offset (0-1 heartbeat interval)",
 			-raftHeartbeatInterval,
@@ -104,7 +104,7 @@ func TestDefaultRaftConfig(t *testing.T) {
 		},
 	})
 	s += "//\n"
-	s += formatIntervals("Lease acquisition", []interval{
+	s += formatIntervals("Expiration lease acquisition", []interval{
 		{
 			"Heartbeat offset (0-1 heartbeat interval)",
 			-leaseRenewal,
@@ -116,9 +116,62 @@ func TestDefaultRaftConfig(t *testing.T) {
 			leaseActive,
 		},
 		{
-			"Liveness epoch bump (2x RTT: CPut + append)",
+			"Lease acquisition (1x RTT: append)",
+			minRTT,
+			maxRTT,
+		},
+	})
+	s += "//\n"
+	s += formatIntervals("Epoch lease acquisition", []interval{
+		{
+			"Node Liveness heartbeat offset (0-1 heartbeat interval)",
+			-nodeRenewal,
+			0,
+		},
+		{
+			"Node Liveness record expiration (constant)",
+			nodeActive,
+			nodeActive,
+		},
+		// NOTE: this test misses the fact that with quiescence, the raft election
+		// may not be called until this point.
+		{
+			"Node Liveness epoch bump (2x RTT: CPut + append)",
 			2 * minRTT,
 			2 * maxRTT,
+		},
+		{
+			"Lease acquisition (1x RTT: append)",
+			minRTT,
+			maxRTT,
+		},
+	})
+	s += "//\n"
+	s += formatIntervals("Leader lease acquisition (including raft election)", []interval{
+		{
+			"Store Liveness heartbeat offset (0-1 heartbeat interval)",
+			-storeRenewal,
+			0,
+		},
+		{
+			"Store Liveness expiration (constant)",
+			storeActive,
+			storeActive,
+		},
+		{
+			"Store Liveness withdrawal (0-1 withdrawal interval)",
+			0,
+			storeLivenessWithdrawalInterval,
+		},
+		{
+			fmt.Sprintf("Raft election timeout jitter (random 0x-%dx timeout)", maxElectionMultiplier-1),
+			0,
+			(maxElectionMultiplier - 1) * raftElectionTimeout,
+		},
+		{
+			"Election (3x RTT: prevote, vote, append)",
+			3 * minRTT,
+			3 * maxRTT,
 		},
 		{
 			"Lease acquisition (1x RTT: append)",

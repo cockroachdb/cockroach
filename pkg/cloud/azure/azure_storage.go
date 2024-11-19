@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package azure
 
@@ -225,7 +220,8 @@ func makeAzureStorage(
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
 
-	t, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "azure", dest.AzureConfig.Container)
+	options := args.ExternalStorageOptions()
+	t, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "azure", dest.AzureConfig.Container, options.ClientName)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure: unable to create transport")
 	}
@@ -256,11 +252,6 @@ func makeAzureStorage(
 		if args.IOConf.DisableImplicitCredentials {
 			return nil, errors.New(
 				"implicit credentials disallowed for azure due to --external-io-disable-implicit-credentials flag")
-		}
-
-		options := cloud.ExternalStorageOptions{}
-		for _, o := range args.Options {
-			o(&options)
 		}
 
 		defaultCredentialsOptions := &DefaultAzureCredentialWithFileOptions{}

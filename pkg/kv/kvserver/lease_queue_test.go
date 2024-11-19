@@ -1,18 +1,14 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver_test
 
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,13 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	proto "github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,21 +85,34 @@ func TestLeaseQueueLeasePreferencePurgatoryError(t *testing.T) {
 		ServerArgsPerNode: serverArgs,
 	})
 	defer tc.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(tc.Conns[0])
 
-	db := tc.Conns[0]
 	setLeasePreferences := func(node int) {
-		_, err := db.Exec(fmt.Sprintf(`ALTER TABLE t CONFIGURE ZONE USING
+		tdb.Exec(t, fmt.Sprintf(`ALTER TABLE t CONFIGURE ZONE USING
       num_replicas=3, num_voters=3, voter_constraints='[]', lease_preferences='[[+rack=%d]]'`,
 			node))
-		require.NoError(t, err)
+	}
+
+	checkSplits := func() error {
+		var count int
+		var startSplit bool
+		tdb.QueryRow(t,
+			"SELECT count(*), bool_or(start_key ~ 'TableMin') FROM [SHOW RANGES FROM TABLE t WITH DETAILS];",
+		).Scan(&count, &startSplit)
+		if count != numRanges {
+			return errors.Errorf("expected %d ranges in table, found %d", numRanges, count)
+		}
+		if !startSplit {
+			return errors.New("expected table to be split at /TableMin")
+		}
+		return nil
 	}
 
 	leaseCount := func(node int) int {
 		var count int
-		err := db.QueryRow(fmt.Sprintf(
+		tdb.QueryRow(t, fmt.Sprintf(
 			"SELECT count(*) FROM [SHOW RANGES FROM TABLE t WITH DETAILS] WHERE lease_holder = %d", node),
 		).Scan(&count)
-		require.NoError(t, err)
 		return count
 	}
 
@@ -114,25 +124,33 @@ func TestLeaseQueueLeasePreferencePurgatoryError(t *testing.T) {
 		return nil
 	}
 
+	// Shorten the closed timestamp target duration and span config reconciliation
+	// interval so that span configs propagate more rapidly.
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '100ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
+
 	// Create a test table with numRanges-1 splits, to end up with numRanges
 	// ranges. We will use the test table ranges to assert on the purgatory lease
 	// preference behavior.
-	_, err := db.Exec("CREATE TABLE t (i int);")
-	require.NoError(t, err)
-	_, err = db.Exec(
-		fmt.Sprintf("INSERT INTO t(i) select generate_series(1,%d)", numRanges-1))
-	require.NoError(t, err)
-	_, err = db.Exec("ALTER TABLE t SPLIT AT SELECT i FROM t;")
-	require.NoError(t, err)
+	tdb.Exec(t, "CREATE TABLE t (i int);")
+	tdb.Exec(t, fmt.Sprintf("INSERT INTO t(i) select generate_series(1,%d)", numRanges-1))
+	tdb.Exec(t, "ALTER TABLE t SPLIT AT SELECT i FROM t;")
 	require.NoError(t, tc.WaitForFullReplication())
 
-	// Set a preference on the initial node, then wait until all the leases for
-	// the test table are on that node.
+	// Set a preference on the initial node, then wait until:
+	// (1) the first span in the test table (i.e. [/Table/<id>, /Table/<id>/1/1))
+	//     has been split off into its own range.
+	// (2) all the leases for the test table are on the initial node.
 	setLeasePreferences(initialPreferredNode)
 	testutils.SucceedsSoon(t, func() error {
 		for serverIdx := 0; serverIdx < numNodes; serverIdx++ {
-			require.NoError(t, tc.GetFirstStoreFromServer(t, serverIdx).
-				ForceLeaseQueueProcess())
+			store := tc.GetFirstStoreFromServer(t, serverIdx)
+			require.NoError(t, store.ForceSplitScanAndProcess())
+			require.NoError(t, store.ForceLeaseQueueProcess())
+		}
+		if err := checkSplits(); err != nil {
+			return err
 		}
 		return checkLeaseCount(initialPreferredNode, numRanges)
 	})
@@ -143,10 +161,32 @@ func TestLeaseQueueLeasePreferencePurgatoryError(t *testing.T) {
 	store := tc.GetFirstStoreFromServer(t, 0)
 	blockTransferTarget.Store(true)
 	setLeasePreferences(nextPreferredNode)
+	rangeIDs := func() map[roachpb.RangeID]struct{} {
+		rows := tdb.Query(t, `SELECT range_id FROM [ SHOW RANGES FROM TABLE t ]`)
+		var rangeID roachpb.RangeID
+		m := map[roachpb.RangeID]struct{}{}
+		for rows.Next() {
+			require.NoError(t, rows.Scan(&rangeID))
+			m[rangeID] = struct{}{}
+		}
+		require.NoError(t, rows.Err())
+		return m
+	}()
+	require.Len(t, rangeIDs, numRanges)
 	testutils.SucceedsSoon(t, func() error {
 		require.NoError(t, store.ForceLeaseQueueProcess())
-		if purgLen := store.LeaseQueuePurgatoryLength(); purgLen != numRanges {
-			return errors.Errorf("expected %d in purgatory but got %v", numRanges, purgLen)
+		purg := store.LeaseQueuePurgatory()
+		var missing []roachpb.RangeID
+		for k := range rangeIDs {
+			if _, ok := purg[k]; !ok {
+				missing = append(missing, k)
+			}
+		}
+		sort.Slice(missing, func(i, j int) bool {
+			return missing[i] < missing[j]
+		})
+		if len(missing) > 0 {
+			return errors.Errorf("replicas missing from purgatory: %v", missing)
 		}
 		return nil
 	})
@@ -228,7 +268,7 @@ func TestLeaseQueueExpirationLeasesOnly(t *testing.T) {
 		epochLeases, leaderLeases, expLeases = countLeases()
 		t.Logf("enabling: epochLeases=%d leaderLeases=%d expLeases=%d", epochLeases, leaderLeases, expLeases)
 		return epochLeases == 0 && leaderLeases == 0 && expLeases > 0
-	}, 30*time.Second, 500*time.Millisecond) // accomodate stress/deadlock builds
+	}, 30*time.Second, 500*time.Millisecond) // accommodate stress/deadlock builds
 
 	// Run a scan across the ranges, just to make sure they work.
 	scanCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -248,6 +288,183 @@ func TestLeaseQueueExpirationLeasesOnly(t *testing.T) {
 		t.Logf("disabling: epochLeases=%d leaderLeases=%d expLeases=%d", epochLeases, leaderLeases, expLeases)
 		return epochLeases > 0 && leaderLeases == 0 && expLeases > 0 && expLeases <= initialExpLeases
 	}, 30*time.Second, 500*time.Millisecond)
+}
+
+// TestLeaseQueueSwitchesLeaseType tests that changing the value of the
+// kv.raft.leader_fortification.fraction_enabled cluster setting switches leases
+// on non-system ranges between epoch-based leases and leader leases.
+func TestLeaseQueueSwitchesLeaseType(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // too slow under stressrace
+	skip.UnderDeadlock(t)
+	skip.UnderShort(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Speed up the lease queue, which switches the lease type.
+			Settings:        st,
+			ScanMinIdleTime: time.Millisecond,
+			ScanMaxIdleTime: time.Millisecond,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	require.NoError(t, tc.WaitForFullReplication())
+
+	db := tc.Server(0).DB()
+	sqlDB := tc.ServerConn(0)
+
+	// Split off a few ranges so we have something to work with.
+	scratchKey := tc.ScratchRange(t)
+	for i := 0; i <= 255; i++ {
+		splitKey := append(scratchKey.Clone(), byte(i))
+		require.NoError(t, db.AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
+	}
+
+	countLeases := func() (epoch, leader, expiration int64) {
+		for i := 0; i < tc.NumServers(); i++ {
+			require.NoError(t, tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+				require.NoError(t, s.ComputeMetrics(ctx))
+				epoch += s.Metrics().LeaseEpochCount.Value()
+				leader += s.Metrics().LeaseLeaderCount.Value()
+				expiration += s.Metrics().LeaseExpirationCount.Value()
+				return nil
+			}))
+		}
+		return
+	}
+
+	// We expect to have both expiration and epoch leases at the start, since the
+	// meta and liveness ranges require expiration leases. However, we should have
+	// no leader leases.
+	epochLeases, leaderLeases, expLeases := countLeases()
+	require.NotZero(t, epochLeases)
+	require.Zero(t, leaderLeases)
+	require.NotZero(t, expLeases)
+	t.Logf("initial: epochLeases=%d leaderLeases=%d expLeases=%d", epochLeases, leaderLeases, expLeases)
+
+	waitForLeasesToSwitch := func(name string, someEpoch, someLeader bool) {
+		require.Eventually(t, func() bool {
+			epochLeases, leaderLeases, expLeases = countLeases()
+			t.Logf("%s: epochLeases=%d leaderLeases=%d expLeases=%d", name, epochLeases, leaderLeases, expLeases)
+			return ((epochLeases > 0) == someEpoch) && ((leaderLeases > 0) == someLeader)
+		}, 30*time.Second, 500*time.Millisecond) // accommodate stress/deadlock builds
+
+		// Run a scan across the ranges, just to make sure they work.
+		scanCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		_, err := db.Scan(scanCtx, scratchKey, scratchKey.PrefixEnd(), 1)
+		require.NoError(t, err)
+	}
+
+	// Switch 100% of ranges to use leader fortification, which should allow them
+	// to switch to leader leases, except for the system ranges, which still
+	// require expiration-based leases.
+	_, err := sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.raft.leader_fortification.fraction_enabled = 1.00`)
+	require.NoError(t, err)
+	waitForLeasesToSwitch("100%", false /* someEpoch */, true /* someLeader */)
+
+	// Switch to 50% of ranges using leader fortification, and by extension, leader
+	// leases. The other 50% should switch back to epoch-based leases.
+	_, err = sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.raft.leader_fortification.fraction_enabled = 0.50`)
+	require.NoError(t, err)
+	waitForLeasesToSwitch("50%", true /* someEpoch */, true /* someLeader */)
+
+	// Disable leader leases, even on ranges using raft fortification. All leader
+	// leases should switch back to epoch-based leases.
+	_, err = sqlDB.ExecContext(ctx, `SET CLUSTER SETTING kv.leases.leader_leases.enabled = false`)
+	require.NoError(t, err)
+	waitForLeasesToSwitch("disabled", true /* someEpoch */, false /* someLeader */)
+}
+
+// TestUpdateLastUpdateTimesUsingStoreLiveness tests that `lastUpdateTimes` is
+// updated when the leader is supported by a follower in the store liveness even
+// if it's not updating the map upon receiving followers' messages.
+func TestUpdateLastUpdateTimesUsingStoreLiveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t) // too slow under stressrace
+	skip.UnderDeadlock(t)
+	skip.UnderShort(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
+	manualClock := hlc.NewHybridManualClock()
+	knobs := base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			WallClock: manualClock,
+		},
+		Store: &kvserver.StoreTestingKnobs{
+			// Disable updating the `lastUpdateTimes` map when the leader receives
+			// messages from followers. This is to simulate the leader not
+			// sending/receiving any messages because it doesn't have any updates.
+			DisableUpdateLastUpdateTimesMapOnRaftGroupStep: true,
+		},
+	}
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// Speed up the lease queue, which switches the lease type.
+			Settings:        st,
+			ScanMinIdleTime: time.Millisecond,
+			ScanMaxIdleTime: time.Millisecond,
+			Knobs:           knobs,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	db := tc.Server(0).DB()
+	sqlDB := tc.ServerConn(0)
+
+	// Split off a few ranges so we have something to work with.
+	scratchKey := tc.ScratchRange(t)
+	for i := 0; i <= 16; i++ {
+		splitKey := append(scratchKey.Clone(), byte(i))
+		require.NoError(t, db.AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
+	}
+
+	// Switch 100% of ranges to use leader fortification.
+	_, err := sqlDB.ExecContext(ctx,
+		`SET CLUSTER SETTING kv.raft.leader_fortification.fraction_enabled = 1.00`)
+	require.NoError(t, err)
+
+	// Increment the manual clock to ensure that all followers are initially
+	// considered inactive.
+	manualClock.Increment(time.Second.Nanoseconds() * 3)
+
+	// Make sure that the replicas are considered active.
+	require.Eventually(t, func() bool {
+		allActive := true
+		for i := 0; i < tc.NumServers(); i++ {
+			store, err := tc.Server(i).GetStores().(*kvserver.Stores).
+				GetStore(tc.Server(i).GetFirstStoreID())
+			require.NoError(t, err)
+
+			store.VisitReplicas(func(r *kvserver.Replica) (wantMore bool) {
+				leader := tc.GetRaftLeader(t, r.Desc().StartKey)
+
+				// Any replica that is not active will cause this check to repeat.
+				if !leader.IsFollowerActiveSince(r.ReplicaID(), leader.Clock().PhysicalTime(),
+					time.Second) {
+					allActive = false
+				}
+
+				return true
+			})
+		}
+
+		return allActive
+	}, 45*time.Second, 1*time.Second) // accommodate stress
 }
 
 // TestLeaseQueueRaceReplicateQueue asserts that the replicate/lease queue will
@@ -294,9 +511,9 @@ func TestLeaseQueueRaceReplicateQueue(t *testing.T) {
 	// replica in the replicate queue synchronously. The lease queue processing
 	// should block on the block mutex above, causing the replicate queue to
 	// return a AllocatorTokenErr trying to process the replica.
-	_, _, _ = repl.Store().Enqueue(ctx, "lease", repl, true /* skipShouldQueue */, true /* async */)
+	_, _ = repl.Store().Enqueue(ctx, "lease", repl, true /* skipShouldQueue */, true /* async */)
 	<-blocked
-	_, processErr, _ := repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
+	processErr, _ := repl.Store().Enqueue(ctx, "replicate", repl, true /* skipShouldQueue */, false /* async */)
 	require.ErrorIs(t, processErr, plan.NewErrAllocatorToken("lease"))
 }
 

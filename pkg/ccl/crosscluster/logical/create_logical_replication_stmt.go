@@ -1,10 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logical
 
@@ -14,8 +11,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -23,7 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -31,13 +33,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/issuelink"
 )
 
 func init() {
@@ -63,16 +66,16 @@ func createLogicalReplicationStreamPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) (err error) {
+	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) (retErr error) {
 		defer func() {
-			if err == nil {
+			if retErr == nil {
 				telemetry.Count("logical_replication_stream.started")
 			}
 		}()
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V24_2) {
+		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V24_3) {
 			return pgerror.New(pgcode.FeatureNotSupported,
 				"replication job not supported before V24.2")
 		}
@@ -93,7 +96,7 @@ func createLogicalReplicationStreamPlanHook(
 		}
 
 		if stmt.From.Database != "" {
-			return errors.UnimplementedErrorf(issuelink.IssueLink{}, "logical replication streams on databases are unsupported")
+			return errors.UnimplementedErrorf(errors.IssueLink{}, "logical replication streams on databases are unsupported")
 		}
 		if len(stmt.From.Tables) != len(stmt.Into.Tables) {
 			return pgerror.New(pgcode.InvalidParameterValue, "the same number of source and destination tables must be specified")
@@ -123,10 +126,23 @@ func createLogicalReplicationStreamPlanHook(
 			mode = jobspb.LogicalReplicationDetails_Validated
 		}
 
+		discard := jobspb.LogicalReplicationDetails_DiscardNothing
+		if m, ok := options.Discard(); ok {
+			switch m {
+			case "ttl-deletes":
+				discard = jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes
+			case "all-deletes":
+				discard = jobspb.LogicalReplicationDetails_DiscardAllDeletes
+			default:
+				return pgerror.Newf(pgcode.InvalidParameterValue, "unknown discard option %q", m)
+			}
+		}
+
 		var (
 			targetsDescription string
 			srcTableNames      = make([]string, len(stmt.From.Tables))
 			repPairs           = make([]jobspb.LogicalReplicationDetails_ReplicationPair, len(stmt.Into.Tables))
+			srcTableDescs      = make([]*descpb.TableDescriptor, len(stmt.Into.Tables))
 		)
 		for i := range stmt.From.Tables {
 
@@ -140,28 +156,6 @@ func createLogicalReplicationStreamPlanHook(
 				return err
 			}
 			repPairs[i].DstDescriptorID = int32(td.GetID())
-
-			// TODO(dt): remove when we support this via KV metadata.
-			var foundTSCol bool
-			for _, col := range td.GetColumns() {
-				if col.Name == originTimestampColumnName {
-					foundTSCol = true
-					if col.Type.Family() != types.DecimalFamily {
-						return errors.Newf(
-							"%s column must be type DECIMAL for use by logical replication", originTimestampColumnName,
-						)
-					}
-					break
-				}
-			}
-			if !foundTSCol {
-				return errors.WithHintf(errors.Newf(
-					"tables written to by logical replication currently require a %q DECIMAL column",
-					originTimestampColumnName,
-				), "try 'ALTER TABLE %s ADD COLUMN %s DECIMAL NOT VISIBLE DEFAULT NULL ON UPDATE NULL'",
-					dstObjName.String(), originTimestampColumnName,
-				)
-			}
 
 			tbNameWithSchema := tree.MakeTableNameWithSchema(
 				tree.Name(prefix.Database.GetName()),
@@ -178,15 +172,30 @@ func createLogicalReplicationStreamPlanHook(
 			}
 
 			if mode != jobspb.LogicalReplicationDetails_Validated {
-				fks := td.OutboundForeignKeys()
-				for _, fk := range append(fks[:len(fks):len(fks)], td.InboundForeignKeys()...) {
-					// TODO(dt): move the constraint to un-validated for them.
-					if fk.IsConstraintValidated() {
-						return pgerror.Newf(pgcode.InvalidParameterValue, "only 'NOT VALID' foreign keys are only supported with MODE = 'validated'")
-					}
+				if len(td.OutboundForeignKeys()) > 0 || len(td.InboundForeignKeys()) > 0 {
+					return pgerror.Newf(pgcode.InvalidParameterValue, "foreign keys are only supported with MODE = 'validated'")
 				}
 			}
 		}
+		if !p.ExtendedEvalContext().TxnIsSingleStmt {
+			return errors.New("cannot CREATE LOGICAL REPLICATION STREAM in a multi-statement transaction")
+		}
+
+		// Commit the planner txn because several operations below may take several
+		// seconds, which we would like to conduct outside the scope of the planner
+		// txn to prevent txn refresh errors.
+		if err := p.Txn().Commit(ctx); err != nil {
+			return err
+		}
+		// Release all descriptor leases here. We need to do this because we're
+		// about run schema changes below to lock the replicating tables. Note that
+		// we committed the underlying transaction above -- so we're not using any
+		// leases anymore, but we might be holding some.
+		//
+		// This is all a bit of a hack to deal with the fact that the usual
+		// machinery for releasing leases assumes that we do not close the planner
+		// txn during statement execution.
+		p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
 
 		streamAddress := crosscluster.StreamAddress(from)
 		streamURL, err := streamAddress.URL()
@@ -194,6 +203,11 @@ func createLogicalReplicationStreamPlanHook(
 			return err
 		}
 		streamAddress = crosscluster.StreamAddress(streamURL.String())
+
+		cleanedURI, err := cloud.SanitizeExternalStorageURI(from, nil)
+		if err != nil {
+			return err
+		}
 
 		client, err := streamclient.NewStreamClient(ctx, streamAddress, p.ExecCfg().InternalDB, streamclient.WithLogical())
 		if err != nil {
@@ -213,9 +227,38 @@ func createLogicalReplicationStreamPlanHook(
 		if err != nil {
 			return err
 		}
+		defer func() {
+			if retErr != nil {
+				retErr = errors.CombineErrors(retErr, client.Complete(ctx, spec.StreamID, false))
+			}
+		}()
+
+		sourceTypes := make([]*descpb.TypeDescriptor, len(spec.TypeDescriptors))
+		for i, desc := range spec.TypeDescriptors {
+			sourceTypes[i] = &desc
+		}
+		crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(sourceTypes)
+
+		// If the user asked to ignore "ttl-deletes", make sure that at least one of
+		// the source tables actually has a TTL job which sets the omit bit that
+		// is used for filtering; if not, they probably forgot that step.
+		throwNoTTLWithCDCIgnoreError := discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes
 
 		for i, name := range srcTableNames {
-			repPairs[i].SrcDescriptorID = int32(spec.TableDescriptors[name].ID)
+			td := spec.TableDescriptors[name]
+			cpy := tabledesc.NewBuilder(&td).BuildCreatedMutableTable()
+			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, crossClusterResolver); err != nil {
+				return err
+			}
+			srcTableDescs[i] = cpy.TableDesc()
+			repPairs[i].SrcDescriptorID = int32(td.ID)
+			if td.RowLevelTTL != nil && td.RowLevelTTL.DisableChangefeedReplication {
+				throwNoTTLWithCDCIgnoreError = false
+			}
+		}
+
+		if throwNoTTLWithCDCIgnoreError {
+			return pgerror.Newf(pgcode.InvalidParameterValue, "DISCARD = 'ttl-deletes' specified but no tables have changefeed-excluded TTLs")
 		}
 
 		replicationStartTime := spec.ReplicationStartTime
@@ -237,30 +280,56 @@ func createLogicalReplicationStreamPlanHook(
 		if cr, ok := options.GetDefaultFunction(); ok {
 			defaultConflictResolution = *cr
 		}
+		return p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			dstTableDescs := make([]*tabledesc.Mutable, 0, len(srcTableDescs))
+			for _, pair := range repPairs {
+				dstTableDesc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, catid.DescID(pair.DstDescriptorID))
+				if err != nil {
+					return err
+				}
+				dstTableDescs = append(dstTableDescs, dstTableDesc)
+			}
 
-		jr := jobs.Record{
-			JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
-			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, streamAddress),
-			Username:    p.User(),
-			Details: jobspb.LogicalReplicationDetails{
-				StreamID:                  uint64(spec.StreamID),
-				SourceClusterID:           spec.SourceClusterID,
-				ReplicationStartTime:      replicationStartTime,
-				SourceClusterConnStr:      string(streamAddress),
-				ReplicationPairs:          repPairs,
-				TableNames:                srcTableNames,
-				DefaultConflictResolution: defaultConflictResolution,
-				FilterRangefeed:           options.GetFilterRangefeed(),
-				Mode:                      mode,
-			},
-			Progress: progress,
-		}
+			if buildutil.CrdbTestBuild {
+				if len(srcTableDescs) != len(dstTableDescs) {
+					panic("srcTableDescs and dstTableDescs should have the same length")
+				}
+			}
+			for i := range srcTableDescs {
+				err := tabledesc.CheckLogicalReplicationCompatibility(srcTableDescs[i], dstTableDescs[i].TableDesc(), options.SkipSchemaCheck())
+				if err != nil {
+					return err
+				}
+			}
 
-		if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, p.InternalSQLTxn()); err != nil {
-			return err
-		}
-		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jr.JobID))}
-		return nil
+			jr := jobs.Record{
+				JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
+				Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, cleanedURI),
+				Username:    p.User(),
+				Details: jobspb.LogicalReplicationDetails{
+					StreamID:                  uint64(spec.StreamID),
+					SourceClusterID:           spec.SourceClusterID,
+					ReplicationStartTime:      replicationStartTime,
+					SourceClusterConnStr:      string(streamAddress),
+					ReplicationPairs:          repPairs,
+					TableNames:                srcTableNames,
+					DefaultConflictResolution: defaultConflictResolution,
+					Discard:                   discard,
+					Mode:                      mode,
+					MetricsLabel:              options.metricsLabel,
+				},
+				Progress: progress,
+			}
+
+			if err := replicationutils.LockLDRTables(ctx, txn, dstTableDescs, jr.JobID); err != nil {
+				return err
+			}
+			if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
+				return err
+			}
+			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jr.JobID))}
+			return nil
+		})
 	}
 
 	return fn, streamCreationHeader, nil, false, nil
@@ -279,9 +348,11 @@ func createLogicalReplicationStreamTypeCheck(
 			stmt.Options.Cursor,
 			stmt.Options.DefaultFunction,
 			stmt.Options.Mode,
+			stmt.Options.MetricsLabel,
+			stmt.Options.Discard,
 		},
 		exprutil.Bools{
-			stmt.Options.FilterRangefeed,
+			stmt.Options.SkipSchemaCheck,
 		},
 	}
 	if err := exprutil.TypeCheck(ctx, "LOGICAL REPLICATION STREAM", p.SemaCtx(),
@@ -294,12 +365,14 @@ func createLogicalReplicationStreamTypeCheck(
 }
 
 type resolvedLogicalReplicationOptions struct {
-	cursor          *hlc.Timestamp
-	mode            *string
+	cursor          hlc.Timestamp
+	mode            string
 	defaultFunction *jobspb.LogicalReplicationDetails_DefaultConflictResolution
 	// Mapping of table name to function descriptor
 	userFunctions   map[string]int32
-	filterRangefeed bool
+	discard         string
+	skipSchemaCheck bool
+	metricsLabel    string
 }
 
 func evalLogicalReplicationOptions(
@@ -314,7 +387,14 @@ func evalLogicalReplicationOptions(
 		if err != nil {
 			return nil, err
 		}
-		r.mode = &mode
+		r.mode = mode
+	}
+	if options.MetricsLabel != nil {
+		metricsLabel, err := eval.String(ctx, options.MetricsLabel)
+		if err != nil {
+			return nil, err
+		}
+		r.metricsLabel = metricsLabel
 	}
 	if options.Cursor != nil {
 		cursor, err := eval.String(ctx, options.Cursor)
@@ -326,7 +406,7 @@ func evalLogicalReplicationOptions(
 		if err != nil {
 			return nil, err
 		}
-		r.cursor = &asOf.Timestamp
+		r.cursor = asOf.Timestamp
 	}
 	if options.DefaultFunction != nil {
 		defaultResolution := &jobspb.LogicalReplicationDetails_DefaultConflictResolution{}
@@ -374,8 +454,15 @@ func evalLogicalReplicationOptions(
 		}
 	}
 
-	if options.FilterRangefeed == tree.DBoolTrue {
-		r.filterRangefeed = true
+	if options.Discard != nil {
+		discard, err := eval.String(ctx, options.Discard)
+		if err != nil {
+			return nil, err
+		}
+		r.discard = discard
+	}
+	if options.SkipSchemaCheck == tree.DBoolTrue {
+		r.skipSchemaCheck = true
 	}
 	return r, nil
 }
@@ -399,17 +486,17 @@ func lookupFunctionID(
 }
 
 func (r *resolvedLogicalReplicationOptions) GetCursor() (hlc.Timestamp, bool) {
-	if r == nil || r.cursor == nil {
+	if r == nil || r.cursor.IsEmpty() {
 		return hlc.Timestamp{}, false
 	}
-	return *r.cursor, true
+	return r.cursor, true
 }
 
 func (r *resolvedLogicalReplicationOptions) GetMode() (string, bool) {
-	if r == nil || r.mode == nil {
+	if r == nil || r.mode == "" {
 		return "", false
 	}
-	return *r.mode, true
+	return r.mode, true
 }
 
 func (r *resolvedLogicalReplicationOptions) GetDefaultFunction() (
@@ -429,9 +516,16 @@ func (r *resolvedLogicalReplicationOptions) GetUserFunctions() (map[string]int32
 	return r.userFunctions, true
 }
 
-func (r *resolvedLogicalReplicationOptions) GetFilterRangefeed() bool {
+func (r *resolvedLogicalReplicationOptions) Discard() (string, bool) {
+	if r == nil || r.discard == "" {
+		return "", false
+	}
+	return r.discard, true
+}
+
+func (r *resolvedLogicalReplicationOptions) SkipSchemaCheck() bool {
 	if r == nil {
 		return false
 	}
-	return r.filterRangefeed
+	return r.skipSchemaCheck
 }

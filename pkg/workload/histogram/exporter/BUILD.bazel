@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "exporter",
+    srcs = [
+        "exporter.go",
+        "json_exporter.go",
+        "openmetrics_exporter.go",
+        "util.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-microbench/util",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_common//expfmt",
+    ],
+)
+
+go_test(
+    name = "exporter_test",
+    srcs = ["exporter_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":exporter"],
+    deps = [
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

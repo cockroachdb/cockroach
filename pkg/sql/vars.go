@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -418,50 +413,22 @@ var varGen = map[string]sessionVar{
 	`default_transaction_isolation`: {
 		Set: func(ctx context.Context, m sessionDataMutator, s string) error {
 			allowReadCommitted := allowReadCommittedIsolation.Get(&m.settings.SV)
-			allowSnapshot := allowSnapshotIsolation.Get(&m.settings.SV)
+			allowRepeatableRead := allowRepeatableReadIsolation.Get(&m.settings.SV)
 			hasLicense := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 			var allowedValues = []string{"serializable"}
-			if allowSnapshot {
-				allowedValues = append(allowedValues, "snapshot")
+			if allowRepeatableRead {
+				allowedValues = append(allowedValues, "repeatable read")
 			}
 			if allowReadCommitted {
 				allowedValues = append(allowedValues, "read committed")
 			}
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
-			originalLevel := level
-			upgraded := false
-			upgradedDueToLicense := false
 			if !ok {
 				return newVarValueError(`default_transaction_isolation`, s, allowedValues...)
 			}
-			switch level {
-			case tree.ReadUncommittedIsolation:
-				upgraded = true
-				fallthrough
-			case tree.ReadCommittedIsolation:
-				level = tree.SerializableIsolation
-				if allowReadCommitted && hasLicense {
-					level = tree.ReadCommittedIsolation
-				} else {
-					upgraded = true
-					if allowReadCommitted && !hasLicense {
-						upgradedDueToLicense = true
-					}
-				}
-			case tree.RepeatableReadIsolation:
-				upgraded = true
-				fallthrough
-			case tree.SnapshotIsolation:
-				level = tree.SerializableIsolation
-				if allowSnapshot && hasLicense {
-					level = tree.SnapshotIsolation
-				} else {
-					upgraded = true
-					if allowSnapshot && !hasLicense {
-						upgradedDueToLicense = true
-					}
-				}
-			}
+			originalLevel := level
+			level, upgraded, upgradedDueToLicense := level.UpgradeToEnabledLevel(
+				allowReadCommitted, allowRepeatableRead, hasLicense)
 			if f := m.upgradedIsolationLevel; upgraded && f != nil {
 				f(ctx, originalLevel, upgradedDueToLicense)
 			}
@@ -662,6 +629,23 @@ var varGen = map[string]sessionVar{
 		},
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().PartiallyDistributedPlansDisabled), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`disable_vec_union_eager_cancellation`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_vec_union_eager_cancellation`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("disable_vec_union_eager_cancellation", s)
+			if err != nil {
+				return err
+			}
+			m.SetDisableVecUnionEagerCancellation(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableVecUnionEagerCancellation), nil
 		},
 		GlobalDefault: globalFalse,
 	},
@@ -1125,10 +1109,10 @@ var varGen = map[string]sessionVar{
 	// CockroachDB extension.
 	`system_identity`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return evalCtx.SessionData().SystemIdentity().Normalized(), nil
+			return evalCtx.SessionData().SystemIdentity(), nil
 		},
 		GetFromSessionData: func(sd *sessiondata.SessionData) string {
-			return sd.SystemIdentity().Normalized()
+			return sd.SystemIdentity()
 		},
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
@@ -1466,6 +1450,15 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	// This is a read-only setting that shows the method that was used
+	// to authenticate this session.
+	`authentication_method`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(evalCtx.SessionData().AuthenticationMethod), nil
+		},
+	},
+
 	// See https://www.postgresql.org/docs/9.4/runtime-config-connection.html
 	`ssl`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
@@ -1607,15 +1600,15 @@ var varGen = map[string]sessionVar{
 	// See https://github.com/postgres/postgres/blob/REL_10_STABLE/src/backend/utils/misc/guc.c#L3401-L3409
 	`transaction_isolation`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			level := tree.IsolationLevelFromKVTxnIsolationLevel(evalCtx.Txn.IsoLevel())
+			level := tree.FromKVIsoLevel(evalCtx.Txn.IsoLevel())
 			return strings.ToLower(level.String()), nil
 		},
 		RuntimeSet: func(ctx context.Context, evalCtx *extendedEvalContext, local bool, s string) error {
 			level, ok := tree.IsolationLevelMap[strings.ToLower(s)]
 			if !ok {
 				var allowedValues = []string{"serializable"}
-				if allowSnapshotIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {
-					allowedValues = append(allowedValues, "snapshot")
+				if allowRepeatableReadIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {
+					allowedValues = append(allowedValues, "repeatable read")
 				}
 				if allowReadCommittedIsolation.Get(&evalCtx.ExecCfg.Settings.SV) {
 					allowedValues = append(allowedValues, "read committed")
@@ -3497,6 +3490,79 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUsePolymorphicParameterFix), nil
 		},
 		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`optimizer_push_limit_into_project_filtered_scan`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_push_limit_into_project_filtered_scan`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_push_limit_into_project_filtered_scan", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerPushLimitIntoProjectFilteredScan(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`bypass_pcr_reader_catalog_aost`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("bypass_pcr_reader_catalog_aost", s)
+			if err != nil {
+				return err
+			}
+			m.SetBypassPCRReaderCatalogAOST(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().BypassPCRReaderCatalogAOST), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`unsafe_allow_triggers_modifying_cascades`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`unsafe_allow_triggers_modifying_cascades`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("unsafe_allow_triggers_modifying_cascades", s)
+			if err != nil {
+				return err
+			}
+			m.SetUnsafeAllowTriggersModifyingCascades(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`recursion_depth_limit`: {
+		GetStringVal: makeIntGetStringValFn(`recursion_depth_limit`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set recursion_depth_limit to a negative value: %d", b)
+			}
+			m.SetRecursionDepthLimit(int(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(evalCtx.SessionData().RecursionDepthLimit, 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(1000, 10)
+		},
 	},
 }
 

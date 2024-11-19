@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package idxconstraint
 
@@ -631,9 +626,10 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	// Attempt to build a single tight constraint from a scalar expression and use
 	// it to derive predicates/constraints on computed columns.
-	if c.computedColSet.Intersects(c.keyCols) &&
+	if !c.skipComputedColPredDerivation &&
 		c.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation &&
-		!c.skipComputedColPredDerivation {
+		c.computedColSet.Intersects(c.keyCols) &&
+		c.computedColInSuffix(offset) {
 		switch t := e.(type) {
 		case *memo.FiltersExpr, *memo.FiltersItem, *memo.AndExpr, *memo.OrExpr:
 		// Skip over scalar expressions that are not conditions, require special
@@ -646,23 +642,24 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 				// Attempt to convert the constraint into a disjunction of ANDed IS
 				// predicates, with additional derived IS conjuncts on computed
 				// columns based on columns in the constraint spans.
-				// TODO(msirek/mgartner): Modify CombineComputedColFilters to build a
-				// `Constraint` or `constraint.Set` directly instead of building a
-				// filter and calling `makeSpansForExpr`.
-				computedColumnFilters := norm.CombineComputedColFilters(
+				// TODO(mgartner): Modify CombineComputedColFilters to build a
+				// `Constraint` or `constraint.Set` directly instead of building
+				// a filter and calling `makeSpansForExpr`.
+				disjunctions := norm.CombineComputedColFilters(
 					c.computedCols,
 					c.keyCols,
 					c.colsInComputedColsExpressions,
 					constraints.Constraint(0),
 					c.factory,
 				)
-				if len(computedColumnFilters) == 1 {
-					// All predicates in `computedColumnFilters[0].Condition` fully
-					// represent the original condition plus derived predicates, so we
-					// only have to make spans on the new condition.
+				if len(disjunctions) > 0 {
+					// All disjunctions fully represent the original condition
+					// plus derived predicates, so we only have to make spans on
+					// the list of disjunctions.
+					origSkip := c.skipComputedColPredDerivation
 					c.skipComputedColPredDerivation = true
-					localTight := c.makeSpansForExpr(offset, computedColumnFilters[0].Condition, out)
-					c.skipComputedColPredDerivation = false
+					defer func() { c.skipComputedColPredDerivation = origSkip }()
+					localTight := c.binaryMergeSpansForOr(offset, disjunctions, out)
 					return localTight
 				}
 			}
@@ -1324,4 +1321,15 @@ func (c *indexConstraintCtx) isNullable(offset int) bool {
 // colType returns the type of the index column <offset>.
 func (c *indexConstraintCtx) colType(offset int) *types.T {
 	return c.md.ColumnMeta(c.columns[offset].ID()).Type
+}
+
+// computedColInSuffix returns true if one of the key columns at or after offset
+// is a computed column.
+func (c *indexConstraintCtx) computedColInSuffix(offset int) bool {
+	for _, col := range c.columns[offset:] {
+		if c.computedColSet.Contains(col.ID()) {
+			return true
+		}
+	}
+	return false
 }

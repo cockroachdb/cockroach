@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scplan
 
@@ -23,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_24_1"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_24_2"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_24_3"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -100,6 +96,7 @@ func (p Plan) StagesForCurrentPhase() []scstage.Stage {
 func MakePlan(ctx context.Context, initial scpb.CurrentState, params Params) (p Plan, err error) {
 	defer scerrors.StartEventf(
 		ctx,
+		0, /* level */
 		"building declarative schema changer plan in %s (rollback=%v) for %s",
 		redact.Safe(params.ExecutionPhase),
 		redact.Safe(params.InRollback),
@@ -160,6 +157,7 @@ type rulesForRelease struct {
 // with the newest supported version first.
 var rulesForReleases = []rulesForRelease{
 	{activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
+	{activeVersion: clusterversion.V24_3, rulesRegistry: release_24_3.GetRegistry()},
 	{activeVersion: clusterversion.V24_2, rulesRegistry: release_24_2.GetRegistry()},
 	{activeVersion: clusterversion.V24_1, rulesRegistry: release_24_1.GetRegistry()},
 }

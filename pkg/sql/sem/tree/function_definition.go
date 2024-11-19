@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree
 
@@ -165,7 +160,7 @@ func NewFunctionDefinition(
 	overloads := make([]*Overload, len(def))
 
 	for i := range def {
-		if def[i].PreferredOverload {
+		if def[i].OverloadPreference == OverloadPreferencePreferred {
 			// Builtins with a preferred overload are always ambiguous.
 			props.AmbiguousReturnType = true
 			break
@@ -214,19 +209,22 @@ func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 func (fd *FunctionDefinition) String() string { return AsString(fd) }
 
 // Format implements the NodeFormatter interface.
-// ResolvedFunctionDefinitions should always be builtin functions, so we do not
-// need to anonymize them, even if the flag is set.
+//
+// ResolvedFunctionDefinitions can be builtin or user-defined, so we must
+// respect formatting flags.
 func (fd *ResolvedFunctionDefinition) Format(ctx *FmtCtx) {
 	// This is necessary when deserializing function expressions for SHOW CREATE
 	// statements. When deserializing a function expression with function OID
 	// references, it's guaranteed that there'll be always one overload resolved.
-	// There is no need to show prefix for builtin functions since we don't
-	// serialize them.
+	// There is no need to show prefix or use formatting flags for builtin
+	// functions since we don't serialize them.
 	if len(fd.Overloads) == 1 && catid.IsOIDUserDefined(fd.Overloads[0].Oid) {
-		ctx.WriteString(fd.Overloads[0].Schema)
+		ctx.FormatName(fd.Overloads[0].Schema)
 		ctx.WriteString(".")
+		ctx.FormatName(fd.Name)
+	} else {
+		ctx.WriteString(fd.Name)
 	}
-	ctx.WriteString(fd.Name)
 }
 
 // String implements the Stringer interface.
@@ -488,7 +486,7 @@ func combineOverloads(a, b []QualifiedOverload, path SearchPath) []QualifiedOver
 	if foundUDFOverload {
 		for i, overload := range result {
 			copiedOverload := *overload.Overload
-			copiedOverload.PreferredOverload = false
+			copiedOverload.OverloadPreference = OverloadPreferenceNone
 			result[i] = QualifiedOverload{
 				Schema:   overload.Schema,
 				Overload: &copiedOverload,

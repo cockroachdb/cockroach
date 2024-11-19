@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -493,12 +488,6 @@ var npgsqlBlocklist = blocklist{
 	`Npgsql.Tests.Types.CompositeTests(NonMultiplexing).Table_as_composite(True)`:                                                                 "unknown",
 	`Npgsql.Tests.Types.CompositeTests(NonMultiplexing).Table_as_composite_with_deleted_columns`:                                                  "unknown",
 	`Npgsql.Tests.Types.CompositeTests(NonMultiplexing).With_schema`:                                                                              "unknown",
-	`Npgsql.Tests.Types.DateTimeInfinityTests(False).TimestampTz_read`:                                                                            "unknown",
-	`Npgsql.Tests.Types.DateTimeInfinityTests(False).TimestampTz_write`:                                                                           "unknown",
-	`Npgsql.Tests.Types.DateTimeInfinityTests(False).Timestamp_read`:                                                                              "unknown",
-	`Npgsql.Tests.Types.DateTimeInfinityTests(False).Timestamp_write`:                                                                             "unknown",
-	`Npgsql.Tests.Types.DateTimeInfinityTests(True).TimestampTz_read`:                                                                             "unknown",
-	`Npgsql.Tests.Types.DateTimeInfinityTests(True).Timestamp_read`:                                                                               "unknown",
 	`Npgsql.Tests.Types.DateTimeTests.Cannot_mix_DateTime_Kinds_in_range`:                                                                         "unknown",
 	`Npgsql.Tests.Types.DateTimeTests.Daterange_as_NpgsqlRange_of_DateOnly`:                                                                       "unknown",
 	`Npgsql.Tests.Types.DateTimeTests.Daterange_as_NpgsqlRange_of_DateTime`:                                                                       "unknown",

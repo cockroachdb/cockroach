@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package reports
 
@@ -124,6 +119,11 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderStressWithIssue(t, 134948)
+	skip.UnderRaceWithIssue(t, 134948)
+	skip.UnderShort(t)
+
 	ctx := context.Background()
 	// 2 regions, 3 dcs per region.
 	tc := serverutils.StartCluster(t, 6, base.TestClusterArgs{

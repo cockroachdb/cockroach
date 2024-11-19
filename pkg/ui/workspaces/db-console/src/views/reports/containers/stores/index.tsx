@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { Loading } from "@cockroachlabs/cluster-ui";
 import isEmpty from "lodash/isEmpty";
@@ -26,7 +21,6 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
-
 
 import { BackToAdvanceDebug } from "../util";
 
@@ -140,9 +134,7 @@ function selectStoresState(state: AdminUIState, props: StoresProps) {
 }
 
 const selectStoresLoading = createSelector(selectStoresState, stores => {
-  return (
-    isEmpty(stores) || (isEmpty(stores.data) && isNil(stores.lastError))
-  );
+  return isEmpty(stores) || (isEmpty(stores.data) && isNil(stores.lastError));
 });
 
 const selectSortedStores = createSelector(

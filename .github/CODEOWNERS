@@ -36,8 +36,12 @@
 /docs/RFCS/                  @cockroachdb/rfc-prs
 /docs/generated/redact_safe.md @cockroachdb/security
 
+/LICENSE                     @cockroachdb/release-eng-prs
+/licenses                    @cockroachdb/release-eng-prs
+
 /Makefile                    @cockroachdb/dev-inf
 
+#!/pkg                         @cockroachdb/unowned
 #!/pkg/sql/                    @cockroachdb/sql-queries-noreview
 
 /pkg/sql/inverted/           @cockroachdb/sql-queries-prs
@@ -73,10 +77,11 @@
 /pkg/sql/importer/           @cockroachdb/sql-queries-prs
 /pkg/ccl/importerccl/        @cockroachdb/sql-queries-prs
 
-/pkg/sql/appstatspb          @cockroachdb/obs-prs
-/pkg/sql/execstats/          @cockroachdb/obs-prs
-/pkg/sql/scheduledlogging/   @cockroachdb/obs-prs
-/pkg/sql/sqlstats/           @cockroachdb/obs-prs
+/pkg/sql/appstatspb           @cockroachdb/obs-prs
+/pkg/sql/execstats/           @cockroachdb/obs-prs
+/pkg/sql/scheduledlogging/    @cockroachdb/obs-prs
+/pkg/sql/sqlstats/            @cockroachdb/obs-prs
+/pkg/sql/tablemetadatacache/  @cockroachdb/obs-prs
 /pkg/ccl/testccl/sqlstatsccl/ @cockroachdb/obs-prs
 
 /pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
@@ -111,6 +116,7 @@
 /pkg/sql/database*.go        @cockroachdb/sql-foundations
 /pkg/sql/drop*.go            @cockroachdb/sql-foundations
 /pkg/sql/grant*.go           @cockroachdb/sql-foundations
+/pkg/sql/multitenant_admin_function_test.go @cockroachdb/sql-foundations
 /pkg/sql/rename*.go          @cockroachdb/sql-foundations
 /pkg/sql/revoke*.go          @cockroachdb/sql-foundations
 /pkg/sql/schema*.go          @cockroachdb/sql-foundations
@@ -164,7 +170,7 @@
 /pkg/cli/syncbench/          @cockroachdb/storage @cockroachdb/kv-prs
 /pkg/cli/swappable_fs*       @cockroachdb/storage
 /pkg/cli/testutils.go        @cockroachdb/test-eng
-/pkg/cli/tsdump.go           @cockroachdb/obs-prs @cockroachdb/obs-india-prs
+/pkg/cli/tsdump*.go          @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/cli/userfile.go         @cockroachdb/disaster-recovery
 /pkg/cli/workload*           @cockroachdb/sql-foundations
 /pkg/cli/zip*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
@@ -178,6 +184,7 @@
 /pkg/server/admin*.go                    @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/api_v2*.go                   @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/api_v2_auth*.go              @cockroachdb/obs-prs @cockroachdb/server-prs @cockroachdb/prodsec @cockroachdb/product-security
+/pkg/server/application_api/             @cockroachdb/obs-prs
 /pkg/server/authentication*.go           @cockroachdb/prodsec     @cockroachdb/server-prs @cockroachdb/product-security
 /pkg/server/clock_monotonicity.go        @cockroachdb/kv-prs
 /pkg/server/combined_statement_stats*.go @cockroachdb/obs-prs
@@ -197,6 +204,7 @@
 /pkg/server/init*.go                     @cockroachdb/kv-prs      @cockroachdb/server-prs
 /pkg/server/intent_*.go                  @cockroachdb/kv-prs      @cockroachdb/server-prs
 /pkg/server/key_vis*                     @cockroachdb/obs-prs
+/pkg/server/license/                     @cockroachdb/sql-foundations
 /pkg/server/load_endpoint*               @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/loss_of_quorum*.go           @cockroachdb/kv-prs
 /pkg/server/migration*                   @cockroachdb/sql-foundations
@@ -569,17 +577,17 @@
 /pkg/ts/catalog/             @cockroachdb/obs-prs
 #!/pkg/util/                 @cockroachdb/unowned
 /pkg/util/addr/              @cockroachdb/obs-prs
+/pkg/util/admission/         @cockroachdb/admission-control
+/pkg/util/goschedstats       @cockroachdb/admission-control
+/pkg/util/grunning/          @cockroachdb/admission-control
 /pkg/util/log/               @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/util/metric/            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
-/pkg/util/tracing            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
-/pkg/util/stop/              @cockroachdb/kv-prs
-/pkg/util/grunning/          @cockroachdb/admission-control
-/pkg/util/admission/         @cockroachdb/admission-control
-/pkg/util/schedulerlatency/  @cockroachdb/admission-control
 /pkg/util/mon                @cockroachdb/sql-queries-prs
+/pkg/util/schedulerlatency/  @cockroachdb/admission-control
+/pkg/util/stop/              @cockroachdb/kv-prs
+/pkg/util/tracing            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/workload/               @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
 /pkg/obs/                    @cockroachdb/obs-prs
-/pkg/obsservice/             @cockroachdb/obs-prs
 /pkg/ccl/auditloggingccl     @cockroachdb/obs-prs
 /pkg/cmd/drt*                @cockroachdb/test-eng
 

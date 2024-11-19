@@ -1,10 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import omit from "lodash/omit";
 import React from "react";
@@ -46,7 +43,11 @@ function mapStateToProps(state: AdminUIState): OwnProps {
  * LicenseSwap is a higher-order component that swaps out two components based
  * on the current license status.
  */
-export default function swapByLicense<OSSProps, CCLProps, TProps = OSSProps | CCLProps>(
+export default function swapByLicense<
+  OSSProps,
+  CCLProps,
+  TProps = OSSProps | CCLProps,
+>(
   OSSComponent: React.ComponentClass<OSSProps>,
   CCLComponent: React.ComponentClass<CCLProps>,
 ) {

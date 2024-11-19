@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package keys
 
@@ -188,6 +183,12 @@ func (e sqlEncoder) TenantSpan() roachpb.Span {
 	key := *e.buf
 	endKey := *e.endKey
 	return roachpb.Span{Key: key, EndKey: endKey}
+}
+
+// TableSpan returns a span representing the table's keyspace.
+func (e sqlEncoder) TableSpan(tableID uint32) roachpb.Span {
+	key := e.TablePrefix(tableID)
+	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
 }
 
 // TablePrefix returns the key prefix used for the table's data.

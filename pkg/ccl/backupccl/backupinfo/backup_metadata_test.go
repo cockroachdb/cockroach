@@ -1,15 +1,13 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupinfo_test
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"testing"
 
@@ -27,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -57,8 +56,9 @@ func TestMetadataSST(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = true`)
 
 	// Check that backup metadata is correct on full cluster backup.
-	sqlDB.Exec(t, `BACKUP TO $1`, userfile)
-	checkMetadata(ctx, t, tc, userfile)
+	sqlDB.Exec(t, `BACKUP INTO $1`, userfile)
+	backupPath := userfile + getBackupPath(t, sqlDB, userfile)
+	checkMetadata(ctx, t, tc, backupPath)
 
 	// Check for correct backup metadata on incremental backup with revision
 	// history.
@@ -68,25 +68,28 @@ func TestMetadataSST(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE emptydb.bar(k INT, v INT)`)
 	sqlDB.Exec(t, `DROP DATABASE emptydb`)
 
-	sqlDB.Exec(t, `BACKUP TO $1 WITH revision_history`, userfile)
-	checkMetadata(ctx, t, tc, userfile)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, userfile)
+	checkMetadata(ctx, t, tc, backupPath)
 
 	//  Check for correct backup metadata on single table backups.
 	userfile1 := "userfile:///1"
-	sqlDB.Exec(t, `BACKUP TABLE data.bank TO $1 WITH revision_history`, userfile1)
-	checkMetadata(ctx, t, tc, userfile1)
+	sqlDB.Exec(t, `BACKUP TABLE data.bank INTO $1 WITH revision_history`, userfile1)
+	backupPath1 := userfile1 + getBackupPath(t, sqlDB, userfile1)
+	checkMetadata(ctx, t, tc, backupPath1)
 
 	// Check for correct backup metadata on tenant backups.
 	userfile2 := "userfile:///2"
 	_, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	require.NoError(t, err)
-	sqlDB.Exec(t, `BACKUP TENANT 10 TO $1`, userfile2)
-	checkMetadata(ctx, t, tc, userfile2)
+	sqlDB.Exec(t, `BACKUP TENANT 10 INTO $1`, userfile2)
+	backupPath2 := userfile2 + getBackupPath(t, sqlDB, userfile2)
+	checkMetadata(ctx, t, tc, backupPath2)
 }
 
 func checkMetadata(
 	ctx context.Context, t *testing.T, tc *testcluster.TestCluster, backupLoc string,
 ) {
+	t.Helper()
 	store, err := cloud.ExternalStorageFromURI(
 		ctx,
 		backupLoc,
@@ -299,6 +302,16 @@ func checkStats(
 	}
 
 	require.Equal(t, expectedStats, metaStats)
+}
+
+// Gets the first backup path in a userfile path.
+// Note: the tests in this file expects only one backup in the path so only fetches the first backup
+func getBackupPath(t *testing.T, db *sqlutils.SQLRunner, userfile string) string {
+	rows := db.Query(t, "SHOW BACKUPS IN $1", userfile)
+	var result struct{ path string }
+	require.True(t, rows.Next(), fmt.Sprintf("Could not find backup path in %s", userfile))
+	require.NoError(t, rows.Scan(&result.path))
+	return result.path
 }
 
 func testingReadBackupManifest(

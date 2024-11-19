@@ -1,0 +1,64 @@
+# Verify hostError failure are routed to test-eng and marked as infra-flake,
+# when the first failure is a non-handled error.
+
+add-failure name=(oops)
+----
+ok
+
+add-failure name=(oops again) type=(vm-host-error)
+----
+ok
+
+post
+----
+----
+roachtest.vm_host_error [failed]() on test_branch @ [test_SHA](). A Side-Eye cluster snapshot was captured on timeout: [https://app.side-eye.io/snapshots/1](https://app.side-eye.io/snapshots/1).
+
+
+```
+test github_test failed: oops
+hostError VMs: my_VM [owner=test-eng]
+```
+
+Parameters:
+ - <code>arch=amd64</code>
+ - <code>cloud=gce</code>
+ - <code>coverageBuild=false</code>
+ - <code>cpu=4</code>
+ - <code>encrypted=false</code>
+ - <code>fs=ext4</code>
+ - <code>localSSD=true</code>
+ - <code>runtimeAssertionsBuild=false</code>
+ - <code>ssd=0</code>
+<details><summary>Help</summary>
+<p>
+
+
+See: [roachtest README](https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md)
+
+
+
+See: [How To Investigate \(internal\)](https://cockroachlabs.atlassian.net/l/c/SSSBr8c7)
+
+
+
+See: [Grafana](https://go.crdb.dev/roachtest-grafana//github-test/1689957243000/1689957853000)
+
+</p>
+</details>
+/cc @cockroachdb/test-eng
+<sub>
+
+[This test on roachdash](https://roachdash.crdb.dev/?filter=status:open%20t:.*vm_host_error.*&sort=title+created&display=lastcommented+project) | [Improve this report!](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/bazci/githubpost/issues)
+
+</sub>
+
+------
+Labels:
+- <code>O-roachtest</code>
+- <code>X-infra-flake</code>
+- <code>T-testeng</code>
+Rendered:
+https://github.com/cockroachdb/cockroach/issues/new?body=roachtest.vm_host_error+%5Bfailed%5D%28%29+on+test_branch+%40+%5Btest_SHA%5D%28%29.+A+Side-Eye+cluster+snapshot+was+captured+on+timeout%3A+%5Bhttps%3A%2F%2Fapp.side-eye.io%2Fsnapshots%2F1%5D%28https%3A%2F%2Fapp.side-eye.io%2Fsnapshots%2F1%29.%0A%0A%0A%60%60%60%0Atest+github_test+failed%3A+oops%0AhostError+VMs%3A+my_VM+%5Bowner%3Dtest-eng%5D%0A%60%60%60%0A%0AParameters%3A%0A+-+%3Ccode%3Earch%3Damd64%3C%2Fcode%3E%0A+-+%3Ccode%3Ecloud%3Dgce%3C%2Fcode%3E%0A+-+%3Ccode%3EcoverageBuild%3Dfalse%3C%2Fcode%3E%0A+-+%3Ccode%3Ecpu%3D4%3C%2Fcode%3E%0A+-+%3Ccode%3Eencrypted%3Dfalse%3C%2Fcode%3E%0A+-+%3Ccode%3Efs%3Dext4%3C%2Fcode%3E%0A+-+%3Ccode%3ElocalSSD%3Dtrue%3C%2Fcode%3E%0A+-+%3Ccode%3EruntimeAssertionsBuild%3Dfalse%3C%2Fcode%3E%0A+-+%3Ccode%3Essd%3D0%3C%2Fcode%3E%0A%3Cdetails%3E%3Csummary%3EHelp%3C%2Fsummary%3E%0A%3Cp%3E%0A%0A%0ASee%3A+%5Broachtest+README%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Fblob%2Fmaster%2Fpkg%2Fcmd%2Froachtest%2FREADME.md%29%0A%0A%0A%0ASee%3A+%5BHow+To+Investigate+%5C%28internal%5C%29%5D%28https%3A%2F%2Fcockroachlabs.atlassian.net%2Fl%2Fc%2FSSSBr8c7%29%0A%0A%0A%0ASee%3A+%5BGrafana%5D%28https%3A%2F%2Fgo.crdb.dev%2Froachtest-grafana%2F%2Fgithub-test%2F1689957243000%2F1689957853000%29%0A%0A%3C%2Fp%3E%0A%3C%2Fdetails%3E%0A%2Fcc+%40cockroachdb%2Ftest-eng%0A%3Csub%3E%0A%0A%5BThis+test+on+roachdash%5D%28https%3A%2F%2Froachdash.crdb.dev%2F%3Ffilter%3Dstatus%3Aopen%2520t%3A.%2Avm_host_error.%2A%26sort%3Dtitle%2Bcreated%26display%3Dlastcommented%2Bproject%29+%7C+%5BImprove+this+report%21%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Ftree%2Fmaster%2Fpkg%2Fcmd%2Fbazci%2Fgithubpost%2Fissues%29%0A%0A%3C%2Fsub%3E%0A%0A------%0ALabels%3A%0A-+%3Ccode%3EO-roachtest%3C%2Fcode%3E%0A-+%3Ccode%3EX-infra-flake%3C%2Fcode%3E%0A-+%3Ccode%3ET-testeng%3C%2Fcode%3E%0A&title=roachtest%3A+vm_host_error+failed
+----
+----

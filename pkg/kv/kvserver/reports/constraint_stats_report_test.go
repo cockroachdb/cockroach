@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package reports
 
@@ -1053,9 +1048,7 @@ func generateTableZone(t table, tableDesc descpb.TableDescriptor) (*zonepb.ZoneC
 	// Fill in the SubzoneSpans.
 	if tableZone != nil {
 		var err error
-		tableZone.SubzoneSpans, err = sql.GenerateSubzoneSpans(
-			nil, keys.SystemSQLCodec,
-			tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), tableZone.Subzones, false /* hasNewSubzones */)
+		tableZone.SubzoneSpans, err = sql.GenerateSubzoneSpans(keys.SystemSQLCodec, tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), tableZone.Subzones)
 		if err != nil {
 			return nil, errors.Wrap(err, "error generating subzone spans")
 		}

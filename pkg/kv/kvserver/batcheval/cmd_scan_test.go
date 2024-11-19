@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package batcheval
 
@@ -17,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -228,6 +224,173 @@ func TestScanReverseScanWholeRows(t *testing.T) {
 		}
 
 		require.EqualValues(t, resp.Header().NumKeys, 3)
+	})
+}
+
+// TestScanReturnRawMVCC tests that a ScanRequest with the
+// ReturnRawMVCC option set should return the full bytes of the
+// MVCCValue in the RawBytes field of returned roachpb.Values.
+func TestScanReturnRawMVCC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Write a value with WriteOptions that will produce an
+	// MVCCValueHeader.
+	clock := hlc.NewClockForTesting(nil)
+	settings := cluster.MakeTestingClusterSettings()
+	evalCtx := (&MockEvalCtx{Clock: clock, ClusterSettings: settings}).EvalContext()
+	ts := clock.Now()
+
+	var (
+		expectedOriginID = uint32(42)
+		key1             = roachpb.Key([]byte{'a'}) // Will have MVCCValueHeader
+		key2             = roachpb.Key([]byte{'b'}) // Will have MVCCValueHeader
+		key3             = roachpb.Key([]byte{'c'}) // No MVCCValueHeader
+		key4             = roachpb.Key([]byte{'d'})
+		value            = roachpb.MakeValueFromString("woohoo")
+	)
+
+	putWithWriteOptions := func(key roachpb.Key, value roachpb.Value, writeOpts *kvpb.WriteOptions, db storage.Engine, txn *roachpb.Transaction) {
+		putResp := kvpb.PutResponse{}
+		_, err := Put(ctx, db, CommandArgs{
+			EvalCtx: evalCtx,
+			Header: kvpb.Header{
+				Txn:          txn,
+				Timestamp:    ts,
+				WriteOptions: writeOpts,
+			},
+			Args: &kvpb.PutRequest{
+				RequestHeader: kvpb.RequestHeader{Key: key},
+				Value:         value,
+			},
+		}, &putResp)
+		require.NoError(t, err)
+	}
+	putWithOriginIDSet := func(key roachpb.Key, value roachpb.Value, db storage.Engine, txn *roachpb.Transaction) {
+		putWithWriteOptions(key, value, &kvpb.WriteOptions{OriginID: expectedOriginID}, db, txn)
+	}
+
+	setup := func(db storage.Engine, txn *roachpb.Transaction) {
+		putWithOriginIDSet(key1, value, db, txn)
+		putWithOriginIDSet(key2, value, db, txn)
+		putWithWriteOptions(key3, value, nil, db, txn)
+	}
+	checkRow := func(expOriginID uint32, v roachpb.Value) {
+		mvccValue, err := storage.DecodeMVCCValue(v.RawBytes)
+		require.NoError(t, err)
+		require.Equal(t, expOriginID, mvccValue.OriginID)
+	}
+	scan := func(returnRaw bool, db storage.Engine, txn *roachpb.Transaction) kvpb.ScanResponse {
+		resp := kvpb.ScanResponse{}
+		_, err := Scan(ctx, db, CommandArgs{
+			EvalCtx: evalCtx,
+			Header:  kvpb.Header{Txn: txn, Timestamp: clock.Now()},
+			Args: &kvpb.ScanRequest{
+				ReturnRawMVCCValues: returnRaw,
+				RequestHeader: kvpb.RequestHeader{
+					Key:    key1,
+					EndKey: key4,
+				},
+			},
+		}, &resp)
+		require.NoError(t, err)
+		return resp
+	}
+	rscan := func(returnRaw bool, db storage.Engine, txn *roachpb.Transaction) kvpb.ReverseScanResponse {
+		resp := kvpb.ReverseScanResponse{}
+		_, err := ReverseScan(ctx, db, CommandArgs{
+			EvalCtx: evalCtx,
+			Header:  kvpb.Header{Txn: txn, Timestamp: ts},
+			Args: &kvpb.ReverseScanRequest{
+				ReturnRawMVCCValues: returnRaw,
+				RequestHeader: kvpb.RequestHeader{
+					Key:    key1,
+					EndKey: key4,
+				},
+			},
+		}, &resp)
+		require.NoError(t, err)
+		return resp
+	}
+	get := func(key roachpb.Key, returnRaw bool, db storage.Engine, txn *roachpb.Transaction) kvpb.GetResponse {
+		getResp := kvpb.GetResponse{}
+		_, err := Get(ctx, db, CommandArgs{
+			EvalCtx: evalCtx,
+			Header:  kvpb.Header{Txn: txn, Timestamp: ts},
+			Args: &kvpb.GetRequest{
+				ReturnRawMVCCValues: returnRaw,
+				RequestHeader:       kvpb.RequestHeader{Key: key},
+			},
+		}, &getResp)
+		require.NoError(t, err)
+		return getResp
+	}
+
+	testutils.RunTrueAndFalse(t, "txn", func(t *testing.T, useTxn bool) {
+		testutils.RunTrueAndFalse(t, "ReturnRawMVCCValues", func(t *testing.T, returnRaw bool) {
+			db := storage.NewDefaultInMemForTesting()
+			defer db.Close()
+
+			var txn *roachpb.Transaction
+			if useTxn {
+				txn1 := roachpb.MakeTransaction("test", nil, /* baseKey */
+					isolation.Serializable,
+					roachpb.NormalUserPriority, ts, 0, 0, 0, false /* omitInRangefeeds */)
+				txn = &txn1
+			}
+			expOriginID := expectedOriginID
+			// If we are running without ReturnRaweMVCCValues, we
+			// should never see the originID.
+			if !returnRaw {
+				expOriginID = 0
+			}
+			setup(db, txn)
+			t.Run("scan", func(t *testing.T) {
+				resp := scan(returnRaw, db, txn)
+				require.Equal(t, 3, len(resp.Rows))
+				checkRow(expOriginID, resp.Rows[0].Value)
+				checkRow(expOriginID, resp.Rows[1].Value)
+				checkRow(0, resp.Rows[2].Value)
+			})
+			t.Run("reverse_scan", func(t *testing.T) {
+				resp := rscan(returnRaw, db, txn)
+				require.Equal(t, 3, len(resp.Rows))
+				checkRow(expOriginID, resp.Rows[2].Value)
+				checkRow(expOriginID, resp.Rows[1].Value)
+				checkRow(0, resp.Rows[0].Value)
+			})
+			t.Run("get", func(t *testing.T) {
+				resp := get(key1, returnRaw, db, txn)
+				checkRow(expOriginID, *resp.Value)
+				resp = get(key3, returnRaw, db, txn)
+				checkRow(0, *resp.Value)
+			})
+		})
+	})
+
+	t.Run("scan_at_lower_sequence_number", func(t *testing.T) {
+		db := storage.NewDefaultInMemForTesting()
+		defer db.Close()
+
+		txn := roachpb.MakeTransaction("test", nil, /* baseKey */
+			isolation.Serializable,
+			roachpb.NormalUserPriority, ts, 0, 0, 0, false /* omitInRangefeeds */)
+		setup(db, &txn)
+		// Write 3 values at a higher sequence number with no
+		// origin ID. We should still get the originID written
+		// at a lower sequence number. Txn is captured in the
+		// funcs above.
+		txn.Sequence += 1
+		putWithWriteOptions(key1, value, nil, db, &txn)
+		putWithWriteOptions(key2, value, nil, db, &txn)
+		putWithWriteOptions(key3, value, nil, db, &txn)
+		txn.Sequence = 0
+
+		resp := scan(true, db, &txn)
+		require.Equal(t, 3, len(resp.Rows))
+		checkRow(expectedOriginID, resp.Rows[0].Value)
+		checkRow(expectedOriginID, resp.Rows[1].Value)
+		checkRow(0, resp.Rows[2].Value)
 	})
 }
 

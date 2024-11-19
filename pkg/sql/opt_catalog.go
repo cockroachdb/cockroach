@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -403,15 +398,17 @@ func getDescForDataSource(o cat.DataSource) (catalog.TableDescriptor, error) {
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
-func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
-	if o.ID() == 0 {
-		return oc.planner.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, priv)
+func (oc *optCatalog) CheckPrivilege(
+	ctx context.Context, o cat.Object, user username.SQLUsername, priv privilege.Kind,
+) error {
+	if o.ID() == cat.DefaultStableID {
+		return oc.planner.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, priv, user)
 	}
 	desc, err := getDescFromCatalogObjectForPermissions(o)
 	if err != nil {
 		return err
 	}
-	return oc.planner.CheckPrivilege(ctx, desc, priv)
+	return oc.planner.CheckPrivilegeForUser(ctx, desc, priv, user)
 }
 
 // CheckAnyPrivilege is part of the cat.Catalog interface.
@@ -424,12 +421,14 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 }
 
 // CheckExecutionPrivilege is part of the cat.Catalog interface.
-func (oc *optCatalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+func (oc *optCatalog) CheckExecutionPrivilege(
+	ctx context.Context, oid oid.Oid, user username.SQLUsername,
+) error {
 	desc, err := oc.planner.FunctionDesc(ctx, oid)
 	if err != nil {
 		return errors.WithAssertionFailure(err)
 	}
-	return oc.planner.CheckPrivilege(ctx, desc, privilege.EXECUTE)
+	return oc.planner.CheckPrivilegeForUser(ctx, desc, privilege.EXECUTE, user)
 }
 
 // HasAdminRole is part of the cat.Catalog interface.
@@ -502,6 +501,22 @@ func (oc *optCatalog) Optimizer() interface{} {
 	}
 	plannerInterface := eval.Planner(oc.planner)
 	return plannerInterface.Optimizer()
+}
+
+// GetCurrentUser is part of the cat.Catalog interface.
+func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
+	return oc.planner.User()
+}
+
+// GetRoutineOwner is part of the cat.Catalog interface.
+func (oc *optCatalog) GetRoutineOwner(
+	ctx context.Context, routineOid oid.Oid,
+) (username.SQLUsername, error) {
+	fnDesc, err := oc.planner.FunctionDesc(ctx, routineOid)
+	if err != nil {
+		return username.EmptyRoleName(), err
+	}
+	return fnDesc.FuncDesc().Privileges.Owner(), nil
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -614,13 +629,17 @@ func (oc *optCatalog) codec() keys.SQLCodec {
 // optView is a wrapper around catalog.TableDescriptor that implements
 // the cat.Object, cat.DataSource, and cat.View interfaces.
 type optView struct {
-	desc catalog.TableDescriptor
+	desc     catalog.TableDescriptor
+	triggers []optTrigger
 }
 
 var _ cat.View = &optView{}
 
 func newOptView(desc catalog.TableDescriptor) *optView {
-	return &optView{desc: desc}
+	return &optView{
+		desc:     desc,
+		triggers: getOptTriggers(desc.GetTriggers()),
+	}
 }
 
 // ID is part of the cat.Object interface.
@@ -671,6 +690,16 @@ func (ov *optView) ColumnName(i int) tree.Name {
 func (ov *optView) CollectTypes(ord int) (descpb.IDs, error) {
 	col := ov.desc.AllColumns()[ord]
 	return collectTypes(col)
+}
+
+// TriggerCount is part of the cat.View interface.
+func (ov *optView) TriggerCount() int {
+	return len(ov.triggers)
+}
+
+// Trigger is part of the cat.View interface.
+func (ov *optView) Trigger(i int) cat.Trigger {
+	return &ov.triggers[i]
 }
 
 // optSequence is a wrapper around catalog.TableDescriptor that
@@ -767,6 +796,8 @@ type optTable struct {
 	// can be different from desc's constraints because of synthesized
 	// constraints for user defined types.
 	checkConstraints []optCheckConstraint
+
+	triggers []optTrigger
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
@@ -975,13 +1006,21 @@ func newOptTable(
 
 		if idx.IsUnique() {
 			if idx.ImplicitPartitioningColumnCount() > 0 {
-				// Add unique constraints for implicitly partitioned unique indexes.
+				// Add unique constraints for implicitly partitioned unique indexes. If
+				// there is a single implicit column of ENUM type (e.g. an implicit RBR
+				// column), then we can ensure uniqueness under non-Serializable
+				// isolation levels by writing tombstones. We assume that the partition
+				// column is the first column of the index.
+				partitionColumn := catalog.FindColumnByID(desc, idx.GetKeyColumnID(0 /* columnOrdinal */))
+				canUseTombstones := idx.ImplicitPartitioningColumnCount() == 1 &&
+					partitionColumn.GetType().Family() == types.EnumFamily
 				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-					name:         idx.GetName(),
-					table:        ot.ID(),
-					columns:      idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
-					withoutIndex: true,
-					predicate:    idx.GetPredicate(),
+					name:             idx.GetName(),
+					table:            ot.ID(),
+					columns:          idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
+					withoutIndex:     true,
+					canUseTombstones: canUseTombstones,
+					predicate:        idx.GetPredicate(),
 					// TODO(rytaft): will we ever support an unvalidated unique constraint
 					// here?
 					validity: descpb.ConstraintValidity_Validated,
@@ -1078,6 +1117,9 @@ func newOptTable(
 		})
 	}
 	ot.checkConstraints = append(ot.checkConstraints, synthesizedChecks...)
+
+	// Move all triggers into the opt table.
+	ot.triggers = getOptTriggers(desc.GetTriggers())
 
 	// Add stats last, now that other metadata is initialized.
 	if stats != nil {
@@ -1387,6 +1429,16 @@ func (ot *optTable) GetDatabaseID() descpb.ID {
 // IsHypothetical is part of the cat.Table interface.
 func (ot *optTable) IsHypothetical() bool {
 	return false
+}
+
+// TriggerCount is part of the cat.Table interface.
+func (ot *optTable) TriggerCount() int {
+	return len(ot.triggers)
+}
+
+// Trigger is part of the cat.Table interface.
+func (ot *optTable) Trigger(i int) cat.Trigger {
+	return &ot.triggers[i]
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
@@ -1955,8 +2007,9 @@ type optUniqueConstraint struct {
 	columns   []descpb.ColumnID
 	predicate string
 
-	withoutIndex bool
-	validity     descpb.ConstraintValidity
+	withoutIndex     bool
+	canUseTombstones bool
+	validity         descpb.ConstraintValidity
 
 	uniquenessGuaranteedByAnotherIndex bool
 }
@@ -1999,6 +2052,10 @@ func (u *optUniqueConstraint) Predicate() (string, bool) {
 // WithoutIndex is part of the cat.UniqueConstraint interface.
 func (u *optUniqueConstraint) WithoutIndex() bool {
 	return u.withoutIndex
+}
+
+func (u *optUniqueConstraint) CanUseTombstones() bool {
+	return u.canUseTombstones
 }
 
 // Validated is part of the cat.UniqueConstraint interface.
@@ -2460,6 +2517,16 @@ func (ot *optVirtualTable) IsRefreshViewRequired() bool {
 	return false
 }
 
+// TriggerCount is part of the cat.Table interface.
+func (ot *optVirtualTable) TriggerCount() int {
+	return 0
+}
+
+// Trigger is part of the cat.Table interface.
+func (ot *optVirtualTable) Trigger(i int) cat.Trigger {
+	panic(errors.AssertionFailedf("no triggers"))
+}
+
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
 // reported by a virtual table. The index assumes that table column 0 is a dummy
 // PK column.
@@ -2688,6 +2755,118 @@ type optCatalogTableInterface interface {
 
 var _ optCatalogTableInterface = &optTable{}
 var _ optCatalogTableInterface = &optVirtualTable{}
+
+// optTrigger is a wrapper around descpb.TriggerDescriptor that implements the
+// cat.Trigger interface.
+type optTrigger struct {
+	name               tree.Name
+	actionTime         tree.TriggerActionTime
+	events             []tree.TriggerEvent
+	newTransitionAlias tree.Name
+	oldTransitionAlias tree.Name
+	forEachRow         bool
+	whenExpr           string
+	funcID             cat.StableID
+	funcArgs           tree.Datums
+	funcBody           string
+	enabled            bool
+}
+
+var _ cat.Trigger = &optTrigger{}
+
+// Name is part of the cat.Trigger interface.
+func (o *optTrigger) Name() tree.Name {
+	return o.name
+}
+
+// ActionTime is part of the cat.Trigger interface.
+func (o *optTrigger) ActionTime() tree.TriggerActionTime {
+	return o.actionTime
+}
+
+// EventCount is part of the cat.Trigger interface.
+func (o *optTrigger) EventCount() int {
+	return len(o.events)
+}
+
+// Event is part of the cat.Trigger interface.
+func (o *optTrigger) Event(i int) tree.TriggerEvent {
+	return o.events[i]
+}
+
+// NewTransitionAlias is part of the cat.Trigger interface.
+func (o *optTrigger) NewTransitionAlias() tree.Name {
+	return o.newTransitionAlias
+}
+
+// OldTransitionAlias is part of the cat.Trigger interface.
+func (o *optTrigger) OldTransitionAlias() tree.Name {
+	return o.oldTransitionAlias
+}
+
+// ForEachRow is part of the cat.Trigger interface.
+func (o *optTrigger) ForEachRow() bool {
+	return o.forEachRow
+}
+
+// WhenExpr is part of the cat.Trigger interface.
+func (o *optTrigger) WhenExpr() string {
+	return o.whenExpr
+}
+
+// FuncID is part of the cat.Trigger interface.
+func (o *optTrigger) FuncID() cat.StableID {
+	return o.funcID
+}
+
+// FuncArgs is part of the cat.Trigger interface.
+func (o *optTrigger) FuncArgs() tree.Datums {
+	return o.funcArgs
+}
+
+func (o *optTrigger) FuncBody() string {
+	return o.funcBody
+}
+
+// Enabled is part of the cat.Trigger interface.
+func (o *optTrigger) Enabled() bool {
+	return o.enabled
+}
+
+// getOptTriggers maps from descpb.TriggerDescriptor to optTrigger.
+func getOptTriggers(descTriggers []descpb.TriggerDescriptor) []optTrigger {
+	triggers := make([]optTrigger, len(descTriggers))
+	for i := range triggers {
+		descTrigger := &descTriggers[i]
+		optEvents := make([]tree.TriggerEvent, len(descTrigger.Events))
+		for j := range optEvents {
+			descEvent := descTrigger.Events[j]
+			optEvents[j].EventType = tree.TriggerEventType(descEvent.Type)
+			optEvents[j].Columns = make(tree.NameList, 0, len(descEvent.ColumnNames))
+			for _, colName := range descEvent.ColumnNames {
+				optEvents[j].Columns = append(optEvents[j].Columns, tree.Name(colName))
+			}
+		}
+		funcArgs := make(tree.Datums, len(descTrigger.FuncArgs))
+		for j := range funcArgs {
+			funcArgs[j] = tree.NewDString(descTrigger.FuncArgs[j])
+		}
+		triggers[i] = optTrigger{
+			name:               tree.Name(descTrigger.Name),
+			actionTime:         tree.TriggerActionTime(descTrigger.ActionTime),
+			events:             optEvents,
+			newTransitionAlias: tree.Name(descTrigger.NewTransitionAlias),
+			oldTransitionAlias: tree.Name(descTrigger.OldTransitionAlias),
+			forEachRow:         descTrigger.ForEachRow,
+			whenExpr:           descTrigger.WhenExpr,
+			funcID:             cat.StableID(descTrigger.FuncID),
+			funcArgs:           funcArgs,
+			funcBody:           descTrigger.FuncBody,
+			enabled:            descTrigger.Enabled,
+		}
+	}
+	return triggers
+}
 
 // collectTypes walks the given column's default and computed expression,
 // and collects any user defined types it finds. If the column itself is of

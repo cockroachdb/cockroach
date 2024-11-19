@@ -1,19 +1,13 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
 import (
 	"bufio"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/csv"
 	"encoding/gob"
@@ -31,12 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -60,21 +52,6 @@ var debugTimeSeriesDumpOpts = struct {
 	clusterLabel: "",
 	yaml:         "/tmp/tsdump.yaml",
 }
-
-var (
-	// each site in datadog has a different host name. ddSiteToHostMap
-	// holds the mapping of site name to the host name.
-	ddSiteToHostMap = map[string]string{
-		"us1":     "api.datadoghq.com",
-		"us3":     "api.us3.datadoghq.com",
-		"us5":     "api.us5.datadoghq.com",
-		"eu1":     "api.datadoghq.eu",
-		"ap1":     "api.ap1.datadoghq.com",
-		"us1-fed": "api.ddog-gov.com",
-	}
-
-	targetURLFormat = "https://%s/api/v2/series"
-)
 
 var debugTimeSeriesDumpCmd = &cobra.Command{
 	Use:   "tsdump",
@@ -100,13 +77,6 @@ will then convert it to the --format requested in the current invocation.
 			convertFile = args[0]
 		}
 
-		// validate the datadog site name & generate target url for datadog upload
-		host, ok := ddSiteToHostMap[debugTimeSeriesDumpOpts.ddSite]
-		if !ok {
-			return fmt.Errorf("unsupported datadog site '%s'", debugTimeSeriesDumpOpts.ddSite)
-		}
-		targetURL := fmt.Sprintf(targetURLFormat, host)
-
 		var w tsWriter
 		switch debugTimeSeriesDumpOpts.format {
 		case tsDumpRaw:
@@ -131,23 +101,34 @@ will then convert it to the --format requested in the current invocation.
 				doRequest,
 			)
 		case tsDumpDatadog:
-			w = makeDatadogWriter(
-				ctx,
+			targetURL, err := getDatadogTargetURL(debugTimeSeriesDumpOpts.ddSite)
+			if err != nil {
+				return err
+			}
+
+			var datadogWriter = makeDatadogWriter(
 				targetURL,
-				false, /* init */
+				false,
 				debugTimeSeriesDumpOpts.ddApiKey,
-				100, /* threshold */
+				100,
 				doDDRequest,
 			)
+			return datadogWriter.upload(args[0])
+
 		case tsDumpDatadogInit:
-			w = makeDatadogWriter(
-				ctx,
+			targetURL, err := getDatadogTargetURL(debugTimeSeriesDumpOpts.ddSite)
+			if err != nil {
+				return err
+			}
+
+			var datadogWriter = makeDatadogWriter(
 				targetURL,
-				true, /* init */
+				true,
 				debugTimeSeriesDumpOpts.ddApiKey,
-				100, /* threshold */
+				100,
 				doDDRequest,
 			)
+			return datadogWriter.upload(args[0])
 		case tsDumpOpenMetrics:
 			if debugTimeSeriesDumpOpts.targetURL != "" {
 				write := beginHttpRequestWithWritePipe(debugTimeSeriesDumpOpts.targetURL)
@@ -281,6 +262,15 @@ will then convert it to the --format requested in the current invocation.
 	}),
 }
 
+func getDatadogTargetURL(site string) (string, error) {
+	host, ok := ddSiteToHostMap[site]
+	if !ok {
+		return "", fmt.Errorf("unsupported datadog site '%s'", site)
+	}
+	targetURL := fmt.Sprintf(targetURLFormat, host)
+	return targetURL, nil
+}
+
 func doRequest(req *http.Request) error {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -290,30 +280,6 @@ func doRequest(req *http.Request) error {
 
 	if resp.StatusCode > 299 {
 		return errors.Newf("tsdump: bad response status: %+v", resp)
-	}
-	return nil
-}
-
-func doDDRequest(req *http.Request) error {
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	ddResp := DatadogResp{}
-	err = json.Unmarshal(respBytes, &ddResp)
-	if err != nil {
-		return err
-	}
-	if len(ddResp.Errors) > 0 {
-		return errors.Newf("tsdump: error response from datadog: %v", ddResp.Errors)
-	}
-	if resp.StatusCode > 299 {
-		return errors.Newf("tsdump: bad response status code: %+v", resp)
 	}
 	return nil
 }
@@ -346,210 +312,6 @@ type tsWriter interface {
 	Emit(*tspb.TimeSeriesData) error
 	Flush() error
 }
-
-// datadogWriter can convert our metrics to Datadog format and send
-// them via HTTP to the public DD endpoint, assuming an API key is set
-// in the CLI flags.
-type datadogWriter struct {
-	sync.Once
-	targetURL string
-	buffer    bytes.Buffer
-	series    []DatadogSeries
-	uploadID  string
-	init      bool
-	apiKey    string
-	// namePrefix sets the string to prepend to all metric names. The
-	// names are kept with `.` delimiters.
-	namePrefix string
-	doRequest  func(req *http.Request) error
-	threshold  int
-}
-
-func makeDatadogWriter(
-	ctx context.Context,
-	targetURL string,
-	init bool,
-	apiKey string,
-	threshold int,
-	doRequest func(req *http.Request) error,
-) *datadogWriter {
-	return &datadogWriter{
-		targetURL:  targetURL,
-		buffer:     bytes.Buffer{},
-		uploadID:   newTsdumpUploadID(),
-		init:       init,
-		apiKey:     apiKey,
-		namePrefix: "crdb.tsdump.", // Default pre-set prefix to distinguish these uploads.
-		doRequest:  doRequest,
-		threshold:  threshold,
-	}
-}
-
-var newTsdumpUploadID = func() string {
-	clusterTagValue := ""
-	if debugTimeSeriesDumpOpts.clusterLabel != "" {
-		clusterTagValue = debugTimeSeriesDumpOpts.clusterLabel
-	} else if serverCfg.ClusterName != "" {
-		clusterTagValue = serverCfg.ClusterName
-	} else {
-		clusterTagValue = fmt.Sprintf("cluster-debug-%d", timeutil.Now().Unix())
-	}
-	return newUploadID(clusterTagValue)
-}
-
-// DatadogPoint is a single metric point in Datadog format
-type DatadogPoint struct {
-	// Timestamp must be in seconds since Unix epoch.
-	Timestamp int64   `json:"timestamp"`
-	Value     float64 `json:"value"`
-}
-
-// DatadogSeries contains a JSON encoding of a single series object
-// that can be send to Datadog.
-type DatadogSeries struct {
-	Metric    string         `json:"metric"`
-	Type      int            `json:"type"`
-	Points    []DatadogPoint `json:"points"`
-	Resources []struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-	} `json:"resources"`
-	// In order to encode arbitrary key-value pairs, use a `:` delimited
-	// tag string like `cluster:dedicated`.
-	Tags []string `json:"tags"`
-}
-
-// DatadogSubmitMetrics is the top level JSON object that must be sent to Datadog.
-// See: https://docs.datadoghq.com/api/latest/metrics/#submit-metrics
-type DatadogSubmitMetrics struct {
-	Series []DatadogSeries `json:"series"`
-}
-
-const (
-	DatadogSeriesTypeUnknown = iota
-	DatadogSeriesTypeCounter
-	DatadogSeriesTypeRate
-	DatadogSeriesTypeGauge
-)
-
-func (d *datadogWriter) Emit(data *tspb.TimeSeriesData) error {
-	series := &DatadogSeries{
-		// TODO(davidh): This is not correct. We should inspect metric metadata and set appropriately.
-		// The impact of not doing this is that the metric will be treated as a gauge by default.
-		Type:   DatadogSeriesTypeUnknown,
-		Points: make([]DatadogPoint, len(data.Datapoints)),
-	}
-
-	name := data.Name
-
-	var tags []string
-	// Hardcoded values
-	tags = append(tags, "cluster_type:SELF_HOSTED")
-	tags = append(tags, "job:cockroachdb")
-	tags = append(tags, "region:local")
-
-	if debugTimeSeriesDumpOpts.clusterLabel != "" {
-		tags = append(tags, makeDDTag("cluster_label", debugTimeSeriesDumpOpts.clusterLabel))
-	}
-
-	tags = append(tags, makeDDTag(uploadIDTag, d.uploadID))
-
-	d.Do(func() {
-		fmt.Println("Upload ID:", d.uploadID)
-	})
-
-	sl := reCrStoreNode.FindStringSubmatch(data.Name)
-	if len(sl) != 0 {
-		storeNodeKey := sl[1]
-		if storeNodeKey == "node" {
-			storeNodeKey += "_id"
-		}
-		tags = append(tags, fmt.Sprintf("%s:%s", storeNodeKey, data.Source))
-		name = sl[2]
-	} else {
-		tags = append(tags, "node_id:0")
-	}
-
-	series.Tags = tags
-
-	series.Metric = d.namePrefix + name
-
-	// When running in init mode, we insert zeros with the current
-	// timestamp in order to populate Datadog's metrics list. Then the
-	// user can enable these metrics for historic ingest and load the
-	// full dataset. This should only be necessary once globally.
-	if d.init {
-		series.Points = []DatadogPoint{{
-			Value:     0,
-			Timestamp: timeutil.Now().Unix(),
-		}}
-	} else {
-		for i, ts := range data.Datapoints {
-			series.Points[i].Value = ts.Value
-			series.Points[i].Timestamp = ts.TimestampNanos / 1_000_000_000
-		}
-	}
-
-	// We append every series directly to the list. This isn't ideal
-	// because every series batch that `Emit` is called with will contain
-	// around 360 points and the same metric will repeat many many times.
-	// This causes us to repeat the metadata collection here. Ideally, we
-	// can find the series object for this metric if it already exists
-	// and insert the points there.
-	d.series = append(d.series, *series)
-
-	// The limit of `100` is an experimentally set heuristic. It can
-	// probably be increased. This results in a payload that's generally
-	// below 2MB. DD's limit is 5MB.
-	if len(d.series) > d.threshold {
-		fmt.Printf(
-			"tsdump datadog upload: sending payload containing %d series including %s\n",
-			len(d.series),
-			d.series[0].Metric,
-		)
-		return d.Flush()
-	}
-	return nil
-}
-
-func (d *datadogWriter) Flush() error {
-	var buf bytes.Buffer
-	err := json.NewEncoder(&buf).Encode(&DatadogSubmitMetrics{Series: d.series})
-	if err != nil {
-		return err
-	}
-	var zipBuf bytes.Buffer
-	g := gzip.NewWriter(&zipBuf)
-	_, err = io.Copy(g, &buf)
-	if err != nil {
-		return err
-	}
-	err = g.Close()
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("POST", d.targetURL, &zipBuf)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("DD-API-KEY", d.apiKey)
-	req.Header.Set(server.ContentTypeHeader, "application/json")
-	req.Header.Set(httputil.ContentEncodingHeader, "gzip")
-
-	err = d.doRequest(req)
-	if err != nil {
-		return err
-	}
-	d.series = nil
-	return nil
-}
-
-type DatadogResp struct {
-	Errors []string `json:"errors"`
-}
-
-var _ tsWriter = &datadogWriter{}
 
 type jsonWriter struct {
 	sync.Once

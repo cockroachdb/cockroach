@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package explain
 
@@ -23,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -33,8 +29,35 @@ import (
 
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
 // OutputBuilder flags are taken into account.
-func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
-	return emitInternal(ctx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
+func Emit(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	plan *Plan,
+	ob *OutputBuilder,
+	spanFormatFn SpanFormatFn,
+) error {
+	return emitInternal(ctx, evalCtx, plan, ob, spanFormatFn, nil /* visitedFKsByCascades */)
+}
+
+// MaybeAdjustVirtualIndexScan is injected from the sql package.
+//
+// This function clarifies usage of the virtual indexes for EXPLAIN purposes.
+var MaybeAdjustVirtualIndexScan func(
+	ctx context.Context, evalCtx *eval.Context, index cat.Index, params exec.ScanParams,
+) (_ cat.Index, _ exec.ScanParams, extraAttribute string)
+
+// joinIndexNames emits a string of index names on table 'table' as specified in
+// 'ords', with each name separated by 'sep'.
+func joinIndexNames(table cat.Table, ords cat.IndexOrdinals, sep string) string {
+	var sb strings.Builder
+	for i, idx := range ords {
+		index := table.Index(idx)
+		if i > 0 {
+			sb.WriteString(sep)
+		}
+		sb.WriteString(string(index.Name()))
+	}
+	return sb.String()
 }
 
 // - visitedFKsByCascades is updated on recursive calls for each cascade plan.
@@ -42,6 +65,7 @@ func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanF
 // "id" of the FK constraint that we construct as OriginTableID || Name.
 func emitInternal(
 	ctx context.Context,
+	evalCtx *eval.Context,
 	plan *Plan,
 	ob *OutputBuilder,
 	spanFormatFn SpanFormatFn,
@@ -64,7 +88,7 @@ func emitInternal(
 			return err
 		}
 		ob.EnterNode(name, columns, ordering)
-		if err := e.emitNodeAttributes(n); err != nil {
+		if err := e.emitNodeAttributes(ctx, evalCtx, n); err != nil {
 			return err
 		}
 		for _, c := range n.children {
@@ -144,7 +168,7 @@ func emitInternal(
 			} else {
 				visitedFKsByCascades[fkID] = struct{}{}
 				defer delete(visitedFKsByCascades, fkID)
-				if err = emitInternal(ctx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
+				if err = emitInternal(ctx, evalCtx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
 					return err
 				}
 			}
@@ -158,6 +182,7 @@ func emitInternal(
 		}
 		ob.LeaveNode()
 	}
+	// TODO(drewk): handle triggers as well.
 	ob.LeaveNode()
 	return nil
 }
@@ -340,6 +365,7 @@ var nodeNames = [...]string{
 	createFunctionOp:       "create function",
 	createTableOp:          "create table",
 	createTableAsOp:        "create table as",
+	createTriggerOp:        "create trigger",
 	createViewOp:           "create view",
 	deleteOp:               "delete",
 	deleteRangeOp:          "delete range",
@@ -434,7 +460,7 @@ func omitStats(n *Node) bool {
 	return false
 }
 
-func (e *emitter) emitNodeAttributes(n *Node) error {
+func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context, n *Node) error {
 	var actualRowCount uint64
 	var hasActualRowCount bool
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
@@ -559,7 +585,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 					}
 
 					var duration string
-					if e.ob.flags.Deflake.Has(DeflakeVolatile) {
+					if e.ob.flags.Deflake.HasAny(DeflakeVolatile) {
 						duration = "<hidden>"
 					} else {
 						timeSinceStats := timeutil.Since(s.TableStatsCreatedAt)
@@ -571,7 +597,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 					var forecastStr string
 					if s.Forecast {
-						if e.ob.flags.Deflake.Has(DeflakeVolatile) {
+						if e.ob.flags.Deflake.HasAny(DeflakeVolatile) {
 							forecastStr = "; using stats forecast"
 						} else {
 							timeSinceStats := timeutil.Since(s.ForecastAt)
@@ -629,10 +655,17 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 					"consider running 'ANALYZE %[1]s'", a.Table.Name(),
 			))
 		}
+		var extraAttribute string
+		if a.Table.IsVirtualTable() && MaybeAdjustVirtualIndexScan != nil {
+			a.Index, a.Params, extraAttribute = MaybeAdjustVirtualIndexScan(ctx, evalCtx, a.Index, a.Params)
+		}
 		e.emitTableAndIndex("table", a.Table, a.Index, suffix)
 		// Omit spans for virtual tables, unless we actually have a constraint.
 		if a.Table != nil && !(a.Table.IsVirtualTable() && a.Params.IndexConstraint == nil) {
 			e.emitSpans("spans", a.Table, a.Index, a.Params)
+		}
+		if extraAttribute != "" {
+			ob.Attr(extraAttribute, "")
 		}
 
 		if a.Params.HardLimit > 0 {
@@ -876,16 +909,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
-		if len(a.ArbiterIndexes) > 0 {
-			var sb strings.Builder
-			for i, idx := range a.ArbiterIndexes {
-				index := a.Table.Index(idx)
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(string(index.Name()))
-			}
-			ob.Attr("arbiter indexes", sb.String())
+		if arbind := joinIndexNames(a.Table, a.ArbiterIndexes, ", "); arbind != "" {
+			ob.Attr("arbiter indexes", arbind)
 		}
 		if len(a.ArbiterConstraints) > 0 {
 			var sb strings.Builder
@@ -897,6 +922,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				sb.WriteString(uniqueConstraint.Name())
 			}
 			ob.Attr("arbiter constraints", sb.String())
+		}
+		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
 		}
 
 	case insertFastPathOp:
@@ -921,6 +949,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			)
 			e.emitLockingPolicyWithPrefix("uniqueness check ", uniq.Locking)
 		}
+		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
+		}
 		if len(a.Rows) > 0 {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Rows[0]))
 		}
@@ -935,16 +966,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
-		if len(a.ArbiterIndexes) > 0 {
-			var sb strings.Builder
-			for i, idx := range a.ArbiterIndexes {
-				index := a.Table.Index(idx)
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(string(index.Name()))
-			}
-			ob.Attr("arbiter indexes", sb.String())
+		if arbind := joinIndexNames(a.Table, a.ArbiterIndexes, ", "); arbind != "" {
+			ob.Attr("arbiter indexes", arbind)
 		}
 		if len(a.ArbiterConstraints) > 0 {
 			var sb strings.Builder
@@ -957,10 +980,16 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			}
 			ob.Attr("arbiter constraints", sb.String())
 		}
+		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
+		}
 
 	case updateOp:
 		a := n.args.(*updateArgs)
 		ob.Attrf("table", "%s", a.Table.Name())
+		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
+			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
+		}
 		ob.Attr("set", printColumns(tableColumns(a.Table, a.UpdateCols)))
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
@@ -1040,6 +1069,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		createFunctionOp,
 		createTableOp,
 		createTableAsOp,
+		createTriggerOp,
 		createViewOp,
 		sequenceSelectOp,
 		saveTableOp,

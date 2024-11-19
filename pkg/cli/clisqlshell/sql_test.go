@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package clisqlshell_test
 
@@ -59,6 +54,12 @@ func Example_sql() {
 	// first batch consisting of 1 row has been returned to the client.
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(i-2) from generate_series(1,3) g(i)`})
 	c.RunWithArgs([]string{`sql`, `-e`, `SELECT '20:01:02+03:04:05'::timetz AS regression_65066`})
+
+	// Check that previous SQL error message is not displayed when the CLI is exited.
+	c.RunWithArgs([]string{`sql`, `-e`, `SELECT 1 FROM hoge`})
+	c.RunWithArgs([]string{`sql`, `-e`, `exit`})
+	c.RunWithArgs([]string{`sql`, `-e`, `SELECT 1 FROM hoge`})
+	c.RunWithArgs([]string{`sql`, `-e`, `\q`})
 
 	// Output:
 	// sql -e show application_name
@@ -118,6 +119,14 @@ func Example_sql() {
 	// sql -e SELECT '20:01:02+03:04:05'::timetz AS regression_65066
 	// regression_65066
 	// 20:01:02+03:04:05
+	// sql -e SELECT 1 FROM hoge
+	// ERROR: relation "hoge" does not exist
+	// SQLSTATE: 42P01
+	// sql -e exit
+	// sql -e SELECT 1 FROM hoge
+	// ERROR: relation "hoge" does not exist
+	// SQLSTATE: 42P01
+	// sql -e \q
 }
 
 func Example_sql_config() {

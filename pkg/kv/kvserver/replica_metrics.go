@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvserver
 
@@ -38,6 +33,10 @@ type ReplicaMetrics struct {
 	ViolatingLeasePreferences bool
 	LessPreferredLease        bool
 
+	// LeaderNotFortified indicates whether the leader believes itself to be
+	// fortified or not.
+	LeaderNotFortified bool
+
 	// Quiescent indicates whether the replica believes itself to be quiesced.
 	Quiescent bool
 	// Ticking indicates whether the store is ticking the replica. It should be
@@ -51,6 +50,7 @@ type ReplicaMetrics struct {
 	Unavailable              bool
 	Underreplicated          bool
 	Overreplicated           bool
+	Decommissioning          bool
 	RaftLogTooLarge          bool
 	RangeTooLarge            bool
 	BehindCount              int64
@@ -97,8 +97,10 @@ func (r *Replica) Metrics(
 		conf:                     r.mu.conf,
 		vitalityMap:              vitalityMap,
 		clusterNodes:             clusterNodes,
-		desc:                     r.mu.state.Desc,
+		desc:                     r.shMu.state.Desc,
 		raftStatus:               r.raftSparseStatusRLocked(),
+		leadSupportStatus:        r.raftLeadSupportStatusRLocked(),
+		now:                      now,
 		leaseStatus:              r.leaseStatusAtRLocked(ctx, now),
 		storeID:                  r.store.StoreID(),
 		storeAttrs:               storeAttrs,
@@ -108,9 +110,9 @@ func (r *Replica) Metrics(
 		ticking:                  ticking,
 		latchMetrics:             latchMetrics,
 		lockTableMetrics:         lockTableMetrics,
-		raftLogSize:              r.mu.raftLogSize,
-		raftLogSizeTrusted:       r.mu.raftLogSizeTrusted,
-		rangeSize:                r.mu.state.Stats.Total(),
+		raftLogSize:              r.shMu.raftLogSize,
+		raftLogSizeTrusted:       r.shMu.raftLogSizeTrusted,
+		rangeSize:                r.shMu.state.Stats.Total(),
 		qpUsed:                   qpUsed,
 		qpCapacity:               qpCap,
 		paused:                   r.mu.pausedFollowers,
@@ -130,6 +132,8 @@ type calcReplicaMetricsInput struct {
 	clusterNodes             int
 	desc                     *roachpb.RangeDescriptor
 	raftStatus               *raft.SparseStatus
+	leadSupportStatus        raft.LeadSupportStatus
+	now                      hlc.ClockTimestamp
 	leaseStatus              kvserverpb.LeaseStatus
 	storeID                  roachpb.StoreID
 	storeAttrs, nodeAttrs    roachpb.Attributes
@@ -172,17 +176,19 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		rangeTooLargeMultiple   = 2
 	)
 	largeRangeThreshold := rangeTooLargeMultiple * d.conf.RangeMaxBytes
-	rangeCounter, unavailable, underreplicated, overreplicated, tooLarge := calcRangeCounter(
+	rangeCounter, unavailable, underreplicated, overreplicated, tooLarge, decommissioning := calcRangeCounter(
 		d.storeID, d.desc, d.leaseStatus, d.vitalityMap, d.conf.GetNumVoters(), d.conf.NumReplicas,
 		d.clusterNodes, largeRangeThreshold, d.rangeSize)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
-	leader := d.raftStatus != nil && d.raftStatus.RaftState == raft.StateLeader
+	leader := d.raftStatus != nil && d.raftStatus.RaftState == raftpb.StateLeader
 	var leaderBehindCount, leaderPausedFollowerCount int64
+	var leaderNotFortified bool
 	if leader {
 		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.vitalityMap)
 		leaderPausedFollowerCount = int64(len(d.paused))
+		leaderNotFortified = d.leadSupportStatus.LeadSupportUntil.Less(d.now.ToTimestamp())
 	}
 
 	return ReplicaMetrics{
@@ -194,12 +200,14 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		LivenessLease:             livenessLease,
 		ViolatingLeasePreferences: violatingLeasePreferences,
 		LessPreferredLease:        lessPreferredLease,
+		LeaderNotFortified:        leaderNotFortified,
 		Quiescent:                 d.quiescent,
 		Ticking:                   d.ticking,
 		RangeCounter:              rangeCounter,
 		Unavailable:               unavailable,
 		Underreplicated:           underreplicated,
 		Overreplicated:            overreplicated,
+		Decommissioning:           decommissioning,
 		RaftLogTooLarge: d.raftLogSizeTrusted &&
 			d.raftLogSize > raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold,
 		RangeTooLarge:            tooLarge,
@@ -243,7 +251,7 @@ func calcRangeCounter(
 	numVoters, numReplicas int32,
 	clusterNodes int,
 	rangeTooLargeThreshold, rangeSize int64,
-) (rangeCounter, unavailable, underreplicated, overreplicated, tooLarge bool) {
+) (rangeCounter, unavailable, underreplicated, overreplicated, tooLarge, decommissioning bool) {
 	// If there is a live leaseholder (regardless of whether the lease is still
 	// valid) that leaseholder is responsible for range-level metrics.
 	if vitalityMap[leaseStatus.Lease.Replica.NodeID].IsLive(livenesspb.Metrics) {
@@ -279,6 +287,7 @@ func calcRangeCounter(
 			overreplicated = true
 		}
 		tooLarge = rangeSize > rangeTooLargeThreshold
+		decommissioning = calcDecommissioningCount(desc, vitalityMap) > 0
 	}
 	return
 }
@@ -333,6 +342,18 @@ func calcBehindCount(
 	return behindCount
 }
 
+func calcDecommissioningCount(
+	desc *roachpb.RangeDescriptor, vitalityMap livenesspb.NodeVitalityMap,
+) int {
+	var decommissioningCount int
+	for _, rd := range desc.Replicas().Descriptors() {
+		if vitalityMap[rd.NodeID].IsDecommissioning() {
+			decommissioningCount++
+		}
+	}
+	return decommissioningCount
+}
+
 // LoadStats returns the load statistics for the replica.
 func (r *Replica) LoadStats() load.ReplicaLoadStats {
 	return r.loadStats.Stats()
@@ -344,7 +365,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) needsMergeBySizeRLocked() bool {
-	return r.mu.state.Stats.Total() < r.mu.conf.RangeMinBytes
+	return r.shMu.state.Stats.Total() < r.mu.conf.RangeMinBytes
 }
 
 func (r *Replica) needsRaftLogTruncationLocked() bool {
@@ -356,9 +377,10 @@ func (r *Replica) needsRaftLogTruncationLocked() bool {
 	// of the bytes in raftLogLastCheckSize are already part of pending
 	// truncations since this comparison is looking at whether the raft log has
 	// grown sufficiently.
-	checkRaftLog := r.mu.raftLogSize-r.mu.raftLogLastCheckSize >= RaftLogQueueStaleSize
+	checkRaftLog := r.shMu.raftLogSize-r.shMu.raftLogLastCheckSize >= RaftLogQueueStaleSize
 	if checkRaftLog {
-		r.mu.raftLogLastCheckSize = r.mu.raftLogSize
+		r.raftMu.AssertHeld()
+		r.shMu.raftLogLastCheckSize = r.shMu.raftLogSize
 	}
 	return checkRaftLog
 }
@@ -374,7 +396,7 @@ func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool
 	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
 		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
 	}
-	size := r.mu.state.Stats.Total()
+	size := r.shMu.state.Stats.Total()
 	maxSize := int64(float64(maxBytes)*mult) + 1
 	if maxBytes <= 0 || size <= maxSize {
 		return false, 0

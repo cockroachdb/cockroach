@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -50,6 +45,14 @@ func runImportMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster,
 		// the `workload fixtures import` command, which is only supported
 		// reliably multi-tenant mode starting from that version.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
+		// Only use the latest version of each release to work around #127029.
+		mixedversion.AlwaysUseLatestPredecessors,
+		// This test sometimes flake on separate-process
+		// deployments. Needs investigation.
+		mixedversion.EnabledDeploymentModes(
+			mixedversion.SystemOnlyDeployment,
+			mixedversion.SharedProcessDeployment,
+		),
 	)
 	runImport := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		if err := h.Exec(r, "DROP DATABASE IF EXISTS tpcc CASCADE;"); err != nil {

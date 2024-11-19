@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rowexec
 
@@ -230,11 +225,11 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		// key as a DBytes. The Datum should never be DNull since nulls aren't
 		// stored in inverted indexes.
 		if row[ifr.invertedColIdx].Datum == nil {
-			ifr.MoveToDraining(errors.New("no datum found"))
+			ifr.MoveToDraining(errors.AssertionFailedf("no datum found"))
 			return ifrStateUnknown, ifr.DrainHelper()
 		}
 		if row[ifr.invertedColIdx].Datum.ResolvedType().Family() != types.EncodedKeyFamily {
-			ifr.MoveToDraining(errors.New("inverted column should have type encodedkey"))
+			ifr.MoveToDraining(errors.AssertionFailedf("inverted column should have type encodedkey"))
 			return ifrStateUnknown, ifr.DrainHelper()
 		}
 		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DEncodedKey))

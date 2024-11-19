@@ -1,6 +1,7 @@
 {
   "root": true,
   "extends": [
+    "@cockroachlabs/eslint-config",
     "plugin:import/recommended",
     "plugin:import/typescript"
   ],
@@ -29,6 +30,13 @@
     "react/jsx-no-target-blank": "off",
     // This rule errors for imports using a webpack alias.
     "import/no-unresolved": "off",
+    // The following rules are included because there are simply
+    // too many failures to fix right now
+    "react/jsx-key": "off",
+    "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/ban-types": "off",
+    "@typescript-eslint/naming-convention": "off",
+    "react/no-unescaped-entities": "off",
     "import/no-extraneous-dependencies": [
       "error",
       {

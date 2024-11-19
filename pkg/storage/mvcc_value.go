@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package storage
 
@@ -17,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
@@ -214,6 +210,9 @@ func EncodeMVCCValueToBuf(v MVCCValue, buf []byte) ([]byte, bool, error) {
 		return v.Value.RawBytes, false, nil
 	}
 
+	// NB: This code is duplicated in encodeExtendedMVCCValueToSizedBuf and
+	// edits should be replicated there.
+
 	// Extended encoding. Wrap the roachpb.Value encoding with a header containing
 	// MVCC-level metadata. Requires a re-allocation and copy.
 	headerLen := v.MVCCValueHeader.Size()
@@ -244,6 +243,38 @@ func EncodeMVCCValueToBuf(v MVCCValue, buf []byte) ([]byte, bool, error) {
 	return buf, true, nil
 }
 
+func mvccValueSize(v MVCCValue) (size int, extendedEncoding bool) {
+	if v.MVCCValueHeader.IsEmpty() && !disableSimpleValueEncoding {
+		return len(v.Value.RawBytes), false
+	}
+	return extendedPreludeSize + v.MVCCValueHeader.Size() + len(v.Value.RawBytes), true
+}
+
+// encodeExtendedMVCCValueToSizedBuf encodes an MVCCValue into its encoded form
+// in the provided buffer. The provided buf must be exactly sized, matching the
+// value returned by MVCCValue.encodedMVCCValueSize.
+//
+// See EncodeMVCCValueToBuf for detailed comments on the encoding scheme.
+func encodeExtendedMVCCValueToSizedBuf(v MVCCValue, buf []byte) error {
+	if buildutil.CrdbTestBuild {
+		if sz := encodedMVCCValueSize(v); sz != len(buf) {
+			panic(errors.AssertionFailedf("provided buf (len=%d) is not sized correctly; expected %d", len(buf), sz))
+		}
+	}
+	headerSize := len(buf) - len(v.Value.RawBytes)
+	headerLen := headerSize - extendedPreludeSize
+	binary.BigEndian.PutUint32(buf, uint32(headerLen))
+	buf[tagPos] = extendedEncodingSentinel
+	if _, err := v.MVCCValueHeader.MarshalToSizedBuffer(buf[extendedPreludeSize:headerSize]); err != nil {
+		return errors.Wrap(err, "marshaling MVCCValueHeader")
+	}
+	if buildutil.CrdbTestBuild && len(buf[headerSize:]) != len(v.Value.RawBytes) {
+		panic(errors.AssertionFailedf("insufficient space for raw value; expected %d, got %d", len(v.Value.RawBytes), len(buf[headerSize:])))
+	}
+	copy(buf[headerSize:], v.Value.RawBytes)
+	return nil
+}
+
 // DecodeMVCCValue decodes an MVCCKey from its Pebble representation.
 //
 // NOTE: this function does not inline, so it is not suitable for performance
@@ -257,7 +288,7 @@ func DecodeMVCCValue(buf []byte) (MVCCValue, error) {
 	if ok || err != nil {
 		return v, err
 	}
-	return decodeExtendedMVCCValue(buf)
+	return decodeExtendedMVCCValue(buf, true)
 }
 
 // DecodeValueFromMVCCValue decodes and MVCCValue and returns the
@@ -265,6 +296,8 @@ func DecodeMVCCValue(buf []byte) (MVCCValue, error) {
 //
 // NB: Caller assumes that this function does not copy or re-allocate
 // the underlying byte slice.
+//
+//gcassert:inline
 func DecodeValueFromMVCCValue(buf []byte) (roachpb.Value, error) {
 	if len(buf) == 0 {
 		// Tombstone with no header.
@@ -322,17 +355,40 @@ func tryDecodeSimpleMVCCValue(buf []byte) (MVCCValue, bool, error) {
 	return MVCCValue{}, false, nil
 }
 
-func decodeExtendedMVCCValue(buf []byte) (MVCCValue, error) {
+//gcassert:inline
+func decodeMVCCValueIgnoringHeader(buf []byte) (MVCCValue, error) {
+	if len(buf) == 0 {
+		return MVCCValue{}, nil
+	}
+	if len(buf) <= tagPos {
+		return MVCCValue{}, errMVCCValueMissingTag
+	}
+	if buf[tagPos] != extendedEncodingSentinel {
+		return MVCCValue{Value: roachpb.Value{RawBytes: buf}}, nil
+	}
+
+	// Extended encoding
+	headerLen := binary.BigEndian.Uint32(buf)
+	headerSize := extendedPreludeSize + headerLen
+	if len(buf) < int(headerSize) {
+		return MVCCValue{}, errMVCCValueMissingHeader
+	}
+	return MVCCValue{Value: roachpb.Value{RawBytes: buf[headerSize:]}}, nil
+}
+
+func decodeExtendedMVCCValue(buf []byte, unmarshalHeader bool) (MVCCValue, error) {
 	headerLen := binary.BigEndian.Uint32(buf)
 	headerSize := extendedPreludeSize + headerLen
 	if len(buf) < int(headerSize) {
 		return MVCCValue{}, errMVCCValueMissingHeader
 	}
 	var v MVCCValue
-	// NOTE: we don't use protoutil to avoid passing header through an interface,
-	// which would cause a heap allocation and incur the cost of dynamic dispatch.
-	if err := v.MVCCValueHeader.Unmarshal(buf[extendedPreludeSize:headerSize]); err != nil {
-		return MVCCValue{}, errors.Wrapf(err, "unmarshaling MVCCValueHeader")
+	if unmarshalHeader {
+		// NOTE: we don't use protoutil to avoid passing header through an interface,
+		// which would cause a heap allocation and incur the cost of dynamic dispatch.
+		if err := v.MVCCValueHeader.Unmarshal(buf[extendedPreludeSize:headerSize]); err != nil {
+			return MVCCValue{}, errors.Wrapf(err, "unmarshaling MVCCValueHeader")
+		}
 	}
 	v.Value.RawBytes = buf[headerSize:]
 	return v, nil

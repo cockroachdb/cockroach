@@ -1,0 +1,97 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "./application.module.scss";
+
+.alert {
+  margin-bottom: crl-gutters(1);
+  padding: crl-gutters(1);
+  border-left-width: 4px;
+  border-left-style: solid;
+  background: $color-base-white;
+  overflow-wrap: break-word;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  border-radius: 5px;
+
+  &.primary {
+    background: $color-core-blue-1;
+    border-left-color: $color-base-blue;
+  }
+
+  &.success {
+    background: $color-core-green-1;
+    border-left-color: $color-base-green;
+  }
+
+  &.warning {
+    background: $color-core-orange-1;
+    border-left-color: $color-base-orange;
+  }
+
+  &.danger {
+    background: $color-core-red-1;
+    border-left-color: $color-base-red;
+  }
+
+  &.cancelled {
+    display: none;
+  }
+}
+
+.icon-container {
+  display: flex;
+  align-self: flex-start;
+  padding: crl-gutters(0.5) crl-gutters(1.5) crl-gutters(0.5) crl-gutters(1);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.title {
+  @include crl-type-body--strong;
+  color: $crl-base-text--dark;
+  flex: 1;
+}
+
+.expandIcon {
+  cursor: pointer;
+  margin-right: crl-gutters(1);
+}
+
+.additionalText {
+  margin-top: crl-gutters(1);
+}
+
+.cancel {
+  margin-left: auto;
+  margin-right: crl-gutters(0.5);
+
+  svg {
+    cursor: pointer;
+    fill: $color-core-neutral-4;
+  }
+}
+
+.message {
+  @include crl-type-body;
+  color: $crl-base-text;
+
+  a {
+    @include crl-type-body--strong;
+    letter-spacing: 0;
+  }
+}

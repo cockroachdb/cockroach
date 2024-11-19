@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package schemachange
 
@@ -58,6 +53,11 @@ func TestColumnConversions(t *testing.T) {
 
 		"DECIMAL(6)": {
 			"DECIMAL(8)": ColumnConversionTrivial,
+		},
+
+		"DECIMAL(10,2)": {
+			"DECIMAL(10,1)": ColumnConversionGeneral,
+			"DECIMAL(10,5)": ColumnConversionTrivial,
 		},
 
 		"FLOAT4": {
@@ -246,11 +246,19 @@ func TestColumnConversions(t *testing.T) {
 						}
 
 					case types.DecimalFamily:
-						insert = []interface{}{"-112358", "112358"}
+						// Decimal values will be truncated on insert to either 0 or 2 digits.
+						insert = []interface{}{"-112358.878", "112358.134"}
 						switch toTyp.Family() {
 						case types.DecimalFamily:
 							// We're going to see decimals returned as strings
-							expect = []interface{}{[]uint8("-112358"), []uint8("112358")}
+							switch toTyp.Width() {
+							case 0:
+								expect = []interface{}{[]uint8("-112359"), []uint8("112358")}
+							case 1:
+								expect = []interface{}{[]uint8("-112358.9"), []uint8("112358.1")}
+							case 5:
+								expect = []interface{}{[]uint8("-112358.88"), []uint8("112358.13")}
+							}
 						}
 
 					case types.FloatFamily:

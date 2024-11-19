@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2023 The etcd Authors
 //
@@ -18,10 +18,10 @@
 package rafttest
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 )
 
 func (env *InteractionEnv) handleReportUnreachable(t *testing.T, d datadriven.TestData) error {

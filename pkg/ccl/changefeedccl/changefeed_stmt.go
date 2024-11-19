@@ -1,10 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -244,6 +241,7 @@ func changefeedPlanHook(
 		// of protected timestamps.
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
+		jr.JobID = jobID
 		{
 			var ptr *ptpb.Record
 			codec := p.ExecCfg().Codec
@@ -263,7 +261,7 @@ func changefeedPlanHook(
 				// must have specified transaction to use, and is responsible for committing
 				// transaction.
 
-				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, *jr, jobID, p.InternalSQLTxn())
+				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, *jr, jr.JobID, p.InternalSQLTxn())
 				if err != nil {
 					return err
 				}
@@ -286,7 +284,7 @@ func changefeedPlanHook(
 			}
 
 			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, *jr); err != nil {
+				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jr.JobID, txn, *jr); err != nil {
 					return err
 				}
 				if ptr != nil {
@@ -464,6 +462,15 @@ func createChangefeedJobRecord(
 	targetDescs, err := getTableDescriptors(ctx, p, &tableOnlyTargetList, statementTime, initialHighWater)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, t := range targetDescs {
+		if tbl, ok := t.(catalog.TableDescriptor); ok && tbl.ExternalRowData() != nil {
+			if tbl.ExternalRowData().TenantID.IsSet() {
+				return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on a replication target are not supported")
+			}
+			return nil, errors.UnimplementedError(errors.IssueLink{}, "changefeeds on external tables are not supported")
+		}
 	}
 
 	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets,
@@ -656,7 +663,8 @@ func createChangefeedJobRecord(
 		// changefeed, thus ensuring that no job is created for this changefeed as
 		// desired.
 		sinklessRecord := &jobs.Record{
-			Details: details,
+			Description: jobDescription,
+			Details:     details,
 		}
 		return sinklessRecord, nil
 	}
@@ -800,8 +808,7 @@ func getTableDescriptors(
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
-			tableName := m.GetTableName()
-			err = errors.Errorf("table %q does not exist", tableName)
+			err = errors.Wrapf(m.Unwrap(), "table %q does not exist", m.GetTableName())
 		}
 		err = errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
 		if !initialHighWater.IsEmpty() {
@@ -1189,16 +1196,19 @@ func (b *changefeedResumer) handleChangefeedError(
 	// Execution relocation errors just get returned immediately, as they indicate
 	// another node has taken over execution and this execution should end now.
 	if jobs.IsLeaseRelocationError(changefeedErr) {
+		log.Warningf(ctx, "job lease relocated (%v)", changefeedErr)
 		return changefeedErr
 	}
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	onError, errErr := opts.GetOnError()
 	if errErr != nil {
+		log.Warningf(ctx, "job failed (%v) but was unable to get on error option (%v)", changefeedErr, errErr)
 		return errors.CombineErrors(changefeedErr, errErr)
 	}
 	switch onError {
 	// default behavior
 	case changefeedbase.OptOnErrorFail:
+		log.Warningf(ctx, "job failed (%v)", changefeedErr)
 		return changefeedErr
 	// pause instead of failing
 	case changefeedbase.OptOnErrorPause:
@@ -1216,6 +1226,7 @@ func (b *changefeedResumer) handleChangefeedError(
 			return nil
 		}, errorMessage)
 	default:
+		log.Warningf(ctx, "job failed (%v) but has unrecognized option value %s=%s", changefeedErr, changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
 		return errors.Wrapf(changefeedErr, "unrecognized option value: %s=%s for handling error",
 			changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
 	}
@@ -1520,7 +1531,7 @@ func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record, isTransf
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if jr != nil {
 		changefeedDetails := jr.Details.(jobspb.ChangefeedDetails)
-		changefeedEventDetails = getCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description)
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description, jr.JobID)
 	}
 
 	createChangefeedEvent := &eventpb.CreateChangefeed{
@@ -1537,7 +1548,7 @@ func logChangefeedFailedTelemetry(
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if job != nil {
 		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
-		changefeedEventDetails = getCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description)
+		changefeedEventDetails = makeCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description, job.ID())
 	}
 
 	changefeedFailedEvent := &eventpb.ChangefeedFailed{
@@ -1548,8 +1559,8 @@ func logChangefeedFailedTelemetry(
 	log.StructuredEvent(ctx, severity.INFO, changefeedFailedEvent)
 }
 
-func getCommonChangefeedEventDetails(
-	ctx context.Context, details jobspb.ChangefeedDetails, description string,
+func makeCommonChangefeedEventDetails(
+	ctx context.Context, details jobspb.ChangefeedDetails, description string, jobID jobspb.JobID,
 ) eventpb.CommonChangefeedEventDetails {
 	opts := details.Opts
 
@@ -1562,13 +1573,11 @@ func getCommonChangefeedEventDetails(
 		sinkType = parsedSink.Scheme
 	}
 
-	var initialScan string
 	initialScanType, initialScanSet := opts[changefeedbase.OptInitialScan]
 	_, initialScanOnlySet := opts[changefeedbase.OptInitialScanOnly]
 	_, noInitialScanSet := opts[changefeedbase.OptNoInitialScan]
-	if initialScanSet && initialScanType == `` {
-		initialScan = `yes`
-	} else if initialScanSet && initialScanType != `` {
+	initialScan := `yes`
+	if initialScanSet && initialScanType != `` {
 		initialScan = initialScanType
 	} else if initialScanOnlySet {
 		initialScan = `only`
@@ -1594,6 +1603,7 @@ func getCommonChangefeedEventDetails(
 		Resolved:    resolved,
 		Format:      opts[changefeedbase.OptFormat],
 		InitialScan: initialScan,
+		JobId:       int64(jobID),
 	}
 
 	return changefeedEventDetails

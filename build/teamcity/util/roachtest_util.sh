@@ -1,3 +1,8 @@
+# Copyright 2021 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 # Common logic used by the nightly roachtest scripts (Bazel and non-Bazel).
 
 # Set up Google credentials. Note that we need this for all clouds since we upload
@@ -91,6 +96,6 @@ function upload_all {
 trap upload_all EXIT
 
 # Set up the parameters for the roachtest invocation.
-PARALLELISM=16
-CPUQUOTA=1024
+PARALLELISM="${PARALLELISM-16}"
+CPUQUOTA="${CPUQUOTA-1024}"
 TESTS="${TESTS-}"

@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachprod-microbench/model",
+        "//pkg/cmd/roachprod-microbench/util",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_google_api//drive/v3:drive",
         "@org_golang_google_api//googleapi",

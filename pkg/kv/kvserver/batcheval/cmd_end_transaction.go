@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package batcheval
 
@@ -1280,15 +1275,33 @@ func splitTriggerHelper(
 			log.Fatalf(ctx, "LHS of split has no lease")
 		}
 
-		replica, found := split.RightDesc.GetReplicaDescriptor(leftLease.Replica.StoreID)
-		if !found {
+		// Copy the lease from the left-hand side of the split over to the
+		// right-hand side so that it can immediately start serving requests.
+		// When doing so, we need to make a few modifications.
+		rightLease := leftLease
+		// Rebind the lease to the existing leaseholder store's replica from the
+		// right-hand side's descriptor.
+		var ok bool
+		rightLease.Replica, ok = split.RightDesc.GetReplicaDescriptor(leftLease.Replica.StoreID)
+		if !ok {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Errorf(
 				"pre-split lease holder %+v not found in post-split descriptor %+v",
 				leftLease.Replica, split.RightDesc,
 			)
 		}
-		rightLease := leftLease
-		rightLease.Replica = replica
+		// Convert leader leases into expiration-based leases. A leader lease is
+		// tied to a specific raft leadership term within a specific raft group.
+		// During a range split, we initialize a new raft group on the right-hand
+		// side, so a leader lease term from the left-hand side is unusable. Once
+		// the right-hand side elects a leader and collocates the lease and leader,
+		// it can promote the expiration-based lease back to a leader lease.
+		if rightLease.Type() == roachpb.LeaseLeader {
+			exp := rec.Clock().Now().Add(int64(rec.GetRangeLeaseDuration()), 0)
+			rightLease.Expiration = &exp
+			rightLease.Term = 0
+			rightLease.MinExpiration = hlc.Timestamp{}
+		}
+
 		gcThreshold, err := sl.LoadGCThreshold(ctx, batch)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load GCThreshold")

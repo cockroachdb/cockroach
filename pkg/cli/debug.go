@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cli
 
@@ -1459,6 +1454,8 @@ func init() {
 	pebbleTool := tool.New(
 		tool.Mergers(storage.MVCCMerger),
 		tool.DefaultComparer(storage.EngineComparer),
+		tool.KeySchema(storage.DefaultKeySchema),
+		tool.KeySchemas(storage.KeySchemas...),
 		tool.FS(pebbleToolFS),
 		tool.OpenErrEnhancer(func(err error) error {
 			if pebble.IsCorruptionError(err) {
@@ -1574,8 +1571,12 @@ func init() {
 		"tenant IDs to filter logs by")
 
 	f = debugZipUploadCmd.Flags()
-	f.StringVar(&debugZipUploadOpts.ddAPIKey, "dd-api-key", "",
+	f.StringVar(&debugZipUploadOpts.ddAPIKey, "dd-api-key", getEnvOrDefault(datadogAPIKeyEnvVar, ""),
 		"Datadog API key to use to send debug.zip artifacts to datadog")
+	f.StringVar(&debugZipUploadOpts.ddAPPKey, "dd-app-key", getEnvOrDefault(datadogAPPKeyEnvVar, ""),
+		"Datadog APP key to use to send debug.zip artifacts to datadog")
+	f.StringVar(&debugZipUploadOpts.ddSite, "dd-site", getEnvOrDefault(datadogSiteEnvVar, defaultDDSite),
+		"Datadog site to use to send debug.zip artifacts to datadog")
 	f.StringSliceVar(&debugZipUploadOpts.include, "include", nil,
 		"The debug zip artifacts to include. Possible values: "+strings.Join(zipArtifactTypes, ", "))
 	f.StringSliceVar(&debugZipUploadOpts.tags, "tags", nil,
@@ -1583,6 +1584,16 @@ func init() {
 			"\nExample: --tags \"env:prod,customer:xyz\"")
 	f.StringVar(&debugZipUploadOpts.clusterName, "cluster", "",
 		"Name of the cluster to associate with the debug zip artifacts. This can be used to identify data in the upstream observability tool.")
+	f.Var(&debugZipUploadOpts.from, "from", "oldest timestamp to include (inclusive)")
+	f.Var(&debugZipUploadOpts.to, "to", "newest timestamp to include (inclusive)")
+	f.StringVar(&debugZipUploadOpts.logFormat, "log-format", "crdb-v1",
+		"log format of the input files")
+	// the log-format flag is depricated. It will
+	// eventually be removed completely. keeping it hidden for now incase we ever
+	// need to specify the log format
+	f.Lookup("log-format").Hidden = true
+	f.StringVar(&debugZipUploadOpts.gcpProjectID, "gcp-project-id",
+		defaultGCPProjectID, "GCP project ID to use to send debug.zip logs to GCS")
 
 	f = debugDecodeKeyCmd.Flags()
 	f.Var(&decodeKeyOptions.encoding, "encoding", "key argument encoding")
@@ -1611,9 +1622,10 @@ func init() {
 		"", "prometheus label for cluster name")
 	f.StringVar(&debugTimeSeriesDumpOpts.yaml, "yaml", debugTimeSeriesDumpOpts.yaml, "full path to create the tsdump.yaml with storeID: nodeID mappings (raw format only). This file is required when loading the raw tsdump for troubleshooting.")
 	f.StringVar(&debugTimeSeriesDumpOpts.targetURL, "target-url", "", "target URL to send openmetrics data over HTTP")
-	f.StringVar(&debugTimeSeriesDumpOpts.ddSite, "dd-site", "us5",
+	f.StringVar(&debugTimeSeriesDumpOpts.ddSite, "dd-site", getEnvOrDefault(datadogSiteEnvVar, defaultDDSite),
 		"Datadog site to use to send tsdump artifacts to datadog")
-	f.StringVar(&debugTimeSeriesDumpOpts.ddApiKey, "dd-api-key", "", "Datadog API key to use to send to the datadog formatter")
+	f.StringVar(&debugTimeSeriesDumpOpts.ddApiKey, "dd-api-key", getEnvOrDefault(datadogAPIKeyEnvVar, ""),
+		"Datadog API key to use to send to the datadog formatter")
 	f.StringVar(&debugTimeSeriesDumpOpts.httpToken, "http-token", "", "HTTP header to use with the json export format")
 
 	f = debugSendKVBatchCmd.Flags()

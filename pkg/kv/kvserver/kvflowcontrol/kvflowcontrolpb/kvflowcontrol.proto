@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.kv.kvserver.kvflowcontrol.kvflowcontrolpb;
@@ -133,6 +128,8 @@ message RaftLogPosition {
 // AdmittedResponseForRange is only used in RACv2. It contains a MsgAppResp
 // from a follower to a leader, that was generated to advance the admitted
 // vector for that follower, maintained by the leader.
+//
+// TODO(pav-kv): remove this type and use PiggybackedAdmittedState.
 message AdmittedResponseForRange {
   option (gogoproto.goproto_stringer) = false;
 
@@ -148,4 +145,45 @@ message AdmittedResponseForRange {
 
   // Msg is the MsgAppResp containing the admitted vector.
   raftpb.Message msg = 3 [(gogoproto.nullable) = false];
+}
+
+// AdmittedState communicates a replica's vector of admitted log indices at
+// different priorities to the leader of a range.
+//
+// Used only in RACv2.
+message AdmittedState {
+  option (gogoproto.goproto_stringer) = false;
+  // Term is the leader term of the log for which the Admitted indices were
+  // computed. The indices are consistent with this leader's log.
+  uint64 term = 1;
+  // Admitted contains admitted log indices for each priority < NumPriorities.
+  repeated uint64 admitted = 2;
+}
+
+// PiggybackedAdmittedState wraps the AdmittedState with the routing information
+// needed to deliver the admitted vector to a particular leader replica, and for
+// it to know who sent it.
+//
+// Used only in RACv2.
+message PiggybackedAdmittedState {
+  option (gogoproto.goproto_stringer) = false;
+
+  // RangeID is the ID of the range to which this message is related. Used for
+  // routing at the leader node.
+  uint64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // ToStoreID is the store at the leader containing the leader replica. Used
+  // for routing at the leader node.
+  uint64 to_store_id = 2 [(gogoproto.customname) = "ToStoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+
+  // FromReplicaID is the replica sending this message.
+  uint64 from_replica_id = 3 [(gogoproto.customname) = "FromReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+  // ToReplicaID is the leader replica receiving this message.
+  uint64 to_replica_id = 4 [(gogoproto.customname) = "ToReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+
+  // Admitted is the admitted vector at the sending replica.
+  AdmittedState admitted = 5 [(gogoproto.nullable) = false];
 }

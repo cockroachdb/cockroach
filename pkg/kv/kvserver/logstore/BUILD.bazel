@@ -35,7 +35,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/stop",
-        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//record",

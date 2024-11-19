@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package throttler
 
@@ -13,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +33,8 @@ type testLocalService struct {
 	clock fakeClock
 }
 
+var _ Service = (*testLocalService)(nil)
+
 func newTestLocalService(opts ...LocalOption) *testLocalService {
 	s := &testLocalService{
 		localService: NewLocalService(opts...).(*localService),
@@ -50,16 +51,17 @@ func countGuesses(
 	step time.Duration,
 	period time.Duration,
 ) int {
+	ctx := context.Background()
 	count := 0
 	for i := 0; step*time.Duration(i) < period; i++ {
 		throttle.clock.advance(step)
 
-		throttleTime, err := throttle.LoginCheck(connection)
+		throttleTime, err := throttle.LoginCheck(ctx, connection)
 		if err != nil {
 			continue
 		}
 
-		err = throttle.ReportAttempt(context.Background(), connection, throttleTime, AttemptInvalidCredentials)
+		err = throttle.ReportAttempt(ctx, connection, throttleTime, AttemptInvalidCredentials)
 		require.NoError(t, err, "ReportAttempt should only return errors in the case of racing requests")
 
 		count++
@@ -68,6 +70,9 @@ func countGuesses(
 }
 
 func TestThrottleLimitsCredentialGuesses(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
+
 	throttle := newTestLocalService(WithBaseDelay(time.Second))
 	ip1Tenant1 := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
 	ip1Tenant2 := ConnectionTags{IP: "1.1.1.1", TenantID: "2"}
@@ -90,13 +95,17 @@ func TestThrottleLimitsCredentialGuesses(t *testing.T) {
 }
 
 func TestReportSuccessDisablesLimiter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
+
+	ctx := context.Background()
 	throttle := newTestLocalService()
 	tenant1 := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
 	tenant2 := ConnectionTags{IP: "1.1.1.1", TenantID: "2"}
 
-	throttleTime, err := throttle.LoginCheck(tenant1)
+	throttleTime, err := throttle.LoginCheck(ctx, tenant1)
 	require.NoError(t, err)
-	require.NoError(t, throttle.ReportAttempt(context.Background(), tenant1, throttleTime, AttemptOK))
+	require.NoError(t, throttle.ReportAttempt(ctx, tenant1, throttleTime, AttemptOK))
 
 	require.Equal(t,
 		int(time.Hour/time.Second),
@@ -112,19 +121,25 @@ func TestReportSuccessDisablesLimiter(t *testing.T) {
 }
 
 func TestRacingRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
+
+	ctx := context.Background()
 	throttle := newTestLocalService()
 	connection := ConnectionTags{IP: "1.1.1.1", TenantID: "1"}
 
-	throttleTime, err := throttle.LoginCheck(connection)
+	throttleTime, err := throttle.LoginCheck(ctx, connection)
 	require.NoError(t, err)
 
-	require.NoError(t, throttle.ReportAttempt(context.Background(), connection, throttleTime, AttemptInvalidCredentials))
+	require.NoError(t, throttle.ReportAttempt(ctx, connection, throttleTime, AttemptInvalidCredentials))
 
 	l := throttle.lockedGetThrottle(connection)
 	nextTime := l.nextTime
 
 	for _, status := range []AttemptStatus{AttemptOK, AttemptInvalidCredentials} {
-		require.Error(t, throttle.ReportAttempt(context.Background(), connection, throttleTime, status))
+		err := throttle.ReportAttempt(ctx, connection, throttleTime, status)
+		require.Error(t, err)
+		require.Regexp(t, "throttler refused connection", err.Error())
 
 		// Verify the throttled report has no affect on limiter state.
 		l := throttle.lockedGetThrottle(connection)

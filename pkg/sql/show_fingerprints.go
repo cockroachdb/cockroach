@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -23,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -71,8 +67,27 @@ type showFingerprintsNode struct {
 func (p *planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
+
+	op := "SHOW EXPERIMENTAL_FINGERPRINTS"
+	evalOptions, err := evalShowFingerprintOptions(ctx, n.Options, p.EvalContext(), p.SemaCtx(),
+		op, p.ExprEvaluator(op))
+	if err != nil {
+		return nil, err
+	}
+
 	if n.TenantSpec != nil {
-		return p.planShowTenantFingerprint(ctx, n.TenantSpec, n.Options)
+		// Tenant fingerprints use the KV fingerprint method and can't exclude columns this way
+		if evalOptions.excludedUserColumns != nil {
+			err = pgerror.New(pgcode.InvalidParameterValue, "cannot use the EXCLUDE COLUMNS option when fingerprinting a tenant.")
+			return nil, err
+		}
+		return p.planShowTenantFingerprint(ctx, n.TenantSpec, evalOptions)
+	}
+
+	// Only allow this for virtual clusters as it uses the KV fingerprint method instead of SQL
+	if !evalOptions.startTimestamp.IsEmpty() {
+		err = pgerror.New(pgcode.InvalidParameterValue, "cannot use the START TIMESTAMP option when fingerprinting a table.")
+		return nil, err
 	}
 
 	// We avoid the cache so that we can observe the fingerprints without
@@ -91,19 +106,22 @@ func (p *planner) ShowFingerprints(
 		columns:   colinfo.ShowFingerprintsColumns,
 		tableDesc: tableDesc,
 		indexes:   tableDesc.ActiveIndexes(),
+		options:   evalOptions,
 	}, nil
 }
 
 type resolvedShowTenantFingerprintOptions struct {
-	startTimestamp hlc.Timestamp
+	startTimestamp      hlc.Timestamp
+	excludedUserColumns []string
 }
 
-func evalShowTenantFingerprintOptions(
+func evalShowFingerprintOptions(
 	ctx context.Context,
 	options tree.ShowFingerprintOptions,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	op string,
+	eval exprutil.Evaluator,
 ) (*resolvedShowTenantFingerprintOptions, error) {
 	r := &resolvedShowTenantFingerprintOptions{}
 	if options.StartTimestamp != nil {
@@ -114,11 +132,21 @@ func evalShowTenantFingerprintOptions(
 		r.startTimestamp = ts
 	}
 
+	if options.ExcludedUserColumns != nil {
+		cols, err := eval.StringArray(
+			ctx, tree.Exprs(options.ExcludedUserColumns))
+
+		if err != nil {
+			return nil, err
+		}
+		r.excludedUserColumns = cols
+	}
+
 	return r, nil
 }
 
 func (p *planner) planShowTenantFingerprint(
-	ctx context.Context, ts *tree.TenantSpec, options tree.ShowFingerprintOptions,
+	ctx context.Context, ts *tree.TenantSpec, evalOptions *resolvedShowTenantFingerprintOptions,
 ) (planNode, error) {
 	if err := CanManageTenant(ctx, p); err != nil {
 		return nil, err
@@ -129,12 +157,6 @@ func (p *planner) planShowTenantFingerprint(
 	}
 
 	tspec, err := p.planTenantSpec(ctx, ts, "SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER")
-	if err != nil {
-		return nil, err
-	}
-
-	evalOptions, err := evalShowTenantFingerprintOptions(ctx, options, p.EvalContext(), p.SemaCtx(),
-		"SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER")
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +312,11 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 	index := n.indexes[n.run.rowIdx]
-	sql, err := BuildFingerprintQueryForIndex(n.tableDesc, index, []string{})
+	excludedColumns := []string{}
+	if n.options != nil && len(n.options.excludedUserColumns) > 0 {
+		excludedColumns = append(excludedColumns, n.options.excludedUserColumns...)
+	}
+	sql, err := BuildFingerprintQueryForIndex(n.tableDesc, index, excludedColumns)
 	if err != nil {
 		return false, err
 	}

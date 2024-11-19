@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvcoord
 
@@ -478,7 +473,7 @@ func TestSendRPCOrder(t *testing.T) {
 				Lease: lease,
 			}
 			if tc.leaseHolder == 0 {
-				ri.ClosedTimestampPolicy = rangecache.UnknownClosedTimestampPolicy
+				ri.ClosedTimestampPolicy = -1 // rangecache.unknownClosedTimestampPolicy
 			}
 			ds.rangeCache.Insert(ctx, ri)
 
@@ -851,7 +846,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 				t.Fatalf("unexpected error: %v", pErr)
 			}
 			require.Equal(t, 2, attempts)
-			rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
+			rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 			require.NoError(t, err)
 
 			if tc.expLeaseholder != nil {
@@ -1535,7 +1530,7 @@ func TestDistSenderLeaseholderDown(t *testing.T) {
 		t.Errorf("contacted n1: %t, contacted n2: %t", contacted1, contacted2)
 	}
 
-	rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
+	rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.NoError(t, err)
 	require.Equal(t, desc, rng.Desc)
 	require.Equal(t, roachpb.StoreID(2), rng.Lease.Replica.StoreID)
@@ -1800,7 +1795,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			if _, pErr := kv.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
 				t.Errorf("put encountered unexpected error: %s", pErr)
 			}
-			rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
+			rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 			if tc.shouldClearReplica {
 				require.Error(t, err)
 			} else if tc.shouldClearLeaseHolder {
@@ -2308,7 +2303,7 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 			// Check that the cache has the updated descriptor returned by the RPC.
 			for _, ri := range tc {
 				rk := ri.Desc.StartKey
-				entry, _ := ds.rangeCache.TestingGetCached(ctx, rk, false /* inverted */)
+				entry, _ := ds.rangeCache.TestingGetCached(ctx, rk, false, roachpb.LAG_BY_CLUSTER_SETTING)
 				require.Equal(t, ri, entry)
 			}
 		})
@@ -2373,7 +2368,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 			if len(seen) == 1 {
 				// Pretend that this replica is the leaseholder in the cache to verify
 				// that the response evicts it.
-				rng, err := ds.rangeCache.TestingGetCached(ctx, descriptor.StartKey, false /* inverse */)
+				rng, err := ds.rangeCache.TestingGetCached(ctx, descriptor.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 				require.NoError(t, err)
 				ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 					Desc:  rng.Desc,
@@ -2409,7 +2404,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rng, e := ds.rangeCache.TestingGetCached(ctx, descriptor.StartKey, false /* inverted */)
+	rng, e := ds.rangeCache.TestingGetCached(ctx, descriptor.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.NoError(t, e)
 	require.Equal(t, leaseholderStoreID, rng.Lease.Replica.StoreID)
 }
@@ -4280,7 +4275,7 @@ func TestCanSendToFollower(t *testing.T) {
 			// we've had where we were always updating the leaseholder on successful
 			// RPCs because we erroneously assumed that a success must come from the
 			// leaseholder.
-			rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)
+			rng, err := ds.rangeCache.TestingGetCached(ctx, testUserRangeDescriptor.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 			require.NoError(t, err)
 			require.NotNil(t, rng.Lease)
 			require.Equal(t, roachpb.StoreID(2), rng.Lease.Replica.StoreID)
@@ -4446,7 +4441,7 @@ func TestEvictMetaRange(t *testing.T) {
 		}
 
 		// Verify that there is one meta2 cached range.
-		cachedRange, err := ds.rangeCache.TestingGetCached(ctx, keys.RangeMetaKey(roachpb.RKey("a")), false)
+		cachedRange, err := ds.rangeCache.TestingGetCached(ctx, keys.RangeMetaKey(roachpb.RKey("a")), false, roachpb.LAG_BY_CLUSTER_SETTING)
 		require.NoError(t, err)
 		if !cachedRange.Desc.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc.EndKey.Equal(testMetaEndKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
@@ -4462,13 +4457,13 @@ func TestEvictMetaRange(t *testing.T) {
 		}
 
 		// Verify that there are two meta2 cached ranges.
-		cachedRange, err = ds.rangeCache.TestingGetCached(ctx, keys.RangeMetaKey(roachpb.RKey("a")), false)
+		cachedRange, err = ds.rangeCache.TestingGetCached(ctx, keys.RangeMetaKey(roachpb.RKey("a")), false, roachpb.LAG_BY_CLUSTER_SETTING)
 		require.NoError(t, err)
 		if !cachedRange.Desc.StartKey.Equal(keys.Meta2Prefix) || !cachedRange.Desc.EndKey.Equal(splitKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
 				keys.Meta2Prefix, splitKey, cachedRange.Desc.StartKey, cachedRange.Desc.EndKey)
 		}
-		cachedRange, err = ds.rangeCache.TestingGetCached(ctx, keys.RangeMetaKey(roachpb.RKey("b")), false)
+		cachedRange, err = ds.rangeCache.TestingGetCached(ctx, keys.RangeMetaKey(roachpb.RKey("b")), false, roachpb.LAG_BY_CLUSTER_SETTING)
 		require.NoError(t, err)
 		if !cachedRange.Desc.StartKey.Equal(splitKey) || !cachedRange.Desc.EndKey.Equal(testMetaEndKey) {
 			t.Fatalf("expected cached meta2 range to be [%s, %s), actual [%s, %s)",
@@ -5547,7 +5542,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 				_, err = ds.sendToReplicas(ctx, ba, tok, false /* withCommit */)
 				require.IsType(t, &sendError{}, err)
 				require.Regexp(t, "NotLeaseHolderError", err)
-				cached, err := rc.TestingGetCached(ctx, tc.initialDesc.StartKey, false /* inverted */)
+				cached, err := rc.TestingGetCached(ctx, tc.initialDesc.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 				require.NoError(t, err)
 				require.Equal(t, tc.updatedDesc, cached.Desc)
 				require.Equal(t, tc.expReplicasTried, numCalled)

@@ -1,12 +1,7 @@
 // Copyright 2015 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Note that there's also lease_internal_test.go, in package lease.
 
@@ -17,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -929,6 +926,7 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 	fooReleaseCount := int32(0)
 	var tableID int64
 
+	ctx := context.Background()
 	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
@@ -938,10 +936,12 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 				RemoveOnceDereferenced: true,
 				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
 					if desc.GetName() == "foo" {
+						log.Infof(ctx, "lease acquirer stack trace: %s", debug.Stack())
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
 				LeaseReleasedEvent: func(id descpb.ID, _ descpb.DescriptorVersion, _ error) {
+					log.Infof(ctx, "releasing lease for ID %d", int64(id))
 					if int64(id) == atomic.LoadInt64(&tableID) {
 						atomic.AddInt32(&fooReleaseCount, 1)
 					}
@@ -970,6 +970,7 @@ CREATE TABLE t.foo (v INT);
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "foo")
 	atomic.StoreInt64(&tableID, int64(tableDesc.GetID()))
+	log.Infof(ctx, "table ID for foo is %d", tableDesc.GetID())
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -989,6 +990,7 @@ CREATE TABLE t.foo (v INT);
 	// Descriptor has been acquired one more time than it has been released.
 	aCount, rCount := atomic.LoadInt32(&fooAcquiredCount), atomic.LoadInt32(&fooReleaseCount)
 	if aCount != rCount+1 {
+		t.Logf("\nall stacks:\n\n%s\n", allstacks.Get())
 		t.Fatalf("invalid descriptor acquisition counts = %d, %d", aCount, rCount)
 	}
 
@@ -1274,6 +1276,9 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 
 	var testAcquiredCount int32
 	var testAcquisitionBlockCount int32
+	// Descriptor IDs for the two tables under test
+	var test1ID atomic.Int32
+	var test2ID atomic.Int32
 	var minimumDescID descpb.ID
 	var params base.TestClusterArgs
 	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
@@ -1310,7 +1315,15 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 				if id < minimumDescID || typ == lease.AcquireBackground {
 					return
 				}
+				if int32(id) != test1ID.Load() && int32(id) != test2ID.Load() {
+					return
+				}
 				atomic.AddInt32(&testAcquisitionBlockCount, 1)
+				// The test sets the IDs of the two tables only when we shouldn't  block. So if we
+				// see a block event dump a stack to aid in debugging.
+				log.Infof(ctx,
+					"Lease acquisition of ID %d resulted in a block event. Stack trace to follow:\n%s",
+					id, debug.Stack())
 			},
 		},
 	}
@@ -1363,8 +1376,10 @@ CREATE TABLE t.test2 ();
 	}
 	eo2 := ts2.Expiration(ctx)
 
-	// Reset testAcquisitionBlockCount as the first acqusition will always block.
-	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
+	// Save off the IDs of the two tables so that we increment testAcquisitionBlockCount
+	// if we ever block waiting for those leases to expire.
+	test1ID.Store(int32(test1Desc.GetID()))
+	test2ID.Store(int32(test2Desc.GetID()))
 
 	testutils.SucceedsSoon(t, func() error {
 		// Acquire another lease by name on test1. At first this will be the

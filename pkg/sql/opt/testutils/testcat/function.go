@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package testcat
 
@@ -17,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -59,7 +55,19 @@ func (tc *Catalog) ResolveFunction(
 func (tc *Catalog) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
 ) (*tree.RoutineName, *tree.Overload, error) {
-	return nil, nil, errors.AssertionFailedf("ResolveFunctionByOID not supported in test catalog")
+	for udfName, def := range tc.udfs {
+		for _, o := range def.Overloads {
+			if o.Oid == oid {
+				_ = udfName
+				name := tree.MakeQualifiedRoutineName("", "", def.Name)
+				return &name, o.Overload, nil
+			}
+		}
+	}
+	return nil, nil, errors.Mark(
+		pgerror.Newf(pgcode.UndefinedFunction, "unknown function with ID: %d", oid),
+		tree.ErrRoutineUndefined,
+	)
 }
 
 // CreateRoutine handles the CREATE FUNCTION statement.
@@ -166,9 +174,8 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 	if c.IsProcedure {
 		routineType = tree.ProcedureRoutine
 	}
-	tc.currUDFOid++
 	overload := &tree.Overload{
-		Oid:               tc.currUDFOid,
+		Oid:               catid.TypeIDToOID(catid.DescID(tc.nextStableID())),
 		Types:             signatureTypes,
 		ReturnType:        tree.FixedReturnType(retType),
 		Body:              body,

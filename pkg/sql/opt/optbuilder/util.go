@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package optbuilder
 
@@ -19,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -510,7 +506,7 @@ func (b *Builder) resolveSchemaForCreate(
 		panic(err)
 	}
 
-	if err := b.catalog.CheckPrivilege(b.ctx, sch, privilege.CREATE); err != nil {
+	if err := b.catalog.CheckPrivilege(b.ctx, sch, b.catalog.GetCurrentUser(), privilege.CREATE); err != nil {
 		panic(err)
 	}
 
@@ -662,7 +658,7 @@ func (b *Builder) resolveDataSource(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
 	var flags cat.Flags
-	if b.insideViewDef || b.insideFuncDef {
+	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
 		// Avoid taking descriptor leases when we're creating a view or a
 		// function.
 		flags.AvoidDescriptorCaches = true
@@ -690,7 +686,7 @@ func (b *Builder) resolveDataSourceRef(
 	ref *tree.TableRef, priv privilege.Kind,
 ) (cat.DataSource, opt.MDDepName) {
 	var flags cat.Flags
-	if b.insideViewDef || b.insideFuncDef {
+	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
 		// Avoid taking table leases when we're creating a view or a function.
 		flags.AvoidDescriptorCaches = true
 	}
@@ -710,7 +706,7 @@ func (b *Builder) resolveDataSourceRef(
 // of the memo.
 func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
 	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
-		err := b.catalog.CheckPrivilege(b.ctx, ds, priv)
+		err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, priv)
 		if err != nil {
 			panic(err)
 		}
@@ -795,4 +791,60 @@ func tableOrdinals(tab cat.Table, k columnKinds) []int {
 		}
 	}
 	return ordinals
+}
+
+// addBarrier adds an optimization barrier to the given scope, in order to
+// prevent side effects from being duplicated, eliminated, or reordered.
+func (b *Builder) addBarrier(s *scope) {
+	s.expr = b.factory.ConstructBarrier(s.expr)
+}
+
+// projectColWithMetadataName projects a new anonymous column with the given
+// metadata name in the given scope. The other columns in the scope are passed
+// through. It returns the column ID of the new column.
+func (b *Builder) projectColWithMetadataName(
+	s *scope, name string, typ *types.T, scalar opt.ScalarExpr,
+) opt.ColumnID {
+	passThroughCols := s.colSet()
+	colName := scopeColName("").WithMetadataName(name)
+	col := b.synthesizeColumn(s, colName, typ, nil /* expr */, scalar /* scalar */)
+	proj := memo.ProjectionsExpr{b.factory.ConstructProjectionsItem(scalar, col.id)}
+	s.expr = b.factory.ConstructProject(s.expr, proj, passThroughCols)
+	return col.id
+}
+
+// makeConstRaiseArgs builds the arguments for a crdb_internal.plpgsql_raise
+// function call.
+func (b *Builder) makeConstRaiseArgs(
+	severity, message, detail, hint, code string,
+) memo.ScalarListExpr {
+	makeConstStr := func(str string) opt.ScalarExpr {
+		return b.factory.ConstructConstVal(tree.NewDString(str), types.String)
+	}
+	return memo.ScalarListExpr{
+		makeConstStr(severity),
+		makeConstStr(message),
+		makeConstStr(detail),
+		makeConstStr(hint),
+		makeConstStr(code),
+	}
+}
+
+// makePLpgSQLRaiseFn builds a call to the crdb_internal.plpgsql_raise builtin
+// function, which implements the notice-sending behavior of RAISE statements.
+func (b *Builder) makePLpgSQLRaiseFn(args memo.ScalarListExpr) opt.ScalarExpr {
+	const raiseFnName = "crdb_internal.plpgsql_raise"
+	fnProps, overloads := builtinsregistry.GetBuiltinProperties(raiseFnName)
+	if len(overloads) != 1 {
+		panic(errors.AssertionFailedf("expected one overload for %s", raiseFnName))
+	}
+	return b.factory.ConstructFunction(
+		args,
+		&memo.FunctionPrivate{
+			Name:       raiseFnName,
+			Typ:        types.Int,
+			Properties: fnProps,
+			Overload:   &overloads[0],
+		},
+	)
 }

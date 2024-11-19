@@ -1,10 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -317,15 +314,11 @@ func restore(
 		return emptyRowCount, err
 	}
 
-	ver := job.Payload().CreationClusterVersion
-	// TODO(radu,msbutler,stevendanna): we might be able to remove this now?
-	on231 := ver.Major > 23 || (ver.Major == 23 && ver.Minor >= 1)
 	restoreCheckpoint := job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
 	requiredSpans := dataToRestore.getSpans()
 	progressTracker, err := makeProgressTracker(
 		requiredSpans,
 		restoreCheckpoint,
-		on231,
 		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV),
 		endTime)
 	if err != nil {
@@ -356,11 +349,9 @@ func restore(
 		return makeSpanCoveringFilter(
 			requiredSpans,
 			restoreCheckpoint,
-			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
 			introducedSpanFrontier,
 			targetSize,
-			maxFileCount,
-			progressTracker.useFrontier)
+			maxFileCount)
 	}(); err != nil {
 		return roachpb.RowCount{}, err
 	}
@@ -438,13 +429,6 @@ func restore(
 			return errors.Wrap(progressLogger.Loop(ctx, requestFinishedCh), "job progress loop")
 		}
 		tasks = append(tasks, jobProgressLoop)
-	}
-	if !progressTracker.useFrontier {
-		// This goroutine feeds the deprecated high water mark variant of the
-		// generativeCheckpointLoop.
-		tasks = append(tasks, func(ctx context.Context) error {
-			return genSpan(ctx, progressTracker.inFlightSpanFeeder)
-		})
 	}
 
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
@@ -882,21 +866,6 @@ func spansForAllRestoreTableIndexes(
 		})
 		return false
 	})
-
-	if forOnlineRestore {
-		spans, _ = roachpb.MergeSpans(&spans)
-		tableIDMap := make(map[uint32]struct{}, len(spans))
-		for _, sp := range spans {
-			_, tableID, err := codec.DecodeTablePrefix(sp.Key)
-			if err != nil {
-				return nil, err
-			}
-			if _, exists := tableIDMap[tableID]; exists {
-				return nil, errors.Newf("restore target contains two distinct spans with table id %d. Online restore cannot handle this as it may make an empty file span", tableID)
-			}
-			tableIDMap[tableID] = struct{}{}
-		}
-	}
 	return spans, nil
 }
 
@@ -1192,6 +1161,10 @@ func createImportingDescriptors(
 	// Set the new descriptors' states to offline.
 	for _, desc := range mutableTables {
 		desc.SetOffline("restoring")
+
+		// Remove any LDR Jobs from the table descriptor, ensuring schema changes
+		// can be run on the table descriptor.
+		desc.LDRJobIDs = nil
 	}
 	for _, desc := range typesToWrite {
 		desc.SetOffline("restoring")
@@ -1210,6 +1183,7 @@ func createImportingDescriptors(
 		for _, desc := range mutableTables {
 			if desc.GetParentID() == tempSystemDBID {
 				desc.SetPublic()
+				desc.LocalityConfig = nil
 			}
 		}
 	}
@@ -1277,6 +1251,13 @@ func createImportingDescriptors(
 
 				if db, ok := dbsByID[regionTypeDesc.GetParentID()]; ok {
 					desc := db.DatabaseDesc()
+					if db.GetName() == restoreTempSystemDB {
+						t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
+						t.TypeDesc().RegionConfig = nil
+						// TODO(foundations): should these be rewritten instead of blank? Does it matter since we drop the whole DB before the job exits?
+						t.TypeDesc().ReferencingDescriptorIDs = nil
+						continue
+					}
 					if desc.RegionConfig == nil {
 						return errors.AssertionFailedf(
 							"found MULTIREGION_ENUM on non-multi-region database %s", desc.Name)

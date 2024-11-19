@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedbase
 
@@ -291,7 +288,9 @@ var SinkIOWorkers = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"changefeed.sink_io_workers",
 	"the number of workers used by changefeeds when sending requests to the sink "+
-		"(currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value",
+		"(currently the batching versions of webhook, pubsub, and kafka sinks that are "+
+		"enabled by changefeed.new_<sink type>_sink_enabled only): <0 disables, 0 assigns "+
+		"a reasonable default, >0 assigns the setting value",
 	0,
 	settings.WithPublic)
 

@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlccl
 
@@ -17,10 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -51,6 +50,20 @@ func TestShowTransferState(t *testing.T) {
 	require.NoError(t, err)
 	_, err = tenantDB.Exec("GRANT SELECT ON tab TO testuser")
 	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		// Waiting for the cluster setting to propagate to the tenant.
+		var enabled bool
+		if err := tenantDB.QueryRow(
+			`SHOW CLUSTER SETTING server.user_login.session_revival_token.enabled`,
+		).Scan(&enabled); err != nil {
+			return err
+		}
+		if !enabled {
+			return errors.New("cluster setting not yet propagated")
+		}
+		return nil
+	})
 
 	testUserConn := tenant.SQLConn(t, serverutils.User(username.TestUser))
 
@@ -212,9 +225,9 @@ func TestShowTransferState(t *testing.T) {
 		t.Run("root_user", func(t *testing.T) {
 			var key string
 			var errVal, sessionState, sessionRevivalToken gosql.NullString
+
 			err := tenantDB.QueryRow(`SHOW TRANSFER STATE WITH 'bar'`).Scan(&errVal, &sessionState, &sessionRevivalToken, &key)
 			require.NoError(t, err)
-
 			require.True(t, errVal.Valid)
 			require.Equal(t, "cannot create token for root user", errVal.String)
 			require.False(t, sessionState.Valid)

@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package batcheval_test
 
@@ -222,7 +217,7 @@ func setupData(
 	if opts.rwMode == fs.ReadOnly {
 		readOnlyStr = "_readonly"
 	}
-	name := fmt.Sprintf("refresh_range_bench_data_%s_%s%s_%d_%d_%d",
+	name := fmt.Sprintf("refresh_range_bench_data_%s_%s%s_%d_%d_%d_v2",
 		verStr, orderStr, readOnlyStr, opts.numKeys, opts.valueBytes, opts.lBaseMaxBytes)
 
 	dir := testfixtures.ReuseOrGenerate(b, name, func(dir string) {

@@ -970,6 +970,10 @@ SELECT (SELECT 2, 2) IN (SELECT x+1 FROM xy)
 query error pgcode 42601 subquery has too many columns
 SELECT (SELECT 2, 2) IN (SELECT x+1, y+1, x+y FROM xy)
 
+subtest end
+
+subtest regression_100561
+
 # Regression test for #100561.
 statement ok
 CREATE TABLE t100561a (a INT);
@@ -987,3 +991,86 @@ SELECT * FROM (
 WHERE tmp.x = bc.b + 1;
 ----
 NULL  2  1  NULL
+
+subtest end
+
+subtest regression_130001
+
+# Regression test for #100561.
+
+# Adding a redundant filter to the LEFT JOIN should not change the result.
+query TTTI rowsort
+WITH a (colA) AS (
+	VALUES ('row-1'), ('row-2')
+),
+b (colB) AS (
+	VALUES ('row-1'), ('row-2')
+)
+SELECT a.colA, l.colB, l.colB_agg, l.count
+FROM a
+LEFT JOIN LATERAL (
+	SELECT colB, array_agg(colB) AS colB_agg, count(*) AS count
+	FROM b
+	WHERE colB = a.colA
+	GROUP BY colB
+) l ON true;
+----
+row-1  row-1  {row-1}  1
+row-2  row-2  {row-2}  1
+
+query TTTI rowsort
+WITH a (colA) AS (
+	VALUES ('row-1'), ('row-2')
+),
+b (colB) AS (
+	VALUES ('row-1'), ('row-2')
+)
+SELECT a.colA, l.colB, l.colB_agg, l.count
+FROM a
+LEFT JOIN LATERAL (
+	SELECT colB, array_agg(colB) AS colB_agg, count(*) AS count
+	FROM b
+	WHERE colB = a.colA
+	GROUP BY colB
+) l ON true
+  -- redundant filter
+	AND l.colB = a.colA;
+----
+row-1  row-1  {row-1}  1
+row-2  row-2  {row-2}  1
+
+# Regression test for #127814. The vectorized engine should correctly project
+# expressions operating on NULL.
+statement ok
+CREATE TABLE t127814_empty (i INT)
+
+statement ok
+CREATE TABLE t127814 (o OID)
+
+statement ok
+INSERT INTO t127814 VALUES (0)
+
+query B
+SELECT o NOT IN ((SELECT NULL FROM t127814_empty),) FROM t127814
+----
+NULL
+
+# Regression test for #130759. The vectorized engine should correctly evaluate
+# IN expressions where the tuple on the RHS contains a single NULL value.
+statement ok
+CREATE TABLE t130759 (
+  i INT
+);
+
+statement ok
+INSERT INTO t130759 VALUES (0);
+
+query I
+SELECT 1
+FROM t130759
+WHERE NOT (
+  ('127.0.0.1'::INET - i) IN (
+    (SELECT NULL FROM (VALUES (0)) v(i) WHERE false),
+  )
+)
+----

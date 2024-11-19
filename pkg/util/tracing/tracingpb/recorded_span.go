@@ -1,12 +1,7 @@
 // Copyright 2019 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tracingpb
 
@@ -27,8 +22,12 @@ const (
 // TraceID is a probabilistically-unique id, shared by all spans in a trace.
 type TraceID uint64
 
+func (TraceID) SafeValue() {}
+
 // SpanID is a probabilistically-unique span id.
 type SpanID uint64
+
+func (SpanID) SafeValue() {}
 
 // Recording represents a group of RecordedSpans rooted at a fixed root span, as
 // returned by GetRecording. Spans are sorted by StartTime.

@@ -1,16 +1,14 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package cdcevent
 
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -24,14 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -130,6 +132,164 @@ CREATE TABLE foo (
 			require.Equal(t, expectResultColumns(t, tableDesc, tc.expectedKeyCols), slurpColumns(t, r.ForEachKeyColumn()))
 			require.Equal(t, expectResultColumns(t, tableDesc, tc.expectedColumns), slurpColumns(t, r.ForEachColumn()))
 			require.Equal(t, expectResultColumns(t, tableDesc, tc.expectedUDTCols), slurpColumns(t, r.ForEachUDTColumn()))
+		})
+	}
+}
+
+// TestEventDescriptorWithSchemaChanges validates that complex schema changes
+// will produce valid event descriptors.
+func TestEventDescriptorWithSchemaChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var hookEnabled atomic.Bool
+	var validationFn func(stage string) error
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, stageIdx int) error {
+					if !hookEnabled.Load() {
+						return nil
+					}
+					return validationFn(fmt.Sprintf("%s/stage=%d", p.Params.ExecutionPhase, stageIdx))
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
+	sqlDB.Exec(t, `
+CREATE TABLE foo (
+  a INT,
+  b STRING,
+  c STRING NOT NULL,
+  d STRING AS (concat(b, c)) VIRTUAL,
+  e status NOT NULL,
+  PRIMARY KEY (b, a),
+  FAMILY main (a, b, e),
+  FAMILY only_c (c)
+)`)
+
+	for _, tc := range []struct {
+		schemaChange string
+		// Each new primary index generated during the test will pause at each stage
+		// of the schema change. Then it will try to see if the current index matches
+		// a expected state, if it doesn't it will validate the against the next expected
+		// state assuming a transition has occurred (i.e. the primary index has been
+		// replaced).
+		expectedKeyCols [][]string
+		expectedColumns [][]string
+		expectedUDTCols [][]string
+	}{
+		{
+			// Replace the primary index with one that uses hash sharding, we will see
+			// the following states:
+			// 1) the original primary key
+			// 2) the new primary key, since the new primary key is hash sharded,
+			//		we are going to have a new key column (crdb_internal_a_b_shard_16)
+			//		that is hashing the primary key columns.
+			schemaChange:    "ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS(b, a) USING HASH",
+			expectedKeyCols: [][]string{{"b", "a"}, {"crdb_internal_a_b_shard_16", "b", "a"}},
+			expectedColumns: [][]string{{"a", "b", "e"}, {"a", "b", "e"}},
+			expectedUDTCols: [][]string{{"e"}, {"e"}},
+		},
+		{
+			// Replace the primary index with a new one with a hash. This will lead
+			// to 3 indexes observed:
+			// 1) The original from the previous test, including the hash sharding
+			//	  columns.
+			// 2) An index without the hash sharding column and just c + e
+			// 3) An index with c + e and a new hash sharding column.
+			schemaChange:    "ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS(c, e) USING HASH",
+			expectedKeyCols: [][]string{{"crdb_internal_a_b_shard_16", "b", "a"}, {"c", "e"}, {"crdb_internal_c_e_shard_16", "c", "e"}},
+			expectedColumns: [][]string{{"a", "b", "e"}, {"a", "b", "e"}, {"a", "b", "e"}},
+			expectedUDTCols: [][]string{{"e"}, {"e"}, {"e"}},
+		},
+		{
+			// We are going to execute a mix of add, drop and alter primary key operations,
+			// this will result in 3 primary indexes being swapped.
+			// 1) The first primary index key will be the same as previous test
+			// 2) The second primary key will use the column "a", without a hash
+			//    sharding column since that needs to be created next.
+			// 3) The final primary key will "a" and have hash sharding on it.
+			schemaChange:    "ALTER TABLE foo ADD COLUMN j INT DEFAULT 32, DROP COLUMN d, DROP COLUMN crdb_internal_a_b_shard_16, DROP COLUMN b, ALTER PRIMARY KEY USING COLUMNS(a) USING HASH",
+			expectedKeyCols: [][]string{{"crdb_internal_c_e_shard_16", "c", "e"}, {"a"}, {"crdb_internal_a_shard_16", "a"}},
+			expectedColumns: [][]string{{"a", "b", "e"}, {"a", "b", "e"}, {"a", "e", "j"}},
+			expectedUDTCols: [][]string{{"e"}, {"e"}, {"e"}},
+		},
+	} {
+		t.Run(tc.schemaChange, func(t *testing.T) {
+			validateCh := make(chan string)
+			validationComplete := make(chan struct{})
+			validationFn = func(stage string) error {
+				validateCh <- stage
+				<-validationComplete
+				return nil
+			}
+			hookEnabled.Store(true)
+			defer hookEnabled.Store(false)
+
+			// Execute the schema change
+			grp := ctxgroup.WithContext(context.Background())
+			grp.GoCtx(func(ctx context.Context) error {
+				_, err := sqlDB.DB.ExecContext(ctx, tc.schemaChange)
+				hookEnabled.Store(false)
+				close(validateCh)
+				close(validationComplete)
+				return err
+			})
+			currentIdx := 0
+			for stageName := range validateCh {
+				t.Run(stageName, func(t *testing.T) {
+					defer func() {
+						validationComplete <- struct{}{}
+						if t.Failed() {
+							hookEnabled.Swap(false)
+						}
+					}()
+					tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
+					mainFamily := mustGetFamily(t, tableDesc, 0)
+					ed, err := NewEventDescriptor(tableDesc, mainFamily, false, false, s.Clock().Now())
+					require.NoError(t, err)
+
+					// Verify Metadata information for event descriptor.
+					require.Equal(t, tableDesc.GetID(), ed.TableID)
+					require.Equal(t, tableDesc.GetName(), ed.TableName)
+					require.True(t, ed.HasOtherFamilies)
+
+					// Verify primary key and family columns are as expected.
+					r := Row{EventDescriptor: ed}
+
+					compareFunc := func(required bool, expected, actual interface{}) bool {
+						if !assert.ObjectsAreEqual(expected, actual) {
+							if required {
+								require.Equal(t, expected, actual)
+							}
+							return false
+						}
+						return true
+					}
+					for i := 0; i < 2 && currentIdx < len(tc.expectedKeyCols); i, currentIdx = i+1, currentIdx+1 {
+						required := i > 0 || (currentIdx+1) >= len(tc.expectedKeyCols)
+						if !compareFunc(required, expectResultColumnsWithFamily(t, tableDesc, tc.expectedKeyCols[currentIdx], mainFamily), slurpColumns(t, r.ForEachKeyColumn())) {
+							continue
+						}
+						if !compareFunc(required, expectResultColumnsWithFamily(t, tableDesc, tc.expectedColumns[currentIdx], mainFamily), slurpColumns(t, r.ForEachColumn())) {
+							continue
+						}
+						if !compareFunc(required, expectResultColumnsWithFamily(t, tableDesc, tc.expectedUDTCols[currentIdx], mainFamily), slurpColumns(t, r.ForEachUDTColumn())) {
+							continue
+						}
+						break
+					}
+				})
+			}
+
+			require.NoError(t, grp.Wait())
+
 		})
 	}
 }
@@ -438,6 +598,9 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	// Use alter column type to force column reordering.
 	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true`)
+	// TODO(#133040): force the legacy schema changer. When run with the DSC,
+	// the ordering changes in the column family. This needs to be revisited in 133040.
+	sqlDB.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 
 	type decodeExpectation struct {
 		expectUnwatchedErr bool
@@ -668,6 +831,65 @@ func expectResultColumns(
 			}
 		} else if desc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(col.GetID()) {
 			// Primary index column that's not part of colNames.
+			ord++
+		}
+	}
+
+	for _, colName := range colNames {
+		col, err := catalog.MustFindColumnByName(desc, colName)
+		require.NoError(t, err)
+		res = append(res, ResultColumn{
+			ResultColumn: colinfo.ResultColumn{
+				Name:           col.GetName(),
+				Typ:            col.GetType(),
+				TableID:        desc.GetID(),
+				PGAttributeNum: uint32(col.GetPGAttributeNum()),
+			},
+			Computed:  col.IsComputed(),
+			ord:       colNamesSet[colName],
+			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
+		})
+	}
+	return res
+}
+
+func expectResultColumnsWithFamily(
+	t *testing.T,
+	desc catalog.TableDescriptor,
+	colNames []string,
+	family *descpb.ColumnFamilyDescriptor,
+) (res []ResultColumn) {
+	t.Helper()
+
+	// Map the column names to their expected ordinal positions.
+	//
+	// The ordinal positions in EventDescriptor.keyCols, EventDescriptor.valueCols,
+	// and EventDescriptor.udtCols (which are indexes into a rowenc.EncDatumRow)
+	// are calculated in the following manner: Start with catalog.TableDescriptor.PublicColumns()
+	// and enumerate any (i) primary key columns and (ii) columns in a specified family.
+	// All remaining columns are filtered out.
+	//
+	// This test helper function generates ordinal positions in the same manner,
+	// except it uses colNames instead of a column family descriptor when filtering columns.
+	colNamesSet := make(map[string]int)
+	for _, colName := range family.ColumnNames {
+		colNamesSet[colName] = -1
+	}
+	ord := 0
+	for _, col := range desc.PublicColumns() {
+		colName := string(col.ColName())
+		if _, ok := colNamesSet[colName]; ok {
+			switch {
+			case col.IsVirtual():
+				colNamesSet[colName] = virtualColOrd
+			default:
+				colNamesSet[colName] = ord
+				ord++
+			}
+		} else if desc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(col.GetID()) {
+			// Primary index column that's not part of column family, but
+			// will still be indexed.
+			colNamesSet[colName] = ord
 			ord++
 		}
 	}

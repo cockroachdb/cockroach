@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tree_test
 
@@ -49,6 +44,12 @@ func TestAvailTypesAreSets(t *testing.T) {
 	for i, test := range testCases {
 		seen := make(map[oid.Oid]struct{})
 		for _, newType := range test.availTypes {
+			// Collated strings have the same Oid as uncollated strings, but we need the
+			// ability to parse constants as collated strings when that is the desired
+			// type.
+			if newType.Family() == types.CollatedStringFamily {
+				continue
+			}
 			if _, ok := seen[newType.Oid()]; ok {
 				t.Errorf("%d: found duplicate type: %v", i, newType)
 			}
@@ -216,6 +217,13 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 			// resolve that exact type. In actual execution, the constant would be resolved
 			// as a hydrated enum type instead.
 			if availType.Family() == types.EnumFamily {
+				continue
+			}
+
+			// The collated string value in c.AvailableTypes() is AnyCollatedString, so we
+			// will not be able to resolve that exact type. In actual execution, the constant
+			// would be resolved with an actual desired locale.
+			if availType.Family() == types.CollatedStringFamily {
 				continue
 			}
 
@@ -391,6 +399,7 @@ func mustParseDArrayOfType(typ *types.T) func(t *testing.T, s string) tree.Datum
 
 var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.String:           func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
+	types.BPChar:           func(t *testing.T, s string) tree.Datum { return tree.NewDString(strings.TrimRight(s, " ")) },
 	types.Bytes:            func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
 	types.Int:              mustParseDInt,
 	types.Float:            mustParseDFloat,
@@ -453,33 +462,39 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		parseOptions map[*types.T]struct{}
 	}{
 		{
-			c:            tree.NewStrVal("abc 世界"),
-			parseOptions: typeSet(types.String, types.Bytes, types.TSVector, types.RefCursor),
+			c: tree.NewStrVal("abc 世界"),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.TSVector,
+				types.RefCursor),
+		},
+		{
+			c: tree.NewStrVal("abc 世界   "),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.TSVector,
+				types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal("true"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Bool, types.Jsonb, types.TSVector,
-				types.TSQuery, types.RefCursor),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Bool, types.Jsonb,
+				types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal("2010-09-28"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Date, types.Timestamp,
-				types.TimestampTZ, types.TSVector, types.TSQuery, types.RefCursor),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Date,
+				types.Timestamp, types.TimestampTZ, types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal("2010-09-28 12:00:00.1"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.TimeTZ, types.Timestamp,
-				types.TimestampTZ, types.Date, types.RefCursor),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Time, types.TimeTZ,
+				types.Timestamp, types.TimestampTZ, types.Date, types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal("2006-07-08T00:00:00.000000123Z"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Time, types.TimeTZ, types.Timestamp,
-				types.TimestampTZ, types.Date, types.RefCursor),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Time, types.TimeTZ,
+				types.Timestamp, types.TimestampTZ, types.Date, types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal("PT12H2M"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Interval, types.TSVector,
-				types.TSQuery, types.RefCursor),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Interval,
+				types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
 			c:            tree.NewBytesStrVal("abc 世界"),
@@ -503,23 +518,24 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c: tree.NewStrVal("box(0 0, 1 1)"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Box2D, types.TSVector,
-				types.RefCursor),
-		},
-		{
-			c: tree.NewStrVal("POINT(-100.59 42.94)"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Geography, types.Geometry,
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Box2D,
 				types.TSVector, types.RefCursor),
 		},
 		{
+			c: tree.NewStrVal("POINT(-100.59 42.94)"),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Geography,
+				types.Geometry, types.TSVector, types.RefCursor),
+		},
+		{
 			c: tree.NewStrVal("192.168.100.128/25"),
-			parseOptions: typeSet(types.String, types.Bytes, types.INet, types.TSVector, types.TSQuery,
-				types.RefCursor),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.INet,
+				types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal("111000110101"),
 			parseOptions: typeSet(
 				types.String,
+				types.BPChar,
 				types.Bytes,
 				types.VarBit,
 				types.Int,
@@ -534,17 +550,19 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c: tree.NewStrVal("A/1"),
-			parseOptions: typeSet(types.String, types.PGLSN, types.Bytes, types.TSQuery, types.TSVector,
-				types.RefCursor),
+			parseOptions: typeSet(types.String, types.BPChar, types.PGLSN, types.Bytes,
+				types.TSQuery, types.TSVector, types.RefCursor),
 		},
 		{
-			c:            tree.NewStrVal(`{"a": 1}`),
-			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb, types.RefCursor),
+			c: tree.NewStrVal(`{"a": 1}`),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Jsonb,
+				types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal(`{1,2}`),
 			parseOptions: typeSet(
 				types.String,
+				types.BPChar,
 				types.Bytes,
 				types.BytesArray,
 				types.StringArray,
@@ -562,6 +580,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			c: tree.NewStrVal(`{1.5,2.0}`),
 			parseOptions: typeSet(
 				types.String,
+				types.BPChar,
 				types.Bytes,
 				types.BytesArray,
 				types.StringArray,
@@ -576,8 +595,17 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c: tree.NewStrVal(`{a,b}`),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.TSVector, types.TSQuery, types.RefCursor, types.RefCursorArray),
+			parseOptions: typeSet(
+				types.String,
+				types.BPChar,
+				types.Bytes,
+				types.BytesArray,
+				types.StringArray,
+				types.TSVector,
+				types.TSQuery,
+				types.RefCursor,
+				types.RefCursorArray,
+			),
 		},
 		{
 			c:            tree.NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})),
@@ -585,34 +613,38 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c: tree.NewStrVal(`18e7b17e-4ead-4e27-bfd5-bb6d11261bb6`),
-			parseOptions: typeSet(types.String, types.Bytes, types.Uuid, types.TSVector, types.TSQuery,
-				types.RefCursor),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Uuid,
+				types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal(`{18e7b17e-4ead-4e27-bfd5-bb6d11261bb6, 18e7b17e-4ead-4e27-bfd5-bb6d11261bb7}`),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.UUIDArray, types.TSVector, types.RefCursor, types.RefCursorArray),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.BytesArray,
+				types.StringArray, types.UUIDArray, types.TSVector, types.RefCursor,
+				types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{true, false}"),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.BoolArray, types.TSVector, types.RefCursor, types.RefCursorArray),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.BytesArray,
+				types.StringArray, types.BoolArray, types.TSVector, types.RefCursor,
+				types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{2010-09-28, 2010-09-29}"),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.DateArray, types.TimestampArray, types.TimestampTZArray, types.TSVector,
-				types.RefCursor, types.RefCursorArray),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.BytesArray,
+				types.StringArray, types.DateArray, types.TimestampArray, types.TimestampTZArray,
+				types.TSVector, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{1A/1,2/2A}"),
-			parseOptions: typeSet(types.String, types.PGLSNArray, types.Bytes, types.BytesArray,
-				types.StringArray, types.TSQuery, types.TSVector, types.RefCursor, types.RefCursorArray),
+			parseOptions: typeSet(types.String, types.BPChar, types.PGLSNArray, types.Bytes,
+				types.BytesArray, types.StringArray, types.TSQuery, types.TSVector, types.RefCursor,
+				types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{2010-09-28 12:00:00.1, 2010-09-29 12:00:00.1}"),
 			parseOptions: typeSet(
 				types.String,
+				types.BPChar,
 				types.Bytes,
 				types.BytesArray,
 				types.StringArray,
@@ -628,6 +660,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			c: tree.NewStrVal("{2006-07-08T00:00:00.000000123Z, 2006-07-10T00:00:00.000000123Z}"),
 			parseOptions: typeSet(
 				types.String,
+				types.BPChar,
 				types.Bytes,
 				types.BytesArray,
 				types.StringArray,
@@ -641,18 +674,19 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c: tree.NewStrVal("{PT12H2M, -23:00:00}"),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.IntervalArray, types.RefCursor, types.RefCursorArray),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.BytesArray,
+				types.StringArray, types.IntervalArray, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{192.168.100.128, ::ffff:10.4.3.2}"),
-			parseOptions: typeSet(types.String, types.Bytes, types.BytesArray, types.StringArray,
-				types.INetArray, types.RefCursor, types.RefCursorArray),
+			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.BytesArray,
+				types.StringArray, types.INetArray, types.RefCursor, types.RefCursorArray),
 		},
 		{
 			c: tree.NewStrVal("{0101, 11}"),
 			parseOptions: typeSet(
 				types.String,
+				types.BPChar,
 				types.Bytes,
 				types.BytesArray,
 				types.StringArray,
@@ -682,6 +716,13 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				// resolve that exact type. In actual execution, the constant would be resolved
 				// as a hydrated enum type instead.
 				if availType.Family() == types.EnumFamily {
+					continue
+				}
+
+				// The collated string value in c.AvailableTypes() is AnyCollatedString, so we
+				// will not be able to resolve that exact type. In actual execution, the constant
+				// would be resolved with an actual desired locale.
+				if availType.Family() == types.CollatedStringFamily {
 					continue
 				}
 

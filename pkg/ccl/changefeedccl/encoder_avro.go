@@ -1,10 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -34,6 +31,7 @@ type confluentAvroEncoder struct {
 	schemaRegistry            schemaRegistry
 	schemaPrefix              string
 	updatedField, beforeField bool
+	mvccTimestampField        bool
 	virtualColumnVisibility   changefeedbase.VirtualColumnVisibility
 	targets                   changefeedbase.Targets
 	envelopeType              changefeedbase.EnvelopeType
@@ -90,6 +88,7 @@ func newConfluentAvroEncoder(
 	e.updatedField = opts.UpdatedTimestamps
 	e.beforeField = opts.Diff
 	e.customKeyColumn = opts.CustomKeyColumn
+	e.mvccTimestampField = opts.MVCCTimestamps
 
 	// TODO: Implement this.
 	if opts.KeyInValue {
@@ -257,10 +256,10 @@ func (e *confluentAvroEncoder) EncodeValue(
 		// This means metadata can safely go at the top level as there are never arbitrary column names
 		// for it to conflict with.
 		if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
-			opts = avroEnvelopeOpts{afterField: true, beforeField: e.beforeField, updatedField: e.updatedField}
+			opts = avroEnvelopeOpts{afterField: true, beforeField: e.beforeField, updatedField: e.updatedField, mvccTimestampField: e.mvccTimestampField}
 			afterDataSchema = currentSchema
 		} else {
-			opts = avroEnvelopeOpts{recordField: true, updatedField: e.updatedField}
+			opts = avroEnvelopeOpts{recordField: true, updatedField: e.updatedField, mvccTimestampField: e.mvccTimestampField}
 			recordDataSchema = currentSchema
 		}
 
@@ -284,11 +283,12 @@ func (e *confluentAvroEncoder) EncodeValue(
 		e.valueCache.Add(cacheKey, registered)
 	}
 
-	var meta avroMetadata
+	meta := avroMetadata{}
 	if registered.schema.opts.updatedField {
-		meta = map[string]interface{}{
-			`updated`: evCtx.updated,
-		}
+		meta[`updated`] = evCtx.updated
+	}
+	if registered.schema.opts.mvccTimestampField {
+		meta[`mvcc_timestamp`] = evCtx.mvcc
 	}
 
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format

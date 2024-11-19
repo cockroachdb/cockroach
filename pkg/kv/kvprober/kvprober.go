@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package kvprober sends queries to KV in a loop, with configurable sleep
 // times, in order to generate data about the healthiness or unhealthiness of
@@ -372,7 +367,8 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 	var finishAndGetRecording func() tracingpb.Recording
 	var probeCtx = ctx
 
-	if tracingEnabled.Get(&p.settings.SV) {
+	isTracingEnabled := tracingEnabled.Get(&p.settings.SV)
+	if isTracingEnabled {
 		probeCtx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, p.tracer, "read probe")
 	}
 
@@ -430,7 +426,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 
 	d := timeutil.Since(start)
 	// Extract leaseholder information from the trace recording if enabled.
-	if tracingEnabled.Get(&p.settings.SV) {
+	if isTracingEnabled {
 		leaseholder := p.returnLeaseholderInfo(finishAndGetRecording())
 		ctx = logtags.AddTag(ctx, "leaseholder", leaseholder)
 		log.Health.Infof(ctx, "kv.Get(%s), r=%v having likely leaseholder=%s returned success in %v", step.Key, step.RangeID, leaseholder, d)
@@ -456,7 +452,8 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 	var finishAndGetRecording func() tracingpb.Recording
 	var probeCtx = ctx
 
-	if tracingEnabled.Get(&p.settings.SV) {
+	isTracingEnabled := tracingEnabled.Get(&p.settings.SV)
+	if isTracingEnabled {
 		probeCtx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, p.tracer, "write probe")
 	}
 
@@ -511,7 +508,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 
 	d := timeutil.Since(start)
 	// Extract leaseholder information from the trace recording if enabled.
-	if tracingEnabled.Get(&p.settings.SV) {
+	if isTracingEnabled {
 		leaseholder := p.returnLeaseholderInfo(finishAndGetRecording())
 		ctx = logtags.AddTag(ctx, "leaseholder", leaseholder)
 		log.Health.Infof(ctx, "kv.Txn(Put(%s); Del(-)), r=%v having likely leaseholder=%s returned success in %v", step.Key, step.RangeID, leaseholder, d)

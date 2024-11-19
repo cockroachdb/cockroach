@@ -1,5 +1,5 @@
-// This code has been modified from its original form by Cockroach Labs, Inc.
-// All modifications are Copyright 2024 Cockroach Labs, Inc.
+// This code has been modified from its original form by The Cockroach Authors.
+// All modifications are Copyright 2024 The Cockroach Authors.
 //
 // Copyright 2015 The etcd Authors
 //
@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/raft/quorum"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -100,7 +101,7 @@ func getBasicStatus(r *raft) BasicStatus {
 	s.HardState = r.hardState()
 	s.SoftState = r.softState()
 	s.Applied = r.raftLog.applied
-	if s.RaftState == StateFollower && s.Lead == r.id {
+	if s.RaftState == pb.StateFollower && s.Lead == r.id {
 		// A raft leader's term ends when it is shut down. It'll rejoin its peers as
 		// a follower when it comes back up, but its Lead and Term field may still
 		// correspond to its pre-restart leadership term. We expect this to quickly
@@ -124,14 +125,14 @@ func getBasicStatus(r *raft) BasicStatus {
 func getStatus(r *raft) Status {
 	var s Status
 	s.BasicStatus = getBasicStatus(r)
-	if s.RaftState == StateLeader {
+	if s.RaftState == pb.StateLeader {
 		s.Progress = getProgressCopy(r)
 	}
 	s.Config = r.config.Clone()
 	// NOTE: we assign to LeadSupportUntil even if RaftState is not currently
 	// StateLeader. The replica may have been the leader and stepped down to a
 	// follower before its lead support ran out.
-	s.LeadSupportUntil = hlc.Timestamp{} // TODO(arul): populate this field
+	s.LeadSupportUntil = r.fortificationTracker.LeadSupportUntil(r.state)
 	return s
 }
 
@@ -141,7 +142,7 @@ func getStatus(r *raft) Status {
 func getSparseStatus(r *raft) SparseStatus {
 	var s SparseStatus
 	s.BasicStatus = getBasicStatus(r)
-	if s.RaftState == StateLeader {
+	if s.RaftState == pb.StateLeader {
 		s.Progress = make(map[pb.PeerID]tracker.Progress, r.trk.Len())
 		withProgress(r, func(id pb.PeerID, _ ProgressType, pr tracker.Progress) {
 			s.Progress[id] = pr
@@ -155,14 +156,14 @@ func getSparseStatus(r *raft) SparseStatus {
 func getLeadSupportStatus(r *raft) LeadSupportStatus {
 	var s LeadSupportStatus
 	s.BasicStatus = getBasicStatus(r)
-	s.LeadSupportUntil = hlc.Timestamp{} // TODO(arul): populate this field
+	s.LeadSupportUntil = r.fortificationTracker.LeadSupportUntil(r.state)
 	return s
 }
 
 // MarshalJSON translates the raft status into JSON.
 func (s Status) MarshalJSON() ([]byte, error) {
-	j := fmt.Sprintf(`{"id":"%x","term":%d,"vote":"%x","commit":%d,"lead":"%x","raftState":%q,"applied":%d,"progress":{`,
-		s.ID, s.Term, s.Vote, s.Commit, s.Lead, s.RaftState, s.Applied)
+	j := fmt.Sprintf(`{"id":"%x","term":%d,"vote":"%x","commit":%d,"lead":"%x","leadEpoch":"%d","raftState":%q,"applied":%d,"progress":{`,
+		s.ID, s.Term, s.Vote, s.Commit, s.Lead, s.LeadEpoch, s.RaftState, s.Applied)
 
 	if len(s.Progress) == 0 {
 		j += "},"
@@ -182,7 +183,7 @@ func (s Status) MarshalJSON() ([]byte, error) {
 func (s Status) String() string {
 	b, err := s.MarshalJSON()
 	if err != nil {
-		getLogger().Panicf("unexpected error: %v", err)
+		raftlogger.GetLogger().Panicf("unexpected error: %v", err)
 	}
 	return string(b)
 }

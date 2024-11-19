@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -818,6 +813,9 @@ const (
 	// NodeUnhealthy means that the node should be avoided because
 	// it's not healthy.
 	NodeUnhealthy
+	// NodeDraining means that the node should be avoided because
+	// it's draining.
+	NodeDraining
 )
 
 // spanPartitionState captures information about the current state of the
@@ -890,7 +888,7 @@ type PlanningCtx struct {
 
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
-	saveFlows func(_ map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, _ []execinfra.LocalProcessor, vectorized bool) error
+	saveFlows SaveFlowsFunc
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
@@ -983,11 +981,20 @@ func (p *PlanningCtx) setUpForMainQuery(
 	p.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 }
 
+// SaveFlowsFunc is the signature for a function used to examine the physical
+// plan for a query. Implementations may not be concurrency-safe.
+type SaveFlowsFunc func(
+	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
+	opChains execopnode.OpChains,
+	localProcessors []execinfra.LocalProcessor,
+	vectorized bool,
+) error
+
 // getDefaultSaveFlowsFunc returns the default function used to save physical
 // plans and their diagrams. The returned function is **not** concurrency-safe.
 func getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
-) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error {
+) SaveFlowsFunc {
 	return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, localProcessors []execinfra.LocalProcessor, vectorized bool) error {
 		var diagram execinfrapb.FlowDiagram
 		if planner.instrumentation.shouldSaveDiagrams() {
@@ -1080,6 +1087,8 @@ func (p *PlanningCtx) getCleanupFunc() func() {
 // plan to a planNode subtree.
 //
 // These plans are built recursively on a planNode tree.
+//
+// PhysicalPlan is immutable after its finalization.
 type PhysicalPlan struct {
 	physicalplan.PhysicalPlan
 
@@ -1567,6 +1576,7 @@ func (dsp *DistSQLPlanner) deprecatedHealthySQLInstanceIDForKVNodeIDSystem(
 func (dsp *DistSQLPlanner) checkInstanceHealth(
 	instanceID base.SQLInstanceID,
 	instanceRPCAddr string,
+	isDraining bool,
 	nodeStatusesCache map[base.SQLInstanceID]NodeStatus,
 ) NodeStatus {
 	if nodeStatusesCache != nil {
@@ -1575,7 +1585,9 @@ func (dsp *DistSQLPlanner) checkInstanceHealth(
 		}
 	}
 	status := NodeOK
-	if err := dsp.nodeHealth.connHealthInstance(instanceID, instanceRPCAddr); err != nil {
+	if isDraining {
+		status = NodeDraining
+	} else if err := dsp.nodeHealth.connHealthInstance(instanceID, instanceRPCAddr); err != nil {
 		if errors.Is(err, rpc.ErrNotHeartbeated) {
 			// Consider ErrNotHeartbeated as a temporary error (see its description) and
 			// avoid caching its result, as it can resolve to a more accurate result soon.
@@ -1624,7 +1636,7 @@ func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeHostedInstanceResolver(
 		sqlInstance := base.SQLInstanceID(nodeID)
 		if n, ok := instances[sqlInstance]; ok {
 			if status := dsp.checkInstanceHealth(
-				sqlInstance, n.InstanceRPCAddr, planCtx.nodeStatuses); status == NodeOK {
+				sqlInstance, n.InstanceRPCAddr, n.IsDraining, planCtx.nodeStatuses); status == NodeOK {
 				return sqlInstance, SpanPartitionReason_TARGET_HEALTHY
 			}
 		}
@@ -1688,7 +1700,8 @@ func (dsp *DistSQLPlanner) filterUnhealthyInstances(
 	for _, n := range instances {
 		// Gateway is always considered healthy
 		if n.InstanceID == dsp.gatewaySQLInstanceID ||
-			dsp.checkInstanceHealth(n.InstanceID, n.InstanceRPCAddr, nodeStatusesCache) == NodeOK {
+			dsp.checkInstanceHealth(n.InstanceID, n.InstanceRPCAddr,
+				n.IsDraining, nodeStatusesCache) == NodeOK {
 			instances[j] = n
 			j++
 		} else {
@@ -4862,7 +4875,8 @@ func logAndSanitizeExportDestination(ctx context.Context, dest string) error {
 func checkScanParallelizationIfLocal(
 	ctx context.Context, plan *planComponents, c *localScanParallelizationChecker,
 ) (prohibitParallelization, hasScanNodeToParallelize bool) {
-	if plan.main.planNode == nil || len(plan.cascades) != 0 || len(plan.checkPlans) != 0 {
+	if plan.main.planNode == nil || len(plan.cascades) != 0 ||
+		len(plan.checkPlans) != 0 || len(plan.triggers) != 0 {
 		// We either used the experimental DistSQL spec factory or have
 		// cascades/checks; both of these conditions - for now - prohibit
 		// the scan parallelization.
@@ -5128,8 +5142,8 @@ func finalizePlanWithRowCount(
 		Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE,
 	})
 
-	// Assign processor IDs.
 	for i, p := range plan.Processors {
+		// Assign processor IDs.
 		plan.Processors[i].Spec.ProcessorID = int32(i)
 		// Double check that our reliance on ProcessorID == index is good.
 		if _, ok := plan.LocalVectorSources[int32(i)]; ok {
@@ -5137,6 +5151,24 @@ func finalizePlanWithRowCount(
 			if p.Spec.Core.Values == nil {
 				panic(errors.AssertionFailedf("expected processor to be Values"))
 			}
+		}
+		// Prevent the type schema corruption as found in #130402.
+		//
+		// Namely, during the vectorized operator planning we often use the type
+		// slice from the input spec to create the type schema of an operator.
+		// However, it is possible that the same type slice is shared by
+		// multiple stages of processors. If it just so happens that there is
+		// free capacity in the slice, and we append to it when planning
+		// operators for both stages, we might corrupt the type schema captured
+		// by the operators for the earlier stage. In order to prevent such type
+		// schema corruption we cap the slice to force creation of a fresh copy
+		// on the first append.
+		//
+		// We can't do this capping later (during the vectorized planning)
+		// because the physical plan is immutable once finalized.
+		for j := range p.Spec.Input {
+			inputSpec := &p.Spec.Input[j]
+			inputSpec.ColumnTypes = inputSpec.ColumnTypes[:len(inputSpec.ColumnTypes):len(inputSpec.ColumnTypes)]
 		}
 	}
 }

@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package importer
 
@@ -23,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -60,7 +56,7 @@ func runImport(
 
 	// Install type metadata in all of the import tables.
 	spec = protoutil.Clone(spec).(*execinfrapb.ReadImportDataSpec)
-	importResolver := makeImportTypeResolver(spec.Types)
+	importResolver := crosscluster.MakeCrossClusterTypeResolver(spec.Types)
 	for _, table := range spec.Tables {
 		cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
 		if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {

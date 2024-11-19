@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package descs
 
@@ -20,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -79,6 +75,93 @@ type leasedDescriptors struct {
 	cache nstree.NameMap
 }
 
+// mismatchedExternalDataRowTimestamp is generated when the external row data timestamps
+// within a descriptor do not match.
+type mismatchedExternalDataRowTimestamp struct {
+	newDescName      string
+	newDescID        descpb.ID
+	newDescTS        hlc.Timestamp
+	existingDescName string
+	existingDescID   descpb.ID
+	existingDescTS   hlc.Timestamp
+}
+
+func newMismatchedExternalDataRowTimestampError(
+	newDesc catalog.TableDescriptor, existingDesc catalog.TableDescriptor,
+) *mismatchedExternalDataRowTimestamp {
+	return &mismatchedExternalDataRowTimestamp{
+		newDescName:      newDesc.GetName(),
+		newDescID:        newDesc.GetID(),
+		newDescTS:        newDesc.ExternalRowData().AsOf,
+		existingDescName: existingDesc.GetName(),
+		existingDescID:   existingDesc.GetID(),
+		existingDescTS:   existingDesc.ExternalRowData().AsOf,
+	}
+}
+
+func (e *mismatchedExternalDataRowTimestamp) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("PCR reader timestamp has moved forward, "+
+		"existing descriptor %s(%d) and timestamp: %s "+
+		"new descritpor %s(%d) and timestamp: %s",
+		e.newDescName,
+		e.newDescID,
+		e.newDescTS,
+		e.existingDescName,
+		e.existingDescID,
+		e.existingDescTS)
+	return nil
+}
+
+func (e *mismatchedExternalDataRowTimestamp) Error() string {
+	return fmt.Sprint(errors.Formattable(e))
+}
+
+var _ errors.SafeFormatter = (*mismatchedExternalDataRowTimestamp)(nil)
+
+// maybeAssertExternalRowDataTS asserts if the descriptor references external
+// row data, then the timestamp across the entire collection *must* match.
+func (ld *leasedDescriptors) maybeAssertExternalRowDataTS(desc catalog.Descriptor) error {
+	tableDesc, ok := desc.(catalog.TableDescriptor)
+	if !ok {
+		return nil
+	}
+	if tableDesc.ExternalRowData() == nil {
+		return nil
+	}
+	currentTS := tableDesc.ExternalRowData().AsOf
+	return ld.cache.IterateByID(func(entry catalog.NameEntry) error {
+		// Skip databases / schemas.
+		if entry.GetParentID() == descpb.InvalidID ||
+			entry.GetParentSchemaID() == descpb.InvalidID ||
+			entry.GetID() == tableDesc.GetID() {
+			return nil
+		}
+		// Next get the underlying descriptor.
+		otherDesc := entry.(lease.LeasedDescriptor).Underlying()
+		if otherTableDesc, ok := otherDesc.(catalog.TableDescriptor); ok {
+			// Skip conventional descriptors.
+			if otherTableDesc.ExternalRowData() == nil {
+				return nil
+			}
+			// Confirm the timestamps match the most recent descriptor.
+			if !otherTableDesc.ExternalRowData().AsOf.Equal(currentTS) {
+				// Normally the PCR catalog reader will run with AOST timestamps,
+				// if during the setup of the connection executor we were able to
+				// lease the system database descriptor and confirm that it is for
+				// a PCR reader catalog. If we were not able to lease the system database
+				// descriptor, then its possible no AOST timestamp is set. Otherwise,
+				// this error should *never* happen.
+				return newMismatchedExternalDataRowTimestampError(
+					tableDesc,
+					otherTableDesc)
+			}
+			// Otherwise, we expect all other timestamps to match as well.
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+}
+
 // getLeasedDescriptorByName return a leased descriptor valid for the
 // transaction, acquiring one if necessary. Due to a bug in lease acquisition
 // for dropped descriptors, the descriptor may have to be read from the store,
@@ -99,7 +182,8 @@ func (ld *leasedDescriptors) getByName(
 			log.Eventf(ctx, "found descriptor in collection for (%d, %d, '%s'): %d",
 				parentID, parentSchemaID, name, cached.GetID())
 		}
-		return cached.(lease.LeasedDescriptor).Underlying(), false, nil
+		desc = cached.(lease.LeasedDescriptor).Underlying()
+		return desc, false, nil
 	}
 
 	readTimestamp := txn.ReadTimestamp()
@@ -183,7 +267,12 @@ func (ld *leasedDescriptors) getResult(
 			return nil, false, err
 		}
 	}
-	return ldesc.Underlying(), false, nil
+
+	desc := ldesc.Underlying()
+	if err = ld.maybeAssertExternalRowDataTS(desc); err != nil {
+		return nil, false, err
+	}
+	return desc, false, nil
 }
 
 func (ld *leasedDescriptors) maybeUpdateDeadline(

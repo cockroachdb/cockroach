@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
+# Copyright 2022 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
 set -euo pipefail
 
 # explicit_casts_gen.sh generates a CSV file of test cases for use by

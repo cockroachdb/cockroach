@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package leases
 
@@ -19,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -63,6 +59,22 @@ type Settings struct {
 	MinExpirationSupported bool
 	// RangeLeaseDuration specifies the range lease duration.
 	RangeLeaseDuration time.Duration
+}
+
+// PrevLeaseManipulation contains a set of instructions for manipulating the
+// previous lease. These actions must be taken before the next lease can be
+// requested.
+type PrevLeaseManipulation struct {
+	// RevokeAndForwardNextStart indicates that the previous lease must be revoked
+	// before the next lease can be requested. Then, after the revocation, the
+	// start time of the next lease should be set to a clock.Now reading captured
+	// after the previous, now-revoked lease.
+	RevokeAndForwardNextStart bool
+	// RevokeAndForwardNextExpiration indicates that the previous lease must be
+	// revoked before the next lease can be requested. Then, after the revocation,
+	// the minimum expiration of the next lease should be forwarded past the
+	// expiration of the previous, now-revoked lease.
+	RevokeAndForwardNextExpiration bool
 }
 
 // NodeLiveness is a read-only interface to the node liveness subsystem.
@@ -162,6 +174,9 @@ func (i BuildInput) validate() error {
 	if i.Now.IsEmpty() {
 		return errors.AssertionFailedf("no clock timestamp provided")
 	}
+	if i.Now.Less(i.MinLeaseProposedTS) {
+		return errors.AssertionFailedf("clock timestamp earlier than minimum lease proposed timestamp")
+	}
 	if i.RaftStatus == nil {
 		return errors.AssertionFailedf("no raft status provided")
 	}
@@ -247,6 +262,7 @@ func (i BuildInput) toVerifyInput() VerifyInput {
 // Output is the set of outputs for the lease acquisition process.
 type Output struct {
 	NextLease                roachpb.Lease
+	PrevLeaseManipulation    PrevLeaseManipulation
 	NodeLivenessManipulation NodeLivenessManipulation
 }
 
@@ -326,9 +342,10 @@ func build(st Settings, nl NodeLiveness, i BuildInput) (Output, error) {
 	// newly constructed lease.
 	nextLease.Sequence = leaseSequence(st, i, nextLease)
 
-	// Construct the output and determine whether any node liveness manipulation
-	// is necessary before the lease can be requested.
+	// Construct the output and determine whether any previous lease and node
+	// liveness manipulation is necessary before the lease can be requested.
 	o := Output{NextLease: nextLease}
+	o.PrevLeaseManipulation = prevLeaseManipulation(st, i, nextLease)
 	o.NodeLivenessManipulation = nodeLivenessManipulation(st, i, nextLease, nextLeaseLiveness)
 
 	// Validate the output.
@@ -370,15 +387,27 @@ func leaseType(st Settings, i BuildInput) roachpb.LeaseType {
 		// construct an epoch-based lease.
 		return roachpb.LeaseEpoch
 	}
-	if i.RaftStatus.RaftState != raft.StateLeader {
-		// If this range wants to use a leader lease, but it is not currently the
-		// raft leader, we construct an expiration-based lease. It is highly likely
-		// that the lease acquisition will be rejected before being proposed by the
-		// lease safety checks in verifyAcquisition. If not (e.g. because the
-		// kv.lease.reject_on_leader_unknown.enabled setting is set to a non-default
-		// value of false), we may end up with an expiration-based lease, which is
-		// safe and can be upgraded to a leader lease when the range becomes the
-		// leader.
+	if i.RaftStatus.RaftState != raftpb.StateLeader || i.RaftStatus.LeadTransferee != raft.None {
+		// If this range wants to use a leader lease, but the local replica is not
+		// currently the raft leader, we construct an expiration-based lease. It is
+		// highly likely that the lease acquisition will be rejected before being
+		// proposed by the lease safety checks in verifyAcquisition. If not (e.g.
+		// because the kv.lease.reject_on_leader_unknown.enabled setting is set to
+		// the default value of false), the local replica may end up with an
+		// expiration-based lease, which is safe and can be upgraded to a leader
+		// lease when the replica becomes the leader.
+		//
+		// Similarly, if the replica is the raft leader but it is in the process of
+		// transferring away its leadership, we construct an expiration-based lease
+		// instead of a leader lease, as a precaution. This ensures that a poorly
+		// timed leader lease acquisition does not race with a leadership transfer
+		// and cause a leader lease to be prematurely invalidated when the leader
+		// transfer completes and leadership is stolen away, before leader support
+		// expires. The race cannot occur in the other direction (lease acquisition
+		// in-progress, then leadership transfer initiated) because a raft leader
+		// will only initiate a leadership transfer if it does not currently hold
+		// the lease and is not in the process of acquiring it. The two synchronize
+		// on the replica mutex.
 		return roachpb.LeaseExpiration
 	}
 	// We're the leader and we prefer leader leases, so we construct a leader
@@ -516,7 +545,7 @@ func leaseTerm(i BuildInput, nextType roachpb.LeaseType) uint64 {
 	if nextType != roachpb.LeaseLeader {
 		panic("leaseTerm called for non-leader lease")
 	}
-	if i.RaftStatus.RaftState != raft.StateLeader {
+	if i.RaftStatus.RaftState != raftpb.StateLeader {
 		panic("leaseTerm called when not leader")
 	}
 	if i.RaftStatus.Term == 0 {
@@ -557,6 +586,45 @@ func leaseSequence(st Settings, i BuildInput, nextLease roachpb.Lease) roachpb.L
 		// retry with a different sequence number. This is actually exactly what
 		// the sequence number is used to enforce!
 		return i.PrevLease.Sequence + 1
+	}
+}
+
+func prevLeaseManipulation(
+	st Settings, i BuildInput, nextLease roachpb.Lease,
+) PrevLeaseManipulation {
+	switch {
+	case i.Acquisition():
+		// We don't own the previous lease, so there's nothing to do.
+		return PrevLeaseManipulation{}
+	case i.Extension():
+		// If the previous lease has its expiration extended indirectly (i.e. not
+		// through a lease record update) and we are switching lease types before it
+		// has expired, we must take care to ensure that the expiration does not
+		// regress. This is more involved than the common case because the lease's
+		// expiration may continue to advance on its own if we take no action. We
+		// avoid any expiration regression by revoking the lease and then advancing
+		// the minimum expiration of the next lease beyond the maximum expiration
+		// that the previous lease had.
+		prevType := i.PrevLease.Type()
+		indirectExp := prevType != roachpb.LeaseExpiration
+		switchingType := prevType != nextLease.Type()
+		if indirectExp && switchingType && !i.PrevLeaseExpired && st.MinExpirationSupported {
+			return PrevLeaseManipulation{
+				RevokeAndForwardNextExpiration: true,
+			}
+		}
+		// Otherwise, there's no need to manipulate the previous lease while
+		// extending it.
+		return PrevLeaseManipulation{}
+	case i.Transfer():
+		// Revoke the previous lease before transferring it away. Then use the
+		// current time for the start of the next lease. See cmd_lease_transfer.go
+		// for details.
+		return PrevLeaseManipulation{
+			RevokeAndForwardNextStart: true,
+		}
+	default:
+		panic("unknown lease operation")
 	}
 }
 
@@ -707,4 +775,17 @@ func validateNonZero[T comparable](field T, name string) error {
 		return errors.AssertionFailedf("%s must be set", name)
 	}
 	return nil
+}
+
+// RunEachLeaseType calls f in a subtest for each lease type.
+func RunEachLeaseType[T testingTB[T]](t T, f func(T, roachpb.LeaseType)) {
+	for _, l := range roachpb.LeaseTypes() {
+		t.Run(l.String(), func(t T) { f(t, l) })
+	}
+}
+
+// testingTB is an interface that matches *testing.T and *testing.B, without
+// incurring the package dependency.
+type testingTB[T any] interface {
+	Run(name string, f func(t T)) bool
 }

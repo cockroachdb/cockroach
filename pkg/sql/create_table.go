@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -246,6 +241,12 @@ func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (boo
 }
 
 func (n *createTableNode) startExec(params runParams) error {
+	// Check if the parent object is a replicated PCR descriptor, which will block
+	// schema changes.
+	if n.dbDesc.GetReplicatedPCRVersion() != 0 {
+		return pgerror.Newf(pgcode.ReadOnlySQLTransaction, "schema changes are not allowed on a reader catalog")
+	}
+
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("table"))
 
 	colsWithPrimaryKeyConstraint := make(map[tree.Name]bool)
@@ -539,6 +540,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				params.p.txn,
 				params.ExecCfg().Codec,
 				desc.ImmutableCopy().(catalog.TableDescriptor),
+				nil, /* uniqueWithTombstoneIndexes */
 				desc.PublicColumns(),
 				&tree.DatumAlloc{},
 				&params.ExecCfg().Settings.SV,
@@ -550,13 +552,12 @@ func (n *createTableNode) startExec(params runParams) error {
 			}
 			ti := tableInserterPool.Get().(*tableInserter)
 			*ti = tableInserter{ri: ri}
-			tw := tableWriter(ti)
 			defer func() {
-				tw.close(params.ctx)
+				ti.close(params.ctx)
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
-			if err := tw.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
+			if err := ti.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
 				return err
 			}
 
@@ -573,7 +574,7 @@ func (n *createTableNode) startExec(params runParams) error {
 					if err != nil {
 						return err
 					}
-					if err := tw.finalize(params.ctx); err != nil {
+					if err := ti.finalize(params.ctx); err != nil {
 						return err
 					}
 					break
@@ -583,7 +584,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				// raft commands.
 				if ti.currentBatchSize >= ti.maxBatchSize ||
 					ti.b.ApproximateMutationBytes() >= ti.maxBatchByteSize {
-					if err := tw.flushAndStartNewBatch(params.ctx); err != nil {
+					if err := ti.flushAndStartNewBatch(params.ctx); err != nil {
 						return err
 					}
 				}
@@ -595,7 +596,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				// An empty row.PartialIndexUpdateHelper is used here because
 				// there are no indexes, partial or otherwise, to update.
 				var pm row.PartialIndexUpdateHelper
-				if err := tw.row(params.ctx, rowBuffer, pm, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+				if err := ti.row(params.ctx, rowBuffer, pm, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
 					return err
 				}
 			}
@@ -1049,6 +1050,25 @@ func ResolveFK(
 			validity = descpb.ConstraintValidity_Unvalidated
 		} else {
 			validity = descpb.ConstraintValidity_Validating
+		}
+	}
+
+	// Adding a foreign key dependency on a table with row-level TTL enabled can
+	// cause a slowdown in the TTL deletion job as the number of rows to be updated per
+	// deletion can go up. In such a case, flag a notice to the user advising them to
+	// update the ttl_delete_batch_size to avoid generating TTL deletion jobs with a high
+	// cardinality of rows being deleted.
+	// See https://github.com/cockroachdb/cockroach/issues/125103 for more details.
+	if target.HasRowLevelTTL() {
+		// Use foreign key actions to determine upstream impact and flag a notice if the
+		// actions for delete involve cascading deletes.
+		if d.Actions.Delete != tree.NoAction && d.Actions.Delete != tree.Restrict {
+			evalCtx.ClientNoticeSender.BufferClientNotice(
+				ctx,
+				pgnotice.Newf("Table %s has row level TTL enabled. This will make TTL deletion jobs"+
+					" more expensive as dependent rows will need to be updated as well. To improve performance"+
+					" of the TTL job, consider reducing the value of ttl_delete_batch_size.",
+					target.GetName()))
 		}
 	}
 
@@ -2058,13 +2078,6 @@ func NewTableDesc(
 		}
 	}
 
-	// If explicit primary keys are required, error out since a primary key was not supplied.
-	if desc.GetPrimaryIndex().NumKeyColumns() == 0 && desc.IsPhysicalTable() && evalCtx != nil &&
-		evalCtx.SessionData() != nil && evalCtx.SessionData().RequireExplicitPrimaryKeys {
-		return nil, errors.Errorf(
-			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
-	}
-
 	for i := range desc.Columns {
 		if _, ok := primaryIndexColumnSet[desc.Columns[i].Name]; ok {
 			desc.Columns[i].Nullable = false
@@ -2084,6 +2097,16 @@ func NewTableDesc(
 	}
 	if err := desc.AllocateIDs(ctx, version); err != nil {
 		return nil, err
+	}
+
+	// If explicit primary keys are required, error out if a primary key was not
+	// supplied.
+	if desc.IsPhysicalTable() &&
+		evalCtx != nil && evalCtx.SessionData() != nil &&
+		evalCtx.SessionData().RequireExplicitPrimaryKeys &&
+		desc.IsPrimaryIndexDefaultRowID() {
+		return nil, errors.Errorf(
+			"no primary key specified for table %s (require_explicit_primary_keys = true)", desc.Name)
 	}
 
 	for _, idx := range desc.PublicNonPrimaryIndexes() {

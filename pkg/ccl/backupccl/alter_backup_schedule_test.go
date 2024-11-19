@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package backupccl
 
@@ -158,5 +155,42 @@ INSERT INTO t1 values (1), (10), (100);
 
 	rows = th.sqlDB.QueryStr(t, fmt.Sprintf(`ALTER BACKUP SCHEDULE %d EXECUTE IMMEDIATELY;`, scheduleID))
 	require.Equal(t, trim(th.env.Now().String()), trim(rows[0][3]))
+}
 
+func TestAlterBackupScheduleSetsIncrementalClusterID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newAlterSchedulesTestHelper(t, nil)
+	defer cleanup()
+
+	rows := th.sqlDB.QueryStr(
+		t,
+		`CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup/alter-schedule' RECURRING '@daily' FULL BACKUP ALWAYS;`,
+	)
+	require.Len(t, rows, 1)
+	scheduleID, err := strconv.Atoi(rows[0][0])
+	require.NoError(t, err)
+
+	// Artificially remove cluster ID from full backup to simulate pre-23.2 schedule.
+	th.sqlDB.QueryStr(
+		t,
+		fmt.Sprintf(`UPDATE system.scheduled_jobs
+			SET
+			schedule_details = crdb_internal.json_to_pb(
+				'cockroach.jobs.jobspb.ScheduleDetails',
+				json_remove_path(
+					crdb_internal.pb_to_json('cockroach.jobs.jobspb.ScheduleDetails', schedule_details),
+					ARRAY['clusterId']
+				)
+			)
+			WHERE schedule_id=%d;`, scheduleID),
+	)
+
+	// Ensure creating incremental from a full backup schedule without a cluster ID passes
+	rows = th.sqlDB.QueryStr(t, fmt.Sprintf(
+		`ALTER BACKUP SCHEDULE %d SET RECURRING '@hourly', SET FULL BACKUP '@daily'`,
+		scheduleID),
+	)
+	require.Len(t, rows, 2)
 }

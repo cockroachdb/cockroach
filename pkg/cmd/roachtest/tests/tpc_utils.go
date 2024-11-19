@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -107,7 +102,7 @@ func loadTPCHDataset(
 	if _, err := db.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS tpch;`); err != nil {
 		return err
 	}
-	query := fmt.Sprintf(`RESTORE tpch.* FROM '%s' WITH into_db = 'tpch', unsafe_restore_incompatible_version;`, tpchURL)
+	query := fmt.Sprintf(`RESTORE tpch.* FROM '/' IN '%s' WITH into_db = 'tpch', unsafe_restore_incompatible_version;`, tpchURL)
 	_, err = db.ExecContext(ctx, query)
 	return err
 }

@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package acl
 
@@ -16,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenantdirsvr"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -68,6 +66,7 @@ func cidrRanges(fn lookupTenantFunc) *CIDRRanges {
 
 func TestACLWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -157,7 +156,7 @@ func TestACLWatcher(t *testing.T) {
 		}
 
 		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
-		require.EqualError(t, err, "connection to '10' denied: cluster does not allow private connections from endpoint 'random-connection'")
+		require.EqualError(t, err, "cluster does not allow private connections from endpoint 'random-connection'")
 		require.Nil(t, remove)
 	})
 
@@ -172,7 +171,7 @@ func TestACLWatcher(t *testing.T) {
 		}
 
 		remove, err := watcher.ListenForDenied(ctx, connection, noError(t))
-		require.EqualError(t, err, "connection to '10' denied: cluster does not allow public connections from IP 127.0.0.1")
+		require.EqualError(t, err, "cluster does not allow public connections from IP 127.0.0.1")
 		require.Nil(t, remove)
 	})
 
@@ -284,7 +283,7 @@ func TestACLWatcher(t *testing.T) {
 		// Emit the same item.
 		c <- pe
 
-		require.EqualError(t, <-errorChan, "connection to '10' denied: cluster does not allow private connections from endpoint 'cockroachdb'")
+		require.EqualError(t, <-errorChan, "cluster does not allow private connections from endpoint 'cockroachdb'")
 	})
 
 	t.Run("connection is denied by update to public cidr ranges", func(t *testing.T) {
@@ -335,7 +334,7 @@ func TestACLWatcher(t *testing.T) {
 		// Emit the same item.
 		c <- pcr
 
-		require.EqualError(t, <-errorChan, "connection to '10' denied: cluster does not allow public connections from IP 1.1.2.2")
+		require.EqualError(t, <-errorChan, "cluster does not allow public connections from IP 1.1.2.2")
 	})
 
 	t.Run("unregister removes listeners", func(t *testing.T) {

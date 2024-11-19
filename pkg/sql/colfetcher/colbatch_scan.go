@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package colfetcher
 
@@ -133,7 +128,7 @@ func newColBatchScanBase(
 ) (*colBatchScanBase, *kvpb.BoundedStalenessHeader, *cFetcherTableArgs, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
-		return nil, nil, nil, errors.Errorf("attempting to create a ColBatchScan with uninitialized NodeID")
+		return nil, nil, nil, errors.AssertionFailedf("attempting to create a ColBatchScan with uninitialized NodeID")
 	}
 	var bsHeader *kvpb.BoundedStalenessHeader
 	if aost := flowCtx.EvalCtx.AsOfSystemTime; aost != nil && aost.BoundedStaleness {
@@ -333,6 +328,7 @@ func NewColBatchScan(
 		flowCtx.Txn,
 		bsHeader,
 		spec.Reverse,
+		tableArgs.RequiresRawMVCCValues(),
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
 		spec.LockingDurability,

@@ -1,0 +1,148 @@
+init
+----
+now=0s
+
+tick duration=1s
+----
+now=1s waiting=[]
+complete:
+
+schedule
+range_id=1 delay=1s
+----
+submitted now=1s
+  range_id=1 @ 2s (1s+1s)
+
+# There shouldn't be any scheduled events completed yet, as 1s hasn't passed
+# since scheduling the first one.
+tick duration=0
+----
+now=1s waiting=[(r1,t2s)]
+complete:
+
+# The first scheduled event for range_id=1 should be completed as exactly 1s has passed.
+tick duration=1s
+----
+now=2s waiting=[]
+complete:
+  2s: range_id=1
+
+# Next, try out scheduling multiple events, with some delays being identical.
+schedule 
+range_id=1 delay=1s
+range_id=1 delay=1s
+range_id=2 delay=2s
+range_id=3 delay=3s
+range_id=4 delay=4s
+----
+submitted now=2s
+  range_id=1 @ 3s (2s+1s)
+  range_id=1 @ 3s (2s+1s)
+  range_id=2 @ 4s (2s+2s)
+  range_id=3 @ 5s (2s+3s)
+  range_id=4 @ 6s (2s+4s)
+
+# None of these newly scheduled events should have completed yet.
+tick duration=0
+----
+now=2s waiting=[(r1,t3s),(r1,t3s),(r2,t4s),(r3,t5s),(r4,t6s)]
+complete:
+  2s: range_id=1
+
+# The events for range_id=1 should have all completed, expect three events, one
+# on the first second and the other two a second after.
+tick duration=1s
+----
+now=3s waiting=[(r2,t4s),(r3,t5s),(r4,t6s)]
+complete:
+  2s: range_id=1
+  3s: range_id=1
+  3s: range_id=1
+
+tick duration=1s
+----
+now=4s waiting=[(r3,t5s),(r4,t6s)]
+complete:
+  2s: range_id=1
+  3s: range_id=1
+  3s: range_id=1
+  4s: range_id=2
+
+tick duration=1s
+----
+now=5s waiting=[(r4,t6s)]
+complete:
+  2s: range_id=1
+  3s: range_id=1
+  3s: range_id=1
+  4s: range_id=2
+  5s: range_id=3
+
+
+# All scheduled events should have now been removed.
+tick duration=1s
+----
+now=6s waiting=[]
+complete:
+  2s: range_id=1
+  3s: range_id=1
+  3s: range_id=1
+  4s: range_id=2
+  5s: range_id=3
+  6s: range_id=4
+
+# Schedule an event with a longer delay, then schedule another event after 1s
+# with a shorter delay. The newer event should still complete before the
+# earlier one.
+schedule
+range_id=1 delay=3s
+----
+submitted now=6s
+  range_id=1 @ 9s (6s+3s)
+
+tick duration=1s
+----
+now=7s waiting=[(r1,t9s)]
+complete:
+  2s: range_id=1
+  3s: range_id=1
+  3s: range_id=1
+  4s: range_id=2
+  5s: range_id=3
+  6s: range_id=4
+
+schedule
+range_id=2 delay=1s
+----
+submitted now=7s
+  range_id=2 @ 8s (7s+1s)
+
+# The second scheduled event should now be complete for range_id=2.
+tick duration=1s
+----
+now=8s waiting=[(r1,t9s)]
+complete:
+  2s: range_id=1
+  3s: range_id=1
+  3s: range_id=1
+  4s: range_id=2
+  5s: range_id=3
+  6s: range_id=4
+  8s: range_id=2
+
+# The earlier event should now also complete.
+tick duration=1s
+----
+now=9s waiting=[]
+complete:
+  2s: range_id=1
+  3s: range_id=1
+  3s: range_id=1
+  4s: range_id=2
+  5s: range_id=3
+  6s: range_id=4
+  8s: range_id=2
+  9s: range_id=1
+
+stop
+----

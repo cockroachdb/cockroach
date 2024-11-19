@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 import { AxisUnits, util } from "@cockroachlabs/cluster-ui";
 import React from "react";
@@ -33,20 +28,6 @@ export default function (props: GraphDashboardProps) {
         <Metric
           name="cr.node.physical_replication.logical_bytes"
           title="Logical Bytes"
-          nonNegativeRate
-        />
-      </Axis>
-    </LineGraph>,
-    <LineGraph
-      title="SST Bytes"
-      sources={storeSources}
-      tenantSource={tenantSource}
-      tooltip={`Rate at which the SST bytes (compressed) are sent to KV by all replication jobs`}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        <Metric
-          name="cr.node.physical_replication.sst_bytes"
-          title="SST Bytes"
           nonNegativeRate
         />
       </Axis>

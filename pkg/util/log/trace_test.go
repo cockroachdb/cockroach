@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package log
 
@@ -41,5 +36,23 @@ func TestTrace(t *testing.T) {
 			event: test5err
 	`); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// BenchmarkVEventNoop measures the cost of a VEvent call when neither verbose
+// logging nor tracing is enabled.
+func BenchmarkVEventNoop(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		VEvent(context.Background(), 1, "should be free")
+	}
+}
+
+// BenchmarkVEventfNoop measures the cost of a VEventf call when neither verbose
+// logging nor tracing is enabled.
+func BenchmarkVEventfNoop(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		VEventf(context.Background(), 1, "%s", "should be free")
 	}
 }

@@ -1,10 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package engineccl
 
@@ -97,6 +94,9 @@ func loadTestData(
 				minWallTime = minSStableTimestamps[i/scaled]
 			}
 			timestamp := hlc.Timestamp{WallTime: minWallTime + rand.Int63n(int64(batchTimeSpan))}
+			if timestamp.Less(hlc.MinTimestamp) {
+				timestamp = hlc.MinTimestamp
+			}
 			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
 			value.InitChecksum(key)
 			if _, err := storage.MVCCPut(ctx, batch, key, timestamp, value, storage.MVCCWriteOptions{}); err != nil {
@@ -142,7 +142,7 @@ func runIterate(
 
 	// Store the database in this directory so we don't have to regenerate it on
 	// each benchmark run.
-	eng := loadTestData(b, "mvcc_data_v2", numKeys, numBatches, batchTimeSpan, valueBytes)
+	eng := loadTestData(b, "mvcc_data_v3", numKeys, numBatches, batchTimeSpan, valueBytes)
 	defer eng.Close()
 
 	b.SetBytes(int64(numKeys * valueBytes))

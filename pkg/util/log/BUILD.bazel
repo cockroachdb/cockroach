@@ -118,7 +118,13 @@ go_library(
         "@io_bazel_rules_go//go/platform:openbsd": [
             "@org_golang_x_sys//unix",
         ],
+        "@io_bazel_rules_go//go/platform:osx": [
+            "@org_golang_x_sys//unix",
+        ],
         "@io_bazel_rules_go//go/platform:plan9": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:qnx": [
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:solaris": [
@@ -172,6 +178,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/util/caller",
         "//pkg/util/ctxgroup",
+        "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/log/channel",
         "//pkg/util/log/logconfig",

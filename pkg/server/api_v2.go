@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // CockroachDB v2 API
 //
@@ -49,6 +44,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/gorilla/mux"
+)
+
+// Path variables.
+const (
+	dbIdPathVar    = "database_id"
+	tableIdPathVar = "table_id"
 )
 
 type ApiV2System interface {
@@ -102,6 +103,8 @@ func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) http.Handler {
 	allowAnonymous := opts.sqlServer.cfg.Insecure
 	authMux := authserver.NewV2Mux(authServer, innerMux, allowAnonymous)
 	outerMux := mux.NewRouter()
+	serverMetrics := NewServerHttpMetrics(opts.sqlServer.MetricsRegistry(), opts.sqlServer.execCfg.Settings)
+	serverMetrics.registerMetricsMiddleware(outerMux)
 
 	systemAdmin, saOk := opts.admin.(*systemAdminServer)
 	systemStatus, ssOk := opts.status.(*systemStatusServer)
@@ -187,6 +190,13 @@ func registerRoutes(
 		{"rules/", a.listRules, false, authserver.RegularRole, true},
 
 		{"sql/", a.execSQL, true, authserver.RegularRole, true},
+		{"database_metadata/", a.GetDbMetadata, true, authserver.RegularRole, true},
+		{"database_metadata/{database_id:[0-9]+}/", a.GetDbMetadataWithDetails, true, authserver.RegularRole, true},
+		{"table_metadata/", a.GetTableMetadata, true, authserver.RegularRole, true},
+		{"table_metadata/{table_id:[0-9]+}/", a.GetTableMetadataWithDetails, true, authserver.RegularRole, true},
+		{"table_metadata/updatejob/", a.TableMetadataJob, true, authserver.RegularRole, true},
+		{fmt.Sprintf("grants/databases/{%s:[0-9]+}/", dbIdPathVar), a.getDatabaseGrants, true, authserver.RegularRole, true},
+		{fmt.Sprintf("grants/tables/{%s:[0-9]+}/", tableIdPathVar), a.getTableGrants, true, authserver.RegularRole, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)

@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package server
 
@@ -30,13 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -2910,14 +2905,7 @@ func (s *systemAdminServer) Decommission(
 }
 
 // DataDistribution returns a count of replicas on each node for each table.
-//
-// TODO(kv): Now that we have coalesced ranges, this endpoint no longer reports
-// accurate replica counts. Furthermore, since it doesn't take coalesced ranges
-// into account, this endpoint doesn't work for secondary tenants whose ranges are
-// *always* coalesced. Update this endpoint to handle coalesced ranges and
-// implement tenant filtering, after which it can be moved back into the
-// adminServer instead of the systemAdminServer.
-func (s *systemAdminServer) DataDistribution(
+func (s *adminServer) DataDistribution(
 	ctx context.Context, req *serverpb.DataDistributionRequest,
 ) (_ *serverpb.DataDistributionResponse, retErr error) {
 	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
@@ -2948,19 +2936,43 @@ func (s *adminServer) dataDistributionHelper(
 		ZoneConfigs:  make(map[string]serverpb.DataDistributionResponse_ZoneConfig),
 	}
 
-	// Get ids and names for databases and tables.
-	// Set up this structure in the response.
-
-	// This relies on crdb_internal.tables returning data even for newly added tables
-	// and deleted tables (as opposed to e.g. information_schema) because we are interested
-	// in the data for all ranges, not just ranges for visible tables.
+	// We use crdb_internal.tables as it also returns data for deleted tables
+	// which are not garbage collected yet, as opposed to information_schema,
+	// because we are interested in the data for all ranges, not just ranges for
+	// visible tables.
 	//
-	// Don't include tables with a NULL database_name, which in this case means
-	// excluding virtual tables (like crdb_internal.tables itself, for example).
-	tablesQuery := `SELECT name, schema_name, table_id, database_name, drop_time FROM
-									"".crdb_internal.tables WHERE database_name IS NOT NULL`
+	// The query is structured as follows:
+	//
+	// 1. The tables CTE selects table details from crdb_internal.tables and
+	//    joins it with crdb_internal.table_spans to get the start and end keys for
+	//    each table. We exclude tables with a NULL database_name to avoid virtual
+	//    tables (like crdb_internal.tables itself).
+	//
+	// 2. The main SELECT joins the tables CTE with crdb_internal.ranges_no_leases to
+	//    get the ranges the current table overlaps with. A single table can
+	//    overlap with multiple ranges, and if range coalescing is enabled, a single
+	//    range may overlap with multiple tables too.
+	tablesQuery := `
+    WITH tables AS (
+        SELECT
+            t.schema_name, t.name AS table_name, t.database_name,
+            t.table_id, t.drop_time, s.start_key, s.end_key
+        FROM
+            "".crdb_internal.tables t
+            JOIN "".crdb_internal.table_spans s ON t.table_id = s.descriptor_id
+        WHERE
+            t.database_name IS NOT NULL
+    )
+    SELECT
+        t.table_id, t.table_name, t.schema_name, t.database_name, t.drop_time, r.replicas
+    FROM
+        tables t
+        JOIN "".crdb_internal.ranges_no_leases r ON t.start_key < r.end_key
+            AND t.end_key > r.start_key
+    ORDER BY t.table_id;`
+
 	it, err := s.internalExecutor.QueryIteratorEx(
-		ctx, "admin-replica-matrix", nil, /* txn */
+		ctx, "data-distribution", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		tablesQuery,
 	)
@@ -2971,26 +2983,36 @@ func (s *adminServer) dataDistributionHelper(
 	// for loop early (before Next() returns false).
 	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
-	// Used later when we're scanning Meta2 and only have IDs, not names.
-	tableInfosByTableID := map[uint32]serverpb.DataDistributionResponse_TableInfo{}
-
 	var hasNext bool
-	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
-		row := it.Cur()
-		tableName := (*string)(row[0].(*tree.DString))
-		schemaName := (*string)(row[1].(*tree.DString))
-		fqTableName := fmt.Sprintf("%s.%s",
-			tree.NameStringP(schemaName), tree.NameStringP(tableName))
-		tableID := uint32(tree.MustBeDInt(row[2]))
-		dbName := (*string)(row[3].(*tree.DString))
+	for hasNext, err = it.Next(ctx); err == nil && hasNext; /* `it` updated by inner loop */ {
+		firstRow := it.Cur()
+		tableID := uint32(*firstRow[0].(*tree.DInt))
 
-		// Look at whether it was dropped.
-		var droppedAtTime *time.Time
-		droppedAtDatum, ok := row[4].(*tree.DTimestamp)
-		if ok {
-			droppedAtTime = &droppedAtDatum.Time
+		tableInfo := serverpb.DataDistributionResponse_TableInfo{
+			ReplicaCountByNodeId: make(map[roachpb.NodeID]int64),
 		}
 
+		// Iterate over rows with the same table ID since rows are sorted by table_id
+		for ; err == nil && hasNext; hasNext, err = it.Next(ctx) {
+			row := it.Cur()
+			curTableID := uint32(*row[0].(*tree.DInt))
+			if tableID != curTableID {
+				break
+			}
+			for _, node := range row[5].(*tree.DArray).Array {
+				tableInfo.ReplicaCountByNodeId[roachpb.NodeID(*node.(*tree.DInt))]++
+			}
+		}
+
+		if droppedAtDatum, ok := firstRow[4].(*tree.DTimestamp); ok {
+			tableInfo.DroppedAt = &droppedAtDatum.Time
+		}
+
+		tableName := (*string)(firstRow[1].(*tree.DString))
+		schemaName := (*string)(firstRow[2].(*tree.DString))
+		fqTableName := fmt.Sprintf("%s.%s", tree.NameStringP(schemaName), tree.NameStringP(tableName))
+
+		dbName := (*string)(firstRow[3].(*tree.DString))
 		// Insert database if it doesn't exist.
 		dbInfo, ok := resp.DatabaseInfo[*dbName]
 		if !ok {
@@ -2999,100 +3021,9 @@ func (s *adminServer) dataDistributionHelper(
 			}
 			resp.DatabaseInfo[*dbName] = dbInfo
 		}
-
-		// Get zone config for table.
-		zcID := int64(0)
-
-		if droppedAtTime == nil {
-			// TODO(vilterp): figure out a way to get zone configs for tables that are dropped
-			zoneConfigQuery := fmt.Sprintf(
-				`SELECT zone_id FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s.%s]`,
-				(*tree.Name)(dbName), (*tree.Name)(schemaName), (*tree.Name)(tableName),
-			)
-			row, err := s.internalExecutor.QueryRowEx(
-				ctx, "admin-replica-matrix", nil, /* txn */
-				sessiondata.InternalExecutorOverride{User: userName},
-				zoneConfigQuery,
-			)
-			if err != nil {
-				return nil, err
-			}
-			if row == nil {
-				return nil, errors.Errorf(
-					"could not get zone config for table %s; 0 rows returned", *tableName,
-				)
-			}
-
-			zcID = int64(tree.MustBeDInt(row[0]))
-		}
-
-		// Insert table.
-		tableInfo := serverpb.DataDistributionResponse_TableInfo{
-			ReplicaCountByNodeId: make(map[roachpb.NodeID]int64),
-			ZoneConfigId:         zcID,
-			DroppedAt:            droppedAtTime,
-		}
 		dbInfo.TableInfo[fqTableName] = tableInfo
-		tableInfosByTableID[tableID] = tableInfo
 	}
 	if err != nil {
-		return nil, err
-	}
-
-	// Get replica counts.
-	if err := s.db.Txn(ctx, func(txnCtx context.Context, txn *kv.Txn) error {
-		acct := s.memMonitor.MakeBoundAccount()
-		defer acct.Close(txnCtx)
-
-		kvs, err := kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
-			Key:    keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1),
-			EndKey: keys.MaxKey,
-		})
-		if err != nil {
-			return err
-		}
-
-		// Group replicas by table and node, accumulate counts.
-		var rangeDesc roachpb.RangeDescriptor
-		for _, kv := range kvs {
-			if err := acct.Grow(txnCtx, int64(len(kv.Key)+len(kv.Value.RawBytes))); err != nil {
-				return err
-			}
-			if err := kv.ValueProto(&rangeDesc); err != nil {
-				return err
-			}
-			// TODO(embrown): Tables can use one codec since they
-			// seem to all share the same id.
-			_, tenID, err := keys.DecodeTenantPrefix(rangeDesc.StartKey.AsRawKey())
-			if err != nil {
-				return err
-			}
-
-			// A range descriptor for a secondary tenant may not contain
-			// a table prefix. Often, the start key for a tenant will be just
-			// the tenant prefix itself, e.g. `/Tenant/2`. Once the tenant prefix
-			// is stripped inside `DecodeTablePrefix`, nothing (aka `/Min`) is left.
-			keySansPrefix, _ := keys.MakeSQLCodec(tenID).StripTenantPrefix(rangeDesc.StartKey.AsRawKey())
-			if keys.MinKey.Equal(keySansPrefix) {
-				// There's no table prefix to be decoded.
-				// Try the next descriptor.
-				continue
-			}
-			_, tableID, err := keys.MakeSQLCodec(tenID).DecodeTablePrefix(rangeDesc.StartKey.AsRawKey())
-			if err != nil {
-				return err
-			}
-			for _, replicaDesc := range rangeDesc.Replicas().Descriptors() {
-				tableInfo, found := tableInfosByTableID[tableID]
-				if !found {
-					// This is a database, skip.
-					continue
-				}
-				tableInfo.ReplicaCountByNodeId[replicaDesc.NodeID]++
-			}
-		}
-		return nil
-	}); err != nil {
 		return nil, err
 	}
 
@@ -3104,7 +3035,7 @@ func (s *adminServer) dataDistributionHelper(
 		WHERE target IS NOT NULL
 	`
 	it, err = s.internalExecutor.QueryIteratorEx(
-		ctx, "admin-replica-matrix", nil, /* txn */
+		ctx, "data-distribution", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		zoneConfigsQuery)
 	if err != nil {
@@ -3271,9 +3202,11 @@ func (s *systemAdminServer) enqueueRangeLocal(
 		queueName = "mvccGC"
 	}
 
-	traceSpans, processErr, err := store.Enqueue(
-		ctx, queueName, repl, req.SkipShouldQueue, false, /* async */
+	traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+	processErr, err := store.Enqueue(
+		traceCtx, queueName, repl, req.SkipShouldQueue, false, /* async */
 	)
+	traceSpans := rec()
 	if err != nil {
 		response.Details[0].Error = err.Error()
 		return response, nil
@@ -3515,6 +3448,19 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		}
 		val := int64(*s)
 		*d = &val
+
+	case *[]int64:
+		s, ok := tree.AsDArray(src)
+		if !ok {
+			return errors.Errorf("source type assertion failed")
+		}
+		for i := 0; i < s.Len(); i++ {
+			id, ok := tree.AsDInt(s.Array[i])
+			if !ok {
+				return errors.Errorf("source type assertion failed on index %d", i)
+			}
+			*d = append(*d, int64(id))
+		}
 
 	case *[]descpb.ID:
 		s, ok := tree.AsDArray(src)
@@ -4021,4 +3967,54 @@ func (s *systemAdminServer) ListTenants(
 	return &serverpb.ListTenantsResponse{
 		Tenants: tenantList,
 	}, nil
+}
+
+// ReadFromTenantInfo returns the read-from info for a tenant, if configured.
+func (s *systemAdminServer) ReadFromTenantInfo(
+	ctx context.Context, req *serverpb.ReadFromTenantInfoRequest,
+) (*serverpb.ReadFromTenantInfoResponse, error) {
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+	if ok && req.TenantID != tenantID {
+		return nil, errors.Errorf("mismatched tenant IDs")
+	}
+	tenantID = req.TenantID
+	if tenantID.IsSystem() {
+		return &serverpb.ReadFromTenantInfoResponse{}, nil
+	}
+
+	var dstID roachpb.TenantID
+	var dstTenant *mtinfopb.TenantInfo
+	if err := s.sqlServer.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		found, err := sql.GetTenantRecordByID(ctx, txn, tenantID, s.st)
+		if err != nil {
+			return err
+		}
+		if found.ReadFromTenant == nil || !found.ReadFromTenant.IsSet() {
+			return nil
+		}
+		dstID = *found.ReadFromTenant
+		target, err := sql.GetTenantRecordByID(ctx, txn, dstID, s.st)
+		if err != nil {
+			return err
+		}
+		dstTenant = target
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	if dstTenant == nil {
+		return &serverpb.ReadFromTenantInfoResponse{}, nil
+	}
+
+	if dstTenant.PhysicalReplicationConsumerJobID == 0 {
+		return nil, errors.Errorf("missing job ID")
+	}
+
+	progress, err := jobs.LoadJobProgress(ctx, s.sqlServer.internalDB, dstTenant.PhysicalReplicationConsumerJobID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.ReadFromTenantInfoResponse{ReadFrom: dstID, ReadAt: progress.GetStreamIngest().ReplicatedTime}, nil
 }

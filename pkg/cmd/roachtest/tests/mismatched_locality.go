@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -15,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
@@ -58,7 +54,7 @@ func runMismatchedLocalityTest(ctx context.Context, t test.Test, c cluster.Clust
 	// Verify that we can add and drop regions for the database. There's no longer
 	// any node with the old localities, but that's fine.
 	db = c.Conn(ctx, t.L(), 3)
-	if err := WaitFor3XReplication(ctx, t, t.L(), db); err != nil {
+	if err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`ALTER DATABASE defaultdb ADD REGION "venus";`); err != nil {

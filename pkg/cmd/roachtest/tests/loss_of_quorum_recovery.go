@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -14,8 +9,8 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"encoding/json"
 	"fmt"
+	"io"
 	"path"
 	"path/filepath"
 	"time"
@@ -23,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	spec2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -218,7 +214,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		require.NoError(t, err, "failed to set default statement timeout")
 
 		t.L().Printf("running workload")
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, ifLocal(c, "10s", "30s"), ""))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, roachtestutil.IfLocal(c, "10s", "30s"), ""))
 		t.L().Printf("workload finished")
 
 		m.ExpectDeaths(int32(c.Spec().NodeCount - 1))
@@ -312,7 +308,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		t.L().Printf("resuming workload")
 		if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()),
 			s.wl.runCmd(
-				fmt.Sprintf("{pgurl:1,4-%d}", len(c.CRDBNodes())), dbName, ifLocal(c, "30s", "3m"),
+				fmt.Sprintf("{pgurl:1,4-%d}", len(c.CRDBNodes())), dbName, roachtestutil.IfLocal(c, "30s", "3m"),
 				workloadHistogramFile)); err != nil {
 			return &recoveryImpossibleError{testOutcome: workloadFailed}
 		}
@@ -347,8 +343,10 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		}
 	}
 
-	recordOutcome, buffer := initPerfCapture()
-	recordOutcome(testOutcome)
+	recordOutcome, buffer := initPerfCapture(t, c)
+	if err := recordOutcome(testOutcome); err != nil {
+		t.L().Errorf("failed to record outcome: %s", err)
+	}
 	buffer.upload(ctx, t, c)
 
 	if testOutcome == success {
@@ -426,7 +424,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		require.NoError(t, err, "failed to set default statement timeout")
 
 		t.L().Printf("running workload")
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, ifLocal(c, "10s", "30s"), ""))
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, roachtestutil.IfLocal(c, "10s", "30s"), ""))
 		t.L().Printf("workload finished")
 
 		m.ExpectDeaths(int32(len(killed)))
@@ -517,7 +515,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 		t.L().Printf("resuming workload")
 		if err = c.RunE(ctx, option.WithNodes(c.WorkloadNode()),
 			s.wl.runCmd(
-				fmt.Sprintf("{pgurl:1,4-%d}", len(c.CRDBNodes())), dbName, ifLocal(c, "30s", "3m"),
+				fmt.Sprintf("{pgurl:1,4-%d}", len(c.CRDBNodes())), dbName, roachtestutil.IfLocal(c, "30s", "3m"),
 				workloadHistogramFile)); err != nil {
 			return &recoveryImpossibleError{testOutcome: workloadFailed}
 		}
@@ -573,8 +571,10 @@ func runHalfOnlineRecoverLossOfQuorum(
 		}
 	}
 
-	recordOutcome, buffer := initPerfCapture()
-	recordOutcome(testOutcome)
+	recordOutcome, buffer := initPerfCapture(t, c)
+	if err = recordOutcome(testOutcome); err != nil {
+		t.L().Errorf("failed to record outcome: %s", err)
+	}
 	buffer.upload(ctx, t, c)
 
 	if testOutcome == success {
@@ -623,7 +623,7 @@ type perfArtifact bytes.Buffer
 func (p *perfArtifact) upload(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Upload the perf artifacts to any one of the nodes so that the test
 	// runner copies it into an appropriate directory path.
-	dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
+	dest := filepath.Join(t.PerfArtifactsDir(), roachtestutil.GetBenchmarkMetricsFileName(t))
 	if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
 		t.L().Errorf("failed to create perf dir: %+v", err)
 	}
@@ -635,20 +635,25 @@ func (p *perfArtifact) upload(ctx context.Context, t test.Test, c cluster.Cluste
 // Register histogram and create a function that would record test outcome value.
 // Returned buffer contains all recorded ticks for the test and is updated
 // every time metric function is called.
-func initPerfCapture() (func(testOutcomeMetric), *perfArtifact) {
-	reg := histogram.NewRegistry(time.Second*time.Duration(success), histogram.MockWorkloadName)
+func initPerfCapture(
+	t test.Test, c cluster.Cluster,
+) (func(testOutcomeMetric) error, *perfArtifact) {
+	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+	reg := histogram.NewRegistryWithExporter(time.Second*time.Duration(success), histogram.MockWorkloadName, exporter)
 	bytesBuf := bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(bytesBuf)
+	writer := io.Writer(bytesBuf)
+	exporter.Init(&writer)
 
 	writeSnapshot := func() {
 		reg.Tick(func(tick histogram.Tick) {
-			_ = jsonEnc.Encode(tick.Snapshot())
+			_ = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 		})
 	}
 
-	recordOutcome := func(metric testOutcomeMetric) {
+	recordOutcome := func(metric testOutcomeMetric) error {
 		reg.GetHandle().Get("recovery_result").Record(time.Duration(metric) * time.Second)
 		writeSnapshot()
+		return exporter.Close(nil)
 	}
 
 	// Capture start time for the test.

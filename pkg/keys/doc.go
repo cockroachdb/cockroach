@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package keys manages the construction of keys for CockroachDB's key-value
 // layer.
@@ -246,14 +241,16 @@ var _ = [...]interface{}{
 	// 	2. System keys: This is where we store global, system data which is
 	// 	replicated across the cluster.
 	SystemPrefix,
-	NodeLivenessPrefix,     // "\x00liveness-"
-	BootstrapVersionKey,    // "bootstrap-version"
-	NodeIDGenerator,        // "node-idgen"
-	RangeIDGenerator,       // "range-idgen"
-	StatusPrefix,           // "status-"
-	StatusNodePrefix,       // "status-node-"
-	StoreIDGenerator,       // "store-idgen"
-	StartupMigrationPrefix, // "system-version/"
+	NodeLivenessPrefix,              // "\x00liveness-"
+	BootstrapVersionKey,             // "bootstrap-version"
+	ClusterInitGracePeriodTimestamp, // "lic-gpi-ts"
+	TrialLicenseExpiry,              // "lic-tle"
+	NodeIDGenerator,                 // "node-idgen"
+	RangeIDGenerator,                // "range-idgen"
+	StatusPrefix,                    // "status-"
+	StatusNodePrefix,                // "status-node-"
+	StoreIDGenerator,                // "store-idgen"
+	StartupMigrationPrefix,          // "system-version/"
 	// StartupMigrationLease,  // "system-version/lease" - removed in 23.1
 	TimeseriesPrefix,       // "tsd"
 	SystemSpanConfigPrefix, // "xffsys-scfg"

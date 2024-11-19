@@ -1,0 +1,331 @@
+# Verify LDAP HBA entry and authentication/authorization works.
+
+config secure
+----
+
+sql
+CREATE USER ldap_user;
+CREATE ROLE ldap_user_parent_1;
+CREATE ROLE ldap_user_parent_2;
+----
+ok
+
+subtest missing_ldap_hba_param
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap
+----
+ERROR: ldap option not found in hba entry: "ldapserver"
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost
+----
+ERROR: ldap option not found in hba entry: "ldapport"
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636
+----
+ERROR: ldap option not found in hba entry: "ldapbasedn"
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost"
+----
+ERROR: ldap option not found in hba entry: "ldapbinddn"
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost"
+----
+ERROR: ldap option not found in hba entry: "ldapbindpasswd"
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd
+----
+ERROR: ldap option not found in hba entry: "ldapsearchattribute"
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName
+----
+ERROR: ldap option not found in hba entry: "ldapsearchfilter"
+
+subtest end
+
+subtest incorrect_ldap_hba_param
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=":invalid" ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+ERROR: LDAP option "ldapserver" is set to invalid value: ":invalid": parse ":invalid": missing protocol scheme
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=007 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+ERROR: LDAP option "ldapport" is set to invalid value: "007": "ldapport" is not set to either 389 or 636
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="baseDN" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+ERROR: LDAP option "ldapbasedn" is set to invalid value: "baseDN": failed to parse distinguished name baseDN: DN ended with incomplete type, value pair
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="bindDN" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+ERROR: LDAP option "ldapbinddn" is set to invalid value: "bindDN": failed to parse distinguished name bindDN: DN ended with incomplete type, value pair
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd="" ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+ERROR: LDAP option "ldapbindpasswd" is set to invalid value: "": "ldapbindpasswd" is set to empty
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute="" ldapsearchfilter="(memberOf=*)"
+----
+ERROR: LDAP option "ldapsearchattribute" is set to invalid value: "": "ldapsearchattribute" is set to empty
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(*)"
+----
+ERROR: LDAP option "ldapsearchfilter" is set to invalid value: "(*)": "ldapsearchfilter" is not of the format "(key = value)"
+
+subtest end
+
+subtest incorrect_ldap_service_account
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="cn=invalid" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="cn=invalid" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=cn=invalid" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)"
+
+connect user=ldap_user password="valid"
+----
+ERROR: LDAP authentication: error binding as LDAP service user with configured credentials (SQLSTATE 28000)
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd="invalid" ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd="invalid" ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" "ldapbindpasswd=invalid" ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)"
+
+connect user=ldap_user password="valid"
+----
+ERROR: LDAP authentication: error binding as LDAP service user with configured credentials (SQLSTATE 28000)
+
+subtest end
+
+subtest invalid_ldap_password
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)"
+
+connect user=ldap_user password="invalid"
+----
+ERROR: LDAP authentication: unable to bind as LDAP user (SQLSTATE 28000)
+DETAIL: credentials invalid for LDAP server user ldap_user
+
+subtest end
+
+subtest correct_ldap_password
+
+connect user=ldap_user password="valid"
+----
+ok defaultdb
+
+subtest end
+
+subtest unknown_ldap_user
+
+set_hba
+host  all invalid_ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all invalid_ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER              ADDRESS      METHOD        OPTIONS
+loopback all      all               all          trust
+host     all      root              all          cert-password
+host     all      invalid_ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)"
+
+connect user=invalid_ldap_user password="valid"
+----
+ERROR: LDAP authentication: unable to find LDAP user distinguished name (SQLSTATE 28000)
+DETAIL: cannot find provided user invalid_ldap_user on LDAP server
+
+subtest end
+
+subtest unknown_sql_user
+
+set_hba
+host  all unknown_sql_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all unknown_sql_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER             ADDRESS      METHOD        OPTIONS
+loopback all      all              all          trust
+host     all      root             all          cert-password
+host     all      unknown_sql_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)"
+
+connect user=unknown_sql_user password="valid"
+----
+ERROR: password authentication failed for user unknown_sql_user (SQLSTATE 28P01)
+
+subtest end
+
+subtest no_sync_grouplistfilter_not_set
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)"
+
+ldap_mock set_groups=(ldap_user,cn=ldap_user_parent_1,cn=ldap_user_parent_2)
+----
+
+connect user=ldap_user password="ldap_pwd"
+----
+ok defaultdb
+
+query_row
+SELECT pg_has_role('ldap_user', 'ldap_user_parent_1', 'MEMBER')
+----
+false
+
+subtest end
+
+subtest no_membership_grouplistfilter_set
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(objectCategory=CN=Group*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(objectCategory=CN=Group*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)" "ldapgrouplistfilter=(objectCategory=CN=Group*)"
+
+ldap_mock set_groups=(ldap_user,cn=ldap_user_parent_1)
+----
+
+connect user=ldap_user password="ldap_pwd"
+----
+ok defaultdb
+
+query_row
+SELECT pg_has_role('ldap_user', 'ldap_user_parent_1', 'MEMBER')
+----
+true
+
+subtest end
+
+subtest non_standard_sql_group_names
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+
+sql
+CREATE ROLE "ldap-user-parent-1";
+CREATE ROLE "ldap.user.parent.2";
+----
+ok
+
+ldap_mock set_groups=(ldap_user,cn=ldap-user-parent-1,cn=ldap.user.parent.2)
+----
+
+connect user=ldap_user password="ldap_pwd"
+----
+ok defaultdb
+
+query_row
+SELECT pg_has_role('ldap_user', 'ldap-user-parent-1', 'MEMBER')
+----
+true
+
+query_row
+SELECT pg_has_role('ldap_user', 'ldap.user.parent.2', 'MEMBER')
+----
+true
+
+ldap_mock set_groups=(ldap_user,cn=ldap-user-parent-1)
+----
+
+connect user=ldap_user password="ldap_pwd"
+----
+ok defaultdb
+
+query_row
+SELECT pg_has_role('ldap_user', 'ldap-user-parent-1', 'MEMBER')
+----
+true
+
+query_row
+SELECT pg_has_role('ldap_user', 'ldap.user.parent.2', 'MEMBER')
+----
+false
+
+subtest end

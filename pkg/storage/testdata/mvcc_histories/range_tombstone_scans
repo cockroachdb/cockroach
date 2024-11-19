@@ -384,7 +384,7 @@ run error
 scan k=a end=d ts=3 failOnMoreRecent
 ----
 scan: "a"-"d" -> <no data>
-error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
 
 run error
 scan k=a end=d ts=4 failOnMoreRecent
@@ -476,6 +476,18 @@ scan k=b end=d ts=3 globalUncertaintyLimit=4
 ----
 scan: "b"-"d" -> <no data>
 error: (*kvpb.ReadWithinUncertaintyIntervalError:) ReadWithinUncertaintyIntervalError: read at time 3.000000000,0 encountered previous write with future timestamp 4.000000000,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []
+
+run error
+scan k=b end=d ts=3 globalUncertaintyLimit=4 failOnMoreRecent
+----
+scan: "b"-"d" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
+
+run error
+get k=c ts=3 globalUncertaintyLimit=4 failOnMoreRecent
+----
+get: "c" -> <no data>
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
 
 run ok
 scan k=b end=d ts=4 globalUncertaintyLimit=5

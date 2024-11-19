@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package instancestorage
 
@@ -95,6 +90,8 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 				sessionExpiry,
 				roachpb.Locality{},
 				roachpb.Version{},
+				/* encodeIsDraining */ true,
+				/* isDraining */ false,
 			))
 		}
 
@@ -344,6 +341,8 @@ func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 				sessionExpiry,
 				roachpb.Locality{},
 				roachpb.Version{},
+				/* encodeIsDraining */ true,
+				/* isDraining */ false,
 			))
 		}
 		for _, i := range []int{2, 3} {
@@ -476,6 +475,9 @@ func claim(
 	require.NoError(t, err)
 	require.NoError(t, slStorage.Insert(ctx, sessionID, sessionExpiration))
 	require.NoError(t, storage.CreateInstanceDataForTest(
-		ctx, region, instanceID, rpcAddr, sqlAddr, sessionID, sessionExpiration, roachpb.Locality{}, roachpb.Version{},
+		ctx, region, instanceID, rpcAddr, sqlAddr, sessionID,
+		sessionExpiration, roachpb.Locality{}, roachpb.Version{},
+		/* encodeIsDraining */ true,
+		/* isDraining */ false,
 	))
 }

@@ -980,15 +980,6 @@ func (m *ChangefeedEmittedBytes) AppendJSONFields(printComma bool, b redact.Reda
 
 	printComma, b = m.CommonChangefeedEventDetails.AppendJSONFields(printComma, b)
 
-	if m.JobId != 0 {
-		if printComma {
-			b = append(b, ',')
-		}
-		printComma = true
-		b = append(b, "\"JobId\":"...)
-		b = strconv.AppendInt(b, int64(m.JobId), 10)
-	}
-
 	if m.EmittedBytes != 0 {
 		if printComma {
 			b = append(b, ',')
@@ -1594,6 +1585,15 @@ func (m *CommonChangefeedEventDetails) AppendJSONFields(printComma bool, b redac
 		b = append(b, "\"Format\":\""...)
 		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Format)))
 		b = append(b, '"')
+	}
+
+	if m.JobId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"JobId\":"...)
+		b = strconv.AppendInt(b, int64(m.JobId), 10)
 	}
 
 	return printComma, b
@@ -2552,6 +2552,40 @@ func (m *CreateTable) AppendJSONFields(printComma bool, b redact.RedactableBytes
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *CreateTrigger) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.TableName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.TableName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.TriggerName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TriggerName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.TriggerName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *CreateType) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -3002,6 +3036,40 @@ func (m *DropTable) AppendJSONFields(printComma bool, b redact.RedactableBytes) 
 			b = append(b, '"')
 		}
 		b = append(b, ']')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *DropTrigger) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.TableName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.TableName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.TriggerName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TriggerName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.TriggerName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
 	}
 
 	return printComma, b
@@ -5718,6 +5786,18 @@ func (m *SetZoneConfig) AppendJSONFields(printComma bool, b redact.RedactableByt
 	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
 
 	printComma, b = m.CommonZoneConfigDetails.AppendJSONFields(printComma, b)
+
+	if m.ResolvedOldConfig != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ResolvedOldConfig\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.ResolvedOldConfig)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
 
 	return printComma, b
 }

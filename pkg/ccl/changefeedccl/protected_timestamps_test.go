@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedccl
 
@@ -27,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -36,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -446,9 +445,9 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
 }
 
-// TestPTSRecordProtectsTargetsAndDescriptorTable tests that descriptors are not
-// GC'd when they are protected by a PTS record.
-func TestPTSRecordProtectsTargetsAndDescriptorTable(t *testing.T) {
+// TestPTSRecordProtectsTargetsAndSystemTables tests that descriptors and other
+// required tables are not GC'd when they are protected by a PTS record.
+func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -456,8 +455,10 @@ func TestPTSRecordProtectsTargetsAndDescriptorTable(t *testing.T) {
 	defer stopServer()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-
+	sqlDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
 	sqlDB.Exec(t, "CREATE TABLE foo (a INT, b STRING)")
+	sqlDB.Exec(t, `CREATE USER test`)
+	sqlDB.Exec(t, `GRANT admin TO test`)
 	ts := s.Clock().Now()
 	ctx := context.Background()
 
@@ -473,15 +474,92 @@ func TestPTSRecordProtectsTargetsAndDescriptorTable(t *testing.T) {
 		return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 	}))
 
+	// The following code was shameless stolen from
+	// TestShowTenantFingerprintsProtectsTimestamp which almost
+	// surely copied it from the 2-3 other tests that have
+	// something similar.  We should put this in a helper. We have
+	// ForceTableGC, but in ad-hoc testing that appeared to bypass
+	// the PTS record making it useless for this test.
+	//
+	// TODO(ssd): Make a helper that does this.
+	refreshPTSReaderCache := func(asOf hlc.Timestamp, tableName, databaseName string) {
+		tableID, err := s.QueryTableID(ctx, username.RootUserName(), tableName, databaseName)
+		require.NoError(t, err)
+		tableKey := s.Codec().TablePrefix(uint32(tableID))
+		store, err := s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+		var repl *kvserver.Replica
+		testutils.SucceedsSoon(t, func() error {
+			repl = store.LookupReplica(roachpb.RKey(tableKey))
+			if repl == nil {
+				return errors.New("could not find replica")
+			}
+			return nil
+		})
+		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
+		t.Logf("updating PTS reader cache to %s", asOf)
+		require.NoError(
+			t,
+			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
+		)
+		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+	}
+	gcTestTableRange := func(tableName, databaseName string) {
+		row := sqlDB.QueryRow(t, fmt.Sprintf("SELECT range_id FROM [SHOW RANGES FROM TABLE %s.%s]", tableName, databaseName))
+		var rangeID int64
+		row.Scan(&rangeID)
+		refreshPTSReaderCache(s.Clock().Now(), tableName, databaseName)
+		t.Logf("enqueuing range %d for mvccGC", rangeID)
+		sqlDB.Exec(t, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID)
+	}
+
 	// Alter foo few times, then force GC at ts-1.
 	sqlDB.Exec(t, "ALTER TABLE foo ADD COLUMN c STRING")
 	sqlDB.Exec(t, "ALTER TABLE foo ADD COLUMN d STRING")
-	require.NoError(t, s.ForceTableGC(ctx, "system", "descriptor", ts.Add(-1, 0)))
 
-	// We can still fetch table descriptors because of protected timestamp record.
+	// Remove this entry from role_members.
+	sqlDB.Exec(t, "REVOKE admin FROM test")
+
+	// Change the user's password to update the users table.
+	sqlDB.Exec(t, `ALTER USER test WITH PASSWORD 'testpass'`)
+
+	time.Sleep(2 * time.Second)
+	// If you want to GC all system tables:
+	//
+	// tabs := systemschema.MakeSystemTables()
+	// for _, t := range tabs {
+	// 	if t.IsPhysicalTable() && !t.IsSequence() {
+	// 		gcTestTableRange("system", t.GetName())
+	// 	}
+	// }
+	gcTestTableRange("system", "descriptor")
+	gcTestTableRange("system", "zones")
+	gcTestTableRange("system", "comments")
+	gcTestTableRange("system", "role_members")
+	gcTestTableRange("system", "users")
+
+	// We can still fetch table descriptors and role members because of protected timestamp record.
 	asOf := ts
 	_, err := fetchTableDescriptors(ctx, &execCfg, targets, asOf)
 	require.NoError(t, err)
+	// The role_members entry we removed is still visible at the asOf time because of the PTS record.
+	rms, err := fetchRoleMembers(ctx, &execCfg, asOf)
+	require.NoError(t, err)
+	require.Contains(t, rms, []string{"admin", "test"})
+
+	// The user password is still null.
+	ups, err := fetchUsersAndPasswords(ctx, &execCfg, asOf)
+	require.NoError(t, err)
+	found := false
+	for _, up := range ups {
+		if up.username == "test" {
+			require.Equal(t, tree.DNull, up.password)
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
+
 }
 
 // TestChangefeedUpdateProtectedTimestamp tests that changefeeds using the
@@ -619,4 +697,74 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 	}
 
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+}
+
+func fetchRoleMembers(
+	ctx context.Context, execCfg *sql.ExecutorConfig, ts hlc.Timestamp,
+) ([][]string, error) {
+	var roleMembers [][]string
+	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
+			return err
+		}
+		it, err := txn.QueryIteratorEx(ctx, "test-get-role-members", txn.KV(), sessiondata.NoSessionDataOverride, "SELECT role, member FROM system.role_members")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = it.Close() }()
+
+		var ok bool
+		for ok, err = it.Next(ctx); ok && err == nil; ok, err = it.Next(ctx) {
+			role, member := string(tree.MustBeDString(it.Cur()[0])), string(tree.MustBeDString(it.Cur()[1]))
+			roleMembers = append(roleMembers, []string{role, member})
+		}
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return roleMembers, nil
+}
+
+type userPass struct {
+	username string
+	password tree.Datum
+}
+
+func fetchUsersAndPasswords(
+	ctx context.Context, execCfg *sql.ExecutorConfig, ts hlc.Timestamp,
+) ([]userPass, error) {
+	var users []userPass
+	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if err := txn.KV().SetFixedTimestamp(ctx, ts); err != nil {
+			return err
+		}
+		it, err := txn.QueryIteratorEx(ctx, "test-get-users", txn.KV(),
+			sessiondata.NoSessionDataOverride,
+			`SELECT username, "hashedPassword" FROM system.users`,
+		)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = it.Close() }()
+
+		var ok bool
+		for ok, err = it.Next(ctx); ok && err == nil; ok, err = it.Next(ctx) {
+			username := string(tree.MustBeDString(it.Cur()[0]))
+			users = append(users, userPass{username: username, password: it.Cur()[1]})
+		}
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
 }

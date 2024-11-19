@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rangecache
 
@@ -505,15 +500,15 @@ func TestLookupByKeyMin(t *testing.T) {
 		EndKey:   keys.RangeMetaKey(roachpb.RKey("a")),
 	}
 	cache.Insert(ctx, roachpb.RangeInfo{Desc: startToMeta2Desc})
-	entMin, err := cache.TestingGetCached(ctx, roachpb.RKeyMin, false /* inverted */)
+	entMin, err := cache.TestingGetCached(ctx, roachpb.RKeyMin, false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.NoError(t, err)
 	require.NotNil(t, entMin.Desc)
 	require.Equal(t, startToMeta2Desc, entMin.Desc)
 
-	entNext, err := cache.TestingGetCached(ctx, roachpb.RKeyMin.Next(), false /* inverted */)
+	entNext, err := cache.TestingGetCached(ctx, roachpb.RKeyMin.Next(), false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.NoError(t, err)
 	require.Equal(t, entMin, entNext)
-	entNext, err = cache.TestingGetCached(ctx, roachpb.RKeyMin.Next().Next(), false /* inverted */)
+	entNext, err = cache.TestingGetCached(ctx, roachpb.RKeyMin.Next().Next(), false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.NoError(t, err)
 	require.Equal(t, entMin, entNext)
 }
@@ -1050,7 +1045,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	curGeneration := roachpb.RangeGeneration(1)
 	require.True(t, clearOlderOverlapping(ctx, cache, &minToBDesc))
 	cache.addEntryLocked(&cacheEntry{desc: minToBDesc})
-	_, err := cache.TestingGetCached(ctx, roachpb.RKey("b"), false)
+	_, err := cache.TestingGetCached(ctx, roachpb.RKey("b"), false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.Error(t, err)
 
 	require.True(t, clearOlderOverlapping(ctx, cache, &bToMaxDesc))
@@ -1438,7 +1433,7 @@ func TestRangeCacheGeneration(t *testing.T) {
 			cache.Insert(ctx, roachpb.RangeInfo{Desc: *tc.insertDesc})
 
 			for index, queryKey := range tc.queryKeys {
-				ri, err := cache.TestingGetCached(ctx, queryKey, false)
+				ri, err := cache.TestingGetCached(ctx, queryKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 				exp := tc.expectedDesc[index]
 				if exp == nil {
 					require.Error(t, err)
@@ -1503,7 +1498,7 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 
 	ri := roachpb.RangeInfo{
 		Desc:                  desc1,
-		ClosedTimestampPolicy: UnknownClosedTimestampPolicy,
+		ClosedTimestampPolicy: unknownClosedTimestampPolicy,
 	}
 	cache.Insert(ctx, ri)
 	const lag, lead = roachpb.LAG_BY_CLUSTER_SETTING, roachpb.LEAD_FOR_GLOBAL_READS
@@ -1517,7 +1512,7 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	tokRI := tok.RangeInfo()
 	require.Equal(t, desc1, tokRI.Desc)
 	require.Equal(t, roachpb.Lease{}, tokRI.Lease)
-	require.Equal(t, UnknownClosedTimestampPolicy, tokRI.ClosedTimestampPolicy)
+	require.Equal(t, unknownClosedTimestampPolicy, tokRI.ClosedTimestampPolicy)
 
 	// EvictAndReplace() with a new descriptor.
 	ri.Desc = desc2
@@ -1681,7 +1676,7 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.Equal(t, oldTok.Desc(), tok.Desc())
 				require.Equal(t, &l.Replica, tok.Leaseholder())
 				require.Equal(t, oldTok.ClosedTimestampPolicy(lag), tok.ClosedTimestampPolicy(lag))
-				ri, err := cache.TestingGetCached(ctx, startKey, false /* inverted */)
+				ri, err := cache.TestingGetCached(ctx, startKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 				require.NoError(t, err)
 				require.Equal(t, desc1, ri.Desc)
 				require.Equal(t, rep1, ri.Lease.Replica)
@@ -1694,7 +1689,7 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 				require.Equal(t, oldTok.Desc(), tok.Desc())
 				require.Nil(t, tok.Leaseholder())
 				require.Equal(t, oldTok.ClosedTimestampPolicy(lag), tok.ClosedTimestampPolicy(lag))
-				ri, err = cache.TestingGetCached(ctx, startKey, false /* inverted */)
+				ri, err = cache.TestingGetCached(ctx, startKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
 				require.NoError(t, err)
 				require.Equal(t, desc1, ri.Desc)
 				require.True(t, ri.Lease.Empty())

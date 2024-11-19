@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package intentresolver
 
@@ -18,7 +13,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1033,8 +1027,12 @@ func (ir *IntentResolver) resolveIntents(
 	reqs := resolveIntentReqs(intents, opts, singleReq[:])
 	h := opts.AdmissionHeader
 	// We skip the warning for release builds to avoid printing out verbose stack traces.
+	// NB: this was disabled in general since there's a large backlog of reported warnings
+	// that yet have to be resolved, and in the meantime it's not worth  more engineering
+	// time making additional reports.
 	// TODO(aaditya): reconsider this once #112680 is resolved.
-	if !build.IsRelease() && h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
+	// if !build.IsRelease() && h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
+	if false {
 		log.Warningf(ctx,
 			"test-only warning: if you see this, please report to https://github.com/cockroachdb/cockroach/issues/112680. empty admission header provided by %s", string(debug.Stack()))
 	}

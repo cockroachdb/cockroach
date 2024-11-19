@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package raftlog
 
@@ -19,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -250,7 +244,9 @@ func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, er
 	// present at the start of the marshaled raft command. This could speed it
 	// up slightly.
 	var raftAdmissionMeta kvflowcontrolpb.RaftAdmissionMeta
-	if err := protoutil.Unmarshal(data[RaftCommandPrefixLen:], &raftAdmissionMeta); err != nil {
+	// NB: we don't use protoutil.Unmarshal to avoid passing raftAdmissionMeta
+	// through an interface, which would cause a heap allocation.
+	if err := raftAdmissionMeta.Unmarshal(data[RaftCommandPrefixLen:]); err != nil {
 		return kvflowcontrolpb.RaftAdmissionMeta{}, err
 	}
 	if buildutil.CrdbTestBuild {

@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# Sets up datadog for the drt clusters.
+# NOTE - This uses CLUSTER environment variable, if not set the script fails
+
+if [ -z "${CLUSTER}" ]; then
+  echo "environment CLUSTER is not set"
+  exit 1
+fi
+
+dd_api_key="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
+
+if [ -z "${dd_api_key}" ]; then
+  echo "Missing Datadog API key!"
+  exit 1
+fi
+
+dd_site="us5.datadoghq.com"
+
+roachprod ssh $CLUSTER -- "sudo mkdir -p /etc/fluent-bit && sudo tee /etc/fluent-bit/config-override.yaml > /dev/null << EOF
+---
+pipeline:
+ inputs:
+ - name: tail
+   path: /var/log/audit/audit.log
+   tag: audit
+   key: message
+   storage.type: filesystem
+   alias: audit
+ outputs:
+ - name: datadog
+   match: audit
+   host: http-intake.logs.${dd_site}
+   tls: on
+   compress: gzip
+   apikey: ${dd_api_key}
+   dd_source: audit
+   dd_service: drt-cockroachdb
+   dd_tags: env:development,cluster:${cluster%:*},service:drt-cockroachdb,team:drt
+   alias: audit
+   storage.total_limit_size: 25MB
+EOF"
+
+roachprod ssh $CLUSTER -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
+export DD_SITE=${dd_site}
+export DD_API_KEY=${dd_api_key}
+export DD_TAGS=env:development,cluster${CLUSTER%:*},team:drt,service:drt-cockroachdb
+EOF"
+
+roachprod opentelemetry-start $CLUSTER \
+  --datadog-api-key "${dd_api_key}" \
+  --datadog-tags 'service:drt-cockroachdb,team:drt'
+
+roachprod fluent-bit-start $CLUSTER \
+  --datadog-api-key "${dd_api_key}" \
+  --datadog-service drt-cockroachdb \
+  --datadog-tags 'service:drt-cockroachdb,team:drt'
+
+echo
+echo "Updated $CLUSTER configuration to send telemetry data to Datadog."
+echo
+echo "If this was the first time this script was run against $CLUSTER then"
+echo "CockroachDB must be restarted to reload its logging configuration."
+echo
+
+exit 0

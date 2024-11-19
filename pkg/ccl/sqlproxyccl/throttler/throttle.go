@@ -1,19 +1,14 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package throttler
 
 import "time"
 
-const (
-	// throttleDisabled is a sentinal value used to disable the throttle.
-	throttleDisabled = time.Duration(0)
-)
+// throttleDisabled is a sentinel value used to disable the throttle.
+const throttleDisabled = time.Duration(0)
 
 type throttle struct {
 	// The next time an operation blocked by this throttle can proceed.

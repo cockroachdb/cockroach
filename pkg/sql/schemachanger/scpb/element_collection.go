@@ -1,16 +1,14 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scpb
 
 import (
+	"fmt"
+	"reflect"
+
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/errors"
 )
@@ -277,4 +275,13 @@ func (c *ElementCollection[E]) MustHaveZeroOrOne() *ElementCollection[E] {
 		panic(errors.AssertionFailedf("expected element collection size 0 or 1, not %d", c.Size()))
 	}
 	return c
+}
+
+func (c *ElementCollection[E]) String() string {
+	var result string
+	for _, element := range c.Elements() {
+		elemType := reflect.TypeOf(element).Elem()
+		result += fmt.Sprintf("%s:{%+v}\n", elemType.Name(), element)
+	}
+	return result
 }

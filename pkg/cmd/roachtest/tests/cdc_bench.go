@@ -1,12 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package tests
 
@@ -14,9 +9,8 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"io"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -61,15 +55,17 @@ const (
 	// practice it can.
 	cdcBenchColdCatchupScan cdcBenchScanType = "catchup-cold"
 
-	cdcBenchNoServer        cdcBenchServer = ""
-	cdcBenchProcessorServer cdcBenchServer = "processor" // legacy processor
+	cdcBenchNoServer cdcBenchServer = ""
+	// The legacy processor was removed in 25.1+. In such
+	// timeseries, "processor" refers to the now defunct legacy
+	// processor.
 	cdcBenchSchedulerServer cdcBenchServer = "scheduler" // new scheduler
 )
 
 var (
 	cdcBenchScanTypes = []cdcBenchScanType{
 		cdcBenchInitialScan, cdcBenchCatchupScan, cdcBenchColdCatchupScan}
-	cdcBenchServers = []cdcBenchServer{cdcBenchProcessorServer, cdcBenchSchedulerServer}
+	cdcBenchServers = []cdcBenchServer{cdcBenchSchedulerServer}
 )
 
 func registerCDCBench(r registry.Registry) {
@@ -91,7 +87,7 @@ func registerCDCBench(r registry.Registry) {
 				Benchmark:        true,
 				Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
 				CompatibleClouds: registry.AllExceptAWS,
-				Suites:           registry.Suites(registry.Nightly),
+				Suites:           registry.Suites(registry.Weekly),
 				RequiresLicense:  true,
 				Timeout:          4 * time.Hour, // Allow for the initial import and catchup scans with 100k ranges.
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -119,7 +115,7 @@ func registerCDCBench(r registry.Registry) {
 				Benchmark:        true,
 				Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
 				CompatibleClouds: registry.AllExceptAWS,
-				Suites:           registry.Suites(registry.Nightly),
+				Suites:           registry.Suites(registry.Weekly),
 				RequiresLicense:  true,
 				Timeout:          time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -137,7 +133,7 @@ func registerCDCBench(r registry.Registry) {
 					Benchmark:        true,
 					Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
 					CompatibleClouds: registry.AllExceptAWS,
-					Suites:           registry.Suites(registry.Nightly),
+					Suites:           registry.Suites(registry.Weekly),
 					RequiresLicense:  true,
 					Timeout:          time.Hour,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -153,7 +149,7 @@ func registerCDCBench(r registry.Registry) {
 					Benchmark:        true,
 					Cluster:          r.MakeClusterSpec(nodes+3, spec.CPU(cpus)),
 					CompatibleClouds: registry.AllExceptAWS,
-					Suites:           registry.Suites(registry.Nightly),
+					Suites:           registry.Suites(registry.Weekly),
 					RequiresLicense:  true,
 					Timeout:          time.Hour,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -267,7 +263,7 @@ func runCDCBenchScan(
 	}
 
 	// Wait for system ranges to upreplicate.
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 	// Create and split the workload table. We don't import data here, because it
 	// imports before splitting, which takes a very long time.
@@ -277,7 +273,7 @@ func runCDCBenchScan(
 	t.L().Printf("creating table with %s ranges", humanize.Comma(numRanges))
 	c.Run(ctx, option.WithNodes(nCoord), fmt.Sprintf(
 		`./cockroach workload init kv --splits %d {pgurl:%d}`, numRanges, nData[0]))
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 	cursor := timeutil.Now() // before data is ingested
 
@@ -349,7 +345,7 @@ func runCDCBenchScan(
 		t.L().Printf("changefeed completed in %s (scanned %s rows per second)",
 			duration.Truncate(time.Second), humanize.Comma(rate))
 
-		// Record scan rate to stats.json.
+		// Record scan rate to stats file.
 		return writeCDCBenchStats(ctx, t, c, nCoord, "scan-rate", rate)
 	})
 
@@ -421,8 +417,6 @@ func runCDCBenchWorkload(
 	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
 
 	switch server {
-	case cdcBenchProcessorServer:
-		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "false"
 	case cdcBenchSchedulerServer:
 		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "true"
 	case cdcBenchNoServer:
@@ -445,7 +439,7 @@ func runCDCBenchWorkload(
 	}
 
 	// Wait for system ranges to upreplicate.
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 	// Create and split the workload table.
 	//
@@ -454,7 +448,7 @@ func runCDCBenchWorkload(
 	t.L().Printf("creating table with %s ranges", humanize.Comma(numRanges))
 	c.Run(ctx, option.WithNodes(nWorkload), fmt.Sprintf(
 		`./cockroach workload init kv --splits %d {pgurl:%d}`, numRanges, nData[0]))
-	require.NoError(t, WaitFor3XReplication(ctx, t, t.L(), conn))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
 	// For read-only workloads, ingest some data. init --insert-count does not use
 	// the standard key generator that the read workload uses, so we have to write
@@ -552,10 +546,17 @@ func runCDCBenchWorkload(
 			extra += ` --tolerate-errors`
 		}
 		t.L().Printf("running workload")
+		labels := map[string]string{
+			"duration":     duration.String(),
+			"concurrency":  fmt.Sprintf("%d", concurrency),
+			"read_percent": fmt.Sprintf("%d", readPercent),
+			"insert_count": fmt.Sprintf("%d", insertCount),
+		}
+
 		err := c.RunE(ctx, option.WithNodes(nWorkload), fmt.Sprintf(
-			`./cockroach workload run kv --seed %d --histograms=%s/stats.json `+
+			`./cockroach workload run kv --seed %d %s `+
 				`--concurrency %d --duration %s --write-seq R%d --read-percent %d %s {pgurl:%d-%d}`,
-			workloadSeed, t.PerfArtifactsDir(), concurrency, duration, insertCount, readPercent, extra,
+			workloadSeed, roachtestutil.GetWorkloadHistogramArgs(t, c, labels), concurrency, duration, insertCount, readPercent, extra,
 			nData[0], nData[len(nData)-1]))
 		if err != nil {
 			return err
@@ -632,7 +633,7 @@ func waitForChangefeed(
 	}
 }
 
-// writeCDCBenchStats writes a single perf metric into stats.json on the
+// writeCDCBenchStats writes a single perf metric into stats file on the
 // given node, for graphing in roachperf.
 func writeCDCBenchStats(
 	ctx context.Context,
@@ -645,25 +646,24 @@ func writeCDCBenchStats(
 	// The easiest way to record a precise metric for roachperf is to cast it as a
 	// duration in seconds in the histogram's upper bound.
 	valueS := time.Duration(value) * time.Second
-	reg := histogram.NewRegistry(valueS, histogram.MockWorkloadName)
-	bytesBuf := bytes.NewBuffer([]byte{})
-	jsonEnc := json.NewEncoder(bytesBuf)
 
+	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+	reg := histogram.NewRegistryWithExporter(valueS, histogram.MockWorkloadName, exporter)
+
+	bytesBuf := bytes.NewBuffer([]byte{})
+	writer := io.Writer(bytesBuf)
+
+	exporter.Init(&writer)
 	var err error
 	reg.GetHandle().Get(metric).Record(valueS)
 	reg.Tick(func(tick histogram.Tick) {
-		err = jsonEnc.Encode(tick.Snapshot())
+		err = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 	})
 	if err != nil {
 		return err
 	}
 
-	// Upload the perf artifacts to the given node.
-	path := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-	if err := c.RunE(ctx, option.WithNodes(node), "mkdir -p "+filepath.Dir(path)); err != nil {
-		return err
-	}
-	if err := c.PutString(ctx, bytesBuf.String(), path, 0755, node); err != nil {
+	if _, err = roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, bytesBuf, exporter, node); err != nil {
 		return err
 	}
 	return nil

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 /**
  * This module contains all the REST endpoints for communicating with the admin UI.
@@ -210,6 +205,11 @@ export type NetworkConnectivityRequest =
   protos.cockroach.server.serverpb.NetworkConnectivityRequest;
 export type NetworkConnectivityResponse =
   protos.cockroach.server.serverpb.NetworkConnectivityResponse;
+
+export type GetThrottlingMetadataRequest =
+  protos.cockroach.server.serverpb.GetThrottlingMetadataRequest;
+export type GetThrottlingMetadataResponse =
+  protos.cockroach.server.serverpb.GetThrottlingMetadataResponse;
 
 // API constants
 
@@ -857,6 +857,17 @@ export function getNetworkConnectivity(
     serverpb.NetworkConnectivityResponse,
     `${STATUS_PREFIX}/connectivity`,
     req as any,
+    timeout,
+  );
+}
+
+export function getThrottlingMetadata(
+  timeout?: moment.Duration,
+): Promise<GetThrottlingMetadataResponse> {
+  return timeoutFetch(
+    serverpb.GetThrottlingMetadataResponse,
+    `${STATUS_PREFIX}/throttling`,
+    null,
     timeout,
   );
 }

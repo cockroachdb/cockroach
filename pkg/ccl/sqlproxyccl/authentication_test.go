@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlproxyccl
 
@@ -13,8 +10,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
+	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,6 +25,7 @@ var nilThrottleHook = func(state throttler.AttemptStatus) error {
 
 func TestAuthenticateOK(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
@@ -55,6 +55,7 @@ func TestAuthenticateOK(t *testing.T) {
 
 func TestAuthenticateClearText(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
@@ -98,6 +99,7 @@ func TestAuthenticateClearText(t *testing.T) {
 
 func TestAuthenticateThrottled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	server := func(t *testing.T, be *pgproto3.Backend) {
 		require.NoError(t, be.Send(&pgproto3.AuthenticationCleartextPassword{}))
@@ -139,13 +141,19 @@ func TestAuthenticateThrottled(t *testing.T) {
 	go server(t, sqlServer)
 	go client(t, sqlClient)
 
-	_, err := authenticate(proxyToClient, proxyToServer, nil, /* proxyBackendKeyData */
+	// The error returned from authenticate should be different from the error
+	// received at the client.
+	_, err := authenticate(
+		proxyToClient,
+		proxyToServer,
+		nil, /* proxyBackendKeyData */
 		func(status throttler.AttemptStatus) error {
 			require.Equal(t, throttler.AttemptInvalidCredentials, status)
-			return authThrottledError
-		})
+			return errors.New("request denied")
+		},
+	)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "too many failed authentication attempts")
+	require.Contains(t, err.Error(), "request denied")
 
 	proxyToServer.Close()
 	proxyToClient.Close()
@@ -153,6 +161,7 @@ func TestAuthenticateThrottled(t *testing.T) {
 
 func TestErrorFollowingAuthenticateNotThrottled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	server := func(t *testing.T, be *pgproto3.Backend) {
 		require.NoError(t, be.Send(&pgproto3.AuthenticationCleartextPassword{}))
@@ -208,6 +217,7 @@ func TestErrorFollowingAuthenticateNotThrottled(t *testing.T) {
 
 func TestAuthenticateError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
@@ -228,6 +238,7 @@ func TestAuthenticateError(t *testing.T) {
 
 func TestAuthenticateUnexpectedMessage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	cli, srv := net.Pipe()
 	be := pgproto3.NewBackend(pgproto3.NewChunkReader(srv), srv)
@@ -250,6 +261,7 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 
 func TestReadTokenAuthResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutilsccl.ServerlessOnly(t)
 
 	t.Run("unexpected message", func(t *testing.T) {
 		cli, srv := net.Pipe()

@@ -25,10 +25,10 @@ ok
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1
-2: StateFollower (Voter) Term:1 Lead:1
-3: StateFollower (Voter) Term:1 Lead:1
-4: StateFollower (Non-Voter) Term:1 Lead:1
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:1
 
 # ForgetLeader is ignored if the follower is supporting the leader's store
 # liveness epoch.
@@ -52,10 +52,10 @@ INFO 2 forgetting leader 1 at term 1
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1
-2: StateFollower (Voter) Term:1 Lead:0
-3: StateFollower (Voter) Term:1 Lead:1
-4: StateFollower (Non-Voter) Term:1 Lead:1
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
+2: StateFollower (Voter) Term:1 Lead:0 LeadEpoch:0
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:1
 
 forget-leader 2
 ----
@@ -63,10 +63,10 @@ INFO 2 no leader at term 1; dropping forget leader msg
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1
-2: StateFollower (Voter) Term:1 Lead:0
-3: StateFollower (Voter) Term:1 Lead:1
-4: StateFollower (Non-Voter) Term:1 Lead:1
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
+2: StateFollower (Voter) Term:1 Lead:0 LeadEpoch:0
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:1
 
 # ForgetLeader also works on learners, but only if they are not supporting the
 # leader's store liveness epoch.
@@ -88,12 +88,29 @@ INFO 4 forgetting leader 1 at term 1
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1
-2: StateFollower (Voter) Term:1 Lead:0
-3: StateFollower (Voter) Term:1 Lead:1
-4: StateFollower (Non-Voter) Term:1 Lead:0
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:1
+2: StateFollower (Voter) Term:1 Lead:0 LeadEpoch:0
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+4: StateFollower (Non-Voter) Term:1 Lead:0 LeadEpoch:0
 
-# When receiving a heartbeat from the leader, they revert to followers.
+# Give store liveness support to allow MsgFortifyLeader to be sent.
+grant-support 2 1
+----
+  1 2 3 4
+1 2 1 1 1
+2 2 1 1 1
+3 1 1 1 1
+4 x 1 1 1
+
+grant-support 4 1
+----
+  1 2 3 4
+1 2 1 1 1
+2 2 1 1 1
+3 1 1 1 1
+4 2 1 1 1
+
+# When receiving MsgFortifyLeader from the leader, they revert to followers.
 tick-heartbeat 1
 ----
 ok
@@ -101,11 +118,11 @@ ok
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:2
   Messages:
-  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
-  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
-  1->4 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->4 MsgFortifyLeader Term:1 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
@@ -113,41 +130,50 @@ stabilize
   Ready MustSync=true:
   HardState Term:1 Commit:11 Lead:0 LeadEpoch:0
 > 2 receiving messages
-  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
-> 3 receiving messages
-  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->2 MsgFortifyLeader Term:1 Log:0/0
 > 4 receiving messages
-  1->4 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->4 MsgFortifyLeader Term:1 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:2
   Messages:
-  2->1 MsgHeartbeatResp Term:1 Log:0/0
-> 3 handling Ready
-  Ready MustSync=false:
-  Messages:
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 > 4 handling Ready
   Ready MustSync=true:
-  HardState Term:1 Commit:11 Lead:1 LeadEpoch:0
+  HardState Term:1 Commit:11 Lead:1 LeadEpoch:2
   Messages:
-  4->1 MsgHeartbeatResp Term:1 Log:0/0
+  4->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 > 1 receiving messages
-  2->1 MsgHeartbeatResp Term:1 Log:0/0
-  3->1 MsgHeartbeatResp Term:1 Log:0/0
-  4->1 MsgHeartbeatResp Term:1 Log:0/0
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
+  4->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:2
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1
-2: StateFollower (Voter) Term:1 Lead:1
-3: StateFollower (Voter) Term:1 Lead:1
-4: StateFollower (Non-Voter) Term:1 Lead:1
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:2
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:2
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:2
+
+withdraw-support 2 1
+----
+  1 2 3 4
+1 2 1 1 1
+2 x 1 1 1
+3 1 1 1 1
+4 2 1 1 1
 
 withdraw-support 3 1
 ----
   1 2 3 4
-1 1 1 1 1
+1 2 1 1 1
+2 x 1 1 1
+3 x 1 1 1
+4 2 1 1 1
+
+withdraw-support 4 1
+----
+  1 2 3 4
+1 2 1 1 1
 2 x 1 1 1
 3 x 1 1 1
 4 x 1 1 1
@@ -162,10 +188,10 @@ INFO 3 [logterm: 1, index: 11] sent MsgVote request to 2 at term 2
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1
-2: StateFollower (Voter) Term:1 Lead:1
-3: StateCandidate (Voter) Term:2 Lead:0
-4: StateFollower (Non-Voter) Term:1 Lead:1
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:2
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:2
+3: StateCandidate (Voter) Term:2 Lead:0 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:2
 
 forget-leader 3
 ----
@@ -173,10 +199,10 @@ ok
 
 raft-state
 ----
-1: StateLeader (Voter) Term:1 Lead:1
-2: StateFollower (Voter) Term:1 Lead:1
-3: StateCandidate (Voter) Term:2 Lead:0
-4: StateFollower (Non-Voter) Term:1 Lead:1
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:2
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:2
+3: StateCandidate (Voter) Term:2 Lead:0 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:2
 
 stabilize log-level=none
 ----
@@ -184,37 +210,66 @@ ok
 
 raft-state
 ----
-1: StateFollower (Voter) Term:2 Lead:3
-2: StateFollower (Voter) Term:2 Lead:3
-3: StateLeader (Voter) Term:2 Lead:3
-4: StateFollower (Non-Voter) Term:2 Lead:3
+1: StateFollower (Voter) Term:2 Lead:3 LeadEpoch:1
+2: StateFollower (Voter) Term:2 Lead:3 LeadEpoch:1
+3: StateLeader (Voter) Term:2 Lead:3 LeadEpoch:1
+4: StateFollower (Non-Voter) Term:2 Lead:3 LeadEpoch:1
 
 # ForgetLeader shouldn't affect the election timeout: if a follower
 # forgets the leader 1 tick before the election timeout fires, it
 # will still campaign on the next tick.
-set-randomized-election-timeout 2 timeout=3
-----
-ok
-
-tick-heartbeat 2
-----
-ok
-
-tick-heartbeat 2
+#
+# NB: We also must withdraw support in store liveness, because otherwise every
+# tick will reset the election timer.
+set-randomized-election-timeout 2 timeout=5
 ----
 ok
 
 withdraw-support 2 3
 ----
   1 2 3 4
-1 1 1 1 1
+1 2 1 1 1
 2 x 1 x 1
 3 x 1 1 1
 4 x 1 1 1
 
+tick-heartbeat 2
+----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
+
+tick-heartbeat 2
+----
+ok
+
 forget-leader 2
 ----
 INFO 2 forgetting leader 3 at term 2
+
+# Withdraw support for 3 from all peers so that they vote for 2 when 2 calls an
+# election.
+withdraw-support 1 3
+----
+  1 2 3 4
+1 2 1 x 1
+2 x 1 x 1
+3 x 1 1 1
+4 x 1 1 1
+
+withdraw-support 3 3
+----
+  1 2 3 4
+1 2 1 x 1
+2 x 1 x 1
+3 x 1 x 1
+4 x 1 1 1
+
+withdraw-support 4 3
+----
+  1 2 3 4
+1 2 1 x 1
+2 x 1 x 1
+3 x 1 x 1
+4 x 1 x 1
 
 tick-heartbeat 2
 ----
@@ -229,7 +284,7 @@ ok
 
 raft-state
 ----
-1: StateFollower (Voter) Term:3 Lead:2
-2: StateLeader (Voter) Term:3 Lead:2
-3: StateFollower (Voter) Term:3 Lead:2
-4: StateFollower (Non-Voter) Term:3 Lead:2
+1: StateFollower (Voter) Term:3 Lead:2 LeadEpoch:1
+2: StateLeader (Voter) Term:3 Lead:2 LeadEpoch:1
+3: StateFollower (Voter) Term:3 Lead:2 LeadEpoch:1
+4: StateFollower (Non-Voter) Term:3 Lead:2 LeadEpoch:1

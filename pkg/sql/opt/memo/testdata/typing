@@ -419,30 +419,25 @@ SELECT EXISTS(SELECT * FROM a WHERE expr<0) FROM (SELECT x+1 AS expr FROM a)
 project
  ├── columns: exists:11(bool!null)
  ├── group-by (hash)
- │    ├── columns: true_agg:13(bool) rownum:15(int!null)
- │    ├── grouping columns: rownum:15(int!null)
+ │    ├── columns: x:1(int!null) canary_agg:12(int)
+ │    ├── grouping columns: x:1(int!null)
  │    ├── left-join (cross)
- │    │    ├── columns: expr:5(int!null) true:12(bool) rownum:15(int!null)
- │    │    ├── ordinality
- │    │    │    ├── columns: expr:5(int!null) rownum:15(int!null)
- │    │    │    └── project
- │    │    │         ├── columns: expr:5(int!null)
- │    │    │         ├── scan a
- │    │    │         │    └── columns: x:1(int!null)
- │    │    │         └── projections
- │    │    │              └── x:1 + 1 [as=expr:5, type=int]
+ │    │    ├── columns: x:1(int!null) expr:5(int!null) x:6(int)
  │    │    ├── project
- │    │    │    ├── columns: true:12(bool!null)
+ │    │    │    ├── columns: expr:5(int!null) x:1(int!null)
  │    │    │    ├── scan a
+ │    │    │    │    └── columns: x:1(int!null)
  │    │    │    └── projections
- │    │    │         └── true [as=true:12, type=bool]
+ │    │    │         └── x:1 + 1 [as=expr:5, type=int]
+ │    │    ├── scan a
+ │    │    │    └── columns: x:6(int!null)
  │    │    └── filters
  │    │         └── expr:5 < 0 [type=bool]
  │    └── aggregations
- │         └── const-not-null-agg [as=true_agg:13, type=bool]
- │              └── true:12 [type=bool]
+ │         └── const-not-null-agg [as=canary_agg:12, type=int]
+ │              └── x:6 [type=int]
  └── projections
-      └── true_agg:13 IS NOT NULL [as=exists:11, type=bool]
+      └── canary_agg:12 IS NOT NULL [as=exists:11, type=bool]
 
 # Cast
 build

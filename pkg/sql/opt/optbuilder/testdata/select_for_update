@@ -32,6 +32,8 @@ SELECT * FROM t FOR UPDATE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2
@@ -52,6 +54,8 @@ SELECT * FROM t FOR NO KEY UPDATE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-no-key-update
  └── project
       ├── columns: a:1!null b:2
@@ -72,6 +76,8 @@ SELECT * FROM t FOR SHARE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-share
  └── project
       ├── columns: a:1!null b:2
@@ -92,6 +98,8 @@ SELECT * FROM t FOR KEY SHARE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-key-share
  └── project
       ├── columns: a:1!null b:2
@@ -112,9 +120,13 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (9,10)
  ├── locking: for-share
  └── lock t
       ├── columns: a:1!null b:2
+      ├── key columns: a:1
+      ├── lock columns: (5,6)
       ├── locking: for-key-share
       └── project
            ├── columns: a:1!null b:2
@@ -135,12 +147,18 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (13,14)
  ├── locking: for-no-key-update
  └── lock t
       ├── columns: a:1!null b:2
+      ├── key columns: a:1
+      ├── lock columns: (9,10)
       ├── locking: for-share
       └── lock t
            ├── columns: a:1!null b:2
+           ├── key columns: a:1
+           ├── lock columns: (5,6)
            ├── locking: for-key-share
            └── project
                 ├── columns: a:1!null b:2
@@ -161,15 +179,23 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE FOR NO KEY UPDATE FOR UPDATE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (17,18)
  ├── locking: for-update
  └── lock t
       ├── columns: a:1!null b:2
+      ├── key columns: a:1
+      ├── lock columns: (13,14)
       ├── locking: for-no-key-update
       └── lock t
            ├── columns: a:1!null b:2
+           ├── key columns: a:1
+           ├── lock columns: (9,10)
            ├── locking: for-share
            └── lock t
                 ├── columns: a:1!null b:2
+                ├── key columns: a:1
+                ├── lock columns: (5,6)
                 ├── locking: for-key-share
                 └── project
                      ├── columns: a:1!null b:2
@@ -190,6 +216,8 @@ SELECT * FROM t FOR UPDATE OF t
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2
@@ -222,6 +250,8 @@ SELECT 1 FROM t FOR UPDATE OF t
 ----
 lock t
  ├── columns: "?column?":5!null  [hidden: a:1!null]
+ ├── key columns: a:1
+ ├── lock columns: (6,7)
  ├── locking: for-update
  └── project
       ├── columns: "?column?":5!null a:1!null
@@ -248,6 +278,8 @@ SELECT * FROM t AS t2 FOR UPDATE
 ----
 lock t [as=t2]
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2
@@ -278,6 +310,8 @@ SELECT * FROM t AS t2 FOR UPDATE OF t2
 ----
 lock t [as=t2]
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2
@@ -303,6 +337,8 @@ SELECT * FROM [53 AS t] FOR UPDATE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2
@@ -323,6 +359,8 @@ SELECT * FROM [53 AS t] FOR UPDATE OF t
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2
@@ -389,6 +427,8 @@ SELECT * FROM v FOR UPDATE
 ----
 lock t [as=t2]
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null
@@ -409,6 +449,8 @@ SELECT * FROM v FOR UPDATE OF v
 ----
 lock t [as=t2]
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null
@@ -463,6 +505,8 @@ SELECT * FROM v AS v2 FOR UPDATE
 ----
 lock t [as=t2]
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null
@@ -493,6 +537,8 @@ SELECT * FROM v AS v2 FOR UPDATE OF v2
 ----
 lock t [as=t2]
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null
@@ -521,6 +567,8 @@ SELECT * FROM (SELECT a FROM t) FOR UPDATE
 ----
 lock t
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null
@@ -541,6 +589,8 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE)
 ----
 lock t
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null
@@ -561,9 +611,13 @@ SELECT * FROM (SELECT a FROM t FOR NO KEY UPDATE) FOR KEY SHARE
 ----
 lock t
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (9,10)
  ├── locking: for-key-share
  └── lock t
       ├── columns: a:1!null
+      ├── key columns: a:1
+      ├── lock columns: (5,6)
       ├── locking: for-no-key-update
       └── project
            ├── columns: a:1!null
@@ -584,9 +638,13 @@ SELECT * FROM (SELECT a FROM t FOR KEY SHARE) FOR NO KEY UPDATE
 ----
 lock t
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (9,10)
  ├── locking: for-no-key-update
  └── lock t
       ├── columns: a:1!null
+      ├── key columns: a:1
+      ├── lock columns: (5,6)
       ├── locking: for-key-share
       └── project
            ├── columns: a:1!null
@@ -617,6 +675,8 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE OF t)
 ----
 lock t
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null
@@ -637,6 +697,8 @@ SELECT * FROM (SELECT a FROM t) AS r FOR UPDATE
 ----
 lock t
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null
@@ -657,6 +719,8 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE) AS r
 ----
 lock t
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null
@@ -687,6 +751,8 @@ SELECT * FROM (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
 lock t
  ├── columns: a:1!null
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null
@@ -755,6 +821,8 @@ project
                 ├── columns: t.a:1!null
                 └── lock t
                      ├── columns: t.a:1!null
+                     ├── key columns: t.a:1
+                     ├── lock columns: (5,6)
                      ├── locking: for-update
                      └── project
                           ├── columns: t.a:1!null
@@ -801,6 +869,8 @@ project
                 ├── columns: t.a:1!null
                 └── lock t
                      ├── columns: t.a:1!null
+                     ├── key columns: t.a:1
+                     ├── lock columns: (5,6)
                      ├── locking: for-update
                      └── project
                           ├── columns: t.a:1!null
@@ -869,6 +939,8 @@ project
                 ├── columns: a:1!null
                 └── lock t
                      ├── columns: a:1!null
+                     ├── key columns: a:1
+                     ├── lock columns: (5,6)
                      ├── locking: for-update
                      └── project
                           ├── columns: a:1!null
@@ -915,6 +987,8 @@ project
                 ├── columns: a:1!null
                 └── lock t
                      ├── columns: a:1!null
+                     ├── key columns: a:1
+                     ├── lock columns: (5,6)
                      ├── locking: for-update
                      └── project
                           ├── columns: a:1!null
@@ -944,6 +1018,8 @@ SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (9,10)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2
@@ -990,6 +1066,8 @@ project
            └── any: eq
                 ├── lock t
                 │    ├── columns: a:5!null
+                │    ├── key columns: a:5
+                │    ├── lock columns: (9,10)
                 │    ├── locking: for-update
                 │    └── project
                 │         ├── columns: a:5!null
@@ -1020,6 +1098,8 @@ SELECT * FROM t WHERE a IN (SELECT a FROM t) FOR UPDATE OF t
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (9,10)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2
@@ -1066,6 +1146,8 @@ project
            └── any: eq
                 ├── lock t
                 │    ├── columns: a:5!null
+                │    ├── key columns: a:5
+                │    ├── lock columns: (9,10)
                 │    ├── locking: for-update
                 │    └── project
                 │         ├── columns: a:5!null
@@ -1096,6 +1178,8 @@ SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (9,10)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2
@@ -1144,6 +1228,8 @@ project
                 │    ├── columns: b:6
                 │    └── lock t
                 │         ├── columns: a:5!null b:6
+                │         ├── key columns: a:5
+                │         ├── lock columns: (9,10)
                 │         ├── locking: for-update
                 │         └── project
                 │              ├── columns: a:5!null b:6
@@ -1174,6 +1260,8 @@ SELECT * FROM t WHERE a IN (SELECT b FROM t) FOR UPDATE OF t
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (9,10)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2
@@ -1222,6 +1310,8 @@ project
                 │    ├── columns: b:6
                 │    └── lock t
                 │         ├── columns: a:5!null b:6
+                │         ├── key columns: a:5
+                │         ├── lock columns: (9,10)
                 │         ├── locking: for-update
                 │         └── project
                 │              ├── columns: a:5!null b:6
@@ -1315,6 +1405,8 @@ with &1
  ├── columns: a:9!null
  ├── lock t
  │    ├── columns: t.a:1!null
+ │    ├── key columns: t.a:1
+ │    ├── lock columns: (5,6)
  │    ├── locking: for-update
  │    └── project
  │         ├── columns: t.a:1!null
@@ -1347,6 +1439,8 @@ with &1 (cte)
  ├── columns: a:9!null
  ├── lock t
  │    ├── columns: t.a:1!null
+ │    ├── key columns: t.a:1
+ │    ├── lock columns: (5,6)
  │    ├── locking: for-update
  │    └── project
  │         ├── columns: t.a:1!null
@@ -1382,9 +1476,13 @@ SELECT * FROM t JOIN u USING (a) FOR UPDATE
 ----
 lock u
  ├── columns: a:1!null b:2 c:6  [hidden: u.a:5!null]
+ ├── key columns: u.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -1417,6 +1515,8 @@ SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t
 ----
 lock t
  ├── columns: a:1!null b:2 c:6
+ ├── key columns: t.a:1
+ ├── lock columns: (9,10)
  ├── locking: for-update
  └── project
       ├── columns: t.a:1!null b:2 c:6
@@ -1449,6 +1549,8 @@ SELECT * FROM t JOIN u USING (a) FOR UPDATE OF u
 ----
 lock u
  ├── columns: a:1!null b:2 c:6  [hidden: u.a:5!null]
+ ├── key columns: u.a:5
+ ├── lock columns: (9,10)
  ├── locking: for-update
  └── project
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -1482,9 +1584,13 @@ SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t, u
 ----
 lock u
  ├── columns: a:1!null b:2 c:6  [hidden: u.a:5!null]
+ ├── key columns: u.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -1518,9 +1624,13 @@ SELECT * FROM t JOIN u USING (a) FOR UPDATE OF t FOR SHARE OF u
 ----
 lock u
  ├── columns: a:1!null b:2 c:6  [hidden: u.a:5!null]
+ ├── key columns: u.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-share
  └── lock t
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -1564,9 +1674,13 @@ SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2 FOR SHARE OF u2
 ----
 lock u [as=u2]
  ├── columns: a:1!null b:2 c:6  [hidden: u2.a:5!null]
+ ├── key columns: u2.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-share
  └── lock t [as=t2]
       ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
+      ├── key columns: t2.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
@@ -1600,15 +1714,23 @@ SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR UPDATE
 ----
 lock u
  ├── columns: a:1!null b:2 c:6  [hidden: u.a:5!null]
+ ├── key columns: u.a:5
+ ├── lock columns: (21,22)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (17,18)
       ├── locking: for-update
       └── lock u
            ├── columns: t.a:1!null b:2 u.a:5!null c:6
+           ├── key columns: u.a:5
+           ├── lock columns: (13,14)
            ├── locking: for-key-share
            └── lock t
                 ├── columns: t.a:1!null b:2 u.a:5!null c:6
+                ├── key columns: t.a:1
+                ├── lock columns: (9,10)
                 ├── locking: for-key-share
                 └── project
                      ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -1642,12 +1764,18 @@ SELECT * FROM t JOIN u USING (a) FOR KEY SHARE FOR NO KEY UPDATE OF t
 ----
 lock t
  ├── columns: a:1!null b:2 c:6  [hidden: u.a:5!null]
+ ├── key columns: t.a:1
+ ├── lock columns: (17,18)
  ├── locking: for-no-key-update
  └── lock u
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── key columns: u.a:5
+      ├── lock columns: (13,14)
       ├── locking: for-key-share
       └── lock t
            ├── columns: t.a:1!null b:2 u.a:5!null c:6
+           ├── key columns: t.a:1
+           ├── lock columns: (9,10)
            ├── locking: for-key-share
            └── project
                 ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -1681,15 +1809,23 @@ SELECT * FROM t JOIN u USING (a) FOR SHARE FOR NO KEY UPDATE OF t FOR UPDATE OF 
 ----
 lock u
  ├── columns: a:1!null b:2 c:6  [hidden: u.a:5!null]
+ ├── key columns: u.a:5
+ ├── lock columns: (21,22)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (17,18)
       ├── locking: for-no-key-update
       └── lock u
            ├── columns: t.a:1!null b:2 u.a:5!null c:6
+           ├── key columns: u.a:5
+           ├── lock columns: (13,14)
            ├── locking: for-share
            └── lock t
                 ├── columns: t.a:1!null b:2 u.a:5!null c:6
+                ├── key columns: t.a:1
+                ├── lock columns: (9,10)
                 ├── locking: for-share
                 └── project
                      ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -1949,9 +2085,13 @@ SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE
 ----
 lock u [as=u2]
  ├── columns: a:1!null b:2 c:6  [hidden: u2.a:5!null]
+ ├── key columns: u2.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t [as=t2]
       ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
+      ├── key columns: t2.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
@@ -2014,6 +2154,8 @@ SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2
 ----
 lock t [as=t2]
  ├── columns: a:1!null b:2 c:6
+ ├── key columns: t2.a:1
+ ├── lock columns: (9,10)
  ├── locking: for-update
  └── project
       ├── columns: t2.a:1!null b:2 c:6
@@ -2046,6 +2188,8 @@ SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF u2
 ----
 lock u [as=u2]
  ├── columns: a:1!null b:2 c:6  [hidden: u2.a:5!null]
+ ├── key columns: u2.a:5
+ ├── lock columns: (9,10)
  ├── locking: for-update
  └── project
       ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
@@ -2084,9 +2228,13 @@ SELECT * FROM t AS t2 JOIN u AS u2 USING (a) FOR UPDATE OF t2, u2
 ----
 lock u [as=u2]
  ├── columns: a:1!null b:2 c:6  [hidden: u2.a:5!null]
+ ├── key columns: u2.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t [as=t2]
       ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
+      ├── key columns: t2.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t2.a:1!null b:2 u2.a:5!null c:6
@@ -2125,9 +2273,13 @@ SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE
 ----
 lock u [as=u2]
  ├── columns: a:1!null b:2 c:6  [hidden: u2.a:5!null]
+ ├── key columns: u2.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null b:2 u2.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t.a:1!null b:2 u2.a:5!null c:6
@@ -2191,9 +2343,13 @@ SELECT * FROM (t JOIN u AS u2 USING (a)) j FOR UPDATE OF j
 ----
 lock u [as=u2]
  ├── columns: a:1!null b:2 c:6  [hidden: u2.a:5!null]
+ ├── key columns: u2.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null b:2 u2.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t.a:1!null b:2 u2.a:5!null c:6
@@ -2230,9 +2386,13 @@ SELECT * FROM t, u FOR UPDATE
 ----
 lock u
  ├── columns: a:1!null b:2 a:5!null c:6
+ ├── key columns: u.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -2263,6 +2423,8 @@ SELECT * FROM t, u FOR UPDATE OF t
 ----
 lock t
  ├── columns: a:1!null b:2 a:5!null c:6
+ ├── key columns: t.a:1
+ ├── lock columns: (9,10)
  ├── locking: for-update
  └── project
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -2294,9 +2456,13 @@ SELECT * FROM t, u FOR SHARE OF t FOR UPDATE OF u
 ----
 lock u
  ├── columns: a:1!null b:2 a:5!null c:6
+ ├── key columns: u.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-share
       └── project
            ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -2330,9 +2496,13 @@ SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE
 ----
 lock u
  ├── columns: a:1!null b:2 a:5!null c:6
+ ├── key columns: u.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -2377,6 +2547,8 @@ SELECT * FROM t, LATERAL (SELECT * FROM u) sub FOR UPDATE OF sub
 ----
 lock u
  ├── columns: a:1!null b:2 a:5!null c:6
+ ├── key columns: u.a:5
+ ├── lock columns: (9,10)
  ├── locking: for-update
  └── project
       ├── columns: t.a:1!null b:2 u.a:5!null c:6
@@ -2421,6 +2593,8 @@ SELECT * FROM indexed WHERE b = 2 FOR UPDATE
 ----
 lock indexed
  ├── columns: a:1!null b:2!null c:3
+ ├── key columns: a:1
+ ├── lock columns: (6-8)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2!null c:3
@@ -2449,6 +2623,8 @@ SELECT * FROM indexed WHERE b BETWEEN 2 AND 10 FOR UPDATE
 ----
 lock indexed
  ├── columns: a:1!null b:2!null c:3
+ ├── key columns: a:1
+ ├── lock columns: (6-8)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2!null c:3
@@ -2488,9 +2664,13 @@ SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a = 2 FOR UPDATE
 ----
 lock u
  ├── columns: c:6  [hidden: t.a:1!null u.a:5!null]
+ ├── key columns: u.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null u.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t.a:1!null u.a:5!null c:6
@@ -2532,9 +2712,13 @@ SELECT c FROM t JOIN u ON t.b = u.a WHERE t.a BETWEEN 2 AND 10 FOR UPDATE
 ----
 lock u
  ├── columns: c:6  [hidden: t.a:1!null u.a:5!null]
+ ├── key columns: u.a:5
+ ├── lock columns: (13,14)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null u.a:5!null c:6
+      ├── key columns: t.a:1
+      ├── lock columns: (9,10)
       ├── locking: for-update
       └── project
            ├── columns: t.a:1!null u.a:5!null c:6
@@ -2576,9 +2760,13 @@ SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
 ----
 lock indexed
  ├── columns: a:1!null b:2!null a:5!null b:6!null c:7
+ ├── key columns: indexed.a:5
+ ├── lock columns: (14-16)
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null t.b:2!null indexed.a:5!null indexed.b:6!null c:7
+      ├── key columns: t.a:1
+      ├── lock columns: (10,11)
       ├── locking: for-update
       └── project
            ├── columns: t.a:1!null t.b:2!null indexed.a:5!null indexed.b:6!null c:7
@@ -2626,6 +2814,8 @@ SELECT * FROM inverted WHERE b @> '{1, 2}' FOR UPDATE
 ----
 lock inverted
  ├── columns: a:1!null b:2!null c:3
+ ├── key columns: a:1
+ ├── lock columns: (7-9)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2!null c:3
@@ -2654,6 +2844,8 @@ SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
 ----
 lock inverted
  ├── columns: a:1!null b:2 c:3
+ ├── key columns: a:1
+ ├── lock columns: (7-9)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2 c:3
@@ -2689,9 +2881,13 @@ SELECT * FROM inverted@b_inv AS i1, inverted AS i2 WHERE i1.b @> i2.b FOR UPDATE
 ----
 lock inverted [as=i2]
  ├── columns: a:1!null b:2 c:3 a:7!null b:8 c:9
+ ├── key columns: i2.a:7
+ ├── lock columns: (19-21)
  ├── locking: for-update
  └── lock inverted [as=i1]
       ├── columns: i1.a:1!null i1.b:2 i1.c:3 i2.a:7!null i2.b:8 i2.c:9
+      ├── key columns: i1.a:1
+      ├── lock columns: (13-15)
       ├── locking: for-update
       └── project
            ├── columns: i1.a:1!null i1.b:2 i1.c:3 i2.a:7!null i2.b:8 i2.c:9
@@ -2742,6 +2938,8 @@ SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0 FOR UPDATE
 ----
 lock zigzag
  ├── columns: a:1!null b:2!null c:3!null
+ ├── key columns: a:1
+ ├── lock columns: (8-11)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2!null c:3!null
@@ -2770,6 +2968,8 @@ SELECT * from zigzag where d @> '{"a": {"b": "c"}, "f": "g"}' FOR UPDATE
 ----
 lock zigzag
  ├── columns: a:1!null b:2 c:3 d:4!null
+ ├── key columns: a:1
+ ├── lock columns: (8-11)
  ├── locking: for-update
  └── project
       ├── columns: a:1!null b:2 c:3 d:4!null
@@ -2794,6 +2994,8 @@ SELECT * FROM information_schema.columns FOR UPDATE
 ----
 lock columns
  ├── columns: table_catalog:2!null table_schema:3!null table_name:4!null column_name:5!null column_comment:6 ordinal_position:7!null column_default:8 is_nullable:9!null data_type:10!null character_maximum_length:11 character_octet_length:12 numeric_precision:13 numeric_precision_radix:14 numeric_scale:15 datetime_precision:16 interval_type:17 interval_precision:18 character_set_catalog:19 character_set_schema:20 character_set_name:21 collation_catalog:22 collation_schema:23 collation_name:24 domain_catalog:25 domain_schema:26 domain_name:27 udt_catalog:28 udt_schema:29 udt_name:30 scope_catalog:31 scope_schema:32 scope_name:33 maximum_cardinality:34 dtd_identifier:35 is_self_referencing:36 is_identity:37 identity_generation:38 identity_start:39 identity_increment:40 identity_maximum:41 identity_minimum:42 identity_cycle:43 is_generated:44 generation_expression:45 is_updatable:46 is_hidden:47!null crdb_sql_type:48!null  [hidden: crdb_internal_vtable_pk:1!null]
+ ├── key columns: crdb_internal_vtable_pk:1
+ ├── lock columns: (49-96)
  ├── locking: for-update
  └── scan columns
       └── columns: crdb_internal_vtable_pk:1!null table_catalog:2!null table_schema:3!null table_name:4!null column_name:5!null column_comment:6 ordinal_position:7!null column_default:8 is_nullable:9!null data_type:10!null character_maximum_length:11 character_octet_length:12 numeric_precision:13 numeric_precision_radix:14 numeric_scale:15 datetime_precision:16 interval_type:17 interval_precision:18 character_set_catalog:19 character_set_schema:20 character_set_name:21 collation_catalog:22 collation_schema:23 collation_name:24 domain_catalog:25 domain_schema:26 domain_name:27 udt_catalog:28 udt_schema:29 udt_name:30 scope_catalog:31 scope_schema:32 scope_name:33 maximum_cardinality:34 dtd_identifier:35 is_self_referencing:36 is_identity:37 identity_generation:38 identity_start:39 identity_increment:40 identity_maximum:41 identity_minimum:42 identity_cycle:43 is_generated:44 generation_expression:45 is_updatable:46 is_hidden:47!null crdb_sql_type:48!null
@@ -2816,11 +3018,14 @@ SELECT * FROM t FOR UPDATE NOWAIT
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update,nowait
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── locking: none,nowait
 
 build
 SELECT * FROM t FOR NO KEY UPDATE NOWAIT
@@ -2836,11 +3041,14 @@ SELECT * FROM t FOR NO KEY UPDATE NOWAIT
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-no-key-update,nowait
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── locking: none,nowait
 
 build
 SELECT * FROM t FOR SHARE NOWAIT
@@ -2856,11 +3064,14 @@ SELECT * FROM t FOR SHARE NOWAIT
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-share,nowait
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── locking: none,nowait
 
 build
 SELECT * FROM t FOR KEY SHARE NOWAIT
@@ -2876,11 +3087,14 @@ SELECT * FROM t FOR KEY SHARE NOWAIT
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-key-share,nowait
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── locking: none,nowait
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
@@ -2896,14 +3110,19 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (9,10)
  ├── locking: for-share,nowait
  └── lock t
       ├── columns: a:1!null b:2
+      ├── key columns: a:1
+      ├── lock columns: (5,6)
       ├── locking: for-key-share
       └── project
            ├── columns: a:1!null b:2
            └── scan t
-                └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                └── locking: none,nowait
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
@@ -2919,17 +3138,24 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (13,14)
  ├── locking: for-no-key-update
  └── lock t
       ├── columns: a:1!null b:2
+      ├── key columns: a:1
+      ├── lock columns: (9,10)
       ├── locking: for-share,nowait
       └── lock t
            ├── columns: a:1!null b:2
+           ├── key columns: a:1
+           ├── lock columns: (5,6)
            ├── locking: for-key-share
            └── project
                 ├── columns: a:1!null b:2
                 └── scan t
-                     └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                     ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                     └── locking: none,nowait
 
 build
 SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWAIT
@@ -2945,20 +3171,29 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE NOWAIT FOR NO KEY UPDATE FOR UPDATE NOWA
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (17,18)
  ├── locking: for-update,nowait
  └── lock t
       ├── columns: a:1!null b:2
+      ├── key columns: a:1
+      ├── lock columns: (13,14)
       ├── locking: for-no-key-update
       └── lock t
            ├── columns: a:1!null b:2
+           ├── key columns: a:1
+           ├── lock columns: (9,10)
            ├── locking: for-share,nowait
            └── lock t
                 ├── columns: a:1!null b:2
+                ├── key columns: a:1
+                ├── lock columns: (5,6)
                 ├── locking: for-key-share
                 └── project
                      ├── columns: a:1!null b:2
                      └── scan t
-                          └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                          ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+                          └── locking: none,nowait
 
 build
 SELECT * FROM t FOR UPDATE OF t NOWAIT
@@ -2974,11 +3209,14 @@ SELECT * FROM t FOR UPDATE OF t NOWAIT
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update,nowait
  └── project
       ├── columns: a:1!null b:2
       └── scan t
-           └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+           └── locking: none,nowait
 
 build
 SELECT * FROM t FOR UPDATE OF t2 NOWAIT
@@ -3006,11 +3244,14 @@ SELECT 1 FROM t FOR UPDATE OF t NOWAIT
 ----
 lock t
  ├── columns: "?column?":5!null  [hidden: a:1!null]
+ ├── key columns: a:1
+ ├── lock columns: (6,7)
  ├── locking: for-update,nowait
  └── project
       ├── columns: "?column?":5!null a:1!null
       ├── scan t
-      │    └── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    ├── columns: a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
+      │    └── locking: none,nowait
       └── projections
            └── 1 [as="?column?":5]
 
@@ -3032,6 +3273,8 @@ SELECT * FROM t FOR UPDATE SKIP LOCKED
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update,skip-locked
  └── project
       ├── columns: a:1!null b:2
@@ -3053,6 +3296,8 @@ SELECT * FROM t FOR NO KEY UPDATE SKIP LOCKED
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-no-key-update,skip-locked
  └── project
       ├── columns: a:1!null b:2
@@ -3074,6 +3319,8 @@ SELECT * FROM t FOR SHARE SKIP LOCKED
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-share,skip-locked
  └── project
       ├── columns: a:1!null b:2
@@ -3095,6 +3342,8 @@ SELECT * FROM t FOR KEY SHARE SKIP LOCKED
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-key-share,skip-locked
  └── project
       ├── columns: a:1!null b:2
@@ -3116,9 +3365,13 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (9,10)
  ├── locking: for-share,skip-locked
  └── lock t
       ├── columns: a:1!null b:2
+      ├── key columns: a:1
+      ├── lock columns: (5,6)
       ├── locking: for-key-share
       └── project
            ├── columns: a:1!null b:2
@@ -3140,12 +3393,18 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (13,14)
  ├── locking: for-no-key-update
  └── lock t
       ├── columns: a:1!null b:2
+      ├── key columns: a:1
+      ├── lock columns: (9,10)
       ├── locking: for-share,skip-locked
       └── lock t
            ├── columns: a:1!null b:2
+           ├── key columns: a:1
+           ├── lock columns: (5,6)
            ├── locking: for-key-share
            └── project
                 ├── columns: a:1!null b:2
@@ -3167,15 +3426,23 @@ SELECT * FROM t FOR KEY SHARE FOR SHARE SKIP LOCKED FOR NO KEY UPDATE FOR UPDATE
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (17,18)
  ├── locking: for-update,skip-locked
  └── lock t
       ├── columns: a:1!null b:2
+      ├── key columns: a:1
+      ├── lock columns: (13,14)
       ├── locking: for-no-key-update
       └── lock t
            ├── columns: a:1!null b:2
+           ├── key columns: a:1
+           ├── lock columns: (9,10)
            ├── locking: for-share,skip-locked
            └── lock t
                 ├── columns: a:1!null b:2
+                ├── key columns: a:1
+                ├── lock columns: (5,6)
                 ├── locking: for-key-share
                 └── project
                      ├── columns: a:1!null b:2
@@ -3197,6 +3464,8 @@ SELECT * FROM t FOR UPDATE OF t SKIP LOCKED
 ----
 lock t
  ├── columns: a:1!null b:2
+ ├── key columns: a:1
+ ├── lock columns: (5,6)
  ├── locking: for-update,skip-locked
  └── project
       ├── columns: a:1!null b:2
@@ -3230,6 +3499,8 @@ SELECT 1 FROM t FOR UPDATE OF t SKIP LOCKED
 ----
 lock t
  ├── columns: "?column?":5!null  [hidden: a:1!null]
+ ├── key columns: a:1
+ ├── lock columns: (6,7)
  ├── locking: for-update,skip-locked
  └── project
       ├── columns: "?column?":5!null a:1!null

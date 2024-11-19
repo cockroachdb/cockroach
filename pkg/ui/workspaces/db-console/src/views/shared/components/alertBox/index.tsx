@@ -1,22 +1,17 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
+import { CockroachMarkLightFull } from "@cockroachlabs/icons";
 import classNames from "classnames";
 import React from "react";
 
 import { AlertInfo, AlertLevel } from "src/redux/alerts";
-import { trustIcon } from "src/util/trust";
 import {
   warningIcon,
-  notificationIcon,
   criticalIcon,
+  informationIcon,
 } from "src/views/shared/components/icons";
 
 import "./alertbox.styl";
@@ -24,11 +19,13 @@ import "./alertbox.styl";
 function alertIcon(level: AlertLevel) {
   switch (level) {
     case AlertLevel.CRITICAL:
-      return trustIcon(criticalIcon);
+      return criticalIcon;
     case AlertLevel.WARNING:
-      return trustIcon(warningIcon);
+      return warningIcon;
+    case AlertLevel.INFORMATION:
+      return informationIcon;
     default:
-      return trustIcon(notificationIcon);
+      return <CockroachMarkLightFull />;
   }
 }
 
@@ -49,7 +46,7 @@ export class AlertBox extends React.Component<AlertBoxProps, {}> {
 
     const learnMore = this.props.link && (
       <a className="" href={this.props.link}>
-        Learn More.
+        Learn More
       </a>
     );
     content = (
@@ -68,10 +65,7 @@ export class AlertBox extends React.Component<AlertBoxProps, {}> {
           `alert-box--${AlertLevel[this.props.level].toLowerCase()}`,
         )}
       >
-        <div
-          className="alert-box__icon"
-          dangerouslySetInnerHTML={alertIcon(this.props.level)}
-        />
+        <div className="alert-box__icon">{alertIcon(this.props.level)}</div>
         {content}
         <div className="alert-box__dismiss">
           <a className="alert-box__link" onClick={this.props.dismiss}>

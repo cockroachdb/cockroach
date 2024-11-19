@@ -17,6 +17,7 @@ write *eventpb.SetZoneConfig to event log:
     - '"gc.ttlseconds" = 10000'
     - num_replicas = 7
     target: DATABASE db
+  resolvedOldConfig: 'range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false '
   sql:
     descriptorId: 104
     statement: ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹num_replicas› = ‹7›, ‹"gc.ttlseconds"› = ‹10000›

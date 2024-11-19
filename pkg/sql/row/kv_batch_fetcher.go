@@ -1,17 +1,11 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package row
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync/atomic"
@@ -177,7 +171,8 @@ type txnKVFetcher struct {
 	scanFormat     kvpb.ScanFormat
 	indexFetchSpec *fetchpb.IndexFetchSpec
 
-	reverse bool
+	reverse       bool
+	rawMVCCValues bool
 	// lockStrength represents the locking mode to use when fetching KVs.
 	lockStrength lock.Strength
 	// lockWaitPolicy represents the policy to be used for handling conflicting
@@ -302,87 +297,46 @@ func makeSendFunc(
 func makeExternalSpanSendFunc(
 	ext *fetchpb.IndexFetchSpec_ExternalRowData, db *kv.DB, batchRequestsIssued *int64,
 ) sendFunc {
-	// rewrite remaps the key to its external counterpart.
-	//
-	// Since we're performing this remapping before the key reaches the KV
-	// layer, we can modify the underlying slice directly (in case it has enough
-	// capacity).
-	rewrite := func(k roachpb.Key) (roachpb.Key, error) {
-		if buildutil.CrdbTestBuild {
-			if !bytes.HasPrefix(k, ext.OldPrefix) {
-				return nil, errors.AssertionFailedf(
-					"external row data does not have old prefix, key=%v, oldPrefix=%v", k, ext.OldPrefix,
-				)
-			}
-		}
-		if len(ext.OldPrefix) == len(ext.NewPrefix) {
-			// Fast path - we can simply update the prefix in-place.
-			copy(k, ext.NewPrefix)
-			return k, nil
-		}
-		suffix := k[len(ext.OldPrefix):]
-		if len(ext.OldPrefix) > len(ext.NewPrefix) {
-			// Update the prefix and shift the suffix accordingly to the left.
-			copy(k, ext.NewPrefix)
-			copy(k[len(ext.NewPrefix):], suffix)
-			k = k[:len(ext.NewPrefix)+len(suffix)]
-			return k, nil
-		}
-		if cap(k) >= len(ext.NewPrefix)+len(suffix) {
-			// There is enough capacity in the underlying slice to shift the
-			// suffix to the right.
-			k = k[:len(ext.NewPrefix)+len(suffix)]
-		} else {
-			// We'll need a fresh allocation for this key.
-			// TODO(yuzefovich): consider using bufalloc here.
-			k = make([]byte, len(ext.NewPrefix)+len(suffix))
-		}
-		// Copy the suffix first in order to not corrupt it (in case we're
-		// reusing the key slice).
-		copy(k[len(ext.NewPrefix):], suffix)
-		copy(k, ext.NewPrefix)
-		return k, nil
-	}
-
 	return func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
-		ba.Timestamp = ext.AsOf
 		for _, req := range ba.Requests {
-			var err error
+			// We only allow external row data for a few known types of request.
 			switch r := req.GetInner().(type) {
 			case *kvpb.GetRequest:
-				r.RequestHeader.Key, err = rewrite(r.RequestHeader.Key)
-				if err != nil {
-					return nil, err
-				}
 			case *kvpb.ScanRequest:
-				r.RequestHeader.Key, err = rewrite(r.RequestHeader.Key)
-				if err != nil {
-					return nil, err
-				}
-				r.RequestHeader.EndKey, err = rewrite(r.RequestHeader.EndKey)
-				if err != nil {
-					return nil, err
-				}
 			case *kvpb.ReverseScanRequest:
-				r.RequestHeader.Key, err = rewrite(r.RequestHeader.Key)
-				if err != nil {
-					return nil, err
-				}
-				r.RequestHeader.EndKey, err = rewrite(r.RequestHeader.EndKey)
-				if err != nil {
-					return nil, err
-				}
 			default:
 				return nil, errors.AssertionFailedf("request type %T unsupported for external row data", r)
 			}
 		}
 		log.VEventf(ctx, 2, "kv external fetcher: sending a batch with %d requests", len(ba.Requests))
-		res, err := db.NonTransactionalSender().Send(ctx, ba)
+
+		// Open a new transaction with fixed timestamp set to the external
+		// timestamp. We must do this with txn.Send rather than using
+		// db.NonTransactionalSender to get the 1-to-1 request-response guarantee
+		// required by txnKVFetcher.
+		// TODO(michae2): Explore whether we should keep this transaction open for
+		// the duration of the surrounding transaction.
+		var res *kvpb.BatchResponse
+		err := db.TxnWithAdmissionControl(
+			ctx, ba.AdmissionHeader.Source, admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
+			kv.SteppingDisabled,
+			func(ctx context.Context, txn *kv.Txn) error {
+				if err := txn.SetFixedTimestamp(ctx, ext.AsOf); err != nil {
+					return err
+				}
+				var err *kvpb.Error
+				res, err = txn.Send(ctx, ba)
+				if err != nil {
+					return err.GoError()
+				}
+				return nil
+			})
+
 		// Note that in some code paths there is no concurrency when using the
 		// sendFunc, but we choose to unconditionally use atomics here since its
 		// overhead should be negligible in the grand scheme of things anyway.
 		atomic.AddInt64(batchRequestsIssued, 1)
-		return res, err.GoError()
+		return res, err
 	}
 }
 
@@ -398,6 +352,7 @@ type newTxnKVFetcherArgs struct {
 	forceProductionKVBatchSize bool
 	kvPairsRead                *int64
 	batchRequestsIssued        *int64
+	rawMVCCValues              bool
 
 	admission struct { // groups AC-related fields
 		requestHeader  kvpb.AdmissionHeader
@@ -418,6 +373,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		// Default to BATCH_RESPONSE. The caller will override if needed.
 		scanFormat:                 kvpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
+		rawMVCCValues:              args.rawMVCCValues,
 		lockStrength:               GetKeyLockingStrength(args.lockStrength),
 		lockWaitPolicy:             GetWaitPolicy(args.lockWaitPolicy),
 		lockDurability:             GetKeyLockingDurability(args.lockDurability),
@@ -663,7 +619,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	}
 	ba.AdmissionHeader = f.requestAdmissionHeader
 	ba.Requests = spansToRequests(
-		f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.lockDurability, f.reqsScratch,
+		f.spans.Spans, f.scanFormat, f.reverse, f.rawMVCCValues, f.lockStrength, f.lockDurability, f.reqsScratch,
 	)
 
 	monitoring := f.acc != nil
@@ -1016,6 +972,7 @@ func spansToRequests(
 	spans roachpb.Spans,
 	scanFormat kvpb.ScanFormat,
 	reverse bool,
+	rawMVCCValues bool,
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
 	reqsScratch []kvpb.RequestUnion,
@@ -1053,6 +1010,7 @@ func spansToRequests(
 				gets[curGet].req.Key = spans[i].Key
 				gets[curGet].req.KeyLockingStrength = lockStrength
 				gets[curGet].req.KeyLockingDurability = lockDurability
+				gets[curGet].req.ReturnRawMVCCValues = rawMVCCValues
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
 				curGet++
@@ -1062,6 +1020,7 @@ func spansToRequests(
 			scans[curScan].req.SetSpan(spans[i])
 			spans[i] = roachpb.Span{}
 			scans[curScan].req.ScanFormat = scanFormat
+			scans[curScan].req.ReturnRawMVCCValues = rawMVCCValues
 			scans[curScan].req.KeyLockingStrength = lockStrength
 			scans[curScan].req.KeyLockingDurability = lockDurability
 			scans[curScan].union.ReverseScan = &scans[curScan].req
@@ -1079,6 +1038,7 @@ func spansToRequests(
 				gets[curGet].req.Key = spans[i].Key
 				gets[curGet].req.KeyLockingStrength = lockStrength
 				gets[curGet].req.KeyLockingDurability = lockDurability
+				gets[curGet].req.ReturnRawMVCCValues = rawMVCCValues
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
 				curGet++
@@ -1090,6 +1050,7 @@ func spansToRequests(
 			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLockingStrength = lockStrength
 			scans[curScan].req.KeyLockingDurability = lockDurability
+			scans[curScan].req.ReturnRawMVCCValues = rawMVCCValues
 			scans[curScan].union.Scan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
 		}

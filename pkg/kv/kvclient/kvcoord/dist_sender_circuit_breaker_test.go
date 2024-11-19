@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package kvcoord_test
 
@@ -31,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -412,7 +408,7 @@ func benchmarkCircuitBreakersTrack(
 	}
 
 	// Setting nowNanos to 1 basically means that we'll never launch a probe.
-	nowNanos := int64(1)
+	now := crtime.Mono(1)
 
 	var wg sync.WaitGroup
 	wg.Add(conc)
@@ -427,12 +423,12 @@ func benchmarkCircuitBreakersTrack(
 			// Adjust b.N for concurrency.
 			for i := 0; i < b.N/conc; i++ {
 				cb := cbs.ForReplica(rangeDesc, replDesc)
-				_, cbToken, err := cb.Track(sendCtx, ba, false /* withCommit */, nowNanos)
+				_, cbToken, err := cb.Track(sendCtx, ba, false /* withCommit */, now)
 				if err != nil {
 					assert.NoError(b, err)
 					return
 				}
-				_ = cbToken.Done(br, sendErr, nowNanos) // ignore cancellation error
+				_ = cbToken.Done(br, sendErr, now) // ignore cancellation error
 			}
 		}()
 	}

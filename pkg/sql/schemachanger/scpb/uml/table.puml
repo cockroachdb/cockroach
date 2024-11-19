@@ -43,6 +43,7 @@ object ColumnComputeExpression
 ColumnComputeExpression :  TableID
 ColumnComputeExpression :  ColumnID
 ColumnComputeExpression :  Expression
+ColumnComputeExpression :  Usage
 
 object ColumnDefaultExpression
 
@@ -84,6 +85,7 @@ ColumnType :  IsNullable
 ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
 ColumnType :  ElementCreationMetadata
+ColumnType :  ColumnFamilyOrderFollowsColumnID
 
 object CompositeType
 
@@ -258,10 +260,20 @@ object IndexZoneConfig
 
 IndexZoneConfig :  TableID
 IndexZoneConfig :  IndexID
-IndexZoneConfig :  PartitionName
 IndexZoneConfig :  Subzone
 IndexZoneConfig : []SubzoneSpans
 IndexZoneConfig :  SeqNum
+
+object LDRJobIDs
+
+LDRJobIDs :  TableID
+LDRJobIDs : []JobIDs
+
+object NamedRangeZoneConfig
+
+NamedRangeZoneConfig :  RangeID
+NamedRangeZoneConfig :  ZoneConfig
+NamedRangeZoneConfig :  SeqNum
 
 object Namespace
 
@@ -274,6 +286,15 @@ object Owner
 
 Owner :  DescriptorID
 Owner :  Owner
+
+object PartitionZoneConfig
+
+PartitionZoneConfig :  TableID
+PartitionZoneConfig :  IndexID
+PartitionZoneConfig :  PartitionName
+PartitionZoneConfig :  Subzone
+PartitionZoneConfig : []SubzoneSpans
+PartitionZoneConfig :  SeqNum
 
 object PrimaryIndex
 
@@ -392,6 +413,65 @@ TemporaryIndex :  Index
 TemporaryIndex :  IsUsingSecondaryEncoding
 TemporaryIndex :  Expr
 
+object Trigger
+
+Trigger :  TableID
+Trigger :  TriggerID
+
+object TriggerDeps
+
+TriggerDeps :  TableID
+TriggerDeps :  TriggerID
+TriggerDeps : []UsesRelationIDs
+TriggerDeps : []UsesTypeIDs
+TriggerDeps : []UsesRoutineIDs
+
+object TriggerEnabled
+
+TriggerEnabled :  TableID
+TriggerEnabled :  TriggerID
+TriggerEnabled :  Enabled
+
+object TriggerEvents
+
+TriggerEvents :  TableID
+TriggerEvents :  TriggerID
+TriggerEvents : []Events
+
+object TriggerFunctionCall
+
+TriggerFunctionCall :  TableID
+TriggerFunctionCall :  TriggerID
+TriggerFunctionCall :  FuncID
+TriggerFunctionCall : []FuncArgs
+TriggerFunctionCall :  FuncBody
+
+object TriggerName
+
+TriggerName :  TableID
+TriggerName :  TriggerID
+TriggerName :  Name
+
+object TriggerTiming
+
+TriggerTiming :  TableID
+TriggerTiming :  TriggerID
+TriggerTiming :  ActionTime
+TriggerTiming :  ForEachRow
+
+object TriggerTransition
+
+TriggerTransition :  TableID
+TriggerTransition :  TriggerID
+TriggerTransition :  NewTransitionAlias
+TriggerTransition :  OldTransitionAlias
+
+object TriggerWhen
+
+TriggerWhen :  TableID
+TriggerWhen :  TriggerID
+TriggerWhen :  WhenExpr
+
 object TypeComment
 
 TypeComment :  TypeID
@@ -478,6 +558,7 @@ SecondaryIndex <|-- IndexName
 PrimaryIndex <|-- IndexPartitioning
 SecondaryIndex <|-- IndexPartitioning
 Index <|-- IndexZoneConfig
+Table <|-- LDRJobIDs
 Table <|-- Namespace
 View <|-- Namespace
 Sequence <|-- Namespace
@@ -492,6 +573,7 @@ Database <|-- Owner
 Schema <|-- Owner
 AliasType <|-- Owner
 EnumType <|-- Owner
+TablePartitioning <|-- PartitionZoneConfig
 Table <|-- PrimaryIndex
 View <|-- PrimaryIndex
 Table <|-- RowLevelTTL
@@ -523,6 +605,16 @@ Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Table <|-- TemporaryIndex
 View <|-- TemporaryIndex
+Table <|-- Trigger
+View <|-- Trigger
+Trigger <|-- TriggerDeps
+Trigger <|-- TriggerEnabled
+Trigger <|-- TriggerEvents
+Trigger <|-- TriggerFunctionCall
+Trigger <|-- TriggerName
+Trigger <|-- TriggerTiming
+Trigger <|-- TriggerTransition
+Trigger <|-- TriggerWhen
 CompositeType,EnumType <|-- TypeComment
 Table <|-- UniqueWithoutIndexConstraint
 Table <|-- UniqueWithoutIndexConstraintUnvalidated

@@ -1,12 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package scbuildstmt
 
@@ -15,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -25,12 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -41,7 +40,7 @@ import (
 )
 
 func alterTableAddColumn(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddColumn,
+	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, stmt tree.Statement, t *tree.AlterTableAddColumn,
 ) {
 	d := t.ColumnDef
 	// We don't support handling zone config related properties for tables, so
@@ -71,7 +70,11 @@ func alterTableAddColumn(
 		}
 	}
 	if d.IsSerial {
-		panic(scerrors.NotImplementedErrorf(d, "contains serial data type"))
+		if b.SessionData().SerialNormalizationMode != sessiondatapb.SerialUsesRowID {
+			panic(scerrors.NotImplementedErrorf(d, "contains serial data type in unsupported mode"))
+		}
+		d = alterTableAddColumnSerial(b, d, tn)
+
 	}
 	if d.GeneratedIdentity.IsGeneratedAsIdentity {
 		panic(scerrors.NotImplementedErrorf(d, "contains generated identity type"))
@@ -259,6 +262,43 @@ func alterTableAddColumn(
 	}
 }
 
+func alterTableAddColumnSerial(
+	b BuildCtx, d *tree.ColumnTableDef, tn *tree.TableName,
+) *tree.ColumnTableDef {
+	if err := catalog.AssertValidSerialColumnDef(d, tn); err != nil {
+		panic(err)
+	}
+
+	defType, err := tree.ResolveType(b, d.Type, b.SemaCtx().GetTypeResolver())
+	if err != nil {
+		panic(err)
+	}
+
+	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(
+		defType.Name(), b.SessionData().SerialNormalizationMode.String()))
+
+	if defType.Width() < types.Int.Width() {
+		b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+			b,
+			errors.WithHintf(
+				pgnotice.Newf(
+					"upgrading the column %s to %s to utilize the session serial_normalization setting",
+					d.Name.String(),
+					types.Int.SQLString(),
+				),
+				"change the serial_normalization to sql_sequence or sql_sequence_cached if you wish "+
+					"to use a smaller sized serial column at the cost of performance. See %s",
+				docs.URL("serial.html"),
+			),
+		)
+	}
+
+	// Serial is an alias for a real column definition. False indicates a remapped alias.
+	d.IsSerial = false
+
+	return catalog.UseRowID(*d)
+}
+
 func columnNamesToIDs(b BuildCtx, tbl *scpb.Table) map[string]descpb.ColumnID {
 	tableElts := b.QueryByID(tbl.TableID)
 	namesToIDs := make(map[string]descpb.ColumnID)
@@ -271,17 +311,18 @@ func columnNamesToIDs(b BuildCtx, tbl *scpb.Table) map[string]descpb.ColumnID {
 }
 
 type addColumnSpec struct {
-	tbl      *scpb.Table
-	col      *scpb.Column
-	fam      *scpb.ColumnFamily
-	name     *scpb.ColumnName
-	colType  *scpb.ColumnType
-	def      *scpb.ColumnDefaultExpression
-	onUpdate *scpb.ColumnOnUpdateExpression
-	compute  *scpb.ColumnComputeExpression
-	comment  *scpb.ColumnComment
-	unique   bool
-	notNull  bool
+	tbl              *scpb.Table
+	col              *scpb.Column
+	fam              *scpb.ColumnFamily
+	name             *scpb.ColumnName
+	colType          *scpb.ColumnType
+	def              *scpb.ColumnDefaultExpression
+	onUpdate         *scpb.ColumnOnUpdateExpression
+	compute          *scpb.ColumnComputeExpression
+	transientCompute *scpb.ColumnComputeExpression
+	comment          *scpb.ColumnComment
+	unique           bool
+	notNull          bool
 }
 
 // addColumn adds a column as specified in the `spec`. It delegates most of the work
@@ -310,6 +351,9 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		if spec.compute != nil {
 			b.Add(spec.compute)
 		}
+		if spec.transientCompute != nil {
+			b.AddTransient(spec.transientCompute)
+		}
 		if spec.comment != nil {
 			b.Add(spec.comment)
 		}
@@ -319,7 +363,7 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		}
 
 		inflatedChain := getInflatedPrimaryIndexChain(b, spec.tbl.TableID)
-		if spec.def == nil && spec.colType.ComputeExpr == nil && spec.compute == nil {
+		if spec.def == nil && spec.colType.ComputeExpr == nil && spec.compute == nil && spec.transientCompute == nil {
 			// Optimization opportunity: if we were to add a new column without default
 			// value nor computed expression, then we can just add the column to existing
 			// non-nil primary indexes without actually backfilling any data. This is

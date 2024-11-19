@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package flowinfra_test
 
@@ -59,7 +54,7 @@ func TestOutbox(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	clock := hlc.NewClockForTesting(nil)
-	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
+	clusterID, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +219,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	clock := hlc.NewClockForTesting(nil)
-	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
+	clusterID, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +292,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			clock := hlc.NewClockForTesting(nil)
-			clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
+			clusterID, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -375,7 +370,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	clock := hlc.NewClockForTesting(nil)
-	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
+	clusterID, mockServer, addr, err := flowinfra.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,7 +496,7 @@ func BenchmarkOutbox(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(bgCtx)
 	clock := hlc.NewClockForTesting(nil)
-	clusterID, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(bgCtx, clock, stopper, execinfra.StaticSQLInstanceID)
+	clusterID, mockServer, addr, err := flowinfra.StartMockDistSQLServer(bgCtx, clock, stopper, execinfra.StaticSQLInstanceID)
 	if err != nil {
 		b.Fatal(err)
 	}

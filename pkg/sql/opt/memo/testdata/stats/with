@@ -116,13 +116,13 @@ with &1 (t0)
            ├── stats: [rows=10000]
            ├── fd: ()-->(30)
            ├── inner-join (cross)
-           │    ├── columns: true_agg:28(bool!null)
+           │    ├── columns: canary_agg:28(bool!null)
            │    ├── stats: [rows=10000]
            │    ├── fd: ()-->(28)
            │    ├── scan a
            │    │    └── stats: [rows=5000]
            │    ├── inner-join (cross)
-           │    │    ├── columns: true_agg:28(bool!null)
+           │    │    ├── columns: canary_agg:28(bool!null)
            │    │    ├── cardinality: [0 - 2]
            │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(one-or-more)
            │    │    ├── stats: [rows=2]
@@ -132,29 +132,29 @@ with &1 (t0)
            │    │    │    ├── cardinality: [1 - 2]
            │    │    │    └── stats: [rows=2]
            │    │    ├── select
-           │    │    │    ├── columns: true_agg:28(bool!null)
+           │    │    │    ├── columns: canary_agg:28(bool!null)
            │    │    │    ├── cardinality: [0 - 1]
            │    │    │    ├── stats: [rows=1, distinct(28)=1, null(28)=0]
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(28)
            │    │    │    ├── scalar-group-by
-           │    │    │    │    ├── columns: true_agg:28(bool)
+           │    │    │    │    ├── columns: canary_agg:28(bool)
            │    │    │    │    ├── cardinality: [1 - 1]
            │    │    │    │    ├── stats: [rows=1, distinct(28)=1, null(28)=0]
            │    │    │    │    ├── key: ()
            │    │    │    │    ├── fd: ()-->(28)
            │    │    │    │    ├── values
-           │    │    │    │    │    ├── columns: true:27(bool!null)
+           │    │    │    │    │    ├── columns: canary:27(bool!null)
            │    │    │    │    │    ├── cardinality: [1 - 1]
            │    │    │    │    │    ├── stats: [rows=1]
            │    │    │    │    │    ├── key: ()
            │    │    │    │    │    ├── fd: ()-->(27)
            │    │    │    │    │    └── (true,) [type=tuple{bool}]
            │    │    │    │    └── aggregations
-           │    │    │    │         └── const-agg [as=true_agg:28, type=bool, outer=(27)]
-           │    │    │    │              └── true:27 [type=bool]
+           │    │    │    │         └── const-agg [as=canary_agg:28, type=bool, outer=(27)]
+           │    │    │    │              └── canary:27 [type=bool]
            │    │    │    └── filters
-           │    │    │         └── true_agg:28 IS NOT NULL [type=bool, outer=(28), constraints=(/28: (/NULL - ]; tight)]
+           │    │    │         └── canary_agg:28 IS NOT NULL [type=bool, outer=(28), constraints=(/28: (/NULL - ]; tight)]
            │    │    └── filters (true)
            │    └── filters (true)
            └── projections

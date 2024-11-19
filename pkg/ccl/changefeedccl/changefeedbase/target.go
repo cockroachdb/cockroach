@@ -1,10 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package changefeedbase
 
@@ -111,6 +108,19 @@ func (ts *Targets) EachTableID(f func(descpb.ID) error) error {
 		}
 	}
 	return nil
+}
+
+// EachTableIDWithBool is similar to EachTableID but avoids using
+// iterutil.Map(err) to eliminate the overhead of errors.Is. Thus, f should not
+// return iterutil.StopIteration(). It returns false with error when the
+// callback f returns false or true when the iteration completes.
+func (ts *Targets) EachTableIDWithBool(f func(descpb.ID) (bool, error)) (bool, error) {
+	for id := range ts.m {
+		if b, err := f(id); !b {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 // EachHavingTableID iterates over each Target with the given id, returning

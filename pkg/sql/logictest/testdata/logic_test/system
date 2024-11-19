@@ -8,9 +8,7 @@ test       root  NULL  NULL  {}  NULL
 
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
-skipif config 3node-tenant-default-configs
-skipif config local-mixed-24.1
-skipif config local-mixed-24.2
+skipif config 3node-tenant-default-configs local-mixed-24.2
 query TTTTT
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system] ORDER BY 2
 ----
@@ -138,7 +136,6 @@ public  zones                            table     node  NULL
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 query I rowsort
 SELECT id FROM system.descriptor ORDER BY 1
@@ -406,7 +403,6 @@ system  root   CONNECT  true
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.
 skipif config 3node-tenant-default-configs
-skipif config local-mixed-24.1
 skipif config local-mixed-24.2
 query TTTTTB rowsort
 SHOW GRANTS ON system.*
@@ -1324,6 +1320,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 AND name != 'kv.range_merge.queue_enabled'
 ORDER BY name
 ----
@@ -1340,6 +1337,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 ORDER BY name
 ----
 cluster.secret
@@ -1360,6 +1358,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 AND name NOT IN ('version', 'cluster.secret', 'kv.range_merge.queue_enabled')
 ORDER BY name
 ----
@@ -1375,6 +1374,7 @@ WHERE name NOT LIKE 'sql.defaults%'
 AND name NOT LIKE 'sql.distsql%'
 AND name NOT LIKE 'sql.testing%'
 AND name NOT LIKE 'sql.stats%'
+AND name NOT LIKE 'sql.txn.%_isolation.enabled'
 AND name NOT IN ('version', 'cluster.secret')
 ORDER BY name
 ----
@@ -1424,3 +1424,57 @@ ALTER TABLE system.public.tenant_usage CONFIGURE ZONE USING
   num_replicas = 5,
   constraints = '[]',
   lease_preferences = '[]'
+
+# Regression test for 133278, that clusters with sql.defaults.vectorize set to
+# old value '1' can still start new connections.
+
+statement ok
+UPSERT INTO system.settings (name, value, "valueType") VALUES ('sql.defaults.vectorize', '1', 'e')
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'sql.defaults.vectorize'
+----
+sql.defaults.vectorize  1
+
+query T retry
+SHOW CLUSTER SETTING sql.defaults.vectorize
+----
+on
+
+statement ok
+SET vectorize = DEFAULT
+
+query T
+SHOW vectorize
+----
+on
+
+# Make sure we can open a new connection.
+user testuser newsession
+
+user root
+
+statement ok
+RESET CLUSTER SETTING sql.defaults.vectorize
+
+statement ok
+RESET vectorize
+
+query TT
+SELECT name, value FROM system.settings WHERE name = 'sql.defaults.vectorize'
+----
+
+query T retry
+SHOW CLUSTER SETTING sql.defaults.vectorize
+----
+on
+
+query T
+SHOW vectorize
+----
+on
+
+user testuser
+
+statement ok
+RESET vectorize

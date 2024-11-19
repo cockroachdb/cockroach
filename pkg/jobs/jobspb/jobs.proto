@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 syntax = "proto3";
 package cockroach.sql.jobs.jobspb;
@@ -132,7 +127,12 @@ message StreamIngestionDetails {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.customname) = "SourceClusterID"];
 
+  // If ReaderTenantID is non-zero, this ID is associated with the reader tenant
+  // from which users can run read queries.
+  roachpb.TenantID read_tenant_id = 15 [(gogoproto.customname) = "ReadTenantID", (gogoproto.nullable) = false];
+
   reserved 5, 6;
+  // Next ID: 16.
 }
 
 message StreamIngestionCheckpoint {
@@ -184,7 +184,9 @@ message StreamIngestionProgress {
   // if different than ReplicatedTime.
   util.hlc.Timestamp initial_revert_to = 11 [(gogoproto.nullable) = false];
 
-  // Next Id: 10
+  util.hlc.Timestamp replicated_time_at_cutover = 12 [(gogoproto.nullable) = false];
+
+  // Next Id: 13
 }
 
 message HistoryRetentionDetails {
@@ -201,10 +203,10 @@ message HistoryRetentionDetails {
 }
 
 message HistoryRetentionProgress {
-    google.protobuf.Timestamp last_heartbeat_time = 1 [
-      (gogoproto.nullable) = false,
-      (gogoproto.stdtime) = true
-    ];
+  google.protobuf.Timestamp last_heartbeat_time = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.stdtime) = true
+  ];
 }
 
 message LogicalReplicationDetails {
@@ -237,9 +239,9 @@ message LogicalReplicationDetails {
   util.hlc.Timestamp replication_start_time = 5 [(gogoproto.nullable) = false];
 
   bytes source_cluster_id = 6 [
-      (gogoproto.nullable) = false,
-      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
-      (gogoproto.customname) = "SourceClusterID"];
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "SourceClusterID"];
 
   message DefaultConflictResolution{
     enum DefaultConflictResolution {
@@ -252,7 +254,7 @@ message LogicalReplicationDetails {
   }
   DefaultConflictResolution default_conflict_resolution = 7 [(gogoproto.nullable) = false];
 
-  bool filter_rangefeed = 8;
+  reserved 8;
 
   enum ApplyMode {
     Immediate = 0;
@@ -261,22 +263,32 @@ message LogicalReplicationDetails {
 
   ApplyMode mode = 9;
 
-  // Next ID: 10.
+  string metrics_label = 10;
+
+  enum Discard {
+    DiscardNothing = 0;
+    DiscardCDCIgnoredTTLDeletes = 1;
+    DiscardAllDeletes = 2;
+  }
+
+  Discard discard = 11;
+
+  // Next ID: 12.
 }
 
 message LogicalReplicationProgress {
-    reserved 1, 2, 3, 4, 7;
+  reserved 1, 2, 3, 4, 7;
 
-    // ReplicatedTime is the ingestion frontier. This is the canonical
-    // value of the frontier. The HighWater in the job progress is for
-    // informational purposes only.
-    util.hlc.Timestamp replicated_time = 5 [(gogoproto.nullable) = false];
+  // ReplicatedTime is the ingestion frontier. This is the canonical
+  // value of the frontier. The HighWater in the job progress is for
+  // informational purposes only.
+  util.hlc.Timestamp replicated_time = 5 [(gogoproto.nullable) = false];
 
-    // Checkpoint stores a set of resolved spans denoting completed ingestion progress
-    StreamIngestionCheckpoint checkpoint = 6 [(gogoproto.nullable) = false];
+  // Checkpoint stores a set of resolved spans denoting completed ingestion progress
+  StreamIngestionCheckpoint checkpoint = 6 [(gogoproto.nullable) = false];
 
-    // StreamAddresses are the source cluster addresses read from the latest topology.
-    repeated string stream_addresses = 8;
+  // StreamAddresses are the source cluster addresses read from the latest topology.
+  repeated string stream_addresses = 8;
 }
 
 message StreamReplicationDetails {
@@ -296,6 +308,8 @@ message StreamReplicationDetails {
   // ExpirationWindow specifies the length of time a producer job will stay
   // alive without a heartbeat from the consumer job.
   int64 expiration_window = 4 [(gogoproto.casttype) = "time.Duration"];
+
+  repeated uint32 table_ids = 5 [(gogoproto.customname) = "TableIDs"];
 }
 
 message StreamReplicationProgress {
@@ -321,8 +335,8 @@ message SchedulePTSChainingRecord {
 
 
   bytes protected_timestamp_record = 1 [
-   (gogoproto.customname) = "ProtectedTimestampRecord",
-   (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+    (gogoproto.customname) = "ProtectedTimestampRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
 
   PTSAction action = 2;
@@ -384,7 +398,7 @@ message BackupDetails {
   SchedulePTSChainingRecord schedule_pts_chaining_record = 10 [(gogoproto.customname) = "SchedulePTSChainingRecord"];
 
   bool revision_history = 13;
-  repeated string incremental_from = 14;
+  reserved 14;
   bool full_cluster = 15;
 
   reserved 16;
@@ -910,13 +924,13 @@ message DroppedTableDetails {
 message SchemaChangeGCDetails {
   message DroppedIndex {
     int64 index_id = 1 [(gogoproto.customname) = "IndexID",
-                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
     int64 drop_time = 2;
   }
 
   message DroppedID {
     int64 id = 1 [(gogoproto.customname) = "ID",
-                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
     int64 drop_time = 2;
   }
 
@@ -931,7 +945,7 @@ message SchemaChangeGCDetails {
   // If dropping indexes, the table ID which has those indexes. If dropping a
   // database, the database ID.
   int64 parent_id = 3 [(gogoproto.customname) = "ParentID",
-                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
 
   message DroppedTenant {
     uint64 id = 1 [(gogoproto.customname) = "ID"];
@@ -1025,13 +1039,13 @@ message SchemaChangeGCProgress {
 
   message IndexProgress {
     int64 index_id = 1 [(gogoproto.customname) = "IndexID",
-                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
     Status status = 2;
   }
 
   message TableProgress {
     int64 id = 1 [(gogoproto.customname) = "ID",
-                 (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
     Status status = 2;
   }
 
@@ -1076,7 +1090,7 @@ message ChangefeedTargetSpecification {
 
   TargetType type = 1;
   uint32 table_id = 2 [(gogoproto.customname) = "TableID",
-  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   string family_name = 3;
   string statement_time_name = 4;
 
@@ -1262,8 +1276,8 @@ message RowLevelTTLDetails {
 
 message RowLevelTTLProgress {
 
-  // JobRowCount is the number of deleted rows for the entire TTL job.
-  int64 job_row_count = 1;
+  // JobDeletedRowCount is the number of rows deleted by TTL job so far.
+  int64 job_deleted_row_count = 1;
 
   // ProcessorProgresses is the progress per DistSQL processor.
   repeated RowLevelTTLProcessorProgress processor_progresses = 2 [(gogoproto.nullable)=false];
@@ -1271,8 +1285,12 @@ message RowLevelTTLProgress {
   // UseDistSQL is no longer used in v23.1+ as all TTL jobs are using DistSQL.
   reserved 3;
 
-  // JobSpanCount is the number of spans for the entire TTL job.
-  int64 job_span_count = 4;
+  // JobTotalSpanCount is the number of spans for the entire TTL job.
+  int64 job_total_span_count = 4;
+
+  // JobProcessedSpanCount is the number of spans that have been processed by
+  // the TTL job so far.
+  int64 job_processed_span_count = 5;
 }
 
 message RowLevelTTLProcessorProgress {
@@ -1323,7 +1341,7 @@ message AutoConfigEnvRunnerProgress {
 }
 
 message AutoConfigTaskDetails {
-reserved 1, 2;
+  reserved 1, 2;
 }
 
 message AutoConfigTaskProgress {
@@ -1341,6 +1359,33 @@ message MVCCStatisticsJobDetails {
 
 message MVCCStatisticsJobProgress {
 
+}
+
+message StandbyReadTSPollerDetails {
+
+}
+
+message StandbyReadTSPollerProgress {
+
+}
+
+message UpdateTableMetadataCacheDetails {}
+message UpdateTableMetadataCacheProgress {
+  enum Status {
+    NOT_RUNNING = 0;
+    RUNNING = 1;
+  }
+  // The time at which the job last started a run.
+  google.protobuf.Timestamp last_start_time = 1 [
+    (gogoproto.nullable) = true,
+    (gogoproto.stdtime) = true
+  ];
+  // The time at which the job last completed a run.
+  google.protobuf.Timestamp last_completed_time = 2 [
+    (gogoproto.nullable) = true,
+    (gogoproto.stdtime) = true
+  ];
+  Status status = 3;
 }
 
 message ImportRollbackDetails {
@@ -1422,6 +1467,8 @@ message Payload {
     ImportRollbackDetails import_rollback_details = 46;
     HistoryRetentionDetails history_retention_details = 47;
     LogicalReplicationDetails logical_replication_details = 48;
+    UpdateTableMetadataCacheDetails update_table_metadata_cache_details = 49;
+    StandbyReadTSPollerDetails standby_read_ts_poller_details = 50;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1449,7 +1496,7 @@ message Payload {
   // specifies how old such record could get before this job is canceled.
   int64 maximum_pts_age = 40 [(gogoproto.casttype) = "time.Duration",  (gogoproto.customname) = "MaximumPTSAge"];
 
-  // NEXT ID: 45
+  // NEXT ID: 51
 }
 
 message Progress {
@@ -1499,6 +1546,8 @@ message Progress {
     ImportRollbackProgress import_rollback_progress = 34;
     HistoryRetentionProgress HistoryRetentionProgress = 35;
     LogicalReplicationProgress LogicalReplication = 36;
+    UpdateTableMetadataCacheProgress table_metadata_cache = 37;
+    StandbyReadTSPollerProgress standby_read_ts_poller = 38;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1539,6 +1588,8 @@ enum Type {
   HISTORY_RETENTION = 26 [(gogoproto.enumvalue_customname) = "TypeHistoryRetention"];
   LOGICAL_REPLICATION = 27 [(gogoproto.enumvalue_customname) = "TypeLogicalReplication"];
   AUTO_CREATE_PARTIAL_STATS = 28 [(gogoproto.enumvalue_customname) = "TypeAutoCreatePartialStats"];
+  UPDATE_TABLE_METADATA_CACHE = 29 [(gogoproto.enumvalue_customname) = "TypeUpdateTableMetadataCache"];
+  STANDBY_READ_TS_POLLER = 30 [(gogoproto.enumvalue_customname) = "TypeStandbyReadTSPoller"];
 }
 
 message Job {

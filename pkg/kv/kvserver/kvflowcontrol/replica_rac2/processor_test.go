@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package replica_rac2
 
@@ -16,70 +11,53 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 type testReplica struct {
-	mu       syncutil.Mutex
 	raftNode *testRaftNode
 	b        *strings.Builder
 
 	leaseholder roachpb.ReplicaID
 }
 
-var _ Replica = &testReplica{}
+var _ ReplicaForTesting = &testReplica{}
 
 func newTestReplica(b *strings.Builder) *testReplica {
-	r := &testReplica{
-		b: b,
-	}
+	return &testReplica{b: b}
+}
+
+func (r *testReplica) initRaft(stable rac2.LogMark) {
 	r.raftNode = &testRaftNode{
-		b: b,
-		r: r,
+		b: r.b, r: r,
+		term:              stable.Term,
+		mark:              stable,
+		nextUnstableIndex: stable.Index + 1,
 	}
-	return r
 }
 
-func (r *testReplica) RaftMuAssertHeld() {
-	fmt.Fprintf(r.b, " Replica.RaftMuAssertHeld\n")
-}
-
-func (r *testReplica) MuAssertHeld() {
-	fmt.Fprintf(r.b, " Replica.MuAssertHeld\n")
-}
-
-func (r *testReplica) MuLock() {
-	fmt.Fprintf(r.b, " Replica.MuLock\n")
-	r.mu.Lock()
-}
-
-func (r *testReplica) MuUnlock() {
-	fmt.Fprintf(r.b, " Replica.MuUnlock\n")
-	r.mu.Unlock()
-}
-
-func (r *testReplica) RaftNodeMuLocked() RaftNode {
-	fmt.Fprintf(r.b, " Replica.RaftNodeMuLocked\n")
-	return r.raftNode
-}
-
-func (r *testReplica) LeaseholderMuLocked() roachpb.ReplicaID {
-	fmt.Fprintf(r.b, " Replica.LeaseholderMuLocked\n")
-	r.mu.AssertHeld()
-	return r.leaseholder
+func (r *testReplica) IsScratchRange() bool {
+	return true
 }
 
 type testRaftScheduler struct {
@@ -94,83 +72,51 @@ type testRaftNode struct {
 	b *strings.Builder
 	r *testReplica
 
-	admitted          [raftpb.NumPriorities]uint64
-	leader            roachpb.ReplicaID
-	stableIndex       uint64
+	isLeader bool
+	term     uint64
+	leader   roachpb.ReplicaID
+
+	mark              rac2.LogMark
 	nextUnstableIndex uint64
-	term              uint64
 }
 
-func (rn *testRaftNode) EnablePingForAdmittedLaggingLocked() {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.EnablePingForAdmittedLaggingLocked\n")
+func (rn *testRaftNode) SendPingRaftMuLocked(to roachpb.ReplicaID) bool {
+	fmt.Fprintf(rn.b, " RaftNode.SendPingRaftMuLocked(%d)\n", to)
+	return true
 }
 
-func (rn *testRaftNode) TermLocked() uint64 {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.TermLocked() = %d\n", rn.term)
-	return rn.term
+func (rn *testRaftNode) SendMsgAppRaftMuLocked(
+	_ roachpb.ReplicaID, _ raft.LogSlice,
+) (raftpb.Message, bool) {
+	panic("unimplemented")
 }
 
-func (rn *testRaftNode) LeaderLocked() roachpb.ReplicaID {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.LeaderLocked() = %s\n", rn.leader)
-	return rn.leader
+func (rn *testRaftNode) setMark(t *testing.T, mark rac2.LogMark) {
+	require.True(t, mark.After(rn.mark))
+	rn.mark = mark
 }
 
-func (rn *testRaftNode) StableIndexLocked() uint64 {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.StableIndexLocked() = %d\n", rn.stableIndex)
-	return rn.stableIndex
-}
-
-func (rn *testRaftNode) NextUnstableIndexLocked() uint64 {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.NextUnstableIndexLocked() = %d\n", rn.nextUnstableIndex)
-	return rn.nextUnstableIndex
-}
-
-func (rn *testRaftNode) GetAdmittedLocked() [raftpb.NumPriorities]uint64 {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.GetAdmittedLocked = %s\n", admittedString(rn.admitted))
-	return rn.admitted
-}
-
-func (rn *testRaftNode) SetAdmittedLocked(admitted [raftpb.NumPriorities]uint64) raftpb.Message {
-	rn.r.mu.AssertHeld()
-	// TODO(sumeer): set more fields.
-	msg := raftpb.Message{
-		Type: raftpb.MsgAppResp,
+func (rn *testRaftNode) check(t *testing.T) {
+	if rn == nil {
+		return
 	}
-	fmt.Fprintf(rn.b, " RaftNode.SetAdmittedLocked(%s) = %s\n",
-		admittedString(admitted), msgString(msg))
-	rn.admitted = admitted
-	return msg
+	require.LessOrEqual(t, rn.mark.Term, rn.term)
+	require.LessOrEqual(t, rn.nextUnstableIndex, rn.mark.Index+1)
 }
 
-func (rn *testRaftNode) StepMsgAppRespForAdmittedLocked(msg raftpb.Message) error {
-	rn.r.mu.AssertHeld()
-	fmt.Fprintf(rn.b, " RaftNode.StepMsgAppRespForAdmittedLocked(%s)\n", msgString(msg))
-	return nil
-}
-
-func admittedString(admitted [raftpb.NumPriorities]uint64) string {
-	return fmt.Sprintf("[%d, %d, %d, %d]", admitted[0], admitted[1], admitted[2], admitted[3])
-}
-
-func msgString(msg raftpb.Message) string {
-	return fmt.Sprintf("type: %s from: %d to: %d", msg.Type.String(), msg.From, msg.To)
+func (rn *testRaftNode) print() {
+	fmt.Fprintf(rn.b, "Raft: term: %d leader: %d leaseholder: %d mark: %+v next-unstable: %d",
+		rn.term, rn.leader, rn.r.leaseholder, rn.mark, rn.nextUnstableIndex)
 }
 
 type testAdmittedPiggybacker struct {
 	b *strings.Builder
 }
 
-func (p *testAdmittedPiggybacker) AddMsgAppRespForLeader(
-	n roachpb.NodeID, s roachpb.StoreID, r roachpb.RangeID, msg raftpb.Message,
+func (p *testAdmittedPiggybacker) Add(
+	n roachpb.NodeID, m kvflowcontrolpb.PiggybackedAdmittedState,
 ) {
-	fmt.Fprintf(p.b, " Piggybacker.AddMsgAppRespForLeader(leader=(n%s,s%s,r%s), msg=%s)\n",
-		n, s, r, msgString(msg))
+	fmt.Fprintf(p.b, " Piggybacker.Add(n%d, %v)\n", n, m)
 }
 
 type testACWorkQueue struct {
@@ -185,21 +131,45 @@ func (q *testACWorkQueue) Admit(ctx context.Context, entry EntryForAdmission) bo
 }
 
 type testRangeControllerFactory struct {
-	b *strings.Builder
+	b   *strings.Builder
+	rcs []*testRangeController
 }
 
-func (f *testRangeControllerFactory) New(state rangeControllerInitState) rac2.RangeController {
+func (f *testRangeControllerFactory) New(
+	ctx context.Context, state rangeControllerInitState,
+) rac2.RangeController {
 	fmt.Fprintf(f.b, " RangeControllerFactory.New(replicaSet=%s, leaseholder=%s, nextRaftIndex=%d)\n",
 		state.replicaSet, state.leaseholder, state.nextRaftIndex)
-	return &testRangeController{b: f.b}
+	rc := &testRangeController{b: f.b, waited: true}
+	f.rcs = append(f.rcs, rc)
+	return rc
 }
 
 type testRangeController struct {
-	b *strings.Builder
+	b              *strings.Builder
+	waited         bool
+	waitForEvalErr error
 }
 
-func (c *testRangeController) WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) error {
-	panic("WaitForEval should not be called")
+func (c *testRangeController) WaitForEval(
+	ctx context.Context, pri admissionpb.WorkPriority,
+) (bool, error) {
+	errStr := "<nil>"
+	if c.waitForEvalErr != nil {
+		errStr = c.waitForEvalErr.Error()
+	}
+	fmt.Fprintf(c.b, " RangeController.WaitForEval(pri=%s) = (waited=%t err=%s)\n",
+		pri.String(), c.waited, errStr)
+	return c.waited, c.waitForEvalErr
+}
+
+type testMsgAppSender struct{}
+
+func (testMsgAppSender) SendMsgApp(
+	ctx context.Context, msg raftpb.Message, lowPriorityOverride bool,
+) {
+	// Do nothing, since only called by the real RangeController, which is not
+	// used in this test.
 }
 
 func raftEventString(e rac2.RaftEvent) string {
@@ -223,8 +193,25 @@ func (c *testRangeController) HandleRaftEventRaftMuLocked(
 	return nil
 }
 
-func (c *testRangeController) HandleSchedulerEventRaftMuLocked(ctx context.Context) error {
-	panic("HandleSchedulerEventRaftMuLocked should not be called when no send-queues")
+func (c *testRangeController) HandleSchedulerEventRaftMuLocked(
+	_ context.Context, _ rac2.RaftMsgAppMode, _ raft.LogSnapshot,
+) {
+	panic("HandleSchedulerEventRaftMuLocked is unimplemented")
+}
+
+func (c *testRangeController) AdmitRaftMuLocked(
+	_ context.Context, replicaID roachpb.ReplicaID, av rac2.AdmittedVector,
+) {
+	fmt.Fprintf(c.b, " RangeController.AdmitRaftMuLocked(%s, %+v)\n", replicaID, av)
+}
+
+func (c *testRangeController) MaybeSendPingsRaftMuLocked() {
+	fmt.Fprintf(c.b, " RangeController.MaybeSendPingsRaftMuLocked()\n")
+}
+
+func (c *testRangeController) HoldsSendTokensLocked() bool {
+	fmt.Fprintf(c.b, " RangeController.HoldsSendTokensLocked()\n")
+	return false
 }
 
 func (c *testRangeController) SetReplicasRaftMuLocked(
@@ -244,7 +231,44 @@ func (c *testRangeController) CloseRaftMuLocked(ctx context.Context) {
 	fmt.Fprintf(c.b, " RangeController.CloseRaftMuLocked\n")
 }
 
+func (c *testRangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspectpb.Handle {
+	fmt.Fprintf(c.b, " RangeController.InspectRaftMuLocked\n")
+	return kvflowinspectpb.Handle{}
+}
+
+func (c *testRangeController) SendStreamStats(stats *rac2.RangeSendStreamStats) {
+	fmt.Fprintf(c.b, " RangeController.SendStreamStats\n")
+}
+
+func makeTestMutexAsserter() rac2.ReplicaMutexAsserter {
+	var raftMu syncutil.Mutex
+	var replicaMu syncutil.RWMutex
+	return rac2.MakeReplicaMutexAsserter(&raftMu, &replicaMu)
+}
+
+func LockRaftMuAndReplicaMu(mu *rac2.ReplicaMutexAsserter) (unlockFunc func()) {
+	mu.RaftMu.Lock()
+	mu.ReplicaMu.Lock()
+	return func() {
+		mu.ReplicaMu.Unlock()
+		mu.RaftMu.Unlock()
+	}
+}
+
+func LockRaftMu(mu *rac2.ReplicaMutexAsserter) (unlockFunc func()) {
+	mu.RaftMu.Lock()
+	return func() {
+		mu.RaftMu.Unlock()
+	}
+}
+
 func TestProcessorBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const replicaID = 5
+
+	ctx := context.Background()
 	var b strings.Builder
 	var r *testReplica
 	var sched testRaftScheduler
@@ -252,7 +276,9 @@ func TestProcessorBasic(t *testing.T) {
 	var q testACWorkQueue
 	var rcFactory testRangeControllerFactory
 	var p *processorImpl
-	reset := func(enabled EnabledWhenLeaderLevel) {
+	tenantID := roachpb.MustMakeTenantID(4)
+	muAsserter := makeTestMutexAsserter()
+	reset := func(enabled kvflowcontrol.V2EnabledWhenLeaderLevel) {
 		b.Reset()
 		r = newTestReplica(&b)
 		sched = testRaftScheduler{b: &b}
@@ -263,80 +289,109 @@ func TestProcessorBasic(t *testing.T) {
 			NodeID:                 1,
 			StoreID:                2,
 			RangeID:                3,
-			TenantID:               roachpb.MustMakeTenantID(4),
-			ReplicaID:              5,
-			Replica:                r,
+			ReplicaID:              replicaID,
+			ReplicaForTesting:      r,
+			ReplicaMutexAsserter:   muAsserter,
 			RaftScheduler:          &sched,
 			AdmittedPiggybacker:    &piggybacker,
 			ACWorkQueue:            &q,
+			MsgAppSender:           testMsgAppSender{},
 			RangeControllerFactory: &rcFactory,
 			EnabledWhenLeaderLevel: enabled,
+			EvalWaitMetrics:        rac2.NewEvalWaitMetrics(),
 		}).(*processorImpl)
 		fmt.Fprintf(&b, "n%s,s%s,r%s: replica=%s, tenant=%s, enabled-level=%s\n",
-			p.opts.NodeID, p.opts.StoreID, p.opts.RangeID, p.opts.ReplicaID, p.opts.TenantID,
-			enabledLevelString(p.mu.enabledWhenLeader))
+			p.opts.NodeID, p.opts.StoreID, p.opts.RangeID, p.opts.ReplicaID, tenantID,
+			enabledLevelString(p.GetEnabledWhenLeader()))
 	}
 	builderStr := func() string {
 		str := b.String()
 		b.Reset()
 		return str
 	}
-	printRaftState := func() {
-		fmt.Fprintf(&b, "Raft: leader: %d leaseholder: %d stable: %d next-unstable: %d term: %d admitted: %s",
-			r.raftNode.leader, r.leaseholder, r.raftNode.stableIndex, r.raftNode.nextUnstableIndex,
-			r.raftNode.term, admittedString(r.raftNode.admitted))
+	printLogTracker := func() {
+		fmt.Fprint(&b, p.logTracker.debugString())
 	}
-	ctx := context.Background()
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "processor"),
 		func(t *testing.T, d *datadriven.TestData) string {
+			defer func() { r.raftNode.check(t) }()
+
 			switch d.Cmd {
 			case "reset":
 				enabledLevel := parseEnabledLevel(t, d)
 				reset(enabledLevel)
 				return builderStr()
 
+			case "init-raft":
+				var mark rac2.LogMark
+				d.ScanArgs(t, "log-term", &mark.Term)
+				d.ScanArgs(t, "log-index", &mark.Index)
+				r.initRaft(mark)
+				unlockFunc := LockRaftMuAndReplicaMu(&muAsserter)
+				p.InitRaftLocked(ctx, r.raftNode, r.raftNode.mark)
+				unlockFunc()
+				return builderStr()
+
 			case "set-raft-state":
-				if d.HasArg("admitted") {
-					var arg string
-					d.ScanArgs(t, "admitted", &arg)
-					admitted := parseAdmitted(t, arg)
-					r.raftNode.admitted = admitted
-				}
 				if d.HasArg("leader") {
 					var leaderID int
 					d.ScanArgs(t, "leader", &leaderID)
+					r.raftNode.isLeader = leaderID == replicaID
 					r.raftNode.leader = roachpb.ReplicaID(leaderID)
-				}
-				if d.HasArg("stable-index") {
-					var stableIndex uint64
-					d.ScanArgs(t, "stable-index", &stableIndex)
-					r.raftNode.stableIndex = stableIndex
 				}
 				if d.HasArg("next-unstable-index") {
 					var nextUnstableIndex uint64
 					d.ScanArgs(t, "next-unstable-index", &nextUnstableIndex)
 					r.raftNode.nextUnstableIndex = nextUnstableIndex
 				}
-				if d.HasArg("my-leader-term") {
-					var myLeaderTerm uint64
-					d.ScanArgs(t, "my-leader-term", &myLeaderTerm)
-					r.raftNode.term = myLeaderTerm
+				if d.HasArg("term") {
+					var term uint64
+					d.ScanArgs(t, "term", &term)
+					r.raftNode.term = term
 				}
 				if d.HasArg("leaseholder") {
 					var leaseholder int
 					d.ScanArgs(t, "leaseholder", &leaseholder)
 					r.leaseholder = roachpb.ReplicaID(leaseholder)
 				}
-				printRaftState()
+				if d.HasArg("log-term") {
+					var mark rac2.LogMark
+					d.ScanArgs(t, "log-term", &mark.Term)
+					d.ScanArgs(t, "log-index", &mark.Index)
+					r.raftNode.setMark(t, mark)
+				}
+				r.raftNode.print()
+				return builderStr()
+
+			case "synced-log":
+				var mark rac2.LogMark
+				d.ScanArgs(t, "term", &mark.Term)
+				d.ScanArgs(t, "index", &mark.Index)
+				p.SyncedLogStorage(ctx, mark)
+				printLogTracker()
 				return builderStr()
 
 			case "on-destroy":
+				unlockFunc := LockRaftMu(&muAsserter)
 				p.OnDestroyRaftMuLocked(ctx)
+				unlockFunc()
 				return builderStr()
 
 			case "set-enabled-level":
 				enabledLevel := parseEnabledLevel(t, d)
-				p.SetEnabledWhenLeaderRaftMuLocked(enabledLevel)
+				var state RaftNodeBasicState
+				if r.raftNode != nil {
+					state = RaftNodeBasicState{
+						Term:              r.raftNode.term,
+						IsLeader:          r.raftNode.isLeader,
+						Leader:            r.raftNode.leader,
+						NextUnstableIndex: r.raftNode.nextUnstableIndex,
+						Leaseholder:       r.leaseholder,
+					}
+				}
+				unlockFunc := LockRaftMu(&muAsserter)
+				p.SetEnabledWhenLeaderRaftMuLocked(ctx, enabledLevel, state)
+				unlockFunc()
 				return builderStr()
 
 			case "get-enabled-level":
@@ -346,42 +401,71 @@ func TestProcessorBasic(t *testing.T) {
 
 			case "on-desc-changed":
 				desc := parseRangeDescriptor(t, d)
-				p.OnDescChangedLocked(ctx, &desc)
+				unlockFunc := LockRaftMuAndReplicaMu(&muAsserter)
+				p.OnDescChangedLocked(ctx, &desc, tenantID)
+				unlockFunc()
 				return builderStr()
 
 			case "handle-raft-ready-and-admit":
-				var entries []raftpb.Entry
+				// We don't bother setting RaftEvent.ReplicasStateInfo since it is
+				// unused by processorImpl, and simply passed down to RangeController
+				// (which we've mocked out in this test).
+				var event rac2.RaftEvent
 				if d.HasArg("entries") {
 					var arg string
 					d.ScanArgs(t, "entries", &arg)
-					entries = createEntries(t, parseEntryInfos(t, arg))
+					event.Entries = createEntries(t, parseEntryInfos(t, arg))
+				}
+				if len(event.Entries) > 0 {
+					d.ScanArgs(t, "leader-term", &event.Term)
 				}
 				fmt.Fprintf(&b, "HandleRaftReady:\n")
-				p.HandleRaftReadyRaftMuLocked(ctx, entries)
-				fmt.Fprintf(&b, ".....\n")
-				if len(entries) > 0 {
-					var leaderTerm uint64
-					d.ScanArgs(t, "leader-term", &leaderTerm)
-					fmt.Fprintf(&b, "AdmitRaftEntries:\n")
-					isV2 := p.AdmitRaftEntriesFromMsgStorageAppendRaftMuLocked(ctx, leaderTerm, entries)
-					fmt.Fprintf(&b, "leader-using-v2: %t\n", isV2)
+				var state RaftNodeBasicState
+				if r.raftNode != nil {
+					state = RaftNodeBasicState{
+						Term:              r.raftNode.term,
+						IsLeader:          r.raftNode.isLeader,
+						Leader:            r.raftNode.leader,
+						NextUnstableIndex: r.raftNode.nextUnstableIndex,
+						Leaseholder:       r.leaseholder,
+					}
 				}
+				unlockFunc := LockRaftMu(&muAsserter)
+				p.HandleRaftReadyRaftMuLocked(ctx, state, event)
+				fmt.Fprintf(&b, ".....\n")
+				if len(event.Entries) > 0 {
+					fmt.Fprintf(&b, "AdmitRaftEntries:\n")
+					destroyedOrV2 := p.AdmitRaftEntriesRaftMuLocked(ctx, event)
+					fmt.Fprintf(&b, "destroyed-or-leader-using-v2: %t\n", destroyedOrV2)
+					printLogTracker()
+				}
+				unlockFunc()
 				return builderStr()
 
 			case "enqueue-piggybacked-admitted":
 				var from, to uint64
 				d.ScanArgs(t, "from", &from)
 				d.ScanArgs(t, "to", &to)
-				msg := raftpb.Message{
-					Type: raftpb.MsgAppResp,
-					To:   raftpb.PeerID(to),
-					From: raftpb.PeerID(from),
+				require.Equal(t, p.opts.ReplicaID, roachpb.ReplicaID(to))
+
+				var term, index, pri int
+				d.ScanArgs(t, "term", &term)
+				d.ScanArgs(t, "index", &index)
+				d.ScanArgs(t, "pri", &pri)
+				require.Less(t, pri, int(raftpb.NumPriorities))
+				as := kvflowcontrolpb.AdmittedState{
+					Term:     uint64(term),
+					Admitted: make([]uint64, raftpb.NumPriorities),
 				}
-				p.EnqueuePiggybackedAdmittedAtLeader(msg)
+				as.Admitted[pri] = uint64(index)
+
+				p.EnqueuePiggybackedAdmittedAtLeader(roachpb.ReplicaID(from), as)
 				return builderStr()
 
 			case "process-piggybacked-admitted":
+				unlockFunc := LockRaftMu(&muAsserter)
 				p.ProcessPiggybackedAdmittedAtLeaderRaftMuLocked(ctx)
+				unlockFunc()
 				return builderStr()
 
 			case "side-channel":
@@ -405,27 +489,54 @@ func TestProcessorBasic(t *testing.T) {
 					Last:            last,
 					LowPriOverride:  lowPriOverride,
 				}
+				unlockFunc := LockRaftMu(&muAsserter)
 				p.SideChannelForPriorityOverrideAtFollowerRaftMuLocked(info)
+				unlockFunc()
 				return builderStr()
 
 			case "admitted-log-entry":
-				var replicaID int
-				d.ScanArgs(t, "replica-id", &replicaID)
-				var leaderTerm uint64
-				d.ScanArgs(t, "leader-term", &leaderTerm)
-				var index uint64
-				d.ScanArgs(t, "index", &index)
+				var cb EntryForAdmissionCallbackState
+				d.ScanArgs(t, "leader-term", &cb.Mark.Term)
+				d.ScanArgs(t, "index", &cb.Mark.Index)
 				var pri int
 				d.ScanArgs(t, "pri", &pri)
-				cb := EntryForAdmissionCallbackState{
-					StoreID:    2,
-					RangeID:    3,
-					ReplicaID:  roachpb.ReplicaID(replicaID),
-					LeaderTerm: leaderTerm,
-					Index:      index,
-					Priority:   raftpb.Priority(pri),
-				}
+				cb.Priority = raftpb.Priority(pri)
 				p.AdmittedLogEntry(ctx, cb)
+				printLogTracker()
+				return builderStr()
+
+			case "admit-for-eval":
+				pri := parseAdmissionPriority(t, d)
+				// The callee ignores the create time.
+				admitted, err := p.AdmitForEval(ctx, pri, time.Time{})
+				fmt.Fprintf(&b, "admitted: %t err: ", admitted)
+				if err == nil {
+					fmt.Fprintf(&b, "<nil>\n")
+				} else {
+					fmt.Fprintf(&b, "%s\n", err.Error())
+				}
+				return builderStr()
+
+			case "set-wait-for-eval-return-values":
+				rc := rcFactory.rcs[len(rcFactory.rcs)-1]
+				d.ScanArgs(t, "waited", &rc.waited)
+				rc.waitForEvalErr = nil
+				if d.HasArg("err") {
+					var errStr string
+					d.ScanArgs(t, "err", &errStr)
+					rc.waitForEvalErr = errors.Errorf("%s", errStr)
+				}
+				return builderStr()
+
+			case "inspect":
+				unlockFunc := LockRaftMu(&muAsserter)
+				p.InspectRaftMuLocked(ctx)
+				unlockFunc()
+				return builderStr()
+
+			case "send-stream-stats":
+				stats := rac2.RangeSendStreamStats{}
+				p.SendStreamStats(&stats)
 				return builderStr()
 
 			default:
@@ -434,50 +545,48 @@ func TestProcessorBasic(t *testing.T) {
 		})
 }
 
-func parseEnabledLevel(t *testing.T, td *datadriven.TestData) EnabledWhenLeaderLevel {
+func parseAdmissionPriority(t *testing.T, td *datadriven.TestData) admissionpb.WorkPriority {
+	var priStr string
+	td.ScanArgs(t, "pri", &priStr)
+	for k, v := range admissionpb.WorkPriorityDict {
+		if v == priStr {
+			return k
+		}
+	}
+	t.Fatalf("unknown priority %s", priStr)
+	return admissionpb.NormalPri
+}
+
+func parseEnabledLevel(
+	t *testing.T, td *datadriven.TestData,
+) kvflowcontrol.V2EnabledWhenLeaderLevel {
 	if td.HasArg("enabled-level") {
 		var str string
 		td.ScanArgs(t, "enabled-level", &str)
 		switch str {
 		case "not-enabled":
-			return NotEnabledWhenLeader
+			return kvflowcontrol.V2NotEnabledWhenLeader
 		case "v1-encoding":
-			return EnabledWhenLeaderV1Encoding
+			return kvflowcontrol.V2EnabledWhenLeaderV1Encoding
 		case "v2-encoding":
-			return EnabledWhenLeaderV2Encoding
+			return kvflowcontrol.V2EnabledWhenLeaderV2Encoding
 		default:
 			t.Fatalf("unrecoginized level %s", str)
 		}
 	}
-	return NotEnabledWhenLeader
+	return kvflowcontrol.V2NotEnabledWhenLeader
 }
 
-func enabledLevelString(enabledLevel EnabledWhenLeaderLevel) string {
+func enabledLevelString(enabledLevel kvflowcontrol.V2EnabledWhenLeaderLevel) string {
 	switch enabledLevel {
-	case NotEnabledWhenLeader:
+	case kvflowcontrol.V2NotEnabledWhenLeader:
 		return "not-enabled"
-	case EnabledWhenLeaderV1Encoding:
+	case kvflowcontrol.V2EnabledWhenLeaderV1Encoding:
 		return "v1-encoding"
-	case EnabledWhenLeaderV2Encoding:
+	case kvflowcontrol.V2EnabledWhenLeaderV2Encoding:
 		return "v2-encoding"
 	}
 	return "unknown-level"
-}
-
-func parseAdmitted(t *testing.T, arg string) [raftpb.NumPriorities]uint64 {
-	n := len(arg)
-	require.LessOrEqual(t, 2, n)
-	require.Equal(t, uint8('['), arg[0])
-	require.Equal(t, uint8(']'), arg[n-1])
-	parts := strings.Split(arg[1:n-1], ",")
-	require.Equal(t, 4, len(parts))
-	var admitted [raftpb.NumPriorities]uint64
-	for i, part := range parts {
-		val, err := strconv.Atoi(strings.TrimSpace(part))
-		require.NoError(t, err)
-		admitted[i] = uint64(val)
-	}
-	return admitted
 }
 
 func parseRangeDescriptor(t *testing.T, td *datadriven.TestData) roachpb.RangeDescriptor {

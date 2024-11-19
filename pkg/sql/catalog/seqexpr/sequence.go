@@ -1,12 +1,7 @@
 // Copyright 2020 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package seqexpr provides functionality to find usages of sequences in
 // expressions.
@@ -85,10 +80,10 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 			if len(funcExpr.Exprs) == overload.Types.Length() {
 				paramTypes, ok := overload.Types.(tree.ParamTypes)
 				if !ok {
-					panic(pgerror.Newf(
+					return nil, pgerror.Newf(
 						pgcode.InvalidFunctionDefinition,
 						"%s has invalid argument types", funcExpr.Func.String(),
-					))
+					)
 				}
 				found = true
 				for i := 0; i < len(paramTypes); i++ {
@@ -103,10 +98,10 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 			}
 		}
 		if !found {
-			panic(pgerror.New(
+			return nil, pgerror.New(
 				pgcode.DatatypeMismatch,
 				"could not find matching function overload for given arguments",
-			))
+			)
 		}
 	}
 	return nil, nil

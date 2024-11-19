@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlccl
 
@@ -16,10 +13,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -140,6 +138,11 @@ func TestExplainGist(t *testing.T) {
 	skip.UnderDeadlock(t, "the test is too slow")
 	skip.UnderRace(t, "the test is too slow")
 
+	// Use the release-build panic-catching behavior instead of the
+	// crdb_test-build behavior. This is needed so that some known bugs like
+	// #117101 don't result in a test failure.
+	defer colexecerror.ProductionBehaviorForTests()()
+
 	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
 
@@ -194,6 +197,7 @@ func TestExplainGist(t *testing.T) {
 				for _, knownErr := range []string{
 					"invalid datum type given: RECORD, expected RECORD", // #117101
 					"expected equivalence dependants to be its closure", // #119045
+					"not in index", // #133129
 				} {
 					if strings.Contains(err.Error(), knownErr) {
 						// Don't fail the test on a set of known errors.
@@ -251,9 +255,11 @@ func TestExplainGist(t *testing.T) {
 			}
 			_, err = sqlDB.Exec("SELECT crdb_internal.decode_plan_gist($1);", gist)
 			if err != nil {
-				// We might be still in the process of cancelling the previous
-				// DROP operation - ignore this particular error.
-				if !errors.Is(err, catalog.ErrDescriptorDropped) {
+				// We might be still in the process of cancelling the previous DROP
+				// operation or hit the statement timeout - ignore this particular
+				// error.
+				if !testutils.IsError(err, "descriptor is being dropped") &&
+					!sqltestutils.IsClientSideQueryCanceledErr(err) {
 					t.Fatal(err)
 				}
 				continue

@@ -1,12 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package memo
 
@@ -542,6 +537,12 @@ func (h *hasher) HashFKCascades(val FKCascades) {
 	}
 }
 
+func (h *hasher) HashAfterTriggers(val *AfterTriggers) {
+	if val != nil {
+		h.HashUint64(uint64(reflect.ValueOf(val.Builder).Pointer()))
+	}
+}
+
 func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
 	h.HashUint64(uint64(val.Mode))
 	hash := h.hash
@@ -1020,6 +1021,17 @@ func (h *hasher) IsFKCascadesEqual(l, r FKCascades) bool {
 		}
 	}
 	return true
+}
+
+func (h *hasher) IsAfterTriggersEqual(l, r *AfterTriggers) bool {
+	if l == r {
+		return true
+	}
+	if l == nil || r == nil {
+		return false
+	}
+	// It's sufficient to compare the TriggerBuilder instances.
+	return l.Builder == r.Builder
 }
 
 func (h *hasher) IsExplainOptionsEqual(l, r tree.ExplainOptions) bool {

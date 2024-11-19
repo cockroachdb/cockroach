@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
@@ -338,7 +333,9 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	}
 
 	var sb span.Builder
-	sb.Init(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
+	sb.InitAllowingExternalRowData(
+		planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index,
+	)
 
 	var stat *stats.TableStatistic
 	var histogram []cat.HistogramBucket
@@ -532,12 +529,20 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	// Create the table readers; for this we initialize a dummy scanNode.
 	scan := scanNode{desc: desc}
+	if colCfg.wantedColumns == nil {
+		// wantedColumns cannot be left nil, and if it is nil at this point,
+		// then we only have virtual computed columns, so we'll allocate an
+		// empty slice.
+		colCfg.wantedColumns = []tree.ColumnID{}
+	}
 	err := scan.initDescDefaults(colCfg)
 	if err != nil {
 		return nil, err
 	}
 	var sb span.Builder
-	sb.Init(planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index)
+	sb.InitAllowingExternalRowData(
+		planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index,
+	)
 	scan.spans, err = sb.UnconstrainedSpans()
 	if err != nil {
 		return nil, err

@@ -1,10 +1,7 @@
 // Copyright 2021 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sqlproxyccl
 
@@ -107,7 +104,8 @@ var authenticate = func(
 		case *pgproto3.AuthenticationOk:
 			throttleError := throttleHook(throttler.AttemptOK)
 			if throttleError != nil {
-				if err = feSend(toPgError(throttleError)); err != nil {
+				// Send a user-facing error.
+				if err = feSend(toPgError(authThrottledError)); err != nil {
 					return nil, err
 				}
 				return nil, throttleError
@@ -128,7 +126,8 @@ var authenticate = func(
 				throttleError = throttleHook(throttler.AttemptInvalidCredentials)
 			}
 			if throttleError != nil {
-				if err = feSend(toPgError(throttleError)); err != nil {
+				// Send a user-facing error.
+				if err = feSend(toPgError(authThrottledError)); err != nil {
 					return nil, err
 				}
 				return nil, throttleError

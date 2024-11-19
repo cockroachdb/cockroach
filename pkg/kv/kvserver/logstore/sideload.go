@@ -1,12 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package logstore
 
@@ -56,8 +51,8 @@ type SideloadStorage interface {
 	// files that remain, or an error.
 	TruncateTo(_ context.Context, index kvpb.RaftIndex) (freed, retained int64, _ error)
 	// BytesIfTruncatedFromTo returns the number of bytes that would be freed,
-	// if one were to truncate [from, to). Additionally, it returns the the
-	// number of bytes that would be retained >= to.
+	// if one were to truncate [from, to). Additionally, it returns the number
+	// of bytes that would be retained >= to.
 	BytesIfTruncatedFromTo(_ context.Context, from kvpb.RaftIndex, to kvpb.RaftIndex) (freed, retained int64, _ error)
 	// Returns an absolute path to the file that Get() would return the contents
 	// of. Does not check whether the file actually exists.

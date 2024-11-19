@@ -1,10 +1,7 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package partitionccl
 
@@ -1070,9 +1067,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
-			hasNewSubzones := false
-			spans, err := sql.GenerateSubzoneSpans(
-				cluster.NoSettings, keys.SystemSQLCodec, parse.tableDesc, parse.subzones, hasNewSubzones)
+			spans, err := sql.GenerateSubzoneSpans(keys.SystemSQLCodec, parse.tableDesc, parse.subzones)
 			if err != nil {
 				t.Fatalf("generating subzone spans: %+v", err)
 			}

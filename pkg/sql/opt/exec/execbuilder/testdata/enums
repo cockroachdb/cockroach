@@ -145,17 +145,17 @@ limit
  ├── union-all
  │    ├── union-all
  │    │    ├── scan composite_key
- │    │    │    ├── constraint: /6/7: [/'hello' - /'hello']
+ │    │    │    ├── constraint: /8/9: [/'hello' - /'hello']
  │    │    │    └── limit: 5
  │    │    └── scan composite_key
- │    │         ├── constraint: /10/11: [/'howdy' - /'howdy']
+ │    │         ├── constraint: /14/15: [/'howdy' - /'howdy']
  │    │         └── limit: 5
  │    └── union-all
  │         ├── scan composite_key
- │         │    ├── constraint: /14/15: [/'hi' - /'hi']
+ │         │    ├── constraint: /20/21: [/'hi' - /'hi']
  │         │    └── limit: 5
  │         └── scan composite_key
- │              ├── constraint: /18/19: [/'cheers' - /'cheers']
+ │              ├── constraint: /26/27: [/'cheers' - /'cheers']
  │              └── limit: 5
  └── 5
 
@@ -167,16 +167,16 @@ query T
 EXPLAIN (OPT,VERBOSE) SELECT x FROM nulls WHERE y < 0 UNION SELECT x FROM nulls WHERE y > 10
 ----
 union
- ├── columns: x:11
+ ├── columns: x:15
  ├── left columns: nulls.x:1
- ├── right columns: nulls.x:6
- ├── internal-ordering: +11
+ ├── right columns: nulls.x:8
+ ├── internal-ordering: +15
  ├── cardinality: [0 - 5]
- ├── stats: [rows=5, distinct(11)=5, null(11)=1]
+ ├── stats: [rows=5, distinct(15)=5, null(15)=1]
  ├── cost: 2284.86667
- ├── key: (11)
+ ├── key: (15)
  ├── distribution: test
- ├── interesting orderings: (+11)
+ ├── interesting orderings: (+15)
  ├── project
  │    ├── columns: nulls.x:1
  │    ├── stats: [rows=333.3333, distinct(1)=5, null(1)=3.33333]
@@ -202,26 +202,26 @@ union
  │         └── filters
  │              └── y:2 < 0 [outer=(2), constraints=(/2: (/NULL - /-1]; tight)]
  └── project
-      ├── columns: nulls.x:6
-      ├── stats: [rows=333.3333, distinct(6)=5, null(6)=3.33333]
+      ├── columns: nulls.x:8
+      ├── stats: [rows=333.3333, distinct(8)=5, null(8)=3.33333]
       ├── cost: 1142.40333
-      ├── ordering: +6
+      ├── ordering: +8
       ├── distribution: test
-      ├── interesting orderings: (+6)
+      ├── interesting orderings: (+8)
       └── select
-           ├── columns: nulls.x:6 y:7
-           ├── stats: [rows=333.3333, distinct(6)=5, null(6)=3.33333, distinct(7)=33.3333, null(7)=0]
+           ├── columns: nulls.x:8 y:9
+           ├── stats: [rows=333.3333, distinct(8)=5, null(8)=3.33333, distinct(9)=33.3333, null(9)=0]
            ├── cost: 1139.05
-           ├── ordering: +6
+           ├── ordering: +8
            ├── distribution: test
-           ├── interesting orderings: (+6,+7)
+           ├── interesting orderings: (+8,+9)
            ├── scan nulls@nulls_x_y_idx
-           │    ├── columns: nulls.x:6 y:7
-           │    ├── stats: [rows=1000, distinct(6)=5, null(6)=10, distinct(7)=100, null(7)=10]
+           │    ├── columns: nulls.x:8 y:9
+           │    ├── stats: [rows=1000, distinct(8)=5, null(8)=10, distinct(9)=100, null(9)=10]
            │    ├── cost: 1129.02
-           │    ├── ordering: +6
+           │    ├── ordering: +8
            │    ├── distribution: test
-           │    ├── prune: (6,7)
-           │    └── interesting orderings: (+6,+7)
+           │    ├── prune: (8,9)
+           │    └── interesting orderings: (+8,+9)
            └── filters
-                └── y:7 > 10 [outer=(7), constraints=(/7: [/11 - ]; tight)]
+                └── y:9 > 10 [outer=(9), constraints=(/9: [/11 - ]; tight)]

@@ -155,7 +155,7 @@ vectorized: true
         └── • scan
               missing stats
               table: a@a_b_idx
-              spans: [/'\x1220666f0001' - /'\x1220666f0001'] [/'\x12666f6f0001' - /'\x12666f6f0001'] [/'\x126f6f200001' - /'\x126f6f200001']
+              spans: [/" fo" - /" fo"] [/"foo" - /"foo"] [/"oo " - /"oo "]
 
 # Test that trigram indexes accelerate the % operator with an OR if the
 # constant has more than one trigram.
@@ -177,7 +177,7 @@ vectorized: true
         └── • scan
               missing stats
               table: a@a_b_idx
-              spans: [/'\x1220666f0001' - /'\x1220666f0001'] [/'\x12666f6f0001' - /'\x12666f6f0001'] [/'\x126f62200001' - /'\x126f62200001'] [/'\x126f6f620001' - /'\x126f6f620001']
+              spans: [/" fo" - /" fo"] [/"foo" - /"foo"] [/"ob " - /"ob "] [/"oob" - /"oob"]
 
 # Test that trigram indexes can accelerate the % operator if there are fewer
 # than 3 characters in the constant by using padded trigrams.
@@ -199,7 +199,7 @@ vectorized: true
         └── • scan
               missing stats
               table: a@a_b_idx
-              spans: [/'\x122020660001' - /'\x122020660001'] [/'\x1220666f0001' - /'\x1220666f0001'] [/'\x12666f200001' - /'\x12666f200001']
+              spans: [/"  f" - /"  f"] [/" fo" - /" fo"] [/"fo " - /"fo "]
 
 # Test that trigram indexes can accelerate the % operator in reverse order.
 query T
@@ -220,7 +220,7 @@ vectorized: true
         └── • scan
               missing stats
               table: a@a_b_idx
-              spans: [/'\x1220626c0001' - /'\x1220626c0001'] [/'\x126168200001' - /'\x126168200001'] [/'\x12626c610001' - /'\x12626c610001'] [/'\x126c61680001' - /'\x126c61680001']
+              spans: [/" bl" - /" bl"] [/"ah " - /"ah "] [/"bla" - /"bla"] [/"lah" - /"lah"]
 
 # Test that trigram indexes can't accelerate the % operator with no constant
 # columns.
@@ -303,7 +303,7 @@ vectorized: true
         └── • scan
               missing stats
               table: b@b_a_idx
-              spans: [/'\x1220666f0001' - /'\x1220666f0001'] [/'\x12666f6f0001' - /'\x12666f6f0001'] [/'\x126f62200001' - /'\x126f62200001'] [/'\x126f6f620001' - /'\x126f6f620001']
+              spans: [/" fo" - /" fo"] [/"foo" - /"foo"] [/"ob " - /"ob "] [/"oob" - /"oob"]
 
 # Regression test for #88925.
 statement ok

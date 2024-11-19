@@ -1,12 +1,7 @@
 // Copyright 2014 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package stop
 
@@ -15,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"runtime/debug"
+	"runtime/trace"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -220,7 +216,7 @@ func NewStopper(options ...Option) *Stopper {
 	return s
 }
 
-// recover reports the current panic, if any, any panics again.
+// recover reports the current panic, if any, and panics again.
 //
 // Note: this function _must_ be called with `defer s.recover()`, otherwise
 // the panic recovery won't work.
@@ -315,9 +311,25 @@ func (s *Stopper) RunTask(ctx context.Context, taskName string, f func(context.C
 	// Call f.
 	defer s.recover(ctx)
 	defer s.runPostlude()
+	defer s.startRegion(ctx, taskName).End()
 
 	f(ctx)
 	return nil
+}
+
+type region interface {
+	End()
+}
+
+type noopRegion struct{}
+
+func (n noopRegion) End() {}
+
+func (s *Stopper) startRegion(ctx context.Context, taskName string) region {
+	if !trace.IsEnabled() {
+		return noopRegion{}
+	}
+	return trace.StartRegion(ctx, taskName)
 }
 
 // RunTaskWithErr is like RunTask(), but takes in a callback that can return an
@@ -332,6 +344,7 @@ func (s *Stopper) RunTaskWithErr(
 	// Call f.
 	defer s.recover(ctx)
 	defer s.runPostlude()
+	defer s.startRegion(ctx, taskName).End()
 
 	return f(ctx)
 }
@@ -472,8 +485,9 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 
 	// Call f on another goroutine.
 	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
-	go func() {
+	go func(taskName string) {
 		defer s.runPostlude()
+		defer s.startRegion(ctx, taskName).End()
 		defer sp.Finish()
 		defer s.recover(ctx)
 		if alloc != nil {
@@ -482,7 +496,7 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 
 		sp.UpdateGoroutineIDToCurrent()
 		f(ctx)
-	}()
+	}(opt.TaskName)
 	return nil
 }
 

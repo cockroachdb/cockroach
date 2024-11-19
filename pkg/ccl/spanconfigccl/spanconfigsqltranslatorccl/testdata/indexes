@@ -6,7 +6,13 @@ exec-sql
 CREATE DATABASE db;
 CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
 CREATE INDEX idx ON db.t (j);
+----
+
+exec-sql
 ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+----
+
+exec-sql
 ALTER INDEX db.t@idx CONFIGURE ZONE USING num_voters = 5;
 ----
 
@@ -59,6 +65,9 @@ translate database=db table=t
 # continues to hold a placeholder zone config.
 exec-sql
 ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds = 3600;
+----
+
+exec-sql
 ALTER INDEX db.t@idx CONFIGURE ZONE USING gc.ttlseconds = 25
 ----
 
@@ -92,3 +101,24 @@ translate database=db table=t
 /Table/106{-/2}                            range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
 /Table/106/{2-3}                           range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5
 /Table/10{6/3-7}                           range_max_bytes=100000000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
+
+# Configure a zone config field on each index on a table to ensure that both
+# indexes have their own zone configs.
+exec-sql
+CREATE TABLE db.t_indexes (k INT PRIMARY KEY, v INT, INDEX idx (v));
+----
+
+exec-sql
+ALTER INDEX db.t_indexes@t_indexes_pkey CONFIGURE ZONE USING num_replicas = 4;
+----
+
+exec-sql
+ALTER INDEX db.t_indexes@idx CONFIGURE ZONE USING num_replicas = 5;
+----
+
+translate database=db table=t_indexes
+----
+/Table/107{-/1}                            ttl_seconds=3600 num_replicas=7
+/Table/107/{1-2}                           ttl_seconds=3600 num_replicas=4
+/Table/107/{2-3}                           ttl_seconds=3600 num_replicas=5
+/Table/10{7/3-8}                           ttl_seconds=3600 num_replicas=7

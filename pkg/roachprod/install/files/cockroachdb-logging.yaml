@@ -1,7 +1,11 @@
 ---
 file-defaults:
   auditable: false
-  buffered-writes: true
+  buffered-writes: false
+  buffering:
+    max-staleness: 5s
+    flush-trigger-size: 256KiB
+    max-buffer-size: 50MiB
   dir: #{ .LogDir #}
   exit-on-error: false
   filter: INFO
@@ -35,13 +39,13 @@ sinks:
       channels: [STORAGE]
     security:
       channels: [PRIVILEGES, USER_ADMIN]
-      auditable: true
+      auditable: false
     sql-audit:
       channels: [SENSITIVE_ACCESS]
-      auditable: true
+      auditable: false
     sql-auth:
       channels: [SESSIONS]
-      auditable: true
+      auditable: false
     sql-exec:
       channels: [SQL_EXEC]
     sql-slow:

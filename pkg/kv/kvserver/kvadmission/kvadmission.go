@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 // Package kvadmission is the integration layer between KV and admission
 // control.
@@ -58,12 +53,12 @@ var elasticCPUDurationPerInternalLowPriRead = settings.RegisterDurationSetting(
 	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
 )
 
-// internalLowPriReadElasticControlEnabled determines whether internally
-// submitted low pri reads integrate with elastic CPU control.
-var internalLowPriReadElasticControlEnabled = settings.RegisterBoolSetting(
+// elasticAdmissionAllLowPri determines whether internally
+// submitted low bulk pri requests integrate with elastic CPU control.
+var elasticAdmissionAllLowPri = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kvadmission.low_pri_read_elastic_control.enabled",
-	"determines whether the internally submitted low priority reads integrate with elastic CPU control",
+	"kvadmission.elastic_control_bulk_low_priority.enabled",
+	"determines whether the all low bulk priority requests integrate with elastic CPU control",
 	true,
 )
 
@@ -186,6 +181,9 @@ type Controller interface {
 		_ context.Context, _ roachpb.TenantID, _ roachpb.StoreID, _ roachpb.RangeID, _ roachpb.ReplicaID,
 		leaderTerm uint64, _ raftpb.Entry)
 	replica_rac2.ACWorkQueue
+	// GetSnapshotQueue returns the SnapshotQueue which is used for ingesting raft
+	// snapshots.
+	GetSnapshotQueue(roachpb.StoreID) *admission.SnapshotQueue
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -338,7 +336,7 @@ func (n *controllerImpl) AdmitKVWork(
 		var admitted bool
 		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV)
 		if attemptFlowControl && !bypassAdmission {
-			kvflowHandle, found := n.kvflowHandles.Lookup(ba.RangeID)
+			kvflowHandle, found := n.kvflowHandles.LookupReplicationAdmissionHandle(ba.RangeID)
 			if !found {
 				return Handle{}, nil
 			}
@@ -353,6 +351,10 @@ func (n *controllerImpl) AdmitKVWork(
 				// and the point of deduction. That's ok, there's no strong
 				// synchronization needed between these two points.
 				ah.raftAdmissionMeta = &kvflowcontrolpb.RaftAdmissionMeta{
+					// NOTE: The priority is identical for v1 and v2, a
+					// admissionpb.WorkPriority,  until we encode the command in
+					// replica_raft, where if the range is using racv2 encoding we will
+					// convert the priority to a raftpb.Priority.
 					AdmissionPriority:   int32(admissionInfo.Priority),
 					AdmissionCreateTime: admissionInfo.CreateTime,
 					AdmissionOriginNode: n.nodeID.Get(),
@@ -399,14 +401,13 @@ func (n *controllerImpl) AdmitKVWork(
 		//   handed out through this mechanism, as a way to provide latency
 		//   isolation to non-elastic ("latency sensitive") work running on the
 		//   same machine.
-		// - We do the same for internally submitted low priority reads in
+		// - We do the same for internally submitted bulk low priority requests in
 		//   general (notably, for KV work done on the behalf of row-level TTL
-		//   reads). Everything admissionpb.UserLowPri and above uses the slots
-		//   mechanism.
-		isInternalLowPriRead := ba.IsReadOnly() && admissionInfo.Priority < admissionpb.UserLowPri
+		//   reads or other jobs). Everything admissionpb.UserLowPri and above uses
+		//   the slots mechanism.
 		shouldUseElasticCPU :=
 			(exportRequestElasticControlEnabled.Get(&n.settings.SV) && ba.IsSingleExportRequest()) ||
-				(internalLowPriReadElasticControlEnabled.Get(&n.settings.SV) && isInternalLowPriRead)
+				(admissionInfo.Priority <= admissionpb.BulkLowPri && elasticAdmissionAllLowPri.Get(&n.settings.SV))
 
 		if shouldUseElasticCPU {
 			var admitDuration time.Duration
@@ -660,9 +661,9 @@ var _ replica_rac2.ACWorkQueue = &controllerImpl{}
 
 // Admit implements replica_rac2.ACWorkQueue. It is only used for the RACv2 protocol.
 func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForAdmission) bool {
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(entry.CallbackState.StoreID)
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(entry.StoreID)
 	if storeAdmissionQ == nil {
-		log.Errorf(ctx, "unable to find queue for store: %s", entry.CallbackState.StoreID)
+		log.Errorf(ctx, "unable to find queue for store: %s", entry.StoreID)
 		return false // nothing to do
 	}
 
@@ -678,12 +679,12 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 	}
 	wi.ReplicatedWorkInfo = admission.ReplicatedWorkInfo{
 		Enabled:    true,
-		RangeID:    entry.CallbackState.RangeID,
-		ReplicaID:  entry.CallbackState.ReplicaID,
-		LeaderTerm: entry.CallbackState.LeaderTerm,
+		RangeID:    entry.RangeID,
+		ReplicaID:  entry.ReplicaID,
+		LeaderTerm: entry.CallbackState.Mark.Term,
 		LogPosition: admission.LogPosition{
 			Term:  0, // Ignored by callback in RACv2.
-			Index: entry.CallbackState.Index,
+			Index: entry.CallbackState.Mark.Index,
 		},
 		Origin:       0,
 		RaftPri:      entry.CallbackState.Priority,
@@ -702,6 +703,14 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
 	}
 	return true
+}
+
+func (n *controllerImpl) GetSnapshotQueue(storeID roachpb.StoreID) *admission.SnapshotQueue {
+	sq := n.storeGrantCoords.TryGetSnapshotQueueForStore(storeID)
+	if sq == nil {
+		return nil
+	}
+	return sq.(*admission.SnapshotQueue)
 }
 
 // FollowerStoreWriteBytes captures stats about writes done to a store by a

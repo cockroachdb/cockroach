@@ -1,12 +1,7 @@
 // Copyright 2022 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package main
 
@@ -22,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	roachprodConfig "github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -86,7 +82,7 @@ func newExecutor(config executorConfig) (*executor, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = verifyPathFlag("output-dir", config.outputDir, true)
+	err = util.VerifyPathFlag("output-dir", config.outputDir, true)
 	if err != nil {
 		return nil, err
 	}
@@ -113,9 +109,9 @@ func newExecutor(config executorConfig) (*executor, error) {
 
 	roachprodConfig.Quiet = config.quiet
 	timestamp := timeutil.Now()
-	l := initLogger(filepath.Join(config.outputDir, fmt.Sprintf("roachprod-microbench-%s.log", timestamp.Format(timeFormat))))
+	l := InitLogger(filepath.Join(config.outputDir, fmt.Sprintf("roachprod-microbench-%s.log", timestamp.Format(util.TimeFormat))))
 
-	excludeBenchmarks := getRegexExclusionPairs(config.excludeList)
+	excludeBenchmarks := util.GetRegexExclusionPairs(config.excludeList)
 	return &executor{
 		executorConfig:         config,
 		excludeBenchmarksRegex: excludeBenchmarks,
@@ -279,7 +275,7 @@ func (e *executor) executeBenchmarks() error {
 	}
 
 	// Init `roachprod` and get the number of nodes in the cluster.
-	initRoachprod()
+	InitRoachprod()
 	statuses, err := roachprod.Status(context.Background(), e.log, e.cluster, "")
 	if err != nil {
 		return err

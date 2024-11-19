@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Copyright 2022 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+
 # casts_gen.sh generates castMap entries by reading from Postgres's pg_cast
 # table. To use this script, Postgres must be installed with the PostGIS
 # extension and already running.

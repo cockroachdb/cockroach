@@ -25,7 +25,7 @@ Mutators:           cluster_setting[test_cluster_setting]
 Plan:
 ├── install fixtures for version "v22.2.3" (1)
 ├── start cluster at version "v22.2.3" (2)
-├── wait for system tenant on nodes :1-4 to reach cluster version '22.2' (3)
+├── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on system tenant (3)
 ├── run "do something" (4)
 ├── upgrade cluster from "v22.2.3" to "v23.1.10"
 │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (5)
@@ -37,7 +37,7 @@ Plan:
 │   │   └── restart node 4 with binary version v23.1.10 (10)
 │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (11)
 │   ├── run "my mixed-version feature" (12)
-│   └── wait for system tenant on nodes :1-4 to reach cluster version '23.1' (13)
+│   └── wait for all nodes (:1-4) to acknowledge cluster version '23.1' on system tenant (13)
 ├── upgrade cluster from "v23.1.10" to "v23.2.4"
 │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (14)
 │   ├── upgrade nodes :1-4 from "v23.1.10" to "v23.2.4"
@@ -51,7 +51,7 @@ Plan:
 │   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (22)
 │   ├── run "my mixed-version feature" (23)
 │   ├── reset cluster setting "test_cluster_setting" on system tenant (24)
-│   └── wait for system tenant on nodes :1-4 to reach cluster version '23.2' (25)
+│   └── wait for all nodes (:1-4) to acknowledge cluster version '23.2' on system tenant (25)
 └── upgrade cluster from "v23.2.4" to "<current>"
    ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (26)
    ├── upgrade nodes :1-4 from "v23.2.4" to "<current>"
@@ -79,4 +79,4 @@ Plan:
    ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (45)
    ├── set cluster setting "test_cluster_setting" to '1' on system tenant (46)
    ├── reset cluster setting "test_cluster_setting" on system tenant (47)
-   └── wait for system tenant on nodes :1-4 to reach cluster version <current> (48)
+   └── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (48)

@@ -1,12 +1,7 @@
 // Copyright 2016 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 //
 // This file provides generic interfaces that allow tests to set up test
 // clusters without importing the testcluster (and indirectly server) package
@@ -47,6 +42,9 @@ type TestClusterInterface interface {
 
 	// ServerConn returns a gosql.DB connection to a specific node.
 	ServerConn(idx int) *gosql.DB
+
+	// Restart stops and then starts all servers in the cluster.
+	Restart() error
 
 	// StopServer stops a single server.
 	StopServer(idx int)
@@ -272,6 +270,10 @@ type TestClusterInterface interface {
 	// TogglesplitQueues activates or deactivates the split queues on all
 	// the stores on all the nodes.
 	ToggleSplitQueues(active bool)
+
+	// ToggleLeaseQueues activates or deactivates the lease queues on all
+	// the stores on all the nodes.
+	ToggleLeaseQueues(active bool)
 }
 
 // SplitPoint describes a split point that is passed to SplitTable.

@@ -1,10 +1,7 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package streamclient
 
@@ -22,10 +19,10 @@ import (
 )
 
 const (
-	// sslInlineURLParam is a non-standard connection URL
+	// SslInlineURLParam is a non-standard connection URL
 	// parameter. When true, we assume that sslcert, sslkey, and
 	// sslrootcert contain URL-encoded data rather than paths.
-	sslInlineURLParam = "sslinline"
+	SslInlineURLParam = "sslinline"
 
 	sslModeURLParam     = "sslmode"
 	sslCertURLParam     = "sslcert"
@@ -82,7 +79,7 @@ type tlsCerts struct {
 // tlsCerts struct can be used to apply the certificate data to the
 // tls.Config produced by pgx.
 func uriWithInlineTLSCertsRemoved(remote *url.URL) (*url.URL, *tlsCerts, error) {
-	if remote.Query().Get(sslInlineURLParam) != "true" {
+	if remote.Query().Get(SslInlineURLParam) != "true" {
 		return remote, nil, nil
 	}
 
@@ -132,7 +129,7 @@ func uriWithInlineTLSCertsRemoved(remote *url.URL) (*url.URL, *tlsCerts, error) 
 	v.Del(sslCertURLParam)
 	v.Del(sslKeyURLParam)
 	v.Del(sslRootCertURLParam)
-	v.Del(sslInlineURLParam)
+	v.Del(SslInlineURLParam)
 	retURL.RawQuery = v.Encode()
 	return &retURL, tlsInfo, nil
 }

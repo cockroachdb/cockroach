@@ -10,7 +10,7 @@ EXPLAIN (DDL) DROP TABLE multi_region_test_db.public.table_regional_by_row;
 Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 29 elements transitioning toward ABSENT
+ │         ├── 35 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
@@ -35,12 +35,18 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
- │         └── 38 Mutation operations
+ │         └── 46 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
@@ -50,6 +56,10 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967293,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967293,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967292,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
@@ -60,6 +70,8 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967293,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967292,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
@@ -68,6 +80,8 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967293,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967292,"TableID":108}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":108}
@@ -81,7 +95,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 29 elements transitioning toward ABSENT
+ │    │    ├── 35 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 108 (table_regional_by_row-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
@@ -106,6 +120,12 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 1 (table_regional_by_row_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
@@ -114,7 +134,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 29 elements transitioning toward ABSENT
+ │         ├── 35 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
@@ -139,12 +159,18 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
- │         └── 42 Mutation operations
+ │         └── 50 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
@@ -154,6 +180,10 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967293,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967293,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967292,"TableID":108}
+ │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
@@ -164,6 +194,8 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967293,"TableID":108}
+ │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967292,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":108}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
@@ -172,6 +204,8 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967293,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967292,"TableID":108}
  │              ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":108}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":108}

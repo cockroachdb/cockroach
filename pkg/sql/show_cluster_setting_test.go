@@ -1,16 +1,12 @@
 // Copyright 2023 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package sql
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -58,6 +54,21 @@ func TestCheckClusterSettingValuesAreEquivalent(t *testing.T) {
 		{ // 4
 			kv:  encode(t, "22.2-upgrading-to-23.1-step-011"),
 			exp: "value differs between local setting ([]) and KV (22.2-upgrading-to-23.1-step-011)",
+		},
+		{ // 5
+			// NB: On release branches, clusterversion.Latest will have a fence
+			// version that has -1 for the internal version.
+			local: encode(t, clusterversion.Latest.Version().FenceVersion().String()),
+			kv:    encode(t, (clusterversion.Latest - 1).Version().String()),
+		},
+		{ // 6
+			local: encode(t, clusterversion.Latest.Version().String()),
+			kv:    encode(t, (clusterversion.Latest - 1).Version().String()),
+			exp: fmt.Sprintf(
+				"value differs between local setting (%s) and KV (%s)",
+				clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()},
+				clusterversion.ClusterVersion{Version: (clusterversion.Latest - 1).Version()},
+			),
 		},
 	} {
 		t.Run("", func(t *testing.T) {

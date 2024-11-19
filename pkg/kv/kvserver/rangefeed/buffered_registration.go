@@ -1,12 +1,7 @@
 // Copyright 2024 The Cockroach Authors.
 //
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
 
 package rangefeed
 
@@ -75,6 +70,7 @@ type bufferedRegistration struct {
 var _ registration = &bufferedRegistration{}
 
 func newBufferedRegistration(
+	streamCtx context.Context,
 	span roachpb.Span,
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
@@ -89,6 +85,7 @@ func newBufferedRegistration(
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
+			streamCtx:        streamCtx,
 			span:             span,
 			catchUpTimestamp: startTS,
 			withDiff:         withDiff,
@@ -151,10 +148,17 @@ func (br *bufferedRegistration) publish(
 	}
 }
 
-// disconnect cancels the output loop context for the registration and passes an
+// IsDisconnected returns true if the registration has been disconnected.
+func (br *bufferedRegistration) IsDisconnected() bool {
+	br.mu.Lock()
+	defer br.mu.Unlock()
+	return br.mu.disconnected
+}
+
+// Disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
-func (br *bufferedRegistration) disconnect(pErr *kvpb.Error) {
+func (br *bufferedRegistration) Disconnect(pErr *kvpb.Error) {
 	br.mu.Lock()
 	defer br.mu.Unlock()
 	if !br.mu.disconnected {
@@ -166,7 +170,7 @@ func (br *bufferedRegistration) disconnect(pErr *kvpb.Error) {
 			br.mu.outputLoopCancelFn()
 		}
 		br.mu.disconnected = true
-		br.stream.Disconnect(pErr)
+		br.stream.SendError(pErr)
 	}
 }
 
@@ -190,7 +194,20 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 		return err
 	}
 
-	firstIteration := true
+	var (
+		// The following variables facilitate logging when the registration was
+		// overflowed before the catchup scan completed.
+		//
+		// For long catchup scans this is often expected. Hopefully, the buffer
+		// contains a checkpoint with a non-empty timestamp. The buffer will always
+		// contain a checkpoint since one is added to the buffer during registration;
+		// but, it is possible that at the time of registration we did not have a
+		// resolved timestamp. We check for this case since it means that the entire
+		// catchup scan was wasted work.
+		firstIteration                 = true
+		wasOverflowedOnFirstIteration  = false
+		oneCheckpointWithTimestampSent = false
+	)
 	// Normal buffered output loop.
 	for {
 		overflowed := false
@@ -199,17 +216,30 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 			overflowed = br.mu.overflowed
 			br.mu.caughtUp = true
 		}
+		if firstIteration {
+			wasOverflowedOnFirstIteration = br.mu.overflowed
+		}
 		br.mu.Unlock()
+		firstIteration = false
+
 		if overflowed {
-			if firstIteration {
-				log.Warningf(ctx, "rangefeed on %s was already overflowed by the time that first iteration (after catch up scan from %s) ran", br.span, br.catchUpTimestamp)
+			if wasOverflowedOnFirstIteration && br.shouldLogOverflow(oneCheckpointWithTimestampSent) {
+				log.Warningf(ctx, "rangefeed %s overflowed during catch up scan from %s (useful checkpoint sent: %v)",
+					br.span, br.catchUpTimestamp, oneCheckpointWithTimestampSent)
 			}
+
 			return newErrBufferCapacityExceeded().GoError()
 		}
-		firstIteration = false
+
 		select {
 		case nextEvent := <-br.buf:
-			err := br.stream.Send(nextEvent.event)
+
+			if wasOverflowedOnFirstIteration && !oneCheckpointWithTimestampSent {
+				isCheckpointEvent := nextEvent.event != nil && nextEvent.event.Checkpoint != nil
+				oneCheckpointWithTimestampSent = isCheckpointEvent && !nextEvent.event.Checkpoint.ResolvedTS.IsEmpty()
+			}
+
+			err := br.stream.SendUnbuffered(nextEvent.event)
 			nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
 			if err != nil {
@@ -217,8 +247,8 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 			}
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-br.stream.Context().Done():
-			return br.stream.Context().Err()
+		case <-br.streamCtx.Done():
+			return br.streamCtx.Err()
 		}
 	}
 }
@@ -233,7 +263,7 @@ func (br *bufferedRegistration) runOutputLoop(ctx context.Context, _forStacks ro
 	ctx, br.mu.outputLoopCancelFn = context.WithCancel(ctx)
 	br.mu.Unlock()
 	err := br.outputLoop(ctx)
-	br.disconnect(kvpb.NewError(err))
+	br.Disconnect(kvpb.NewError(err))
 }
 
 // drainAllocations should be done after registration is disconnected from
@@ -271,7 +301,7 @@ func (br *bufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
 		br.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, br.stream.Send, br.withDiff, br.withFiltering, br.withOmitRemote)
+	return catchUpIter.CatchUpScan(ctx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote)
 }
 
 // Wait for this registration to completely process its internal buffer.
@@ -303,4 +333,13 @@ func (br *bufferedRegistration) detachCatchUpIter() *CatchUpIterator {
 	catchUpIter := br.mu.catchUpIter
 	br.mu.catchUpIter = nil
 	return catchUpIter
+}
+
+var overflowLogEvery = log.Every(5 * time.Second)
+
+// shouldLogOverflow returns true if the output loop should log about an
+// overflow on the first iteration. We don't want to log every case since we
+// expect this on some very busy servers.
+func (br *bufferedRegistration) shouldLogOverflow(checkpointSent bool) bool {
+	return (!checkpointSent) || log.V(1) || overflowLogEvery.ShouldLog()
 }
