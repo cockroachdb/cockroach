@@ -18,7 +18,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/logical"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/physical"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/producer"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/gqpccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
