@@ -1789,8 +1789,9 @@ func doRestorePlan(
 	// localities. Incrementals will be searched for automatically.
 	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, &mem, baseStores, incStores, mkStore, fullyResolvedBaseDirectory,
-		fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(),
+		fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(), false,
 	)
+
 	if err != nil {
 		return err
 	}

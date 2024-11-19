@@ -4110,18 +4110,15 @@ func TestNonLinearChain(t *testing.T) {
 
 	// Restore the same thing -- t2 -- we did before but now with the extra inc
 	// spur hanging out in the chain. This should produce the same result, and we
-	// would like it to only open one extra file to do so -- the manifest that
-	// includes the timestamps that then show it is not needed by the restore.
+	// would like it to only open two extra file2 to do so -- the manifest that
+	// includes the timestamps that then show it is not needed by the restore, and
+	// the checksum for said manifest.
 	sqlDB.Exec(t, `DROP TABLE t`)
+	openedBefore = tc.Servers[0].MustGetSQLCounter("cloud.readers_opened")
 	sqlDB.Exec(t, `RESTORE TABLE defaultdb.t FROM LATEST IN $1`, localFoo)
 	sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"0"}, {"1"}, {"2"}})
-	openedB := tc.Servers[0].MustGetSQLCounter("cloud.readers_opened") - openedA - openedBefore
-	// TODO(dt): enable this assertion once it holds.
-	if false {
-		require.Equal(t, openedA+1, openedB)
-	} else {
-		require.Less(t, openedA+1, openedB)
-	}
+	openedB := tc.Servers[0].MustGetSQLCounter("cloud.readers_opened") - openedBefore
+	require.Equal(t, openedA+2, openedB)
 
 	// Finally, make sure we can restore from the tip of the spur, not just the
 	// tip of the chain.
