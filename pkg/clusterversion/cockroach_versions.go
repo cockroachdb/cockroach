@@ -179,31 +179,6 @@ const (
 	// V24_1 is CockroachDB v24.1. It's used for all v24.1.x patch releases.
 	V24_1
 
-	// V24_2Start demarcates the start of cluster versions stepped through during
-	// the process of upgrading from 24.1 to 24.2.
-	V24_2Start
-
-	// V24_2_StmtDiagRedacted is the migration to add `redacted` column to the
-	// system.statement_diagnostics_requests table.
-	V24_2_StmtDiagRedacted
-
-	// V24_2_TenantSystemTables is the migration that creates the system tables
-	// in app tenants that were previously missing due to only being present in
-	// the system tenant.
-	V24_2_TenantSystemTables
-
-	// V24_2_TenantRates is the migration to add the `current_rates` and
-	// `next_rates` consumption rate columns to the system.tenant_usage table.
-	V24_2_TenantRates
-
-	// V24_2_DeleteTenantSettingsVersion is the migration that deletes
-	// the `system.tenant_settings` row for the `version` setting.
-	V24_2_DeleteTenantSettingsVersion
-
-	// V24_2_LeaseMinTimestamp is the earlier version which supports the lease
-	// minimum timestamp field.
-	V24_2_LeaseMinTimestamp
-
 	// V24_2 is CockroachDB v24.2. It's used for all v24.2.x patch releases.
 	V24_2
 
@@ -293,15 +268,6 @@ var versionTable = [numKeys]roachpb.Version{
 	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
 
 	V24_1: {Major: 24, Minor: 1, Internal: 0},
-
-	// v24.2 versions. Internal versions must be even.
-	V24_2Start: {Major: 24, Minor: 1, Internal: 2},
-
-	V24_2_StmtDiagRedacted:            {Major: 24, Minor: 1, Internal: 4},
-	V24_2_TenantSystemTables:          {Major: 24, Minor: 1, Internal: 6},
-	V24_2_TenantRates:                 {Major: 24, Minor: 1, Internal: 8},
-	V24_2_DeleteTenantSettingsVersion: {Major: 24, Minor: 1, Internal: 10},
-	V24_2_LeaseMinTimestamp:           {Major: 24, Minor: 1, Internal: 12},
 
 	V24_2: {Major: 24, Minor: 2, Internal: 0},
 

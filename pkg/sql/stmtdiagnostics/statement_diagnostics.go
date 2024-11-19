@@ -11,7 +11,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -297,9 +296,6 @@ func (r *Registry) insertRequestInternal(
 	expiresAfter time.Duration,
 	redacted bool,
 ) (RequestID, error) {
-	if redacted && !r.st.Version.IsActive(ctx, clusterversion.V24_2_StmtDiagRedacted) {
-		return 0, errors.Newf("redacted bundles are only supported after 24.2 version migrations have completed")
-	}
 	if samplingProbability != 0 {
 		if samplingProbability < 0 || samplingProbability > 1 {
 			return 0, errors.Newf(
@@ -666,7 +662,6 @@ func (r *Registry) InsertStatementDiagnostics(
 // updates r.mu.requests accordingly.
 func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
-	isRedactedSupported := r.st.Version.IsActive(ctx, clusterversion.V24_2_StmtDiagRedacted)
 
 	// Loop until we run the query without straddling an epoch increment.
 	for {
@@ -674,15 +669,11 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
-		var extraColumns string
-		if isRedactedSupported {
-			extraColumns = ", redacted"
-		}
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist%s
+			`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted
 				FROM system.statement_diagnostics_requests
-				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`, extraColumns),
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
 		)
 		if err != nil {
 			return err
@@ -739,10 +730,8 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		if antiGist, ok := row[6].(*tree.DBool); ok {
 			antiPlanGist = bool(*antiGist)
 		}
-		if isRedactedSupported {
-			if b, ok := row[7].(*tree.DBool); ok {
-				redacted = bool(*b)
-			}
+		if b, ok := row[7].(*tree.DBool); ok {
+			redacted = bool(*b)
 		}
 		ids.Add(int(id))
 		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted)
