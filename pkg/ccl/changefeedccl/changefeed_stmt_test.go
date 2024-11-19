@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMakeChangefeedJobDescription(t *testing.T) {
+func TestMakeChangefeedDescription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -82,7 +82,7 @@ func TestMakeChangefeedJobDescription(t *testing.T) {
 
 		opts := changefeedbase.MakeStatementOptions(tc.opts)
 
-		desc, err := makeChangefeedJobDescription(ctx, create, tc.sinkURI, opts)
+		desc, err := makeChangefeedDescription(ctx, create, tc.sinkURI, opts)
 		require.NoError(t, err)
 		require.Equal(t, tc.expected, desc)
 	}
