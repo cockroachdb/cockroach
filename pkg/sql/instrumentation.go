@@ -54,7 +54,7 @@ var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"sql.txn_stats.sample_rate",
 	"the probability that a given transaction will collect execution statistics (displayed in the DB Console)",
-	0.01,
+	0.00,
 	settings.Fraction,
 )
 
