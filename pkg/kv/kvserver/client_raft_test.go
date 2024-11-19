@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	raft "github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -865,22 +867,22 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	manualClock := hlc.NewHybridManualClock()
+	st := cluster.MakeTestingClusterSettings()
+	// Make sure the test doesn't run under epoch leases; it makes it hard to
+	// ensure the liveness range leaseholder is not partitioned.
+	kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 1.0)
+
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Server: &server.TestingKnobs{
-						WallClock: manualClock,
-					},
-				},
+				Settings: st,
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
 	store := tc.GetFirstStoreFromServer(t, 0)
 
-	key := tc.ScratchRangeWithExpirationLease(t)
+	key := tc.ScratchRange(t)
 	incA := int64(5)
 	incB := int64(7)
 	incC := int64(9)
@@ -912,10 +914,10 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	partReplSender := tc.GetFirstStoreFromServer(t, partStore).TestSender()
 
 	// Partition the original leader from its followers. We do this by installing
-	// unreliableRaftHandler listeners on all three Stores. The handler on the
-	// partitioned store filters out all messages while the handler on the other
-	// two stores only filters out messages from the partitioned store. The
-	// configuration looks like:
+	// unreliableRaftHandler listeners and UnreliableHandler store liveness
+	// listeners on all three Stores. The handlers on the partitioned store filter
+	// out all messages while the handler on the other two stores only filters out
+	// messages from the partitioned store. The configuration looks like:
 	//
 	//           [0]
 	//          x  x
@@ -923,23 +925,34 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	//        x      x
 	//      [1]<---->[2]
 	//
-	log.Infof(ctx, "test: installing unreliable Raft transports")
+	log.Infof(ctx, "test: installing unreliable Raft and Store Liveness transports")
 	for _, s := range []int{0, 1, 2} {
-		h := &unreliableRaftHandler{
+		raftHandler := &unreliableRaftHandler{
 			rangeID:                    partRepl.RangeID,
 			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
 		}
 		if s != partStore {
 			// Only filter messages from the partitioned store on the other
 			// two stores.
-			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+			raftHandler.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 				return req.FromReplica.StoreID == partRepl.StoreID()
 			}
-			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
+			raftHandler.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
-		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
+		storeLivenessUnreliableHandler := &storeliveness.UnreliableHandler{
+			MessageHandler: tc.GetFirstStoreFromServer(t, s).TestingStoreLivenessSupportManager(),
+			UnreliableHandlerFuncs: storeliveness.UnreliableHandlerFuncs{
+				DropStoreLivenessMsg: func(msg *slpb.Message) bool {
+					return msg.To.StoreID == partRepl.StoreID() || msg.From.StoreID == partRepl.StoreID()
+				},
+			},
+		}
+		storeLivenessTransport := tc.Servers[s].StoreLivenessTransport().(*storeliveness.Transport)
+		storeLivenessTransport.ListenMessages(tc.Target(s).StoreID, storeLivenessUnreliableHandler)
+		raftTransport := tc.Servers[s].RaftTransport().(*kvserver.RaftTransport)
+		raftTransport.ListenIncomingRaftMessages(tc.Target(s).StoreID, raftHandler)
 	}
 
 	// Perform a series of writes on the partitioned replica. The writes will
@@ -989,7 +1002,6 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	var newLeaderRepl *kvserver.Replica
 	var newLeaderReplSender kv.Sender
 	testutils.SucceedsSoon(t, func() error {
-		manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
 		i++
 		sender := nonPartitionedSenders[i%2]
 		_, pErr := kv.SendWrapped(ctx, sender, incArgs)
@@ -1018,7 +1030,6 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	truncArgs := truncateLogArgs(index+1, partRepl.RangeID)
 	truncArgs.Key = partRepl.Desc().StartKey.AsRawKey()
 	testutils.SucceedsSoon(t, func() error {
-		manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
 		_, pErr := kv.SendWrappedWith(ctx, newLeaderReplSender, kvpb.Header{RangeID: partRepl.RangeID}, truncArgs)
 		if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); ok {
 			return pErr.GoError()
@@ -1051,6 +1062,11 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 			},
 		})
+		storeLivenessUnreliableHandler := &storeliveness.UnreliableHandler{
+			MessageHandler: tc.GetFirstStoreFromServer(t, s).TestingStoreLivenessSupportManager(),
+		}
+		storeLivenessTransport := tc.Servers[s].StoreLivenessTransport().(*storeliveness.Transport)
+		storeLivenessTransport.ListenMessages(tc.Target(s).StoreID, storeLivenessUnreliableHandler)
 	}
 
 	// The partitioned replica should catch up after a snapshot.
