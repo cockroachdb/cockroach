@@ -91,73 +91,22 @@ enum ResumeReason {
   RESUME_ELASTIC_CPU_LIMIT = 5;
 }
 
-// RequestHeaderPure is not to be used directly. It's generated only for use of
-// its marshaling methods by RequestHeader. See the comment there.
-message RequestHeaderPure {
-  bytes key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
-  bytes end_key = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
-  int32 sequence = 5 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
-}
-
-// RequestHeaderPure is not to be used directly. It's generated only for use of
-// its marshaling methods by RequestHeader. See the comment there.
-message RequestHeaderCrdbTest {
-  message Empty{};
-  Empty kvnemesis_seq = 6 [
-    (gogoproto.customname) = "KVNemesisSeq",
-    (gogoproto.nullable) = false,
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Container"];
-  bytes key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
-  bytes end_key = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
-  int32 sequence = 5 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
-}
-
 // RequestHeader is supplied with every storage node request.
-//
-// This message has some trickery attached to it to allow it to carry a
-// testing-only field (KVNemesisSeq) in a way that avoids overhead in production
-// code. The field is nominally an empty Message, but is cast to a Go type that
-// is an int64 when under the crdb_test tag, and an empty struct otherwise. This
-// ensures that production code does not have to pay for the increased struct
-// size that would result from having the field always present. Additionally, we
-// want to avoid encoding extra bytes on the wire; (gogoproto.nullable) will
-// still encode the field tag even when the referenced field is empty. To work
-// around this, we don't auto-generate the Size() and various marshal methods
-// for RequestHeader. Instead, we have two sibling messages, RequestHeaderPure
-// and RequestHeaderCrdbTest. The former is RequestHeader without the
-// KVNemesisSeq field, and the latter is identical to RequestHeader but does
-// have the generated Size and Marshal methods. We then implement the
-// corresponding methods on RequestHeader by delegating to either, making sure
-// to only delegate to RequestHeaderCrdbTest when we're under the crdb_test
-// build tag *and* the KVNemesisSeq is nonzero. This effectively simulates a
-// version of (gogoproto.nullable) in which the zero value is not represented on
-// the wire. No change to unmarshalling code is necessary, as the generated
-// unmarshaler on RequestHeader can deal with the presence of the field just
-// fine.
-//
-// NB: unfortunately there isn't a way to have the {Pure,CrdbTest} messages
-// unexported.
-//
-// NB: ensure that RequestHeader{,Pure,CrdbTest} stay in sync when adding
-// or removing fields.
 message RequestHeader {
-  option (gogoproto.marshaler) = false;
-  option (gogoproto.sizer) = false;
-
   reserved 1, 2;
   message Empty{};
-  // Empty is zero-size in production. It's an int64 under the crdb_test build tag.
-  // This is used to enable kvnemesis testing, which builds on uniqueness of values
-  // in the MVCC history. Deletions don't have a user-definable value, so we need
-  // an extra identifier, which is provided by this field.
+  // Empty is zero-size in production and doesn't generate any encoded bytes
+  // (thanks to gogoproto.omitempty). It's an int64 under the crdb_test build
+  // tag. This is used to enable kvnemesis testing, which builds on uniqueness
+  // of values in the MVCC history. Deletions don't have a user-definable value,
+  // so we need an extra identifier, which is provided by this field.
   //
   // NB: it's important that this isn't at the end of the message, see:
   // https://dave.cheney.net/2015/10/09/padding-is-hard
   Empty kvnemesis_seq = 6 [
     (gogoproto.customname) = "KVNemesisSeq",
     (gogoproto.nullable) = false,
+    (gogoproto.omitempty) = true,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Container"];
 
   // The key for request. If the request operates on a range, this

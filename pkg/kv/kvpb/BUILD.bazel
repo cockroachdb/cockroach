@@ -10,7 +10,6 @@ go_library(
     srcs = [
         "ambiguous_result_error.go",
         "api.go",
-        "api_requestheader.go",
         "batch.go",
         "data.go",
         "errors.go",
