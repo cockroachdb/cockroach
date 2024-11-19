@@ -580,21 +580,22 @@ subtest when_clause
 
 # The WHEN clause must be of type BOOL.
 statement error pgcode 42804 pq: argument of WHEN must be type bool, not type int
-CREATE TRIGGER foo AFTER INSERT ON xy WHEN (1) EXECUTE FUNCTION f();
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW WHEN (1) EXECUTE FUNCTION f();
 
 # The WHEN clause cannot reference table columns.
 statement error pgcode 42703 pq: column "x" does not exist\nHINT: column references in a trigger WHEN clause must be prefixed with NEW or OLD
-CREATE TRIGGER foo AFTER INSERT ON xy WHEN (x = 1) EXECUTE FUNCTION f();
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW WHEN (x = 1) EXECUTE FUNCTION f();
 
 # The WHEN clause cannot contain a subquery.
 statement error pgcode 0A000 pq: subqueries are not allowed in WHEN
-CREATE TRIGGER foo AFTER INSERT ON xy WHEN (SELECT 1) EXECUTE FUNCTION f();
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW WHEN (SELECT 1) EXECUTE FUNCTION f();
 
-statement error pgcode 42P17 pq: statement trigger's WHEN condition cannot reference column values
-CREATE TRIGGER foo AFTER INSERT ON xy WHEN (NEW IS NULL) EXECUTE FUNCTION f();
-
-statement error pgcode 42P17 pq: statement trigger's WHEN condition cannot reference column values
-CREATE TRIGGER foo AFTER INSERT ON xy WHEN (OLD IS NULL) EXECUTE FUNCTION f();
+# TODO(#126362): uncomment these test cases.
+# statement error pgcode 42P17 pq: statement trigger's WHEN condition cannot reference column values
+# CREATE TRIGGER foo AFTER INSERT ON xy WHEN (NEW IS NULL) EXECUTE FUNCTION f();
+#
+# statement error pgcode 42P17 pq: statement trigger's WHEN condition cannot reference column values
+# CREATE TRIGGER foo AFTER INSERT ON xy WHEN (OLD IS NULL) EXECUTE FUNCTION f();
 
 statement error pgcode 42P17 pq: DELETE trigger's WHEN condition cannot reference NEW values
 CREATE TRIGGER foo AFTER DELETE ON xy FOR EACH ROW WHEN (NEW IS NULL) EXECUTE FUNCTION f();
@@ -622,7 +623,7 @@ CREATE FUNCTION g() RETURNS TRIGGER AS $$
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 42P01 pq: relation "nonexistent" does not exist
-CREATE TRIGGER foo BEFORE INSERT ON xy EXECUTE FUNCTION g();
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
 
 statement ok
 DROP FUNCTION g;
@@ -650,7 +651,7 @@ CREATE FUNCTION g() RETURNS TRIGGER AS $$
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 42883 pq: unknown function: f_nonexistent()
-CREATE TRIGGER foo AFTER DELETE ON xy EXECUTE FUNCTION g();
+CREATE TRIGGER foo AFTER DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
 
 # Case with a nonexistent type reference.
 statement ok
@@ -662,7 +663,7 @@ CREATE FUNCTION g() RETURNS TRIGGER AS $$
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 42704 pq: type "typ_nonexistent" does not exist
-CREATE TRIGGER foo BEFORE INSERT ON xy EXECUTE FUNCTION g();
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
 
 # Incorrect type in a SQL expression.
 statement ok
@@ -691,7 +692,7 @@ CREATE FUNCTION g() RETURNS TRIGGER AS $$
 $$ LANGUAGE PLpgSQL;
 
 statement error pgcode 0A000 pq: unimplemented: CREATE TABLE usage inside a function definition
-CREATE TRIGGER foo AFTER DELETE ON xy EXECUTE FUNCTION g();
+CREATE TRIGGER foo AFTER DELETE ON xy FOR EACH ROW EXECUTE FUNCTION g();
 
 statement ok
 DROP FUNCTION g;
@@ -3476,6 +3477,22 @@ CREATE OR REPLACE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f
 
 statement error pgcode 0A000 pq: unimplemented: cascade dropping triggers
 DROP TRIGGER foo ON xy CASCADE;
+
+statement error pgcode 0A000 pq: unimplemented: statement-level triggers are not yet supported
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH STATEMENT EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: unimplemented: INSTEAD OF triggers are not yet supported
+CREATE TRIGGER foo INSTEAD OF INSERT ON v FOR EACH ROW EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: unimplemented: REFERENCING clause is not yet supported for triggers
+CREATE TRIGGER foo AFTER INSERT ON xy REFERENCING NEW TABLE AS nt FOR EACH ROW EXECUTE FUNCTION f();
+
+# TODO(#126362): uncomment this case.
+# statement error pgcode 0A000 pq: unimplemented: TRUNCATE triggers are not yet supported
+# CREATE TRIGGER foo AFTER TRUNCATE ON xy FOR EACH STATEMENT EXECUTE FUNCTION f();
+
+statement error pgcode 0A000 pq: unimplemented: column lists are not yet supported for triggers
+CREATE TRIGGER foo AFTER UPDATE OF y ON xy FOR EACH ROW EXECUTE FUNCTION f();
 
 statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
