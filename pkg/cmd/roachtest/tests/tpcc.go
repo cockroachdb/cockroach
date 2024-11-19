@@ -1731,19 +1731,23 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					perfBuf, err := getHistogramOpenmetrics(exporter, snapshots)
 
 					// Since the exporter got initialized in getHistogramOpenmetrics, calling defer now
-					defer exporter.Close(func() error {
-						if _, err = roachtestutil.CreateStatsFileInClusterFromExporterWithPrefix(ctx, t, c, perfBuf, exporter, group.LoadNodes, statsFilePrefix); err != nil {
-							return err
+					defer func() {
+						if err := exporter.Close(func() error {
+							if _, err = roachtestutil.CreateStatsFileInClusterFromExporterWithPrefix(ctx, t, c, perfBuf, exporter, group.LoadNodes, statsFilePrefix); err != nil {
+								return err
+							}
+							return nil
+						}); err != nil {
+							t.Errorf("failed to close exporter: %v", err)
 						}
-						return nil
-					})
+					}()
 
 					if err != nil {
-						return errors.Wrapf(err, "error converting histogram to openmetrics")
+						errors.Wrapf(err, "error converting histogram to openmetrics")
 					}
+					resultChan <- result
+					return nil
 				}
-				resultChan <- result
-				return nil
 
 			})
 		}
