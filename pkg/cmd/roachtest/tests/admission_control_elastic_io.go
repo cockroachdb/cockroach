@@ -78,7 +78,7 @@ func registerElasticIO(r registry.Registry) {
 			m.Go(func(ctx context.Context) error {
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := fmt.Sprintf("./cockroach workload run kv --init %s -concurrency=512 "+
+				cmd := fmt.Sprintf("./cockroach workload run kv --init %s --concurrency=512 "+
 					"--splits=1000 --read-percent=0 --min-block-bytes=65536 --max-block-bytes=65536 "+
 					"--txn-qos=background --tolerate-errors --secure %s %s",
 					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), dur, url)
