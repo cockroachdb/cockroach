@@ -119,9 +119,11 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		// These elements need v23.1 so they can be used without checking any version gates.
 		return true
 	case *scpb.SequenceOption:
+		// These elements need v23.2 so they can be used without checking any version gates.
 		return true
 	case *scpb.TypeComment, *scpb.DatabaseZoneConfig:
-		return version.IsActive(clusterversion.V24_2)
+		// These elements need v24.2 so they can be used without checking any version gates.
+		return true
 	case *scpb.ColumnComputeExpression, *scpb.FunctionSecurity, *scpb.LDRJobIDs,
 		*scpb.PartitionZoneConfig, *scpb.Trigger, *scpb.TriggerName,
 		*scpb.TriggerEnabled, *scpb.TriggerTiming, *scpb.TriggerEvents, *scpb.TriggerTransition,

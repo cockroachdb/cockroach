@@ -14,7 +14,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/multitenantccl/tenantcostserver/tenanttokenbucket",
-        "//pkg/clusterversion",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/multitenant",

@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -117,12 +116,6 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 		}
 
 	case types.PGVectorFamily:
-		if !st.Version.IsActive(ctx, clusterversion.V24_2) {
-			return pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"pg_vector not supported until version 24.2",
-			)
-		}
 		if err := base.CheckEnterpriseEnabled(st, "vector datatype"); err != nil {
 			return err
 		}
