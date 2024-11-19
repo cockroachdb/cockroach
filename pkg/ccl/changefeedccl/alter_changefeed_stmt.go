@@ -188,10 +188,16 @@ func alterChangefeedPlanHook(
 			alterChangefeedAsOf: resolveTime,
 		}
 
+		newDescription, err := makeChangefeedDescription(ctx, annotatedStmt.CreateChangefeed, newSinkURI, newOptions)
+		if err != nil {
+			return err
+		}
+
 		jobRecord, err := createChangefeedJobRecord(
 			ctx,
 			p,
 			annotatedStmt,
+			newDescription,
 			newSinkURI,
 			newOptions,
 			jobID,
