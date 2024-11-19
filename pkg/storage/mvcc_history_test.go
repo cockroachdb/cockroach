@@ -262,7 +262,8 @@ func TestMVCCHistories(t *testing.T) {
 		// SST iterator in order to accurately represent the raw SST data.
 		reportSSTEntries := func(buf *redact.StringBuilder, name string, sst []byte) error {
 			r, err := sstable.NewMemReader(sst, sstable.ReaderOptions{
-				Comparer: storage.EngineComparer,
+				Comparer:   storage.EngineComparer,
+				KeySchemas: sstable.MakeKeySchemas(storage.KeySchemas...),
 			})
 			if err != nil {
 				return err
@@ -275,7 +276,7 @@ func TestMVCCHistories(t *testing.T) {
 				return err
 			}
 			defer func() { _ = iter.Close() }()
-			for kv := iter.SeekGE(nil, 0); kv != nil; kv = iter.Next() {
+			for kv := iter.First(); kv != nil; kv = iter.Next() {
 				if err := iter.Error(); err != nil {
 					return err
 				}
@@ -337,7 +338,7 @@ func TestMVCCHistories(t *testing.T) {
 					for _, k := range s.Keys {
 						buf.Printf("%s: %s", strings.ToLower(k.Kind().String()),
 							roachpb.Span{Key: start.Key, EndKey: end.Key})
-						if k.Suffix != nil {
+						if len(k.Suffix) > 0 {
 							ts, err := storage.DecodeMVCCTimestampSuffix(k.Suffix)
 							if err != nil {
 								return err
