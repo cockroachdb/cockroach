@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -209,10 +210,11 @@ func TestDataDriven(t *testing.T) {
 					{
 						start := h.parseKeyFromArgKey("start")
 						end := h.parseKeyFromArgKey("end")
+						errStr := h.getErrorFromArgs()
 						q := func(ctx context.Context, txn *kv.Txn, cr catkv.CatalogReader) (nstree.Catalog, error) {
 							return cr.ScanDescriptorsInSpans(ctx, txn, []roachpb.Span{{Key: start, EndKey: end}})
 						}
-						return h.doCatalogQuery(ctx, q)
+						return h.doCatalogQueryWithErr(ctx, q, errStr)
 					}
 				case "scan_descriptors_in_multiple_spans":
 					{
@@ -237,6 +239,14 @@ type testHelper struct {
 	ucr, ccr catkv.CatalogReader
 }
 
+func (h testHelper) getErrorFromArgs() string {
+	arg, exists := h.d.Arg("error")
+	if !exists {
+		return ""
+	}
+	return arg.SingleVal(h.t)
+}
+
 func (h testHelper) parseSpanFromArgKey(argkey string) roachpb.Span {
 	arg, exists := h.d.Arg(argkey)
 	if !exists {
@@ -252,7 +262,7 @@ func (h testHelper) parseSpanFromArgKey(argkey string) roachpb.Span {
 func (h testHelper) parseKeyFromArgKey(argkey string) roachpb.Key {
 	arg, exists := h.d.Arg(argkey)
 	if !exists {
-		h.t.Fatalf("scan_descriptors_in_span requires '%s' arg", argkey)
+		h.t.Fatalf("test requires '%s' arg", argkey)
 	}
 	return h.parseKeyFromArgStr(arg.SingleVal(h.t))
 }
@@ -316,7 +326,7 @@ func (h testHelper) argDesc(
 type queryFunc func(ctx context.Context, txn *kv.Txn, cr catkv.CatalogReader) (nstree.Catalog, error)
 
 func (h testHelper) wrappedQuery(
-	ctx context.Context, label string, cr catkv.CatalogReader, unwrapped queryFunc,
+	ctx context.Context, label string, cr catkv.CatalogReader, unwrapped queryFunc, errStr string,
 ) (c nstree.Catalog, rs tracingpb.RecordedSpan) {
 	err := h.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		tracer := h.execCfg.AmbientCtx.Tracer
@@ -324,19 +334,25 @@ func (h testHelper) wrappedQuery(
 			ctx, catkv.TestingSpanOperationName, tracing.WithRecording(tracingpb.RecordingVerbose),
 		)
 		c, err = unwrapped(vCtx, txn, cr)
+		if err != nil {
+			return err
+		}
 		rec := vSpan.FinishAndGetRecording(tracingpb.RecordingVerbose)
 		var found bool
 		rs, found = rec.FindSpan(catkv.TestingSpanOperationName)
 		require.True(h.t, found)
-		return err
+		return nil
 	})
-	require.NoErrorf(h.t, err, "%s: error running query with %s CatalogReader", h.d.Pos, label)
+	require.True(h.t, testutils.IsError(err, errStr), "expected error '%s' but instead got '%s'", errStr, err)
 	return c, rs
 }
-
 func (h testHelper) doCatalogQuery(ctx context.Context, fn queryFunc) string {
-	u := h.marshalResult(h.wrappedQuery(ctx, "uncached", h.ucr, fn))
-	c := h.marshalResult(h.wrappedQuery(ctx, "cached", h.ccr, fn))
+	return h.doCatalogQueryWithErr(ctx, fn, "")
+}
+
+func (h testHelper) doCatalogQueryWithErr(ctx context.Context, fn queryFunc, errStr string) string {
+	u := h.marshalResult(h.wrappedQuery(ctx, "uncached", h.ucr, fn, errStr))
+	c := h.marshalResult(h.wrappedQuery(ctx, "cached", h.ccr, fn, errStr))
 	d := diff.Diff(u, c)
 	if len(d) == 0 {
 		return u
