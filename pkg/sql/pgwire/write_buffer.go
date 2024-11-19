@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -95,11 +96,42 @@ func (b *writeBuffer) writeFromFmtCtx(fmtCtx *tree.FmtCtx) {
 	}
 }
 
+// writePaddedData checks if the data needs to be padded and calls
+// applyPadding. Else it writes the data to the write buffer.
+func (b *writeBuffer) writePaddedData(v []byte, t *types.T) {
+	// Add t.Width() as length prefix.
+	b.writeLengthPrefixedByteSlice(v, t.Width())
+
+	remainingPadLength := int(t.Width()) - len(v)
+	b.applyPadding(remainingPadLength)
+}
+
+// applyPadding applies padding (in the form of blanks spaces)
+// to the right of the values inside the write buffer
+// to fill all the remaining width from t.Width().
+func (b *writeBuffer) applyPadding(remainingPadLength int) {
+	for remainingPadLength > 0 {
+		padChunkLength := min(remainingPadLength, len(spaces))
+
+		padChunk := spaces[:padChunkLength]
+		b.write(padChunk)
+
+		remainingPadLength -= padChunkLength
+	}
+}
+
 // writeLengthPrefixedString writes a length-prefixed string. The
 // length is encoded as an int32.
 func (b *writeBuffer) writeLengthPrefixedString(s string) {
 	b.putInt32(int32(len(s)))
 	b.writeString(s)
+}
+
+// writeLengthPrefixedByteSlice writes a length-prefixed byte slice. The
+// length is encoded as an int32.
+func (b *writeBuffer) writeLengthPrefixedByteSlice(v []byte, specifiedLength int32) {
+	b.putInt32(specifiedLength)
+	b.write(v)
 }
 
 // writeLengthPrefixedDatum writes a length-prefixed Datum in its
