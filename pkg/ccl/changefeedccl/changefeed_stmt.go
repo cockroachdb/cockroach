@@ -129,7 +129,7 @@ func changefeedTypeCheck(
 	return true, withSinkHeader, nil
 }
 
-// changefeedPlanHook implements sql.PlanHookFn.
+// changefeedPlanHook implements sql.planHookFn.
 func changefeedPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
@@ -141,7 +141,7 @@ func changefeedPlanHook(
 	exprEval := p.ExprEvaluator("CREATE CHANGEFEED")
 	var sinkURI string
 	unspecifiedSink := changefeedStmt.SinkURI == nil
-	avoidBuffering := unspecifiedSink
+	var avoidBuffering bool
 	var header colinfo.ResultColumns
 	if unspecifiedSink {
 		// An unspecified sink triggers a fairly radical change in behavior.
@@ -159,6 +159,10 @@ func changefeedPlanHook(
 		if err != nil {
 			return nil, nil, nil, false, changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
 		}
+		if sinkURI == `` {
+			// Error if someone specifies an INTO with the empty string.
+			return nil, nil, nil, false, errors.New(`omit the SINK clause for inline results`)
+		}
 		header = withSinkHeader
 	}
 
@@ -168,12 +172,17 @@ func changefeedPlanHook(
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
+	opts := changefeedbase.MakeStatementOptions(rawOpts)
 
-	// rowFn impements sql.PlanHookRowFn
+	description, err := makeChangefeedDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
+	// rowFn implements sql.PlanHookRowFn.
 	rowFn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
-		opts := changefeedbase.MakeStatementOptions(rawOpts)
 		st, err := opts.GetInitialScanType()
 		if err != nil {
 			return err
@@ -182,16 +191,11 @@ func changefeedPlanHook(
 			return err
 		}
 
-		if !unspecifiedSink && sinkURI == `` {
-			// Error if someone specifies an INTO with the empty string. We've
-			// already sent the wrong result column headers.
-			return errors.New(`omit the SINK clause for inline results`)
-		}
-
 		jr, err := createChangefeedJobRecord(
 			ctx,
 			p,
 			changefeedStmt,
+			description,
 			sinkURI,
 			opts,
 			jobspb.InvalidJobID,
@@ -321,7 +325,7 @@ func changefeedPlanHook(
 	rowFnLogErrors := func(ctx context.Context, pn []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		err := rowFn(ctx, pn, resultsCh)
 		if err != nil {
-			logChangefeedFailedTelemetry(ctx, nil, failureTypeForStartupError(err))
+			logChangefeedFailedTelemetryDuringStartup(ctx, description, failureTypeForStartupError(err))
 		}
 		return err
 	}
@@ -375,6 +379,7 @@ func createChangefeedJobRecord(
 	ctx context.Context,
 	p sql.PlanHookState,
 	changefeedStmt *annotatedChangefeedStatement,
+	description string,
 	sinkURI string,
 	opts changefeedbase.StatementOptions,
 	jobID jobspb.JobID,
@@ -384,11 +389,6 @@ func createChangefeedJobRecord(
 
 	for _, warning := range opts.DeprecationWarnings() {
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
-	}
-
-	jobDescription, err := makeChangefeedJobDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
-	if err != nil {
-		return nil, err
 	}
 
 	statementTime := hlc.Timestamp{
@@ -409,6 +409,7 @@ func createChangefeedJobRecord(
 		return asOf.Timestamp, nil
 	}
 	if opts.HasStartCursor() {
+		var err error
 		initialHighWater, err = evalTimestamp(opts.GetCursor())
 		if err != nil {
 			return nil, err
@@ -663,7 +664,7 @@ func createChangefeedJobRecord(
 		// changefeed, thus ensuring that no job is created for this changefeed as
 		// desired.
 		sinklessRecord := &jobs.Record{
-			Description: jobDescription,
+			Description: description,
 			Details:     details,
 		}
 		return sinklessRecord, nil
@@ -744,7 +745,7 @@ Few hours to a few days range are appropriate values for this option.`
 	}
 
 	jr := &jobs.Record{
-		Description: jobDescription,
+		Description: description,
 		Username:    p.User(),
 		DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
 			for _, desc := range targetDescs {
@@ -980,7 +981,7 @@ func requiresTopicInValue(s Sink) bool {
 	return s.getConcreteType() == sinkTypeWebhook
 }
 
-func makeChangefeedJobDescription(
+func makeChangefeedDescription(
 	ctx context.Context,
 	changefeed *tree.CreateChangefeed,
 	sinkURI string,
@@ -992,7 +993,7 @@ func makeChangefeedJobDescription(
 	}
 
 	if sinkURI != "" {
-		// Redacts user sensitive information from job description.
+		// Redacts user sensitive information from description.
 		cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, nil)
 		if err != nil {
 			return "", err
@@ -1558,6 +1559,17 @@ func logChangefeedFailedTelemetry(
 
 	changefeedFailedEvent := &eventpb.ChangefeedFailed{
 		CommonChangefeedEventDetails: changefeedEventDetails,
+		FailureType:                  failureType,
+	}
+
+	log.StructuredEvent(ctx, severity.INFO, changefeedFailedEvent)
+}
+
+func logChangefeedFailedTelemetryDuringStartup(
+	ctx context.Context, description string, failureType changefeedbase.FailureType,
+) {
+	changefeedFailedEvent := &eventpb.ChangefeedFailed{
+		CommonChangefeedEventDetails: eventpb.CommonChangefeedEventDetails{Description: description},
 		FailureType:                  failureType,
 	}
 
