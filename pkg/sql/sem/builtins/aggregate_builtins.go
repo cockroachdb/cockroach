@@ -5076,14 +5076,14 @@ func validateInputFractions(datum tree.Datum) ([]float64, bool, error) {
 		return nil
 	}
 
-	if datum.ResolvedType().Identical(types.Float) {
+	if t := datum.ResolvedType(); t.Family() == types.FloatFamily {
 		fraction := float64(tree.MustBeDFloat(datum))
 		singleInput = true
 		if err := validate(fraction); err != nil {
 			return nil, false, err
 		}
 		fractions = append(fractions, fraction)
-	} else if datum.ResolvedType().Equivalent(types.FloatArray) {
+	} else if t.Family() == types.ArrayFamily && t.ArrayContents().Family() == types.FloatFamily {
 		fractionsDatum := tree.MustBeDArray(datum)
 		for _, f := range fractionsDatum.Array {
 			fraction := float64(tree.MustBeDFloat(f))
@@ -5266,7 +5266,7 @@ func (a *percentileContAggregate) Result() (tree.Datum, error) {
 			ceilRowNumber := int(math.Ceil(rowNumber))
 			floorRowNumber := int(math.Floor(rowNumber))
 
-			if a.arr.ParamTyp.Identical(types.Float) {
+			if t := a.arr.ParamTyp; t.Family() == types.FloatFamily {
 				var target float64
 				if rowNumber == float64(ceilRowNumber) && rowNumber == float64(floorRowNumber) {
 					target = float64(tree.MustBeDFloat(a.arr.Array[int(rowNumber)-1]))
@@ -5279,7 +5279,7 @@ func (a *percentileContAggregate) Result() (tree.Datum, error) {
 				if err := res.Append(tree.NewDFloat(tree.DFloat(target))); err != nil {
 					return nil, err
 				}
-			} else if a.arr.ParamTyp.Family() == types.IntervalFamily {
+			} else if t.Family() == types.IntervalFamily {
 				var target *tree.DInterval
 				if rowNumber == float64(ceilRowNumber) && rowNumber == float64(floorRowNumber) {
 					target = tree.MustBeDInterval(a.arr.Array[int(rowNumber)-1])
