@@ -1,0 +1,9 @@
+I241119 22:28:29.976811 301 util/log/file_sync_buffer.go:237 ⋮ [config]   file created at: 2024/11/19 22:28:29
+I241119 22:28:29.976825 301 util/log/file_sync_buffer.go:237 ⋮ [config]   running on machine: ‹miles-crl-mac.local›
+I241119 22:28:29.976829 301 util/log/file_sync_buffer.go:237 ⋮ [config]   binary: CockroachDB CCL v25.1.0-alpha.00000000-dev (darwin arm64, built , go1.22.8 X:nocoverageredesign)
+I241119 22:28:29.976833 301 util/log/file_sync_buffer.go:237 ⋮ [config]   arguments: [‹/private/var/tmp/_bazel_miles/8e6f37a11f54ea4e6a58bb92f8ed964e/sandbox/darwin-sandbox/5820/execroot/com_github_cockroachdb_cockroach/bazel-out/darwin_arm64-fastbuild/bin/pkg/ccl/changefeedccl/changefeedccl_test_/changefeedccl_test.runfiles/com_github_cockroachdb_cockroach/pkg/ccl/changefeedccl/changefeedccl_test_/changefeedccl_test› ‹-test.v›]
+I241119 22:28:29.976841 301 util/log/file_sync_buffer.go:237 ⋮ [config]   log format (utf8=✓): crdb-v2
+I241119 22:28:29.976843 301 util/log/file_sync_buffer.go:237 ⋮ [config]   line format: [IWEF]yymmdd hh:mm:ss.uuuuuu goid [chan@]file:line redactionmark \[tags\] [counter] msg
+I241119 22:28:29.976440 301 2@kv/kvserver/replica_proposal.go:618 ⋮ [T1,Vsystem,n1,s1,r2/1:‹/System/NodeLiveness{-Max}›,raft] 1  new range lease repl=(n1,s1):1 seq=1 start=0,0 exp=1732055315.975064000,0 pro=1732055309.975064000,0 acq=Request following <empty>
+I241119 22:28:29.977016 301 2@kv/kvserver/replica_proposal.go:635 ⋮ [T1,Vsystem,n1,s1,r2/1:‹/System/NodeLiveness{-Max}›,raft] 3  acquired system range lease: repl=(n1,s1):1 seq=1 start=0,0 exp=1732055315.975064000,0 pro=1732055309.975064000,0 acq=Request [acquisition-type=Request]
+I241119 22:28:29.976445 300 2@kv/kvserver/replica_proposal.go:635 ⋮ [T1,Vsystem,n1,s1,r1/1:‹/{Min-System/NodeL…}›,raft] 2  acquired system range lease: repl=(n1,s1):1 seq=1 start=0,0 exp=1732055315.975064000,1 pro=1732055309.975064000,1 acq=Request [acquisition-type=Request]

@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -80,7 +81,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -207,64 +207,78 @@ func TestChangefeedBasicQuery(t *testing.T) {
 	defer f.Close()
 
 	trimRx := regexp.MustCompile(`executing (.*), \[txn:.*`)
-	spanKeysRx := regexp.MustCompile(`\[([^,]+),([^,]+)\)`)
-	keyScanner := keysutil.MakePrettyScanner(nil, nil)
+	tableIdRx := regexp.MustCompile(`(/Tenant/[0-9]+)?/(Table|NamespaceTable)/([0-9]+)`)
+
+	// systemTablesToProtect
+	tableIDsAccessed := map[int64]struct{}{}
+
+	traceCb := func(trace tracingpb.Recording, stmt string) {
+		if !cfCreated.Load() {
+			return
+		}
+		if !strings.HasPrefix(stmt, "CREATE CHANGEFEED") {
+			return
+		}
+		for _, span := range trace {
+			fmt.Fprintf(f, "\t%s\n", span.String())
+			for _, log := range span.Logs {
+				msg := log.Message.StripMarkers()
+				if strings.Contains(msg, "executing Scan") {
+					// executing Scan [/Tenant/10/Table/3/1,/Tenant/10/Table/3/2), Scan [/Tenant/10/NamespaceTable/30/1,/Tenant/10/NamespaceTable/30/2), Scan [/Tenant/10/Table/24/1,/Tenant/10/Table/24/2), Scan [/Tenant/10/Table/5/1,/Tenant/10/Table/5/2), [txn: cd065f05]}
+					// spans like
+					// [/Tenant/10/Table/3/1,/Tenant/10/Table/3/2) = (kv) span
+					// or [/Table/3/1,/Table/3/2)
+					// or [/Tenant/10/NamespaceTable/30/1,/Tenant/10/NamespaceTable/30/2)
+					// fmt.Fprintf(f, "found scan log: %s\n", msg)
+
+					trimmed := trimRx.FindStringSubmatch(msg)[1]
+					spanStmts := strings.Split(trimmed, ", ")
+					for _, spanStmt := range spanStmts {
+						// Scan [/Table/24/1/0/106,/Table/24/1/0/107)
+						spanStmt = strings.Replace(spanStmt, "Scan ", "", 1)
+						startEnd := strings.Split(strings.Trim(spanStmt, "[)"), ",")
+						start := startEnd[0]
+						// TODO: /NamespaceTable/
+						matches := tableIdRx.FindStringSubmatch(start)
+						require.NotEmpty(t, matches)
+						tableID, err := strconv.ParseInt(matches[3], 10, 64)
+						if err != nil {
+							t.Fatal(err)
+						}
+						tableIDsAccessed[tableID] = struct{}{}
+					}
+
+				}
+			}
+		}
+	}
 
 	cdcTest(t, testFn, withKnobsFn(func(knobs *base.TestingKnobs) {
 		knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 		if knobs.SQLExecutor == nil {
 			knobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
 		}
-		knobs.SQLExecutor.(*sql.ExecutorTestingKnobs).WithStatementTrace = func(trace tracingpb.Recording, stmt string) {
-			if !cfCreated.Load() {
-				return
-			}
-			if !strings.HasPrefix(stmt, "CREATE CHANGEFEED") {
-				return
-			}
-			for _, span := range trace {
-				// fmt.Fprintf(f, "\t%+v\n", span)
-				fmt.Fprintf(f, "\t%s\n", span.String())
-				for _, log := range span.Logs {
-					msg := log.Message.StripMarkers()
-					if strings.Contains(msg, "executing Scan") {
-						// executing Scan [/Tenant/10/Table/3/1,/Tenant/10/Table/3/2), Scan [/Tenant/10/NamespaceTable/30/1,/Tenant/10/NamespaceTable/30/2), Scan [/Tenant/10/Table/24/1,/Tenant/10/Table/24/2), Scan [/Tenant/10/Table/5/1,/Tenant/10/Table/5/2), [txn: cd065f05]}
-						// spans like
-						// [/Tenant/10/Table/3/1,/Tenant/10/Table/3/2) = (kv) span
-						// or [/Table/3/1,/Table/3/2)
-						// or [/Tenant/10/NamespaceTable/30/1,/Tenant/10/NamespaceTable/30/2)
-						// fmt.Fprintf(f, "found scan log: %s\n", msg)
-
-						trimmed := trimRx.FindStringSubmatch(msg)[1]
-						spanStmts := strings.Split(trimmed, ", ")
-						for _, spanStmt := range spanStmts {
-							// Scan [/Table/24/1/0/106,/Table/24/1/0/107)
-							matches := spanKeysRx.FindStringSubmatch(spanStmt)
-							start, end := matches[1], matches[2]
-							startKey, err := keyScanner.Scan(start)
-							if err != nil {
-								t.Fatal(err)
-							}
-							endKey, err := keyScanner.Scan(end)
-							if err != nil {
-								t.Fatal(err)
-							}
-
-							// TODO: get real codec/ tenant id, unless system
-							codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(10))
-							codec.StripTenantPrefix(startKey)
-
-						}
-
-					}
-				}
-			}
-		}
+		knobs.SQLExecutor.(*sql.ExecutorTestingKnobs).WithStatementTrace = traceCb
 	}), feedTestForceSink("sinkless"))
 
-	// withArgsFn(func(args *base.TestServerArgs) {
-	// 	args.DefaultTestTenant = base.TODOTestTenantDisabled
-	// })
+	// NamespaceTableID
+	// RoleOptionsTableID
+
+	// NOTE: not all the required tables will necessarily show up in every run due to caching.
+	require.NotEmpty(t, tableIDsAccessed)
+	fmt.Printf("tables accessed: %+v\n", tableIDsAccessed)
+	systemTablesToProtectMap := make(map[catid.DescID]struct{}, len(systemTablesToProtect))
+	for _, id := range systemTablesToProtect {
+		systemTablesToProtectMap[catid.DescID(id)] = struct{}{}
+	}
+
+	var missingTableIDs []catid.DescID
+	for id := range tableIDsAccessed {
+		if _, ok := systemTablesToProtectMap[catid.DescID(id)]; !ok {
+			missingTableIDs = append(missingTableIDs, catid.DescID(id))
+		}
+	}
+	require.Empty(t, missingTableIDs)
 }
 
 // Same test as TestChangefeedBasicQuery, but using wrapped envelope with CDC query.
