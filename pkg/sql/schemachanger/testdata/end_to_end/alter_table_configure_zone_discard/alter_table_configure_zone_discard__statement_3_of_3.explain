@@ -1,0 +1,21 @@
+/* setup */
+CREATE TABLE t(i int);
+
+/* test */
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 10000;
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 8;
+EXPLAIN (DDL) ALTER TABLE t CONFIGURE ZONE DISCARD;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE DISCARD; following ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹7›, ‹"gc.ttlseconds"› = ‹10000›; ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹8›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT TableZoneConfig:{DescID: 104 (t), SeqNum: 1}
+ │         │    └── PUBLIC → ABSENT TableZoneConfig:{DescID: 104 (t), SeqNum: 2}
+ │         └── 2 Mutation operations
+ │              ├── DiscardTableZoneConfig {"TableID":104}
+ │              └── DiscardTableZoneConfig {"TableID":104}
+ └── PreCommitPhase
+      └── Stage 1 of 1 in PreCommitPhase
+           └── 1 Mutation operation
+                └── UndoAllInTxnImmediateMutationOpSideEffects

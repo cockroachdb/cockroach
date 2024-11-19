@@ -41,13 +41,16 @@ func (tzo *tableZoneConfigObj) getZoneConfigElemForAdd(_ BuildCtx) (scpb.Element
 	return elem, nil
 }
 
-func (tzo *tableZoneConfigObj) getZoneConfigElemForDrop(_ BuildCtx) (scpb.Element, []scpb.Element) {
-	elem := &scpb.TableZoneConfig{
-		TableID:    tzo.tableID,
-		ZoneConfig: tzo.zoneConfig,
-		SeqNum:     tzo.seqNum,
-	}
-	return elem, nil
+func (tzo *tableZoneConfigObj) getZoneConfigElemForDrop(
+	b BuildCtx,
+) ([]scpb.Element, []scpb.Element) {
+	var elems []scpb.Element
+	b.QueryByID(tzo.getTargetID()).FilterTableZoneConfig().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TableZoneConfig) {
+			e.ZoneConfig.DeleteTableConfig()
+			elems = append(elems, e)
+		})
+	return elems, nil
 }
 
 func (tzo *tableZoneConfigObj) checkPrivilegeForSetZoneConfig(

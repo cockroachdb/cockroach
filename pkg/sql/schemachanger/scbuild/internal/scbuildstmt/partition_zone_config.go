@@ -91,10 +91,10 @@ func (pzo *partitionZoneConfigObj) getZoneConfigElemForAdd(
 
 func (pzo *partitionZoneConfigObj) getZoneConfigElemForDrop(
 	b BuildCtx,
-) (scpb.Element, []scpb.Element) {
+) ([]scpb.Element, []scpb.Element) {
 	// TODO(annie): this will need to be revised in order to implement subzone
 	// discards. This is fine for now as we fallback before we can get here.
-	return pzo.getZoneConfigElemForAdd(b)
+	return nil, nil
 }
 
 func (pzo *partitionZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {

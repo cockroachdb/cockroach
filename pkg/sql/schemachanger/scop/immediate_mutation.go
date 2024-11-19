@@ -1002,10 +1002,19 @@ type AddDatabaseZoneConfig struct {
 	ZoneConfig zonepb.ZoneConfig
 }
 
-// DiscardZoneConfig discards the zone config for the given descriptor ID.
+// DiscardZoneConfig discards the zone config for the given ID. For table IDs,
+// we use DiscardTableZoneConfig as some extra work is needed for subzones.
 type DiscardZoneConfig struct {
 	immediateMutationOp
-	DescID     descpb.ID
+	DescID descpb.ID
+}
+
+// DiscardTableZoneConfig discards the zone config for the given table ID. If
+// the table has subzones, we mark the table's zone config as a subzone
+// placeholder.
+type DiscardTableZoneConfig struct {
+	immediateMutationOp
+	TableID    descpb.ID
 	ZoneConfig *zonepb.ZoneConfig
 }
 
