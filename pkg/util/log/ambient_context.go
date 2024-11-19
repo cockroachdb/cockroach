@@ -130,12 +130,11 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 }
 
 // AnnotateCtxWithSpan annotates the given context with the information in
-// AmbientContext (see AnnotateCtx) and opens a span.
+// AmbientContext (see AnnotateCtx).
 //
-// If the given context has a span, the new span is a child of that span.
-// Otherwise, the Tracer in AmbientContext is used to create a new root span.
-//
-// The caller is responsible for closing the span (via Span.Finish).
+// If the given context has a trace span, a child span is created. The returned
+// span may be nil, but either way the caller is responsible for eventually
+// closing the span (via Span.Finish, which is valid on the nil Span).
 func (ac *AmbientContext) AnnotateCtxWithSpan(
 	ctx context.Context, opName string,
 ) (context.Context, *tracing.Span) {
@@ -155,7 +154,7 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 		}
 	}
 
-	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
+	return tracing.ChildSpan(ctx, opName)
 }
 
 // MakeTestingAmbientContext creates an AmbientContext for use in tests,
