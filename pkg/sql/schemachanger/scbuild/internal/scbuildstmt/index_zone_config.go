@@ -80,10 +80,12 @@ func (izo *indexZoneConfigObj) getZoneConfigElemForAdd(b BuildCtx) (scpb.Element
 	return szCfg, szCfgsToUpdate
 }
 
-func (izo *indexZoneConfigObj) getZoneConfigElemForDrop(b BuildCtx) (scpb.Element, []scpb.Element) {
+func (izo *indexZoneConfigObj) getZoneConfigElemForDrop(
+	b BuildCtx,
+) ([]scpb.Element, []scpb.Element) {
 	// TODO(annie): this will need to be revised in order to implement subzone
 	// discards.
-	return izo.getZoneConfigElemForAdd(b)
+	return nil, nil
 }
 
 func (izo *indexZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {

@@ -240,6 +240,12 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 		c.InsertTemporarySchema(tempIdxToRegister.schemaName, tempIdxToRegister.parentID, tempIdxId)
 	}
 
+	for _, zcToDelete := range s.zoneConfigsToDelete {
+		if err = c.DeleteZoneConfig(ctx, zcToDelete.id); err != nil {
+			return err
+		}
+	}
+
 	for _, zcToUpdate := range s.modifiedZoneConfigs {
 		if err = c.UpdateZoneConfig(ctx, zcToUpdate.id, zcToUpdate.zc); err != nil {
 			return err
@@ -269,12 +275,6 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 			}
 		}
 		if err = c.WriteZoneConfigToBatch(ctx, id, zcToWrite); err != nil {
-			return err
-		}
-	}
-
-	for _, zcToDelete := range s.zoneConfigsToDelete {
-		if err = c.DeleteZoneConfig(ctx, zcToDelete.id); err != nil {
 			return err
 		}
 	}
