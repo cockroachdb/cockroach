@@ -124,7 +124,7 @@ func TestAzureFileCredential(t *testing.T) {
 		defaultCreds, err := azidentity.NewDefaultAzureCredential(nil)
 		require.NoError(t, err)
 
-		require.ErrorContains(t, verifyCredentialsAccess(defaultCreds), "DefaultAzureCredential: failed to acquire a token")
+		require.ErrorContains(t, verifyCredentialsAccess(defaultCreds), "DefaultAzureCredential authentication failed. failed to acquire a token")
 
 		require.NoError(t, writeAzureCredentialsFile(credFile, cfg.tenantID, cfg.clientID, cfg.clientSecret))
 
