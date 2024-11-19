@@ -6,6 +6,7 @@
 package rangefeed
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -94,6 +96,7 @@ func generateStaticTestdata() testData {
 func TestEventSizeCalculation(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	data := generateStaticTestdata()
+	storage.ColumnarBlocksEnabled.Override(context.Background(), &st.SV, true)
 
 	key := data.key
 	timestamp := data.timestamp
@@ -217,10 +220,10 @@ func TestEventSizeCalculation(t *testing.T) {
 		{
 			name:                 "sstEvent event",
 			ev:                   event{sst: &sstEvent{data: sst, span: span, ts: timestamp}},
-			expectedCurrMemUsage: int64(1962),
+			expectedCurrMemUsage: int64(2218),
 			actualCurrMemUsage: eventOverhead + sstEventOverhead +
 				int64(cap(sst)+cap(span.Key)+cap(span.EndKey)),
-			expectedFutureMemUsage: int64(1978),
+			expectedFutureMemUsage: int64(2234),
 			actualFutureMemUsage: futureEventBaseOverhead + rangefeedSSTTableOverhead +
 				int64(cap(sst)+cap(span.Key)+cap(span.EndKey)),
 		},

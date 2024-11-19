@@ -10,6 +10,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -80,11 +81,14 @@ func (*noopFinishAbort) Abort() {}
 // MakeIngestionWriterOptions returns writer options suitable for writing SSTs
 // that will subsequently be ingested (e.g. with AddSSTable).
 func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstable.WriterOptions {
-	// By default, take a conservative approach and assume we don't have newer
-	// table features available. Upgrade to an appropriate version only if the
-	// cluster supports it. Currently, all supported versions understand
-	// TableFormatPebblev4.
+	// All supported versions understand TableFormatPebblev4. If columnar blocks
+	// are enabled and the active cluster version is at least 24.3, use
+	// TableFormatPebblev5.
 	format := sstable.TableFormatPebblev4
+	if cs.Version.IsActive(ctx, clusterversion.V24_3) && ColumnarBlocksEnabled.Get(&cs.SV) {
+		format = sstable.TableFormatPebblev5
+	}
+
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 	// By default, compress with the algorithm used for storage in a Pebble store.
 	// There are other, more specific, use cases that may call for a different

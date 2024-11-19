@@ -178,6 +178,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectErr: []string{
 				`unexpected timestamp 2.000000000,0 (expected 1.000000000,0) for key "c"`,
 				`key has suffix "\x00\x00\x00\x00w5\x94\x00\t", expected "\x00\x00\x00\x00;\x9a\xca\x00\t"`,
+				`has suffix 0x000000007735940009; require 0x000000003b9aca0009`,
 			},
 		},
 		"SSTTimestampToRequestTimestamp rejects incorrect SST timestamp for range keys": {
@@ -187,6 +188,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectErr: []string{
 				`unexpected timestamp 2.000000000,0 (expected 1.000000000,0) for range key {c-d}`,
 				`key has suffix "\x00\x00\x00\x00w5\x94\x00\t", expected "\x00\x00\x00\x00;\x9a\xca\x00\t"`,
+				`has suffix 0x000000007735940009; require 0x000000003b9aca0009`,
 			},
 		},
 		"SSTTimestampToRequestTimestamp rejects incorrect 0 SST timestamp": {
@@ -196,6 +198,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectErr: []string{
 				`unexpected timestamp 0,0 (expected 1.000000000,0) for key "c"`,
 				`key has suffix "", expected "\x00\x00\x00\x00;\x9a\xca\x00\t"`,
+				`has suffix 0x; require 0x000000003b9aca0009`,
 			},
 			expectErrRace: `SST contains inline value or intent for key "c"/0,0`,
 		},

@@ -51,6 +51,12 @@ import (
 	"github.com/petermattis/goid"
 )
 
+func init() {
+	pollPreemptionInterval.Lock()
+	defer pollPreemptionInterval.Unlock()
+	pollPreemptionInterval.interval = 5 * time.Minute
+}
+
 var (
 	errTestsFailed = fmt.Errorf("some tests failed")
 
@@ -2132,20 +2138,29 @@ var getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger
 	return c.GetPreemptedVMs(ctx, l)
 }
 
-// pollPreemptionInterval is how often to poll for preempted VMs.
-var pollPreemptionInterval = 5 * time.Minute
+// pollPreemptionInterval is how often to poll for preempted VMs. We use a
+// mutex protected struct to allow for unit tests to safely modify it.
+// Interval defaults to 5 minutes if not set.
+var pollPreemptionInterval struct {
+	syncutil.Mutex
+	interval time.Duration
+}
 
 func monitorForPreemptedVMs(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger) {
 	if c.IsLocal() || !c.Spec().UseSpotVMs {
 		return
 	}
 
+	pollPreemptionInterval.Lock()
+	defer pollPreemptionInterval.Unlock()
+	interval := pollPreemptionInterval.interval
+
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(pollPreemptionInterval):
+			case <-time.After(interval):
 				preemptedVMs, err := getPreemptedVMsHook(c, ctx, l)
 				if err != nil {
 					l.Printf("WARN: monitorForPreemptedVMs: failed to check preempted VMs:\n%+v", err)
