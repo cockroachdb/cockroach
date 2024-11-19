@@ -43,14 +43,23 @@ func (dzo *databaseZoneConfigObj) getZoneConfigElemForAdd(
 }
 
 func (dzo *databaseZoneConfigObj) getZoneConfigElemForDrop(
-	_ BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	elem := &scpb.DatabaseZoneConfig{
-		DatabaseID: dzo.databaseID,
-		ZoneConfig: dzo.zoneConfig,
-		SeqNum:     dzo.seqNum,
+	b BuildCtx,
+) ([]scpb.Element, []scpb.Element) {
+	var elems []scpb.Element
+	if dzo.seqNum > 0 {
+		for i := range dzo.seqNum {
+			elems = append(elems, &scpb.DatabaseZoneConfig{
+				DatabaseID: dzo.databaseID,
+				SeqNum:     i + 1,
+			})
+		}
+	} else {
+		elems = append(elems, &scpb.DatabaseZoneConfig{
+			DatabaseID: dzo.databaseID,
+			SeqNum:     0,
+		})
 	}
-	return elem, nil
+	return elems, nil
 }
 
 func (dzo *databaseZoneConfigObj) checkPrivilegeForSetZoneConfig(

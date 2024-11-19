@@ -43,13 +43,22 @@ func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForAdd(
 
 func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForDrop(
 	_ BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	elem := &scpb.NamedRangeZoneConfig{
-		RangeID:    rzo.rangeID,
-		ZoneConfig: rzo.zoneConfig,
-		SeqNum:     rzo.seqNum,
+) ([]scpb.Element, []scpb.Element) {
+	var elems []scpb.Element
+	if rzo.seqNum > 0 {
+		for i := range rzo.seqNum {
+			elems = append(elems, &scpb.NamedRangeZoneConfig{
+				RangeID: rzo.rangeID,
+				SeqNum:  i + 1,
+			})
+		}
+	} else {
+		elems = append(elems, &scpb.NamedRangeZoneConfig{
+			RangeID: rzo.rangeID,
+			SeqNum:  0,
+		})
 	}
-	return elem, nil
+	return elems, nil
 }
 
 func (rzo *namedRangeZoneConfigObj) checkPrivilegeForSetZoneConfig(
