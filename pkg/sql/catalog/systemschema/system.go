@@ -852,13 +852,13 @@ CREATE TABLE system.sql_instances (
     is_draining    BOOL NULL,
     CONSTRAINT "primary" PRIMARY KEY (crdb_region, id),
     FAMILY "primary" (
-      id, 
-      addr, 
-      session_id, 
-      locality, 
-      sql_addr, 
-      crdb_region, 
-      binary_version, 
+      id,
+      addr,
+      session_id,
+      locality,
+      sql_addr,
+      crdb_region,
+      binary_version,
       is_draining
     )
 )`
@@ -5037,7 +5037,7 @@ var ListenNotifyQueueTable = makeSystemTable(
 		descpb.InvalidID, // dynamically assigned table ID
 		[]descpb.ColumnDescriptor{
 			{Name: "channel", ID: 1, Type: types.String},
-			{Name: "payload", ID: 2, Type: types.String, Nullable: true},
+			{Name: "payload", ID: 2, Type: types.String},
 			{Name: "pid", ID: 3, Type: types.Int4},
 		},
 		[]descpb.ColumnFamilyDescriptor{{

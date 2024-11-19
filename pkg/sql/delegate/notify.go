@@ -29,16 +29,9 @@ import (
 // Alternatively, we could set it to 0/-1/some special value and not support
 // this facet of the feature at all, to avoid users doing the wrong thing.
 func (d *delegator) delegateNotify(n *tree.Notify) (tree.Statement, error) {
-	if n.Payload != nil {
-		return d.parse(fmt.Sprintf(
-			`UPSERT INTO system.notifications (channel, payload, pid) SELECT %s, %s, pg_backend_pid()`,
-			lexbase.EscapeSQLString(n.ChannelName.String()),
-			lexbase.EscapeSQLString(n.Payload.RawString()),
-		))
-	} else {
-		return d.parse(fmt.Sprintf(
-			`UPSERT INTO system.notifications (channel, payload, pid) SELECT %s, NULL, pg_backend_pid()`,
-			lexbase.EscapeSQLString(n.ChannelName.String()),
-		))
-	}
+	return d.parse(fmt.Sprintf(
+		`UPSERT INTO system.notifications (channel, payload, pid) SELECT %s, %s, pg_backend_pid()`,
+		lexbase.EscapeSQLString(n.ChannelName.String()),
+		lexbase.EscapeSQLString(n.Payload.RawString()),
+	))
 }

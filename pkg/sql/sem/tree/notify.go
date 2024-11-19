@@ -13,7 +13,8 @@ package tree
 // Notify represents a NOTIFY statement.
 type Notify struct {
 	ChannelName Name
-	// Payload is a constant string expression and it may be empty/nil.
+	// Payload is a constant string expression and it may be empty but NOT nil.
+	// TODO: how can i make that it is not nil in the type system?
 	Payload *StrVal
 }
 
@@ -23,7 +24,7 @@ var _ Statement = &Notify{}
 func (node *Notify) Format(ctx *FmtCtx) {
 	ctx.WriteString("NOTIFY ")
 	ctx.WriteString(node.ChannelName.Normalize())
-	if node.Payload != nil {
+	if len(node.Payload.s) > 0 {
 		ctx.WriteString(", ")
 		ctx.FormatNode(node.Payload)
 	}

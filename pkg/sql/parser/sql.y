@@ -4726,7 +4726,7 @@ logical_replication_options:
   }
 | SKIP SCHEMA CHECK
   {
-    $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)} 
+    $$.val = &tree.LogicalReplicationOptions{SkipSchemaCheck: tree.MakeDBool(true)}
   }
 | LABEL '=' string_or_placeholder
   {
@@ -9686,7 +9686,7 @@ notify_stmt:
   }
 | NOTIFY name
   {
-    $$.val = &tree.Notify{ChannelName: tree.Name($2)}
+    $$.val = &tree.Notify{ChannelName: tree.Name($2), Payload: tree.NewStrVal("")}
   }
 
 // grant_targets is a non-terminal for a list of privilege targets, either a
