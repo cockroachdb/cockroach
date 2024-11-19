@@ -1629,7 +1629,7 @@ func EncodeSecondaryIndexes(
 		if cap(secondaryIndexEntries)-len(secondaryIndexEntries) < len(entries) {
 			resliceSize := sizeOfIndexEntry * int64(cap(secondaryIndexEntries))
 			if err := indexBoundAccount.Grow(ctx, resliceSize); err != nil {
-				return nil, 0, errors.Wrap(err,
+				return nil, memUsedEncodingSecondaryIdxs, errors.Wrap(err,
 					"failed to re-slice index entries buffer")
 			}
 			memUsedEncodingSecondaryIdxs += resliceSize
@@ -1641,11 +1641,11 @@ func EncodeSecondaryIndexes(
 		// non-trivial.
 		for _, index := range entries {
 			if err := indexBoundAccount.Grow(ctx, int64(len(index.Key))); err != nil {
-				return nil, 0, errors.Wrap(err, "failed to allocate space for index keys")
+				return nil, memUsedEncodingSecondaryIdxs, errors.Wrap(err, "failed to allocate space for index keys")
 			}
 			memUsedEncodingSecondaryIdxs += int64(len(index.Key))
 			if err := indexBoundAccount.Grow(ctx, int64(len(index.Value.RawBytes))); err != nil {
-				return nil, 0, errors.Wrap(err, "failed to allocate space for index values")
+				return nil, memUsedEncodingSecondaryIdxs, errors.Wrap(err, "failed to allocate space for index values")
 			}
 			memUsedEncodingSecondaryIdxs += int64(len(index.Value.RawBytes))
 		}
