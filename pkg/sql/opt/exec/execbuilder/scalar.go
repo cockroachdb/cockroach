@@ -818,6 +818,7 @@ func (b *Builder) buildSubquery(
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 		)
+		_, tailCall := b.tailCalls[subquery]
 		return tree.NewTypedRoutineExpr(
 			"subquery",
 			args,
@@ -827,7 +828,7 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
-			false, /* tailCall */
+			tailCall,
 			false, /* procedure */
 			false, /* triggerFunc */
 			false, /* blockStart */
@@ -848,11 +849,18 @@ func (b *Builder) buildSubquery(
 		planGen := func(
 			ctx context.Context, ref tree.RoutineExecFactory, args tree.Datums, fn tree.RoutinePlanGeneratedFunc,
 		) error {
+			// Analyze the input of the subquery to find tail calls, which will allow
+			// nested routines (including lazy subqueries) to be executed in the same
+			// context as this subquery.
+			tailCalls := make(map[opt.ScalarExpr]struct{})
+			memo.ExtractTailCalls(input, tailCalls)
+
 			ef := ref.(exec.Factory)
 			eb := New(ctx, ef, b.optimizer, b.mem, b.catalog, input, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
+			eb.tailCalls = tailCalls
 			ePlan, _, err := eb.buildRelational(input)
 			if err != nil {
 				return err
@@ -879,6 +887,7 @@ func (b *Builder) buildSubquery(
 			}
 			return nil
 		}
+		_, tailCall := b.tailCalls[subquery]
 		return tree.NewTypedRoutineExpr(
 			"subquery",
 			nil, /* args */
@@ -888,7 +897,7 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
-			false, /* tailCall */
+			tailCall,
 			false, /* procedure */
 			false, /* triggerFunc */
 			false, /* blockStart */
@@ -1204,9 +1213,9 @@ func (b *Builder) buildRoutinePlanGenerator(
 			// in the Builder. When a nested routine is evaluated, this information
 			// may be used to enable tail-call optimization.
 			isFinalPlan := i == len(stmts)-1
-			var tailCalls map[*memo.UDFCallExpr]struct{}
+			var tailCalls map[opt.ScalarExpr]struct{}
 			if isFinalPlan {
-				tailCalls = make(map[*memo.UDFCallExpr]struct{})
+				tailCalls = make(map[opt.ScalarExpr]struct{})
 				memo.ExtractTailCalls(optimizedExpr, tailCalls)
 			}
 

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -245,11 +246,26 @@ func (g *routineGenerator) ResolvedType() *types.T {
 
 // Start is part of the eval.ValueGenerator interface.
 func (g *routineGenerator) Start(ctx context.Context, txn *kv.Txn) (err error) {
+	enabledStepping := false
+	var prevSteppingMode kv.SteppingMode
+	var prevSeqNum enginepb.TxnSeq
 	for {
+		if g.expr.EnableStepping && !enabledStepping {
+			prevSteppingMode = txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+			prevSeqNum = txn.GetReadSeqNum()
+			enabledStepping = true
+		}
 		err = g.startInternal(ctx, txn)
-		if err != nil || g.deferredRoutine.expr == nil {
-			// No tail-call optimization.
+		if err != nil {
 			return err
+		}
+		if g.deferredRoutine.expr == nil {
+			// No tail-call optimization.
+			if enabledStepping {
+				_ = txn.ConfigureStepping(ctx, prevSteppingMode)
+				return txn.SetReadSeqNum(prevSeqNum)
+			}
+			return nil
 		}
 		// A nested routine in tail-call position deferred its execution until now.
 		// Since it's in tail-call position, evaluating it will give the result of
@@ -282,22 +298,6 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	err = g.maybeInitBlockState(ctx)
 	if err != nil {
 		return err
-	}
-
-	// Configure stepping for volatile routines so that mutations made by the
-	// invoking statement are visible to the routine.
-	if g.expr.EnableStepping {
-		prevSteppingMode := txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-		prevSeqNum := txn.GetReadSeqNum()
-		defer func() {
-			// If the routine errored, the transaction should be aborted, so
-			// there is no need to reconfigure stepping or revert to the
-			// original sequence number.
-			if err == nil {
-				_ = txn.ConfigureStepping(ctx, prevSteppingMode)
-				err = txn.SetReadSeqNum(prevSeqNum)
-			}
-		}()
 	}
 
 	// Execute each statement in the routine sequentially.
@@ -430,11 +430,25 @@ func (g *routineGenerator) handleException(ctx context.Context, err error) error
 			args := g.args[:blockState.VariableCount]
 			g.reset(ctx, g.p, branch, args)
 
+			// Configure stepping for volatile routines so that mutations made by the
+			// invoking statement are visible to the routine.
+			var prevSteppingMode kv.SteppingMode
+			var prevSeqNum enginepb.TxnSeq
+			txn := g.p.Txn()
+			if g.expr.EnableStepping {
+				prevSteppingMode = txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+				prevSeqNum = txn.GetReadSeqNum()
+			}
+
 			// If handling the exception results in another error, that error can in
 			// turn be caught by a parent exception handler. Otherwise, the exception
 			// was handled, so just return.
-			err = g.startInternal(ctx, g.p.Txn())
+			err = g.startInternal(ctx, txn)
 			if err == nil {
+				if g.expr.EnableStepping {
+					_ = txn.ConfigureStepping(ctx, prevSteppingMode)
+					return txn.SetReadSeqNum(prevSeqNum)
+				}
 				return nil
 			}
 		}
