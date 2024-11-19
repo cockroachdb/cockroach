@@ -36,6 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	raft "github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -912,10 +914,10 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	partReplSender := tc.GetFirstStoreFromServer(t, partStore).TestSender()
 
 	// Partition the original leader from its followers. We do this by installing
-	// unreliableRaftHandler listeners on all three Stores. The handler on the
-	// partitioned store filters out all messages while the handler on the other
-	// two stores only filters out messages from the partitioned store. The
-	// configuration looks like:
+	// unreliableRaftHandler listeners and UnreliableHandler store liveness
+	// listeners on all three Stores. The handlers on the partitioned store filter
+	// out all messages while the handler on the other two stores only filters out
+	// messages from the partitioned store. The configuration looks like:
 	//
 	//           [0]
 	//          x  x
@@ -923,23 +925,34 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	//        x      x
 	//      [1]<---->[2]
 	//
-	log.Infof(ctx, "test: installing unreliable Raft transports")
+	log.Infof(ctx, "test: installing unreliable Raft and Store Liveness transports")
 	for _, s := range []int{0, 1, 2} {
-		h := &unreliableRaftHandler{
+		raftHandler := &unreliableRaftHandler{
 			rangeID:                    partRepl.RangeID,
 			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
 		}
 		if s != partStore {
 			// Only filter messages from the partitioned store on the other
 			// two stores.
-			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+			raftHandler.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 				return req.FromReplica.StoreID == partRepl.StoreID()
 			}
-			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
+			raftHandler.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
-		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
+		storeLivenessUnreliableHandler := &storeliveness.UnreliableHandler{
+			MessageHandler: tc.GetFirstStoreFromServer(t, s).TestingStoreLivenessSupportManager(),
+			UnreliableHandlerFuncs: storeliveness.UnreliableHandlerFuncs{
+				DropStoreLivenessMsg: func(msg *slpb.Message) bool {
+					return msg.To.StoreID == partRepl.StoreID() || msg.From.StoreID == partRepl.StoreID()
+				},
+			},
+		}
+		storeLivenessTransport := tc.Servers[s].StoreLivenessTransport().(*storeliveness.Transport)
+		storeLivenessTransport.ListenMessages(tc.Target(s).StoreID, storeLivenessUnreliableHandler)
+		raftTransport := tc.Servers[s].RaftTransport().(*kvserver.RaftTransport)
+		raftTransport.ListenIncomingRaftMessages(tc.Target(s).StoreID, raftHandler)
 	}
 
 	// Perform a series of writes on the partitioned replica. The writes will
