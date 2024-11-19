@@ -22,12 +22,11 @@ create-trigger
  ├── CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f_basic()
  └── no dependencies
 
+# TODO(#126362, #135655): implement this case.
 build
 CREATE TRIGGER foo AFTER DELETE ON xy REFERENCING OLD TABLE AS foo WHEN (1 = 1) EXECUTE FUNCTION f_basic();
 ----
-create-trigger
- ├── CREATE TRIGGER foo AFTER DELETE ON xy REFERENCING OLD TABLE AS foo FOR EACH STATEMENT WHEN (1 = 1) EXECUTE FUNCTION f_basic()
- └── no dependencies
+error (0A000): unimplemented: statement-level triggers are not yet supported
 
 build
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_basic();
