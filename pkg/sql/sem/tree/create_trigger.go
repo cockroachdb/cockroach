@@ -154,6 +154,16 @@ type TriggerEventTypeSet uint8
 // Ensure that TriggerEventTypeSet can contain all TriggerEventTypes.
 const _ = TriggerEventTypeSet(1) << TriggerEventTypeMax
 
+// MakeTriggerEventTypeSet creates a TriggerEventTypeSet from a list of
+// TriggerEventType values.
+func MakeTriggerEventTypeSet(types ...TriggerEventType) TriggerEventTypeSet {
+	var s TriggerEventTypeSet
+	for _, t := range types {
+		s.Add(t)
+	}
+	return s
+}
+
 // Add adds a TriggerEventType value to the set.
 func (s *TriggerEventTypeSet) Add(t TriggerEventType) {
 	*s |= 1 << t

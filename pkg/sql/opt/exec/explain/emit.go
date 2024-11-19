@@ -100,7 +100,8 @@ func emitInternal(
 		return nil
 	}
 
-	if len(plan.Subqueries) == 0 && len(plan.Cascades) == 0 && len(plan.Checks) == 0 {
+	if len(plan.Subqueries) == 0 && len(plan.Cascades) == 0 &&
+		len(plan.Checks) == 0 && len(plan.Triggers) == 0 {
 		return walk(plan.Root)
 	}
 	ob.EnterNode("root", plan.Root.Columns(), plan.Root.Ordering())
@@ -143,35 +144,46 @@ func emitInternal(
 		}
 		ob.LeaveNode()
 	}
-
+	emitPostQuery := func(pq exec.PostQuery, pqPlan exec.Plan) error {
+		if pqPlan != nil {
+			return emitInternal(ctx, evalCtx, pqPlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades)
+		}
+		// Either we have already emitted the plan for the post-query and want to
+		// avoid infinite recursion, or we cannot produce the plan.
+		if buffer := pq.Buffer; buffer != nil {
+			ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
+		}
+		return nil
+	}
 	for _, cascade := range plan.Cascades {
 		ob.EnterMetaNode("fk-cascade")
 		ob.Attr("fk", cascade.FKConstraint.Name())
+		if visitedFKsByCascades == nil {
+			visitedFKsByCascades = make(map[string]struct{})
+		}
+		// Come up with a custom "id" for this FK.
+		fk := cascade.FKConstraint
+		fkID := fmt.Sprintf("%d%s", fk.OriginTableID(), fk.Name())
 		// Here we do want to allow creation of the plans for the cascades to be
-		// able to include them into the EXPLAIN output.
-		const createPlanIfMissing = true
-		if cascadePlan, err := cascade.GetExplainPlan(ctx, createPlanIfMissing); err != nil {
+		// able to include them into the EXPLAIN output. The exception is when there
+		// are BEFORE triggers on the cascaded mutation, in which case we can only
+		// build the plan if the transaction is still open (see #135157)
+		createPlanIfMissing := true
+		if cascade.CascadeHasBeforeTriggers {
+			createPlanIfMissing = evalCtx.Txn != nil && evalCtx.Txn.IsOpen()
+		}
+		var err error
+		var cascadePlan exec.Plan
+		if _, alreadyEmitted := visitedFKsByCascades[fkID]; !alreadyEmitted {
+			cascadePlan, err = cascade.GetExplainPlan(ctx, createPlanIfMissing)
+			if err != nil {
+				return err
+			}
+			visitedFKsByCascades[fkID] = struct{}{}
+			defer delete(visitedFKsByCascades, fkID)
+		}
+		if err = emitPostQuery(cascade, cascadePlan); err != nil {
 			return err
-		} else {
-			if visitedFKsByCascades == nil {
-				visitedFKsByCascades = make(map[string]struct{})
-			}
-			fk := cascade.FKConstraint
-			// Come up with a custom "id" for this FK.
-			fkID := fmt.Sprintf("%d%s", fk.OriginTableID(), fk.Name())
-			if _, visited := visitedFKsByCascades[fkID]; visited {
-				// If we have already visited this particular FK cascade, we
-				// don't recurse into it again to prevent infinite recursion.
-				if buffer := cascade.Buffer; buffer != nil {
-					ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
-				}
-			} else {
-				visitedFKsByCascades[fkID] = struct{}{}
-				defer delete(visitedFKsByCascades, fkID)
-				if err = emitInternal(ctx, evalCtx, cascadePlan.(*Plan), ob, spanFormatFn, visitedFKsByCascades); err != nil {
-					return err
-				}
-			}
 		}
 		ob.LeaveNode()
 	}
@@ -182,7 +194,24 @@ func emitInternal(
 		}
 		ob.LeaveNode()
 	}
-	// TODO(drewk): handle triggers as well.
+	for _, afterTriggers := range plan.Triggers {
+		ob.EnterMetaNode("after-triggers")
+		for _, trigger := range afterTriggers.Triggers {
+			ob.Attr("trigger", trigger.Name())
+		}
+		// Only allow new plans to be built for AFTER triggers if the transaction is
+		// still open. This is necessary because the transaction might have been
+		// auto-committed by the time we are emitting the plan (see #135157).
+		createPlanIfMissing := evalCtx.Txn != nil && evalCtx.Txn.IsOpen()
+		afterTriggersPlan, err := afterTriggers.GetExplainPlan(ctx, createPlanIfMissing)
+		if err != nil {
+			return err
+		}
+		if err = emitPostQuery(afterTriggers, afterTriggersPlan); err != nil {
+			return err
+		}
+		ob.LeaveNode()
+	}
 	ob.LeaveNode()
 	return nil
 }
@@ -926,6 +955,16 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
 			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
 		}
+		beforeTriggers := cat.GetRowLevelTriggers(
+			a.Table, tree.TriggerActionTimeBefore, tree.MakeTriggerEventTypeSet(tree.TriggerEventInsert),
+		)
+		if len(beforeTriggers) > 0 {
+			ob.EnterMetaNode("before-triggers")
+			for _, trigger := range beforeTriggers {
+				ob.Attrf("trigger", "%s", trigger.Name())
+			}
+			ob.LeaveNode()
+		}
 
 	case insertFastPathOp:
 		a := n.args.(*insertFastPathArgs)
@@ -955,6 +994,11 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if len(a.Rows) > 0 {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Rows[0]))
 		}
+		if cat.HasRowLevelTriggers(a.Table, tree.TriggerActionTimeBefore, tree.TriggerEventInsert) {
+			// The insert fast path should not be planned if there are applicable
+			// triggers.
+			return errors.AssertionFailedf("insert fast path with before-triggers")
+		}
 
 	case upsertOp:
 		a := n.args.(*upsertArgs)
@@ -983,6 +1027,17 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if uniqWithTombstoneIndexes := joinIndexNames(a.Table, a.UniqueWithTombstonesIndexes, ", "); uniqWithTombstoneIndexes != "" {
 			ob.Attr("uniqueness checks (tombstones)", uniqWithTombstoneIndexes)
 		}
+		beforeTriggers := cat.GetRowLevelTriggers(
+			a.Table, tree.TriggerActionTimeBefore,
+			tree.MakeTriggerEventTypeSet(tree.TriggerEventInsert, tree.TriggerEventUpdate),
+		)
+		if len(beforeTriggers) > 0 {
+			ob.EnterMetaNode("before-triggers")
+			for _, trigger := range beforeTriggers {
+				ob.Attrf("trigger", "%s", trigger.Name())
+			}
+			ob.LeaveNode()
+		}
 
 	case updateOp:
 		a := n.args.(*updateArgs)
@@ -994,12 +1049,32 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
 		}
+		beforeTriggers := cat.GetRowLevelTriggers(
+			a.Table, tree.TriggerActionTimeBefore, tree.MakeTriggerEventTypeSet(tree.TriggerEventUpdate),
+		)
+		if len(beforeTriggers) > 0 {
+			ob.EnterMetaNode("before-triggers")
+			for _, trigger := range beforeTriggers {
+				ob.Attrf("trigger", "%s", trigger.Name())
+			}
+			ob.LeaveNode()
+		}
 
 	case deleteOp:
 		a := n.args.(*deleteArgs)
 		ob.Attrf("from", "%s", a.Table.Name())
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")
+		}
+		beforeTriggers := cat.GetRowLevelTriggers(
+			a.Table, tree.TriggerActionTimeBefore, tree.MakeTriggerEventTypeSet(tree.TriggerEventDelete),
+		)
+		if len(beforeTriggers) > 0 {
+			ob.EnterMetaNode("before-triggers")
+			for _, trigger := range beforeTriggers {
+				ob.Attrf("trigger", "%s", trigger.Name())
+			}
+			ob.LeaveNode()
 		}
 
 	case deleteRangeOp:
@@ -1014,6 +1089,10 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 			IndexConstraint: a.IndexConstraint,
 		}
 		e.emitSpans("spans", a.Table, a.Table.Index(cat.PrimaryIndex), params)
+		if cat.HasRowLevelTriggers(a.Table, tree.TriggerActionTimeBefore, tree.TriggerEventDelete) {
+			// DeleteRange should not be planned if there are applicable triggers.
+			return errors.AssertionFailedf("delete range with before-triggers")
+		}
 
 	case showCompletionsOp:
 		a := n.args.(*showCompletionsArgs)
