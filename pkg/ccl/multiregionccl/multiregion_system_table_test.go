@@ -549,7 +549,8 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 
 	// Enable settings required for configuring a tenant's system database as multi-region.
 	makeSettings := func() *cluster.Settings {
-		cs := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.V24_1.Version(),
+		cs := cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.V24_3_SQLInstancesAddDraining.Version(),
 			clusterversion.MinSupported.Version(),
 			false)
 		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
@@ -596,9 +597,10 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE REGION FAILURE"},
 	})
 
-	_, err = cluster.Conns[0].Exec("SET CLUSTER SETTING version = crdb_internal.node_executable_version();")
+	v := clusterversion.V24_3_SQLInstancesAddDraining.Version().String()
+	_, err = cluster.Conns[0].Exec("SET CLUSTER SETTING version = $1", v)
 	require.NoError(t, err)
-	tDB.Exec(t, "SET CLUSTER SETTING version = crdb_internal.node_executable_version();")
+	tDB.Exec(t, "SET CLUSTER SETTING version = $1", v)
 
 	tDB.CheckQueryResults(t, "SELECT create_statement FROM [SHOW CREATE DATABASE system]", [][]string{
 		{"CREATE DATABASE system PRIMARY REGION \"us-east1\" REGIONS = \"us-east1\", \"us-east2\", \"us-east3\" SURVIVE REGION FAILURE"},
