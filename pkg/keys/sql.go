@@ -25,7 +25,7 @@ func MakeTenantPrefix(tenID roachpb.TenantID) roachpb.Key {
 // MakeTenantSpan creates the start/end key pair associated with the specified tenant.
 func MakeTenantSpan(tenID roachpb.TenantID) roachpb.Span {
 	if tenID == roachpb.TenantOne {
-		return roachpb.Span{Key: PrefixlessNamespaceTableMin, EndKey: PrefixlessNamespaceTableMax}
+		return roachpb.Span{Key: PrefixlessTableDataMin, EndKey: PrefixlessTableDataMax}
 	}
 	tenIDint := tenID.ToUint64()
 	return roachpb.Span{
