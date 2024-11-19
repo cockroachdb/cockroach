@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -562,7 +563,7 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 
 	// Enable settings required for configuring a tenant's system database as multi-region.
 	makeSettings := func() *cluster.Settings {
-		cs := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.V24_1.Version(),
+		cs := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(),
 			clusterversion.MinSupported.Version(),
 			false)
 		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
@@ -578,9 +579,13 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		},
 		multiregionccltestutils.WithSettings(makeSettings()))
 	defer cleanup()
-
 	id, err := roachpb.MakeTenantID(11)
 	require.NoError(t, err)
+
+	// Disable license enforcement for this test.
+	for _, s := range cluster.Servers {
+		s.ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer.Disable(ctx)
+	}
 
 	tenantArgs := base.TestTenantArgs{
 		Settings: makeSettings(),
@@ -593,7 +598,8 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		TenantID: id,
 		Locality: cluster.Servers[0].Locality(),
 	}
-	_, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
+	appLayer, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
+	appLayer.ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer.Disable(ctx)
 
 	tDB := sqlutils.MakeSQLRunner(tenantSQL)
 
