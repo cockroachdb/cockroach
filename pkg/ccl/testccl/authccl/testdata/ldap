@@ -352,7 +352,7 @@ CREATE ROLE "ldap-parent-synced";
 ----
 ok
 
-ldap_mock set_groups=(ldap_user,cn=ldap-parent-synced,cn=ldap-parent-unsynced)
+ldap_mock set_groups=(ldap_user,cn=ldap-parent-unsynced,cn=ldap-parent-synced)
 ----
 
 connect user=ldap_user password="ldap_pwd"

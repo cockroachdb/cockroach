@@ -739,11 +739,13 @@ func EnsureUserOnlyBelongsToRoles(
 		if len(rolesToRevoke) > 0 {
 			revokeStmt := strings.Builder{}
 			revokeStmt.WriteString("REVOKE ")
-			for i, role := range rolesToRevoke {
-				if i > 0 {
+			addComma := false
+			for _, role := range rolesToRevoke {
+				if addComma {
 					revokeStmt.WriteString(", ")
 				}
 				revokeStmt.WriteString(role.SQLIdentifier())
+				addComma = true
 			}
 			revokeStmt.WriteString(" FROM ")
 			revokeStmt.WriteString(user.SQLIdentifier())
@@ -757,12 +759,14 @@ func EnsureUserOnlyBelongsToRoles(
 		if len(rolesToGrant) > 0 {
 			grantStmt := strings.Builder{}
 			grantStmt.WriteString("GRANT ")
-			for i, role := range rolesToGrant {
+			addComma := false
+			for _, role := range rolesToGrant {
 				if roleExists, _ := RoleExists(ctx, txn, role); roleExists {
-					if i > 0 {
+					if addComma {
 						grantStmt.WriteString(", ")
 					}
 					grantStmt.WriteString(role.SQLIdentifier())
+					addComma = true
 				}
 			}
 			grantStmt.WriteString(" TO ")
