@@ -7,6 +7,7 @@ package descs
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -130,6 +131,9 @@ func getDescriptorsByID(
 		// escaping and forcing IDs to escape on this hot path.
 		idsForLog := append(make([]descpb.ID, 0, len(ids)), ids...)
 		log.VEventf(ctx, 2, "looking up descriptors for ids %v", idsForLog)
+		if len(idsForLog) > 50 {
+			fmt.Println("lots of logs")
+		}
 	}
 
 	// We want to avoid the allocation in the case that there is exactly one

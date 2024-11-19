@@ -350,6 +350,7 @@ go_test(
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",
         "//pkg/workload/bank",
         "//pkg/workload/ledger",

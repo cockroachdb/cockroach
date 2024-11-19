@@ -80,6 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -90,6 +91,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
@@ -151,6 +153,8 @@ func TestChangefeedBasicQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	cfCreated := atomic.Bool{}
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -158,6 +162,7 @@ func TestChangefeedBasicQuery(t *testing.T) {
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
 		foo := feed(t, f, `CREATE CHANGEFEED AS SELECT *, event_op() AS op, cdc_prev FROM foo`)
 		defer closeFeed(t, foo)
+		cfCreated.Store(true)
 
 		// 'initial' is skipped because only the latest value ('updated') is
 		// emitted by the initial scan.
@@ -185,7 +190,81 @@ func TestChangefeedBasicQuery(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn)
+	// like these
+	// executing Scan [/Table/24/1/0/106,/Table/24/1/0/107), Scan [/Table/24/1/1/106,/Table/24/1/1/107), Scan [/Table/24/1/2/106,/Table/24/1/2/107), Scan [/Table/24/1/3/106,/Table/24/1/3/107), Scan [/Table/24/1/4/106,/Table/24/1/4/107), Scan [/Table/24/1/5/106,/Table/24/1/5/107), Scan [/Table/24/1/6/106,/Table/24/1/6/107), Scan [/Table/24/1/7/106,/Table/24/1/7/107), [txn: becca51e]
+
+	// should protect
+	// 33
+	// 30
+	// target table's db or schema are prob ok to leave out
+
+	// optionally a job trace might let us do this for a non sinkless feed. followon task?
+
+	f, err := os.Create("/tmp/output.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	trimRx := regexp.MustCompile(`executing (.*), \[txn:.*`)
+	spanKeysRx := regexp.MustCompile(`\[([^,]+),([^,]+)\)`)
+	keyScanner := keysutil.MakePrettyScanner(nil, nil)
+
+	cdcTest(t, testFn, withKnobsFn(func(knobs *base.TestingKnobs) {
+		knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+		if knobs.SQLExecutor == nil {
+			knobs.SQLExecutor = &sql.ExecutorTestingKnobs{}
+		}
+		knobs.SQLExecutor.(*sql.ExecutorTestingKnobs).WithStatementTrace = func(trace tracingpb.Recording, stmt string) {
+			if !cfCreated.Load() {
+				return
+			}
+			if !strings.HasPrefix(stmt, "CREATE CHANGEFEED") {
+				return
+			}
+			for _, span := range trace {
+				// fmt.Fprintf(f, "\t%+v\n", span)
+				fmt.Fprintf(f, "\t%s\n", span.String())
+				for _, log := range span.Logs {
+					msg := log.Message.StripMarkers()
+					if strings.Contains(msg, "executing Scan") {
+						// executing Scan [/Tenant/10/Table/3/1,/Tenant/10/Table/3/2), Scan [/Tenant/10/NamespaceTable/30/1,/Tenant/10/NamespaceTable/30/2), Scan [/Tenant/10/Table/24/1,/Tenant/10/Table/24/2), Scan [/Tenant/10/Table/5/1,/Tenant/10/Table/5/2), [txn: cd065f05]}
+						// spans like
+						// [/Tenant/10/Table/3/1,/Tenant/10/Table/3/2) = (kv) span
+						// or [/Table/3/1,/Table/3/2)
+						// or [/Tenant/10/NamespaceTable/30/1,/Tenant/10/NamespaceTable/30/2)
+						// fmt.Fprintf(f, "found scan log: %s\n", msg)
+
+						trimmed := trimRx.FindStringSubmatch(msg)[1]
+						spanStmts := strings.Split(trimmed, ", ")
+						for _, spanStmt := range spanStmts {
+							// Scan [/Table/24/1/0/106,/Table/24/1/0/107)
+							matches := spanKeysRx.FindStringSubmatch(spanStmt)
+							start, end := matches[1], matches[2]
+							startKey, err := keyScanner.Scan(start)
+							if err != nil {
+								t.Fatal(err)
+							}
+							endKey, err := keyScanner.Scan(end)
+							if err != nil {
+								t.Fatal(err)
+							}
+
+							// TODO: get real codec/ tenant id, unless system
+							codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(10))
+							codec.StripTenantPrefix(startKey)
+
+						}
+
+					}
+				}
+			}
+		}
+	}), feedTestForceSink("sinkless"))
+
+	// withArgsFn(func(args *base.TestServerArgs) {
+	// 	args.DefaultTestTenant = base.TODOTestTenantDisabled
+	// })
 }
 
 // Same test as TestChangefeedBasicQuery, but using wrapped envelope with CDC query.
