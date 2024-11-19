@@ -74,6 +74,9 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 		panic(err)
 	}
 
+	// Check for unsupported CREATE TRIGGER statements.
+	checkUnsupportedCreateTrigger(ct, ds)
+
 	// Lookup the implicit table type. This must happen after the above checks,
 	// since virtual/system tables do not have an implicit type.
 	typeID := typedesc.TableIDToImplicitTypeOID(descpb.ID(ds.ID()))
@@ -326,3 +329,41 @@ var triggerFuncStaticParams = []routineParam{
 
 const triggerColNew = "new"
 const triggerColOld = "old"
+
+func checkUnsupportedCreateTrigger(ct *tree.CreateTrigger, ds cat.DataSource) {
+	if ct.ForEach == tree.TriggerForEachStatement {
+		panic(unimplementedStatementLevelErr)
+	}
+	if ct.ActionTime == tree.TriggerActionTimeInsteadOf {
+		panic(unimplementedInsteadOfErr)
+	}
+	if len(ct.Transitions) > 0 {
+		panic(unimplementedReferencingErr)
+	}
+	for _, event := range ct.Events {
+		if event.EventType == tree.TriggerEventTruncate {
+			panic(unimplementedTruncateErr)
+		}
+		if len(event.Columns) > 0 {
+			panic(unimplementedColumnListErr)
+		}
+	}
+	if _, ok := ds.(cat.View); ok {
+		panic(unimplementedViewTriggerErr)
+	}
+}
+
+var (
+	unimplementedStatementLevelErr = unimplemented.NewWithIssue(126362,
+		"statement-level triggers are not yet supported")
+	unimplementedInsteadOfErr = unimplemented.NewWithIssue(126363,
+		"INSTEAD OF triggers are not yet supported")
+	unimplementedReferencingErr = unimplemented.NewWithIssue(135655,
+		"REFERENCING clause is not yet supported for triggers")
+	unimplementedTruncateErr = unimplemented.NewWithIssue(135657,
+		"TRUNCATE triggers are not yet supported")
+	unimplementedColumnListErr = unimplemented.NewWithIssue(135656,
+		"column lists are not yet supported for triggers")
+	unimplementedViewTriggerErr = unimplemented.NewWithIssue(135658,
+		"triggers on views are not yet supported")
+)
