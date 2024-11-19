@@ -117,13 +117,19 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	mvt := mixedversion.NewTest(testCtx, t, t.L(), c, c.All(), opts...)
 	mvt.InMixedVersion(
-		"run backup",
+		"maybe run backup",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			// Verify that backups can be created in various configurations. This is
-			// important to test because changes in system tables might cause backups to
-			// fail in mixed-version clusters.
-			dest := fmt.Sprintf("nodelocal://1/%d", timeutil.Now().UnixNano())
-			return h.Exec(rng, `BACKUP INTO $1`, dest)
+			if h.DeploymentMode() != mixedversion.SeparateProcessDeployment {
+				// Verify that backups can be created in various configurations. This is
+				// important to test because changes in system tables might cause backups to
+				// fail in mixed-version clusters.
+				dest := fmt.Sprintf("nodelocal://1/%d", timeutil.Now().UnixNano())
+				return h.Exec(rng, `BACKUP INTO $1`, dest)
+			} else {
+				// Skip the backup step in separate-process deployments, since nodelocal
+				// is not supported in pods.
+				return nil
+			}
 		})
 	mvt.InMixedVersion(
 		"test features",
