@@ -20,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -396,30 +398,64 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 	tctx context.Context, sp roachpb.Span, readAsOf hlc.Timestamp,
 ) (roachpb.Key, []rowenc.IndexEntry, int64, error) {
 	knobs := &ib.flowCtx.Cfg.TestingKnobs
-	var memUsedBuildingBatch int64
 	if knobs.RunBeforeBackfillChunk != nil {
 		if err := knobs.RunBeforeBackfillChunk(sp); err != nil {
 			return nil, nil, 0, err
 		}
 	}
-	var key roachpb.Key
 
-	ctx, traceSpan := tracing.ChildSpan(tctx, "indexBatch")
-	defer traceSpan.Finish()
-	start := timeutil.Now()
+	var memUsedBuildingBatch int64
+	var key roachpb.Key
 	var entries []rowenc.IndexEntry
-	if err := ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+
+	br := indexBatchRetry{
+		nextChunkSize: ib.spec.ChunkSize,
+		// Memory used while building index entries is released by another goroutine
+		// once those entries are processed. However, with wide rows and/or limited
+		// memory, memory pressure issues can arise. To address this, we retry with
+		// a smaller chunk size after an exponential backoff. Although the maximum
+		// wait time between retries may seem lengthy, it is significantly faster
+		// than allowing the entire schema operation to fail and restart.
+		retryOpts: retry.Options{
+			InitialBackoff: 500 * time.Millisecond,
+			Multiplier:     2,
+			MaxRetries:     15,
+			MaxBackoff:     1 * time.Minute,
+		},
+		resetForNextAttempt: func(ctx context.Context) error {
+			if entries != nil {
+				return errors.AssertionFailedf("expected entries to be nil on error")
+			}
+			// There is no need to track the memory we allocated in the last failed
+			// attempt. We will allocate new memory on the next iteration.
+			if memUsedBuildingBatch > 0 {
+				ib.ShrinkBoundAccount(ctx, memUsedBuildingBatch)
+				memUsedBuildingBatch = 0
+			}
+			return nil
+		},
+	}
+	br.buildIndexChunk = func(ctx context.Context, txn isql.Txn) error {
 		if err := txn.KV().SetFixedTimestamp(ctx, readAsOf); err != nil {
 			return err
 		}
+		// If this is a retry that succeeds, save the smaller chunk size to use as
+		// the starting size for the next batch. If memory pressure occurred with a
+		// larger batch size, it's prudent not to revert to it for subsequent batches.
+		ib.spec.ChunkSize = br.nextChunkSize
 
 		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
 		entries, key, memUsedBuildingBatch, err = ib.BuildIndexEntriesChunk(
-			ctx, txn.KV(), ib.desc, sp, ib.spec.ChunkSize, false, /* traceKV */
+			ctx, txn.KV(), ib.desc, sp, br.nextChunkSize, false, /* traceKV */
 		)
 		return err
-	}); err != nil {
+	}
+
+	ctx, traceSpan := tracing.ChildSpan(tctx, "indexBatch")
+	defer traceSpan.Finish()
+	start := timeutil.Now()
+	if err := br.buildBatchWithRetry(ctx, ib.flowCtx.Cfg.DB); err != nil {
 		return nil, nil, 0, err
 	}
 	prepTime := timeutil.Since(start)
@@ -437,4 +473,42 @@ func (ib *indexBackfiller) Resume(output execinfra.RowReceiver) {
 // Close is part of the execinfra.Processor interface.
 func (ib *indexBackfiller) Close(ctx context.Context) {
 	ib.IndexBackfiller.Close(ctx)
+}
+
+type indexBatchRetry struct {
+	nextChunkSize       int64
+	buildIndexChunk     func(ctx context.Context, txn isql.Txn) error
+	resetForNextAttempt func(ctx context.Context) error
+	retryOpts           retry.Options
+}
+
+// buildBatchWithRetry constructs a batch of index entries with a retry mechanism
+// to handle out-of-memory errors.
+func (b *indexBatchRetry) buildBatchWithRetry(ctx context.Context, db isql.DB) error {
+	r := retry.StartWithCtx(ctx, b.retryOpts)
+	for {
+		if err := db.Txn(ctx, b.buildIndexChunk); err != nil {
+			// Retry for any out of memory error. We want to wait for the goroutine
+			// that processes the prior batches of index entries to free memory.
+			if sqlerrors.IsOutOfMemoryError(err) && b.nextChunkSize > 1 {
+				// Callback to clear out any state acquired in the last attempt
+				if resetErr := b.resetForNextAttempt(ctx); resetErr != nil {
+					return errors.CombineErrors(err, resetErr)
+				}
+
+				if !r.Next() {
+					// If we have exhausted all retries, fail with the out of memory error.
+					return errors.Wrapf(err, "failed after %d retries", r.CurrentAttempt())
+				}
+				b.nextChunkSize = max(1, b.nextChunkSize/2)
+				log.Infof(ctx,
+					"out of memory while building index entries; retrying with batch size %d. Silencing error: %v",
+					b.nextChunkSize, err)
+				continue
+			}
+			return err
+		}
+		break // Batch completed successfully, no need for a retry.
+	}
+	return nil
 }
