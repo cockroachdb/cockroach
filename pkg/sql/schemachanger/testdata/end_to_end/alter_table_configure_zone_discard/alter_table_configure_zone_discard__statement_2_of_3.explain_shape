@@ -1,0 +1,9 @@
+/* setup */
+CREATE TABLE t(i int);
+
+/* test */
+ALTER TABLE t CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 10000;
+EXPLAIN (DDL, SHAPE) ALTER TABLE t CONFIGURE ZONE USING num_replicas = 8;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹8›; following ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹7›, ‹"gc.ttlseconds"› = ‹10000›;
+ └── execute 1 system table mutations transaction
