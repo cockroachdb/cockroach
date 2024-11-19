@@ -64,6 +64,7 @@ func registerFixtures(r registry.Registry) {
 		Suites:           registry.Suites(registry.Fixtures),
 		Owner:            registry.OwnerTestEng,
 		Cluster:          r.MakeClusterSpec(4),
+		RequiresLicense:  true,
 		Run:              runFixtures,
 	})
 }
