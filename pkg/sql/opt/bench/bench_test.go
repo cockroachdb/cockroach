@@ -242,7 +242,7 @@ var schemas = []string{
 	`
 	CREATE TABLE json_comp
 	(
-		k INT PRIMARY KEY,
+		k UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		i INT,
 		j1 JSON,
 		j2 JSON,
@@ -523,10 +523,9 @@ var queries = [...]benchQuery{
 		cleanup: "TRUNCATE TABLE json_table",
 	},
 	{
-		name:    "json-comp-insert",
-		query:   `INSERT INTO json_comp(k, i, j1, j2, j3) VALUES ($1, $2, $3, $4, $5)`,
-		args:    []interface{}{1, 10, `'{"foo": {"bar": {"int": 12345, "int2": 1}}, "baz": false}'`, `'{"str": "hello world"}'`, `'{"c": [2, 3, "baz", true, false, null]}'`},
-		cleanup: "TRUNCATE TABLE json_table",
+		name:  "json-comp-insert",
+		query: `INSERT INTO json_comp(i, j1, j2, j3) VALUES ($1, $2, $3, $4)`,
+		args:  []interface{}{10, `'{"foo": {"bar": {"int": 12345, "int2": 1}}, "baz": false}'`, `'{"str": "hello world"}'`, `'{"c": [2, 3, "baz", true, false, null]}'`},
 	},
 	{
 		name: "batch-insert-one",
@@ -1126,13 +1125,14 @@ func BenchmarkEndToEnd(b *testing.B) {
 	}
 
 	for _, query := range queriesToTest(b) {
+		args := trimSingleQuotes(query.args)
 		b.Run(query.name, func(b *testing.B) {
 			for _, vectorize := range []string{"on", "off"} {
 				b.Run("vectorize="+vectorize, func(b *testing.B) {
 					sr.Exec(b, "SET vectorize="+vectorize)
 					b.Run("Simple", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {
-							sr.Exec(b, query.query, query.args...)
+							sr.Exec(b, query.query, args...)
 							if query.cleanup != "" {
 								sr.Exec(b, query.cleanup)
 							}
@@ -1144,7 +1144,7 @@ func BenchmarkEndToEnd(b *testing.B) {
 							b.Fatalf("%v", err)
 						}
 						for i := 0; i < b.N; i++ {
-							res, err := prepared.Exec(query.args...)
+							res, err := prepared.Exec(args...)
 							if err != nil {
 								b.Fatalf("%v", err)
 							}
@@ -1164,6 +1164,18 @@ func BenchmarkEndToEnd(b *testing.B) {
 			}
 		})
 	}
+}
+
+func trimSingleQuotes(args []interface{}) []interface{} {
+	res := make([]interface{}, len(args))
+	for i, arg := range args {
+		if s, ok := arg.(string); ok {
+			res[i] = strings.Trim(s, "'")
+		} else {
+			res[i] = arg
+		}
+	}
+	return res
 }
 
 var slowQueries = [...]benchQuery{
