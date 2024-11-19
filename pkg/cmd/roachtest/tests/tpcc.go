@@ -1725,15 +1725,21 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				// Since directly emitting openmetrics and computing Tpmc from it is not supported, it is better to convert the
 				// stats.json emitted and convert it into openmetrics in the test itself and upload it to the cluster
 				if t.ExportOpenmetrics() {
-					exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
-					perfBuf, err := getHistogramOpenmetrics(exporter, snapshots)
-					if err != nil {
-						return errors.Wrapf(err, "error converting histogram to openmetrics")
-					}
 					// Creating a prefix
 					statsFilePrefix := fmt.Sprintf("warehouses=%d/", warehouses)
-					if _, err = roachtestutil.CreateStatsFileInClusterFromExporterWithPrefix(ctx, t, c, perfBuf, exporter, group.LoadNodes, statsFilePrefix); err != nil {
-						return err
+					exporter := roachtestutil.CreateWorkloadHistogramExporterWithLabels(t, c, map[string]string{"warehouses": fmt.Sprintf("%d", warehouses)})
+					perfBuf, err := getHistogramOpenmetrics(exporter, snapshots)
+
+					// Since the exporter got initialized in getHistogramOpenmetrics, calling defer now
+					defer exporter.Close(func() error {
+						if _, err = roachtestutil.CreateStatsFileInClusterFromExporterWithPrefix(ctx, t, c, perfBuf, exporter, group.LoadNodes, statsFilePrefix); err != nil {
+							return err
+						}
+						return nil
+					})
+
+					if err != nil {
+						return errors.Wrapf(err, "error converting histogram to openmetrics")
 					}
 				}
 				resultChan <- result
@@ -1902,10 +1908,6 @@ func getHistogramOpenmetrics(
 				return nil, errors.Wrapf(err, "failed to write snapshot for histogram %q", s.Name)
 			}
 		}
-	}
-
-	if err := exporter.Close(nil); err != nil {
-		return nil, err
 	}
 
 	return perfBuf, nil

@@ -94,11 +94,18 @@ func GetBenchmarkMetricsFileName(t test.Test) string {
 	return "stats.json"
 }
 
-// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters
+// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters with no labels
 func CreateWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Exporter {
+	return CreateWorkloadHistogramExporterWithLabels(t, c, nil)
+}
+
+// CreateWorkloadHistogramExporterWithLabels CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters with additional labels
+func CreateWorkloadHistogramExporterWithLabels(
+	t test.Test, c cluster.Cluster, labelMap map[string]string,
+) exporter.Exporter {
 	var metricsExporter exporter.Exporter
 	if t.ExportOpenmetrics() {
-		labels := clusterstats.GetOpenmetricsLabelMap(t, c, nil)
+		labels := clusterstats.GetOpenmetricsLabelMap(t, c, labelMap)
 		openMetricsExporter := &exporter.OpenMetricsExporter{}
 		openMetricsExporter.SetLabels(&labels)
 		metricsExporter = openMetricsExporter
@@ -130,6 +137,8 @@ func CreateStatsFileInClusterFromExporterWithPrefix(
 	node option.NodeListOption,
 	prefix string,
 ) (string, error) {
+
+	// Close and flush any existing data in the buffer
 	if err := exporter.Close(nil); err != nil {
 		return "", err
 	}
