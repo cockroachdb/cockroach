@@ -431,7 +431,7 @@ func NewUndefinedConstraintError(constraintName, tableName string) error {
 // NewUndefinedTriggerError returns a missing constraint error.
 func NewUndefinedTriggerError(triggerName, tableName string) error {
 	return pgerror.Newf(pgcode.UndefinedObject,
-		"trigger %q of relation %q does not exist", triggerName, tableName)
+		"trigger %q for table %q does not exist", triggerName, tableName)
 }
 
 // NewRangeUnavailableError creates an unavailable range error.
