@@ -274,7 +274,7 @@ func importGenUUID(
 		c.randSource = makeImportRand(c)
 	}
 	gen := c.randSource.Int63(c)
-	id := uuid.MakeV4()
+	id := uuid.UUID{}
 	id.DeterministicV4(uint64(gen), uint64(1<<63))
 	return tree.NewDUuid(tree.DUuid{UUID: id}), nil
 }
