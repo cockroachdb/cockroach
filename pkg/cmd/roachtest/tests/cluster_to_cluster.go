@@ -260,6 +260,8 @@ func (ikv replicateImportKV) runDriver(
 type replicateKV struct {
 	readPercent int
 
+	dontTolerateErrors bool
+
 	// This field is merely used to debug the c2c framework for finite workloads.
 	debugRunDuration time.Duration
 
@@ -298,6 +300,11 @@ type replicateKV struct {
 	// antiRegion is the region we do not expect any kv data to reside in if
 	// partitionKVDatabaseInRegion is set.
 	antiRegion string
+
+	// readOnly sets the prepare-read-only flag in the kv workload, which elides
+	// preparing writing statements. This is necessary to get the workload running
+	// properly on a read only standby tenant.
+	readOnly bool
 }
 
 func (kv replicateKV) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
@@ -308,18 +315,21 @@ func (kv replicateKV) sourceInitCmd(tenantName string, nodes option.NodeListOpti
 		MaybeFlag(kv.initRows > 0, "max-block-bytes", kv.maxBlockBytes).
 		MaybeFlag(kv.initWithSplitAndScatter, "splits", 100).
 		MaybeOption(kv.initWithSplitAndScatter, "scatter").
-		Arg("{pgurl%s:%s}", nodes, tenantName)
+		Arg("{pgurl%s:%s}", nodes, tenantName).
+		WithEqualsSyntax()
 	return cmd.String()
 }
 
 func (kv replicateKV) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
 	cmd := roachtestutil.NewCommand(`./cockroach workload run kv`).
-		Option("tolerate-errors").
-		Flag("max-block-bytes", kv.maxBlockBytes).
+		MaybeOption(!kv.dontTolerateErrors, "tolerate-errors").
+		MaybeFlag(kv.maxBlockBytes > 0, "max-block-bytes", kv.maxBlockBytes).
 		Flag("read-percent", kv.readPercent).
 		MaybeFlag(kv.debugRunDuration > 0, "duration", kv.debugRunDuration).
 		MaybeFlag(kv.maxQPS > 0, "max-rate", kv.maxQPS).
-		Arg("{pgurl%s:%s}", nodes, tenantName)
+		MaybeFlag(kv.readOnly, "prepare-read-only", true).
+		Arg("{pgurl%s:%s}", nodes, tenantName).
+		WithEqualsSyntax()
 	return cmd.String()
 }
 
@@ -421,6 +431,9 @@ type replicationSpec struct {
 
 	// multiregion specifies multiregion cluster specs
 	multiregion multiRegionSpecs
+
+	// withReaderOnlyWorkload creates a reader tenant that runs the given workload.
+	withReaderWorkload streamingWorkload
 
 	// overrideTenantTTL specifies the TTL that will be applied by the system tenant on
 	// both the source and destination tenant range.
@@ -685,6 +698,9 @@ func (rd *replicationDriver) preStreamingWorkload(ctx context.Context) {
 func (rd *replicationDriver) startReplicationStream(ctx context.Context) int {
 	streamReplStmt := fmt.Sprintf("CREATE TENANT %q FROM REPLICATION OF %q ON '%s'",
 		rd.setup.dst.name, rd.setup.src.name, rd.setup.src.pgURL.String())
+	if rd.rs.withReaderWorkload != nil {
+		streamReplStmt += " WITH READ VIRTUAL CLUSTER"
+	}
 	rd.setup.dst.sysSQL.Exec(rd.t, streamReplStmt)
 	rd.replicationStartHook(ctx, rd)
 	return getIngestionJobID(rd.t, rd.setup.dst.sysSQL, rd.setup.dst.name)
@@ -867,6 +883,26 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 	return nil
 }
 
+func (rd *replicationDriver) maybeRunReaderTenantWorkload(
+	ctx context.Context, workloadMonitor cluster.Monitor,
+) {
+	if rd.rs.withReaderWorkload != nil {
+		rd.t.Status("running reader tenant workload")
+		readerTenantName := fmt.Sprintf("%s-readonly", rd.setup.dst.name)
+		workloadMonitor.Go(func(ctx context.Context) error {
+			err := rd.c.RunE(ctx, option.WithNodes(rd.setup.workloadNode), rd.rs.withReaderWorkload.sourceRunCmd(readerTenantName, rd.setup.dst.gatewayNodes))
+			// The workload should only return an error if the roachtest driver cancels the
+			// ctx after the rd.additionalDuration has elapsed after the initial scan completes.
+			if err != nil && ctx.Err() == nil {
+				// Implies the workload context was not cancelled and the workload cmd returned a
+				// different error.
+				return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
+			}
+			return nil
+		})
+	}
+}
+
 // checkParticipatingNodes asserts that multiple nodes in the source and dest cluster are
 // participating in the replication stream.
 //
@@ -979,6 +1015,8 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.metrics.initialScanEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
 	rd.t.Status(fmt.Sprintf(`initial scan complete. run workload and repl. stream for another %s minutes`,
 		rd.rs.additionalDuration))
+
+	rd.maybeRunReaderTenantWorkload(ctx, workloadMonitor)
 
 	select {
 	case <-workloadDoneCh:
@@ -1130,13 +1168,14 @@ func registerClusterToCluster(r registry.Registry) {
 			cpus:      8,
 			pdSize:    100,
 			workload: replicateKV{
-				readPercent:             0,
+				readPercent:             50,
 				maxBlockBytes:           1024,
 				initWithSplitAndScatter: true,
 			},
 			timeout:                              1 * time.Hour,
 			additionalDuration:                   10 * time.Minute,
 			cutover:                              5 * time.Minute,
+			withReaderWorkload:                   replicateKV{readPercent: 100, readOnly: true, dontTolerateErrors: true},
 			sometimesTestFingerprintMismatchCode: true,
 			clouds:                               registry.OnlyGCE,
 			suites:                               registry.Suites(registry.Nightly),
@@ -1278,11 +1317,11 @@ func registerClusterToCluster(r registry.Registry) {
 			cpus:     4,
 			pdSize:   10,
 			workload: replicateKV{
-				readPercent:             0,
-				debugRunDuration:        1 * time.Minute,
+				readPercent:             50,
+				debugRunDuration:        10 * time.Minute,
 				initWithSplitAndScatter: true,
 				maxBlockBytes:           1024},
-			timeout:                   5 * time.Minute,
+			timeout:                   30 * time.Minute,
 			additionalDuration:        0 * time.Minute,
 			cutover:                   30 * time.Second,
 			skipNodeDistributionCheck: true,
