@@ -3024,7 +3024,7 @@ override_multi_region_zone_config                          off                 N
 parallelize_multi_key_lookup_joins_enabled                 off                 NULL      NULL        NULL        string
 password_encryption                                        scram-sha-256       NULL      NULL        NULL        string
 pg_trgm.similarity_threshold                               0.3                 NULL      NULL        NULL        string
-plan_cache_mode                                            force_custom_plan   NULL      NULL        NULL        string
+plan_cache_mode                                            auto                NULL      NULL        NULL        string
 plpgsql_use_strict_into                                    off                 NULL      NULL        NULL        string
 prefer_lookup_joins_for_fks                                off                 NULL      NULL        NULL        string
 prepared_statements_cache_size                             0 B                 NULL      NULL        NULL        string
@@ -3221,7 +3221,7 @@ override_multi_region_zone_config                          off                 N
 parallelize_multi_key_lookup_joins_enabled                 off                 NULL  user     NULL      off                 off
 password_encryption                                        scram-sha-256       NULL  user     NULL      scram-sha-256       scram-sha-256
 pg_trgm.similarity_threshold                               0.3                 NULL  user     NULL      0.3                 0.3
-plan_cache_mode                                            force_custom_plan   NULL  user     NULL      force_custom_plan   force_custom_plan
+plan_cache_mode                                            auto                NULL  user     NULL      auto                auto
 plpgsql_use_strict_into                                    off                 NULL  user     NULL      off                 off
 prefer_lookup_joins_for_fks                                off                 NULL  user     NULL      off                 off
 prepared_statements_cache_size                             0 B                 NULL  user     NULL      0 B                 0 B
