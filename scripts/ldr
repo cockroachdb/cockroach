@@ -180,7 +180,7 @@ case $1 in
       "run")
         OUTPUT_FILE_A="a-tpcc-$(date '+%Y-%m-%d-%H:%M:%S').log"
         shift
-        roachprod run $A:1 "env -i nohup ./workload run tpcc --warehouses=150000 --active-warehouses=5000 --max-rate 1600 --workers=5000 --active-workers=400 --wait=false $@ $(roachprod pgurl $A) $(roachprod pgurl $B) > $OUTPUT_FILE_A 2> $OUTPUT_FILE_A &" &
+        roachprod run $A:1 "env -i nohup ./workload run tpcc --warehouses=150000 --active-warehouses=5000 --max-rate 1600 --workers=5000 --active-workers=400 --wait=false --repair-order-ids $@ $(roachprod pgurl $A) $(roachprod pgurl $B) > $OUTPUT_FILE_A 2> $OUTPUT_FILE_A &" &
         ;;
       "stop")
         roachprod run $A:1 -- "killall -9 workload || true"
