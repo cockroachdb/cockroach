@@ -830,7 +830,7 @@ func (dsp *DistSQLPlanner) Run(
 
 	log.VEvent(ctx, 2, "running DistSQL plan")
 
-	dsp.distSQLSrv.ServerConfig.Metrics.QueryStart()
+	dsp.distSQLSrv.ServerConfig.Metrics.QueryStart(len(flows) > 1 /* distributed */)
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
 
 	recv.outputTypes = plan.GetResultTypes()
