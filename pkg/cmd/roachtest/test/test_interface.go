@@ -29,7 +29,7 @@ type Test interface {
 	// StandardCockroach returns path to main cockroach binary, compiled
 	// without runtime assertions.
 	StandardCockroach() string
-	// RuntimeAssertionsCockroach returns the path to cockroach-short
+	// RuntimeAssertionsCockroach returns the path to cockroach
 	// binary compiled with --crdb_test build tag, or an empty string if
 	// no such binary was given.
 	RuntimeAssertionsCockroach() string
