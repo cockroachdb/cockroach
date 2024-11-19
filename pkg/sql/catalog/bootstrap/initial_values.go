@@ -227,6 +227,7 @@ func systemTenantTableKVs(
 
 	tenantOne.Name = tenantTwo.Name
 	tenantTwo.Name = catconstants.SystemTenantName
+	tenantTwo.ServiceMode = mtinfopb.ServiceModeShared
 
 	desc := descMap[string(catconstants.TenantsTableName)]
 	tenantsTableWriter := MakeKVWriter(targetCodec, desc.(catalog.TableDescriptor))
