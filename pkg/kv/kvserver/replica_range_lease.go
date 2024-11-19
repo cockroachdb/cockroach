@@ -43,7 +43,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
@@ -791,8 +790,9 @@ func (r *Replica) leaseSettings(ctx context.Context) leases.Settings {
 		DisableAboveRaftLeaseTransferSafetyChecks: r.store.cfg.TestingKnobs.DisableAboveRaftLeaseTransferSafetyChecks,
 		AllowLeaseProposalWhenNotLeader:           r.store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader,
 		// TODO(arul): remove this field entirely.
-		ExpToEpochEquiv:        true,
-		MinExpirationSupported: r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_2_LeaseMinTimestamp),
+		ExpToEpochEquiv: true,
+		// TODO(radu): remove this field entirely.
+		MinExpirationSupported: true,
 		RangeLeaseDuration:     r.store.cfg.RangeLeaseDuration,
 	}
 }
