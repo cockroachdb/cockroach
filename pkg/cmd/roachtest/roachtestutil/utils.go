@@ -94,11 +94,18 @@ func GetBenchmarkMetricsFileName(t test.Test) string {
 	return "stats.json"
 }
 
-// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters
+// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters with no labels
 func CreateWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Exporter {
+	return CreateWorkloadHistogramExporterWithLabels(t, c, nil)
+}
+
+// CreateWorkloadHistogramExporterWithLabels creates a exporter.Exporter based on the roachtest parameters with additional labels
+func CreateWorkloadHistogramExporterWithLabels(
+	t test.Test, c cluster.Cluster, labelMap map[string]string,
+) exporter.Exporter {
 	var metricsExporter exporter.Exporter
 	if t.ExportOpenmetrics() {
-		labels := clusterstats.GetOpenmetricsLabelMap(t, c, nil)
+		labels := clusterstats.GetOpenmetricsLabelMap(t, c, labelMap)
 		openMetricsExporter := &exporter.OpenMetricsExporter{}
 		openMetricsExporter.SetLabels(&labels)
 		metricsExporter = openMetricsExporter
@@ -118,10 +125,27 @@ func CreateStatsFileInClusterFromExporter(
 	exporter exporter.Exporter,
 	node option.NodeListOption,
 ) (string, error) {
+	return CreateStatsFileInClusterFromExporterWithPrefix(ctx, t, c, perfBuf, exporter, node, "")
+}
+
+func CreateStatsFileInClusterFromExporterWithPrefix(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	perfBuf *bytes.Buffer,
+	exporter exporter.Exporter,
+	node option.NodeListOption,
+	prefix string,
+) (string, error) {
+
+	if perfBuf == nil {
+		return "", errors.New("perf buffer is nil")
+	}
+	// Close and flush any existing data in the buffer
 	if err := exporter.Close(nil); err != nil {
 		return "", err
 	}
-	destinationFileName := GetBenchmarkMetricsFileName(t)
+	destinationFileName := fmt.Sprintf("%s%s", prefix, GetBenchmarkMetricsFileName(t))
 	// Upload the perf artifacts to any one of the nodes so that the test
 	// runner copies it into an appropriate directory path.
 	dest := filepath.Join(t.PerfArtifactsDir(), destinationFileName)
