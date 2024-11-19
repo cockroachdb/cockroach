@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -127,12 +129,6 @@ func RunNemesis(
 	if _, err := db.Exec(`CREATE TABLE foo (id INT PRIMARY KEY, ts STRING DEFAULT '0')`); err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(`SET CLUSTER SETTING kv.range_merge.queue.enabled = false`); err != nil {
-		return nil, err
-	}
-	if _, err := db.Exec(`ALTER TABLE foo SPLIT AT VALUES ($1)`, ns.rowCount/2); err != nil {
-		return nil, err
-	}
 
 	// Initialize table rows by repeatedly running the `openTxn` transition,
 	// then randomly either committing or rolling back transactions. This will
@@ -155,6 +151,63 @@ func RunNemesis(
 				return nil, err
 			}
 		}
+	}
+
+	queryGen, _ := sqlsmith.NewSmither(db, rng,
+		sqlsmith.SimpleDatums(),
+		sqlsmith.MutationsOnly(),
+	)
+	defer queryGen.Close()
+
+	fmt.Print("Generated queries:\n")
+	const numInserts = 100
+	for i := 0; i < numInserts; i++ {
+		start := time.Now()
+		query := queryGen.Generate()
+		start = time.Now()
+		if _, err := db.Exec(query); err != nil {
+			log.Infof(ctx, "Skipping query %s because error %s", query, err)
+			continue
+		}
+		fmt.Printf("executed query %d in %s", i, time.Since(start))
+	}
+
+	//const tableName = "foo"
+	// numInserts := rng.Intn(100) - 1
+	// var inserts []string
+	// var err error
+	// if numInserts, err = randgen.PopulateTableWithRandData(rng, db, tableName, numInserts, &inserts); err != nil {
+	// 	return nil, err
+	// }
+
+	// log.Infof(ctx, "Added %d rows into table %s", numInserts, tableName)
+
+	// Initialize the query generator.
+	//queryGen, _ := sqlsmith.NewSmither(db, rng,
+	//	sqlsmith.SimpleDatums(),
+	//	sqlsmith.MutationsOnly(),
+	//)
+	//defer queryGen.Close()
+	//
+	//fmt.Print("Generated queries:\n")
+	//numInserts := 100
+	//for i := range numInserts {
+	//	start := time.Now()
+	//	query := queryGen.Generate()
+	//	fmt.Printf("query %d: %s\n", i, query)
+	//	start = time.Now()
+	//	if _, err := db.Exec(query); err != nil {
+	//		return nil, err
+	//	}
+	//	fmt.Printf("executed query %d in %s", i, time.Since(start))
+	//}
+	//
+	fmt.Println("DONEEE HEREE")
+	if _, err := db.Exec(`SET CLUSTER SETTING kv.range_merge.queue.enabled = false`); err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(`ALTER TABLE foo SPLIT AT VALUES ($1)`, ns.rowCount/2); err != nil {
+		return nil, err
 	}
 
 	withFormatParquet := ""
@@ -234,6 +287,7 @@ func RunNemesis(
 			return nil, err
 		}
 	}
+	//return nil, nil
 }
 
 type openTxnType string

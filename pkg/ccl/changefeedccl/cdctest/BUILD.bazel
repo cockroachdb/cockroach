@@ -16,7 +16,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
-        "//pkg/geo",
+        "//pkg/internal/sqlsmith",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvclient/rangefeed",
@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/isql",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/testutils/sqlutils",
         "//pkg/util",

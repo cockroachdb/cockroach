@@ -25,7 +25,7 @@ func TestChangefeedNemeses(t *testing.T) {
 	skip.UnderRace(t, "takes >1 min under race")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		rng, seed := randutil.NewPseudoRand()
+		rnd, seed := randutil.NewTestRand()
 		t.Logf("random seed: %d", seed)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -35,7 +35,7 @@ func TestChangefeedNemeses(t *testing.T) {
 		isSinkless := strings.Contains(t.Name(), "sinkless")
 		isCloudstorage := strings.Contains(t.Name(), "cloudstorage")
 
-		v, err := cdctest.RunNemesis(f, s.DB, isSinkless, isCloudstorage, withLegacySchemaChanger, rng)
+		v, err := cdctest.RunNemesis(f, s.DB, isSinkless, isCloudstorage, withLegacySchemaChanger, rnd)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
