@@ -1728,7 +1728,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
 					perfBuf, err := getHistogramOpenmetrics(exporter, snapshots)
 					if err != nil {
-						return errors.Errorf("error getting openmetrics: %v", err)
+						return errors.Wrapf(err, "error converting histogram to openmetrics")
 					}
 					// Creating a prefix
 					statsFilePrefix := fmt.Sprintf("warehouses=%d/", warehouses)
