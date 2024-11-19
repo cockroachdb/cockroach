@@ -90,6 +90,18 @@ func registerSessionVariables(r registry.Registry) {
 			),
 			Owner: registry.OwnerSQLQueries,
 		},
+		// Toggles prefer_lookup_joins_for_fks for any database.
+		// 1-hour cycle.
+		{
+			Name:      "prefer_lookup_joins_for_fks",
+			DBPattern: "",
+			Generator: timeBasedValues(
+				timeutil.Now,
+				[]string{"true", "false"},
+				1*time.Hour,
+			),
+			Owner: registry.OwnerSQLQueries,
+		},
 	}
 	for _, op := range ops {
 		r.AddOperation(registry.OperationSpec{
