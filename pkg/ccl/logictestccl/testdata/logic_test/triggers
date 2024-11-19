@@ -737,7 +737,7 @@ statement ok
 DROP TRIGGER bar ON xy;
 
 # Dropping a nonexistent trigger is an error.
-statement error pgcode 42704 pq: trigger "foo" of relation "xy" does not exist
+statement error pgcode 42704 pq: trigger "foo" for table "xy" does not exist
 DROP TRIGGER foo ON xy;
 
 # The IF EXISTS syntax allows dropping a nonexistent trigger without error.
