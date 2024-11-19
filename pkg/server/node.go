@@ -2138,6 +2138,16 @@ func (n *Node) defaultRangefeedConsumerID() int64 {
 func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
 
+	{
+		// HACK: this makes it much more likely to hit the use-after-finish,
+		// since we don't have to time the client-side ctx cancellation as
+		// perfectly. (Normally, we'd have to have the context still active
+		// here so that we run more code below until we hit RunAsyncTaskEx
+		// by which time the ctx does have to be canceled.
+		_, sp := tracing.ForkSpan(muxStream.Context(), "boom")
+		sp.Finish()
+	}
+
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
 	ctx, cancel := context.WithCancel(n.AnnotateCtx(muxStream.Context()))
