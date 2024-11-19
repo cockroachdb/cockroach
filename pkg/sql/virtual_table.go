@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
@@ -119,7 +120,23 @@ func setupGenerator(
 				return
 			case <-comm:
 			}
-			err := worker(ctx, funcRowPusher(addRow))
+			err := func() (retErr error) {
+				// Guard against crashes when populating the virtual table
+				// (#135760). This should be safe since we assume that the
+				// generator functions do not update shared state and do not
+				// manipulate locks.
+				defer func() {
+					if r := recover(); r != nil {
+						if ok, e := errorutil.ShouldCatch(r); ok {
+							retErr = e
+						} else {
+							// Panic object that is not an error - unexpected.
+							panic(r)
+						}
+					}
+				}()
+				return worker(ctx, funcRowPusher(addRow))
+			}()
 			// Notify that we are done sending rows.
 			select {
 			case <-ctx.Done():
