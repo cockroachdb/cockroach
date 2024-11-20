@@ -42,8 +42,7 @@ type SSTWriter struct {
 	DataSize int64
 	scratch  []byte
 
-	Meta              *sstable.WriterMetadata
-	supportsRangeKeys bool // TODO(erikgrinaker): remove after 22.2
+	Meta *sstable.WriterMetadata
 }
 
 var _ Writer = &SSTWriter{}
@@ -136,8 +135,7 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	opts.Compression = getCompressionAlgorithm(ctx, cs, CompressionAlgorithmBackupTransport)
 	opts.MergerName = "nullptr"
 	return SSTWriter{
-		fw:                sstable.NewWriter(&noopFinishAbort{f}, opts),
-		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
+		fw: sstable.NewWriter(&noopFinishAbort{f}, opts),
 	}
 }
 
@@ -184,8 +182,7 @@ func MakeIngestionSSTWriterWithOverrides(
 		o(&opts)
 	}
 	return SSTWriter{
-		fw:                sstable.NewWriter(w, opts),
-		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
+		fw: sstable.NewWriter(w, opts),
 	}
 }
 
@@ -214,7 +211,7 @@ func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys 
 			return err
 		}
 	}
-	if rangeKeys && fw.supportsRangeKeys {
+	if rangeKeys {
 		fw.DataSize += int64(len(start)) + int64(len(end))
 		if err := fw.fw.RangeKeyDelete(fw.scratch, endRaw); err != nil {
 			return err
@@ -257,9 +254,6 @@ func (fw *SSTWriter) PutRawMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) err
 
 // ClearMVCCRangeKey implements the Writer interface.
 func (fw *SSTWriter) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
-	if !fw.supportsRangeKeys {
-		return nil // noop
-	}
 	if err := rangeKey.Validate(); err != nil {
 		return err
 	}
@@ -276,9 +270,6 @@ func (fw *SSTWriter) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 
 // PutEngineRangeKey implements the Writer interface.
 func (fw *SSTWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []byte) error {
-	if !fw.supportsRangeKeys {
-		return errors.New("range keys not supported by SST writer")
-	}
 	// MVCC values don't account for the timestamp, so we don't account
 	// for the suffix here.
 	fw.DataSize += int64(len(start)) + int64(len(end)) + int64(len(value))
@@ -288,9 +279,6 @@ func (fw *SSTWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []b
 
 // ClearEngineRangeKey implements the Writer interface.
 func (fw *SSTWriter) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) error {
-	if !fw.supportsRangeKeys {
-		return nil // noop
-	}
 	// MVCC values don't account for the timestamp, so we don't account for the
 	// suffix here.
 	fw.DataSize += int64(len(start)) + int64(len(end))
@@ -324,9 +312,6 @@ func (fw *SSTWriter) ClearRawEncodedRange(start, end []byte) error {
 
 // PutInternalRangeKey implements the InternalWriter interface.
 func (fw *SSTWriter) PutInternalRangeKey(start, end []byte, key rangekey.Key) error {
-	if !fw.supportsRangeKeys {
-		return errors.New("range keys not supported by SST writer")
-	}
 	startEngine, ok := DecodeEngineKey(start)
 	if !ok {
 		return errors.New("cannot decode engine key")
