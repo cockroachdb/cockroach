@@ -473,7 +473,7 @@ func (s *testState) runAllFixups(skipBackground bool) error {
 		// Background fixup goroutine is running, so wait until it has processed
 		// all fixups.
 		if !skipBackground {
-			s.Index.fixups.Wait()
+			s.Index.ProcessFixups()
 		}
 		return nil
 	}

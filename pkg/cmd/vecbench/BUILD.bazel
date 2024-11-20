@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "vecbench_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/vecbench",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/sql/vecindex",
+        "//pkg/sql/vecindex/quantize",
+        "//pkg/sql/vecindex/vecstore",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "//pkg/util/vector",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_google_cloud_go_storage//:storage",
+    ],
+)
+
+go_binary(
+    name = "vecbench",
+    embed = [":vecbench_lib"],
+    visibility = ["//visibility:public"],
+)
