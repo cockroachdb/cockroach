@@ -9,7 +9,10 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -119,15 +122,13 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 
 	// We are named range.
 	if zs.NamedZone != "" {
-		if n.Discard {
-			// TODO(annie): Support discard for named range.
-			return nil, scerrors.NotImplementedErrorf(n, "discarding a zone config on a named "+
-				"range is not supported in the DSC")
-		}
 		namedZone := zonepb.NamedZone(zs.NamedZone)
 		id, found := zonepb.NamedZones[namedZone]
 		if !found {
 			return nil, fmt.Errorf("%q is not a built-in zone", string(zs.NamedZone))
+		}
+		if n.Discard && id == keys.RootNamespaceID {
+			return nil, pgerror.Newf(pgcode.CheckViolation, "cannot remove default zone")
 		}
 		return &namedRangeZoneConfigObj{rangeID: catid.DescID(id)}, nil
 	}
