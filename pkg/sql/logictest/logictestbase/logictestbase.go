@@ -513,7 +513,7 @@ var LogicTestConfigs = []TestClusterConfig{
 	},
 	{
 		// This config runs a cluster with 3 nodes, with a separate process per
-		// node. The nodes initially start on v24.2.
+		// node. The nodes initially start on v24.3.
 		Name:                     "cockroach-go-testserver-24.3",
 		UseCockroachGoTestserver: true,
 		BootstrapVersion:         clusterversion.V24_3,
