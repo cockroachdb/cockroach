@@ -123,6 +123,9 @@ func (a *Cache) GetAuthInfo(
 	err = db.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
+		if err := txn.Descriptors().MaybeSetReplicationSafeTS(ctx, txn.KV()); err != nil {
+			return err
+		}
 		_, usersTableDesc, err = descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), UsersTableName)
 		if err != nil {
 			return err
