@@ -110,29 +110,44 @@ func CreateWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Ex
 	return metricsExporter
 }
 
-func CreateStatsFileInClusterFromExporter(
+// CreateStatsFileInNode creates stats file from buffer in the node
+func CreateStatsFileInNode(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	perfBuf *bytes.Buffer,
+	node option.NodeListOption,
+) error {
+	destinationFileName := GetBenchmarkMetricsFileName(t)
+	// Upload the perf artifacts to any one of the nodes so that the test
+	// runner copies it into an appropriate directory path.
+	dest := filepath.Join(t.PerfArtifactsDir(), destinationFileName)
+	if err := c.RunE(ctx, option.WithNodes(node), "mkdir -p "+filepath.Dir(dest)); err != nil {
+		return err
+	}
+	if err := c.PutString(ctx, perfBuf.String(), dest, 0755, node); err != nil {
+		return err
+	}
+	return nil
+}
+
+// UploadPerfArtifacts closes the exporter and also upload the metrics buffer to a stats file in the node passed
+func UploadPerfArtifacts(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
 	perfBuf *bytes.Buffer,
 	exporter exporter.Exporter,
 	node option.NodeListOption,
-) (string, error) {
-	if err := exporter.Close(nil); err != nil {
-		return "", err
+) {
+	if err := exporter.Close(func() error {
+		if err := CreateStatsFileInNode(ctx, t, c, perfBuf, node); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		t.Errorf("failed to close exporter: %v", err)
 	}
-	destinationFileName := GetBenchmarkMetricsFileName(t)
-	// Upload the perf artifacts to any one of the nodes so that the test
-	// runner copies it into an appropriate directory path.
-	dest := filepath.Join(t.PerfArtifactsDir(), destinationFileName)
-	if err := c.RunE(ctx, option.WithNodes(node), "mkdir -p "+filepath.Dir(dest)); err != nil {
-		t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
-	}
-	if err := c.PutString(ctx, perfBuf.String(), dest, 0755, node); err != nil {
-		t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
-	}
-
-	return destinationFileName, nil
 }
 
 // WaitForReady waits until the given nodes report ready via health checks.
