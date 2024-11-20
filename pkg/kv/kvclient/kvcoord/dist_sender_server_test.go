@@ -4814,6 +4814,9 @@ func TestProxyTracing(t *testing.T) {
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
 	kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
 	kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+	// Disable follower reads to ensure that the request is proxied, and not
+	// answered locally due to follower reads.
+	kvserver.FollowerReadsEnabled.Override(ctx, &st.SV, false)
 	closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
 	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 
