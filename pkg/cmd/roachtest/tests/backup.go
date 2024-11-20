@@ -337,6 +337,7 @@ func registerBackup(r registry.Registry) {
 			dest := importBankData(ctx, rows, t, c)
 			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
 			tick, perfBuf := initBulkJobPerfArtifacts(2*time.Hour, t, exporter)
+			defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
 
 			m := c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
@@ -356,10 +357,6 @@ func registerBackup(r registry.Registry) {
 					return err
 				}
 				tick()
-
-				if _, err := roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, exporter, c.Node(1)); err != nil {
-					return err
-				}
 				return nil
 			})
 			m.Wait()
