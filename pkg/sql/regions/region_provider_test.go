@@ -210,6 +210,10 @@ func (f fakeLeaseManager) IncGaugeAfterLeaseDuration(gauge lease.AfterLeaseDurat
 	return func() {}
 }
 
+func (f fakeLeaseManager) GetSafeReplicationTS() hlc.Timestamp {
+	return hlc.Timestamp{}
+}
+
 var _ descs.LeaseManager = (*fakeLeaseManager)(nil)
 
 type fakeSystemDatabase struct {
