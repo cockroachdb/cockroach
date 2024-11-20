@@ -198,10 +198,16 @@ func TestChangefeedIdentifyDependentTablesForProtecting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	cfCreated := atomic.Bool{}
+	var targetTableID int64
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		var err error
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		// get foo's ID
+		targetTableID, err = strconv.ParseInt(sqlDB.QueryStr(t, `select id from system.namespace where name = $1`, "foo")[0][0], 10, 64)
+		require.NoError(t, err)
+
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
 		foo := feed(t, f, `CREATE CHANGEFEED AS SELECT *, event_op() AS op, cdc_prev FROM foo`)
@@ -261,9 +267,11 @@ func TestChangefeedIdentifyDependentTablesForProtecting(t *testing.T) {
 					for _, spanStmt := range spanStmts {
 						spanStmt = strings.Replace(spanStmt, "Scan ", "", 1)
 						startEnd := strings.Split(strings.Trim(spanStmt, "[)"), ",")
+						require.Len(t, startEnd, 2)
 						start := startEnd[0]
 						matches := tableIdRx.FindStringSubmatch(start)
 						require.NotEmpty(t, matches)
+
 						tableID, err := strconv.ParseInt(matches[3], 10, 64)
 						if err != nil {
 							t.Fatal(err)
@@ -284,21 +292,21 @@ func TestChangefeedIdentifyDependentTablesForProtecting(t *testing.T) {
 		knobs.SQLExecutor.(*sql.ExecutorTestingKnobs).WithStatementTrace = traceCb
 	}), feedTestForceSink("sinkless"))
 
-	// NOTE: not all the required tables will necessarily show up in every run due to caching.
+	// NOTE: not all the required tables will necessarily show up in every run due to caching. However we should always see SOME tables.
 	require.NotEmpty(t, tableIDsAccessed)
-	fmt.Printf("tables accessed: %+v\n", tableIDsAccessed)
-	systemTablesToProtectMap := make(map[catid.DescID]struct{}, len(systemTablesToProtect))
+	allowedTables := make(map[catid.DescID]struct{}, len(systemTablesToProtect)+1)
 	for _, id := range systemTablesToProtect {
-		systemTablesToProtectMap[catid.DescID(id)] = struct{}{}
+		allowedTables[catid.DescID(id)] = struct{}{}
 	}
+	allowedTables[catid.DescID(targetTableID)] = struct{}{}
 
-	var missingTableIDs []catid.DescID
+	var unexpectedTableIDs []catid.DescID
 	for id := range tableIDsAccessed {
-		if _, ok := systemTablesToProtectMap[catid.DescID(id)]; !ok {
-			missingTableIDs = append(missingTableIDs, catid.DescID(id))
+		if _, ok := allowedTables[catid.DescID(id)]; !ok {
+			unexpectedTableIDs = append(unexpectedTableIDs, catid.DescID(id))
 		}
 	}
-	require.Empty(t, missingTableIDs)
+	require.Empty(t, unexpectedTableIDs)
 }
 
 // Same test as TestChangefeedBasicQuery, but using wrapped envelope with CDC query.
