@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -267,6 +269,19 @@ func (p *kvRowProcessor) processOneRow(
 				}
 				return p.processOneRow(ctx, dstTableID, row, k, refreshedValue, s, refreshCount+1)
 			}
+
+			// Since the conditional error is not a timestamp error, that means it
+			// must be a uniqueness constraint validation. In the future, if the
+			// conditional failure indicates which key failed, we should ensure the
+			// key belongs to a unique index.
+			//
+			// Overall, converting this to a unique violation is low risk. A
+			// condition validation failure is persistent condition and sending the
+			// row to the DLQ allows the job to continue processing.
+			//
+			// TODO(jeffswenson): ideally this would share an implementaiton with
+			// mkFastPathUniqueCheckErr.
+			return pgerror.Newf(pgcode.UniqueViolation, "duplicate key value violates unique constraint: %s", condErr.String())
 		}
 		return err
 	}

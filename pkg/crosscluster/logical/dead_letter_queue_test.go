@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -23,10 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -387,6 +388,27 @@ func TestDLQLogging(t *testing.T) {
 	}
 }
 
+func TestDLQAllowList(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	pgErr := func(code pgcode.Code) error {
+		return pgerror.New(code, "")
+	}
+
+	require.ErrorContains(t,
+		canDlqError(errors.New("some unknown error")),
+		"can only DLQ errors with pg codes")
+
+	require.ErrorContains(t,
+		canDlqError(pgErr(pgcode.StatementCompletionUnknown)),
+		"unable to DLQ pgcode that indicates an internal or retryable error")
+	require.ErrorContains(t,
+		canDlqError(pgErr(pgcode.SerializationFailure)),
+		"unable to DLQ pgcode that indicates an internal or retryable error")
+
+	require.NoError(t, canDlqError(pgErr(pgcode.CheckViolation)))
+}
+
 func TestDLQJSONQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
@@ -460,94 +482,128 @@ func TestDLQJSONQuery(t *testing.T) {
 	require.NotZero(t, rowID)
 }
 
-// TestEndToEndDLQ tests that write conflicts that occur during an
-// LDR job are persisted to its corresponding DLQ table
 func TestEndToEndDLQ(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("validated", func(t *testing.T) {
+		testEndToEndDLQ(t, "validated")
+	})
+
+	t.Run("immediate", func(t *testing.T) {
+		testEndToEndDLQ(t, "immediate")
+	})
+}
+
+func testEndToEndDLQ(t *testing.T, mode string) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	testDLQClusterArgs := base.TestClusterArgs{
-		// This test makes assertions about the exact number of events that end up in
-		// the DLQ. However, that is impacted by retries that result from range
-		// splits. Setting ReplicationManual disables the split queue.
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(127241),
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-				DistSQL: &execinfra.TestingKnobs{
-					StreamingTestingKnobs: &sql.StreamingTestingKnobs{
-						FailureRate: 100,
-					},
-				},
-			},
-		},
-	}
-
-	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testDLQClusterArgs, 1)
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
 
-	dbBURL, cleanupB := s.PGUrl(t, serverutils.DBName("b"))
-	defer cleanupB()
+	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.retry_queue_duration = '100ms'")
+	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.retry_queue_backoff  = '1ms'")
 
-	var expectedJobID jobspb.JobID
-	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH DEFAULT FUNCTION = 'dlq'", dbBURL.String()).Scan(&expectedJobID)
+	type testCase struct {
+		tableName         string
+		supportsImmediate bool
+		sql               string
+		sqlA              string
+		sqlB              string
+		reason            string
+	}
+	allTests := []testCase{
+		{
+			tableName:         "unique_index",
+			supportsImmediate: true,
+			sql: `
+				CREATE TABLE unique_index (
+    		    key STRING PRIMARY KEY NOT NULL DEFAULT gen_random_uuid()::string,
+    		    value STRING NOT NULL
+				);
+				CREATE UNIQUE INDEX data_value ON unique_index(value);
+				INSERT INTO unique_index(value) VALUES ('this-will-conflict');`,
+			reason: `duplicate key value violates unique constraint`,
+		},
+		{
+			tableName:         "missing_foreign_key",
+			supportsImmediate: false,
+			sql: `
+				CREATE TABLE parent (
+					key STRING PRIMARY KEY NOT NULL
+				);
+				CREATE TABLE missing_foreign_key (
+					key STRING PRIMARY KEY NOT NULL,
+					foreign_key STRING REFERENCES parent (key)
+				);`,
+			sqlB: `
+				INSERT INTO parent(key) VALUES ('parent');
+				INSERT INTO missing_foreign_key (key, foreign_key) values ('will_dlq', 'parent');`,
+			reason: `violates foreign key constraint`,
+		},
+		{
+			tableName:         "constrained",
+			supportsImmediate: false,
+			sql: `
+				CREATE TABLE constrained (
+					key STRING PRIMARY KEY,
+					dbname STRING NOT NULL,
+					-- current_database() evaluates to NULL in the internal executor.
+					-- so this check constraint will fail on replication
+					CHECK(dbname = COALESCE(current_database(), 'tothedlq'))
+				);`,
+
+			sqlB:   `INSERT INTO constrained (key, dbname) VALUES ('foobar', current_database());`,
+			reason: `failed to satisfy CHECK constraint`,
+		},
+	}
+	var tests []testCase
+	for _, test := range allTests {
+		if mode == "immediate" && !test.supportsImmediate {
+			continue
+		}
+		tests = append(tests, test)
+	}
+
+	dbBURL, cleanup := s.PGUrl(t, serverutils.DBName("b"))
+	defer cleanup()
+
+	for _, tc := range tests {
+		if tc.sql != "" {
+			dbA.Exec(t, tc.sql)
+			dbB.Exec(t, tc.sql)
+		}
+		if tc.sqlA != "" {
+			dbA.Exec(t, tc.sqlA)
+		}
+		if tc.sqlB != "" {
+			dbB.Exec(t, tc.sqlB)
+		}
+	}
+
+	var jobs []catpb.JobID
+	for _, tc := range tests {
+		var jobID catpb.JobID
+		dbA.QueryRow(t, fmt.Sprintf(
+			`CREATE LOGICAL REPLICATION STREAM FROM TABLE "%s" ON '%s' INTO TABLE "%s" WITH mode = '%s'`,
+			tc.tableName, dbBURL.String(), tc.tableName, mode)).Scan(&jobID)
+		jobs = append(jobs, jobID)
+	}
 
 	now := s.Clock().Now()
-	WaitUntilReplicatedTime(t, now, dbA, expectedJobID)
+	for _, job := range jobs {
+		WaitUntilReplicatedTime(t, now, dbA, job)
+	}
 
-	dbB.Exec(t, "INSERT INTO tab VALUES (3, 'celeriac')")
-	dbB.Exec(t, "UPSERT INTO tab VALUES (1, 'goodbye, again')")
-
-	expectedTableID := sqlutils.QueryTableID(t, server.Conns[0], "a", "public", "tab")
-	dlqTableName := fmt.Sprintf("crdb_replication.dlq_%d_public_tab", expectedTableID)
-	WaitForDLQLogs(t, dbA, dlqTableName, 2)
-
-	var (
-		jobID        jobspb.JobID
-		tableID      uint32
-		dlqReason    string
-		mutationType string
-	)
-
-	dbA.QueryRow(t, fmt.Sprintf(`
-	SELECT
-		ingestion_job_id,
-		table_id,
-		dlq_reason,
-		mutation_type
-	FROM %s
-	`, dlqTableName)).Scan(
-		&jobID,
-		&tableID,
-		&dlqReason,
-		&mutationType,
-	)
-
-	require.Equal(t, expectedJobID, jobID)
-	require.Equal(t, expectedTableID, tableID)
-	// DLQ reason is set to `tooOld` when `errInjected` is thrown by `failureInjector`
-	require.Equal(t, fmt.Sprintf("%s (%s)", errInjected, tooOld), dlqReason)
-	require.Equal(t, insertMutation.String(), mutationType)
-
-	dbA.CheckQueryResults(
-		t,
-		fmt.Sprintf(`
-	SELECT
-		incoming_row->>'payload' AS payload,
-		incoming_row->>'pk' AS pk
-	FROM %s
-	ORDER BY pk
-	`, dlqTableName),
-		[][]string{
-			{
-				"goodbye, again", "1",
-			},
-			{
-				"celeriac", "3",
-			},
-		},
-	)
+	for _, tc := range tests {
+		id := sqlutils.QueryTableID(t, dbA.DB, "a", "public", tc.tableName)
+		dlq := fmt.Sprintf("crdb_replication.dlq_%d_public_%s", id, tc.tableName)
+		dlqRows := dbA.QueryStr(t, fmt.Sprintf("SELECT dlq_reason FROM %s", dlq))
+		require.Len(t, dlqRows, 1, "dlq for table '%s' is empty'", tc.tableName)
+		for _, msg := range dlqRows {
+			require.Contains(t, msg[0], tc.reason)
+		}
+	}
 }
