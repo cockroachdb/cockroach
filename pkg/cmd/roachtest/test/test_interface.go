@@ -93,4 +93,8 @@ type Test interface {
 	// If true, the stats exporter will export metrics in openmetrics format,
 	// else, the exporter will export in the JSON format.
 	ExportOpenmetrics() bool
+
+	// GetRunId returns the run id of the roachtest run, this is set to build id
+	// when ran from teamcity
+	GetRunId() string
 }
