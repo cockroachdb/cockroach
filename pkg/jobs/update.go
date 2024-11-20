@@ -69,7 +69,6 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 	var payload *jobspb.Payload
 	var progress *jobspb.Progress
 	var status Status
-	var runStats *RunStats
 	j := u.j
 	defer func() {
 		if retErr != nil && !HasJobNotFoundError(retErr) {
@@ -83,9 +82,6 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 		}
 		if progress != nil {
 			j.mu.progress = *progress
-		}
-		if runStats != nil {
-			j.mu.runStats = runStats
 		}
 		if status != "" {
 			j.mu.status = status
@@ -164,10 +160,6 @@ WHERE id = $1
 		Status:   status,
 		Payload:  payload,
 		Progress: progress,
-		RunStats: &RunStats{
-			NumRuns: int(*numRuns),
-			LastRun: lastRun.Time,
-		},
 	}
 
 	var ju JobUpdater
@@ -195,11 +187,7 @@ WHERE id = $1
 				p = payload
 			}
 			// If run stats has been updated, use the updated run stats.
-			rs := md.RunStats
-			if ju.md.RunStats != nil {
-				rs = ju.md.RunStats
-			}
-			LogStatusChangeStructured(ctx, md.ID, p.Type().String(), p, rs, status, ju.md.Status)
+			LogStatusChangeStructured(ctx, md.ID, p.Type().String(), p, status, ju.md.Status)
 		})
 	}
 	if j.registry.knobs.BeforeUpdate != nil {
@@ -232,11 +220,6 @@ WHERE id = $1
 
 	if ju.md.Status != "" {
 		addSetter("status", ju.md.Status)
-	}
-	if ju.md.RunStats != nil {
-		runStats = ju.md.RunStats
-		addSetter("last_run", ju.md.RunStats.LastRun)
-		addSetter("num_runs", ju.md.RunStats.NumRuns)
 	}
 
 	var payloadBytes []byte
@@ -297,19 +280,12 @@ WHERE id = $1
 	return nil
 }
 
-// RunStats consists of job-run statistics: num of runs and last-run timestamp.
-type RunStats struct {
-	LastRun time.Time
-	NumRuns int
-}
-
 // JobMetadata groups the job metadata values passed to UpdateFn.
 type JobMetadata struct {
 	ID       jobspb.JobID
 	Status   Status
 	Payload  *jobspb.Payload
 	Progress *jobspb.Progress
-	RunStats *RunStats
 }
 
 // CheckRunningOrReverting returns an InvalidStatusError if md.Status is not
@@ -346,15 +322,6 @@ func (ju *JobUpdater) UpdateProgress(progress *jobspb.Progress) {
 
 func (ju *JobUpdater) hasUpdates() bool {
 	return ju.md != JobMetadata{}
-}
-
-// UpdateRunStats is used to update the exponential-backoff parameters last_run and
-// num_runs in system.jobs table.
-func (ju *JobUpdater) UpdateRunStats(numRuns int, lastRun time.Time) {
-	ju.md.RunStats = &RunStats{
-		NumRuns: numRuns,
-		LastRun: lastRun,
-	}
 }
 
 func (ju *JobUpdater) PauseRequested(

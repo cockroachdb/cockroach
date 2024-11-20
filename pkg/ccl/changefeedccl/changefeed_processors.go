@@ -1752,14 +1752,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			ju.UpdateProgress(progress)
 
-			// Reset RunStats.NumRuns to 1 since the changefeed is
-			// now running. By resetting the NumRuns, we avoid
-			// future job system level retries from having large
-			// backoffs because of past failures.
-			if md.RunStats != nil {
-				ju.UpdateRunStats(1, md.RunStats.LastRun)
-			}
-
 			return nil
 		}); err != nil {
 			return false, err

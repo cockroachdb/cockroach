@@ -22,22 +22,15 @@ func LogStatusChangeStructured(
 	id jobspb.JobID,
 	jobType string,
 	payload *jobspb.Payload,
-	runStats *RunStats,
 	prevStatus Status,
 	status Status,
 ) {
-	var runNum int
-	if runStats != nil {
-		runNum = runStats.NumRuns
-	}
-
 	out := eventpb.StatusChange{
 		JobID:          int64(id),
 		JobType:        jobType,
 		Description:    redact.Sprintf("status changed to: %s", status),
 		PreviousStatus: string(prevStatus),
 		NewStatus:      string(status),
-		RunNum:         int32(runNum),
 	}
 
 	if payload != nil {
