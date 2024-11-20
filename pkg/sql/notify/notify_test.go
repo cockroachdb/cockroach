@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/jackc/pgx/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,23 +29,23 @@ func TestNotify(t *testing.T) {
 	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 
-	db, err := gosql.Open("postgres", pgURL.String())
+	listenConn, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err)
-	defer db.Close()
+	defer listenConn.Close(ctx)
 
-	conn, err := pgx.Connect(ctx, pgURL.String())
+	notifyConn, err := pgx.Connect(ctx, pgURL.String())
 	require.NoError(t, err)
-	defer conn.Close(ctx)
+	defer notifyConn.Close(ctx)
 
-	_, err = conn.Exec(ctx, "LISTEN A")
-	require.NoError(t, err)
-
-	pid := conn.PgConn().PID()
+	notifyPid := notifyConn.PgConn().PID()
 	// paranoia check
-	p2r := conn.QueryRow(ctx, "SELECT pg_backend_pid()")
+	p2r := notifyConn.QueryRow(ctx, "SELECT pg_backend_pid()")
 	var pid2 int
 	require.NoError(t, p2r.Scan(&pid2))
-	require.Equal(t, pid, uint32(pid2))
+	require.Equal(t, notifyPid, uint32(pid2))
+
+	_, err = listenConn.Exec(ctx, "LISTEN A")
+	require.NoError(t, err)
 
 	const n = 1000
 
@@ -52,21 +53,20 @@ func TestNotify(t *testing.T) {
 	go func() {
 		defer close(done)
 		for next := 0; next < n; next++ {
-			notif, err := conn.WaitForNotification(ctx)
+			notif, err := listenConn.WaitForNotification(ctx)
 			require.NoError(t, err)
 
 			num, err := strconv.Atoi(notif.Payload)
 			require.NoError(t, err)
 
-			require.Equal(t, "a", notif.Channel)
-			require.Equal(t, next, num)
-			// TODO: why is this not equal?
-			require.Equal(t, pid, notif.PID)
+			assert.Equal(t, "a", notif.Channel)
+			assert.Equal(t, next, num)
+			assert.Equal(t, notifyPid, notif.PID)
 		}
 	}()
 
 	for i := 0; i < n; i++ {
-		_, err = db.Exec(fmt.Sprintf("NOTIFY A, '%d'", i))
+		_, err = notifyConn.Exec(ctx, fmt.Sprintf("NOTIFY A, '%d'", i))
 		require.NoError(t, err)
 	}
 	<-done
