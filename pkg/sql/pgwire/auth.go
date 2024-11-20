@@ -270,7 +270,7 @@ func (c *conn) publishConnLatencyMetric(duration int64, authMethod string) {
 func (c *conn) authOKMessage() error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
-	return c.msgBuilder.finishMsg(c.conn)
+	return c.msgBuilder.finishMsg(c.awConn)
 }
 
 // checkClientUsernameMatchesMapping uses the provided RoleMapper to
@@ -624,7 +624,7 @@ func (p *authPipe) SendAuthRequest(authType int32, data []byte) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authType)
 	c.msgBuilder.write(data)
-	return c.msgBuilder.finishMsg(c.conn)
+	return c.msgBuilder.finishMsg(c.awConn)
 }
 
 // GetTenantSpecificMetrics is part of the AuthConn interface.

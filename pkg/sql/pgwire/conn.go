@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotification"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,11 +41,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
+
+// atomicWriter is a wrapper around an io.Writer which presents a thread-safe interface to it.
+type atomicWriter struct {
+	mu syncutil.Mutex
+	w  io.Writer
+}
+
+// Write implements the io.Writer interface.
+func (a *atomicWriter) Write(p []byte) (n int, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.w.Write(p)
+}
+
+var _ io.Writer = &atomicWriter{}
 
 // conn implements a pgwire network connection (version 3 of the protocol,
 // implemented by Postgres v7.4 and later). conn.serve() reads protocol
@@ -57,7 +74,12 @@ type conn struct {
 	// errWriter is used to send back error payloads to the client.
 	errWriter
 
+	// conn is the raw net.Conn backing the connection. It should NOT be written
+	// to directly; use awConn instead.
 	conn net.Conn
+
+	// awConn is a thread-safe wrapper around conn, to support asynchronous writes.
+	awConn *atomicWriter
 
 	cancelConn context.CancelFunc
 
@@ -110,6 +132,15 @@ type conn struct {
 
 	// alwaysLogAuthActivity is used force-enables logging of authn events.
 	alwaysLogAuthActivity bool
+
+	// notifications is a copy of some of the things required to send
+	// notifications down the connection. We need a separate copy of these since
+	// notifications are sent asynchronously.
+	notifications struct {
+		syncutil.Mutex
+		msgBuilder writeBuffer
+		buf        bytes.Buffer
+	}
 }
 
 func (c *conn) setErr(err error) {
@@ -129,7 +160,7 @@ func (c *conn) sendError(ctx context.Context, err error) error {
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
-	_ /* err */ = c.writeErr(ctx, err, c.conn)
+	_ /* err */ = c.writeErr(ctx, err, c.awConn)
 	return err
 }
 
@@ -187,7 +218,7 @@ func (c *conn) processCommands(
 				// Add a prefix. This also adds a stack trace.
 				retErr = errors.Wrap(retErr, "caught fatal error")
 				_ = c.writeErr(ctx, retErr, &c.writerState.buf)
-				_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
+				_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.awConn)
 				c.stmtBuf.Close()
 			}
 		}
@@ -268,6 +299,24 @@ func (c *conn) bufferNotice(ctx context.Context, noticeErr pgnotice.Notice) erro
 	return c.writeErrFields(ctx, noticeErr, &c.writerState.buf)
 }
 
+func (c *conn) SendNotification(notif pgnotification.Notification) error {
+	c.notifications.msgBuilder.initMsg(pgwirebase.ServerMsgNotificationResponse)
+	c.notifications.msgBuilder.putInt32(notif.PID)
+	c.notifications.msgBuilder.writeTerminatedString(notif.Channel)
+	c.notifications.msgBuilder.writeTerminatedString(notif.Payload)
+	if err := c.notifications.msgBuilder.finishMsg(&c.notifications.buf); err != nil {
+		return err
+	}
+
+	// Flush immediately.
+	_, err := c.notifications.buf.WriteTo(c.awConn)
+	if err != nil {
+		c.setErr(err)
+		return err
+	}
+	return nil
+}
+
 func (c *conn) sendInitialConnData(
 	ctx context.Context,
 	sqlServer *sql.Server,
@@ -284,7 +333,7 @@ func (c *conn) sendInitialConnData(
 		sessionID,
 	)
 	if err != nil {
-		_ /* err */ = c.writeErr(ctx, err, c.conn)
+		_ /* err */ = c.writeErr(ctx, err, c.awConn)
 		return sql.ConnectionHandler{}, err
 	}
 
@@ -806,7 +855,7 @@ func (c *conn) BeginCopyIn(
 	for range columns {
 		c.msgBuilder.putInt16(int16(format))
 	}
-	return c.msgBuilder.finishMsg(c.conn)
+	return c.msgBuilder.finishMsg(c.awConn)
 }
 
 // Rd is part of the pgwirebase.Conn interface.
@@ -1249,7 +1298,7 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 	// the underlying ring buffer memory for reuse.
 	c.writerState.fi.cmdStarts.Reset()
 
-	_ /* n */, err := c.writerState.buf.WriteTo(c.conn)
+	_ /* n */, err := c.writerState.buf.WriteTo(c.awConn)
 	if err != nil {
 		c.setErr(err)
 		return err

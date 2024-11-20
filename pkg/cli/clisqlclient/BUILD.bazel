@@ -26,6 +26,7 @@ go_library(
         "//pkg/cli/clierror",
         "//pkg/security/pprompt",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgnotification",
         "//pkg/sql/scanner",
         "//pkg/sql/sem/catconstants",
         "//pkg/util/version",

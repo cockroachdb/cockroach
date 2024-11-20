@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -757,6 +758,10 @@ type ClientComm interface {
 	CreateCopyOutResult(cmd CopyOut, pos CmdPos) CopyOutResult
 	// CreateDrainResult creates a result for a Drain command.
 	CreateDrainResult(pos CmdPos) DrainResult
+
+	// notify.NotificationSender is embedded to support sending PG Notifications
+	// through this connection.
+	notify.NotificationSender
 
 	// LockCommunication ensures that no further results are delivered to the
 	// client. The returned ClientLock can be queried to see what results have

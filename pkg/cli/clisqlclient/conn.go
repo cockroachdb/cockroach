@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotification"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -131,6 +133,10 @@ func (c *sqlConn) handleNotice(notice *pgconn.Notice) {
 	}
 }
 
+func (c *sqlConn) handleNotification(notif *pgconn.Notification) {
+	fmt.Fprintf(os.Stdout, "%s\n", pgnotification.Stringify(notif))
+}
+
 // GetURL implements the Conn interface.
 func (c *sqlConn) GetURL() string {
 	return c.url
@@ -187,6 +193,10 @@ func (c *sqlConn) EnsureConn(ctx context.Context) error {
 	base.OnNotice = func(_ *pgconn.PgConn, notice *pgconn.Notice) {
 		c.handleNotice(notice)
 	}
+	base.OnNotification = func(_ *pgconn.PgConn, notif *pgconn.Notification) {
+		c.handleNotification(notif)
+	}
+
 	// The default pgx dialer uses a KeepAlive of 5 minutes, which we don't want.
 	dialer := &net.Dialer{}
 	dialer.Timeout = 0

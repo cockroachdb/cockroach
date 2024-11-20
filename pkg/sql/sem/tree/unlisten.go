@@ -7,7 +7,7 @@ package tree
 
 // Unlisten represents a UNLISTEN statement.
 type Unlisten struct {
-	ChannelName *UnresolvedObjectName
+	ChannelName Name
 	Star        bool
 }
 
@@ -18,8 +18,8 @@ func (node *Unlisten) Format(ctx *FmtCtx) {
 	ctx.WriteString("UNLISTEN ")
 	if node.Star {
 		ctx.WriteString("* ")
-	} else if node.ChannelName != nil {
-		ctx.FormatNode(node.ChannelName)
+	} else {
+		ctx.WriteString(node.ChannelName.Normalize())
 	}
 }
 

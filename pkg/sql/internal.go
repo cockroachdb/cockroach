@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotification"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -1672,6 +1673,11 @@ func (icc *internalClientComm) CreateCopyOutResult(cmd CopyOut, pos CmdPos) Copy
 
 // CreateDrainResult is part of the ClientComm interface.
 func (icc *internalClientComm) CreateDrainResult(pos CmdPos) DrainResult {
+	panic("unimplemented")
+}
+
+// SendNotification is part of the ClientComm interface.
+func (icc *internalClientComm) SendNotification(pgnotification.Notification) error {
 	panic("unimplemented")
 }
 
