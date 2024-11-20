@@ -50,7 +50,7 @@ var systemTablesToProtect = []descpb.ID{
 	keys.CommentsTableID,
 	keys.NamespaceTableID,
 	keys.RoleOptionsTableID,
-	// These can be identified by the 
+	// These can be identified by the TestChangefeedIdentifyDependentTablesForProtecting test.
 }
 
 func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
