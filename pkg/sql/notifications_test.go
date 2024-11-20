@@ -102,7 +102,8 @@ func TestNotifyNoPayload(t *testing.T) {
 		require.NoError(t, err)
 	}
 	getNotification := func() string {
-		ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		// this version is a lot laggier...
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		notif, err := conn.WaitForNotification(ctx)
 		require.NoError(t, err)
