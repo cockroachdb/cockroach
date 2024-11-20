@@ -153,6 +153,50 @@ func TestChangefeedBasicQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		foo := feed(t, f, `CREATE CHANGEFEED AS SELECT *, event_op() AS op, cdc_prev FROM foo`)
+		defer closeFeed(t, foo)
+
+		// 'initial' is skipped because only the latest value ('updated') is
+		// emitted by the initial scan.
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"a": 0, "b": "updated", "cdc_prev": null, "op": "insert"}`,
+		})
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"a": 1, "b": "a", "cdc_prev": null, "op": "insert"}`,
+			`foo: [2]->{"a": 2, "b": "b", "cdc_prev": null, "op": "insert"}`,
+		})
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		assertPayloads(t, foo, []string{
+			`foo: [2]->{"a": 2, "b": "c", "cdc_prev": {"a": 2, "b": "b"}, "op": "update"}`,
+			`foo: [3]->{"a": 3, "b": "d", "cdc_prev": null, "op": "insert"}`,
+		})
+		// Deleted rows with bare envelope are emitted with only
+		// the key columns set.
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"a": 1, "b": null, "cdc_prev": {"a": 1, "b": "a"}, "op": "delete"}`,
+		})
+	}
+
+	cdcTest(t, testFn)
+}
+
+// TestChangefeedIdentifyDependentTablesForProtecting identifies (system) tables
+// that are accessed in the course of running a changefeed and ensures that they
+// are all in the list of tables we protect with PTS. It does this by running a
+// sinkless changefeed and capturing a trace of its execution. For completeness,
+// it includes a cdc query in the changefeed, under the assumption that doing so
+// will require more tables.
+func TestChangefeedIdentifyDependentTablesForProtecting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	cfCreated := atomic.Bool{}
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -190,26 +234,9 @@ func TestChangefeedBasicQuery(t *testing.T) {
 		})
 	}
 
-	// like these
-	// executing Scan [/Table/24/1/0/106,/Table/24/1/0/107), Scan [/Table/24/1/1/106,/Table/24/1/1/107), Scan [/Table/24/1/2/106,/Table/24/1/2/107), Scan [/Table/24/1/3/106,/Table/24/1/3/107), Scan [/Table/24/1/4/106,/Table/24/1/4/107), Scan [/Table/24/1/5/106,/Table/24/1/5/107), Scan [/Table/24/1/6/106,/Table/24/1/6/107), Scan [/Table/24/1/7/106,/Table/24/1/7/107), [txn: becca51e]
-
-	// should protect
-	// 33
-	// 30
-	// target table's db or schema are prob ok to leave out
-
-	// optionally a job trace might let us do this for a non sinkless feed. followon task?
-
-	f, err := os.Create("/tmp/output.log")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-
 	trimRx := regexp.MustCompile(`executing (.*), \[txn:.*`)
 	tableIdRx := regexp.MustCompile(`(/Tenant/[0-9]+)?/(Table|NamespaceTable)/([0-9]+)`)
 
-	// systemTablesToProtect
 	tableIDsAccessed := map[int64]struct{}{}
 
 	traceCb := func(trace tracingpb.Recording, stmt string) {
@@ -220,25 +247,21 @@ func TestChangefeedBasicQuery(t *testing.T) {
 			return
 		}
 		for _, span := range trace {
-			fmt.Fprintf(f, "\t%s\n", span.String())
 			for _, log := range span.Logs {
 				msg := log.Message.StripMarkers()
-				if strings.Contains(msg, "executing Scan") {
-					// executing Scan [/Tenant/10/Table/3/1,/Tenant/10/Table/3/2), Scan [/Tenant/10/NamespaceTable/30/1,/Tenant/10/NamespaceTable/30/2), Scan [/Tenant/10/Table/24/1,/Tenant/10/Table/24/2), Scan [/Tenant/10/Table/5/1,/Tenant/10/Table/5/2), [txn: cd065f05]}
-					// spans like
-					// [/Tenant/10/Table/3/1,/Tenant/10/Table/3/2) = (kv) span
-					// or [/Table/3/1,/Table/3/2)
-					// or [/Tenant/10/NamespaceTable/30/1,/Tenant/10/NamespaceTable/30/2)
-					// fmt.Fprintf(f, "found scan log: %s\n", msg)
+				// Parse trace logs of the following format into table ids:
+				//
+				// executing Scan [/Tenant/10/Table/3/1,/Tenant/10/Table/3/2), Scan [/Tenant/10/NamespaceTable/30/1,/Tenant/10/NamespaceTable/30/2), Scan [/Tenant/10/Table/24/1,/Tenant/10/Table/24/2), Scan [/Tenant/10/Table/5/1,/Tenant/10/Table/5/2), [txn: cd065f05]}
+				//
+				// This seems a bit brittle, but it's the best we can do currently
 
+				if strings.Contains(msg, "executing Scan") {
 					trimmed := trimRx.FindStringSubmatch(msg)[1]
 					spanStmts := strings.Split(trimmed, ", ")
 					for _, spanStmt := range spanStmts {
-						// Scan [/Table/24/1/0/106,/Table/24/1/0/107)
 						spanStmt = strings.Replace(spanStmt, "Scan ", "", 1)
 						startEnd := strings.Split(strings.Trim(spanStmt, "[)"), ",")
 						start := startEnd[0]
-						// TODO: /NamespaceTable/
 						matches := tableIdRx.FindStringSubmatch(start)
 						require.NotEmpty(t, matches)
 						tableID, err := strconv.ParseInt(matches[3], 10, 64)
@@ -260,9 +283,6 @@ func TestChangefeedBasicQuery(t *testing.T) {
 		}
 		knobs.SQLExecutor.(*sql.ExecutorTestingKnobs).WithStatementTrace = traceCb
 	}), feedTestForceSink("sinkless"))
-
-	// NamespaceTableID
-	// RoleOptionsTableID
 
 	// NOTE: not all the required tables will necessarily show up in every run due to caching.
 	require.NotEmpty(t, tableIDsAccessed)
