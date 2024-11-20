@@ -4829,6 +4829,8 @@ func TestProxyTracing(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		switch leaseType {
 		case roachpb.LeaseExpiration:
+			skip.UnderRace(t, "too slow")
+			skip.UnderDeadlock(t, "too slow")
 			kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
 		case roachpb.LeaseEpoch:
 			// With epoch leases this test doesn't work reliably. It passes
