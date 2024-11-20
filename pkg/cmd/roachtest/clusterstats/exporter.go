@@ -411,8 +411,9 @@ func GetOpenmetricsLabelMap(
 	t test.Test, c cluster.Cluster, labels map[string]string,
 ) map[string]string {
 	defaultMap := map[string]string{
-		"cloud": c.Cloud().String(),
-		"owner": string(t.Spec().(*registry.TestSpec).Owner),
+		"test-run-id": t.GetRunId(),
+		"cloud":       c.Cloud().String(),
+		"owner":       string(t.Spec().(*registry.TestSpec).Owner),
 	}
 
 	// Since the roachtest have / delimiter for subtests

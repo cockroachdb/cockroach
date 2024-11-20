@@ -843,6 +843,7 @@ func (r *testRunner) runWorker(
 			debug:                  clustersOpt.debugMode.IsDebug(),
 			goCoverEnabled:         topt.goCoverEnabled,
 			exportOpenmetrics:      topt.exportOpenMetrics,
+			runID:                  generateRunID(clustersOpt),
 		}
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
