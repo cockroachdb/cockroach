@@ -373,12 +373,15 @@ func (r *ListenerRegistry) runRangefeed(ctx context.Context) {
 				}
 
 				if msg.Error != nil {
-					// TODO: when can this happen and what does it mean?
+					// This indicates that the rangefeed is about to shut down. Log and continue.
+					log.Warningf(ctx, "rangefeed error: %v", msg.Error)
 					continue
 				}
 				val := msg.Val
 				if val == nil {
-					// TODO: when can this happen and what does it mean?
+					// This indicates that we got a non-value message, like a
+					// checkpoint or something else that I don't think we care
+					// about.
 					continue
 				}
 
