@@ -412,6 +412,18 @@ catalog:
   "067":
     descriptor: relation
     namespace: (1, 29, "table_metadata")
+  "068":
+    descriptor: relation
+    namespace: (1, 29, "job_progress")
+  "069":
+    descriptor: relation
+    namespace: (1, 29, "job_progress_history")
+  "070":
+    descriptor: relation
+    namespace: (1, 29, "job_status")
+  "071":
+    descriptor: relation
+    namespace: (1, 29, "job_message")
   "100":
     comments:
       database: this is the default database

@@ -74,6 +74,10 @@ var (
 		catconstants.TxnExecInsightsTableName,
 		catconstants.StmtExecInsightsTableName,
 		catconstants.TableMetadata,
+		catconstants.JobsProgressTableName,
+		catconstants.JobsProgressHistoryTableName,
+		catconstants.JobsStatusTableName,
+		catconstants.JobsMessageTableName,
 	}
 
 	readWriteSystemSequences = []catconstants.SystemTableName{
