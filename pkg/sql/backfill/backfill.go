@@ -795,9 +795,9 @@ func (ib *IndexBackfiller) init(
 // provided, and builds all the added indexes.
 // The method accounts for the memory used by the index entries for this chunk
 // using the memory monitor associated with ib and returns the amount of memory
-// that needs to be freed once the returned IndexEntry slice is freed.
-// It is the callers responsibility to clear the associated bound account when
-// appropriate.
+// that needs to be freed once the returned IndexEntry slice is freed. This is
+// returned for the successful and failure cases. It is the callers responsibility
+// to clear the associated bound account when appropriate.
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -846,7 +846,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	if err := rowenc.InitIndexFetchSpec(
 		&spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
 	); err != nil {
-		return nil, nil, 0, err
+		return nil, nil, memUsedPerChunk, err
 	}
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
@@ -860,7 +860,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			ForceProductionKVBatchSize: ib.evalCtx.TestingKnobs.ForceProductionValues,
 		},
 	); err != nil {
-		return nil, nil, 0, err
+		return nil, nil, memUsedPerChunk, err
 	}
 	defer fetcher.Close(ctx)
 	if err := fetcher.StartScan(
@@ -869,7 +869,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		initBufferSize,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
-		return nil, nil, 0, err
+		return nil, nil, memUsedPerChunk, err
 	}
 
 	iv := &schemaexpr.RowIndexedVarContainer{
@@ -880,7 +880,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 
 	indexEntriesPerRowInitialBufferSize := int64(len(ib.added)) * sizeOfIndexEntry
 	if err := ib.GrowBoundAccount(ctx, indexEntriesPerRowInitialBufferSize); err != nil {
-		return nil, nil, 0, errors.Wrap(err,
+		return nil, nil, memUsedPerChunk, errors.Wrap(err,
 			"failed to initialize empty buffer to store the index entries of a single row")
 	}
 	memUsedPerChunk += indexEntriesPerRowInitialBufferSize
@@ -920,7 +920,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	for i := int64(0); i < chunkSize; i++ {
 		ok, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
 		if err != nil {
-			return nil, nil, 0, err
+			return nil, nil, memUsedPerChunk, err
 		}
 		if !ok {
 			break
@@ -931,10 +931,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// may reference default values.
 		if len(ib.colExprs) > 0 {
 			if err := evaluateExprs(ib.addedCols); err != nil {
-				return nil, nil, 0, err
+				return nil, nil, memUsedPerChunk, err
 			}
 			if err := evaluateExprs(ib.computedCols); err != nil {
-				return nil, nil, 0, err
+				return nil, nil, memUsedPerChunk, err
 			}
 		}
 
@@ -956,7 +956,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 
 				val, err := eval.Expr(ctx, ib.evalCtx, texpr)
 				if err != nil {
-					return nil, nil, 0, err
+					return nil, nil, memUsedPerChunk, err
 				}
 
 				if val == tree.DBoolTrue {
@@ -989,10 +989,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				&ib.muBoundAccount.boundAccount,
 			)
 		}(buffer)
-		if err != nil {
-			return nil, nil, 0, err
-		}
+		// Account for memory use prior to error checking
 		memUsedPerChunk += memUsedDuringEncoding
+		if err != nil {
+			return nil, nil, memUsedPerChunk, err
+		}
 
 		// The memory monitor has already accounted for cap(entries). If the number
 		// of index entries are going to cause the entries buffer to re-slice, then
@@ -1001,7 +1002,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		if cap(entries)-len(entries) < len(buffer) {
 			resliceSize := sizeOfIndexEntry * int64(cap(entries))
 			if err := ib.GrowBoundAccount(ctx, resliceSize); err != nil {
-				return nil, nil, 0, err
+				return nil, nil, memUsedPerChunk, err
 			}
 			memUsedPerChunk += resliceSize
 		}
