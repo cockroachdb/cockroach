@@ -1014,8 +1014,6 @@ func changefeedJobDescription(
 		return "", err
 	}
 
-	c.SinkURI.(*tree.DString).String()
-
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
 	return tree.AsStringWithFlags(c, tree.FmtShowFullURIs), nil
 }
