@@ -2559,6 +2559,9 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		// We could fail since we don't specify the USING expression, so it's
 		// possible that we could pick a data type that doesn't have an automatic cast.
 		stmt.potentialExecErrors.add(pgcode.DatatypeMismatch)
+		// Failure can occur if we attempt to alter a column that has a dependent
+		// computed column.
+		stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
 	}
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
@@ -2566,13 +2569,9 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies || colIsRefByComputed || hasOngoingAlterPKSchemaChange},
 	})
 
-	// TODO(#134008): Remove this with the PR that fixes this bug.
-	stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
-
 	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
 		setSessionVariableString, tableName.String(), columnForTypeChange.name.String(), newTypeName.SQLString())
 	return stmt, nil
-
 }
 
 func (og *operationGenerator) alterTableAlterPrimaryKey(

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -368,9 +369,12 @@ func getColumnIDFromColumnName(
 		return 0
 	}
 
-	_, _, colElem := scpb.FindColumn(colElems)
+	_, targetStatus, colElem := scpb.FindColumn(colElems)
 	if colElem == nil {
 		panic(errors.AssertionFailedf("programming error: cannot find a Column element for column %v", columnName))
+	}
+	if targetStatus == scpb.ToAbsent && required {
+		panic(colinfo.NewUndefinedColumnError(string(columnName)))
 	}
 	return colElem.ColumnID
 }
