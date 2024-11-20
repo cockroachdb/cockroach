@@ -58,6 +58,25 @@ func nilLogger() *logger.Logger {
 	return l
 }
 
+func defaultClusterOpt() clustersOpt {
+	return clustersOpt{
+		typ:       roachprodCluster,
+		user:      "test_user",
+		cpuQuota:  1000,
+		debugMode: NoDebug,
+	}
+}
+
+func defaultLoggingOpt(buf *syncedBuffer) loggingOpt {
+	return loggingOpt{
+		l:            nilLogger(),
+		tee:          logger.NoTee,
+		stdout:       buf,
+		stderr:       buf,
+		artifactsDir: "",
+	}
+}
+
 func TestRunnerRun(t *testing.T) {
 	ctx := context.Background()
 
@@ -234,12 +253,7 @@ func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *ru
 		stderr:       &stderr,
 		artifactsDir: "",
 	}
-	copt := clustersOpt{
-		typ:       roachprodCluster,
-		user:      "test_user",
-		cpuQuota:  1000,
-		debugMode: NoDebug,
-	}
+	copt := defaultClusterOpt()
 	return &runnerTest{
 		stdout: &stdout,
 		stderr: &stderr,
@@ -301,19 +315,8 @@ func TestRunnerTestTimeout(t *testing.T) {
 	runner := newUnitTestRunner(cr, stopper)
 
 	var buf syncedBuffer
-	lopt := loggingOpt{
-		l:            nilLogger(),
-		tee:          logger.NoTee,
-		stdout:       &buf,
-		stderr:       &buf,
-		artifactsDir: "",
-	}
-	copt := clustersOpt{
-		typ:       roachprodCluster,
-		user:      "test_user",
-		cpuQuota:  1000,
-		debugMode: NoDebug,
-	}
+	copt := defaultClusterOpt()
+	lopt := defaultLoggingOpt(&buf)
 	test := registry.TestSpec{
 		Name:             `timeout`,
 		Owner:            OwnerUnitTest,
@@ -418,13 +421,8 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	require.NoError(t, err)
 
 	tests, _ := testsToRun(r, tf, false, 1.0, true)
-	lopt := loggingOpt{
-		l:            nilLogger(),
-		tee:          logger.NoTee,
-		stdout:       io.Discard,
-		stderr:       io.Discard,
-		artifactsDir: "",
-	}
+	var buf syncedBuffer
+	lopt := defaultLoggingOpt(&buf)
 	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt)
 }
 
@@ -537,19 +535,8 @@ func TestTransientErrorFallback(t *testing.T) {
 	runner := newUnitTestRunner(cr, stopper)
 
 	var buf syncedBuffer
-	lopt := loggingOpt{
-		l:            nilLogger(),
-		tee:          logger.NoTee,
-		stdout:       &buf,
-		stderr:       &buf,
-		artifactsDir: "",
-	}
-	copt := clustersOpt{
-		typ:       roachprodCluster,
-		user:      "test_user",
-		cpuQuota:  1000,
-		debugMode: NoDebug,
-	}
+	copt := defaultClusterOpt()
+	lopt := defaultLoggingOpt(&buf)
 
 	// Test that if a test fails with a transient error handled by the `require` package,
 	// the test runner will correctly still identify it as a flake and the run will have
@@ -592,5 +579,79 @@ func TestTransientErrorFallback(t *testing.T) {
 		if !testutils.IsError(err, "some tests failed") {
 			t.Fatalf("expected error \"some tests failed\", got: %v", err)
 		}
+	})
+}
+
+func TestVMPreemptionPolling(t *testing.T) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cr := newClusterRegistry()
+	runner := newUnitTestRunner(cr, stopper)
+
+	var buf syncedBuffer
+	copt := defaultClusterOpt()
+	lopt := defaultLoggingOpt(&buf)
+
+	mockTest := registry.TestSpec{
+		Name:             `preemption`,
+		Owner:            OwnerUnitTest,
+		Cluster:          spec.MakeClusterSpec(0, spec.UseSpotVMs()),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  registry.StandardCockroach,
+		Timeout:          10 * time.Second,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			<-ctx.Done()
+		},
+	}
+
+	setPollPreemptionInterval := func(interval time.Duration) {
+		pollPreemptionInterval.Lock()
+		defer pollPreemptionInterval.Unlock()
+		pollPreemptionInterval.interval = interval
+	}
+
+	getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+		preemptedVMs := []vm.PreemptedVM{{
+			Name:        "test_node",
+			PreemptedAt: time.Now(),
+		}}
+		return preemptedVMs, nil
+	}
+
+	defer func() {
+		getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+			return c.GetPreemptedVMs(ctx, l)
+		}
+		setPollPreemptionInterval(5 * time.Minute)
+	}()
+
+	// Test that if a VM is preempted, the VM preemption monitor will catch
+	// it and cancel the test before it times out.
+	t.Run("polling cancels test", func(t *testing.T) {
+		setPollPreemptionInterval(50 * time.Millisecond)
+
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+		// The preemption monitor should mark a VM as preempted and the test should
+		// be treated as a flake instead of a failed test.
+		require.NoError(t, err)
+	})
+
+	// Test that if a VM is preempted but the polling doesn't catch it because the
+	// test finished first, the post failure checks will check again and mark it as a flake.
+	t.Run("polling doesn't catch preemption", func(t *testing.T) {
+		// Set the interval very high so we don't poll for preemptions.
+		setPollPreemptionInterval(1 * time.Hour)
+
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Error("Should be ignored")
+		}
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt)
+		// The post test failure check should mark a VM as preempted and the test should
+		// be treated as a flake instead of a failed test.
+		require.NoError(t, err)
 	})
 }
