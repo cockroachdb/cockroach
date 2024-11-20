@@ -166,6 +166,9 @@ func TestErrorDuringExtendedProtocolCommit(t *testing.T) {
 
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
+	// This forces a trace span to have been set up in the BeforeExecute
+	// interceptor above.
+	s.Tracer().SetActiveSpansRegistryEnabled(true)
 
 	conn, err := db.Conn(ctx)
 	require.NoError(t, err)

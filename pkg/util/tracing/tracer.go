@@ -179,7 +179,7 @@ var EnableActiveSpansRegistry = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"trace.span_registry.enabled",
 	"if set, ongoing traces can be seen at https://<ui>/#/debug/tracez",
-	envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true),
+	envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", false),
 	settings.WithPublic)
 
 var periodicSnapshotInterval = settings.RegisterDurationSetting(
@@ -667,7 +667,7 @@ func NewTracerWithOpt(ctx context.Context, opts ...TracerOption) *Tracer {
 		t.spanReusePercent = *o.spanReusePercent
 	}
 	t.testing = o.knobs
-	t.SetActiveSpansRegistryEnabled(o.tracingDefault != TracingModeOnDemand)
+	t.SetActiveSpansRegistryEnabled(o.tracingDefault == TracingModeActiveSpansRegistry)
 	if o.sv != nil {
 		t.configure(ctx, o.sv, o.tracingDefault)
 		forceVerboseSpanRegexp.SetOnChange(o.sv, func(ctx context.Context) {
