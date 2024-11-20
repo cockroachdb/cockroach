@@ -25,6 +25,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/install",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/utilccl/licenseccl",
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",

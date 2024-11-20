@@ -21,6 +21,7 @@ import (
 	"text/template"
 
 	"github.com/alessio/shellescape"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
@@ -1294,9 +1295,15 @@ func (c *SyncedCluster) setClusterSettings(
 func (c *SyncedCluster) generateClusterSettingCmd(
 	ctx context.Context, l *logger.Logger, node Node, virtualCluster string,
 ) (string, error) {
-	if config.CockroachDevLicense == "" {
-		l.Printf("%s: COCKROACH_DEV_LICENSE unset: enterprise features will be unavailable",
-			c.Name)
+	license := config.CockroachDevLicense
+	if license == "" {
+		l.Printf("%s: COCKROACH_DEV_LICENSE is unset: generating a license to "+
+			"install if the cluster is not yet initialized.", c.Name)
+		license, _ = (&licenseccl.License{
+			Type:              licenseccl.License_Enterprise,
+			Environment:       licenseccl.Development,
+			ValidUntilUnixSec: timeutil.Now().AddDate(0, 1, 0).Unix(),
+		}).Encode()
 	}
 
 	var tenantPrefix string
@@ -1306,7 +1313,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 
 	clusterSettings := map[string]string{
 		"cluster.organization": "Cockroach Labs - Production Testing",
-		"enterprise.license":   config.CockroachDevLicense,
+		"enterprise.license":   license,
 	}
 	for name, value := range c.ClusterSettings.ClusterSettings {
 		clusterSettings[name] = value
