@@ -118,12 +118,15 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	// By default, take a conservative approach and assume we don't have newer
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
-	format := sstable.TableFormatPebblev2
+	format := sstable.TableFormatPebblev4
+	if cs.Version.IsActive(ctx, clusterversion.V24_3) && ColumnarBlocksEnabled.Get(&cs.SV) {
+		format = sstable.TableFormatPebblev5
+	}
 
-	// TODO(sumeer): add code to use TableFormatPebblev3 after confirming that
-	// we won't run afoul of any stale tooling that reads backup ssts.
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
 
+	// Don't need value blocks.
+	opts.DisableValueBlocks = true
 	// Don't need BlockPropertyCollectors for backups.
 	opts.BlockPropertyCollectors = nil
 	// Disable bloom filters since we only ever iterate backups.
