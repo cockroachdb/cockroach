@@ -1945,10 +1945,10 @@ func setupSpanForIncomingRPC(
 	remoteParent := !ba.TraceInfo.Empty()
 	if !remoteParent {
 		// This is either a local request which circumvented gRPC, or a remote
-		// request that didn't specify tracing information. In the former case,
-		// EnsureChildSpan will create a child span, in the former case we'll get a
-		// root span.
-		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
+		// request that didn't specify tracing information. We make a child span
+		// if the incoming request would like to be traced.
+		ctx, newSpan = tracing.ChildSpan(ctx,
+			grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
 	} else {
 		// Non-local call. Tracing information comes from the request proto.
 

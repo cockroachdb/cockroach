@@ -342,7 +342,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ast := parserStmt.AST
 	var sp *tracing.Span
 	if !isPausablePortal() || !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
-		ctx, sp = tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql query")
+		ctx, sp = tracing.ChildSpan(ctx, "sql query")
 		// TODO(andrei): Consider adding the placeholders as tags too.
 		sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
 		ctx = withStatement(ctx, ast)
@@ -1553,7 +1553,7 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 }
 
 func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retErr error) {
-	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "commit sql txn")
+	ctx, sp := tracing.ChildSpan(ctx, "commit sql txn")
 	defer sp.Finish()
 
 	defer func() {
