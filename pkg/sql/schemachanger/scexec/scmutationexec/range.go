@@ -22,6 +22,18 @@ func (i *immediateVisitor) AddNamedRangeZoneConfig(
 	if !ok {
 		return errors.AssertionFailedf("unknown named zone: %s", op.RangeName)
 	}
-	i.ImmediateMutationStateUpdater.UpdateZoneConfig(catid.DescID(id), protoutil.Clone(&op.ZoneConfig).(*zonepb.ZoneConfig))
+	i.ImmediateMutationStateUpdater.UpdateZoneConfig(catid.DescID(id),
+		protoutil.Clone(&op.ZoneConfig).(*zonepb.ZoneConfig))
+	return nil
+}
+
+func (i *immediateVisitor) DiscardNamedRangeZoneConfig(
+	ctx context.Context, op scop.DiscardNamedRangeZoneConfig,
+) error {
+	id, ok := zonepb.NamedZones[op.RangeName]
+	if !ok {
+		return errors.AssertionFailedf("unknown named zone: %s", op.RangeName)
+	}
+	i.ImmediateMutationStateUpdater.DeleteZoneConfig(catid.DescID(id))
 	return nil
 }
