@@ -77,12 +77,12 @@ func AlterColumnType(
 	}
 
 	typ, err = schemachange.ValidateAlterColumnTypeChecks(ctx, t,
-		params.EvalContext().Settings, typ, col.IsGeneratedAsIdentity())
+		params.EvalContext().Settings, typ, col.IsGeneratedAsIdentity(), col.IsVirtual())
 	if err != nil {
 		return err
 	}
 
-	kind, err := schemachange.ClassifyConversionFromTree(ctx, t, col.GetType(), typ)
+	kind, err := schemachange.ClassifyConversionFromTree(ctx, t, col.GetType(), typ, col.IsVirtual())
 	if err != nil {
 		return err
 	}
