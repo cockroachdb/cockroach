@@ -1592,19 +1592,24 @@ func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (context.Con
 	return tr.StartSpanCtx(ctx, opName, opts...)
 }
 
-// ChildSpan creates a child span of the current one, if any. Recordings from
-// child spans are automatically propagated to the parent span, and the tags are
-// inherited from the context's log tags automatically. Also see `ForkSpan`,
-// for the other kind of derived span relation.
+// ChildSpan creates a child span of the current one, if any, via the WithParent
+// option. Recordings from child spans are automatically propagated to the
+// parent span, and the tags are inherited from the context's log tags
+// automatically. Also see `ForkSpan`, for the other kind of derived span
+// relation.
 //
 // A context wrapping the newly created span is returned, along with the span
 // itself. If non-nil, the caller is responsible for eventually Finish()ing it.
-func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
+func ChildSpan(ctx context.Context, opName string, os ...SpanOption) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
 	}
-	return sp.Tracer().StartSpanCtx(ctx, opName, WithParent(sp))
+	if len(os) == 0 {
+		return sp.Tracer().StartSpanCtx(ctx, opName, WithParent(sp))
+	}
+	os = append(os[:len(os):len(os)], WithParent(sp))
+	return sp.Tracer().StartSpanCtx(ctx, opName, os...)
 }
 
 // EnsureChildSpan looks at the supplied Context. If it contains a Span, returns
