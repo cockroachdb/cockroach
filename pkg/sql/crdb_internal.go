@@ -8008,6 +8008,9 @@ func genClusterLocksGenerator(
 				if filters.databaseName != nil && *filters.databaseName != dbNames[uint32(desc.GetParentID())] {
 					continue
 				}
+				if desc.ExternalRowData() != nil {
+					continue
+				}
 				spansToQuery = append(spansToQuery, desc.TableSpan(p.execCfg.Codec))
 			}
 		}
