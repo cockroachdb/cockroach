@@ -2841,7 +2841,7 @@ func getOptTriggers(descTriggers []descpb.TriggerDescriptor) []optTrigger {
 		optEvents := make([]tree.TriggerEvent, len(descTrigger.Events))
 		for j := range optEvents {
 			descEvent := descTrigger.Events[j]
-			optEvents[j].EventType = tree.TriggerEventType(descEvent.Type)
+			optEvents[j].EventType = tree.TriggerEventTypeToTree[descEvent.Type]
 			optEvents[j].Columns = make(tree.NameList, 0, len(descEvent.ColumnNames))
 			for _, colName := range descEvent.ColumnNames {
 				optEvents[j].Columns = append(optEvents[j].Columns, tree.Name(colName))
@@ -2853,7 +2853,7 @@ func getOptTriggers(descTriggers []descpb.TriggerDescriptor) []optTrigger {
 		}
 		triggers[i] = optTrigger{
 			name:               tree.Name(descTrigger.Name),
-			actionTime:         tree.TriggerActionTime(descTrigger.ActionTime),
+			actionTime:         tree.TriggerActionTimeToTree[descTrigger.ActionTime],
 			events:             optEvents,
 			newTransitionAlias: tree.Name(descTrigger.NewTransitionAlias),
 			oldTransitionAlias: tree.Name(descTrigger.OldTransitionAlias),

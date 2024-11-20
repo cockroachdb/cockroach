@@ -259,6 +259,8 @@ func (d *dummyColumn) ResolvedType() *types.T {
 	return d.typ
 }
 
+type ColumnLookupFn func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T)
+
 // ReplaceColumnVars replaces the occurrences of column names in an expression with
 // dummyColumns containing their type, so that they may be type-checked. It
 // returns this new expression tree alongside a set containing the ColumnID of
@@ -270,8 +272,7 @@ func (d *dummyColumn) ResolvedType() *types.T {
 // The column lookup function allows looking up columns both in the descriptor
 // or in declarative schema changer elements.
 func ReplaceColumnVars(
-	rootExpr tree.Expr,
-	columnLookupFn func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T),
+	rootExpr tree.Expr, columnLookupFn ColumnLookupFn,
 ) (tree.Expr, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
 
@@ -308,20 +309,6 @@ func ReplaceColumnVars(
 	})
 
 	return newExpr, colIDs, err
-}
-
-// replaceColumnVars is a convenience function for ReplaceColumnVars.
-func replaceColumnVars(
-	tbl catalog.TableDescriptor, rootExpr tree.Expr,
-) (tree.Expr, catalog.TableColSet, error) {
-	lookupFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-		col, err := catalog.MustFindColumnByTreeName(tbl, columnName)
-		if err != nil || col.Dropped() {
-			return false, false, 0, nil
-		}
-		return true, !col.IsInaccessible(), col.GetID(), col.GetType()
-	}
-	return ReplaceColumnVars(rootExpr, lookupFn)
 }
 
 // ReplaceSequenceIDsWithFQNames walks the given expr and replaces occurrences

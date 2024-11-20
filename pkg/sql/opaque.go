@@ -283,6 +283,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowVar(ctx, &tree.ShowVar{Name: "transaction_status"})
 	case *tree.ShowTriggers:
 		return p.ShowTriggers(ctx, n)
+	case *tree.ShowCreateTrigger:
+		return p.ShowCreateTrigger(ctx, n)
 	case *tree.Truncate:
 		return p.Truncate(ctx, n)
 	case *tree.Unlisten:
@@ -407,6 +409,7 @@ func init() {
 		&tree.ShowVar{},
 		&tree.ShowTransactionStatus{},
 		&tree.ShowTriggers{},
+		&tree.ShowCreateTrigger{},
 		&tree.Truncate{},
 		&tree.Unlisten{},
 
