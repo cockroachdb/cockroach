@@ -147,6 +147,8 @@ var MinCapacityForBulkIngest = settings.RegisterFloatSetting(
 	"kv.bulk_io_write.min_capacity_remaining_fraction",
 	"remaining store capacity fraction below which bulk ingestion requests are rejected",
 	0.05,
+	settings.FloatInRange(0.04, 0.3),
+	settings.WithPublic,
 )
 
 // BlockLoadConcurrencyLimit controls the maximum number of outstanding
