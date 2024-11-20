@@ -83,7 +83,8 @@ func alterTableAlterColumnType(
 	var err error
 	newColType.Type, err = schemachange.ValidateAlterColumnTypeChecks(
 		b, t, b.ClusterSettings(), newColType.Type,
-		col.GeneratedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN)
+		col.GeneratedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN,
+		newColType.IsVirtual)
 	if err != nil {
 		panic(err)
 	}
@@ -92,7 +93,8 @@ func alterTableAlterColumnType(
 	validateAutomaticCastForNewType(b, tbl.TableID, colID, t.Column.String(),
 		oldColType.Type, newColType.Type, t.Using != nil)
 
-	kind, err := schemachange.ClassifyConversionFromTree(b, t, oldColType.Type, newColType.Type)
+	kind, err := schemachange.ClassifyConversionFromTree(b, t, oldColType.Type, newColType.Type,
+		newColType.IsVirtual)
 	if err != nil {
 		panic(err)
 	}
@@ -285,10 +287,10 @@ func handleGeneralColumnConversion(
 		}
 	})
 
+	// This code path should never be reached for virtual columns, as their values
+	// are always computed dynamically on access and are never stored on disk.
 	if oldColType.IsVirtual {
-		// TODO(#125840): we currently don't support altering the type of a virtual column
-		panic(scerrors.NotImplementedErrorf(t,
-			"backfilling during ALTER COLUMN TYPE for a virtual column is not supported"))
+		panic(errors.AssertionFailedf("virtual columns cannot be backfilled"))
 	}
 
 	// We block any attempt to alter the type of a column that is a key column in

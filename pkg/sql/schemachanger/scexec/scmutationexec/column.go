@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -63,7 +62,8 @@ func (i *immediateVisitor) UpsertColumnType(ctx context.Context, op scop.UpsertC
 	// column. If the column type is set, then this implies we are updating the
 	// type of an existing column.
 	if catCol.HasType() {
-		return i.updateExistingColumnType(ctx, op, col)
+		i.updateExistingColumnType(op, col)
+		return nil
 	}
 	return i.addNewColumnType(ctx, op, tbl, col)
 }
@@ -432,22 +432,12 @@ func (i *immediateVisitor) RemoveColumnOnUpdateExpression(
 
 // updateExistingColumnType will handle data type changes to existing columns.
 func (i *immediateVisitor) updateExistingColumnType(
-	ctx context.Context, op scop.UpsertColumnType, desc *descpb.ColumnDescriptor,
-) error {
-	kind, err := schemachange.ClassifyConversion(ctx, desc.Type, op.ColumnType.Type)
-	if err != nil {
-		return err
-	}
-	switch kind {
-	case schemachange.ColumnConversionTrivial, schemachange.ColumnConversionValidate:
-		// This type of update are ones that don't do a backfill. So, we can simply
-		// update the column type and be done.
-		desc.Type = op.ColumnType.Type
-	default:
-		return errors.AssertionFailedf("unsupported column type change %v -> %v (%v)",
-			desc.Type, op.ColumnType.Type, kind)
-	}
-	return nil
+	op scop.UpsertColumnType, desc *descpb.ColumnDescriptor,
+) {
+	// This operation is only called when a type change doesn’t require a
+	// backfill. When a backfill is required, a new column is created instead.
+	// Therefore, simply update the metadata for the type.
+	desc.Type = op.ColumnType.Type
 }
 
 func clearComputedExpr(col *descpb.ColumnDescriptor) {

@@ -1389,7 +1389,7 @@ SELECT * FROM stored1 ORDER BY A;
 statement ok
 INSERT INTO stored1 VALUES (2147483648),(2147483647);
 
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.2
 statement error pq: validate check constraint: integer out of range for type int4
 ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
 
@@ -1401,11 +1401,11 @@ ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
 statement ok
 DELETE FROM stored1 WHERE a = 2147483648;
 
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.2
 statement ok
 ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
 
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.2
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1416,7 +1416,7 @@ stored1  CREATE TABLE public.stored1 (
            FAMILY f1 (a, comp1)
          )
 
-skipif config local-legacy-schema-changer local-mixed-24.1
+skipif config local-legacy-schema-changer
 query II
 SELECT * FROM stored1 ORDER BY A;
 ----
@@ -1426,25 +1426,25 @@ SELECT * FROM stored1 ORDER BY A;
 2000 2000
 2147483647  2147483647
 
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.2
 # Attempt to convert to a type that is incompatible with the computed expression
 statement error pq: expected STORED COMPUTED COLUMN expression to have type bool, but 'a' has type int
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE BOOL;
 
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2
+skipif config local-legacy-schema-changer local-mixed-24.2
 statement error pq: expected STORED COMPUTED COLUMN expression to have type string, but 'a' has type int
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE TEXT;
 
 # Convert the type to something compatible, but specify a custom value for the
 # column with the USING expression. This will force a type conversion with a backfill.
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2 local-mixed-24.3
+skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
 statement ok
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT2 USING -1;
 
 statement ok
 INSERT INTO stored1 VALUES (-1000);
 
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2 local-mixed-24.3
+skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1455,7 +1455,7 @@ stored1  CREATE TABLE public.stored1 (
            FAMILY f1 (a, comp1)
          )
 
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2 local-mixed-24.3
+skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
 query II
 SELECT * FROM stored1 ORDER BY A;
 ----
@@ -1467,11 +1467,202 @@ SELECT * FROM stored1 ORDER BY A;
 2147483647  -1
 
 # Attempt to drop stored along with changing the column type
-skipif config local-legacy-schema-changer local-mixed-24.1 local-mixed-24.2 local-mixed-24.3
+skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
 statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT4 USING -1, ALTER COLUMN comp1 drop stored;
 
 statement ok
 DROP TABLE stored1;
+
+subtest virtual_compute
+
+statement ok
+CREATE TABLE virt1 (c1 BIGINT NOT NULL PRIMARY KEY, v1 BIGINT NOT NULL AS (c1) virtual);
+
+statement ok
+INSERT INTO virt1 VALUES (100), (2147483647);
+
+# Ensure the USING expression cannot be used
+statement error pq: type change for virtual column "v1" cannot be altered with a USING expression
+ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT4 USING 10;
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+statement ok
+ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT4;
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+query II
+SELECT * from virt1 ORDER BY c1;
+----
+100 100
+2147483647 2147483647
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+query TT
+SHOW CREATE TABLE virt1;
+----
+virt1      CREATE TABLE public.virt1 (
+             c1 INT8 NOT NULL,
+             v1 INT4 NOT NULL AS (c1) VIRTUAL,
+             CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
+           )
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+statement error pq: validate check constraint: integer out of range for type int2
+ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
+
+statement ok
+DELETE FROM virt1 WHERE c1 = 2147483647;
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+statement ok
+ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
+
+statement ok
+INSERT INTO virt1 VALUES (-9999);
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+query II
+SELECT * from virt1 ORDER BY c1;
+----
+-9999 -9999
+100 100
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+query TT
+SHOW CREATE TABLE virt1;
+----
+virt1      CREATE TABLE public.virt1 (
+             c1 INT8 NOT NULL,
+             v1 INT2 NOT NULL AS (c1) VIRTUAL,
+             CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
+           )
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+statement error pq: expected STORED COMPUTED COLUMN expression to have type string, but 'c1' has type int
+ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE TEXT;
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+statement error pq: expected STORED COMPUTED COLUMN expression to have type float, but 'c1' has type int
+ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE FLOAT;
+
+statement ok
+DROP TABLE virt1;
+
+subtest virtual_compute_tz
+
+statement ok
+CREATE TABLE virt2 (C1 TIMESTAMP(6) NOT NULL PRIMARY KEY, v1 TIMESTAMP(3) AS (c1) VIRTUAL);
+
+statement ok
+INSERT INTO virt2 VALUES ('2024-10-31 16:50:00.123456');
+
+query TT
+SELECT * FROM virt2 ORDER BY c1;
+----
+2024-10-31 16:50:00.123456 +0000 +0000  2024-10-31 16:50:00.123 +0000 +0000
+
+statement ok
+ALTER TABLE virt2 ALTER COLUMN v1 SET DATA TYPE TIMESTAMP(2);
+
+query TT
+SELECT * FROM virt2 ORDER BY c1;
+----
+2024-10-31 16:50:00.123456 +0000 +0000  2024-10-31 16:50:00.12 +0000 +0000
+
+query TT
+SHOW CREATE TABLE virt2;
+----
+virt2      CREATE TABLE public.virt2 (
+             c1 TIMESTAMP(6) NOT NULL,
+             v1 TIMESTAMP(2) NULL AS (c1) VIRTUAL,
+             CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
+           )
+
+statement ok
+ALTER TABLE virt2 ALTER COLUMN v1 SET DATA TYPE TIMESTAMP(5);
+
+query TT
+SELECT * FROM virt2 ORDER BY c1;
+----
+2024-10-31 16:50:00.123456 +0000 +0000  2024-10-31 16:50:00.12346 +0000 +0000
+
+query TT
+SHOW CREATE TABLE virt2;
+----
+virt2      CREATE TABLE public.virt2 (
+             c1 TIMESTAMP(6) NOT NULL,
+             v1 TIMESTAMP(5) NULL AS (c1) VIRTUAL,
+             CONSTRAINT virt2_pkey PRIMARY KEY (c1 ASC)
+           )
+
+statement ok
+DROP TABLE virt2;
+
+subtest virtual_compute_decimal
+
+statement ok
+CREATE TABLE virt3 (C1 DECIMAL(6,3) NOT NULL PRIMARY KEY, v1 DECIMAL(6,3) AS (c1) VIRTUAL);
+
+statement ok
+INSERT INTO virt3 VALUES (1.23456),(12.34567),(-123.4);
+
+query TT
+SELECT * FROM virt3 ORDER BY c1;
+----
+-123.400 -123.400
+1.235 1.235
+12.346 12.346
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+statement ok
+ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(6,2);
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+query TT
+SELECT * FROM virt3 ORDER BY c1;
+----
+-123.400 -123.40
+1.235 1.24
+12.346 12.35
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+query TT
+SHOW CREATE TABLE virt3;
+----
+virt3      CREATE TABLE public.virt3 (
+             c1 DECIMAL(6,3) NOT NULL,
+             v1 DECIMAL(6,2) NULL AS (c1) VIRTUAL,
+             CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
+           )
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+statement error pq: validate check constraint: .*value with precision 5, scale 4 must round to an absolute value less than 10\^1
+ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(5,4);
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+statement ok
+ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(8,4);
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+query TT
+SELECT * FROM virt3 ORDER BY c1;
+----
+-123.400 -123.4000
+1.235 1.2350
+12.346 12.3460
+
+skipif config local-legacy-schema-changer local-mixed-24.2
+query TT
+SHOW CREATE TABLE virt3;
+----
+virt3      CREATE TABLE public.virt3 (
+             c1 DECIMAL(6,3) NOT NULL,
+             v1 DECIMAL(8,4) NULL AS (c1) VIRTUAL,
+             CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
+           )
+
+statement ok
+DROP TABLE virt3;
 
 subtest end
