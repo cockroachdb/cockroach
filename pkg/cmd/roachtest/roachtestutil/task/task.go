@@ -13,9 +13,9 @@ import (
 
 type Func func(context.Context, *logger.Logger) error
 
-// Tasker is an interface for executing tasks (goroutines). It is intended for
+// Task is an interface for executing tasks (goroutines). It is intended for
 // use in tests, enabling the test framework to manage panics and errors.
-type Tasker interface {
+type Task interface {
 	// Go runs the given function in a goroutine.
 	Go(fn Func, opts ...Option)
 	// GoWithCancel runs the given function in a goroutine and returns a

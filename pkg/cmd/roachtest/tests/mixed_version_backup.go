@@ -1826,7 +1826,7 @@ func (d *BackupRestoreTestDriver) saveContents(
 func (d *BackupRestoreTestDriver) runBackup(
 	ctx context.Context,
 	l *logger.Logger,
-	tasker task.Tasker,
+	tasker task.Task,
 	rng *rand.Rand,
 	nodes option.NodeListOption,
 	pauseProbability float64,
@@ -2016,7 +2016,7 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 func (d *BackupRestoreTestDriver) createBackupCollection(
 	ctx context.Context,
 	l *logger.Logger,
-	tasker task.Tasker,
+	task task.Task,
 	rng *rand.Rand,
 	fullBackupSpec backupSpec,
 	incBackupSpec backupSpec,
@@ -2032,7 +2032,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	if err := d.testUtils.runJobOnOneOf(ctx, l, fullBackupSpec.Execute.Nodes, func() error {
 		var err error
 		collection, fullBackupEndTime, err = d.runBackup(
-			ctx, l, tasker, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability,
+			ctx, l, task, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability,
 			fullBackup{backupNamePrefix}, internalSystemJobs, isMultitenant,
 		)
 		return err
@@ -2054,7 +2054,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 		if err := d.testUtils.runJobOnOneOf(ctx, l, incBackupSpec.Execute.Nodes, func() error {
 			var err error
 			collection, latestIncBackupEndTime, err = d.runBackup(
-				ctx, l, tasker, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
+				ctx, l, task, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
 				incrementalBackup{collection: collection, incNum: i + 1}, internalSystemJobs, isMultitenant,
 			)
 			return err
