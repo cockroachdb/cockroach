@@ -120,7 +120,7 @@ CREATE TABLE system.notifications (
 	channel STRING NOT NULL PRIMARY KEY,
 	payload STRING,
 	pid INT4 NOT NULL,
-);`
+) WITH (schema_locked = t);`
 
 	// RoleIDSequenceSchema starts at 100 so we have reserved IDs for special
 	// roles such as root and admin.

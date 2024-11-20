@@ -8,7 +8,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -23,9 +22,9 @@ func (un *unlistenNode) startExec(params runParams) error {
 	registry := params.p.execCfg.PGListenerRegistry
 	sessionID := params.extendedEvalCtx.SessionID
 	if un.n.Star {
-		registry.RemoveAllListeners(params.ctx, notify.ListenerID(sessionID))
+		registry.RemoveAllListeners(params.ctx, listenerID(sessionID))
 	} else {
-		registry.RemoveListener(params.ctx, notify.ListenerID(sessionID), un.n.ChannelName.String())
+		registry.RemoveListener(params.ctx, listenerID(sessionID), un.n.ChannelName.String())
 	}
 	return nil
 }

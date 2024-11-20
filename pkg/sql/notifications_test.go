@@ -1,4 +1,4 @@
-package notify_test
+package sql
 
 import (
 	"context"

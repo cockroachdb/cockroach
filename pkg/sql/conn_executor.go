@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
-	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
@@ -2261,7 +2260,7 @@ func (ex *connExecutor) run(
 		}
 	}()
 
-	defer ex.server.cfg.PGListenerRegistry.RemoveAllListeners(ctx, notify.ListenerID(ex.planner.extendedEvalCtx.SessionID))
+	defer ex.server.cfg.PGListenerRegistry.RemoveAllListeners(ctx, listenerID(ex.planner.extendedEvalCtx.SessionID))
 
 	for {
 		ex.curStmtAST = nil

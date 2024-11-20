@@ -152,6 +152,7 @@ go_library(
         "join_predicate.go",
         "limit.go",
         "listen.go",
+        "listener_registry.go",
         "lookup_join.go",
         "max_one_row.go",
         "mem_metrics.go",
@@ -437,7 +438,6 @@ go_library(
         "//pkg/sql/lexbase",
         "//pkg/sql/memsize",
         "//pkg/sql/mutations",
-        "//pkg/sql/notify",
         "//pkg/sql/oidext",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
@@ -614,6 +614,7 @@ go_library(
         "@com_github_prometheus_client_model//go",
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@io_opentelemetry_go_otel//attribute",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
@@ -690,6 +691,7 @@ go_test(
         "mvcc_backfiller_test.go",
         "mvcc_statistics_update_job_test.go",
         "normalization_test.go",
+        "notifications_test.go",
         "pg_metadata_test.go",
         "pg_oid_test.go",
         "pgwire_internal_test.go",

@@ -1691,3 +1691,7 @@ func maybeUpgradePreProductionReadyExpression(
 		"Please see CDC documentation on the use of new cdc_prev tuple.",
 		tree.AsString(oldExpression), tree.AsString(newExpression))
 }
+
+func init() {
+	sql.StartCoreChangefeed = coreChangefeed
+}

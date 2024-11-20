@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 type listenNode struct {
@@ -33,7 +33,16 @@ func (ln *listenNode) startExec(params runParams) error {
 
 	registry := params.p.execCfg.PGListenerRegistry
 	sessionID := params.extendedEvalCtx.SessionID
-	err := registry.AddListener(params.ctx, notify.ListenerID(sessionID), ln.n.ChannelName.Normalize(), params.p.notificationSender)
+	sessionData := params.SessionData().SessionData
+	err := registry.StartListener(
+		params.ctx,
+		listenerID(sessionID),
+		ln.n.ChannelName.Normalize(),
+		params.p.notificationSender,
+		&sessionData,
+		hlc.Timestamp{WallTime: params.EvalContext().StmtTimestamp.UnixNano()}, // ?
+		params.p,
+	)
 	if err != nil {
 		return err
 	}

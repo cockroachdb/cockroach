@@ -71,7 +71,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1461,7 +1460,7 @@ type ExecutorConfig struct {
 	RangeProber eval.RangeProber
 
 	// PGListenerRegistry manages LISTEN/NOTIFY listeners.
-	PGListenerRegistry *notify.ListenerRegistry
+	PGListenerRegistry *ListenerRegistry
 
 	// DescIDGenerator generates unique descriptor IDs.
 	DescIDGenerator eval.DescIDGenerator

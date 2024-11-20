@@ -34,9 +34,10 @@ func validateTable(
 	// saved in it), but our philosophy currently is that any use case for
 	// changefeeds on system tables would be better served by e.g. better
 	// logging and monitoring features.
-	if catalog.IsSystemDescriptor(tableDesc) {
-		return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
-	}
+	// TODO: work around this
+	// if catalog.IsSystemDescriptor(tableDesc) {
+	// 	return errors.Errorf(`CHANGEFEEDs are not supported on system tables`)
+	// }
 	if tableDesc.IsView() {
 		return errors.Errorf(`CHANGEFEED cannot target views: %s`, tableDesc.GetName())
 	}
