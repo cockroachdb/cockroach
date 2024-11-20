@@ -499,16 +499,16 @@ func uploadPerfArtifacts(
 	benchSpec decommissionBenchSpec,
 	pinnedNode, workloadNode int,
 	perfBuf *bytes.Buffer,
-	exporter exporter.Exporter,
 ) {
 	// Store the perf artifacts on the pinned node so that the test
 	// runner copies it into an appropriate directory path.
 
-	destFileName, err := roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, exporter, c.Node(pinnedNode))
+	err := roachtestutil.UploadPerfStats(ctx, t, c, perfBuf, c.Node(pinnedNode), "")
 	if err != nil {
 		t.L().Errorf("error creating perf stats file: %s", err)
 		return
 	}
+	destFileName := roachtestutil.GetBenchmarkMetricsFileName(t)
 	dest := filepath.Join(t.PerfArtifactsDir(), destFileName)
 
 	// Get the workload perf artifacts and move them to the pinned node, so that
@@ -675,6 +675,15 @@ func runDecommissionBench(
 		bytesUsedMetric,
 	)
 
+	defer func() {
+		if err := exporter.Close(func() error {
+			uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf)
+			return nil
+		}); err != nil {
+			t.Errorf("error closing perf exporter: %s", err)
+		}
+	}()
+
 	// The logical node id of the current decommissioning node.
 	var targetNodeAtomic uint32
 
@@ -734,8 +743,6 @@ func runDecommissionBench(
 	if err := m.WaitE(); err != nil {
 		t.Fatal(err)
 	}
-
-	uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf, exporter)
 }
 
 // runDecommissionBenchLong initializes a cluster with TPCC and attempts to
@@ -807,6 +814,15 @@ func runDecommissionBenchLong(
 		decommissionMetric, upreplicateMetric, bytesUsedMetric,
 	)
 
+	defer func() {
+		if err := exporter.Close(func() error {
+			uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf)
+			return nil
+		}); err != nil {
+			t.Errorf("error closing perf exporter: %s", err)
+		}
+	}()
+
 	// The logical node id of the current decommissioning node.
 	var targetNodeAtomic uint32
 
@@ -861,7 +877,6 @@ func runDecommissionBenchLong(
 		t.Fatal(err)
 	}
 
-	uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf, exporter)
 }
 
 // runSingleDecommission picks a random node and attempts to decommission that

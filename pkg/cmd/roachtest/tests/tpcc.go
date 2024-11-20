@@ -1733,16 +1733,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					exporter := roachtestutil.CreateWorkloadHistogramExporterWithLabels(t, c, map[string]string{"warehouses": fmt.Sprintf("%d", warehouses)})
 					writer := io.Writer(perfBuf)
 					exporter.Init(&writer)
-					defer func() {
-						if err := exporter.Close(func() error {
-							if _, err = roachtestutil.CreateStatsFileInClusterFromExporterWithPrefix(ctx, t, c, perfBuf, exporter, group.LoadNodes, statsFilePrefix); err != nil {
-								return err
-							}
-							return nil
-						}); err != nil {
-							t.Errorf("failed to close exporter: %v", err)
-						}
-					}()
+					defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, group.LoadNodes, statsFilePrefix)
 
 					if err := exportOpenMetrics(exporter, snapshots); err != nil {
 						return errors.Wrapf(err, "error converting histogram to openmetrics")
@@ -1900,7 +1891,7 @@ func getTpccLabels(
 
 // This function converts exporter.SnapshotTick to openmetrics into a buffer
 func exportOpenMetrics(
-	exporter exporter.Exporter, snapshots map[string][]exporter.SnapshotTick
+	exporter exporter.Exporter, snapshots map[string][]exporter.SnapshotTick,
 ) error {
 	for _, snaps := range snapshots {
 		for _, s := range snaps {

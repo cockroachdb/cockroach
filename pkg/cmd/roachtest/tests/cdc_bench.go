@@ -654,6 +654,8 @@ func writeCDCBenchStats(
 	writer := io.Writer(bytesBuf)
 
 	exporter.Init(&writer)
+	defer roachtestutil.CloseExporter(ctx, exporter, t, c, bytesBuf, node, "")
+
 	var err error
 	reg.GetHandle().Get(metric).Record(valueS)
 	reg.Tick(func(tick histogram.Tick) {
@@ -663,8 +665,5 @@ func writeCDCBenchStats(
 		return err
 	}
 
-	if _, err = roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, bytesBuf, exporter, node); err != nil {
-		return err
-	}
 	return nil
 }
