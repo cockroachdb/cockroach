@@ -277,6 +277,8 @@ type diskStaller interface {
 type dmsetupDiskStaller struct {
 	t test.Test
 	c cluster.Cluster
+
+	dev string // set in Setup; s.device() doesn't work when volume is not set up
 }
 
 var _ diskStaller = (*dmsetupDiskStaller)(nil)
@@ -286,10 +288,12 @@ func (s *dmsetupDiskStaller) device(nodes option.NodeListOption) string {
 }
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
-	dev := s.device(s.c.All())
+	s.dev = s.device(s.c.All())
 	s.c.Run(ctx, s.c.All(), `sudo umount -f /mnt/data1 || true`)
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup remove_all`)
-	err := s.c.RunE(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
+	// See https://github.com/cockroachdb/cockroach/issues/129619#issuecomment-2316147244.
+	s.c.Run(ctx, s.c.All(), `sudo tune2fs -O ^has_journal `+s.dev)
+	err := s.c.RunE(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+s.dev+`) linear `+s.dev+` 0" | `+
 		`sudo dmsetup create data1`)
 	if err != nil {
 		// This has occasionally been seen to fail with "Device or resource busy",
@@ -304,6 +308,7 @@ func (s *dmsetupDiskStaller) Cleanup(ctx context.Context) {
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup resume data1`)
 	s.c.Run(ctx, s.c.All(), `sudo umount /mnt/data1`)
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup remove_all`)
+	s.c.Run(ctx, s.c.All(), `sudo tune2fs -O has_journal `+s.dev)
 	s.c.Run(ctx, s.c.All(), `sudo mount /mnt/data1`)
 }
 
