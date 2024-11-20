@@ -115,6 +115,30 @@ var classifiers = map[types.Family]map[types.Family]classifier{
 	},
 }
 
+// virtualGeneralReclassifier is used to classify general conversions for virtual
+// computed columns. General conversions don’t apply to these columns, as they
+// aren’t physically stored on disk. If this map is used and the type family is
+// missing, it’s assumed that the type conversion cannot be applied.
+var virtualGeneralReclassifier = map[types.Family]map[types.Family]classifier{
+	types.DecimalFamily: {
+		types.DecimalFamily: ColumnConversionTrivial.classifier(),
+	},
+	types.TimestampFamily: {
+		types.TimestampTZFamily: ColumnConversionTrivial.classifier(),
+		types.TimestampFamily:   ColumnConversionTrivial.classifier(),
+	},
+	types.TimestampTZFamily: {
+		types.TimestampFamily:   ColumnConversionTrivial.classifier(),
+		types.TimestampTZFamily: ColumnConversionTrivial.classifier(),
+	},
+	types.TimeFamily: {
+		types.TimeFamily: ColumnConversionTrivial.classifier(),
+	},
+	types.TimeTZFamily: {
+		types.TimeTZFamily: ColumnConversionTrivial.classifier(),
+	},
+}
+
 // classifierHardestOf creates a composite classifier that returns the
 // hardest kind of the enclosed classifiers.  If any of the
 // classifiers report impossible, impossible will be returned.
@@ -246,7 +270,11 @@ func ClassifyConversion(
 // ClassifyConversionFromTree is a wrapper for ClassifyConversion when we want
 // to take into account the parsed AST for ALTER TABLE .. ALTER COLUMN.
 func ClassifyConversionFromTree(
-	ctx context.Context, t *tree.AlterTableAlterColumnType, oldType *types.T, newType *types.T,
+	ctx context.Context,
+	t *tree.AlterTableAlterColumnType,
+	oldType *types.T,
+	newType *types.T,
+	isVirtual bool,
 ) (ColumnConversionKind, error) {
 	if t.Using != nil {
 		// If an expression is provided, we always need to try a general conversion.
@@ -254,7 +282,27 @@ func ClassifyConversionFromTree(
 		// using the expression.
 		return ColumnConversionGeneral, nil
 	}
-	return ClassifyConversion(ctx, oldType, newType)
+	kind, err := ClassifyConversion(ctx, oldType, newType)
+	if err != nil {
+		return kind, err
+	}
+	// A general rewrite isn't applicable for virtual columns since they don’t exist
+	// physically. We need to pick a new classifier. For conversions that would require
+	// general handling due to incompatible type families (e.g., INT -> TEXT), we
+	// assume these will already be rejected because the computed expression doesn’t
+	// match the new type. Such cases are handled by validateNewTypeForComputedColumn.
+	if isVirtual && kind == ColumnConversionGeneral {
+		if inner, oldTypeFamilyFound := virtualGeneralReclassifier[oldType.Family()]; oldTypeFamilyFound {
+			if fn, newTypeFamilyFound := inner[newType.Family()]; newTypeFamilyFound {
+				kind = fn(oldType, newType)
+				return kind, nil
+			}
+		}
+		return ColumnConversionImpossible,
+			pgerror.Newf(pgcode.CannotCoerce, "cannot convert %s to %s for a virtual column",
+				oldType.SQLString(), newType.SQLString())
+	}
+	return kind, nil
 }
 
 // ValidateAlterColumnTypeChecks performs validation checks on the proposed type
@@ -267,6 +315,7 @@ func ValidateAlterColumnTypeChecks(
 	settions *cluster.Settings,
 	origTyp *types.T,
 	isGeneratedAsIdentity bool,
+	isVirtual bool,
 ) (*types.T, error) {
 	typ := origTyp
 	// Special handling for STRING COLLATE xy to verify that we recognize the language.
@@ -284,6 +333,13 @@ func ValidateAlterColumnTypeChecks(
 		if typ.InternalType.Family != types.IntFamily {
 			return typ, sqlerrors.NewIdentityColumnTypeError()
 		}
+	}
+
+	// A USING expression is unnecessary when altering the type of a virtual column,
+	// as its value is always computed at runtime and is not stored on disk.
+	if isVirtual && t.Using != nil {
+		return typ, pgerror.Newf(pgcode.FeatureNotSupported,
+			"type change for virtual column %q cannot be altered with a USING expression", t.Column)
 	}
 
 	return typ, colinfo.ValidateColumnDefType(ctx, settions, typ)

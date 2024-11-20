@@ -47,7 +47,6 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
         "//pkg/sql/privilege",
-        "//pkg/sql/schemachange",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/catconstants",
