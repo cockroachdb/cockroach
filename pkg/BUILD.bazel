@@ -1265,6 +1265,8 @@ GO_TARGETS = [
     "//pkg/cmd/urlcheck/lib/urlcheck:urlcheck",
     "//pkg/cmd/urlcheck:urlcheck",
     "//pkg/cmd/urlcheck:urlcheck_lib",
+    "//pkg/cmd/vecbench:vecbench",
+    "//pkg/cmd/vecbench:vecbench_lib",
     "//pkg/cmd/whoownsit:whoownsit",
     "//pkg/cmd/whoownsit:whoownsit_lib",
     "//pkg/cmd/workload:workload",
