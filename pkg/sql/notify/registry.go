@@ -415,7 +415,6 @@ func decodeRangefeedVal(val *kvpb.RangeFeedValue) (channel, payload string, pid 
 		return "", "", 0, err
 	}
 
-	// TODO: this fails with nil payloads. how to fix?
 	data, payloadBs, err := encoding.DecodeBytesValue(data)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("decoding payload: %w", err)
