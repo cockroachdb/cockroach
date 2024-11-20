@@ -1594,3 +1594,16 @@ func (node *ShowExternalConnections) Format(ctx *FmtCtx) {
 }
 
 var _ Statement = &ShowExternalConnections{}
+
+// ShowTriggers represents a SHOW TRIGGERS statement.
+type ShowTriggers struct {
+	Table *UnresolvedObjectName
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTriggers) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW TRIGGERS FROM ")
+	ctx.FormatNode(node.Table)
+}
+
+var _ Statement = &ShowTriggers{}
