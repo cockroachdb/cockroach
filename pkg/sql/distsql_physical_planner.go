@@ -1392,12 +1392,12 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	nodeMap map[base.SQLInstanceID]int,
 	getSQLInstanceIDForKVNodeID func(roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason),
 	ignoreMisplannedRanges *bool,
-) (_ []SpanPartition, lastPartitionIdx int, _ error) {
+) ([]SpanPartition, error) {
 	it := planCtx.spanIter
 	// rSpan is the span we are currently partitioning.
 	rSpan, err := keys.SpanAddr(span)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	var lastSQLInstanceID base.SQLInstanceID
@@ -1411,11 +1411,11 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	// these individual ranges.
 	for it.Seek(ctx, span, kvcoord.Ascending); ; it.Next(ctx) {
 		if !it.Valid() {
-			return nil, 0, it.Error()
+			return nil, it.Error()
 		}
 		replDesc, ignore, err := it.ReplicaInfo(ctx)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
 		*ignoreMisplannedRanges = *ignoreMisplannedRanges || ignore
 		desc := it.Desc()
@@ -1441,7 +1441,6 @@ func (dsp *DistSQLPlanner) partitionSpan(
 			nodeMap[sqlInstanceID] = partitionIdx
 		}
 		partition := &partitions[partitionIdx]
-		lastPartitionIdx = partitionIdx
 
 		if len(span.EndKey) == 0 {
 			// If we see a span to partition that has no end key, it means that
@@ -1485,7 +1484,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 		lastKey = endKey
 		lastSQLInstanceID = sqlInstanceID
 	}
-	return partitions, lastPartitionIdx, nil
+	return partitions, nil
 }
 
 // deprecatedPartitionSpansSystem finds node owners for ranges touching the given spans
@@ -1499,7 +1498,7 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 	}
 	for _, span := range spans {
 		var err error
-		partitions, _, err = dsp.partitionSpan(
+		partitions, err = dsp.partitionSpan(
 			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges,
 		)
 		if err != nil {
@@ -1523,24 +1522,8 @@ func (dsp *DistSQLPlanner) partitionSpans(
 		return nil, false, err
 	}
 	nodeMap := make(map[base.SQLInstanceID]int)
-	var lastKey roachpb.Key
-	var lastPartitionIdx int
 	for _, span := range spans {
-		// Rows with column families may have been split into different spans.
-		// These spans should be assigned the same pod so that the pod can
-		// stitch together the rows correctly. Split rows are in adjacent spans.
-		if safeKey, err := keys.EnsureSafeSplitKey(span.Key); err == nil && len(safeKey) > 0 {
-			if safeKey.Equal(lastKey) {
-				if log.V(1) {
-					log.Infof(ctx, "partitioning span %s", span)
-				}
-				partition := &partitions[lastPartitionIdx]
-				partition.Spans = append(partition.Spans, span)
-				continue
-			}
-			lastKey = safeKey
-		}
-		partitions, lastPartitionIdx, err = dsp.partitionSpan(
+		partitions, err = dsp.partitionSpan(
 			ctx, planCtx, span, partitions, nodeMap, resolver, &ignoreMisplannedRanges,
 		)
 		if err != nil {
