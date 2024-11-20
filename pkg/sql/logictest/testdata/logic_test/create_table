@@ -1110,3 +1110,23 @@ statement error pgcode 42804 could not find matching function overload for given
 CREATE TABLE t_133399 AS (SELECT * FROM v_133399 WINDOW window_name AS (ROWS c01 BETWEEN nextval ('abc', 'abc', 'abc') AND c01 PRECEDING));
 
 subtest end
+
+subtest create_table_as_notice
+
+statement ok
+CREATE TABLE IF NOT EXISTS t1 (
+  id1 UUID NOT NULL DEFAULT gen_random_uuid(),
+  id2 UUID NOT NULL DEFAULT gen_random_uuid(),
+  ts TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp(),
+  val JSONB,
+  PRIMARY KEY(id1, id2)
+);
+
+# Ignore weaker isolation levels, since that will cause additional NOTICEs that we don't want to check in this test.
+skipif config weak-iso-level-configs
+query T noticetrace
+CREATE TABLE t2 AS SELECT * FROM t1;
+----
+NOTICE: CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
+
+subtest end
