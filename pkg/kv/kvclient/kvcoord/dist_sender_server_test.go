@@ -4885,10 +4885,15 @@ func TestProxyTracing(t *testing.T) {
 
 		conn := tc.Conns[0]
 
+		// Disable follower reads to ensure that the request is proxied, and not
+		// answered locally due to follower reads.
+		_, err := conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = false")
+		require.NoError(t, err)
+
 		// Create a table and pin the leaseholder replicas to n3. The partition
 		// between n1 and n3 will lead to re-routing via n2, which we expect captured
 		// in the trace.
-		_, err := conn.Exec("CREATE TABLE t (i INT)")
+		_, err = conn.Exec("CREATE TABLE t (i INT)")
 		require.NoError(t, err)
 		_, err = conn.Exec("ALTER TABLE t CONFIGURE ZONE USING num_replicas=3, lease_preferences='[[+dc=dc3]]', constraints='[]'")
 		require.NoError(t, err)
