@@ -146,6 +146,7 @@ type ImmediateMutationVisitor interface {
 	InitSequence(context.Context, InitSequence) error
 	CreateDatabaseDescriptor(context.Context, CreateDatabaseDescriptor) error
 	AddNamedRangeZoneConfig(context.Context, AddNamedRangeZoneConfig) error
+	DiscardNamedRangeZoneConfig(context.Context, DiscardNamedRangeZoneConfig) error
 	AddDatabaseZoneConfig(context.Context, AddDatabaseZoneConfig) error
 	DiscardZoneConfig(context.Context, DiscardZoneConfig) error
 	DiscardTableZoneConfig(context.Context, DiscardTableZoneConfig) error
@@ -798,6 +799,11 @@ func (op CreateDatabaseDescriptor) Visit(ctx context.Context, v ImmediateMutatio
 // Visit is part of the ImmediateMutationOp interface.
 func (op AddNamedRangeZoneConfig) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.AddNamedRangeZoneConfig(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op DiscardNamedRangeZoneConfig) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.DiscardNamedRangeZoneConfig(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

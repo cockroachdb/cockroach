@@ -988,11 +988,17 @@ type CreateDatabaseDescriptor struct {
 	DatabaseID descpb.ID
 }
 
-// AddNamedRangeZoneConfig adds a zone config to a named range..
+// AddNamedRangeZoneConfig adds a zone config to a named range.
 type AddNamedRangeZoneConfig struct {
 	immediateMutationOp
 	RangeName  zonepb.NamedZone
 	ZoneConfig zonepb.ZoneConfig
+}
+
+// DiscardNamedRangeZoneConfig discards a zone config from a named range.
+type DiscardNamedRangeZoneConfig struct {
+	immediateMutationOp
+	RangeName zonepb.NamedZone
 }
 
 // AddDatabaseZoneConfig adds a zone config to a database.
@@ -1015,7 +1021,7 @@ type DiscardZoneConfig struct {
 type DiscardTableZoneConfig struct {
 	immediateMutationOp
 	TableID    descpb.ID
-	ZoneConfig *zonepb.ZoneConfig
+	ZoneConfig zonepb.ZoneConfig
 }
 
 // DiscardSubzoneConfig discards the subzone config for the given descriptor ID.
