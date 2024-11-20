@@ -94,18 +94,11 @@ func GetBenchmarkMetricsFileName(t test.Test) string {
 	return "stats.json"
 }
 
-// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters with no labels
+// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters
 func CreateWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Exporter {
-	return CreateWorkloadHistogramExporterWithLabels(t, c, nil)
-}
-
-// CreateWorkloadHistogramExporterWithLabels CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters with additional labels
-func CreateWorkloadHistogramExporterWithLabels(
-	t test.Test, c cluster.Cluster, labelMap map[string]string,
-) exporter.Exporter {
 	var metricsExporter exporter.Exporter
 	if t.ExportOpenmetrics() {
-		labels := clusterstats.GetOpenmetricsLabelMap(t, c, labelMap)
+		labels := clusterstats.GetOpenmetricsLabelMap(t, c, nil)
 		openMetricsExporter := &exporter.OpenMetricsExporter{}
 		openMetricsExporter.SetLabels(&labels)
 		metricsExporter = openMetricsExporter
@@ -122,41 +115,37 @@ func CreateStatsFileInClusterFromExporter(
 	t test.Test,
 	c cluster.Cluster,
 	perfBuf *bytes.Buffer,
-	exporter exporter.Exporter,
 	node option.NodeListOption,
-) (string, error) {
-	return CreateStatsFileInClusterFromExporterWithPrefix(ctx, t, c, perfBuf, exporter, node, "")
+) error {
+	destinationFileName := GetBenchmarkMetricsFileName(t)
+	// Upload the perf artifacts to any one of the nodes so that the test
+	// runner copies it into an appropriate directory path.
+	dest := filepath.Join(t.PerfArtifactsDir(), destinationFileName)
+	if err := c.RunE(ctx, option.WithNodes(node), "mkdir -p "+filepath.Dir(dest)); err != nil {
+		return err
+	}
+	if err := c.PutString(ctx, perfBuf.String(), dest, 0755, node); err != nil {
+		return err
+	}
+	return nil
 }
 
-func CreateStatsFileInClusterFromExporterWithPrefix(
+func UploadPerfArtifacts(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
 	perfBuf *bytes.Buffer,
 	exporter exporter.Exporter,
 	node option.NodeListOption,
-	prefix string,
-) (string, error) {
-
-	if perfBuf == nil {
-		return "", errors.New("perf buffer is nil")
+) {
+	if err := exporter.Close(func() error {
+		if err := CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, node); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		t.Errorf("failed to close exporter: %v", err)
 	}
-	// Close and flush any existing data in the buffer
-	if err := exporter.Close(nil); err != nil {
-		return "", err
-	}
-	destinationFileName := fmt.Sprintf("%s%s", prefix, GetBenchmarkMetricsFileName(t))
-	// Upload the perf artifacts to any one of the nodes so that the test
-	// runner copies it into an appropriate directory path.
-	dest := filepath.Join(t.PerfArtifactsDir(), destinationFileName)
-	if err := c.RunE(ctx, option.WithNodes(node), "mkdir -p "+filepath.Dir(dest)); err != nil {
-		t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
-	}
-	if err := c.PutString(ctx, perfBuf.String(), dest, 0755, node); err != nil {
-		t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
-	}
-
-	return destinationFileName, nil
 }
 
 // WaitForReady waits until the given nodes report ready via health checks.

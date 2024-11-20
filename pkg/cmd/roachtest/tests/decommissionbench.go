@@ -499,17 +499,16 @@ func uploadPerfArtifacts(
 	benchSpec decommissionBenchSpec,
 	pinnedNode, workloadNode int,
 	perfBuf *bytes.Buffer,
-	exporter exporter.Exporter,
 ) {
 	// Store the perf artifacts on the pinned node so that the test
 	// runner copies it into an appropriate directory path.
 
-	destFileName, err := roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, exporter, c.Node(pinnedNode))
+	err := roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, c.Node(pinnedNode))
 	if err != nil {
 		t.L().Errorf("error creating perf stats file: %s", err)
 		return
 	}
-	dest := filepath.Join(t.PerfArtifactsDir(), destFileName)
+	destFileName := filepath.Join(t.PerfArtifactsDir(), roachtestutil.GetBenchmarkMetricsFileName(t))
 
 	// Get the workload perf artifacts and move them to the pinned node, so that
 	// they can be used to display the workload operation rates during decommission.
@@ -675,6 +674,11 @@ func runDecommissionBench(
 		bytesUsedMetric,
 	)
 
+	defer exporter.Close(func() error {
+		uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf)
+		return nil
+	})
+
 	// The logical node id of the current decommissioning node.
 	var targetNodeAtomic uint32
 
@@ -734,8 +738,6 @@ func runDecommissionBench(
 	if err := m.WaitE(); err != nil {
 		t.Fatal(err)
 	}
-
-	uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf, exporter)
 }
 
 // runDecommissionBenchLong initializes a cluster with TPCC and attempts to
@@ -807,6 +809,11 @@ func runDecommissionBenchLong(
 		decommissionMetric, upreplicateMetric, bytesUsedMetric,
 	)
 
+	defer exporter.Close(func() error {
+		uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf)
+		return nil
+	})
+
 	// The logical node id of the current decommissioning node.
 	var targetNodeAtomic uint32
 
@@ -861,7 +868,6 @@ func runDecommissionBenchLong(
 		t.Fatal(err)
 	}
 
-	uploadPerfArtifacts(ctx, t, c, benchSpec, pinnedNode, workloadNode, perfBuf, exporter)
 }
 
 // runSingleDecommission picks a random node and attempts to decommission that
