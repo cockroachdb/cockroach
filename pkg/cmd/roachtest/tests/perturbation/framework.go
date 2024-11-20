@@ -857,6 +857,7 @@ func (v variations) writePerfArtifacts(
 	bytesBuf := bytes.NewBuffer([]byte{})
 	writer := io.Writer(bytesBuf)
 	exporter.Init(&writer)
+	defer roachtestutil.CloseExporter(ctx, exporter, t, c, bytesBuf, v.Node(1), "")
 
 	reg.GetHandle().Get("baseline").Record(baseline["write"].score)
 	reg.GetHandle().Get("perturbation").Record(perturbation["write"].score)
@@ -867,11 +868,6 @@ func (v variations) writePerfArtifacts(
 		err = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 	})
 	if err != nil {
-		return err
-	}
-
-	node := v.Node(1)
-	if _, err := roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, bytesBuf, exporter, node); err != nil {
 		return err
 	}
 	return nil
