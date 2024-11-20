@@ -2,6 +2,7 @@ show_stmt ::=
 	show_backup_stmt
 	| show_columns_stmt
 	| show_constraints_stmt
+	| show_triggers_stmt
 	| show_create_stmt
 	| show_create_schedules_stmt
 	| show_create_external_connections_stmt

@@ -239,6 +239,7 @@ go_library(
         "show_tenant.go",
         "show_trace.go",
         "show_trace_replica.go",
+        "show_trigger.go",
         "show_var.go",
         "show_zone_config.go",
         "sort.go",

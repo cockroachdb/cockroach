@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-var showCreateTableColumns = colinfo.ResultColumns{
+var showCreateScheduleColumns = colinfo.ResultColumns{
 	{Name: "schedule_id", Typ: types.Int},
 	{Name: "create_statement", Typ: types.String},
 }
@@ -89,7 +89,7 @@ func (p *planner) ShowCreateSchedule(
 
 	return &delayedNode{
 		name:    fmt.Sprintf("SHOW CREATE SCHEDULE %d", n.ScheduleID),
-		columns: showCreateTableColumns,
+		columns: showCreateScheduleColumns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			scheduledJobs, err := loadSchedules(
 				runParams{ctx: ctx, p: p, extendedEvalCtx: &p.extendedEvalCtx}, n)
@@ -116,7 +116,7 @@ func (p *planner) ShowCreateSchedule(
 				rows = append(rows, row)
 			}
 
-			v := p.newContainerValuesNode(showCreateTableColumns, len(rows))
+			v := p.newContainerValuesNode(showCreateScheduleColumns, len(rows))
 			for _, row := range rows {
 				if _, err := v.rows.AddRow(ctx, row); err != nil {
 					v.Close(ctx)

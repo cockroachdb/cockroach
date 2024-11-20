@@ -2120,6 +2120,15 @@ func (*ShowCommitTimestamp) StatementTag() string {
 }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowTriggers) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowTriggers) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowTriggers) StatementTag() string { return "SHOW TRIGGERS" }
+
+// StatementReturnType implements the Statement interface.
 func (*Split) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2513,6 +2522,7 @@ func (n *ShowDefaultPrivileges) String() string               { return AsString(
 func (n *ShowCompletions) String() string                     { return AsString(n) }
 func (n *ShowCommitTimestamp) String() string                 { return AsString(n) }
 func (n *ShowLogicalReplicationJobs) String() string          { return AsString(n) }
+func (n *ShowTriggers) String() string                        { return AsString(n) }
 func (n *Split) String() string                               { return AsString(n) }
 func (n *Truncate) String() string                            { return AsString(n) }
 func (n *TenantSpec) String() string                          { return AsString(n) }
