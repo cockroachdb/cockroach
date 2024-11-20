@@ -1161,7 +1161,7 @@ table_constraints
 table_columns
 
 # Check that the metadata is reported properly.
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 query TTTTT colnames
 SELECT table_catalog, table_schema, table_name, table_type, is_insertable_into
 FROM system.information_schema.tables ORDER BY table_name, table_schema
@@ -1251,6 +1251,10 @@ system         crdb_internal       index_usage_statistics                       
 system         information_schema  information_schema_catalog_name              SYSTEM VIEW  NO
 system         crdb_internal       invalid_objects                              SYSTEM VIEW  NO
 system         public              job_info                                     BASE TABLE   YES
+system         public              job_message                                  BASE TABLE   YES
+system         public              job_progress                                 BASE TABLE   YES
+system         public              job_progress_history                         BASE TABLE   YES
+system         public              job_status                                   BASE TABLE   YES
 system         crdb_internal       jobs                                         SYSTEM VIEW  NO
 system         public              jobs                                         BASE TABLE   YES
 system         public              join_tokens                                  BASE TABLE   YES
@@ -1604,7 +1608,7 @@ SET DATABASE = test
 ## information_schema.check_constraints
 ## information_schema.constraint_column_usage
 
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 query TTTTTTTTT colnames
 SELECT *
 FROM system.information_schema.table_constraints
@@ -1644,6 +1648,21 @@ system              public             29_54_1_not_null                         
 system              public             29_54_2_not_null                                                                                                system         public        job_info                         CHECK            NO             NO
 system              public             29_54_3_not_null                                                                                                system         public        job_info                         CHECK            NO             NO
 system              public             primary                                                                                                         system         public        job_info                         PRIMARY KEY      NO             NO
+system              public             29_71_1_not_null                                                                                                system         public        job_message                      CHECK            NO             NO
+system              public             29_71_2_not_null                                                                                                system         public        job_message                      CHECK            NO             NO
+system              public             29_71_3_not_null                                                                                                system         public        job_message                      CHECK            NO             NO
+system              public             29_71_4_not_null                                                                                                system         public        job_message                      CHECK            NO             NO
+system              public             primary                                                                                                         system         public        job_message                      PRIMARY KEY      NO             NO
+system              public             29_68_1_not_null                                                                                                system         public        job_progress                     CHECK            NO             NO
+system              public             29_68_2_not_null                                                                                                system         public        job_progress                     CHECK            NO             NO
+system              public             primary                                                                                                         system         public        job_progress                     PRIMARY KEY      NO             NO
+system              public             29_69_1_not_null                                                                                                system         public        job_progress_history             CHECK            NO             NO
+system              public             29_69_2_not_null                                                                                                system         public        job_progress_history             CHECK            NO             NO
+system              public             primary                                                                                                         system         public        job_progress_history             PRIMARY KEY      NO             NO
+system              public             29_70_1_not_null                                                                                                system         public        job_status                       CHECK            NO             NO
+system              public             29_70_2_not_null                                                                                                system         public        job_status                       CHECK            NO             NO
+system              public             29_70_3_not_null                                                                                                system         public        job_status                       CHECK            NO             NO
+system              public             primary                                                                                                         system         public        job_status                       PRIMARY KEY      NO             NO
 system              public             29_15_1_not_null                                                                                                system         public        jobs                             CHECK            NO             NO
 system              public             29_15_2_not_null                                                                                                system         public        jobs                             CHECK            NO             NO
 system              public             29_15_3_not_null                                                                                                system         public        jobs                             CHECK            NO             NO
@@ -1970,7 +1989,7 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
 
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -2236,9 +2255,20 @@ system              public             29_67_6_not_null                         
 system              public             29_67_7_not_null                                                                                                total_indexes IS NOT NULL
 system              public             29_67_8_not_null                                                                                                store_ids IS NOT NULL
 system              public             29_67_9_not_null                                                                                                replication_size_bytes IS NOT NULL
+system              public             29_68_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_68_2_not_null                                                                                                written IS NOT NULL
+system              public             29_69_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_69_2_not_null                                                                                                written IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
+system              public             29_70_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_70_2_not_null                                                                                                written IS NOT NULL
+system              public             29_70_3_not_null                                                                                                status IS NOT NULL
+system              public             29_71_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_71_2_not_null                                                                                                written IS NOT NULL
+system              public             29_71_3_not_null                                                                                                kind IS NOT NULL
+system              public             29_71_4_not_null                                                                                                message IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
@@ -2253,7 +2283,7 @@ system              public             check_sampling_probability               
 system              public             check_singleton                                                                                                 ((singleton))
 system              public             single_row                                                                                                      ((singleton))
 
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
@@ -2275,6 +2305,15 @@ system         public        external_connections             connection_name   
 system         public        job_info                         info_key                                                                                                  system              public             primary
 system         public        job_info                         job_id                                                                                                    system              public             primary
 system         public        job_info                         written                                                                                                   system              public             primary
+system         public        job_message                      job_id                                                                                                    system              public             primary
+system         public        job_message                      kind                                                                                                      system              public             primary
+system         public        job_message                      written                                                                                                   system              public             primary
+system         public        job_progress                     job_id                                                                                                    system              public             primary
+system         public        job_progress                     written                                                                                                   system              public             primary
+system         public        job_progress_history             job_id                                                                                                    system              public             primary
+system         public        job_progress_history             written                                                                                                   system              public             primary
+system         public        job_status                       job_id                                                                                                    system              public             primary
+system         public        job_status                       written                                                                                                   system              public             primary
 system         public        jobs                             id                                                                                                        system              public             primary
 system         public        join_tokens                      id                                                                                                        system              public             primary
 system         public        lease                            crdb_region                                                                                               system              public             primary
@@ -2395,7 +2434,7 @@ system         public        users                            username          
 system         public        web_sessions                     id                                                                                                        system              public             primary
 system         public        zones                            id                                                                                                        system              public             primary
 
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 query TTTTTTT colnames
 SELECT *
 FROM system.information_schema.constraint_column_usage
@@ -2417,6 +2456,15 @@ system         public        external_connections             connection_name   
 system         public        job_info                         info_key                                                                                                  system              public             primary
 system         public        job_info                         job_id                                                                                                    system              public             primary
 system         public        job_info                         written                                                                                                   system              public             primary
+system         public        job_message                      job_id                                                                                                    system              public             primary
+system         public        job_message                      kind                                                                                                      system              public             primary
+system         public        job_message                      written                                                                                                   system              public             primary
+system         public        job_progress                     job_id                                                                                                    system              public             primary
+system         public        job_progress                     written                                                                                                   system              public             primary
+system         public        job_progress_history             job_id                                                                                                    system              public             primary
+system         public        job_progress_history             written                                                                                                   system              public             primary
+system         public        job_status                       job_id                                                                                                    system              public             primary
+system         public        job_status                       written                                                                                                   system              public             primary
 system         public        jobs                             id                                                                                                        system              public             primary
 system         public        join_tokens                      id                                                                                                        system              public             primary
 system         public        lease                            crdb_region                                                                                               system              public             primary
@@ -2537,7 +2585,7 @@ system         public        users                            username          
 system         public        web_sessions                     id                                                                                                        system              public             primary
 system         public        zones                            id                                                                                                        system              public             primary
 
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -2803,9 +2851,20 @@ system              public             29_67_6_not_null                         
 system              public             29_67_7_not_null                                                                                                total_indexes IS NOT NULL
 system              public             29_67_8_not_null                                                                                                store_ids IS NOT NULL
 system              public             29_67_9_not_null                                                                                                replication_size_bytes IS NOT NULL
+system              public             29_68_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_68_2_not_null                                                                                                written IS NOT NULL
+system              public             29_69_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_69_2_not_null                                                                                                written IS NOT NULL
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
+system              public             29_70_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_70_2_not_null                                                                                                written IS NOT NULL
+system              public             29_70_3_not_null                                                                                                status IS NOT NULL
+system              public             29_71_1_not_null                                                                                                job_id IS NOT NULL
+system              public             29_71_2_not_null                                                                                                written IS NOT NULL
+system              public             29_71_3_not_null                                                                                                kind IS NOT NULL
+system              public             29_71_4_not_null                                                                                                message IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
@@ -2910,7 +2969,7 @@ select data_type, column_default from information_schema.columns where table_nam
 data_type  column_default
 smallint   0
 
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 query TTTTI colnames
 SELECT table_catalog, table_schema, table_name, column_name, ordinal_position
 FROM system.information_schema.columns
@@ -2959,6 +3018,21 @@ system         public        job_info                         info_key          
 system         public        job_info                         job_id                                                                                                    1
 system         public        job_info                         value                                                                                                     4
 system         public        job_info                         written                                                                                                   3
+system         public        job_message                      job_id                                                                                                    1
+system         public        job_message                      kind                                                                                                      3
+system         public        job_message                      message                                                                                                   4
+system         public        job_message                      written                                                                                                   2
+system         public        job_progress                     fraction                                                                                                  3
+system         public        job_progress                     job_id                                                                                                    1
+system         public        job_progress                     resolved                                                                                                  4
+system         public        job_progress                     written                                                                                                   2
+system         public        job_progress_history             fraction                                                                                                  3
+system         public        job_progress_history             job_id                                                                                                    1
+system         public        job_progress_history             resolved                                                                                                  4
+system         public        job_progress_history             written                                                                                                   2
+system         public        job_status                       job_id                                                                                                    1
+system         public        job_status                       status                                                                                                    3
+system         public        job_status                       written                                                                                                   2
 system         public        jobs                             claim_instance_id                                                                                         9
 system         public        jobs                             claim_session_id                                                                                          8
 system         public        jobs                             created                                                                                                   3
@@ -3927,7 +4001,7 @@ root      other_db       public              ALL             YES
 
 ## information_schema.table_privileges and information_schema.role_table_grants
 
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 # root can see everything
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.table_privileges ORDER BY table_schema, table_name, table_schema, grantee, privilege_type
@@ -4307,6 +4381,38 @@ NULL     root     system         public              job_info                   
 NULL     root     system         public              job_info                                     INSERT          YES           NO
 NULL     root     system         public              job_info                                     SELECT          YES           YES
 NULL     root     system         public              job_info                                     UPDATE          YES           NO
+NULL     admin    system         public              job_message                                  DELETE          YES           NO
+NULL     admin    system         public              job_message                                  INSERT          YES           NO
+NULL     admin    system         public              job_message                                  SELECT          YES           YES
+NULL     admin    system         public              job_message                                  UPDATE          YES           NO
+NULL     root     system         public              job_message                                  DELETE          YES           NO
+NULL     root     system         public              job_message                                  INSERT          YES           NO
+NULL     root     system         public              job_message                                  SELECT          YES           YES
+NULL     root     system         public              job_message                                  UPDATE          YES           NO
+NULL     admin    system         public              job_progress                                 DELETE          YES           NO
+NULL     admin    system         public              job_progress                                 INSERT          YES           NO
+NULL     admin    system         public              job_progress                                 SELECT          YES           YES
+NULL     admin    system         public              job_progress                                 UPDATE          YES           NO
+NULL     root     system         public              job_progress                                 DELETE          YES           NO
+NULL     root     system         public              job_progress                                 INSERT          YES           NO
+NULL     root     system         public              job_progress                                 SELECT          YES           YES
+NULL     root     system         public              job_progress                                 UPDATE          YES           NO
+NULL     admin    system         public              job_progress_history                         DELETE          YES           NO
+NULL     admin    system         public              job_progress_history                         INSERT          YES           NO
+NULL     admin    system         public              job_progress_history                         SELECT          YES           YES
+NULL     admin    system         public              job_progress_history                         UPDATE          YES           NO
+NULL     root     system         public              job_progress_history                         DELETE          YES           NO
+NULL     root     system         public              job_progress_history                         INSERT          YES           NO
+NULL     root     system         public              job_progress_history                         SELECT          YES           YES
+NULL     root     system         public              job_progress_history                         UPDATE          YES           NO
+NULL     admin    system         public              job_status                                   DELETE          YES           NO
+NULL     admin    system         public              job_status                                   INSERT          YES           NO
+NULL     admin    system         public              job_status                                   SELECT          YES           YES
+NULL     admin    system         public              job_status                                   UPDATE          YES           NO
+NULL     root     system         public              job_status                                   DELETE          YES           NO
+NULL     root     system         public              job_status                                   INSERT          YES           NO
+NULL     root     system         public              job_status                                   SELECT          YES           YES
+NULL     root     system         public              job_status                                   UPDATE          YES           NO
 NULL     admin    system         public              jobs                                         DELETE          YES           NO
 NULL     admin    system         public              jobs                                         INSERT          YES           NO
 NULL     admin    system         public              jobs                                         SELECT          YES           YES
@@ -4652,7 +4758,7 @@ NULL     root     system         public              zones                      
 NULL     root     system         public              zones                                        SELECT          YES           YES
 NULL     root     system         public              zones                                        UPDATE          YES           NO
 
-skipif config local-mixed-24.2
+skipif config local-mixed-24.2 local-mixed-24.3
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.role_table_grants
 ----
@@ -5375,6 +5481,38 @@ NULL     root     system         public              table_metadata             
 NULL     root     system         public              table_metadata                               INSERT          YES           NO
 NULL     root     system         public              table_metadata                               SELECT          YES           YES
 NULL     root     system         public              table_metadata                               UPDATE          YES           NO
+NULL     admin    system         public              job_progress                                 DELETE          YES           NO
+NULL     admin    system         public              job_progress                                 INSERT          YES           NO
+NULL     admin    system         public              job_progress                                 SELECT          YES           YES
+NULL     admin    system         public              job_progress                                 UPDATE          YES           NO
+NULL     root     system         public              job_progress                                 DELETE          YES           NO
+NULL     root     system         public              job_progress                                 INSERT          YES           NO
+NULL     root     system         public              job_progress                                 SELECT          YES           YES
+NULL     root     system         public              job_progress                                 UPDATE          YES           NO
+NULL     admin    system         public              job_progress_history                         DELETE          YES           NO
+NULL     admin    system         public              job_progress_history                         INSERT          YES           NO
+NULL     admin    system         public              job_progress_history                         SELECT          YES           YES
+NULL     admin    system         public              job_progress_history                         UPDATE          YES           NO
+NULL     root     system         public              job_progress_history                         DELETE          YES           NO
+NULL     root     system         public              job_progress_history                         INSERT          YES           NO
+NULL     root     system         public              job_progress_history                         SELECT          YES           YES
+NULL     root     system         public              job_progress_history                         UPDATE          YES           NO
+NULL     admin    system         public              job_status                                   DELETE          YES           NO
+NULL     admin    system         public              job_status                                   INSERT          YES           NO
+NULL     admin    system         public              job_status                                   SELECT          YES           YES
+NULL     admin    system         public              job_status                                   UPDATE          YES           NO
+NULL     root     system         public              job_status                                   DELETE          YES           NO
+NULL     root     system         public              job_status                                   INSERT          YES           NO
+NULL     root     system         public              job_status                                   SELECT          YES           YES
+NULL     root     system         public              job_status                                   UPDATE          YES           NO
+NULL     admin    system         public              job_message                                  DELETE          YES           NO
+NULL     admin    system         public              job_message                                  INSERT          YES           NO
+NULL     admin    system         public              job_message                                  SELECT          YES           YES
+NULL     admin    system         public              job_message                                  UPDATE          YES           NO
+NULL     root     system         public              job_message                                  DELETE          YES           NO
+NULL     root     system         public              job_message                                  INSERT          YES           NO
+NULL     root     system         public              job_message                                  SELECT          YES           YES
+NULL     root     system         public              job_message                                  UPDATE          YES           NO
 
 statement ok
 USE other_db;

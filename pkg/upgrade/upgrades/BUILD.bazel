@@ -22,6 +22,7 @@ go_library(
         "v24_3_sql_instances_add_draining.go",
         "v24_3_table_metadata_system_table.go",
         "v24_3_tenant_exclude_data_from_backup.go",
+        "v25_1_add_jobs_tables.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgrades",
     visibility = ["//visibility:public"],
