@@ -166,6 +166,7 @@
 <tr><td><a href="bool.html">bool</a> <code><</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code><</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>box2d <code><</code> box2d</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>bpchar <code><</code> bpchar</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code><</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes[]</a> <code><</code> <a href="bytes.html">bytes[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="collate.html">collatedstring</a> <code><</code> <a href="collate.html">collatedstring</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -242,6 +243,7 @@
 <tr><td><a href="bool.html">bool</a> <code><=</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code><=</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>box2d <code><=</code> box2d</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>bpchar <code><=</code> bpchar</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code><=</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes[]</a> <code><=</code> <a href="bytes.html">bytes[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="collate.html">collatedstring</a> <code><=</code> <a href="collate.html">collatedstring</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -312,6 +314,7 @@
 <tr><td><a href="bool.html">bool</a> <code>=</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code>=</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>box2d <code>=</code> box2d</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>bpchar <code>=</code> bpchar</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code>=</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes[]</a> <code>=</code> <a href="bytes.html">bytes[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="collate.html">collatedstring</a> <code>=</code> <a href="collate.html">collatedstring</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -411,6 +414,7 @@
 <tr><td>anyenum <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>box2d <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>bpchar <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="collate.html">collatedstring</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>IN</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
@@ -443,6 +447,7 @@
 <tr><td><a href="bool.html">bool</a> <code>IS NOT DISTINCT FROM</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code>IS NOT DISTINCT FROM</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>box2d <code>IS NOT DISTINCT FROM</code> box2d</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>bpchar <code>IS NOT DISTINCT FROM</code> bpchar</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code>IS NOT DISTINCT FROM</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes[]</a> <code>IS NOT DISTINCT FROM</code> <a href="bytes.html">bytes[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="collate.html">collatedstring</a> <code>IS NOT DISTINCT FROM</code> <a href="collate.html">collatedstring</a></td><td><a href="bool.html">bool</a></td></tr>
