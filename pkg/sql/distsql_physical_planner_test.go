@@ -962,7 +962,7 @@ func TestPartitionSpans(t *testing.T) {
 					2: 1,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 4,
 				},
 				totalPartitionSpans: 4,
@@ -995,7 +995,7 @@ func TestPartitionSpans(t *testing.T) {
 					2: 1,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 4,
 				},
 				totalPartitionSpans: 4,
@@ -1026,7 +1026,7 @@ func TestPartitionSpans(t *testing.T) {
 					1: 3,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           3,
 					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 1,
 				},
@@ -1058,7 +1058,7 @@ func TestPartitionSpans(t *testing.T) {
 					1: 3,
 					2: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           3,
 					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 1,
 				},
@@ -1090,7 +1090,7 @@ func TestPartitionSpans(t *testing.T) {
 					2: 3,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           2,
 					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 2,
 				},
@@ -1122,7 +1122,7 @@ func TestPartitionSpans(t *testing.T) {
 					2: 1,
 					3: 3,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           2,
 					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 2,
 				},
@@ -1153,7 +1153,7 @@ func TestPartitionSpans(t *testing.T) {
 					1: 2,
 					2: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 3,
 				},
 				totalPartitionSpans: 3,
@@ -1190,7 +1190,7 @@ func TestPartitionSpans(t *testing.T) {
 					1: 9,
 					2: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 10,
 				},
 				totalPartitionSpans: 10,
@@ -1218,7 +1218,7 @@ func TestPartitionSpans(t *testing.T) {
 				partitionSpans: map[base.SQLInstanceID]int{
 					1: 2,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 2,
 				},
 				totalPartitionSpans: 2,
@@ -1253,7 +1253,7 @@ func TestPartitionSpans(t *testing.T) {
 					1: 2,
 					2: 2,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_TARGET_HEALTHY:                              3,
 					SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED: 1,
 				},
@@ -1286,7 +1286,7 @@ func TestPartitionSpans(t *testing.T) {
 					2: 3,
 					4: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_TARGET_HEALTHY:         1,
 					SpanPartitionReason_CLOSEST_LOCALITY_MATCH: 3,
 				},
@@ -1316,7 +1316,7 @@ func TestPartitionSpans(t *testing.T) {
 					6: 2,
 					7: 2,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH:                   2,
 					SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED: 2,
 				},
@@ -1347,7 +1347,7 @@ func TestPartitionSpans(t *testing.T) {
 				partitionSpans: map[base.SQLInstanceID]int{
 					7: 4,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [NumSpanPartitionReason]int{
 					SpanPartitionReason_LOCALITY_FILTERED_RANDOM: 4,
 				},
 				totalPartitionSpans: 4,
