@@ -506,7 +506,7 @@ func emitSchedule(
 	resultsCh chan<- tree.Datums,
 ) error {
 	opts := changefeedbase.MakeStatementOptions(createChangefeedOpts)
-	redactedChangefeedNode, err := makeChangefeedJobDescription(ctx, createChangefeedNode, sinkURI, opts)
+	redactedChangefeedNode, err := makeChangefeedDescription(ctx, createChangefeedNode, sinkURI, opts)
 	if err != nil {
 		return err
 	}
