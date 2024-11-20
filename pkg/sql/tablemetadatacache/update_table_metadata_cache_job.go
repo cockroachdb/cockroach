@@ -68,16 +68,6 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 			updateJobBatchSizeSetting.Get(&execCtx.ExecCfg().Settings.SV),
 			testKnobs)
 	}
-	// We must reset the job's num runs to 0 so that it doesn't get
-	// delayed by the job system's exponential backoff strategy.
-	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		if md.RunStats != nil && md.RunStats.NumRuns > 0 {
-			ju.UpdateRunStats(0, md.RunStats.LastRun)
-		}
-		return nil
-	}); err != nil {
-		log.Errorf(ctx, "%s", err.Error())
-	}
 
 	// Channel used to signal the job should run.
 	signalCh := execCtx.ExecCfg().SQLStatusServer.GetUpdateTableMetadataCacheSignal()

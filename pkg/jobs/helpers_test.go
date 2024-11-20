@@ -86,7 +86,7 @@ const (
 	AdoptQuery                     = claimQuery
 	CancelQuery                    = pauseAndCancelUpdate
 	RemoveClaimsQuery              = removeClaimsForDeadSessionsQuery
-	ProcessJobsQuery               = processQueryWithBackoff
+	ProcessJobsQuery               = processQuery
 	IntervalBaseSettingKey         = intervalBaseSettingKey
 	AdoptIntervalSettingKey        = adoptIntervalSettingKey
 	CancelIntervalSettingKey       = cancelIntervalSettingKey

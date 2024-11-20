@@ -348,15 +348,6 @@ func (ju *JobUpdater) hasUpdates() bool {
 	return ju.md != JobMetadata{}
 }
 
-// UpdateRunStats is used to update the exponential-backoff parameters last_run and
-// num_runs in system.jobs table.
-func (ju *JobUpdater) UpdateRunStats(numRuns int, lastRun time.Time) {
-	ju.md.RunStats = &RunStats{
-		NumRuns: numRuns,
-		LastRun: lastRun,
-	}
-}
-
 func (ju *JobUpdater) PauseRequested(
 	ctx context.Context, txn isql.Txn, md JobMetadata, reason string,
 ) error {
