@@ -16,7 +16,7 @@ func TestLogicTestMixedVersionConfigs(t *testing.T) {
 	// default set.
 	for _, v := range clusterversion.SupportedPreviousReleases() {
 		t.Run(v.String(), func(t *testing.T) {
-			for _, cIdx := range DefaultConfig {
+			for _, cIdx := range DefaultConfigSets[DefaultConfigSet] {
 				c := LogicTestConfigs[cIdx]
 				if c.DisableUpgrade && c.BootstrapVersion == v {
 					return
