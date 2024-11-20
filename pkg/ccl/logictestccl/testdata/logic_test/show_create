@@ -150,6 +150,9 @@ r2  CREATE PROCEDURE sc.r2(s STRING)
       SELECT 1;
     $$
 
+statement ok
+RESET search_path;
+
 # Regression test for #112134 - correctly parse and display PLpgSQL.
 statement ok
 CREATE FUNCTION f112134() RETURNS INT AS $$
@@ -169,7 +172,7 @@ $$ LANGUAGE PLpgSQL;
 query TT
 SHOW CREATE FUNCTION f112134;
 ----
-f112134  CREATE FUNCTION sc.f112134()
+f112134  CREATE FUNCTION public.f112134()
            RETURNS INT8
            VOLATILE
            NOT LEAKPROOF

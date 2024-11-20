@@ -9285,6 +9285,14 @@ show_create_stmt:
       Procedure: true,
     }
   }
+| SHOW CREATE TRIGGER name ON table_name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreateTrigger{
+      Name: tree.Name($4),
+      TableName: $6.unresolvedObjectName(),
+    }
+  }
 | SHOW CREATE ALL SCHEMAS
   {
     $$.val = &tree.ShowCreateAllSchemas{}
