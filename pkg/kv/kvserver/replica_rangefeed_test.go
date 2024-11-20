@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1466,6 +1468,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
 
+	var storeLivenessHeartbeatsOff atomic.Value
 	cargs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
 	manualClock := hlc.NewHybridManualClock()
 	cargs.ServerArgs = base.TestServerArgs{
@@ -1502,6 +1505,11 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 					}
 					log.Infof(ctx, "test rejecting request: %s", ba)
 					return kvpb.NewErrorf("test injected error")
+				},
+				StoreLivenessKnobs: &storeliveness.TestingKnobs{
+					SupportManagerKnobs: storeliveness.SupportManagerKnobs{
+						DisableHeartbeats: &storeLivenessHeartbeatsOff,
+					},
 				},
 			},
 		},
@@ -1573,48 +1581,70 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 		return nil
 	})
 
-	// Run up the clock to upgrade the expiration based lease to an epoch based
-	// one. This test wants to later expire the epoch based lease by pausing
-	// liveness heartbeats.
-	manualClock.Increment(
-		tc.GetFirstStoreFromServer(t, 1).GetStoreConfig().RangeLeaseRenewalDuration().Nanoseconds() +
-			time.Second.Nanoseconds(),
-	)
+	// Wait for the expiration based lease to upgrade to either an epoch or a
+	// leader lease. If we run up the clock here, the test will be faster, but
+	// it will disrupt store liveness (support will be withdrawn).
 	var firstLease roachpb.Lease
 	testutils.SucceedsSoon(t, func() error {
 		repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(scratchKey))
 		leaseStatus := repl.CurrentLeaseStatus(ctx)
-		if leaseStatus.Lease.Type() != roachpb.LeaseEpoch {
+		if leaseStatus.Lease.Type() == roachpb.LeaseExpiration {
 			return errors.Errorf("lease still an expiration based lease")
 		}
 		firstLease = leaseStatus.Lease
 		return nil
 	})
 
-	// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
-	// eligible to acquire a new lease.
-	log.Infof(ctx, "test expiring lease")
-	nl2 := n2.NodeLiveness().(*liveness.NodeLiveness)
-	resumeHeartbeats := nl2.PauseAllHeartbeatsForTest()
-	n2Liveness, ok := nl2.Self()
-	require.True(t, ok)
-	manualClock.Increment(max(firstLease.MinExpiration.WallTime, n2Liveness.Expiration.ToTimestamp().
-		Add(1, 0).WallTime) - manualClock.UnixNano())
 	atomic.StoreInt64(&rejectExtraneousRequests, 1)
+	if firstLease.Type() == roachpb.LeaseEpoch {
+		// Expire the lease. Given that the Raft leadership is on n2, only n2 will be
+		// eligible to acquire a new lease.
+		log.Infof(ctx, "test expiring lease")
+		nl2 := n2.NodeLiveness().(*liveness.NodeLiveness)
+		resumeHeartbeats := nl2.PauseAllHeartbeatsForTest()
+		n2Liveness, ok := nl2.Self()
+		require.True(t, ok)
+		manualClock.Increment(max(firstLease.MinExpiration.WallTime, n2Liveness.Expiration.ToTimestamp().
+			Add(1, 0).WallTime) - manualClock.UnixNano())
 
-	// Ask another node to increment n2's liveness record, but first, wait until
-	// n1's liveness state is the same as n2's. Otherwise, the epoch below might
-	// get rejected because of mismatching liveness records.
-	testutils.SucceedsSoon(t, func() error {
-		nl1 := n1.NodeLiveness().(*liveness.NodeLiveness)
-		n2LivenessFromN1, _ := nl1.GetLiveness(n2.NodeID())
-		if n2Liveness != n2LivenessFromN1.Liveness {
-			return errors.Errorf("waiting for node 2 liveness to converge on both nodes 1 and 2")
-		}
-		return nil
-	})
-	require.NoError(t, n1.NodeLiveness().(*liveness.NodeLiveness).IncrementEpoch(ctx, n2Liveness))
-	resumeHeartbeats()
+		// Ask another node to increment n2's liveness record, but first, wait until
+		// n1's liveness state is the same as n2's. Otherwise, the epoch below might
+		// get rejected because of mismatching liveness records.
+		testutils.SucceedsSoon(t, func() error {
+			nl1 := n1.NodeLiveness().(*liveness.NodeLiveness)
+			n2LivenessFromN1, _ := nl1.GetLiveness(n2.NodeID())
+			if n2Liveness != n2LivenessFromN1.Liveness {
+				return errors.Errorf("waiting for node 2 liveness to converge on both nodes 1 and 2")
+			}
+			return nil
+		})
+		require.NoError(t, n1.NodeLiveness().(*liveness.NodeLiveness).IncrementEpoch(ctx, n2Liveness))
+		resumeHeartbeats()
+	}
+
+	if firstLease.Type() == roachpb.LeaseLeader {
+		// Stop heartbeats on store 2.
+		localStoreID := slpb.StoreIdent{NodeID: n2.NodeID(), StoreID: n2.GetFirstStoreID()}
+		storeLivenessHeartbeatsOff.Store(localStoreID)
+		// Ensure store liveness support is withdrawn.
+		remoteStoreSM := tc.GetFirstStoreFromServer(t, 0).TestingStoreLivenessSupportManager()
+		testutils.SucceedsSoon(t, func() error {
+			_, supported := remoteStoreSM.SupportFor(localStoreID)
+			if supported {
+				return errors.Errorf("support from the leader not withdrawn yet")
+			}
+			return nil
+		})
+		// Ensure replica 2 loses the leadership.
+		testutils.SucceedsSoon(t, func() error {
+			repl := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(scratchKey))
+			if repl.RaftStatus().RaftState == raftpb.StateLeader {
+				return errors.Errorf("leader for r%v still on n2", desc)
+			}
+			return nil
+		})
+		storeLivenessHeartbeatsOff.Store(slpb.StoreIdent{})
+	}
 
 	// Wait for another RangeFeed checkpoint after the lease expired.
 	log.Infof(ctx, "test waiting for another checkpoint")
@@ -1632,8 +1662,21 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	curLease := li.Current()
 	t.Logf("lease before expiration: %s", firstLease)
 	t.Logf("lease after expiration: %s", curLease)
-	if curLease.OwnedBy(n2.GetFirstStoreID()) {
+	// If the lease is an epoch lease, make sure the epoch is incremented.
+	if curLease.OwnedBy(n2.GetFirstStoreID()) && curLease.Type() == roachpb.LeaseEpoch {
 		require.Equal(t, int64(2), curLease.Epoch)
+	}
+	// If the lease is a leader lease, make sure the term is incremented.
+	if curLease.Type() == roachpb.LeaseLeader {
+		testutils.SucceedsSoon(t, func() error {
+			li, _, err = tc.FindRangeLeaseEx(ctx, desc, nil)
+			require.NoError(t, err)
+			curLease = li.Current()
+			if curLease.Term <= firstLease.Term {
+				return errors.Errorf("lease term is still: %v", curLease.Term)
+			}
+			return nil
+		})
 	}
 
 	// Make sure the RangeFeed hasn't errored.
