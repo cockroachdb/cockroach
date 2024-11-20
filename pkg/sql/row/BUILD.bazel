@@ -49,6 +49,7 @@ go_library(
         "//pkg/sql/catalog/fetchpb",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/seqexpr",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/colmem",
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
