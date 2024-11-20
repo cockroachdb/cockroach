@@ -36,6 +36,8 @@ type LeaseManager interface {
 	IncGaugeAfterLeaseDuration(
 		gaugeType lease.AfterLeaseDurationGauge,
 	) (decrAfterWait func())
+
+	GetSafeReplicationTS() hlc.Timestamp
 }
 
 type deadlineHolder interface {
