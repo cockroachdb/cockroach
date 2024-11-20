@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"runtime/trace"
 	"slices"
 	"testing"
 
@@ -674,6 +675,7 @@ func BenchmarkSysbench(b *testing.B) {
 					rng := rand.New(rand.NewSource(0))
 					sys.prep(rng)
 
+					defer trace.StartRegion(ctx, b.Name()).End()
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						workload.opFn(sys, rng)
