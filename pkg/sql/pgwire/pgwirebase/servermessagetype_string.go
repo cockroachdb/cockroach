@@ -26,6 +26,7 @@ func _() {
 	_ = x[ServerMsgEmptyQuery-73]
 	_ = x[ServerMsgErrorResponse-69]
 	_ = x[ServerMsgNoticeResponse-78]
+	_ = x[ServerMsgNotificationResponse-65]
 	_ = x[ServerMsgNoData-110]
 	_ = x[ServerMsgParameterDescription-116]
 	_ = x[ServerMsgParameterStatus-83]
@@ -63,6 +64,8 @@ func (i ServerMessageType) String() string {
 		return "ServerMsgErrorResponse"
 	case ServerMsgNoticeResponse:
 		return "ServerMsgNoticeResponse"
+	case ServerMsgNotificationResponse:
+		return "ServerMsgNotificationResponse"
 	case ServerMsgNoData:
 		return "ServerMsgNoData"
 	case ServerMsgParameterDescription:

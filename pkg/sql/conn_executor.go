@@ -2260,6 +2260,8 @@ func (ex *connExecutor) run(
 		}
 	}()
 
+	defer ex.server.cfg.PGListenerRegistry.RemoveAllListeners(ctx, listenerID(ex.planner.extendedEvalCtx.SessionID))
+
 	for {
 		ex.curStmtAST = nil
 		if err := ctx.Err(); err != nil {
@@ -3828,6 +3830,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
+	p.notificationSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
 	p.storedProcTxnState = ex.getStoredProcTxnStateAccessor()

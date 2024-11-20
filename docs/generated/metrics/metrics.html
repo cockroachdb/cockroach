@@ -1553,6 +1553,9 @@
 <tr><td>APPLICATION</td><td>logical_replication.retry_queue_events</td><td>The replicated time of the logical replication stream in seconds since the unix epoch.</td><td>Events</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>logical_replication.scanning_ranges</td><td>Source side ranges undergoing an initial scan (innacurate with multiple LDR jobs)</td><td>Ranges</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>logical_replication.scanning_ranges_by_label</td><td>Source side ranges undergoing an initial scan</td><td>Ranges</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>APPLICATION</td><td>notifications.channels</td><td>Number of notification channels</td><td>Channels</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>APPLICATION</td><td>notifications.dropped</td><td>Number of notifications dropped</td><td>Notifications</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>APPLICATION</td><td>notifications.rangefeed_restarts</td><td>Number of rangefeed restarts</td><td>Restarts</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>APPLICATION</td><td>obs.tablemetadata.update_job.duration</td><td>Time spent running the update table metadata job.</td><td>Duration</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>APPLICATION</td><td>obs.tablemetadata.update_job.errors</td><td>The total number of errors that have been emitted from the update table metadata job.</td><td>Errors</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>APPLICATION</td><td>obs.tablemetadata.update_job.runs</td><td>The total number of runs of the update table metadata job.</td><td>Executions</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>

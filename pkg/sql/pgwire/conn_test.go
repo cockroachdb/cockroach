@@ -748,7 +748,7 @@ func getSessionArgs(
 			}
 			// Implement a fake pgwire connection handshake. Send the response
 			// after parsing the client-sent parameters.
-			c := &conn{conn: netConn}
+			c := &conn{conn: netConn, awConn: &atomicWriter{w: netConn}}
 			c.msgBuilder.init(nilStat)
 			if err := c.authOKMessage(); err != nil {
 				retErr = errors.CombineErrors(retErr, err)

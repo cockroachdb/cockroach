@@ -1347,6 +1347,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.SpanStatsConsumer = spanStatsConsumer
 	}
 
+	execCfg.PGListenerRegistry = sql.NewListenerRegistry(cfg.stopper, cfg.Settings, cfg.circularInternalExecutor)
+	// cfg.registry.AddMetricStruct(execCfg.PGListenerRegistry.Metrics)
+
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,
 		cfg.internalDB,
@@ -1758,6 +1761,8 @@ func (s *SQLServer) preStart(
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
 
 	s.startLicenseEnforcer(ctx, knobs)
+
+	// s.execCfg.PGListenerRegistry.Start(ctx)
 
 	// Report a warning if the server is being shut down via the stopper
 	// before it was gracefully drained. This warning may be innocuous

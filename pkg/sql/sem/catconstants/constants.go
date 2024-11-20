@@ -53,6 +53,7 @@ const (
 	DescIDSequenceTableName                SystemTableName = "descriptor_id_seq"
 	TenantIDSequenceTableName              SystemTableName = "tenant_id_seq"
 	TenantsTableName                       SystemTableName = "tenants"
+	ListenNotifyQueueTableName             SystemTableName = "notifications"
 	LeaseTableName                         SystemTableName = "lease"
 	EventLogTableName                      SystemTableName = "eventlog"
 	RangeEventTableName                    SystemTableName = "rangelog"

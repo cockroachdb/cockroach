@@ -31,6 +31,8 @@ stmt_without_legacy_transaction ::=
 	| fetch_cursor_stmt
 	| move_cursor_stmt
 	| unlisten_stmt
+	| listen_stmt
+	| notify_stmt
 	| show_commit_timestamp_stmt
 
 legacy_transaction_stmt ::=
@@ -168,8 +170,15 @@ move_cursor_stmt ::=
 	'MOVE' cursor_movement_specifier
 
 unlisten_stmt ::=
-	'UNLISTEN' type_name
+	'UNLISTEN' name
 	| 'UNLISTEN' '*'
+
+listen_stmt ::=
+	'LISTEN' name
+
+notify_stmt ::=
+	'NOTIFY' name ',' 'SCONST'
+	| 'NOTIFY' name
 
 show_commit_timestamp_stmt ::=
 	'SHOW' 'COMMIT' 'TIMESTAMP'
@@ -1230,6 +1239,7 @@ unreserved_keyword ::=
 	| 'LINESTRINGZ'
 	| 'LINESTRINGZM'
 	| 'LIST'
+	| 'LISTEN'
 	| 'LOCAL'
 	| 'LOCKED'
 	| 'LOGICAL'
@@ -1271,6 +1281,7 @@ unreserved_keyword ::=
 	| 'NO'
 	| 'NORMAL'
 	| 'NOTHING'
+	| 'NOTIFY'
 	| 'NO_INDEX_JOIN'
 	| 'NO_ZIGZAG_JOIN'
 	| 'NO_FULL_SCAN'
@@ -3915,6 +3926,7 @@ bare_label_keywords ::=
 	| 'LINESTRINGZ'
 	| 'LINESTRINGZM'
 	| 'LIST'
+	| 'LISTEN'
 	| 'LOCAL'
 	| 'LOCALITY'
 	| 'LOCALTIME'
@@ -3972,6 +3984,7 @@ bare_label_keywords ::=
 	| 'NOT'
 	| 'NOTHING'
 	| 'NOTHING'
+	| 'NOTIFY'
 	| 'NOVIEWACTIVITY'
 	| 'NOVIEWACTIVITYREDACTED'
 	| 'NOVIEWCLUSTERSETTING'

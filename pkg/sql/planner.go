@@ -269,6 +269,10 @@ type planner struct {
 	// instead.
 	noticeSender noticeSender
 
+	// notificationSender allows the sending of notifications. You may use this
+	// object directly.
+	notificationSender NotificationSender
+
 	queryCacheSession querycache.Session
 
 	// evalCatalogBuiltins is used as part of the eval.Context.

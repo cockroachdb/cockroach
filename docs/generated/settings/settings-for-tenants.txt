@@ -334,6 +334,7 @@ sql.metrics.transaction_details.enabled	boolean	true	collect per-application tra
 sql.multiple_modifications_of_table.enabled	boolean	false	if true, allow statements containing multiple INSERT ON CONFLICT, UPSERT, UPDATE, or DELETE subqueries modifying the same table, at the risk of data corruption if the same row is modified multiple times by a single statement (multiple INSERT subqueries without ON CONFLICT cannot cause corruption and are always allowed)	application
 sql.multiregion.drop_primary_region.enabled	boolean	true	allows dropping the PRIMARY REGION of a database if it is the last region	application
 sql.notices.enabled	boolean	true	enable notices in the server/client protocol being sent	application
+sql.notifications.enabled	boolean	true	enable or disable the PG NOTIFY/LISTEN feature	application
 sql.optimizer.uniqueness_checks_for_gen_random_uuid.enabled	boolean	false	if enabled, uniqueness checks may be planned for mutations of UUID columns updated with gen_random_uuid(); otherwise, uniqueness is assumed due to near-zero collision probability	application
 sql.schema.telemetry.recurrence	string	@weekly	cron-tab recurrence for SQL schema telemetry job	system-visible
 sql.spatial.experimental_box2d_comparison_operators.enabled	boolean	false	enables the use of certain experimental box2d comparison operators	application
@@ -402,4 +403,4 @@ trace.span_registry.enabled	boolean	false	if set, ongoing traces can be seen at 
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.	application
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui [etc/utc = 0, america/new_york = 1]	application
-version	version	1000024.3-upgrading-to-1000025.1-step-002	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000025.1	set the active cluster version in the format '<major>.<minor>'	application

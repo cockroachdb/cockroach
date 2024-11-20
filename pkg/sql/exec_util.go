@@ -1459,6 +1459,9 @@ type ExecutorConfig struct {
 	// RangeProber is used in calls to crdb_internal.probe_ranges.
 	RangeProber eval.RangeProber
 
+	// PGListenerRegistry manages LISTEN/NOTIFY listeners.
+	PGListenerRegistry *ListenerRegistry
+
 	// DescIDGenerator generates unique descriptor IDs.
 	DescIDGenerator eval.DescIDGenerator
 

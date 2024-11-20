@@ -2075,6 +2075,7 @@ GO_TARGETS = [
     "//pkg/sql/pgwire/pgerror:pgerror",
     "//pkg/sql/pgwire/pgerror:pgerror_test",
     "//pkg/sql/pgwire/pgnotice:pgnotice",
+    "//pkg/sql/pgwire/pgnotification:pgnotification",
     "//pkg/sql/pgwire/pgwirebase:pgwirebase",
     "//pkg/sql/pgwire/pgwirecancel:pgwirecancel",
     "//pkg/sql/pgwire/pgwirecancel:pgwirecancel_test",

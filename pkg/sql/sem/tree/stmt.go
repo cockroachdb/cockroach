@@ -1264,6 +1264,15 @@ func (*Import) StatementTag() string { return ImportTag }
 func (*Import) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
+func (*Listen) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*Listen) StatementType() StatementType { return TypeTCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Listen) StatementTag() string { return "LISTEN" }
+
+// StatementReturnType implements the Statement interface.
 func (*LiteralValuesClause) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1271,6 +1280,15 @@ func (*LiteralValuesClause) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*LiteralValuesClause) StatementTag() string { return "VALUES" }
+
+// StatementReturnType implements the Statement interface.
+func (*Notify) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*Notify) StatementType() StatementType { return TypeTCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Notify) StatementTag() string { return "NOTIFY" }
 
 // StatementReturnType implements the Statement interface.
 func (*ParenSelect) StatementReturnType() StatementReturnType { return Rows }
