@@ -1328,8 +1328,10 @@ until
 ReadyForQuery
 ReadyForQuery
 ----
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"create_table.go","Line":0,"Routine":"startExec","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE AS"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"create_table.go","Line":0,"Routine":"startExec","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE AS"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
