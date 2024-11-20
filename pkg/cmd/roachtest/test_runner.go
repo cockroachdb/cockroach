@@ -50,6 +50,12 @@ import (
 	"github.com/petermattis/goid"
 )
 
+func init() {
+	pollPreemptionInterval.Lock()
+	defer pollPreemptionInterval.Unlock()
+	pollPreemptionInterval.interval = 5 * time.Minute
+}
+
 var (
 	errTestsFailed = fmt.Errorf("some tests failed")
 
@@ -1252,6 +1258,9 @@ func (r *testRunner) runTest(
 		}()
 
 		grafanaAnnotateTestStart(runCtx, t, c)
+		// Actively poll for VM preemptions, so we can bail out of tests early and
+		// avoid situations where a test times out and the flake assignment logic fails.
+		monitorForPreemptedVMs(runCtx, t, c, l)
 		// This is the call to actually run the test.
 		s.Run(runCtx, t, c)
 	}()
@@ -1351,7 +1360,7 @@ func getVMNames(fullVMNames []string) string {
 // getPreemptedVMNames returns a comma separated list of preempted VM
 // names, or an empty string if no VM was preempted or an error was found.
 func getPreemptedVMNames(ctx context.Context, c *clusterImpl, l *logger.Logger) string {
-	preemptedVMs, err := c.GetPreemptedVMs(ctx, l)
+	preemptedVMs, err := getPreemptedVMsHook(c, ctx, l)
 	if err != nil {
 		l.Printf("failed to check preempted VMs:\n%+v", err)
 		return ""
@@ -1981,4 +1990,50 @@ func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) m
 	}
 
 	return clusterParams
+}
+
+// getPreemptedVMsHook is a hook for unit tests to inject their own c.GetPreemptedVMs
+// implementation.
+var getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+	return c.GetPreemptedVMs(ctx, l)
+}
+
+// pollPreemptionInterval is how often to poll for preempted VMs. We use a
+// mutex protected struct to allow for unit tests to safely modify it.
+// Interval defaults to 5 minutes if not set.
+var pollPreemptionInterval struct {
+	syncutil.Mutex
+	interval time.Duration
+}
+
+func monitorForPreemptedVMs(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger) {
+	if c.IsLocal() || !c.Spec().UseSpotVMs {
+		return
+	}
+
+	pollPreemptionInterval.Lock()
+	defer pollPreemptionInterval.Unlock()
+	interval := pollPreemptionInterval.interval
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(interval):
+				preemptedVMs, err := getPreemptedVMsHook(c, ctx, l)
+				if err != nil {
+					l.Printf("WARN: monitorForPreemptedVMs: failed to check preempted VMs:\n%+v", err)
+					continue
+				}
+
+				// If we find any preemptions, fail the test. Note that we will recheck for
+				// preemptions in post failure processing, which will correctly assign this
+				// failure as an infra flake.
+				if len(preemptedVMs) != 0 {
+					t.Errorf("monitorForPreemptedVMs: Preempted VMs detected: %s", preemptedVMs)
+				}
+			}
+		}
+	}()
 }

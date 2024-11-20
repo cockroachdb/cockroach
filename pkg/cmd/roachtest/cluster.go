@@ -834,6 +834,7 @@ func (f *clusterFactory) clusterMock(cfg clusterConfig) *clusterImpl {
 		name:       f.genName(cfg),
 		expiration: timeutil.Now().Add(24 * time.Hour),
 		r:          f.r,
+		spec:       cfg.spec,
 	}
 }
 
