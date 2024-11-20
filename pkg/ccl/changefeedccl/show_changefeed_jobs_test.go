@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,15 +21,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,6 +125,198 @@ func TestShowChangefeedJobsBasic(t *testing.T) {
 	// TODO: Webhook disabled since the query parameters on the sinkURI are
 	// correct but out of order
 	cdcTest(t, testFn, feedTestOmitSinks("webhook", "sinkless"), feedTestNoExternalConnection)
+}
+
+func TestShowChangefeedJobsShowsHighWaterAfterCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	rnd, _ := randutil.NewTestRand()
+	var maxCheckpointSize int64
+
+	drainUntilTimestamp := func(f cdctest.TestFeed, ts hlc.Timestamp) (err error) {
+		var msg *cdctest.TestFeedMessage
+		for msg, err = f.Next(); msg != nil; msg, err = f.Next() {
+			if msg.Resolved != nil {
+				resolvedTs := extractResolvedTimestamp(t, msg)
+				if ts.LessEq(resolvedTs) {
+					break
+				}
+			}
+		}
+		return err
+	}
+
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		valRange := []int{1, 1000}
+		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo (a) SELECT * FROM generate_series(%d, %d)`, valRange[0], valRange[1]))
+
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+			s.SystemServer.DB(), s.Codec, "d", "foo")
+		tableSpan := fooDesc.PrimaryIndexSpan(s.Codec)
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// Ensure Scan Requests are always small enough that we receive multiple
+		// resolved events during a backfill
+		knobs.FeedKnobs.BeforeScanRequest = func(b *kv.Batch) error {
+			b.Header.MaxSpanRequestKeys = 1 + rnd.Int63n(100)
+			return nil
+		}
+
+		// Emit resolved events for majority of spans.  Be extra paranoid and ensure that
+		// we have at least 1 span for which we don't emit resolved timestamp (to force checkpointing).
+		haveGaps := false
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
+			if r.Span.Equal(tableSpan) {
+				// Do not emit resolved events for the entire table span.
+				// We "simulate" large table by splitting single table span into many parts, so
+				// we want to resolve those sub-spans instead of the entire table span.
+				// However, we have to emit something -- otherwise the entire changefeed
+				// machine would not work.
+				r.Span.EndKey = tableSpan.Key.Next()
+				return false, nil
+			}
+			if haveGaps {
+				return rnd.Intn(10) > 7, nil
+			}
+			haveGaps = true
+			return true, nil
+		}
+
+		// Checkpoint progress frequently, and set the checkpoint size limit.
+		changefeedbase.FrontierCheckpointFrequency.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 1)
+		changefeedbase.FrontierCheckpointMaxBytes.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
+
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='100ms'`)
+		// Some test feeds (kafka) are not buffered, so we have to consume messages.
+		var shouldDrain int32 = 1
+		g := ctxgroup.WithContext(context.Background())
+		g.Go(func() error {
+			for {
+				if shouldDrain == 0 {
+					return nil
+				}
+				m, err := foo.Next()
+				if err != nil {
+					return err
+				}
+
+				if m.Resolved != nil {
+					ts := extractResolvedTimestamp(t, m)
+					if ts.IsEmpty() {
+						return errors.New("unexpected epoch resolved event")
+					}
+				}
+			}
+		})
+
+		defer func() {
+			closeFeed(t, foo)
+		}()
+
+		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+		loadProgress := func() jobspb.Progress {
+			jobID := jobFeed.JobID()
+			job, err := registry.LoadJob(context.Background(), jobID)
+			require.NoError(t, err)
+			return job.Progress()
+		}
+
+		// Wait for non-nil checkpoint.
+		testutils.SucceedsSoon(t, func() error {
+			progress := loadProgress()
+			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+				return nil
+			}
+			return errors.New("waiting for checkpoint")
+		})
+
+		// Pause the job and read and verify the latest checkpoint information.
+		require.NoError(t, jobFeed.Pause())
+		progress := loadProgress()
+		require.NotNil(t, progress.GetChangefeed())
+		h := progress.GetHighWater()
+		noHighWater := h == nil || h.IsEmpty()
+		require.True(t, noHighWater)
+
+		jobCheckpoint := progress.GetChangefeed().Checkpoint
+		require.Less(t, 0, len(jobCheckpoint.Spans))
+		var checkpoint roachpb.SpanGroup
+		checkpoint.Add(jobCheckpoint.Spans...)
+
+		// Collect spans we attempt to resolve after when we resume.
+		var resolved []roachpb.Span
+		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
+			if !r.Span.Equal(tableSpan) {
+				resolved = append(resolved, r.Span)
+			}
+			return false, nil
+		}
+
+		// Resume job.
+		require.NoError(t, jobFeed.Resume())
+
+		// Wait for the high water mark to be non-zero.
+		testutils.SucceedsSoon(t, func() error {
+			prog := loadProgress()
+			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() {
+				return nil
+			}
+			return errors.New("waiting for highwater")
+		})
+
+		var hwt float32
+		var rhwt time.Time
+		sqlDB.QueryRow(t, "SELECT high_water_timestamp, readable_high_water_timestamp from [SHOW CHANGEFEED JOBS]").Scan(&hwt, &rhwt)
+
+		require.NotNil(t, hwt)
+		require.NotNil(t, rhwt)
+
+		// At this point, highwater mark should be set, and previous checkpoint should be gone.
+		progress = loadProgress()
+		require.NotNil(t, progress.GetChangefeed())
+		require.Equal(t, 0, len(progress.GetChangefeed().Checkpoint.Spans))
+
+		// Verify that none of the resolved spans after resume were checkpointed.
+		for _, sp := range resolved {
+			require.Falsef(t, checkpoint.Contains(sp.Key), "span should not have been resolved: %s", sp)
+		}
+
+		// Consume all potentially buffered kv events
+		atomic.StoreInt32(&shouldDrain, 0)
+		if err := g.Wait(); err != nil {
+			require.NotRegexp(t, "unexpected epoch resolved event", err)
+		}
+		err := drainUntilTimestamp(foo, *progress.GetHighWater())
+		require.NoError(t, err)
+
+		// Verify that the checkpoint does not affect future scans
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b STRING DEFAULT 'd'`)
+		var expected []string
+		for i := valRange[0]; i <= valRange[1]; i++ {
+			expected = append(expected, fmt.Sprintf(
+				`foo: [%d]->{"after": {"a": %d, "b": "d"}}`, i, i,
+			))
+		}
+		assertPayloads(t, foo, expected)
+	}
+
+	// TODO(ssd): Tenant testing disabled because of use of DB()
+	for _, sz := range []int64{100 << 20, 100} {
+		maxCheckpointSize = sz
+		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestForceSink("webhook"))
+	}
 }
 
 // TestShowChangefeedJobsRedacted verifies that SHOW CHANGEFEED JOB, SHOW
