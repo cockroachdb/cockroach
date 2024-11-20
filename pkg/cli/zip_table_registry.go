@@ -388,9 +388,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"high_water_timestamp",
 			"coordinator_id",
 			"trace_id",
-			"last_run",
-			"next_run",
-			"num_runs",
 		},
 	},
 	"crdb_internal.system_jobs": {

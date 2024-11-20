@@ -1138,17 +1138,14 @@ func wrapPayloadUnMarshalError(err error, jobID tree.Datum) error {
 }
 
 const (
-	jobsQSelect = `SELECT id, status, created::timestamptz, payload, progress, claim_session_id, claim_instance_id`
+	jobsQuery = `SELECT id, status, created::timestamptz, payload, progress, claim_session_id, claim_instance_id FROM crdb_internal.system_jobs`
 	// Note that we are querying crdb_internal.system_jobs instead of system.jobs directly.
 	// The former has access control built in and will filter out jobs that the
 	// user is not allowed to see.
-	jobsQFrom        = ` FROM crdb_internal.system_jobs`
-	jobsBackoffArgs  = `(SELECT $1::FLOAT AS initial_delay, $2::FLOAT AS max_delay) args`
-	jobIDFilter      = ` WHERE id = $3`
-	jobsStatusFilter = ` WHERE status = $3`
-	jobsTypeFilter   = ` WHERE job_type = $3`
-	jobsQuery        = jobsQSelect + `, last_run::timestamptz, COALESCE(num_runs, 0), ` + jobs.NextRunClause +
-		` as next_run` + jobsQFrom + ", " + jobsBackoffArgs
+	jobsQFrom        = ` `
+	jobIDFilter      = ` WHERE id = $1`
+	jobsStatusFilter = ` WHERE status = $1`
+	jobsTypeFilter   = ` WHERE job_type = $1`
 )
 
 // TODO(tbg): prefix with kv_.
@@ -1172,9 +1169,6 @@ CREATE TABLE crdb_internal.jobs (
   error                 STRING,
   coordinator_id        INT,
   trace_id              INT,
-  last_run              TIMESTAMPTZ,
-  next_run              TIMESTAMPTZ,
-  num_runs              INT,
   execution_errors      STRING[],
   execution_events      JSONB,
   INDEX(job_id),
@@ -1186,23 +1180,23 @@ CREATE TABLE crdb_internal.jobs (
 		populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 			q := jobsQuery + jobIDFilter
 			targetID := tree.MustBeDInt(unwrappedConstraint)
-			return makeJobsTableRows(ctx, p, addRow, q, p.execCfg.JobRegistry.RetryInitialDelay(), p.execCfg.JobRegistry.RetryMaxDelay(), targetID)
+			return makeJobsTableRows(ctx, p, addRow, q, targetID)
 		},
 	}, {
 		populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 			q := jobsQuery + jobsStatusFilter
 			targetStatus := tree.MustBeDString(unwrappedConstraint)
-			return makeJobsTableRows(ctx, p, addRow, q, p.execCfg.JobRegistry.RetryInitialDelay(), p.execCfg.JobRegistry.RetryMaxDelay(), targetStatus)
+			return makeJobsTableRows(ctx, p, addRow, q, targetStatus)
 		},
 	}, {
 		populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 			q := jobsQuery + jobsTypeFilter
 			targetType := tree.MustBeDString(unwrappedConstraint)
-			return makeJobsTableRows(ctx, p, addRow, q, p.execCfg.JobRegistry.RetryInitialDelay(), p.execCfg.JobRegistry.RetryMaxDelay(), targetType)
+			return makeJobsTableRows(ctx, p, addRow, q, targetType)
 		},
 	}},
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		_, err := makeJobsTableRows(ctx, p, addRow, jobsQuery, p.execCfg.JobRegistry.RetryInitialDelay(), p.execCfg.JobRegistry.RetryMaxDelay())
+		_, err := makeJobsTableRows(ctx, p, addRow, jobsQuery)
 		return err
 	},
 }
@@ -1263,12 +1257,10 @@ func makeJobsTableRows(
 		}
 		var id, status, created, payloadBytes, progressBytes, sessionIDBytes,
 			instanceID tree.Datum
-		lastRun, nextRun, numRuns := tree.DNull, tree.DNull, tree.DNull
 		if ok {
 			r := it.Cur()
 			id, status, created, payloadBytes, progressBytes, sessionIDBytes, instanceID =
 				r[0], r[1], r[2], r[3], r[4], r[5], r[6]
-			lastRun, numRuns, nextRun = r[7], r[8], r[9]
 		} else if !ok {
 			if len(sessionJobs) == 0 {
 				return matched, nil
@@ -1408,9 +1400,6 @@ func makeJobsTableRows(
 			errorStr,
 			coordinatorID,
 			traceID,
-			lastRun,
-			nextRun,
-			numRuns,
 			executionErrors,
 			executionEvents,
 		); err != nil {

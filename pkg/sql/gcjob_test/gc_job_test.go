@@ -329,14 +329,14 @@ SELECT job_id
 
 	const expectedRunningStatus = string(sql.RunningStatusWaitingForMVCCGC)
 	testutils.SucceedsSoon(t, func() error {
-		var status, runningStatus, lastRun, nextRun, numRuns, jobErr gosql.NullString
+		var status, runningStatus, jobErr gosql.NullString
 		tdb.QueryRow(t, fmt.Sprintf(`
-SELECT status, running_status, error, last_run, next_run, num_runs
+SELECT status, running_status, error
 FROM crdb_internal.jobs
-WHERE job_id = %s`, jobID)).Scan(&status, &runningStatus, &jobErr, &lastRun, &nextRun, &numRuns)
+WHERE job_id = %s`, jobID)).Scan(&status, &runningStatus, &jobErr)
 
-		t.Logf(`details about SCHEMA CHANGE GC job: {status: %#v, running_status: %#v, error: %#v, last_run: %#v, next_run: %#v, num_runs: %#v}`,
-			status, runningStatus, jobErr, lastRun, nextRun, numRuns)
+		t.Logf(`details about SCHEMA CHANGE GC job: {status: %#v, running_status: %#v, error: %#v}`,
+			status, runningStatus, jobErr)
 
 		if !runningStatus.Valid {
 			return errors.Newf(`running_status is NULL but expected %q`, expectedRunningStatus)
