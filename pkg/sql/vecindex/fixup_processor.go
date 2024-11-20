@@ -140,6 +140,8 @@ func (fp *fixupProcessor) AddSplit(
 // provided context is canceled, processing fixups as they are added to the
 // fixup processor.
 func (fp *fixupProcessor) Start(ctx context.Context) {
+	ctx = internal.WithWorkspace(ctx, &fp.workspace)
+
 	for {
 		// Wait to run the next fixup in the queue.
 		ok, err := fp.run(ctx, true /* wait */)

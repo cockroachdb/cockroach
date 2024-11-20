@@ -184,6 +184,15 @@ func (vi *VectorIndex) Close() {
 	}
 }
 
+// ProcessFixups waits until all pending fixups have been processed by the
+// background goroutine.
+func (vi *VectorIndex) ProcessFixups() {
+	if vi.cancel == nil {
+		panic(errors.AssertionFailedf("ProcessFixups should never be called in tests"))
+	}
+	vi.fixups.Wait()
+}
+
 // CreateRoot creates an empty root partition in the store. This should only be
 // called once when the index is first created.
 func (vi *VectorIndex) CreateRoot(ctx context.Context, txn vecstore.Txn) error {
