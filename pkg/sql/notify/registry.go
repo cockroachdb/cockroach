@@ -96,7 +96,7 @@ func (cm *channelMux) RemoveSender(id ListenerID) (deleteMe bool) {
 //
 // TODO: room for improvement:
 // - guard against slow clients (without using too many goroutines)
-// - handle errors (poison connection? remove listener?)
+// - handle errors more comprehensively (poison connection? remove listener?)
 func (cm *channelMux) RunBatch(ctx context.Context) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
