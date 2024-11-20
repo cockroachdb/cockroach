@@ -1,5 +1,3 @@
-# LogicTest: default-configs
-
 statement ok
 CREATE TABLE t (
   k INT PRIMARY KEY,

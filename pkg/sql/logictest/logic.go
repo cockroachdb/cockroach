@@ -134,11 +134,11 @@ import (
 // The directive also supports blocklists, i.e. running all specified
 // configurations apart from a blocklisted configuration:
 //
-//   # LogicTest: default-configs !3node-tenant
+//   # LogicTest: enterprise-configs !3node-tenant
 //
 // If a blocklist is specified without an accompanying configuration, the
-// default config is assumed. i.e., the following directive is equivalent to the
-// one above:
+// default config is assumed. i.e., the following directive uses all default
+// configurations except 3node-tenant:
 //
 //   # LogicTest: !3node-tenant
 //
