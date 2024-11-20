@@ -51,13 +51,6 @@ const (
 	// updated when canceling jobs concurrently from dead sessions.
 	defaultCancellationsUpdateLimit int64 = 1000
 
-	// defaultRetryInitialDelay is the initial delay in the calculation of exponentially
-	// increasing delays to retry failed jobs.
-	defaultRetryInitialDelay = 30 * time.Second
-
-	// defaultRetryMaxDelay is the maximum delay to retry a failed job.
-	defaultRetryMaxDelay = 24 * time.Hour
-
 	// defaultExecutionErrorsMaxEntries is the default number of error entries
 	// which will be retained.
 	defaultExecutionErrorsMaxEntries = 3
@@ -134,24 +127,6 @@ var (
 		"the number of jobs that can be updated when canceling jobs concurrently from dead sessions",
 		defaultCancellationsUpdateLimit,
 		settings.NonNegativeInt,
-	)
-
-	retryInitialDelaySetting = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		retryInitialDelaySettingKey,
-		"the starting duration of exponential-backoff delay"+
-			" to retry a job which encountered a retryable error or had its coordinator"+
-			" fail. The delay doubles after each retry.",
-		defaultRetryInitialDelay,
-		settings.NonNegativeDuration,
-	)
-
-	retryMaxDelaySetting = settings.RegisterDurationSetting(
-		settings.ApplicationLevel,
-		retryMaxDelaySettingKey,
-		"the maximum duration by which a job can be delayed to retry",
-		defaultRetryMaxDelay,
-		settings.PositiveDuration,
 	)
 
 	executionErrorsMaxEntriesSetting = settings.RegisterIntSetting(

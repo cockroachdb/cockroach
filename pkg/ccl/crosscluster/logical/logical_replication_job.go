@@ -561,9 +561,6 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 				}
 			}
 			ju.UpdateProgress(progress)
-			if md.RunStats != nil && md.RunStats.NumRuns > 1 {
-				ju.UpdateRunStats(1, md.RunStats.LastRun)
-			}
 			if l := rh.job.Details().(jobspb.LogicalReplicationDetails).MetricsLabel; l != "" {
 				rh.metrics.LabeledReplicatedTime.Update(map[string]string{"label": l}, replicatedTime.GoTime().Unix())
 

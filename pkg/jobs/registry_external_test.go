@@ -517,15 +517,7 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 		}
 		return ret
 	}
-	tsEqual := func(t *testing.T, a, b time.Time) {
-		require.Truef(t, a.Equal(b), "%v != %v", a, b)
-	}
-	tsBefore := func(t *testing.T, a, b time.Time) {
-		require.Truef(t, a.Before(b), "%v >= %v", a, b)
-	}
 	executionErrorEqual := func(t *testing.T, a, b parsedError) {
-		tsEqual(t, a.start, b.start)
-		tsEqual(t, a.end, b.end)
 		require.Equal(t, a.instance, b.instance)
 		require.Equal(t, a.error, b.error)
 		require.Equal(t, a.status, b.status)
@@ -533,17 +525,14 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 	waitForEvent := func(t *testing.T, id jobspb.JobID) (ev event, start time.Time) {
 		ev = <-evChan
 		require.Equal(t, id, ev.id)
-		tdb.QueryRow(t, "SELECT last_run FROM crdb_internal.jobs WHERE job_id = $1", id).Scan(&start)
+		tdb.QueryRow(t, "SELECT now() FROM crdb_internal.jobs WHERE job_id = $1", id).Scan(&start)
 		return ev, start
 	}
 	checkExecutionError := func(
-		t *testing.T, execErr parsedError, status jobs.Status, start, afterEnd time.Time, cause string,
+		t *testing.T, execErr parsedError, status jobs.Status, _, _ time.Time, cause string,
 	) {
 		require.Equal(t, base.SQLInstanceID(1), execErr.instance)
 		require.Equal(t, status, execErr.status)
-		tsEqual(t, start, execErr.start)
-		tsBefore(t, execErr.start, execErr.end)
-		tsBefore(t, execErr.end, afterEnd)
 		require.Equal(t, cause, execErr.error)
 	}
 	getExecErrors := func(t *testing.T, id jobspb.JobID) []parsedError {

@@ -1103,7 +1103,6 @@ func (s *TestState) UpdateSchemaChangeJob(
 		Status:   jobs.StatusRunning,
 		Payload:  &oldPayload,
 		Progress: &oldProgress,
-		RunStats: nil,
 	}
 	updateProgress := func(newProgress *jobspb.Progress) {
 		scJob.Progress = *newProgress.GetNewSchemaChange()
