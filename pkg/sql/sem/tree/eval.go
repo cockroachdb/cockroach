@@ -77,8 +77,8 @@ func (op *UnaryOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (*UnaryOp) preferred() bool {
-	return false
+func (*UnaryOp) preference() OverloadPreference {
+	return OverloadPreferenceNone
 }
 
 func unaryOpFixups(
@@ -231,7 +231,7 @@ type BinOp struct {
 	CalledOnNullInput bool
 	EvalOp            BinaryEvalOp
 	Volatility        volatility.V
-	PreferredOverload bool
+	OverloadPreference
 
 	types   TypeList
 	retType ReturnTyper
@@ -251,8 +251,8 @@ func (op *BinOp) returnType() ReturnTyper {
 	return op.retType
 }
 
-func (op *BinOp) preferred() bool {
-	return op.PreferredOverload
+func (op *BinOp) preference() OverloadPreference {
+	return op.OverloadPreference
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
@@ -1303,12 +1303,12 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 
 	treebin.JSONFetchVal: {overloads: []*BinOp{
 		{
-			LeftType:          types.Jsonb,
-			RightType:         types.String,
-			ReturnType:        types.Jsonb,
-			EvalOp:            &JSONFetchValStringOp{},
-			PreferredOverload: true,
-			Volatility:        volatility.Immutable,
+			LeftType:           types.Jsonb,
+			RightType:          types.String,
+			ReturnType:         types.Jsonb,
+			EvalOp:             &JSONFetchValStringOp{},
+			OverloadPreference: OverloadPreferencePreferred,
+			Volatility:         volatility.Immutable,
 		},
 		{
 			LeftType:   types.Jsonb,
@@ -1331,12 +1331,12 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 
 	treebin.JSONFetchText: {overloads: []*BinOp{
 		{
-			LeftType:          types.Jsonb,
-			RightType:         types.String,
-			ReturnType:        types.String,
-			PreferredOverload: true,
-			EvalOp:            &JSONFetchTextStringOp{},
-			Volatility:        volatility.Immutable,
+			LeftType:           types.Jsonb,
+			RightType:          types.String,
+			ReturnType:         types.String,
+			OverloadPreference: OverloadPreferencePreferred,
+			EvalOp:             &JSONFetchTextStringOp{},
+			Volatility:         volatility.Immutable,
 		},
 		{
 			LeftType:   types.Jsonb,
@@ -1376,7 +1376,7 @@ type CmpOp struct {
 
 	Volatility volatility.V
 
-	PreferredOverload bool
+	OverloadPreference
 }
 
 func (op *CmpOp) params() TypeList {
@@ -1393,8 +1393,8 @@ func (op *CmpOp) returnType() ReturnTyper {
 	return cmpOpReturnType
 }
 
-func (op *CmpOp) preferred() bool {
-	return op.PreferredOverload
+func (op *CmpOp) preference() OverloadPreference {
+	return op.OverloadPreference
 }
 
 func cmpOpFixups(
@@ -1517,6 +1517,10 @@ func makeLeFn(a, b *types.T, v volatility.V) *CmpOp {
 func makeIsFn(a, b *types.T, v volatility.V) *CmpOp {
 	return makeCmpOpOverload(treecmp.IsNotDistinctFrom, a, b, true, v)
 }
+func unpreferred(cmp *CmpOp) *CmpOp {
+	cmp.OverloadPreference = OverloadPreferenceUnpreferred
+	return cmp
+}
 
 // CmpOps contains the comparison operations indexed by operation type.
 var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
@@ -1543,6 +1547,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEqFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeEqFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeEqFn(types.String, types.String, volatility.Leakproof),
+		// NOTE: Using unpreferred here is a hack that avoids some "ambiguous
+		// comparison operator" errors. It is necessary because we do not follow
+		// all of Postgres's type conversion rules. See #75101.
+		unpreferred(makeEqFn(types.BPChar, types.BPChar, volatility.Leakproof)),
 		makeEqFn(types.Time, types.Time, volatility.Leakproof),
 		makeEqFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeEqFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1603,6 +1611,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLtFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeLtFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeLtFn(types.String, types.String, volatility.Leakproof),
+		// NOTE: Using unpreferred here is a hack that avoids some "ambiguous
+		// comparison operator" errors. It is necessary because we do not follow
+		// all of Postgres's type conversion rules. See #75101.
+		unpreferred(makeLtFn(types.BPChar, types.BPChar, volatility.Leakproof)),
 		makeLtFn(types.Time, types.Time, volatility.Leakproof),
 		makeLtFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeLtFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1662,6 +1674,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeLeFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeLeFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeLeFn(types.String, types.String, volatility.Leakproof),
+		// NOTE: Using unpreferred here is a hack that avoids some "ambiguous
+		// comparison operator" errors. It is necessary because we do not follow
+		// all of Postgres's type conversion rules. See #75101.
+		unpreferred(makeLeFn(types.BPChar, types.BPChar, volatility.Leakproof)),
 		makeLeFn(types.Time, types.Time, volatility.Leakproof),
 		makeLeFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeLeFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1708,8 +1724,8 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			},
 			CalledOnNullInput: true,
 			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL.
-			PreferredOverload: true,
-			Volatility:        volatility.Leakproof,
+			OverloadPreference: OverloadPreferencePreferred,
+			Volatility:         volatility.Leakproof,
 		},
 		{
 			LeftType:  types.AnyArray,
@@ -1742,6 +1758,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeIsFn(types.PGLSN, types.PGLSN, volatility.Leakproof),
 		makeIsFn(types.RefCursor, types.RefCursor, volatility.Leakproof),
 		makeIsFn(types.String, types.String, volatility.Leakproof),
+		// NOTE: Using unpreferred here is a hack that avoids some "ambiguous
+		// comparison operator" errors. It is necessary because we do not follow
+		// all of Postgres's type conversion rules. See #75101.
+		unpreferred(makeIsFn(types.BPChar, types.BPChar, volatility.Leakproof)),
 		makeIsFn(types.Time, types.Time, volatility.Leakproof),
 		makeIsFn(types.TimeTZ, types.TimeTZ, volatility.Leakproof),
 		makeIsFn(types.Timestamp, types.Timestamp, volatility.Leakproof),
@@ -1810,6 +1830,10 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 		makeEvalTupleIn(types.PGLSN, volatility.Leakproof),
 		makeEvalTupleIn(types.RefCursor, volatility.Leakproof),
 		makeEvalTupleIn(types.String, volatility.Leakproof),
+		// NOTE: Using unpreferred here is a hack that avoids some "ambiguous
+		// comparison operator" errors. It is necessary because we do not follow
+		// all of Postgres's type conversion rules. See #75101.
+		unpreferred(makeEvalTupleIn(types.BPChar, volatility.Leakproof)),
 		makeEvalTupleIn(types.Time, volatility.Leakproof),
 		makeEvalTupleIn(types.TimeTZ, volatility.Leakproof),
 		makeEvalTupleIn(types.Timestamp, volatility.Leakproof),

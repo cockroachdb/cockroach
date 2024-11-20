@@ -159,7 +159,7 @@ func NewFunctionDefinition(
 	overloads := make([]*Overload, len(def))
 
 	for i := range def {
-		if def[i].PreferredOverload {
+		if def[i].OverloadPreference == OverloadPreferencePreferred {
 			// Builtins with a preferred overload are always ambiguous.
 			props.AmbiguousReturnType = true
 			break
