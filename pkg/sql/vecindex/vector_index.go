@@ -185,6 +185,16 @@ func (vi *VectorIndex) Close() {
 	}
 }
 
+// ProcessFixups waits until all pending fixups have been processed by the
+// background goroutine.
+func (vi *VectorIndex) ProcessFixups() {
+	if vi.cancel == nil {
+		panic(errors.AssertionFailedf(
+			"ProcessFixups cannot be called without a background goroutine running"))
+	}
+	vi.fixups.Wait()
+}
+
 // CreateRoot creates an empty root partition in the store. This should only be
 // called once when the index is first created.
 func (vi *VectorIndex) CreateRoot(ctx context.Context, txn vecstore.Txn) error {
@@ -307,7 +317,6 @@ func (vi *VectorIndex) Search(
 		Level:    vecstore.LeafLevel,
 		Options:  options,
 	}
-
 	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
 
 	// Randomize the vector if required by the quantizer.
@@ -696,6 +705,9 @@ type FormatOptions struct {
 func (vi *VectorIndex) Format(
 	ctx context.Context, txn vecstore.Txn, options FormatOptions,
 ) (str string, err error) {
+	ctx = internal.WithWorkspace(ctx, &internal.Workspace{})
+
+	// Write formatted bytes to this buffer.
 	var buf bytes.Buffer
 
 	// Format each number to 4 decimal places, removing unnecessary trailing

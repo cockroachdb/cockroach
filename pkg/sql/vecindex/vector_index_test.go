@@ -504,7 +504,7 @@ func (s *testState) runAllFixups() error {
 	if s.Index.cancel != nil {
 		// Background fixup goroutine is running, so wait until it has processed
 		// all fixups.
-		s.Index.fixups.Wait()
+		s.Index.ProcessFixups()
 		return nil
 	}
 	// Synchronously run fixups.
