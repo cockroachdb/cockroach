@@ -4818,7 +4818,10 @@ func TestProxyTracing(t *testing.T) {
 	ctx := context.Background()
 
 	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
-		if leaseType == roachpb.LeaseEpoch {
+		if leaseType == roachpb.LeaseExpiration {
+			skip.UnderRace(t, "too slow")
+			skip.UnderDeadlock(t, "too slow")
+		} else if leaseType == roachpb.LeaseEpoch {
 			// With epoch leases this test doesn't work reliably. It passes
 			// in cases where it should fail and fails in cases where it
 			// should pass.
