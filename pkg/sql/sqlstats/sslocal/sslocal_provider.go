@@ -167,6 +167,10 @@ func (s *SQLStats) ConsumeStats(
 
 		err := stopper.RunAsyncTask(ctx, "sql-stmt-stats-flush", func(ctx context.Context) {
 			defer wg.Done()
+
+			ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
+
 			for _, stat := range stmtStats {
 				stat := stat
 				if err := stmtVisitor(ctx, stat); err != nil {
@@ -182,6 +186,10 @@ func (s *SQLStats) ConsumeStats(
 
 		err = stopper.RunAsyncTask(ctx, "sql-txn-stats-flush", func(ctx context.Context) {
 			defer wg.Done()
+
+			ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
+
 			for _, stat := range txnStats {
 				stat := stat
 				if err := txnVisitor(ctx, stat); err != nil {
@@ -194,6 +202,7 @@ func (s *SQLStats) ConsumeStats(
 			wg.Done()
 			return
 		}
+
 		wg.Wait()
 	}
 }
