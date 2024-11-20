@@ -4083,4 +4083,67 @@ SELECT * FROM tbl_with_dft_column_family ORDER BY 1
 2  2.0  {"lion": "gazelle"}  def
 3  3.0  {"wolf": "sheep"}    ghi
 
+subtest alter_dropped_col
+
+# Force DSC always so that we use it within a transaction
+let $schema_changer_state
+SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
+
+skipif config local-legacy-schema-changer
+statement ok
+set use_declarative_schema_changer = 'unsafe_always';
+
+statement ok
+create table t_droppedcol (dropme int);
+
+statement ok
+begin;
+
+statement ok
+alter table t_droppedcol drop column dropme;
+
+skipif config local-legacy-schema-changer
+statement error pq: column "dropme" does not exist
+alter table t_droppedcol alter column dropme set not null;
+
+onlyif config local-legacy-schema-changer
+statement error pq: column "dropme" in the middle of being dropped
+alter table t_droppedcol alter column dropme set not null;
+
+statement ok
+rollback;
+
+statement ok
+begin;
+
+statement ok
+alter table t_droppedcol drop column dropme;
+
+skipif config local-legacy-schema-changer
+statement error pq: column "dropme" does not exist
+alter table t_droppedcol alter column dropme set default 99;
+
+onlyif config local-legacy-schema-changer
+statement error pq: column "dropme" in the middle of being dropped
+alter table t_droppedcol alter column dropme set default 99;
+
+statement ok
+rollback;
+
+query TT
+SHOW CREATE TABLE t_droppedcol;
+----
+t_droppedcol CREATE TABLE public.t_droppedcol (
+               dropme INT8 NULL,
+               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+               CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
+             )
+
+statement ok
+DROP TABLE t_droppedcol;
+
+# Restore the schema changer state back.
+statement ok
+SET use_declarative_schema_changer = $schema_changer_state
+
 subtest end
