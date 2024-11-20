@@ -1013,6 +1013,7 @@ func changefeedJobDescription(
 	}); err != nil {
 		return "", err
 	}
+
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
 	return tree.AsStringWithFlags(c, tree.FmtShowFullURIs), nil
 }
