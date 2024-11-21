@@ -235,6 +235,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"sql.drop_virtual_cluster.enabled":                       {},
 	"cross_cluster_replication.enabled":                      {},
 	"server.controller.default_tenant.check_service.enabled": {},
+	"sql.auth.resolve_membership_single_scan.enabled":        {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
