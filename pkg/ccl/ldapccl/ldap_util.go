@@ -52,7 +52,15 @@ func (lu *ldapUtil) MaybeInitLDAPsConn(ctx context.Context, conf ldapConfig) (er
 		return nil
 	}
 	ldapAddress := conf.ldapServer + ":" + conf.ldapPort
-	if lu.conn, err = ldap.DialTLS("tcp", ldapAddress, lu.tlsConfig); err != nil {
+	var opts []ldap.DialOpt
+	if conf.ldapPort == "636" {
+		opts = append(opts, ldap.DialWithTLSConfig(lu.tlsConfig))
+		ldapAddress = "ldaps://" + ldapAddress
+	} else {
+		ldapAddress = "ldap://" + ldapAddress
+	}
+
+	if lu.conn, err = ldap.DialURL(ldapAddress, opts...); err != nil {
 		return errors.Wrap(err, ldapsFailureMessage)
 	}
 	return nil
