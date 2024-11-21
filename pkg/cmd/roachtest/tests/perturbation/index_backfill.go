@@ -35,10 +35,11 @@ func (b backfill) setupMetamorphic(rng *rand.Rand) variations {
 	v := b.setup()
 	// TODO(#133114): The backfill test can cause OOM with low memory
 	// configurations.
+	v = v.randomize(rng)
 	if v.mem == spec.Low {
 		v.mem = spec.Standard
 	}
-	return v.randomize(rng)
+	return v
 }
 
 // startTargetNode starts the target node and creates the backfill table.
