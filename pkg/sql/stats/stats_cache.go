@@ -789,7 +789,21 @@ func (tsp *TableStatisticProto) IsAuto() bool {
 // type that doesn't exist) and returns the rest (with no error).
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID, forecast bool, st *cluster.Settings,
-) ([]*TableStatistic, map[descpb.ColumnID]*types.T, error) {
+) (_ []*TableStatistic, _ map[descpb.ColumnID]*types.T, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// In the event of a "safe" panic, we only want to log the error and
+			// continue executing the query without stats for this table.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
+				panic(r)
+			}
+		}
+	}()
+
 	getTableStatisticsStmt := `
 SELECT
 	"tableID",
