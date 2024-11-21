@@ -809,15 +809,14 @@ func resolveMemberOfWithAdminOption(
 		ret[username.AdminRoleName()] = true
 	}
 
-	type membership struct {
-		role    username.SQLUsername
-		isAdmin bool
-	}
 	memberToRoles := make(map[username.SQLUsername][]membership)
-	if err := forEachRoleMembership(ctx, txn, func(ctx context.Context, role, member username.SQLUsername, isAdmin bool) error {
-		memberToRoles[member] = append(memberToRoles[member], membership{role, isAdmin})
-		return nil
-	}); err != nil {
+	if err := forEachRoleWithMemberships(
+		ctx, txn,
+		func(ctx context.Context, role username.SQLUsername, memberships []membership) error {
+			memberToRoles[role] = memberships
+			return nil
+		},
+	); err != nil {
 		return nil, err
 	}
 
@@ -828,15 +827,82 @@ func resolveMemberOfWithAdminOption(
 			// If the parent role was seen before, we still might need to update
 			// the isAdmin flag for that role, but there's no need to recurse
 			// through the role's ancestry again.
-			prev, alreadySeen := ret[membership.role]
-			ret[membership.role] = prev || membership.isAdmin
+			prev, alreadySeen := ret[membership.parent]
+			ret[membership.parent] = prev || membership.isAdmin
 			if !alreadySeen {
-				recurse(membership.role)
+				recurse(membership.parent)
 			}
 		}
 	}
 	recurse(member)
 	return ret, nil
+}
+
+// membership represents a parent-child role relationship.
+type membership struct {
+	parent, child username.SQLUsername
+	isAdmin       bool
+}
+
+func forEachRoleWithMemberships(
+	ctx context.Context,
+	txn isql.Txn,
+	fn func(ctx context.Context, role username.SQLUsername, memberships []membership) error,
+) (retErr error) {
+	const query = `
+SELECT
+  u.username,
+  array_agg(rm.role ORDER BY rank),
+  array_agg(rm."isAdmin" ORDER BY rank)
+FROM system.users u
+LEFT OUTER JOIN (
+  SELECT *, rank() OVER (PARTITION BY member ORDER BY role)
+  FROM system.role_members
+) rm ON u.username = rm.member
+GROUP BY u.username;`
+	it, err := txn.QueryIteratorEx(ctx, "read-role-with-memberships", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride, query)
+	if err != nil {
+		return err
+	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
+		child := tree.MustBeDString(row[0])
+		childName := username.MakeSQLUsernameFromPreNormalizedString(string(child))
+		parentNames := tree.MustBeDArray(row[1])
+		isAdmins := tree.MustBeDArray(row[2])
+
+		memberships := make([]membership, 0, parentNames.Len())
+		for i := 0; i < parentNames.Len(); i++ {
+			if parentNames.Array[i] == tree.DNull {
+				// A null element means this role has no parents.
+				continue
+			}
+			parent := tree.MustBeDString(parentNames.Array[i])
+			parentName := username.MakeSQLUsernameFromPreNormalizedString(string(parent))
+			isAdmin := tree.MustBeDBool(isAdmins.Array[i])
+			memberships = append(memberships, membership{
+				parent:  parentName,
+				child:   childName,
+				isAdmin: bool(isAdmin),
+			})
+		}
+
+		// The names in the system tables are already normalized.
+		if err := fn(
+			ctx,
+			childName,
+			memberships,
+		); err != nil {
+			return err
+		}
+	}
+	return err
 }
 
 // UserHasRoleOption implements the AuthorizationAccessor interface.
