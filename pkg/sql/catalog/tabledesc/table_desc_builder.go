@@ -514,6 +514,11 @@ func maybeFillInDescriptor(
 	set(catalog.StrippedDanglingSelfBackReferences, maybeStripDanglingSelfBackReferences(builder))
 	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(builder))
 	set(catalog.FixedIncorrectForeignKeyOrigins, maybeFixForeignKeySelfReferences(builder))
+	identityColumnsFixed, err := maybeFixUsesSequencesIDForIdentityColumns(builder)
+	if err != nil {
+		return catalog.PostDeserializationChanges{}, err
+	}
+	set(catalog.FixedUsesSequencesIDForIdentityColumns, identityColumnsFixed)
 	return changes, nil
 }
 
@@ -1290,4 +1295,35 @@ func maybeFixForeignKeySelfReferences(builder *tableDescriptorBuilder) (wasRepai
 		}
 	}
 	return wasRepaired
+}
+
+// maybeFixUsesSequencesIDForIdentityColumns fixes sequence references for
+// identity / serial column expressions.
+func maybeFixUsesSequencesIDForIdentityColumns(
+	builder *tableDescriptorBuilder,
+) (wasRepaired bool, err error) {
+	tableDesc := builder.getLatestDesc()
+	for idx := range tableDesc.Columns {
+		column := &tableDesc.Columns[idx]
+		if column.GeneratedAsIdentityType == catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN {
+			continue
+		}
+		// If the column doesn't have exactly one sequence reference then something
+		// is wrong.
+		if len(column.UsesSequenceIds) == 1 {
+			continue
+		}
+		// The first ownership will point to the owner from CREATE TABLE.
+		tableDesc = builder.getOrInitModifiedDesc()
+		column = &tableDesc.Columns[idx]
+		if len(column.OwnsSequenceIds) == 0 {
+			return false, errors.AssertionFailedf("identity column %s (%d) on table %s must own a sequence",
+				column.Name,
+				column.ID,
+				tableDesc.Name)
+		}
+		column.UsesSequenceIds = append(column.UsesSequenceIds, column.OwnsSequenceIds[0])
+		wasRepaired = true
+	}
+	return wasRepaired, nil
 }
