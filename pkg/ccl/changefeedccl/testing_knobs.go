@@ -96,6 +96,9 @@ type TestingKnobs struct {
 
 	// AsyncFlushSync is called in async flush goroutines as a way to provide synchronization between them.
 	AsyncFlushSync func()
+
+	// WrapTelemetryLogger is used to wrap the periodic telemetry logger in tests.
+	WrapTelemetryLogger func(logger telemetryLogger) telemetryLogger
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

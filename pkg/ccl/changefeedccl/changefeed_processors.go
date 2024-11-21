@@ -272,7 +272,7 @@ func (ca *changeAggregator) wrapMetricsController(
 		return ca.sliMetrics, err
 	}
 
-	recorderWithTelemetry, err := wrapMetricsRecorderWithTelemetry(ctx, job, ca.FlowCtx.Cfg.Settings, recorder)
+	recorderWithTelemetry, err := wrapMetricsRecorderWithTelemetry(ctx, job, ca.FlowCtx.Cfg.Settings, recorder, ca.knobs)
 	if err != nil {
 		return ca.sliMetrics, err
 	}
