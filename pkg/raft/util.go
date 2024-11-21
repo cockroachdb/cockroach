@@ -31,7 +31,6 @@ var isLocalMsg = [...]bool{
 	pb.MsgBeat:              true,
 	pb.MsgUnreachable:       true,
 	pb.MsgSnapStatus:        true,
-	pb.MsgCheckQuorum:       true,
 	pb.MsgStorageAppend:     true,
 	pb.MsgStorageAppendResp: true,
 	pb.MsgStorageApply:      true,
