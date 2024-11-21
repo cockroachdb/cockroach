@@ -373,6 +373,13 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 	if n.n.As() {
+		params.p.BufferClientNotice(
+			params.ctx,
+			pgnotice.Newf("CREATE TABLE ... AS does not copy over "+
+				"indexes, default expressions, or constraints; the new table "+
+				"has a hidden rowid primary key column"),
+		)
+
 		asCols := planColumns(n.sourcePlan)
 		if !n.n.AsHasUserSpecifiedPrimaryKey() {
 			// rowID column is already present in the input as the last column

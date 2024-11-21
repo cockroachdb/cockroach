@@ -1324,7 +1324,7 @@ Query {"String": "CREATE TABLE t110486_1 (k1 PRIMARY KEY) AS VALUES (1), (2), (3
 Query {"String": "CREATE TABLE t110486_2 (k2 PRIMARY KEY) AS VALUES (1), (2), (3);"}
 ----
 
-until
+until ignore=NoticeResponse
 ReadyForQuery
 ReadyForQuery
 ----
