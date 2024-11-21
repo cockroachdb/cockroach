@@ -1481,3 +1481,24 @@ SELECT qux();
 NULL
 
 subtest end
+
+subtest empty_schema_name
+
+user root
+
+statement ok
+set role root;
+use defaultdb;
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42601 pq: empty schema name
+CREATE SCHEMA ""."";
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 42601 pq: empty database name
+CREATE SCHEMA ""."";
+
+statement error pgcode 42601 pq: .*empty schema name
+CREATE SCHEMA "";
+
+subtest end
