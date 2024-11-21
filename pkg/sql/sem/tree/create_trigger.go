@@ -91,6 +91,15 @@ var TriggerActionTimeFromTree = [...]semenumpb.TriggerActionTime{
 	TriggerActionTimeInsteadOf: semenumpb.TriggerActionTime_INSTEAD_OF,
 }
 
+// TriggerActionTimeToTree allows the conversion from a
+// tree.TriggerActionTime to a semenumpb.TriggerActionTime.
+var TriggerActionTimeToTree = [...]TriggerActionTime{
+	semenumpb.TriggerActionTime_ACTION_UNKNOWN: TriggerActionTimeUnknown,
+	semenumpb.TriggerActionTime_BEFORE:         TriggerActionTimeBefore,
+	semenumpb.TriggerActionTime_AFTER:          TriggerActionTimeAfter,
+	semenumpb.TriggerActionTime_INSTEAD_OF:     TriggerActionTimeInsteadOf,
+}
+
 // Format implements the NodeFormatter interface.
 func (node *TriggerActionTime) Format(ctx *FmtCtx) {
 	switch *node {
@@ -124,6 +133,16 @@ var TriggerEventTypeFromTree = [...]semenumpb.TriggerEventType{
 	TriggerEventUpdate:      semenumpb.TriggerEventType_UPDATE,
 	TriggerEventDelete:      semenumpb.TriggerEventType_DELETE,
 	TriggerEventTruncate:    semenumpb.TriggerEventType_TRUNCATE,
+}
+
+// TriggerEventTypeToTree allows the conversion from a
+// semenumpb.TriggerEventType to a tree.TriggerEventType.
+var TriggerEventTypeToTree = [...]TriggerEventType{
+	semenumpb.TriggerEventType_EVENT_UNKNOWN: TriggerEventTypeUnknown,
+	semenumpb.TriggerEventType_INSERT:        TriggerEventInsert,
+	semenumpb.TriggerEventType_UPDATE:        TriggerEventUpdate,
+	semenumpb.TriggerEventType_DELETE:        TriggerEventDelete,
+	semenumpb.TriggerEventType_TRUNCATE:      TriggerEventTruncate,
 }
 
 // Format implements the NodeFormatter interface.

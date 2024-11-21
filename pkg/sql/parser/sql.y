@@ -1030,7 +1030,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANT_NAME TENANTS TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
-%token <str> TRANSACTION TRANSACTIONS TRANSFER TRANSFORM TREAT TRIGGER TRIM TRUE
+%token <str> TRANSACTION TRANSACTIONS TRANSFER TRANSFORM TREAT TRIGGER TRIGGERS TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE TYPES
 %token <str> TRACING
 
@@ -1310,6 +1310,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> show_columns_stmt
 %type <tree.Statement> show_commit_timestamp_stmt
 %type <tree.Statement> show_constraints_stmt
+%type <tree.Statement> show_triggers_stmt
 %type <tree.Statement> show_create_stmt
 %type <tree.ShowCreateFormatOption> opt_show_create_format_options
 %type <tree.Statement> show_create_schedules_stmt
@@ -7794,7 +7795,7 @@ zone_value:
 // %Help: SHOW
 // %Category: Group
 // %Text:
-// SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS,
+// SHOW BACKUP, SHOW CLUSTER SETTING, SHOW COLUMNS, SHOW CONSTRAINTS, SHOW TRIGGERS,
 // SHOW CREATE, SHOW CREATE SCHEDULES, SHOW DATABASES, SHOW DEFAULT SESSION VARIABLES,
 // SHOW ENUMS, SHOW FUNCTION, SHOW FUNCTIONS, SHOW HISTOGRAM, SHOW INDEXES, SHOW PARTITIONS,
 // SHOW JOBS, SHOW STATEMENTS, SHOW RANGE, SHOW RANGES, SHOW REGIONS, SHOW SURVIVAL GOAL,
@@ -7807,6 +7808,7 @@ show_stmt:
   show_backup_stmt           // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt          // EXTEND WITH HELP: SHOW COLUMNS
 | show_constraints_stmt      // EXTEND WITH HELP: SHOW CONSTRAINTS
+| show_triggers_stmt         // EXTEND WITH HELP: SHOW TRIGGERS
 | show_create_stmt           // EXTEND WITH HELP: SHOW CREATE
 | show_create_schedules_stmt // EXTEND WITH HELP: SHOW CREATE SCHEDULES
 | show_create_external_connections_stmt // EXTEND WITH HELP: SHOW CREATE EXTERNAL CONNECTIONS
@@ -8683,6 +8685,18 @@ show_constraints_stmt:
   }
 | SHOW CONSTRAINTS error // SHOW HELP: SHOW CONSTRAINTS
 
+// %Help: SHOW TRIGGERS - list triggers on a table
+// %Category: DDL
+// %Text: SHOW TRIGGERS FROM <tablename>
+// TODO(drewk): Add docs link.
+show_triggers_stmt:
+  SHOW TRIGGERS FROM table_name
+  {
+    $$.val = &tree.ShowTriggers{Table: $4.unresolvedObjectName()}
+  }
+| SHOW TRIGGER error // SHOW HELP: SHOW TRIGGERS
+| SHOW TRIGGERS error // SHOW HELP: SHOW TRIGGERS
+
 // %Help: SHOW STATEMENTS - list running statements
 // %Category: Misc
 // %Text: SHOW [ALL] [CLUSTER | LOCAL] STATEMENTS
@@ -9223,6 +9237,14 @@ show_create_stmt:
         FunctionReference: $4.unresolvedObjectName().ToUnresolvedName(),
       },
       Procedure: true,
+    }
+  }
+| SHOW CREATE TRIGGER name ON table_name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreateTrigger{
+      Name: tree.Name($4),
+      TableName: $6.unresolvedObjectName(),
     }
   }
 | SHOW CREATE ALL SCHEMAS
@@ -17869,6 +17891,7 @@ unreserved_keyword:
 | TRANSFER
 | TRANSFORM
 | TRIGGER
+| TRIGGERS
 | TRUNCATE
 | TRUSTED
 | TYPE
@@ -18458,6 +18481,7 @@ bare_label_keywords:
 | TRANSFORM
 | TREAT
 | TRIGGER
+| TRIGGERS
 | TRIM
 | TRUE
 | TRUNCATE

@@ -262,6 +262,7 @@ FILES = [
     "show_trace",
     "show_transactions_stmt",
     "show_transfer_stmt",
+    "show_triggers_stmt",
     "show_types_stmt",
     "show_users_stmt",
     "show_default_session_variables_for_role_stmt",

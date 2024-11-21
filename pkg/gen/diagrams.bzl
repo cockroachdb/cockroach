@@ -261,6 +261,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:show_trace.html",
     "//docs/generated/sql/bnf:show_transactions.html",
     "//docs/generated/sql/bnf:show_transfer.html",
+    "//docs/generated/sql/bnf:show_triggers.html",
     "//docs/generated/sql/bnf:show_types.html",
     "//docs/generated/sql/bnf:show_users.html",
     "//docs/generated/sql/bnf:show_var.html",

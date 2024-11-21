@@ -276,6 +276,7 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:show_trace.bnf",
     "//docs/generated/sql/bnf:show_transactions_stmt.bnf",
     "//docs/generated/sql/bnf:show_transfer_stmt.bnf",
+    "//docs/generated/sql/bnf:show_triggers_stmt.bnf",
     "//docs/generated/sql/bnf:show_types_stmt.bnf",
     "//docs/generated/sql/bnf:show_users_stmt.bnf",
     "//docs/generated/sql/bnf:show_var.bnf",
