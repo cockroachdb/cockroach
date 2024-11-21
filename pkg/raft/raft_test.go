@@ -4895,6 +4895,37 @@ func TestLogReplicationWithReorderedMessage(t *testing.T) {
 	require.Equal(t, r1.trk.Progress(2).Match, m.Index)
 }
 
+func TestFortificationMetrics(t *testing.T) {
+	fabric := raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3, 4)
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3, 4)),
+		withStoreLiveness(fabric.GetStoreLiveness(1)))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3, 4)),
+		withStoreLiveness(fabric.GetStoreLiveness(2)))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3, 4)),
+		withStoreLiveness(fabric.GetStoreLiveness(3)))
+	n4 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3, 4)),
+		withStoreLiveness(fabric.GetStoreLiveness(4)))
+
+	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3, n4)
+
+	// Withdraw 2's SupportFor() 1. This should cause 2 to reject the
+	// fortification request.
+	nt.livenessFabric.WithdrawSupportFor(2, 1)
+
+	// Withdraw 1's SupportFrom() 3. This should cause 1 to skip sending the
+	// fortification message to 3.
+	nt.livenessFabric.WithdrawSupportFrom(1, 3)
+
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+
+	// The leader should receive an accepted MsgFortifyResp from itself and 4.
+	require.Equal(t, int64(2), n1.metrics.AcceptedFortificationResponses.Count())
+	// The leader should receive a rejected MsgFortifyResp from 2.
+	require.Equal(t, int64(1), n1.metrics.RejectedFortificationResponses.Count())
+	// The leader should skip sending a MsgFortify to 3.
+	require.Equal(t, int64(1), n1.metrics.SkippedFortificationDueToLackOfSupport.Count())
+}
+
 func expectOneMessage(t *testing.T, r *raft) pb.Message {
 	msgs := r.readMessages()
 	require.Len(t, msgs, 1, "expect one message")
@@ -5169,6 +5200,7 @@ func newTestConfig(
 		MaxInflightMsgs: 256,
 		StoreLiveness:   storeLiveness,
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 }
 
