@@ -111,13 +111,12 @@ func (p *ProgressTracker) Visit(f func(id pb.PeerID, pr *Progress)) {
 // raft state machine. Otherwise, it returns false.
 func (p *ProgressTracker) QuorumActive() bool {
 	votes := map[pb.PeerID]bool{}
-	p.Visit(func(id pb.PeerID, pr *Progress) {
+	for id, pr := range p.progress {
 		if pr.IsLearner {
-			return
+			continue
 		}
 		votes[id] = pr.RecentActive
-	})
-
+	}
 	return p.config.Voters.VoteResult(votes) == quorum.VoteWon
 }
 
