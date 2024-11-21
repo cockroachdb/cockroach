@@ -10,7 +10,9 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -178,4 +181,119 @@ func runUpdateSSTTimestamps(ctx context.Context, b *testing.B, numKeys int, conc
 		}
 	}
 	_ = res
+}
+
+func TestBackupExternalIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	seed := randutil.NewPseudoSeed()
+	prng := randutil.NewTestRandWithSeed(seed)
+
+	cfg := generateRandomSSTsConfig{
+		Seed:        prng.Int63(),
+		Keys:        randutil.RandIntInRange(prng, 10_000, 1_000_000),
+		Files:       randutil.RandIntInRange(prng, 2, 5),
+		MaxKeyLen:   randutil.RandIntInRange(prng, 3, 20),
+		MaxValLen:   randutil.RandIntInRange(prng, 2, 1<<10),
+		MaxWallTime: math.MaxInt64,
+	}
+	keys, objs := constructBackupRandomSSTs(t, cfg)
+	bufs := make([][]byte, len(objs))
+	var size int
+	for i := range objs {
+		bufs[i] = objs[i].Buffer.Bytes()
+		size += len(bufs[i])
+	}
+
+	for j := 0; j < 10; j++ {
+		startIndex := randutil.RandIntInRange(prng, 0, len(keys)-1)
+		endIndex := randutil.RandIntInRange(prng, startIndex, len(keys))
+		startKey, err := DecodeMVCCKey(keys[startIndex])
+		require.NoError(t, err)
+		endKey, err := DecodeMVCCKey(keys[endIndex])
+		require.NoError(t, err)
+
+		underlyingIter, err := NewMultiMemSSTIterator(bufs, false, IterOptions{
+			UpperBound: endKey.Key,
+		})
+		require.NoError(t, err)
+
+		it := NewReadAsOfIterator(underlyingIter, hlc.Timestamp{
+			WallTime: randutil.RandInt63InRange(prng, 1, cfg.MaxWallTime),
+		})
+
+		it.SeekGE(startKey)
+		valid, err := it.Valid()
+		require.NoError(t, err)
+		for valid {
+			it.NextKey()
+			valid, err = it.Valid()
+			require.NoError(t, err)
+		}
+		stats := underlyingIter.Stats()
+		it.Close()
+		// Assert that the iterator did not load blocks repeatedly, resulting in
+		// more blocks read than the size of the SSTs. Bugs have existed in the
+		// past that allowed an external iterator to fall into a pathological
+		// pattern of repeatedly re-loading index blocks.
+		require.LessOrEqual(t, stats.Stats.InternalStats.BlockBytes, uint64(size))
+	}
+}
+
+type generateRandomSSTsConfig struct {
+	Seed        int64
+	Keys        int
+	Files       int
+	MaxKeyLen   int
+	MaxValLen   int
+	MaxWallTime int64
+}
+
+func constructBackupRandomSSTs(
+	t testing.TB, cfg generateRandomSSTsConfig,
+) (keys [][]byte, files []MemObject) {
+	prng := randutil.NewTestRandWithSeed(cfg.Seed)
+	keys = make([][]byte, cfg.Keys)
+	for i := range keys {
+		userKey := randutil.RandBytes(prng, randutil.RandIntInRange(prng, 1, cfg.MaxKeyLen))
+		k := MVCCKey{
+			Key: roachpb.Key(userKey),
+			Timestamp: hlc.Timestamp{
+				WallTime: randutil.RandInt63InRange(prng, 1, cfg.MaxWallTime),
+			},
+		}
+		keys[i] = EncodeMVCCKey(k)
+	}
+	slices.SortFunc(keys, EngineKeyCompare)
+
+	objs := make([]MemObject, cfg.Files)
+	writers := make([]*SSTWriter, cfg.Files)
+	for i := 0; i < cfg.Files; i++ {
+		// TODO(jackson): Consider randomizing BlockSize, IndexBlockSize to get
+		// better code coverage without increasing the size of sstables.
+		w := MakeBackupSSTWriter(context.Background(), cluster.MakeTestingClusterSettings(), &objs[i].Buffer)
+		writers[i] = &w
+	}
+
+	valueBuf := make([]byte, cfg.MaxValLen)
+	for _, key := range keys {
+		wi := rand.Intn(len(writers))
+		w := writers[wi]
+		value := valueBuf[:randutil.RandIntInRange(prng, 1, cfg.MaxValLen)]
+		randutil.ReadTestdataBytes(prng, value)
+		v, err := EncodeMVCCValue(MVCCValue{Value: roachpb.MakeValueFromBytes(value)})
+		require.NoError(t, err)
+		require.NoError(t, w.fw.Set(key, v))
+		// TODO(jackson): Divvy the keys a little more reasonably.
+		if len(writers) > 1 && prng.Float64() < 0.01 {
+			require.NoError(t, w.Finish())
+			writers[len(writers)-1], writers[wi] = writers[wi], writers[len(writers)-1]
+			writers = writers[:len(writers)-1]
+		}
+	}
+	for _, w := range writers {
+		require.NoError(t, w.Finish())
+	}
+	return keys, objs
 }
