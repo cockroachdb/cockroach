@@ -55,7 +55,6 @@ type Job struct {
 		payload  jobspb.Payload
 		progress jobspb.Progress
 		status   Status
-		runStats *RunStats
 	}
 }
 
@@ -260,16 +259,6 @@ func (u Updater) started(ctx context.Context) error {
 			md.Payload.StartedMicros = timeutil.ToUnixMicros(u.now())
 			ju.UpdatePayload(md.Payload)
 		}
-		// md.RunStats can be nil because of the timing of version-update when exponential-backoff
-		// gets activated. It may happen that backoff is not activated when Update() function was
-		// called, which will cause to not populate md.RunStats. However, when the code reaches this
-		// point, version update may have been updated to enable backoff. In this case, we can skip
-		// updating num_runs and last_run, treating this job run as if backoff was not activated.
-		//
-		// TODO (sajjad): Update this comment after version 22.2 has been released.
-		if md.RunStats != nil {
-			ju.UpdateRunStats(md.RunStats.NumRuns+1, u.now())
-		}
 		if traceID != 0 && md.Progress != nil && md.Progress.TraceID != traceID {
 			md.Progress.TraceID = traceID
 			ju.UpdateProgress(md.Progress)
@@ -425,23 +414,6 @@ func (u Updater) reverted(
 				}
 			}
 			ju.UpdateStatus(StatusReverting)
-		}
-		// md.RunStats will be nil if clusterversion.RetryJobsWithExponentialBackoff
-		// was not active when Update was called above. In this case, we skip updating
-		// the runStats, treating this job run as if backoff is not active.
-		//
-		// TODO (sajjad): Update this comment after version 22.2 has been released.
-		if md.RunStats != nil {
-			// We can reach here due to a failure or due to the job being canceled.
-			// We should reset the exponential backoff parameters if the job was not
-			// canceled. Note that md.Status will be StatusReverting if the job
-			// was canceled.
-			numRuns := md.RunStats.NumRuns + 1
-			if md.Status != StatusReverting {
-				// Reset the number of runs to speed up reverting.
-				numRuns = 1
-			}
-			ju.UpdateRunStats(numRuns, u.now())
 		}
 		if traceID != 0 && md.Progress != nil && md.Progress.TraceID != traceID {
 			md.Progress.TraceID = traceID
@@ -797,17 +769,6 @@ func unmarshalStatus(datum tree.Datum) (Status, error) {
 		return "", errors.AssertionFailedf("expected string status, but got %T", datum)
 	}
 	return Status(*statusString), nil
-}
-
-// getRunStats returns the RunStats for a job. If they are not set, it will
-// return a zero-value.
-func (j *Job) getRunStats() (rs RunStats) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	if j.mu.runStats != nil {
-		rs = *j.mu.runStats
-	}
-	return rs
 }
 
 // Start will resume the job. The transaction used to create the StartableJob

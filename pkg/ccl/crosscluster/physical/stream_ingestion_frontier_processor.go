@@ -341,13 +341,6 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 
 		ju.UpdateProgress(progress)
 
-		// Reset RunStats.NumRuns to 1 since the stream ingestion has returned to
-		// a steady state. By resetting NumRuns,we avoid future job system level
-		// retries from having a large backoff because of past failures.
-		if md.RunStats != nil && md.RunStats.NumRuns > 1 {
-			ju.UpdateRunStats(1, md.RunStats.LastRun)
-		}
-
 		// Update the protected timestamp record protecting the destination tenant's
 		// keyspan if the replicatedTime has moved forward since the last time we
 		// recorded progress. This makes older revisions of replicated values with a

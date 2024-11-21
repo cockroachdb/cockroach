@@ -6521,7 +6521,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 					_, _ = db.Exec(`SET use_declarative_schema_changer = 'off'; ` + scStmt)
 				}(tc.scStmt)
 				// Verify that the job is in retry state while reverting.
-				const query = `SELECT num_runs > 3 FROM crdb_internal.jobs WHERE status = '` + string(jobs.StatusReverting) + `' AND description ~ '%s'`
+				const query = `SELECT true FROM crdb_internal.jobs WHERE status = '` + string(jobs.StatusReverting) + `' AND description ~ '%s'`
 				sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf(query, tc.jobRegex), [][]string{{"true"}})
 			})
 		}

@@ -112,12 +112,11 @@ type retriableExecutionError struct {
 }
 
 func newRetriableExecutionError(
-	instanceID base.SQLInstanceID, status Status, start, end time.Time, cause error,
+	instanceID base.SQLInstanceID, status Status, end time.Time, cause error,
 ) *retriableExecutionError {
 	return &retriableExecutionError{
 		instanceID: instanceID,
 		status:     status,
-		start:      start,
 		end:        end,
 		cause:      cause,
 	}
