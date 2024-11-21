@@ -133,5 +133,10 @@ var _ BufferedStream = (*BufferedPerRangeEventSink)(nil)
 func (s *BufferedPerRangeEventSink) SendBuffered(
 	event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
-	panic("unimplemented: buffered sender for rangefeed #126560")
+	response := &kvpb.MuxRangeFeedEvent{
+		RangeFeedEvent: *event,
+		RangeID:        s.rangeID,
+		StreamID:       s.streamID,
+	}
+	return s.wrapped.sendBuffered(response, alloc)
 }
