@@ -2485,15 +2485,13 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	const setSessionVariableString = `SET enable_experimental_alter_column_type_general = true;`
-
 	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return nil, err
 	}
 	if !tableExists {
 		return makeOpStmtForSingleError(OpStmtDDL,
-			fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DATA TYPE IrrelevantDataType`, setSessionVariableString, tableName),
+			fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DATA TYPE IrrelevantDataType`, tableName),
 			pgcode.UndefinedTable), nil
 	}
 	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
@@ -2512,8 +2510,8 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 	}
 	if !columnExists {
 		return makeOpStmtForSingleError(OpStmtDDL,
-			fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE IrrelevantTypeName`,
-				setSessionVariableString, tableName, columnForTypeChange.name),
+			fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE IrrelevantTypeName`,
+				tableName, columnForTypeChange.name),
 			pgcode.UndefinedColumn), nil
 	}
 
@@ -2559,6 +2557,9 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		// We could fail since we don't specify the USING expression, so it's
 		// possible that we could pick a data type that doesn't have an automatic cast.
 		stmt.potentialExecErrors.add(pgcode.DatatypeMismatch)
+		// On older versions, attempts to alter the type will fail with an
+		// experimental feature failure.
+		stmt.potentialExecErrors.add(pgcode.ExperimentalFeature)
 	}
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
@@ -2569,8 +2570,8 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 	// TODO(#134008): Remove this with the PR that fixes this bug.
 	stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
 
-	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
-		setSessionVariableString, tableName.String(), columnForTypeChange.name.String(), newTypeName.SQLString())
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
+		tableName.String(), columnForTypeChange.name.String(), newTypeName.SQLString())
 	return stmt, nil
 
 }

@@ -429,10 +429,11 @@ func updateColumnType(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
 	b.Add(newColType)
 }
 
-// failIfExperimentalSettingNotSet checks if the setting that allows altering
-// types is enabled. If the setting is not enabled, this function will panic.
+// failIfExperimentalSettingNotSet checks if the current version requires a
+// setting to be enabled to perform an ALTER COLUMN TYPE operation.
 func failIfExperimentalSettingNotSet(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
-	if !b.SessionData().AlterColumnTypeGeneralEnabled {
+	if !b.SessionData().AlterColumnTypeGeneralEnabled &&
+		!b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_1) {
 		panic(pgerror.WithCandidateCode(
 			errors.WithHint(
 				errors.WithIssueLink(
