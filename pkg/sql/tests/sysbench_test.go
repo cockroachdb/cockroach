@@ -679,6 +679,7 @@ func BenchmarkSysbench(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						workload.opFn(sys, rng)
+						trace.Log(ctx, "foo", "bar")
 					}
 				})
 			}

@@ -12,6 +12,7 @@ import (
 	"maps"
 	"math"
 	"math/rand"
+	"runtime/trace"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -2297,6 +2298,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	if err != nil {
 		return err // err could be io.EOF
 	}
+	defer trace.StartRegion(ctx, "exec-sql-cmd").End()
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",

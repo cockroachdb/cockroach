@@ -9,6 +9,7 @@ import (
 	"context"
 	"math/rand"
 	"runtime/debug"
+	"runtime/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -474,6 +475,7 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 func (tc *TxnCoordSender) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
+	defer trace.StartRegion(ctx, "TxnCoordSender.Send").End()
 	// NOTE: The locking here is unusual. Although it might look like it, we are
 	// NOT holding the lock continuously for the duration of the Send. We lock
 	// here, and unlock at the bottom of the interceptor stack, in the
