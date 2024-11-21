@@ -2033,6 +2033,27 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 	}
+
+	// Bump the version of the role membership table so that the cache is
+	// invalidated.
+	if err := r.execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		txn.KV().SetDebugName("system-restore-bump-role-membership-table")
+		log.Eventf(ctx, "bumping table version of %s", systemschema.RoleMembersTable.GetName())
+
+		td, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, keys.RoleMembersTableID)
+		if err != nil {
+			return errors.Wrapf(err, "fetching table %s", systemschema.RoleMembersTable.GetName())
+		}
+		td.MaybeIncrementVersion()
+		if err := txn.Descriptors().WriteDesc(ctx, false, td, txn.KV()); err != nil {
+			return errors.Wrapf(err, "bumping table version for %s", systemschema.RoleMembersTable.GetName())
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	if err := r.execCfg.ProtectedTimestampManager.Unprotect(ctx, r.job); err != nil {
 		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
