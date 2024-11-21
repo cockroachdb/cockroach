@@ -104,7 +104,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 					"read-percent": "50",
 				}
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := fmt.Sprintf("./cockroach workload run kv %s--concurrency=2 "+
+				cmd := fmt.Sprintf("./cockroach workload run kv %s --concurrency=2 "+
 					"--splits=1000 --read-percent=50 --min-block-bytes=1024 --max-block-bytes=1024 "+
 					"--txn-qos='regular' --tolerate-errors %s %s %s",
 					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), foregroundDB, dur, url)
