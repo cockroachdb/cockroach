@@ -800,17 +800,7 @@ var enableGrantOptionForOwner = settings.RegisterBoolSetting(
 func resolveMemberOfWithAdminOption(
 	ctx context.Context, member username.SQLUsername, txn isql.Txn,
 ) (map[username.SQLUsername]bool, error) {
-	roleExists, err := RoleExists(ctx, txn, member)
-	if err != nil {
-		return nil, err
-	} else if !roleExists {
-		return nil, sqlerrors.NewUndefinedUserError(member)
-	}
 	ret := map[username.SQLUsername]bool{}
-	if member.IsNodeUser() {
-		ret[username.AdminRoleName()] = true
-	}
-
 	memberToRoles := make(map[username.SQLUsername][]membership)
 	if err := forEachRoleWithMemberships(
 		ctx, txn,
@@ -820,6 +810,23 @@ func resolveMemberOfWithAdminOption(
 		},
 	); err != nil {
 		return nil, err
+	}
+	if member.IsNodeUser() {
+		memberToRoles[username.NodeUserName()] = append(
+			memberToRoles[username.NodeUserName()],
+			membership{
+				parent:  username.AdminRoleName(),
+				child:   username.NodeUserName(),
+				isAdmin: true,
+			},
+		)
+	}
+
+	// memberToRoles will have an entry for every user, so we first verify that
+	// the user exists.
+	_, roleExists := memberToRoles[member]
+	if !roleExists {
+		return nil, sqlerrors.NewUndefinedUserError(member)
 	}
 
 	// Recurse through all roles associated with the member.
