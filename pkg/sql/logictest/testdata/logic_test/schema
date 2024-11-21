@@ -1481,3 +1481,24 @@ SELECT qux();
 NULL
 
 subtest end
+
+
+subtest empty_schema_name
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42601 pq: empty schema name
+CREATE SCHEMA ""."";
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 42601 pq: empty database name
+CREATE SCHEMA ""."";
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42601 pq: empty schema name
+CREATE SCHEMA "";
+
+onlyif config local-legacy-schema-changer
+statement error pq: user bar_user does not have CREATE privilege on database bar
+CREATE SCHEMA "";
+
+subtest end
