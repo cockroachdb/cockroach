@@ -144,13 +144,13 @@ func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.B
 
 	// Emit summary metrics from Total
 	for metricName, value := range r.Total {
-		buffer.WriteString(fmt.Sprintf("# TYPE %s gauge\n", util.SanitizeMetricName(metricName)))
+		buffer.WriteString(GetOpenmetricsGaugeType(metricName))
 		buffer.WriteString(fmt.Sprintf("%s{%s} %f %d\n", util.SanitizeMetricName(metricName), *labelString, value, timeutil.Now().UTC().Unix()))
 	}
 
 	// Emit histogram metrics from Stats
 	for _, stat := range r.Stats {
-		buffer.WriteString(fmt.Sprintf("# TYPE %s gauge\n", util.SanitizeMetricName(stat.Tag)))
+		buffer.WriteString(GetOpenmetricsGaugeType(stat.Tag))
 		for i, timestamp := range stat.Time {
 			t := timeutil.Unix(0, timestamp)
 			buffer.WriteString(
@@ -444,4 +444,8 @@ func GetOpenmetricsLabelMap(
 		maps.Copy(defaultMap, labels)
 	}
 	return defaultMap
+}
+
+func GetOpenmetricsGaugeType(metricName string) string {
+	return fmt.Sprintf("# TYPE %s gauge\n", util.SanitizeMetricName(metricName))
 }
