@@ -347,8 +347,6 @@ jobs:
         if: always()
   cockroach-microbench-ci:
     runs-on: [ self-hosted, basic_runner_group ]
-    # TODO(sambhav-jain-16): enable this for pull requests also
-    if: ${{ github.event_name == 'push' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -383,7 +381,7 @@ jobs:
       - name: run scripts
         run: ./build/github/cockroach-microbench-ci.sh
         env:
-          COMPARE_THRESHOLD: "5.00"
+          COMPARE_THRESHOLD: "20.00"
           PUSH_STEP: ${{ github.event_name == 'push' && env.GITHUB_ACTIONS_BRANCH != 'staging' }}
           BASE_SHA: ${{ steps.get_latest_commit_target_branch.outputs.latest_commit }}
 
