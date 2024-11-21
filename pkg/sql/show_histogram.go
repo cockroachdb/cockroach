@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -61,6 +62,22 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 				// We found a statistic, but it has no histogram.
 				return nil, fmt.Errorf("histogram %d not found", n.HistogramID)
 			}
+
+			// Guard against crashes in the code below .
+			defer func() {
+				if r := recover(); r != nil {
+					// Avoid crashing the process in case of a "safe" panic. This is only
+					// possible because the code does not update shared state and does not
+					// manipulate locks.
+					if ok, e := errorutil.ShouldCatch(r); ok {
+						err = e
+					} else {
+						// Other panic objects can't be considered "safe" and thus are
+						// propagated as crashes that terminate the session.
+						panic(r)
+					}
+				}
+			}()
 
 			histogram := &stats.HistogramData{}
 			histData := *row[0].(*tree.DBytes)
