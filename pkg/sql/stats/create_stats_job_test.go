@@ -564,14 +564,6 @@ func TestCreateStatsProgress(t *testing.T) {
 	skip.UnderDeadlock(t, "the test is too sensitive to overload")
 
 	var allowRequest chan struct{}
-	var allowRequestClosed bool
-	// Make sure that we unblock the test server in all scenarios with test
-	// failures.
-	defer func() {
-		if !allowRequestClosed {
-			close(allowRequest)
-		}
-	}()
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
 	var params base.TestServerArgs
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
@@ -588,6 +580,15 @@ func TestCreateStatsProgress(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	var allowRequestClosed bool
+	// Make sure that we unblock the test server in all scenarios with test
+	// failures.
+	defer func() {
+		if !allowRequestClosed {
+			close(allowRequest)
+		}
+	}()
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -723,14 +724,6 @@ func TestCreateStatsUsingExtremesProgress(t *testing.T) {
 	skip.UnderDeadlock(t, "the test is too sensitive to overload")
 
 	var allowRequest chan struct{}
-	var allowRequestClosed bool
-	// Make sure that we unblock the test server in all scenarios with test
-	// failures.
-	defer func() {
-		if !allowRequestClosed {
-			close(allowRequest)
-		}
-	}()
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
 	var params base.TestServerArgs
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
@@ -747,6 +740,15 @@ func TestCreateStatsUsingExtremesProgress(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	var allowRequestClosed bool
+	// Make sure that we unblock the test server in all scenarios with test
+	// failures.
+	defer func() {
+		if !allowRequestClosed {
+			close(allowRequest)
+		}
+	}()
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -777,7 +779,7 @@ func TestCreateStatsUsingExtremesProgress(t *testing.T) {
 	// Invalidate the stats cache so that we can be sure to get the latest stats.
 	s.ExecutorConfig().(sql.ExecutorConfig).TableStatsCache.InvalidateTableStats(ctx, tID)
 
-	sqlDB.Exec(t, `INSERT INTO d.t SELECT x, x from generate_series(101, 120) as g(x)`)
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT x, x from generate_series(101, 1000) as g(x)`)
 
 	const partialStatQuery = `CREATE STATISTICS s2 FROM d.t USING EXTREMES`
 
@@ -788,13 +790,24 @@ func TestCreateStatsUsingExtremesProgress(t *testing.T) {
 		_, err := conn.Exec(partialStatQuery)
 		errCh <- err
 	}()
-	allowRequest <- struct{}{}
+	// Ten iterations here allows us to read some of the rows but not all.
+	for i := 0; i < 10; i++ {
+		select {
+		case allowRequest <- struct{}{}:
+		case err := <-errCh:
+			if err == nil {
+				t.Fatalf("query unexpectedly finished")
+			} else {
+				t.Fatal(err)
+			}
+		}
+	}
 
 	// Fetch the new job ID since we know it's running now.
 	jobID := getLastCreateStatsJobID(t, sqlDB)
 
 	var fractionCompleted float32
-	var prevFractionCompleted float32
+	prevFractionCompleted := getFractionCompleted(t, sqlDB, jobID)
 
 	// Allow the job to progress until it finishes scanning both indexes.
 Loop:
@@ -885,8 +898,11 @@ func createStatsRequestFilter(
 			_, tableID, _ := encoding.DecodeUvarintAscending(key)
 			// Ensure that the tableID is what we expect it to be.
 			if tableID > 0 && descpb.ID(tableID) == tableToBlock.Load() {
-				// Read from the channel twice to allow jobutils.RunJob to complete
-				// even though there is only one ScanRequest.
+				// Read from the channel twice to allow runCreateStatsJob to
+				// complete even though there is only one ScanRequest.
+				// TODO(yuzefovich): only some tests need this behavior.
+				// Consider asking the caller how many times we should receive
+				// from the channel.
 				<-*allowProgressIota
 				<-*allowProgressIota
 			}
