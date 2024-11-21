@@ -263,6 +263,7 @@ func RegisterTests(r registry.Registry) {
 	register(r, backfill{})
 	register(r, &slowDisk{})
 	register(r, elasticWorkload{})
+	register(r, intents{})
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {

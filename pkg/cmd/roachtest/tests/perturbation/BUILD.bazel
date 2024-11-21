@@ -8,6 +8,7 @@ go_library(
         "elastic_workload.go",
         "framework.go",
         "index_backfill.go",
+        "intents.go",
         "kv_workload.go",
         "network_partition.go",
         "restart_node.go",
