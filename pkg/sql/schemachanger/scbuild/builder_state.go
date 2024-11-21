@@ -1936,8 +1936,7 @@ func (b *builderState) serializeUserDefinedTypes(
 
 func (b *builderState) ResolveDatabasePrefix(schemaPrefix *tree.ObjectNamePrefix) {
 	if schemaPrefix.SchemaName == "" || !schemaPrefix.ExplicitSchema {
-		panic(errors.AssertionFailedf("schema name empty when resolving database prefix for a " +
-			"schema name"))
+		panic(pgerror.Newf(pgcode.Syntax, "empty schema name"))
 	}
 	if schemaPrefix.CatalogName == "" {
 		schemaPrefix.CatalogName = tree.Name(b.cr.CurrentDatabase())
