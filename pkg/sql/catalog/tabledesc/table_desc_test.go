@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -275,6 +276,60 @@ func TestFixIncorrectFKOriginTableID(t *testing.T) {
 			desc := b.BuildCreatedMutableTable()
 			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.FixedIncorrectForeignKeyOrigins))
 			require.False(t, out.BuildCreatedMutableTable().GetPostDeserializationChanges().Contains(catalog.FixedIncorrectForeignKeyOrigins))
+			require.Equal(t, out.BuildCreatedMutableTable().TableDesc(), desc.TableDesc())
+		})
+	}
+}
+
+func TestFixMissingSequenceIdentityRefs(t *testing.T) {
+	type testCase struct {
+		name                  string
+		input, expectedOutput descpb.TableDescriptor
+	}
+	defaultExpr := "nextval('sq1')"
+	testData := []testCase{
+		{
+			name: "missing sequence references for identity",
+			input: descpb.TableDescriptor{
+				Name: "foo",
+				ID:   104,
+				Columns: []descpb.ColumnDescriptor{{
+					Name:                    "blah",
+					ID:                      1,
+					Type:                    types.Int,
+					GeneratedAsIdentityType: catpb.GeneratedAsIdentityType_GENERATED_ALWAYS,
+					DefaultExpr:             &defaultExpr,
+					OwnsSequenceIds:         []descpb.ID{23},
+					UsesSequenceIds:         nil,
+				},
+				},
+			},
+			expectedOutput: descpb.TableDescriptor{
+				Name: "foo",
+				ID:   104,
+				Columns: []descpb.ColumnDescriptor{{
+					Name:                    "blah",
+					ID:                      1,
+					Type:                    types.Int,
+					GeneratedAsIdentityType: catpb.GeneratedAsIdentityType_GENERATED_ALWAYS,
+					DefaultExpr:             &defaultExpr,
+					OwnsSequenceIds:         []descpb.ID{23},
+					UsesSequenceIds:         []descpb.ID{23},
+				},
+				},
+			},
+		},
+	}
+
+	for _, test := range testData {
+		t.Run(test.name, func(t *testing.T) {
+			b := NewBuilder(&test.input)
+			require.NoError(t, b.RunPostDeserializationChanges())
+			out := NewBuilder(&test.expectedOutput)
+			require.NoError(t, out.RunPostDeserializationChanges())
+			desc := b.BuildCreatedMutableTable()
+			require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.FixedUsesSequencesIDForIdentityColumns))
+			require.False(t, out.BuildCreatedMutableTable().GetPostDeserializationChanges().Contains(catalog.FixedUsesSequencesIDForIdentityColumns))
 			require.Equal(t, out.BuildCreatedMutableTable().TableDesc(), desc.TableDesc())
 		})
 	}
