@@ -119,4 +119,8 @@ const (
 	// FixedIncorrectForeignKeyOrigins indicates that foreign key origin /
 	// reference IDs that should point to the current descriptor were fixed.
 	FixedIncorrectForeignKeyOrigins
+
+	// FixedUsesSequencesIDForIdentityColumns indicates sequence ID references
+	// are fixed for identity / serial columns.
+	FixedUsesSequencesIDForIdentityColumns
 )

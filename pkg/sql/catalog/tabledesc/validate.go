@@ -1221,6 +1221,11 @@ func (desc *wrapper) validateColumns() error {
 					return errors.Newf("conflicting NULL/NOT NULL declarations for column %q", column.GetName())
 				}
 			}
+
+			// For generated as identity columns ensure that the column uses sequences.
+			if column.NumUsesSequences() != 1 {
+				return errors.Newf("column is identity without sequence references %q", column.GetName())
+			}
 		}
 
 		if column.HasOnUpdate() && column.IsGeneratedAsIdentity() {
