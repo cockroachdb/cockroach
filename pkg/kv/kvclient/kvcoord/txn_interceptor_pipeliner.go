@@ -112,6 +112,16 @@ var rejectTxnOverTrackedWritesBudget = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+// rejectTxnMaxCount will reject transactions if the number of inserts or locks
+// exceeds this value. It is preferable to use this setting instead of
+// kv.transaction.reject_over_max_intents_budget.enabled.
+var rejectTxnMaxCount = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.max_intents_and_locks",
+	"maximum count of inserts or durable locks for a single transactions, 0 to disable",
+	0,
+	settings.WithPublic)
+
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using
 // asynchronous consensus. The interceptor then tracks all writes that have been
 // asynchronously proposed through Raft and ensures that all interfering
@@ -253,6 +263,11 @@ type txnPipeliner struct {
 	// contains all keys spans that the transaction will need to eventually
 	// clean up upon its completion.
 	lockFootprint condensableSpanSet
+
+	// writeCount counts the number of replicated lock acquisitions and intents
+	// written by this txnPipeliner. This includes both in-flight and successful
+	// operations.
+	writeCount int64
 }
 
 // condensableSpanSetRangeIterator describes the interface of RangeIterator
@@ -298,7 +313,7 @@ func (tp *txnPipeliner) SendLocked(
 		return nil, pErr
 	}
 
-	// If we're configured to reject txns over budget, we pre-emptively check
+	// If we're configured to reject txns over budget, we preemptively check
 	// whether this current batch is likely to push us over the edge and, if it
 	// does, we reject it. Note that this check is not precise because generally
 	// we can't know exactly the size of the locks that will be taken by a
@@ -306,10 +321,9 @@ func (tp *txnPipeliner) SendLocked(
 	// budget.
 	rejectOverBudget := rejectTxnOverTrackedWritesBudget.Get(&tp.st.SV)
 	maxBytes := TrackedWritesMaxSize.Get(&tp.st.SV)
-	if rejectOverBudget {
-		if err := tp.maybeRejectOverBudget(ba, maxBytes); err != nil {
-			return nil, kvpb.NewError(err)
-		}
+	rejectTxnMaxCount := rejectTxnMaxCount.Get(&tp.st.SV)
+	if err := tp.maybeRejectOverBudget(ba, maxBytes, rejectOverBudget, rejectTxnMaxCount); err != nil {
+		return nil, kvpb.NewError(err)
 	}
 
 	ba.AsyncConsensus = tp.canUseAsyncConsensus(ctx, ba)
@@ -331,7 +345,7 @@ func (tp *txnPipeliner) SendLocked(
 	// budget. Further requests will be rejected if they attempt to take more
 	// locks.
 	if err := tp.updateLockTracking(
-		ctx, ba, br, pErr, maxBytes, !rejectOverBudget, /* condenseLocksIfOverBudget */
+		ctx, ba, br, pErr, maxBytes, !rejectOverBudget /* condenseLocksIfOverBudget */, rejectTxnMaxCount,
 	); err != nil {
 		return nil, kvpb.NewError(err)
 	}
@@ -356,7 +370,9 @@ func (tp *txnPipeliner) SendLocked(
 // the transaction commits. If it fails, then we'd add the lock spans to our
 // tracking and exceed the budget. It's easier for this code and more
 // predictable for the user if we just reject this batch, though.
-func (tp *txnPipeliner) maybeRejectOverBudget(ba *kvpb.BatchRequest, maxBytes int64) error {
+func (tp *txnPipeliner) maybeRejectOverBudget(
+	ba *kvpb.BatchRequest, maxBytes int64, rejectIfWouldCondense bool, rejectTxnMaxCount int64,
+) error {
 	// Bail early if the current request is not locking, even if we are already
 	// over budget. In particular, we definitely want to permit rollbacks. We also
 	// want to permit lone commits, since the damage in taking too much memory has
@@ -365,9 +381,20 @@ func (tp *txnPipeliner) maybeRejectOverBudget(ba *kvpb.BatchRequest, maxBytes in
 		return nil
 	}
 
+	// NB: The reqEstimate is a count the number of spans in this request with
+	// replicated durability. This is an estimate since accurate accounting
+	// requires the response as well. For point requests this will be accurate,
+	// but for scans, we will count 1 for every span. In reality for scans, it
+	// could be 0 or many replicated locks. When we receive the response we will
+	// get the actual counts in `updateLockTracking` and update
+	// `txnPipeliner.writeCount`.
+	var reqEstimate int64
 	var spans []roachpb.Span
-	if err := ba.LockSpanIterate(nil /* br */, func(sp roachpb.Span, _ lock.Durability) {
+	if err := ba.LockSpanIterate(nil /* br */, func(sp roachpb.Span, durability lock.Durability) {
 		spans = append(spans, sp)
+		if durability == lock.Replicated {
+			reqEstimate++
+		}
 	}); err != nil {
 		return errors.Wrap(err, "iterating lock spans")
 	}
@@ -378,9 +405,20 @@ func (tp *txnPipeliner) maybeRejectOverBudget(ba *kvpb.BatchRequest, maxBytes in
 	locksBudget := maxBytes - tp.ifWrites.byteSize()
 
 	estimate := tp.lockFootprint.estimateSize(spans, locksBudget)
-	if estimate > locksBudget {
+	if rejectIfWouldCondense && estimate > locksBudget {
 		tp.txnMetrics.TxnsRejectedByLockSpanBudget.Inc(1)
 		bErr := newLockSpansOverBudgetError(estimate+tp.ifWrites.byteSize(), maxBytes, ba)
+		return pgerror.WithCandidateCode(bErr, pgcode.ConfigurationLimitExceeded)
+	}
+
+	// This counts from three different sources. The inflight writes are
+	// included in the tp.writeCount.
+	estimateCount := tp.writeCount + reqEstimate
+	// TODO(baptist): We use the same error message as the one above, to avoid
+	// adding additional encoding and decoding for a backport. We could consider
+	// splitting this error message in the future.
+	if rejectTxnMaxCount > 0 && estimateCount > rejectTxnMaxCount {
+		bErr := newLockSpansOverBudgetError(estimateCount, rejectTxnMaxCount, ba)
 		return pgerror.WithCandidateCode(bErr, pgcode.ConfigurationLimitExceeded)
 	}
 	return nil
@@ -677,6 +715,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	pErr *kvpb.Error,
 	maxBytes int64,
 	condenseLocksIfOverBudget bool,
+	rejectTxnMaxCount int64,
 ) error {
 	if err := tp.updateLockTrackingInner(ctx, ba, br, pErr); err != nil {
 		return err
@@ -694,6 +733,16 @@ func (tp *txnPipeliner) updateLockTracking(
 				tp.ifWrites.byteSize(), ba.Txn, ba.Summary())
 		}
 		tp.txnMetrics.TxnsInFlightLocksOverTrackingBudget.Inc(1)
+	}
+	// Similar to the in-flight writes case above, we may have gone over the
+	// rejectTxnMaxCount threshold because we don't accurately estimate the
+	// number of ranged locking reads before sending the request.
+	if tp.writeCount > rejectTxnMaxCount {
+		if tp.inflightOverBudgetEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
+			log.Warningf(ctx, "a transaction has exceeded the maximum number of writes "+
+				"allowed by kv.transaction.max_intents_and_locks: "+
+				"count: %d, txn: %s, ba: %s", tp.writeCount, ba.Txn, ba.Summary())
+		}
 	}
 
 	// Deal with compacting the lock spans.
@@ -818,7 +867,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			if readOnlyReq, ok := req.(kvpb.LockingReadRequest); ok {
 				str, _ = readOnlyReq.KeyLocking()
 			}
-			trackLocks := func(span roachpb.Span, _ lock.Durability) {
+			trackLocks := func(span roachpb.Span, durability lock.Durability) {
 				if ba.AsyncConsensus {
 					// Record any writes that were performed asynchronously. We'll
 					// need to prove that these succeeded sometime before we commit.
@@ -831,6 +880,9 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 					// then add them directly to our lock footprint.
 					tp.lockFootprint.insert(span)
 				}
+				if durability == lock.Replicated {
+					tp.writeCount++
+				}
 			}
 			if err := kvpb.LockSpanIterate(req, resp, trackLocks); err != nil {
 				return errors.Wrap(err, "iterating lock spans")
@@ -840,8 +892,11 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 	return nil
 }
 
-func (tp *txnPipeliner) trackLocks(s roachpb.Span, _ lock.Durability) {
+func (tp *txnPipeliner) trackLocks(s roachpb.Span, durability lock.Durability) {
 	tp.lockFootprint.insert(s)
+	if durability == lock.Replicated {
+		tp.writeCount++
+	}
 }
 
 // stripQueryIntents adjusts the BatchResponse to hide the fact that this
