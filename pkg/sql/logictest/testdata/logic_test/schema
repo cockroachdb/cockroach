@@ -1449,3 +1449,19 @@ SELECT qux();
 NULL
 
 subtest end
+
+subtest empty_schema_name
+
+user root
+
+statement ok
+set role root;
+use defaultdb;
+
+statement error pgcode 3D000 pq: database \"\" does not exist
+CREATE SCHEMA ""."";
+
+statement error pgcode 42601 pq: .*empty schema name
+CREATE SCHEMA "";
+
+subtest end
