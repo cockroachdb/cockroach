@@ -206,3 +206,10 @@ func (sm *StreamManager) Error() <-chan error {
 	}
 	return sm.errCh
 }
+
+// For testing only.
+func (sm *StreamManager) activeStreamCount() int {
+	sm.streams.Lock()
+	defer sm.streams.Unlock()
+	return len(sm.streams.m)
+}
