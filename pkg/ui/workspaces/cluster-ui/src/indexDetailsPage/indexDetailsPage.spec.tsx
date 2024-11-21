@@ -3,10 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { expect } from "chai";
+import "@testing-library/jest-dom";
+import { render } from "@testing-library/react";
 import { shallow } from "enzyme";
 import moment from "moment";
 import React from "react";
+import { MemoryRouter, Route, Switch } from "react-router-dom";
 
 import { IndexDetailsPage, IndexDetailsPageProps, util } from "../index";
 
@@ -31,13 +33,12 @@ describe("IndexDetailsPage", () => {
       createStatement: "",
       totalReads: 0,
       indexRecommendations: [],
-      tableID: undefined,
+      tableID: "2",
       indexID: undefined,
       lastRead: util.minDate,
       lastReset: util.minDate,
       databaseID: 1,
     },
-    breadcrumbItems: null,
     isTenant: false,
     refreshUserSQLRoles: () => {},
     onTimeScaleChange: () => {},
@@ -46,7 +47,7 @@ describe("IndexDetailsPage", () => {
   it("should call refreshNodes if isTenant is false", () => {
     const mockCallback = jest.fn(() => {});
     shallow(<IndexDetailsPage {...props} refreshNodes={mockCallback} />);
-    expect(mockCallback.mock.calls).to.have.length(1);
+    expect(mockCallback.mock.calls).toHaveLength(1);
   });
   it("should not call refreshNodes if isTenant is true", () => {
     const mockCallback = jest.fn(() => {});
@@ -58,6 +59,22 @@ describe("IndexDetailsPage", () => {
         isTenant={true}
       />,
     );
-    expect(mockCallback.mock.calls).to.have.length(0);
+    expect(mockCallback.mock.calls).toHaveLength(0);
+  });
+  it("should render bread crumbs", () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Switch>
+          <Route path="/">
+            <IndexDetailsPage {...props} isTenant={false} />
+          </Route>
+        </Switch>
+      </MemoryRouter>,
+    );
+    const itemLinks = container.getElementsByClassName("item-link");
+    expect(itemLinks).toHaveLength(3);
+    expect(itemLinks[0].getAttribute("href")).toEqual("/databases");
+    expect(itemLinks[1].getAttribute("href")).toEqual("/databases/1");
+    expect(itemLinks[2].getAttribute("href")).toEqual("/table/2");
   });
 });

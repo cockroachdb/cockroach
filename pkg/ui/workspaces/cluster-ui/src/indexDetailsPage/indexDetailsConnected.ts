@@ -10,7 +10,6 @@ import { Dispatch } from "redux";
 
 import { actions as indexStatsActions } from "src/store/indexStats/indexStats.reducer";
 
-import { BreadcrumbItem } from "../breadcrumbs";
 import { AppState, uiConfigActions } from "../store";
 import { actions as analyticsActions } from "../store/analytics";
 import {
@@ -31,7 +30,6 @@ import {
   getMatchParamByName,
   indexNameAttr,
   longToInt,
-  schemaNameAttr,
   tableNameAttr,
   TimestampToMoment,
 } from "../util";
@@ -45,38 +43,11 @@ import {
 
 import RecommendationType = cockroach.sql.IndexRecommendation.RecommendationType;
 
-// Note: if the managed-service routes to the index detail or the previous
-// database pages change, the breadcrumbs displayed here need to be updated.
-// TODO(thomas): ensure callers are splitting schema/table name correctly
-function createManagedServiceBreadcrumbs(
-  database: string,
-  schema: string,
-  table: string,
-  index: string,
-): BreadcrumbItem[] {
-  return [
-    { link: "legacy/databases", name: "Databases" },
-    {
-      link: `/databases/${database}`,
-      name: "Tables",
-    },
-    {
-      link: `/databases/${database}/${schema}/${table}`,
-      name: `Table: ${table}`,
-    },
-    {
-      link: `/databases/${database}/${schema}/${table}/${index}`,
-      name: `Index: ${index}`,
-    },
-  ];
-}
-
 const mapStateToProps = (
   state: AppState,
   props: RouteComponentProps,
 ): IndexDetailsPageData => {
   const databaseName = getMatchParamByName(props.match, databaseNameAttr);
-  const schemaName = getMatchParamByName(props.match, schemaNameAttr);
   const tableName = getMatchParamByName(props.match, tableNameAttr);
   const indexName = getMatchParamByName(props.match, indexNameAttr);
 
@@ -94,14 +65,7 @@ const mapStateToProps = (
       "Unknown") as RecType,
     reason: indexRec.reason,
   }));
-
   return {
-    breadcrumbItems: createManagedServiceBreadcrumbs(
-      databaseName,
-      schemaName,
-      tableName,
-      indexName,
-    ),
     databaseName,
     hasAdminRole: selectHasAdminRole(state),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),

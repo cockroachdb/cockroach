@@ -92,7 +92,6 @@ export const mapStateToProps = (
       indexRecommendations,
       databaseID: stats?.data?.database_id,
     },
-    breadcrumbItems: null,
   };
 };
 
