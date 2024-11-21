@@ -39,7 +39,7 @@ func (r restart) setup() variations {
 	// duration once RACv2 pull mode (send queue) is enabled.
 	// v.clusterSettings["server.time_after_store_suspect"] = (10 * time.Second).String()
 
-	return setup(r, math.Inf(1))
+	return v
 }
 
 func (r restart) setupMetamorphic(rng *rand.Rand) variations {
