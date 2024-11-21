@@ -1195,9 +1195,8 @@ func (r *raft) tickHeartbeat() {
 	if r.electionElapsed >= r.electionTimeout {
 		r.electionElapsed = 0
 		if r.checkQuorum {
-			if err := r.Step(pb.Message{From: r.id, Type: pb.MsgCheckQuorum}); err != nil {
-				r.logger.Debugf("error occurred during checking sending heartbeat: %v", err)
-			} else if r.state != pb.StateLeader {
+			r.checkQuorumActive()
+			if r.state != pb.StateLeader {
 				return // stepped down
 			}
 		}
@@ -1328,8 +1327,8 @@ func (r *raft) becomeLeader() {
 	// progress with the last index already.
 	pr := r.trk.Progress(r.id)
 	pr.BecomeReplicate()
-	// The leader always has RecentActive == true; MsgCheckQuorum makes sure to
-	// preserve this.
+	// The leader always has RecentActive == true. The checkQuorumActive method
+	// makes sure to preserve this.
 	pr.RecentActive = true
 
 	// Conservatively set the pendingConfIndex to the last index in the
@@ -1787,36 +1786,6 @@ func stepLeader(r *raft, m pb.Message) error {
 	switch m.Type {
 	case pb.MsgBeat:
 		r.bcastHeartbeat()
-		return nil
-	case pb.MsgCheckQuorum:
-		quorumActiveByHeartbeats := r.trk.QuorumActive()
-		quorumActiveByFortification := r.fortificationTracker.QuorumActive()
-		if !quorumActiveByHeartbeats {
-			r.logger.Debugf(
-				"%x has not received messages from a quorum of peers in the last election timeout", r.id,
-			)
-		}
-		if !quorumActiveByFortification {
-			r.logger.Debugf("%x does not have store liveness support from a quorum of peers", r.id)
-		}
-		if !quorumActiveByHeartbeats && !quorumActiveByFortification {
-			r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
-			// NB: Stepping down because of CheckQuorum is a special, in that we know
-			// the LeadSupportUntil is in the past. This means that the leader can
-			// safely call a new election or vote for a different peer without
-			// regressing LeadSupportUntil. We don't need to/want to give this any
-			// special treatment -- instead, we handle this like the general step down
-			// case by simply remembering the term/lead information from our stint as
-			// the leader.
-			r.becomeFollower(r.Term, r.id)
-		}
-		// Mark everyone (but ourselves) as inactive in preparation for the next
-		// CheckQuorum.
-		r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
-			if id != r.id {
-				pr.RecentActive = false
-			}
-		})
 		return nil
 	case pb.MsgProp:
 		if len(m.Entries) == 0 {
@@ -2286,6 +2255,41 @@ func stepFollower(r *raft, m pb.Message) error {
 		r.hup(campaignTransfer)
 	}
 	return nil
+}
+
+// checkQuorumActive ensures that the leader is supported by a quorum. If not,
+// the leader steps down to a follower.
+func (r *raft) checkQuorumActive() {
+	assertTrue(r.state == pb.StateLeader, "checkQuorum in a non-leader state")
+
+	quorumActiveByHeartbeats := r.trk.QuorumActive()
+	quorumActiveByFortification := r.fortificationTracker.QuorumActive()
+	if !quorumActiveByHeartbeats {
+		r.logger.Debugf(
+			"%x has not received messages from a quorum of peers in the last election timeout", r.id,
+		)
+	}
+	if !quorumActiveByFortification {
+		r.logger.Debugf("%x does not have store liveness support from a quorum of peers", r.id)
+	}
+	if !quorumActiveByHeartbeats && !quorumActiveByFortification {
+		r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
+		// NB: Stepping down because of CheckQuorum is a special, in that we know
+		// the LeadSupportUntil is in the past. This means that the leader can
+		// safely call a new election or vote for a different peer without
+		// regressing LeadSupportUntil. We don't need to/want to give this any
+		// special treatment -- instead, we handle this like the general step down
+		// case by simply remembering the term/lead information from our stint as
+		// the leader.
+		r.becomeFollower(r.Term, r.id)
+	}
+	// Mark everyone (but ourselves) as inactive in preparation for the next
+	// CheckQuorum.
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		if id != r.id {
+			pr.RecentActive = false
+		}
+	})
 }
 
 // logSliceFromMsgApp extracts the appended LogSlice from a MsgApp message.
