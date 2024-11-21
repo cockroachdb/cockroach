@@ -94,11 +94,18 @@ func GetBenchmarkMetricsFileName(t test.Test) string {
 	return "stats.json"
 }
 
-// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters
+// CreateWorkloadHistogramExporter creates a exporter.Exporter based on the roachtest parameters with no labels
 func CreateWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Exporter {
+	return CreateWorkloadHistogramExporterWithLabels(t, c, nil)
+}
+
+// CreateWorkloadHistogramExporterWithLabels creates a exporter.Exporter based on the roachtest parameters with additional labels
+func CreateWorkloadHistogramExporterWithLabels(
+	t test.Test, c cluster.Cluster, labelMap map[string]string,
+) exporter.Exporter {
 	var metricsExporter exporter.Exporter
 	if t.ExportOpenmetrics() {
-		labels := clusterstats.GetOpenmetricsLabelMap(t, c, nil)
+		labels := clusterstats.GetOpenmetricsLabelMap(t, c, labelMap)
 		openMetricsExporter := &exporter.OpenMetricsExporter{}
 		openMetricsExporter.SetLabels(&labels)
 		metricsExporter = openMetricsExporter
@@ -110,29 +117,50 @@ func CreateWorkloadHistogramExporter(t test.Test, c cluster.Cluster) exporter.Ex
 	return metricsExporter
 }
 
-func CreateStatsFileInClusterFromExporter(
+// UploadPerfStats creates stats file from buffer in the node
+func UploadPerfStats(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
 	perfBuf *bytes.Buffer,
-	exporter exporter.Exporter,
 	node option.NodeListOption,
-) (string, error) {
-	if err := exporter.Close(nil); err != nil {
-		return "", err
+	fileNamePrefix string,
+) error {
+
+	if perfBuf == nil {
+		return errors.New("perf buffer is nil")
 	}
-	destinationFileName := GetBenchmarkMetricsFileName(t)
+	destinationFileName := fmt.Sprintf("%s%s", fileNamePrefix, GetBenchmarkMetricsFileName(t))
 	// Upload the perf artifacts to any one of the nodes so that the test
 	// runner copies it into an appropriate directory path.
 	dest := filepath.Join(t.PerfArtifactsDir(), destinationFileName)
 	if err := c.RunE(ctx, option.WithNodes(node), "mkdir -p "+filepath.Dir(dest)); err != nil {
-		t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
+		return err
 	}
 	if err := c.PutString(ctx, perfBuf.String(), dest, 0755, node); err != nil {
-		t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
+		return err
 	}
+	return nil
+}
 
-	return destinationFileName, nil
+// CloseExporter closes the exporter and also upload the metrics artifacts to a stats file in the node
+func CloseExporter(
+	ctx context.Context,
+	exporter exporter.Exporter,
+	t test.Test,
+	c cluster.Cluster,
+	perfBuf *bytes.Buffer,
+	node option.NodeListOption,
+	fileNamePrefix string,
+) {
+	if err := exporter.Close(func() error {
+		if err := UploadPerfStats(ctx, t, c, perfBuf, node, fileNamePrefix); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		t.Errorf("failed to export perf stats: %v", err)
+	}
 }
 
 // WaitForReady waits until the given nodes report ready via health checks.

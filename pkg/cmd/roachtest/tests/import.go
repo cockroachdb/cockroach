@@ -138,6 +138,8 @@ func registerImportTPCC(r registry.Registry) {
 
 		exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
 		tick, perfBuf := initBulkJobPerfArtifacts(timeout, t, exporter)
+		defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
+
 		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081' {pgurl:1}`
 		m.Go(func(ctx context.Context) error {
 			defer dul.Done()
@@ -155,10 +157,6 @@ func registerImportTPCC(r registry.Registry) {
 			tick()
 			c.Run(ctx, option.WithNodes(c.Node(1)), cmd)
 			tick()
-
-			if _, err := roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, exporter, c.Node(1)); err != nil {
-				return err
-			}
 			return nil
 		})
 		m.Wait()
@@ -233,8 +231,8 @@ func registerImportTPCH(r registry.Registry) {
 			Leases:            registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
-
 				tick, perfBuf := initBulkJobPerfArtifacts(item.timeout, t, exporter)
+				defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
 
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 				conn := c.Conn(ctx, t.L(), 1)
@@ -318,10 +316,6 @@ func registerImportTPCH(r registry.Registry) {
 						return errors.Wrap(err, "import failed")
 					}
 					tick()
-
-					if _, err = roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, perfBuf, exporter, c.Node(1)); err != nil {
-						return err
-					}
 					return nil
 				})
 
