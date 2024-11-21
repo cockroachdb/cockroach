@@ -98,7 +98,10 @@ func registerCDCBench(r registry.Registry) {
 	}
 
 	// Workload impact benchmarks.
-	for _, readPercent := range []int{0, 100} {
+	// TODO(#135952): Reenable readPercent 100. This benchmark historically tested
+	// kv100, but it was disabled because cdc bench can be flaky and kv100 does
+	// not provide enough value for the noise.
+	for _, readPercent := range []int{0} {
 		for _, ranges := range []int64{100, 100000} {
 			const (
 				nodes  = 5 // excluding coordinator and workload nodes
