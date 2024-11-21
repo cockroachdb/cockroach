@@ -376,6 +376,21 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - name: Check for 'performance-regression-expected' label
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const labelToCheck = 'performance-regression-expected';
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const labels = await github.rest.issues.listLabelsOnIssue({
+              owner,
+              repo,
+              issue_number
+            });
+            const labelNames = labels.data.map(label => label.name);
+            const hasLabel = labelNames.includes(labelToCheck);
+            core.exportVariable('PERF_REGRESSION', hasLabel ? 'true' : 'false');
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run scripts
@@ -384,9 +399,7 @@ jobs:
           COMPARE_THRESHOLD: "20.00"
           PUSH_STEP: ${{ github.event_name == 'push' && env.GITHUB_ACTIONS_BRANCH != 'staging' }}
           BASE_SHA: ${{ steps.get_latest_commit_target_branch.outputs.latest_commit }}
-
-          # TODO(sambhav-jain-16): add Performance note check and use this flag. Currently set to false (https://github.com/cockroachdb/cockroach/issues/106661)
-          SKIP_COMPARISON: ${{ env.GITHUB_ACTIONS_BRANCH == 'staging' }}
+          SKIP_COMPARISON: ${{ env.GITHUB_ACTIONS_BRANCH == 'staging' && env.PERF_REGRESSION }}
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()

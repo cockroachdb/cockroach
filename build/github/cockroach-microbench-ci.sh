@@ -48,7 +48,6 @@ bazel test //pkg/sql/tests:tests_test \
   --test_arg=-test.run=- \
   --test_arg='-test.bench=^BenchmarkKV$' \
   --test_sharding_strategy=disabled \
-  --test_arg=-test.cpu --test_arg=1 \
   --test_arg=-test.v \
   --test_arg=-test.count=10 \
   --test_arg=-test.benchmem \

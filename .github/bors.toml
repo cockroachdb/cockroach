@@ -17,6 +17,7 @@ status = [
        "macos_arm64_build",
        "unit_tests",
        "windows_build",
+       "cockroach-microbench-ci",
 ]
 
 # List of commit statuses that must not be failing on the PR commit when it is
