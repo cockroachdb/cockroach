@@ -22,7 +22,7 @@ export const IndexStatsLink: React.FC<Props> = ({
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const linkUrl = isCockroachCloud
-    ? `${location.pathname}/${indexName}`
+    ? `/databases/${encodeURIComponent(dbName)}/null/${encodeURIComponent(escSchemaQualifiedTableName)}/${EncodeUriName(indexName)}`
     : `/database/${encodeURIComponent(dbName)}/table/${encodeURIComponent(escSchemaQualifiedTableName)}/index/${EncodeUriName(indexName)}`;
   return <Link to={linkUrl}>{indexName}</Link>;
 };

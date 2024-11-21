@@ -29,10 +29,11 @@ export const Breadcrumbs: FunctionComponent<BreadcrumbsProps> = ({
   if (items.length === 0) {
     return null;
   }
-  const lastItem = items.pop();
+  const lastItem = items.slice(-1)[0];
+  const itemsWithoutLast = items.slice(0, -1);
   return (
     <div className={cx("breadcrumbs")}>
-      {items.map(({ link, name, onClick = () => {} }) => (
+      {itemsWithoutLast.map(({ link, name, onClick = () => {} }) => (
         <div className={cx("breadcrumbs__item")} key={link}>
           <Link
             className={cx("breadcrumbs__item--link")}
