@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -278,15 +277,7 @@ func (v *beforeAfterValidator) checkRowAt(
 			if len(args) != 0 {
 				stmtBuf.WriteString(` AND `)
 			}
-			// Hacky way to get around out of bound SELECT
-			typeV := ""
-			switch datum.(type) {
-			case float32, float64:
-				typeV = "::float"
-			default:
-				break
-			}
-			fmt.Fprintf(&stmtBuf, `%s = $%d%s`, v.primaryKeyCols[i], i+1, typeV)
+			fmt.Fprintf(&stmtBuf, `%s = $%d`, v.primaryKeyCols[i], i+1)
 			args = append(args, datum)
 		}
 	} else {
@@ -300,28 +291,13 @@ func (v *beforeAfterValidator) checkRowAt(
 			if len(args) != 0 {
 				stmtBuf.WriteString(` AND `)
 			}
-			// Hacky way to get around out of bound SELECT
-			typeV := ""
-			switch rowDatums[col].(type) {
-			case float32, float64:
-				typeV = "::float"
-			default:
-				break
-			}
-			fmt.Fprintf(&stmtBuf, `%s = $%d%s`, col, i+1, typeV)
+			fmt.Fprintf(&stmtBuf, `%s = $%d`, col, i+1)
 			args = append(args, rowDatums[col])
 		}
 	}
 
 	var valid bool
 	stmt := stmtBuf.String()
-	fmt.Println(stmt)
-	for _, arg := range args {
-		fmt.Print("arg: ", arg)
-		fmt.Print("arg type: ", reflect.TypeOf(arg))
-		fmt.Println()
-	}
-
 	if err := v.sqlDB.QueryRow(stmt, args...).Scan(&valid); err != nil {
 		return errors.Wrapf(err, "while executing %s", stmt)
 	}
@@ -478,6 +454,10 @@ func (v *FingerprintValidator) NoteRow(
 
 // applyRowUpdate applies the update represented by `row` to the scratch table.
 func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
+	defer func() {
+		_err = errors.Wrap(_err, "FingerprintValidator failed")
+	}()
+
 	var args []interface{}
 	var primaryKeyDatums []interface{}
 	if err := gojson.Unmarshal([]byte(row.key), &primaryKeyDatums); err != nil {
@@ -511,18 +491,11 @@ func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 			args = append(args, nil)
 		}
 		stmtBuf.WriteString(`) VALUES (`)
-		for i, arg := range args {
+		for i := range args {
 			if i != 0 {
 				stmtBuf.WriteString(`,`)
 			}
-			typeV := ""
-			switch arg.(type) {
-			case float32, float64:
-				typeV = "::float"
-			default:
-				break
-			}
-			fmt.Fprintf(&stmtBuf, `$%d%s`, i+1, typeV)
+			fmt.Fprintf(&stmtBuf, `$%d`, i+1)
 		}
 		stmtBuf.WriteString(`)`)
 
@@ -554,25 +527,11 @@ func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 			if len(args) != 0 {
 				stmtBuf.WriteString(` AND `)
 			}
-			typeV := ""
-			switch datum.(type) {
-			case float32, float64:
-				typeV = "::float"
-			default:
-				break
-			}
-			fmt.Fprintf(&stmtBuf, `%s = $%d%s`, v.primaryKeyCols[i], i+1, typeV)
+			fmt.Fprintf(&stmtBuf, `%s = $%d`, v.primaryKeyCols[i], i+1)
 			args = append(args, datum)
 		}
 	}
 
-	fmt.Println(stmtBuf.String())
-	for _, arg := range args {
-		fmt.Print("arg: ", arg)
-		fmt.Print("arg type: ", reflect.TypeOf(arg))
-	}
-	fmt.Println()
-	fmt.Println("-----------------")
 	return v.sqlDBFunc(func(db *gosql.DB) error {
 		_, err := db.Exec(stmtBuf.String(), args...)
 		return err
