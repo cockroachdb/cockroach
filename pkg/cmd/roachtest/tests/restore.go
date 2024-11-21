@@ -1133,6 +1133,7 @@ func exportToRoachperf(
 	writer := io.Writer(bytesBuf)
 
 	exporter.Init(&writer)
+	defer roachtestutil.CloseExporter(ctx, exporter, t, c, bytesBuf, c.Node(1), "")
 	var err error
 	// Ensure the histogram contains the name of the roachtest
 	reg.GetHandle().Get(testName)
@@ -1143,10 +1144,6 @@ func exportToRoachperf(
 	})
 
 	if err != nil {
-		return
-	}
-	if _, err = roachtestutil.CreateStatsFileInClusterFromExporter(ctx, t, c, bytesBuf, exporter, c.Node(1)); err != nil {
-		t.L().Errorf("error creating stats file: %s", err)
 		return
 	}
 }

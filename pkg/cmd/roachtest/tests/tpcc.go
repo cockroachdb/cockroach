@@ -6,9 +6,11 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io"
 	"maps"
 	"math"
 	"math/rand"
@@ -33,9 +35,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/ttycolor"
+	"github.com/codahale/hdrhistogram"
 	"github.com/lib/pq"
 	promapi "github.com/prometheus/client_golang/api"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
@@ -1716,9 +1720,27 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					t.Fatal(err)
 				}
 				result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
+
+				// This roachtest uses the stats.json emitted from hdr histogram to compute Tpmc and show it in the run log
+				// Since directly emitting openmetrics and computing Tpmc from it is not supported, it is better to convert the
+				// stats.json emitted to openmetrics in the test itself and upload it to the cluster
+				if t.ExportOpenmetrics() {
+					// Creating a prefix
+					statsFilePrefix := fmt.Sprintf("warehouses=%d/", warehouses)
+
+					// Create buffer for performance metrics
+					perfBuf := bytes.NewBuffer([]byte{})
+					exporter := roachtestutil.CreateWorkloadHistogramExporterWithLabels(t, c, map[string]string{"warehouses": fmt.Sprintf("%d", warehouses)})
+					writer := io.Writer(perfBuf)
+					exporter.Init(&writer)
+					defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, group.LoadNodes, statsFilePrefix)
+
+					if err := exportOpenMetrics(exporter, snapshots); err != nil {
+						return errors.Wrapf(err, "error converting histogram to openmetrics")
+					}
+				}
 				resultChan <- result
 				return nil
-
 			})
 		}
 		failErr := m.WaitE()
@@ -1865,4 +1887,20 @@ func getTpccLabels(
 	}
 
 	return labels
+}
+
+// This function converts exporter.SnapshotTick to openmetrics into a buffer
+func exportOpenMetrics(
+	exporter exporter.Exporter, snapshots map[string][]exporter.SnapshotTick,
+) error {
+	for _, snaps := range snapshots {
+		for _, s := range snaps {
+			h := hdrhistogram.Import(s.Hist)
+			if err := exporter.SnapshotAndWrite(h, s.Now, s.Elapsed, &s.Name); err != nil {
+				return errors.Wrapf(err, "failed to write snapshot for histogram %q", s.Name)
+			}
+		}
+	}
+
+	return nil
 }
