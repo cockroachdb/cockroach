@@ -263,7 +263,7 @@ var tpccMeta = workload.Meta{
 			`conns`:                    {RuntimeOnly: true},
 			`idle-conns`:               {RuntimeOnly: true},
 			`txn-retries`:              {RuntimeOnly: true},
-			`order-id-repairs`:         {RuntimeOnly: true},
+			`repair-order-ids`:         {RuntimeOnly: true},
 			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`local-warehouses`:         {RuntimeOnly: true},
 			`regions`:                  {RuntimeOnly: true},
