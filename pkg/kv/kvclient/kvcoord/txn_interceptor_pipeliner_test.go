@@ -2592,75 +2592,81 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.expRejectIdx >= len(tc.reqs) {
-				t.Fatalf("invalid test")
-			}
+			testutils.RunTrueAndFalse(t, "reject-threshold", func(t *testing.T, reject bool) {
+				if tc.expRejectIdx >= len(tc.reqs) {
+					t.Fatalf("invalid test")
+				}
 
-			tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
-			TrackedWritesMaxSize.Override(ctx, &tp.st.SV, tc.maxSize)
-			rejectTxnOverTrackedWritesBudget.Override(ctx, &tp.st.SV, true)
+				tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
+				if reject {
+					rejectTxnMaxBytes.Override(ctx, &tp.st.SV, tc.maxSize)
+				} else {
+					TrackedWritesMaxSize.Override(ctx, &tp.st.SV, tc.maxSize)
+					rejectTxnOverTrackedWritesBudget.Override(ctx, &tp.st.SV, true)
+				}
 
-			txn := makeTxnProto()
+				txn := makeTxnProto()
 
-			var respIdx int
-			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-				// Handle rollbacks and commits separately.
-				if ba.IsSingleAbortTxnRequest() || ba.IsSingleCommitRequest() {
+				var respIdx int
+				mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+					// Handle rollbacks and commits separately.
+					if ba.IsSingleAbortTxnRequest() || ba.IsSingleCommitRequest() {
+						br := ba.CreateReply()
+						br.Txn = ba.Txn
+						return br, nil
+					}
+
+					var resp *kvpb.BatchResponse
+					if respIdx < len(tc.resp) {
+						resp = tc.resp[respIdx]
+					}
+					respIdx++
+
+					if resp != nil {
+						resp.Txn = ba.Txn
+						return resp, nil
+					}
 					br := ba.CreateReply()
 					br.Txn = ba.Txn
 					return br, nil
-				}
+				})
 
-				var resp *kvpb.BatchResponse
-				if respIdx < len(tc.resp) {
-					resp = tc.resp[respIdx]
-				}
-				respIdx++
+				for i, ba := range tc.reqs {
+					ba.Header = kvpb.Header{Txn: &txn}
+					_, pErr := tp.SendLocked(ctx, ba)
+					if i == tc.expRejectIdx {
+						require.NotNil(t, pErr, "expected rejection, but request succeeded")
 
-				if resp != nil {
-					resp.Txn = ba.Txn
-					return resp, nil
-				}
-				br := ba.CreateReply()
-				br.Txn = ba.Txn
-				return br, nil
-			})
+						budgetErr := (lockSpansOverBudgetError{})
+						if !errors.As(pErr.GoError(), &budgetErr) {
+							t.Fatalf("expected lockSpansOverBudgetError, got %+v", pErr.GoError())
+						}
+						require.Equal(t, pgcode.ConfigurationLimitExceeded, pgerror.GetPGCode(pErr.GoError()))
+						require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByLockSpanBudget.Count())
 
-			for i, ba := range tc.reqs {
-				ba.Header = kvpb.Header{Txn: &txn}
-				_, pErr := tp.SendLocked(ctx, ba)
-				if i == tc.expRejectIdx {
-					require.NotNil(t, pErr, "expected rejection, but request succeeded")
+						// Make sure rolling back the txn works.
+						rollback := &kvpb.BatchRequest{}
+						rollback.Add(&kvpb.EndTxnRequest{Commit: false})
+						rollback.Txn = &txn
+						_, pErr = tp.SendLocked(ctx, rollback)
+						require.Nil(t, pErr)
+					} else {
+						require.Nil(t, pErr)
 
-					budgetErr := (lockSpansOverBudgetError{})
-					if !errors.As(pErr.GoError(), &budgetErr) {
-						t.Fatalf("expected lockSpansOverBudgetError, got %+v", pErr.GoError())
+						// Make sure that committing works. This is particularly relevant for
+						// testcases where we ended up over budget but we didn't return an
+						// error (because we failed to pre-emptively detect that we're going
+						// to be over budget and the response surprised us with a large
+						// ResumeSpan). Committing in these situations is allowed, since the
+						// harm has already been done.
+						commit := &kvpb.BatchRequest{}
+						commit.Add(&kvpb.EndTxnRequest{Commit: true})
+						commit.Txn = &txn
+						_, pErr = tp.SendLocked(ctx, commit)
+						require.Nil(t, pErr)
 					}
-					require.Equal(t, pgcode.ConfigurationLimitExceeded, pgerror.GetPGCode(pErr.GoError()))
-					require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByLockSpanBudget.Count())
-
-					// Make sure rolling back the txn works.
-					rollback := &kvpb.BatchRequest{}
-					rollback.Add(&kvpb.EndTxnRequest{Commit: false})
-					rollback.Txn = &txn
-					_, pErr = tp.SendLocked(ctx, rollback)
-					require.Nil(t, pErr)
-				} else {
-					require.Nil(t, pErr)
-
-					// Make sure that committing works. This is particularly relevant for
-					// testcases where we ended up over budget but we didn't return an
-					// error (because we failed to pre-emptively detect that we're going
-					// to be over budget and the response surprised us with a large
-					// ResumeSpan). Committing in these situations is allowed, since the
-					// harm has already been done.
-					commit := &kvpb.BatchRequest{}
-					commit.Add(&kvpb.EndTxnRequest{Commit: true})
-					commit.Txn = &txn
-					_, pErr = tp.SendLocked(ctx, commit)
-					require.Nil(t, pErr)
 				}
-			}
+			})
 		})
 	}
 }
