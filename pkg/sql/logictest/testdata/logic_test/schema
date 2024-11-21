@@ -1379,6 +1379,17 @@ RESET CLUSTER SETTING sql.auth.public_schema_create_privilege.enabled
 
 subtest end
 
+
+subtest schema_with_temp_in_name
+
+statement ok
+CREATE SCHEMA my_pg_temp_123_123;
+
+statement ok
+DROP SCHEMA  my_pg_temp_123_123;
+
+subtest end
+
 # Regression test for #126244: during Memo staleness checking, check object
 # resolution before privileges, to avoid spurious privilege errors.
 subtest check_privileges_after_resolution
@@ -1468,5 +1479,27 @@ query T
 SELECT qux();
 ----
 NULL
+
+subtest end
+
+subtest empty_schema_name
+
+user root
+
+statement ok
+set role root;
+use defaultdb;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-23.1
+statement error pgcode 42601 pq: empty schema name
+CREATE SCHEMA ""."";
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 3D000 pq: database \"\" does not exist
+CREATE SCHEMA ""."";
+
+statement error pgcode 42601 pq: .*empty schema name
+CREATE SCHEMA "";
 
 subtest end
