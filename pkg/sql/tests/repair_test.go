@@ -969,3 +969,41 @@ FROM
 	tdb.Exec(t, repair, 12345, true)
 	tdb.Exec(t, `DROP TABLE testdb.parent`)
 }
+
+func TestAlterGCTTLOfDroppedRelations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, `CREATE DATABASE db2`)
+	tdb.Exec(t, `CREATE TABLE db2.t2 (i INT PRIMARY KEY);`)
+	tdb.Exec(t, `ALTER DATABASE db2 CONFIGURE ZONE USING gc.ttlseconds = 90001;`)
+	tdb.Exec(t, `CREATE TABLE t3 (x INT PRIMARY KEY)`)
+	tdb.Exec(t, `DROP TABLE t3`)
+	tdb.Exec(t, `DROP TABLE db2.t2`)
+
+	vtableQuery := `SELECT name, ttl FROM crdb_internal.kv_dropped_relations ORDER BY name`
+	spanConfigQuery := `
+SELECT
+  crdb_internal.pretty_key(start_key, -1),
+  crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->>'ttlSeconds'
+FROM system.span_configurations
+WHERE start_key >= (SELECT crdb_internal.table_span(100)[1])
+ORDER BY start_key`
+
+	tdb.CheckQueryResults(t, vtableQuery, [][]string{{"t2", "25:00:01"}, {"t3", "04:00:00"}})
+	tdb.CheckQueryResultsRetry(t, spanConfigQuery, [][]string{{"/Table/106", "90001"}, {"/Table/107", "14400"}})
+
+	tdb.Exec(t, `
+SELECT crdb_internal.upsert_dropped_relation_gc_ttl(id, '1 second')
+FROM crdb_internal.kv_dropped_relations WHERE name IN ('t2', 't3')`)
+
+	tdb.CheckQueryResults(t, vtableQuery, [][]string{{"t2", "00:00:01"}, {"t3", "00:00:01"}})
+	tdb.CheckQueryResultsRetry(t, spanConfigQuery, [][]string{{"/Table/106", "1"}, {"/Table/107", "1"}})
+}
