@@ -245,6 +245,9 @@ var retiredSettings = map[InternalKey]struct{}{
 	"bulkio.backup.split_keys_on_timestamps":           {},
 	"sql.create_tenant.default_template":               {},
 	"kvadmission.low_pri_read_elastic_control.enabled": {},
+
+	// removed as of 25.1
+	"sql.auth.resolve_membership_single_scan.enabled": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
