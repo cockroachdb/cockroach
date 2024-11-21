@@ -32,14 +32,14 @@ type splitData struct {
 func (s *splitData) Init(
 	ctx context.Context,
 	quantizer quantize.Quantizer,
-	vectors *vector.Set,
+	vectors vector.Set,
 	oldCentroidDistances []float32,
 	childKeys []vecstore.ChildKey,
 	level vecstore.Level,
 ) {
-	s.Vectors = *vectors
+	s.Vectors = vectors
 	s.OldCentroidDistances = oldCentroidDistances
-	quantizedSet := quantizer.Quantize(ctx, vectors)
+	quantizedSet := quantizer.Quantize(ctx, &s.Vectors)
 	s.Partition = vecstore.NewPartition(quantizer, quantizedSet, childKeys, level)
 }
 

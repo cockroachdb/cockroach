@@ -34,12 +34,11 @@ type Quantizer interface {
 	GetRandomDims() int
 
 	// RandomizeVector optionally performs a random orthogonal transformation
-	// (ROT) on the input vector and writes it to the output vector. If
-	// invert=false, the input vector is "original" and the caller is
-	// responsible for allocating the "randomized" output vector, with length
-	// equal to GetRandomDims(). If invert=true, the input vector is
-	// "randomized" and the caller is responsible for allocating the "original"
-	// output vector.
+	// (ROT) on the input vector and writes it to the output vector. The caller
+	// is responsible for allocating the output vector with length equal to
+	// GetRandomDims(). If invert is true, then a previous ROT is reversed in
+	// order to recover the original vector. The caller is responsible for
+	// allocating the output vector with length equal to GetOriginalDims().
 	//
 	// Randomizing vectors distributes skew more evenly across dimensions and
 	// across vectors in a set. Distance and angle between any two vectors
@@ -49,7 +48,7 @@ type Quantizer interface {
 	//
 	// NOTE: This step may be a no-op for some quantization algorithms, which
 	// may simply copy the original slice to the randomized slice, unchanged.
-	RandomizeVector(ctx context.Context, original vector.T, randomized vector.T, invert bool)
+	RandomizeVector(ctx context.Context, input vector.T, output vector.T, invert bool)
 
 	// Quantize quantizes a set of input vectors and returns their compressed
 	// form as a quantized vector set. Input vectors should already have been

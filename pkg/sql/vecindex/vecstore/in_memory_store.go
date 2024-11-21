@@ -41,6 +41,12 @@ type inMemoryTxn struct {
 	lock lockType
 	// updated is true if any in-memory state has been updated.
 	updated bool
+	// unbalancedKey, if non-zero, records a non-leaf partition that had all of
+	// its vectors removed during the transaction. If, by the end of the
+	// transaction, the partition is still empty, the store will panic, since
+	// this violates the constraint that the K-means tree is always fully
+	// balanced.
+	unbalancedKey PartitionKey
 }
 
 // InMemoryStore implements the Store interface over in-memory partitions and
@@ -84,6 +90,21 @@ func (s *InMemoryStore) BeginTransaction(ctx context.Context) (Txn, error) {
 // CommitTransaction implements the Store interface.
 func (s *InMemoryStore) CommitTransaction(ctx context.Context, txn Txn) error {
 	inMemTxn := txn.(*inMemoryTxn)
+
+	// Panic if the K-means tree contains an empty non-leaf partition after the
+	// transaction ends, as this violates the constraint that the K-means tree
+	// is always full balanced.
+	if inMemTxn.unbalancedKey != 0 {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		partition, ok := s.mu.index[inMemTxn.unbalancedKey]
+		if ok && partition.Count() == 0 {
+			panic(errors.AssertionFailedf(
+				"K-means tree is unbalanced, with empty non-leaf partition %d", inMemTxn.unbalancedKey))
+		}
+	}
+
 	switch inMemTxn.lock {
 	case dataLock:
 		s.txnLock.RUnlock()
@@ -210,8 +231,16 @@ func (s *InMemoryStore) RemoveFromPartition(
 	if !ok {
 		return 0, ErrPartitionNotFound
 	}
+
 	if partition.ReplaceWithLastByKey(childKey) {
-		return partition.Count(), nil
+		count := partition.Count()
+		if count == 0 && partition.Level() > LeafLevel {
+			// A non-leaf partition has zero vectors. If this is still true at the
+			// end of the transaction, the K-means tree will be unbalanced, which
+			// violates a key constraint.
+			txn.(*inMemoryTxn).unbalancedKey = partitionKey
+		}
+		return count, nil
 	}
 	return -1, nil
 }
