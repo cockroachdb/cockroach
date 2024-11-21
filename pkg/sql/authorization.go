@@ -641,7 +641,7 @@ func MemberOfWithAdminOption(
 			InheritCancelation: false,
 		},
 		func(ctx context.Context) (interface{}, error) {
-			var m map[username.SQLUsername]bool
+			var memberships map[username.SQLUsername]bool
 			err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, newTxn isql.Txn) error {
 				// Run the membership read as high-priority, thereby pushing any intents
 				// out of its way. This prevents deadlocks in cases where a GRANT/REVOKE
@@ -656,13 +656,39 @@ func MemberOfWithAdminOption(
 				if err != nil {
 					return err
 				}
-				m, err = resolveMemberOfWithAdminOption(ctx, member, newTxn)
+				memberships, err = resolveMemberOfWithAdminOption(ctx, member, newTxn)
 				if err != nil {
 					return err
 				}
 				return err
 			})
-			return m, err
+			if err != nil {
+				return nil, err
+			}
+			func() {
+				// Update membership if the table version hasn't changed.
+				roleMembersCache.Lock()
+				defer roleMembersCache.Unlock()
+				if roleMembersCache.tableVersion != tableVersion {
+					// Table version has changed while we were looking: don't cache the data.
+					return
+				}
+
+				// Table version remains the same: update map, unlock, return.
+				sizeOfEntry := int64(len(member.Normalized()))
+				for m := range memberships {
+					sizeOfEntry += int64(len(m.Normalized()))
+					sizeOfEntry += memsize.Bool
+				}
+				if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfEntry); err != nil {
+					// If there is no memory available to cache the entry, we can still
+					// proceed so that the query has a chance to succeed.
+					log.Ops.Warningf(ctx, "no memory available to cache role membership info: %v", err)
+				} else {
+					roleMembersCache.userCache[member] = memberships
+				}
+			}()
+			return memberships, nil
 		})
 	var memberships map[username.SQLUsername]bool
 	res := future.WaitForResult(ctx)
@@ -670,30 +696,6 @@ func MemberOfWithAdminOption(
 		return nil, res.Err
 	}
 	memberships = res.Val.(map[username.SQLUsername]bool)
-
-	func() {
-		// Update membership if the table version hasn't changed.
-		roleMembersCache.Lock()
-		defer roleMembersCache.Unlock()
-		if roleMembersCache.tableVersion != tableVersion {
-			// Table version has changed while we were looking: don't cache the data.
-			return
-		}
-
-		// Table version remains the same: update map, unlock, return.
-		sizeOfEntry := int64(len(member.Normalized()))
-		for m := range memberships {
-			sizeOfEntry += int64(len(m.Normalized()))
-			sizeOfEntry += memsize.Bool
-		}
-		if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfEntry); err != nil {
-			// If there is no memory available to cache the entry, we can still
-			// proceed so that the query has a chance to succeed.
-			log.Ops.Warningf(ctx, "no memory available to cache role membership info: %v", err)
-		} else {
-			roleMembersCache.userCache[member] = memberships
-		}
-	}()
 	return memberships, nil
 }
 
