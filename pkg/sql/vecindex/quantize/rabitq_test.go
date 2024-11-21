@@ -183,7 +183,7 @@ func TestRaBitRandomizeVector(t *testing.T) {
 
 		// Ensure that inverting RandomizeVector recovers original vector.
 		randomizedInv := make([]float32, dims)
-		quantizer.RandomizeVector(ctx, randomizedInv, randomized.At(i), true /* invert */)
+		quantizer.RandomizeVector(ctx, randomized.At(i), randomizedInv, true /* invert */)
 		for j, val := range original.At(i) {
 			require.InDelta(t, val, randomizedInv[j], 0.00001)
 		}

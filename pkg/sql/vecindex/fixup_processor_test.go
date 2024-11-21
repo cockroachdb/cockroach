@@ -130,7 +130,7 @@ func TestSplitPartitionData(t *testing.T) {
 			tempVectors := vector.MakeSet(2)
 			tempVectors.AddSet(&vectors)
 			leftSplit, rightSplit := index.fixups.splitPartitionData(
-				ctx, splitPartition, &tempVectors, tc.leftOffsets, tc.rightOffsets)
+				ctx, splitPartition, tempVectors, tc.leftOffsets, tc.rightOffsets)
 
 			validate(&leftSplit, tc.expectedLeft)
 			validate(&rightSplit, tc.expectedRight)
