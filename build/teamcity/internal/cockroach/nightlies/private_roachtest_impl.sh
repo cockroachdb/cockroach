@@ -10,7 +10,11 @@ set -exuo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 
+# N.B. export variables like `root` s.t. they can be used by scripts called below.
+set -a
 source "$dir/teamcity-support.sh"
+set +a
+
 if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "private-roachtest-nightly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
 fi
