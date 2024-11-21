@@ -800,50 +800,18 @@ var enableGrantOptionForOwner = settings.RegisterBoolSetting(
 func resolveMemberOfWithAdminOption(
 	ctx context.Context, member username.SQLUsername, txn isql.Txn,
 ) (map[username.SQLUsername]bool, error) {
-	ret := map[username.SQLUsername]bool{}
-	memberToRoles := make(map[username.SQLUsername][]membership)
-	if err := forEachRoleWithMemberships(
-		ctx, txn,
-		func(ctx context.Context, role username.SQLUsername, memberships []membership) error {
-			memberToRoles[role] = memberships
-			return nil
-		},
-	); err != nil {
+	allMemberships, err := resolveAllMemberships(ctx, txn)
+	if err != nil {
 		return nil, err
 	}
-	if member.IsNodeUser() {
-		memberToRoles[username.NodeUserName()] = append(
-			memberToRoles[username.NodeUserName()],
-			membership{
-				parent:  username.AdminRoleName(),
-				child:   username.NodeUserName(),
-				isAdmin: true,
-			},
-		)
-	}
 
-	// memberToRoles will have an entry for every user, so we first verify that
+	// allMemberships will have an entry for every user, so we first verify that
 	// the user exists.
-	_, roleExists := memberToRoles[member]
+	ret, roleExists := allMemberships[member]
 	if !roleExists {
 		return nil, sqlerrors.NewUndefinedUserError(member)
 	}
 
-	// Recurse through all roles associated with the member.
-	var recurse func(u username.SQLUsername)
-	recurse = func(u username.SQLUsername) {
-		for _, membership := range memberToRoles[u] {
-			// If the parent role was seen before, we still might need to update
-			// the isAdmin flag for that role, but there's no need to recurse
-			// through the role's ancestry again.
-			prev, alreadySeen := ret[membership.parent]
-			ret[membership.parent] = prev || membership.isAdmin
-			if !alreadySeen {
-				recurse(membership.parent)
-			}
-		}
-	}
-	recurse(member)
 	return ret, nil
 }
 
@@ -851,6 +819,54 @@ func resolveMemberOfWithAdminOption(
 type membership struct {
 	parent, child username.SQLUsername
 	isAdmin       bool
+}
+
+func resolveAllMemberships(
+	ctx context.Context, txn isql.Txn,
+) (map[username.SQLUsername]userRoleMembership, error) {
+	memberToDirectParents := make(map[username.SQLUsername][]membership)
+	if err := forEachRoleWithMemberships(
+		ctx, txn,
+		func(ctx context.Context, role username.SQLUsername, memberships []membership) error {
+			memberToDirectParents[role] = memberships
+			return nil
+		},
+	); err != nil {
+		return nil, err
+	}
+	// We need to add entries for the node and public roles, which do not have
+	// rows in system.users.
+	memberToDirectParents[username.NodeUserName()] = append(
+		memberToDirectParents[username.NodeUserName()],
+		membership{
+			parent:  username.AdminRoleName(),
+			child:   username.NodeUserName(),
+			isAdmin: true,
+		},
+	)
+	memberToDirectParents[username.PublicRoleName()] = []membership{}
+
+	// Recurse through all roles associated with each user.
+	ret := make(map[username.SQLUsername]userRoleMembership)
+	for member := range memberToDirectParents {
+		memberToAllAncestors := make(map[username.SQLUsername]bool)
+		var recurse func(u username.SQLUsername)
+		recurse = func(u username.SQLUsername) {
+			for _, membership := range memberToDirectParents[u] {
+				// If the parent role was seen before, we still might need to update
+				// the isAdmin flag for that role, but there's no need to recurse
+				// through the role's ancestry again.
+				prev, alreadySeen := memberToAllAncestors[membership.parent]
+				memberToAllAncestors[membership.parent] = prev || membership.isAdmin
+				if !alreadySeen {
+					recurse(membership.parent)
+				}
+			}
+		}
+		recurse(member)
+		ret[member] = memberToAllAncestors
+	}
+	return ret, nil
 }
 
 func forEachRoleWithMemberships(
