@@ -74,6 +74,7 @@ go_test(
         "resolved_timestamp_test.go",
         "scheduler_test.go",
         "sender_helper_test.go",
+        "stream_manager_test.go",
         "task_test.go",
         "unbuffered_sender_test.go",
     ],
