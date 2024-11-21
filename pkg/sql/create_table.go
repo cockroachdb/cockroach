@@ -1300,6 +1300,7 @@ func newTableDescIfAs(
 
 type newTableDescOptions struct {
 	bypassLocalityOnNonMultiRegionDatabaseCheck bool
+	colToSequenceRefs                           map[tree.Name]*tabledesc.Mutable
 }
 
 // NewTableDescOption is an option on NewTableDesc.
@@ -1310,6 +1311,12 @@ type NewTableDescOption func(o *newTableDescOptions)
 func NewTableDescOptionBypassLocalityOnNonMultiRegionDatabaseCheck() NewTableDescOption {
 	return func(o *newTableDescOptions) {
 		o.bypassLocalityOnNonMultiRegionDatabaseCheck = true
+	}
+}
+
+func NewColToSequenceRefs(refs map[tree.Name]*tabledesc.Mutable) NewTableDescOption {
+	return func(o *newTableDescOptions) {
+		o.colToSequenceRefs = refs
 	}
 }
 
@@ -1653,6 +1660,14 @@ func NewTableDesc(
 			}
 			col := cdd[i].ColumnDescriptor
 			idx := cdd[i].PrimaryKeyOrUniqueIndexDescriptor
+
+			// If necessary add any sequence references for this column, which is
+			// only needed for SERIAL / IDENTITY columns on create.
+			if opts.colToSequenceRefs != nil {
+				if seqDesc := opts.colToSequenceRefs[d.Name]; seqDesc != nil {
+					col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.GetID())
+				}
+			}
 
 			// Do not include virtual tables in these statistics.
 			if !descpb.IsVirtualTable(id) {
@@ -2422,6 +2437,7 @@ func newTableDesc(
 			params.EvalContext(),
 			params.SessionData(),
 			n.Persistence,
+			NewColToSequenceRefs(colNameToOwnedSeq),
 		)
 	})
 	if err != nil {
