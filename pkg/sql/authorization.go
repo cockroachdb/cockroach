@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -572,7 +571,7 @@ func MemberOfWithAdminOption(
 
 	tableVersion := tableDesc.GetVersion()
 	if tableDesc.IsUncommittedVersion() {
-		return resolveMemberOfWithAdminOption(ctx, member, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+		return resolveMemberOfWithAdminOption(ctx, member, txn)
 	}
 	if txn.SessionData().AllowRoleMembershipsToChangeDuringTransaction {
 		defer func() {
@@ -621,7 +620,7 @@ func MemberOfWithAdminOption(
 	// instead just issue a read using `txn` to `system.role_members` table and
 	// return the result.
 	if txn.KV().UserPriority() == roachpb.MaxUserPriority && txn.KV().Epoch() > 0 {
-		return resolveMemberOfWithAdminOption(ctx, member, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+		return resolveMemberOfWithAdminOption(ctx, member, txn)
 	}
 
 	// Lookup memberships outside the lock. There will be at most one request
@@ -657,10 +656,7 @@ func MemberOfWithAdminOption(
 				if err != nil {
 					return err
 				}
-				m, err = resolveMemberOfWithAdminOption(
-					ctx, member, newTxn,
-					useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
-				)
+				m, err = resolveMemberOfWithAdminOption(ctx, member, newTxn)
 				if err != nil {
 					return err
 				}
@@ -701,18 +697,6 @@ func MemberOfWithAdminOption(
 	return memberships, nil
 }
 
-var defaultSingleQueryForRoleMembershipCache = metamorphic.ConstantWithTestBool(
-	"resolve-membership-single-scan-enabled",
-	true, /* defaultValue */
-)
-
-var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.auth.resolve_membership_single_scan.enabled",
-	"determines whether to populate the role membership cache with a single scan",
-	defaultSingleQueryForRoleMembershipCache,
-	settings.WithPublic)
-
 var enableGrantOptionInheritance = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.auth.grant_option_inheritance.enabled",
@@ -731,7 +715,7 @@ var enableGrantOptionForOwner = settings.RegisterBoolSetting(
 
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
 func resolveMemberOfWithAdminOption(
-	ctx context.Context, member username.SQLUsername, txn isql.Txn, singleQuery bool,
+	ctx context.Context, member username.SQLUsername, txn isql.Txn,
 ) (map[username.SQLUsername]bool, error) {
 	roleExists, err := RoleExists(ctx, txn, member)
 	if err != nil {
@@ -743,77 +727,34 @@ func resolveMemberOfWithAdminOption(
 	if member.IsNodeUser() {
 		ret[username.AdminRoleName()] = true
 	}
-	if singleQuery {
-		type membership struct {
-			role    username.SQLUsername
-			isAdmin bool
-		}
-		memberToRoles := make(map[username.SQLUsername][]membership)
-		if err := forEachRoleMembership(ctx, txn, func(ctx context.Context, role, member username.SQLUsername, isAdmin bool) error {
-			memberToRoles[member] = append(memberToRoles[member], membership{role, isAdmin})
-			return nil
-		}); err != nil {
-			return nil, err
-		}
 
-		// Recurse through all roles associated with the member.
-		var recurse func(u username.SQLUsername)
-		recurse = func(u username.SQLUsername) {
-			for _, membership := range memberToRoles[u] {
-				// If the parent role was seen before, we still might need to update
-				// the isAdmin flag for that role, but there's no need to recurse
-				// through the role's ancestry again.
-				prev, alreadySeen := ret[membership.role]
-				ret[membership.role] = prev || membership.isAdmin
-				if !alreadySeen {
-					recurse(membership.role)
-				}
+	type membership struct {
+		role    username.SQLUsername
+		isAdmin bool
+	}
+	memberToRoles := make(map[username.SQLUsername][]membership)
+	if err := forEachRoleMembership(ctx, txn, func(ctx context.Context, role, member username.SQLUsername, isAdmin bool) error {
+		memberToRoles[member] = append(memberToRoles[member], membership{role, isAdmin})
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	// Recurse through all roles associated with the member.
+	var recurse func(u username.SQLUsername)
+	recurse = func(u username.SQLUsername) {
+		for _, membership := range memberToRoles[u] {
+			// If the parent role was seen before, we still might need to update
+			// the isAdmin flag for that role, but there's no need to recurse
+			// through the role's ancestry again.
+			prev, alreadySeen := ret[membership.role]
+			ret[membership.role] = prev || membership.isAdmin
+			if !alreadySeen {
+				recurse(membership.role)
 			}
 		}
-		recurse(member)
-		return ret, nil
 	}
-
-	// Keep track of members we looked up.
-	visited := map[username.SQLUsername]struct{}{}
-	toVisit := []username.SQLUsername{member}
-	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
-
-	for len(toVisit) > 0 {
-		// Pop first element.
-		m := toVisit[0]
-		toVisit = toVisit[1:]
-		if _, ok := visited[m]; ok {
-			continue
-		}
-		visited[m] = struct{}{}
-
-		it, err := txn.QueryIteratorEx(
-			ctx, "expand-roles", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-			lookupRolesStmt, m.Normalized(),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		var ok bool
-		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-			row := it.Cur()
-			roleName := tree.MustBeDString(row[0])
-			isAdmin := row[1].(*tree.DBool)
-
-			// system.role_members stores pre-normalized usernames.
-			role := username.MakeSQLUsernameFromPreNormalizedString(string(roleName))
-			ret[role] = bool(*isAdmin)
-
-			// We need to expand this role. Let the "pop" worry about already-visited elements.
-			toVisit = append(toVisit, role)
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-
+	recurse(member)
 	return ret, nil
 }
 
