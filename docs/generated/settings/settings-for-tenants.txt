@@ -94,6 +94,7 @@ kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled	sys
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions	application
 kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	application
 kv.transaction.randomized_anchor_key.enabled	boolean	false	dictates whether a transactions anchor key is randomized or not	application
+kv.transaction.reject_intents_bytes	integer	0	maximum number of intent bytes for a single transactions, 0 to disable	application
 kv.transaction.reject_over_max_intents_budget.enabled	boolean	false	if set, transactions that exceed their lock tracking budget (kv.transaction.max_intents_bytes) are rejected instead of having their lock spans imprecisely compressed	application
 kv.transaction.write_pipelining.locking_reads.enabled	boolean	true	if enabled, transactional locking reads are pipelined through Raft consensus	application
 kv.transaction.write_pipelining.ranged_writes.enabled	boolean	true	if enabled, transactional ranged writes are pipelined through Raft consensus	application

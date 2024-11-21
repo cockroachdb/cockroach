@@ -111,6 +111,19 @@ var rejectTxnOverTrackedWritesBudget = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+// rejectTxnMaxBytes will reject transactions if the maximum number of intent
+// bytes exceeds this value. This is based on the uncondensed size of the
+// intents. Typically it is preferable to use this setting instead of
+// kv.transaction.reject_over_max_intents_budget.enabled because it allows
+// separating the threshold where we condense intents to preserve memory from
+// the limit where we reject overly large transactions.
+var rejectTxnMaxBytes = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.reject_intents_bytes",
+	"maximum number of intent bytes for a single transactions, 0 to disable",
+	0,
+	settings.WithPublic)
+
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using
 // asynchronous consensus. The interceptor then tracks all writes that have been
 // asynchronously proposed through Raft and ensures that all interfering
@@ -297,16 +310,26 @@ func (tp *txnPipeliner) SendLocked(
 		return nil, pErr
 	}
 
-	// If we're configured to reject txns over budget, we pre-emptively check
+	// If we're configured to reject txns over budget, we preemptively check
 	// whether this current batch is likely to push us over the edge and, if it
 	// does, we reject it. Note that this check is not precise because generally
 	// we can't know exactly the size of the locks that will be taken by a
 	// request (think ResumeSpan); even if the check passes, we might end up over
 	// budget.
-	rejectOverBudget := rejectTxnOverTrackedWritesBudget.Get(&tp.st.SV)
-	maxBytes := TrackedWritesMaxSize.Get(&tp.st.SV)
-	if rejectOverBudget {
-		if err := tp.maybeRejectOverBudget(ba, maxBytes); err != nil {
+	condenseBytes := TrackedWritesMaxSize.Get(&tp.st.SV)
+	var rejectThreshold int64
+	if rejectTxnOverTrackedWritesBudget.Get(&tp.st.SV) {
+		rejectThreshold = condenseBytes
+	}
+	// If the rejectTxnMaxBytes is set then use it instead of the condenseBytes
+	// value. It is unexpected to have both rejectTxnOverTrackedWritesBudget and
+	// rejectTxnMaxBytes set, but if they are, prefer the rejectTxnMaxBytes
+	// value.
+	if maxTxnBudget := rejectTxnMaxBytes.Get(&tp.st.SV); maxTxnBudget > 0 {
+		rejectThreshold = maxTxnBudget
+	}
+	if rejectThreshold > 0 {
+		if err := tp.maybeRejectOverBudget(ba, condenseBytes, rejectThreshold); err != nil {
 			return nil, kvpb.NewError(err)
 		}
 	}
@@ -330,7 +353,7 @@ func (tp *txnPipeliner) SendLocked(
 	// budget. Further requests will be rejected if they attempt to take more
 	// locks.
 	if err := tp.updateLockTracking(
-		ctx, ba, br, pErr, maxBytes, !rejectOverBudget, /* condenseLocksIfOverBudget */
+		ctx, ba, br, pErr, condenseBytes, rejectThreshold > 0, /* condenseLocksIfOverBudget */
 	); err != nil {
 		return nil, kvpb.NewError(err)
 	}
@@ -355,7 +378,9 @@ func (tp *txnPipeliner) SendLocked(
 // the transaction commits. If it fails, then we'd add the lock spans to our
 // tracking and exceed the budget. It's easier for this code and more
 // predictable for the user if we just reject this batch, though.
-func (tp *txnPipeliner) maybeRejectOverBudget(ba *kvpb.BatchRequest, maxBytes int64) error {
+func (tp *txnPipeliner) maybeRejectOverBudget(
+	ba *kvpb.BatchRequest, condenseThreshold, maxBytes int64,
+) error {
 	// Bail early if the current request is not locking, even if we are already
 	// over budget. In particular, we definitely want to permit rollbacks. We also
 	// want to permit lone commits, since the damage in taking too much memory has
@@ -374,12 +399,14 @@ func (tp *txnPipeliner) maybeRejectOverBudget(ba *kvpb.BatchRequest, maxBytes in
 	// Compute how many bytes we can allocate for locks. We account for the
 	// inflight-writes conservatively, since these might turn into lock spans
 	// later.
-	locksBudget := maxBytes - tp.ifWrites.byteSize()
+	ifLockBytes := tp.ifWrites.byteSize()
+	condenseThreshold -= ifLockBytes
+	maxBytes -= ifLockBytes
 
-	estimate := tp.lockFootprint.estimateSize(spans, locksBudget)
-	if estimate > locksBudget {
+	estimate := tp.lockFootprint.estimateSize(spans, condenseThreshold) + tp.lockFootprint.condensedBytes
+	if estimate > maxBytes {
 		tp.txnMetrics.TxnsRejectedByLockSpanBudget.Inc(1)
-		bErr := newLockSpansOverBudgetError(estimate+tp.ifWrites.byteSize(), maxBytes, ba)
+		bErr := newLockSpansOverBudgetError(estimate+ifLockBytes, maxBytes, ba)
 		return pgerror.WithCandidateCode(bErr, pgcode.ConfigurationLimitExceeded)
 	}
 	return nil
