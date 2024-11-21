@@ -1120,9 +1120,6 @@ func (node *Array) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *Tuple) doc(p *PrettyCfg) pretty.Doc {
 	exprDoc := p.Doc(&node.Exprs)
-	if len(node.Exprs) == 1 {
-		exprDoc = pretty.Concat(exprDoc, pretty.Text(","))
-	}
 	d := p.bracket("(", exprDoc, ")")
 	if len(node.Labels) > 0 {
 		labels := make([]pretty.Doc, len(node.Labels))
