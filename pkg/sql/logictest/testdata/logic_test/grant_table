@@ -2671,7 +2671,7 @@ a              public       t           admin    ALL             true
 a              public       t           root     ALL             true
 
 statement ok
-INSERT INTO system.users VALUES('test-user','',false,200);
+CREATE USER "test-user"
 
 statement ok
 GRANT ALL ON t TO readwrite, "test-user"

@@ -593,7 +593,7 @@ func MemberOfWithAdminOption(
 	// Check version and maybe clear cache while holding the mutex.
 	// We use a closure here so that we release the lock here, then keep
 	// going and re-lock if adding the looked-up entry.
-	userMapping, found := func() (userRoleMembership, bool) {
+	userMapping, found, refreshCache := func() (userRoleMembership, bool, bool) {
 		roleMembersCache.Lock()
 		defer roleMembersCache.Unlock()
 		if roleMembersCache.tableVersion < tableVersion {
@@ -602,18 +602,25 @@ func MemberOfWithAdminOption(
 			roleMembersCache.tableVersion = tableVersion
 			roleMembersCache.userCache = make(map[username.SQLUsername]userRoleMembership)
 			roleMembersCache.boundAccount.Empty(ctx)
+			return nil, false, true
 		} else if roleMembersCache.tableVersion > tableVersion {
 			// If the cache is based on a newer table version, then this transaction
 			// should not use the cached data.
-			return nil, false
+			return nil, false, true
 		}
 		userMapping, ok := roleMembersCache.userCache[member]
-		return userMapping, ok
+		return userMapping, ok, len(roleMembersCache.userCache) == 0
 	}()
 
-	if found {
-		// Found: return.
-		return userMapping, nil
+	if !refreshCache {
+		// The cache always contains entries for every role that exists, so the
+		// only time we need to refresh the cache is if it has been invalidated
+		// by the tableVersion changing.
+		if found {
+			return userMapping, nil
+		} else {
+			return nil, sqlerrors.NewUndefinedUserError(member)
+		}
 	}
 
 	// If `txn` is high priority and in a retry, do not launch the singleflight to
@@ -637,13 +644,13 @@ func MemberOfWithAdminOption(
 	// ensure that we are reading from the right version of the table.
 	newTxnTimestamp := txn.KV().ReadTimestamp()
 	future, _ := roleMembersCache.populateCacheGroup.DoChan(ctx,
-		fmt.Sprintf("%s-%d", member.Normalized(), tableVersion),
+		fmt.Sprintf("refreshMembershipCache-%d", tableVersion),
 		singleflight.DoOpts{
 			Stop:               roleMembersCache.stopper,
 			InheritCancelation: false,
 		},
 		func(ctx context.Context) (interface{}, error) {
-			var memberships map[username.SQLUsername]bool
+			var allMemberships map[username.SQLUsername]userRoleMembership
 			err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, newTxn isql.Txn) error {
 				// Run the membership read as high-priority, thereby pushing any intents
 				// out of its way. This prevents deadlocks in cases where a GRANT/REVOKE
@@ -658,7 +665,7 @@ func MemberOfWithAdminOption(
 				if err != nil {
 					return err
 				}
-				memberships, err = resolveMemberOfWithAdminOption(ctx, member, newTxn)
+				allMemberships, err = resolveAllMemberships(ctx, newTxn)
 				if err != nil {
 					return err
 				}
@@ -677,27 +684,37 @@ func MemberOfWithAdminOption(
 				}
 
 				// Table version remains the same: update map, unlock, return.
-				sizeOfEntry := int64(len(member.Normalized()))
-				for m := range memberships {
-					sizeOfEntry += int64(len(m.Normalized()))
-					sizeOfEntry += memsize.Bool
+				sizeOfCache := int64(0)
+				for _, memberships := range allMemberships {
+					sizeOfEntry := int64(len(member.Normalized()))
+					for m := range memberships {
+						sizeOfEntry += int64(len(m.Normalized()))
+						sizeOfEntry += memsize.Bool
+					}
+					sizeOfCache += sizeOfEntry
 				}
-				if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfEntry); err != nil {
+				if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfCache); err != nil {
 					// If there is no memory available to cache the entry, we can still
 					// proceed so that the query has a chance to succeed.
 					log.Ops.Warningf(ctx, "no memory available to cache role membership info: %v", err)
 				} else {
-					roleMembersCache.userCache[member] = memberships
+					roleMembersCache.userCache = allMemberships
 				}
 			}()
-			return memberships, nil
+			return allMemberships, nil
 		})
-	var memberships map[username.SQLUsername]bool
+	var allMemberships map[username.SQLUsername]userRoleMembership
 	res := future.WaitForResult(ctx)
 	if res.Err != nil {
 		return nil, res.Err
 	}
-	memberships = res.Val.(map[username.SQLUsername]bool)
+	allMemberships = res.Val.(map[username.SQLUsername]userRoleMembership)
+	memberships, found := allMemberships[member]
+	// The map contains entries for every role that exists, so if it's
+	// not present in the map, the role does not exist.
+	if !found {
+		return nil, sqlerrors.NewUndefinedUserError(member)
+	}
 	return memberships, nil
 }
 
