@@ -2257,9 +2257,6 @@ SELECT
   fraction_completed,
   high_water_timestamp,
   error,
-  last_run,
-  next_run,
-  num_runs,
   execution_events::string,
   coordinator_id
 FROM crdb_internal.jobs
@@ -2376,9 +2373,6 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 		&fractionCompletedOrNil,
 		&highwaterOrNil,
 		&job.Error,
-		&job.LastRun,
-		&job.NextRun,
-		&job.NumRuns,
 		&executionFailuresOrNil,
 		&coordinatorOrNil,
 	); err != nil {
@@ -2449,9 +2443,7 @@ func jobHelper(
 	const query = `
 	        SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
 	  						 running_status, created, started, finished, modified,
-	  						 fraction_completed, high_water_timestamp, error, last_run,
-								 next_run, num_runs, execution_events::string,
-                 coordinator_id
+	  						 fraction_completed, high_water_timestamp, error, execution_events::string, coordinator_id
 	          FROM crdb_internal.jobs
 	         WHERE job_id = $1`
 	row, cols, err := sqlServer.internalExecutor.QueryRowExWithCols(

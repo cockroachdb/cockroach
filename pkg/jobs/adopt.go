@@ -114,57 +114,22 @@ const (
 		`'` + string(StatusReverting) + `'` +
 		`)`
 
-	// canRunArgs are used in canRunClause, which specify whether a job can be
-	// run now or not.
-	canRunArgs = `(SELECT $3::TIMESTAMP AS ts, $4::FLOAT AS initial_delay, $5::FLOAT AS max_delay) args`
-	// NextRunClause calculates the next execution time of a job with exponential backoff delay, calculated
-	// using last_run and num_runs values.
-	NextRunClause = `
-COALESCE(last_run::timestamptz, created::timestamptz) + least(
-	IF(
-		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT >= 0.0,
-		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT,
-		args.max_delay
-	),
-	args.max_delay
-)::INTERVAL`
-	canRunClause = `args.ts >= ` + NextRunClause
-
-	// processQueryWithBackoff select IDs of the jobs that can be
-	// processed among the claimed jobs.
-	processQueryWithBackoff = `SELECT id FROM system.jobs, ` + canRunArgs +
+	// processQuery select IDs of the jobs that can be processed among the claimed jobs.
+	processQuery = `SELECT id FROM system.jobs ` +
 		` WHERE status IN ` + processQueryStatusTupleString +
-		` AND (claim_session_id = $1 AND claim_instance_id = $2)` +
-		` AND ` + canRunClause
+		` AND (claim_session_id = $1 AND claim_instance_id = $2)`
 
-	// resumeQueryWithBackoff retrieves the job record for a job
-	// we intend to resume.
-	resumeQueryWithBackoff = `SELECT status, crdb_internal.sql_liveness_is_alive(claim_session_id), created_by_type, created_by_id, ` +
-		canRunClause + " AS can_run" +
-		" FROM system.jobs, " + canRunArgs +
-		" WHERE id = $1 AND claim_session_id = $2"
+	// resumeQuery retrieves the job record for a job we intend to resume.
+	resumeQuery = `SELECT status, crdb_internal.sql_liveness_is_alive(claim_session_id), created_by_type, created_by_id ` +
+		"FROM system.jobs " +
+		"WHERE id = $1 AND claim_session_id = $2"
 )
-
-// getProcessQuery returns the query that selects the jobs that are claimed
-// by this node.
-func getProcessQuery(
-	ctx context.Context, s sqlliveness.Session, r *Registry,
-) (string, []interface{}) {
-	// Select the running or reverting jobs that this node has claimed that can be
-	// executed right now.
-	query := processQueryWithBackoff
-	args := []interface{}{s.ID().UnsafeBytes(), r.ID(),
-		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
-	return query, args
-}
 
 // processClaimedJobs processes all jobs currently claimed by the registry.
 func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
-	query, args := getProcessQuery(ctx, s, r)
-
 	it, err := r.db.Executor().QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
-		sessiondata.NodeUserSessionDataOverride, query, args...,
+		sessiondata.NodeUserSessionDataOverride, processQuery, s.ID().UnsafeBytes(), r.ID(),
 	)
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
@@ -295,9 +260,8 @@ func (r *Registry) loadJobForResume(
 
 	row, err := r.db.Executor().QueryRowEx(
 		ctx, "get-job-row", nil,
-		sessiondata.NodeUserSessionDataOverride, resumeQueryWithBackoff,
+		sessiondata.NodeUserSessionDataOverride, resumeQuery,
 		jobID, s.ID().UnsafeBytes(),
-		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay(),
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "job %d: could not query job table row", jobID)
@@ -318,24 +282,6 @@ func (r *Registry) loadJobForResume(
 
 	if isAlive := *row[1].(*tree.DBool); !isAlive {
 		return nil, errors.Errorf("job %d: claim with session id %s has expired", jobID, s.ID())
-	}
-
-	// It's too soon to run the job.
-	//
-	// We need this check to address a race between adopt-loop and an existing
-	// resumer, e.g., in the following schedule:
-	// Adopt loop: Cl(j,n1) St(r1)     Cl(j, n1)                       St(r2)
-	// Resumer 1:                Rg(j)          Up(n1->n2) Fl(j) Ur(j)
-	// Resumer 2:                                                            x-| Starting too soon
-	// Where:
-	//  - Cl(j,nx): claim job j when num_runs is x
-	//  - St(r1): start resumer r1
-	//  - Rg(j): Add jobID of j in adoptedJobs, disabling further resumers
-	//  - Ur(j): Remove jobID of j from adoptedJobs, enabling further resumers
-	//  - Up(n1->2): Update number of runs from 1 to 2
-	//  - Fl(j): Job j fails
-	if canRun := *row[4].(*tree.DBool); !canRun {
-		return nil, nil
 	}
 
 	createdBy, err := unmarshalCreatedBy(row[2], row[3])
@@ -545,7 +491,6 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 						id,
 						string(jobTypeString),
 						nil,
-						&RunStats{},
 						StatusPauseRequested,
 						StatusPaused)
 				})
@@ -572,15 +517,11 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)
 					md.Payload.FinalResumeError = &encodedErr
 					ju.UpdatePayload(md.Payload)
-					// When we cancel a job, we want to reset its last_run and num_runs
-					// so that the job can be picked-up in the next adopt-loop, sooner
-					// than its current next-retry time.
-					ju.UpdateRunStats(0 /* numRuns */, r.clock.Now().GoTime() /* lastRun */)
 					txn.KV().AddCommitTrigger(func(ctx context.Context) {
 						LogStatusChangeStructured(ctx,
 							id,
 							md.Payload.Type().String(),
-							md.Payload, ju.md.RunStats,
+							md.Payload,
 							StatusCancelRequested,
 							StatusReverting)
 					})

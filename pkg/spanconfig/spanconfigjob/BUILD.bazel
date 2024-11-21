@@ -12,7 +12,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/sql",
-        "//pkg/sql/isql",
         "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/log",
