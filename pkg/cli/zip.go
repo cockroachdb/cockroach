@@ -519,6 +519,12 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	ctx := context.Background()
 	baseName := base + "/" + sanitizeFilename(table)
 
+	nameFormat := baseName + "." + zc.clusterPrinter.sqlOutputFilenameExtension
+	if !zipCtx.files.shouldIncludeFile(nameFormat) {
+		zr.start(redact.Sprintf("skipping table data for %s due to file filters", table))
+		return nil
+
+	}
 	s := zr.start(redact.Sprintf("retrieving SQL data for %s", table))
 	const maxRetries = 5
 	suffix := ""

@@ -33,6 +33,13 @@ import (
 var redactedAddress = fmt.Sprintf("%s=%s", rpc.RemoteAddressTag, redact.RedactedMarker())
 
 const regexpOfRemoteAddress = "[[:alnum:].:-]+"
+const stacksFile = "stacks.txt"
+const stacksWithLabel = "stacks_with_labels.txt"
+const heapPprof = "heap.pprof"
+const lsm = "lsm.txt"
+const rangesInfo = "ranges.json"
+const details = "details.json"
+const gossip = "gossip.json"
 
 func (zc *debugZipContext) collectPerNodeData(
 	ctx context.Context,
@@ -78,6 +85,7 @@ func (zc *debugZipContext) collectPerNodeData(
 		return err
 	}
 
+	//TODO: Add filter for it
 	err = zc.getPerNodeMetadata(ctx, prefix, id, nodePrinter)
 	if err != nil {
 		return err
@@ -117,21 +125,33 @@ func (zc *debugZipContext) collectPerNodeData(
 
 // makePerNodeZipRequests defines the zipRequests (API requests) that are to be
 // performed once per node.
-func makePerNodeZipRequests(prefix, id string, status serverpb.StatusClient) []zipRequest {
-	return []zipRequest{
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Redact: zipCtx.redact})
-			},
-			pathName: prefix + "/details",
-		},
-		{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: zipCtx.redact})
-			},
-			pathName: prefix + "/gossip",
-		},
+func makePerNodeZipRequests(zr *zipReporter, prefix, id string, status serverpb.StatusClient) []zipRequest {
+	var zipRequests []zipRequest
+
+	if !zipCtx.files.shouldIncludeFile(details) {
+		zr.info("skipping %s", details)
 	}
+
+	zipRequests = append(zipRequests, zipRequest{
+		fn: func(ctx context.Context) (interface{}, error) {
+			return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Redact: zipCtx.redact})
+		},
+		pathName: prefix + "/details",
+	})
+
+	if !zipCtx.files.shouldIncludeFile(gossip) {
+		zr.info("skipping %s", gossip)
+		return nil
+	}
+
+	zipRequests = append(zipRequests, zipRequest{
+		fn: func(ctx context.Context) (interface{}, error) {
+			return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: zipCtx.redact})
+		},
+		pathName: prefix + "/gossip",
+	})
+
+	return zipRequests
 }
 
 // collectCPUProfiles collects CPU profiles in parallel over all nodes
@@ -317,6 +337,10 @@ func (zc *debugZipContext) collectFileList(
 
 func (zc *debugZipContext) getRangeInformation(ctx context.Context, nodePrinter *zipReporter, id string, prefix string) error {
 	if zipCtx.includeRangeInfo {
+		if !zipCtx.files.shouldIncludeFile(rangesInfo) {
+			nodePrinter.info("skipping %s", rangesInfo)
+			return nil
+		}
 		var ranges *serverpb.RangesResponse
 		s := nodePrinter.start("requesting ranges")
 		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
@@ -334,7 +358,7 @@ func (zc *debugZipContext) getRangeInformation(ctx context.Context, nodePrinter 
 					ranges.Ranges[j].State.Desc.RangeID
 			})
 			s := nodePrinter.start("writing ranges")
-			name := fmt.Sprintf("%s/ranges.json", prefix)
+			name := fmt.Sprintf("%s/%s", prefix, rangesInfo)
 			if err := zc.z.createJSON(s, name, ranges.Ranges); err != nil {
 				return err
 			}
@@ -474,6 +498,10 @@ func (zc *debugZipContext) getProfiles(ctx context.Context, nodePrinter *zipRepo
 }
 
 func (zc *debugZipContext) getEngineStats(ctx context.Context, nodePrinter *zipReporter, id string, prefix string) error {
+	if !zipCtx.files.shouldIncludeFile(lsm) {
+		nodePrinter.info("skipping %s", lsm)
+		return nil
+	}
 	// Collect storage engine metrics using the same format as the /debug/lsm route.
 	var lsmStats string
 	s := nodePrinter.start("requesting engine stats")
@@ -485,13 +513,17 @@ func (zc *debugZipContext) getEngineStats(ctx context.Context, nodePrinter *zipR
 			}
 			return err
 		})
-	if err := zc.z.createRawOrError(s, prefix+"/lsm.txt", []byte(lsmStats), requestErr); err != nil {
+	if err := zc.z.createRawOrError(s, prefix+"/"+lsm, []byte(lsmStats), requestErr); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (zc *debugZipContext) getCurrentHeapProfile(ctx context.Context, nodePrinter *zipReporter, id string, prefix string) error {
+	if !zipCtx.files.shouldIncludeFile(heapPprof) {
+		nodePrinter.info("skipping %s", heapPprof)
+		return nil
+	}
 	var heapData []byte
 	s := nodePrinter.start("requesting heap profile")
 	requestErr := zc.runZipFn(ctx, s,
@@ -505,7 +537,7 @@ func (zc *debugZipContext) getCurrentHeapProfile(ctx context.Context, nodePrinte
 			}
 			return err
 		})
-	if err := zc.z.createRawOrError(s, prefix+"/heap.pprof", heapData, requestErr); err != nil {
+	if err := zc.z.createRawOrError(s, prefix+"/"+heapPprof, heapData, requestErr); err != nil {
 		return err
 	}
 	return nil
@@ -513,6 +545,9 @@ func (zc *debugZipContext) getCurrentHeapProfile(ctx context.Context, nodePrinte
 
 func (zc *debugZipContext) getStackInformation(ctx context.Context, nodePrinter *zipReporter, id string, prefix string) error {
 	if zipCtx.includeStacks {
+		if !zipCtx.files.shouldIncludeFile(stacksFile) {
+			nodePrinter.info("skipping %s", stacksFile)
+		}
 		var stacksData []byte
 		s := nodePrinter.start("requesting stacks")
 		requestErr := zc.runZipFn(ctx, s,
@@ -526,11 +561,14 @@ func (zc *debugZipContext) getStackInformation(ctx context.Context, nodePrinter 
 				}
 				return err
 			})
-		if err := zc.z.createRawOrError(s, prefix+"/stacks.txt", stacksData, requestErr); err != nil {
+		if err := zc.z.createRawOrError(s, prefix+"/"+stacksFile, stacksData, requestErr); err != nil {
 			return err
 		}
 
 		var stacksDataWithLabels []byte
+		if !zipCtx.files.shouldIncludeFile(stacksWithLabel) {
+			nodePrinter.info("skipping %s", stacksWithLabel)
+		}
 		s = nodePrinter.start("requesting stacks with labels")
 		requestErr = zc.runZipFn(ctx, s,
 			func(ctx context.Context) error {
@@ -546,7 +584,7 @@ func (zc *debugZipContext) getStackInformation(ctx context.Context, nodePrinter 
 		if zipCtx.redact {
 			stacksDataWithLabels = redactStackTrace(stacksDataWithLabels)
 		}
-		if err := zc.z.createRawOrError(s, prefix+"/stacks_with_labels.txt", stacksDataWithLabels, requestErr); err != nil {
+		if err := zc.z.createRawOrError(s, prefix+"/"+stacksWithLabel, stacksDataWithLabels, requestErr); err != nil {
 			return err
 		}
 	} else {
@@ -556,8 +594,7 @@ func (zc *debugZipContext) getStackInformation(ctx context.Context, nodePrinter 
 }
 
 func (zc *debugZipContext) getPerNodeMetadata(ctx context.Context, prefix string, id string, nodePrinter *zipReporter) error {
-	perNodeZipRequests := makePerNodeZipRequests(prefix, id, zc.status)
-
+	perNodeZipRequests := makePerNodeZipRequests(nodePrinter, prefix, id, zc.status)
 	for _, r := range perNodeZipRequests {
 		if err := zc.runZipRequest(ctx, nodePrinter, r); err != nil {
 			return err
@@ -594,6 +631,10 @@ func (zc *debugZipContext) getInternalTablesPerNode(nodeDetails serverpb.NodeDet
 }
 
 func (zc *debugZipContext) getNodeStatus(nodeStatus *statuspb.NodeStatus, nodePrinter *zipReporter, prefix string, redactedNodeDetails serverpb.NodeDetails) error {
+	if !zipCtx.files.shouldIncludeFile("status.json") {
+		nodePrinter.info("skipping status.json")
+		return nil
+	}
 	if nodeStatus != nil {
 		// Use nodeStatus to populate the status.json file as it contains more data for a KV node.
 		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", *nodeStatus); err != nil {
