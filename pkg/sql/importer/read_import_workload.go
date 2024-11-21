@@ -120,6 +120,18 @@ func makeDatumFromColOffset(
 			str := *(*string)(unsafe.Pointer(&data))
 			return rowenc.ParseDatumStringAs(ctx, hint, str, evalCtx, semaCtx)
 		}
+	case types.TimestampFamily, types.TimestampTZFamily:
+		switch hint.Family() {
+		case types.TimestampFamily:
+			// workloads are responsible for rounding their timestamp(s) so skip
+			// MakeDTimestamp here and just directly construct it.
+			return alloc.NewDTimestamp(tree.DTimestamp{Time: col.Timestamp()[rowIdx]}), nil
+
+		case types.TimestampTZFamily:
+			// workloads are responsible for rounding their timestamp(s) so skip
+			// MakeDTimestamp here and just directly construct it.
+			return alloc.NewDTimestampTZ(tree.DTimestampTZ{Time: col.Timestamp()[rowIdx]}), nil
+		}
 	}
 	return nil, errors.Errorf(
 		`don't know how to interpret %s column as %s`, col.Type(), hint)
