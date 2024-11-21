@@ -135,7 +135,7 @@ func (r *ClusterStatRun) serializeOpenmetricsOutRun(
 	if err != nil {
 		return errors.Wrap(err, "failed to serialize perf artifacts")
 	}
-	dest := filepath.Join(t.PerfArtifactsDir(), "openmetrics.om")
+	dest := filepath.Join(t.PerfArtifactsDir(), "stats.om")
 	return statsWriter(ctx, t, c, report, dest)
 }
 
@@ -143,9 +143,9 @@ func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.B
 	var buffer bytes.Buffer
 
 	// Emit summary metrics from Total
-	for key, value := range r.Total {
-		buffer.WriteString(fmt.Sprintf("# TYPE %s gauge\n", util.SanitizeMetricName(key)))
-		buffer.WriteString(fmt.Sprintf("%s{%s} %f %d\n", util.SanitizeKey(key), *labelString, value, timeutil.Now().UTC().Unix()))
+	for metricName, value := range r.Total {
+		buffer.WriteString(fmt.Sprintf("# TYPE %s gauge\n", util.SanitizeMetricName(metricName)))
+		buffer.WriteString(fmt.Sprintf("%s{%s} %f %d\n", util.SanitizeMetricName(metricName), *labelString, value, timeutil.Now().UTC().Unix()))
 	}
 
 	// Emit histogram metrics from Stats
@@ -155,7 +155,7 @@ func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.B
 			t := timeutil.Unix(0, timestamp)
 			buffer.WriteString(
 				fmt.Sprintf("%s{%s,agg_tag=\"%s\"} %f %d\n",
-					util.SanitizeValue(stat.Tag),
+					util.SanitizeMetricName(stat.Tag),
 					*labelString,
 					util.SanitizeValue(stat.AggTag),
 					stat.Value[i],
@@ -166,7 +166,7 @@ func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.B
 				t := timeutil.Unix(0, timestamp)
 				buffer.WriteString(
 					fmt.Sprintf("%s{%s,tag=\"%s\",agg_tag=\"%s\"} %f %d\n",
-						util.SanitizeValue(stat.Tag),
+						util.SanitizeMetricName(stat.Tag),
 						*labelString,
 						tag,
 						util.SanitizeValue(stat.AggTag),
