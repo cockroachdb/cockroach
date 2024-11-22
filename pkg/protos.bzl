@@ -56,8 +56,8 @@ SERVER_PROTOS = [
     "@com_google_protobuf//:descriptor_proto",
     "@com_google_protobuf//:duration_proto",
     "@com_google_protobuf//:timestamp_proto",
-    "@go_googleapis//google/api:annotations_proto",
-    "@go_googleapis//google/api:http_proto",
+    "@googleapis//google/api:annotations_proto",
+    "@googleapis//google/api:http_proto",
 ]
 
 # This lists all the in-tree .proto files required to build serverpb_proto.

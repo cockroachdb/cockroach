@@ -21,7 +21,7 @@ proto_library(
     deps = [
         "//pkg/roachpb:roachpb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
-        "@go_googleapis//google/api:annotations_proto",
+        "@googleapis//google/api:annotations_proto",
     ],
 )
 

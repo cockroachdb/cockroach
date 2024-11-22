@@ -127,7 +127,7 @@ http_archive(
 # org_golang_google_protobuf handled in DEPS.bzl.
 
 http_archive(
-    name = "go_googleapis",
+    name = "googleapis",
     patch_args = [
         "-E",
         "-p1",
@@ -143,7 +143,7 @@ http_archive(
     ],
 )
 
-load("@go_googleapis//:repository_rules.bzl", "switched_rules_by_language")
+load("@googleapis//:repository_rules.bzl", "switched_rules_by_language")
 
 switched_rules_by_language(
     name = "com_google_googleapis_imports",
@@ -406,12 +406,9 @@ gazelle_dependencies()
 #      https://github.com/protocolbuffers/protobuf/blob/main/protobuf_deps.bzl
 http_archive(
     name = "com_google_protobuf",
-    sha256 = "6d4e7fe1cbd958dee69ce9becbf8892d567f082b6782d3973a118d0aa00807a8",
-    strip_prefix = "cockroachdb-protobuf-3f5d91f",
-    urls = [
-        # Code as of 3f5d91f2e169d890164d3401b8f4a9453fff5538 (crl-release-3.9, 3.9.2 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-protobuf-3f5d91f.tar.gz",
-    ],
+    sha256 = "7c3ebd7aaedd86fa5dc479a0fda803f602caaf78d8aff7ce83b89e1b8ae7442a",
+    strip_prefix = "protobuf-28.3",
+    urls = ["https://github.com/protocolbuffers/protobuf/archive/v28.3.tar.gz"],
 )
 
 http_archive(

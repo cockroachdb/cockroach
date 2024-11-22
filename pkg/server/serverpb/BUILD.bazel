@@ -45,7 +45,7 @@ proto_library(
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
-        "@go_googleapis//google/api:annotations_proto",
+        "@googleapis//google/api:annotations_proto",
     ],
 )
 

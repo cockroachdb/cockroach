@@ -10,15 +10,15 @@ go 1.22.8
 // merge of any upgrades we should communicate to all teams to be on the lookout
 // for behavior changes, just like we would after a go upgrade.
 require (
-	golang.org/x/crypto v0.27.0
+	golang.org/x/crypto v0.28.0
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
 	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
 	golang.org/x/mod v0.20.0 // indirect
-	golang.org/x/net v0.29.0
+	golang.org/x/net v0.30.0
 	golang.org/x/oauth2 v0.23.0
-	golang.org/x/sync v0.8.0
-	golang.org/x/sys v0.25.0
-	golang.org/x/text v0.19.0
+	golang.org/x/sync v0.9.0
+	golang.org/x/sys v0.27.0
+	golang.org/x/text v0.20.0
 	golang.org/x/time v0.3.0
 	golang.org/x/tools v0.24.0
 )
@@ -173,7 +173,6 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.5.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20240215164046-eb0e60d27cb7
-	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.23.0
 	github.com/guptarohit/asciigraph v0.5.5
 	github.com/influxdata/influxdb-client-go/v2 v2.3.1-0.20210518120617-5d1fff431040
@@ -243,14 +242,14 @@ require (
 	github.com/xdg-go/stringprep v1.0.4
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
 	gitlab.com/golang-commonmark/markdown v0.0.0-20211110145824-bf3e522c626a
-	go.opentelemetry.io/otel v1.17.0
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.3.0
+	go.opentelemetry.io/otel v1.32.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.32.0
 	go.opentelemetry.io/otel/exporters/zipkin v1.0.0-RC3
-	go.opentelemetry.io/otel/sdk v1.17.0
-	go.opentelemetry.io/otel/trace v1.17.0
-	go.opentelemetry.io/proto/otlp v0.11.0
+	go.opentelemetry.io/otel/sdk v1.32.0
+	go.opentelemetry.io/otel/trace v1.32.0
+	go.opentelemetry.io/proto/otlp v1.3.1
 	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5
-	golang.org/x/term v0.24.0
+	golang.org/x/term v0.25.0
 	golang.org/x/tools/go/vcs v0.1.0-deprecated
 	gonum.org/v1/gonum v0.15.1
 	google.golang.org/genproto/googleapis/api v0.0.0-20241104194629-dd2ea8efbc28
@@ -305,7 +304,7 @@ require (
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/bits-and-blooms/bitset v1.4.0 // indirect
 	github.com/campoy/embedmd v1.0.0 // indirect
-	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
+	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
@@ -328,7 +327,7 @@ require (
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-latex/latex v0.0.0-20231108140139-5c1ce85aa4ea // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
-	github.com/go-logr/logr v1.3.0 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-openapi/analysis v0.22.2 // indirect
@@ -414,7 +413,7 @@ require (
 	github.com/prometheus/procfs v0.10.1 // indirect
 	github.com/pseudomuto/protokit v0.2.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
-	github.com/rogpeppe/go-internal v1.11.0 // indirect
+	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/rs/xid v1.3.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sahilm/fuzzy v0.1.0 // indirect
@@ -438,7 +437,7 @@ require (
 	go.mongodb.org/mongo-driver v1.13.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.3.0 // indirect
-	go.opentelemetry.io/otel/metric v1.17.0 // indirect
+	go.opentelemetry.io/otel/metric v1.32.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
@@ -447,7 +446,7 @@ require (
 	gonum.org/v1/plot v0.14.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/bytestream v0.0.0-20241104194629-dd2ea8efbc28 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20241021214115-324edc3d5d38 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20241104194629-dd2ea8efbc28 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 )
 
@@ -466,7 +465,7 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	// The indicated commit is required on top of v1.0.0-RC3 because
 	// it fixes an import comment that otherwise breaks our prereqs tool.
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.3.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.32.0
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )
