@@ -280,6 +280,14 @@ func createLogicalReplicationStreamPlanHook(
 		if cr, ok := options.GetDefaultFunction(); ok {
 			defaultConflictResolution = *cr
 		}
+
+		var jobID jobspb.JobID
+		defer func() {
+			if retErr == nil {
+				resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
+			}
+		}()
+
 		return p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			dstTableDescs := make([]*tabledesc.Mutable, 0, len(srcTableDescs))
 			for _, pair := range repPairs {
@@ -320,14 +328,13 @@ func createLogicalReplicationStreamPlanHook(
 				},
 				Progress: progress,
 			}
-
+			jobID = jr.JobID
 			if err := replicationutils.LockLDRTables(ctx, txn, dstTableDescs, jr.JobID); err != nil {
 				return err
 			}
 			if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
 				return err
 			}
-			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jr.JobID))}
 			return nil
 		})
 	}
