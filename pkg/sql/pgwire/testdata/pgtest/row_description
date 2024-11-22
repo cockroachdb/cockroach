@@ -318,16 +318,6 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send crdb_only
-Query {"String": "SET enable_experimental_alter_column_type_general = true"}
-----
-
-until crdb_only
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"SET"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-send crdb_only
 Query {"String": "ALTER TABLE tab3 ALTER COLUMN b TYPE STRING"}
 ----
 
