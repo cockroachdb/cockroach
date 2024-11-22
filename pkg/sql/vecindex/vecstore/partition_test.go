@@ -24,6 +24,7 @@ func TestPartition(t *testing.T) {
 	childKey20 := ChildKey{PartitionKey: 20}
 	childKey30 := ChildKey{PartitionKey: 30}
 	childKey40 := ChildKey{PartitionKey: 40}
+	childKey50 := ChildKey{PartitionKey: 50}
 
 	// Create new partition and add 4 vectors.
 	quantizer := quantize.NewUnQuantizer(2)
@@ -35,10 +36,13 @@ func TestPartition(t *testing.T) {
 
 	// Try to add duplicate vector.
 	require.False(t, partition.Add(ctx, vector.T{10, 10}, childKey20))
-
 	require.Equal(t, 4, partition.Count())
 	require.Equal(t, []ChildKey{childKey10, childKey20, childKey30, childKey40}, partition.ChildKeys())
 	require.Equal(t, []float32{4, 3.33}, roundFloats(partition.Centroid(), 2))
+
+	// Ensure that cloning does not disturb anything.
+	cloned := partition.Clone()
+	cloned.Add(ctx, vector.T{0, -1}, childKey50)
 
 	// Search method.
 	searchSet := SearchSet{MaxResults: 3}
@@ -66,6 +70,15 @@ func TestPartition(t *testing.T) {
 	require.Equal(t, []ChildKey{childKey40}, partition.ChildKeys())
 	require.True(t, partition.ReplaceWithLastByKey(childKey40))
 	require.Equal(t, []ChildKey{}, partition.ChildKeys())
+
+	// Check that clone is unaffected.
+	require.Equal(t, 5, cloned.Count())
+	require.Equal(t, Level(1), cloned.Level())
+	require.Equal(t, []ChildKey{childKey10, childKey20, childKey30, childKey40, childKey50}, cloned.ChildKeys())
+	squaredDistances := []float32{0, 0, 0, 0, 0}
+	errorBounds := []float32{0, 0, 0, 0, 0}
+	cloned.Quantizer().EstimateSquaredDistances(ctx, cloned.QuantizedSet(), vector.T{3, 4}, squaredDistances, errorBounds)
+	require.Equal(t, []float32{8, 8, 13, 2, 34}, squaredDistances)
 }
 
 func roundResults(results SearchResults, prec int) SearchResults {

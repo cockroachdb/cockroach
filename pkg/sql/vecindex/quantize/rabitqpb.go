@@ -44,6 +44,16 @@ func MakeRaBitQCodeSetFromRawData(data []uint64, width int) RaBitQCodeSet {
 	return RaBitQCodeSet{Count: len(data) / width, Width: width, Data: data}
 }
 
+// Clone makes a deep copy of the code set. Changes to either the original or
+// clone will not affect the other.
+func (cs *RaBitQCodeSet) Clone() RaBitQCodeSet {
+	return RaBitQCodeSet{
+		Count: cs.Count,
+		Width: cs.Width,
+		Data:  slices.Clone(cs.Data),
+	}
+}
+
 // At returns the code at the given position in the set as a slice of uint64
 // values that can be read or written by the caller.
 func (cs *RaBitQCodeSet) At(offset int) RaBitQCode {
@@ -105,6 +115,17 @@ func (vs *RaBitQuantizedVectorSet) ReplaceWithLast(offset int) {
 	vs.CentroidDistances = vs.CentroidDistances[:lastOffset]
 	vs.DotProducts[offset] = vs.DotProducts[lastOffset]
 	vs.DotProducts = vs.DotProducts[:lastOffset]
+}
+
+// Clone implements the QuantizedVectorSet interface.
+func (vs *RaBitQuantizedVectorSet) Clone() QuantizedVectorSet {
+	return &RaBitQuantizedVectorSet{
+		Centroid:          slices.Clone(vs.Centroid),
+		Codes:             vs.Codes.Clone(),
+		CodeCounts:        slices.Clone(vs.CodeCounts),
+		CentroidDistances: slices.Clone(vs.CentroidDistances),
+		DotProducts:       slices.Clone(vs.DotProducts),
+	}
 }
 
 // AddUndefined adds the given number of quantized vectors to this set. The new

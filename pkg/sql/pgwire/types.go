@@ -101,8 +101,19 @@ func writeTextUUID(b *writeBuffer, v uuid.UUID) {
 	b.write(s)
 }
 
-func writeTextString(b *writeBuffer, v string, t *types.T) {
-	b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v, t))
+func writeTextString(b *writeBuffer, s string, t *types.T) {
+	if paddingNeeded([]byte(s), t) {
+		b.writePaddedData([]byte(s), t)
+	} else {
+		b.writeLengthPrefixedString(s)
+	}
+}
+
+func paddingNeeded(v []byte, t *types.T) bool {
+	blankPaddedCharType := t.Oid() == oid.T_bpchar
+	paddingNeeded := len(v) < int(t.Width())
+
+	return blankPaddedCharType && paddingNeeded
 }
 
 func writeTextTimestamp(b *writeBuffer, v time.Time) {
@@ -189,7 +200,7 @@ func writeTextDatumNotNull(
 		writeTextString(b, string(*v), t)
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
+		writeTextString(b, v.Contents, t)
 
 	case *tree.DDate:
 		b.textFormatter.FormatNode(v)
@@ -526,29 +537,26 @@ func writeBinaryBytes(b *writeBuffer, v []byte, t *types.T) {
 		// an empty string for the "char" type in the binary format.
 		v = []byte{0}
 	}
-	pad := 0
-	if t.Oid() == oid.T_bpchar && len(v) < int(t.Width()) {
-		// Pad spaces on the right of the byte slice to make it of length
-		// specified in the type t.
-		pad = int(t.Width()) - len(v)
-	}
-	b.putInt32(int32(len(v) + pad))
-	b.write(v)
-	for pad > 0 {
-		n := min(pad, len(spaces))
-		b.write(spaces[:n])
-		pad -= n
+
+	if paddingNeeded(v, t) {
+		b.writePaddedData(v, t)
+	} else {
+		b.writeLengthPrefixedByteSlice(v, int32(len(v)))
 	}
 }
 
-func writeBinaryString(b *writeBuffer, v string, t *types.T) {
-	s := tree.ResolveBlankPaddedChar(v, t)
+func writeBinaryString(b *writeBuffer, s string, t *types.T) {
 	if t.Oid() == oid.T_char && s == "" {
 		// Match Postgres and always explicitly include a null byte if we have
 		// an empty string for the "char" type in the binary format.
 		s = string([]byte{0})
 	}
-	b.writeLengthPrefixedString(s)
+
+	if paddingNeeded([]byte(s), t) {
+		b.writePaddedData([]byte(s), t)
+	} else {
+		b.writeLengthPrefixedString(s)
+	}
 }
 
 func writeBinaryTimestamp(b *writeBuffer, v time.Time) {
@@ -701,7 +709,7 @@ func writeBinaryDatumNotNull(
 		writeBinaryString(b, string(*v), t)
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
+		writeTextString(b, v.Contents, t)
 
 	case *tree.DTimestamp:
 		writeBinaryTimestamp(b, v.Time)
