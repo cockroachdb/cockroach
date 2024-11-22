@@ -6,6 +6,7 @@
 package stats
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
 	"sort"
@@ -92,6 +93,12 @@ func decodeUpperBound(typ *types.T, a *tree.DatumAlloc, upperBound []byte) (tree
 		datum, _, err = valueside.Decode(a, typ, upperBound)
 	} else {
 		datum, _, err = keyside.Decode(a, typ, upperBound, encoding.Ascending)
+	}
+	if err != nil {
+		err = errors.Wrapf(
+			err, "decoding histogram version %d type %v value %v",
+			int(version), typ.Family().Name(), hex.EncodeToString(upperBound),
+		)
 	}
 	return datum, err
 }
