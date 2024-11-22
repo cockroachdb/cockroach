@@ -77,6 +77,8 @@ type partitionFixupKey struct {
 // fixup, then that will likewise be enqueued and performed in a separate
 // transaction, in order to avoid contention and re-entrancy, both of which can
 // cause problems.
+//
+// All entry methods (i.e. capitalized methods) in fixupProcess are thread-safe.
 type fixupProcessor struct {
 	// --------------------------------------------------
 	// These fields can be accessed on any goroutine once the lock is acquired.
