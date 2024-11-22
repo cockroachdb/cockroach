@@ -3162,6 +3162,9 @@ func DecodeUUIDValue(b []byte) (remaining []byte, u uuid.UUID, err error) {
 
 // DecodeUntaggedUUIDValue decodes a value encoded by EncodeUntaggedUUIDValue.
 func DecodeUntaggedUUIDValue(b []byte) (remaining []byte, u uuid.UUID, err error) {
+	if len(b) < uuidValueEncodedLength {
+		return b, uuid.UUID{}, errors.Errorf("invalid uuid length of %d", len(b))
+	}
 	u, err = uuid.FromBytes(b[:uuidValueEncodedLength])
 	if err != nil {
 		return b, uuid.UUID{}, err
