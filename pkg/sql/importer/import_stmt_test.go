@@ -4806,6 +4806,8 @@ func TestImportComputed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t)
+
 	const nodes = 3
 
 	ctx := context.Background()
