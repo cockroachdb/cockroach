@@ -38,6 +38,9 @@ SELECT * FROM xy;
 statement ok
 DROP TABLE IF EXISTS xy;
 CREATE TABLE xy (x INT, y TEXT);
+
+onlyif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
+statement ok
 SET enable_experimental_alter_column_type_general=true;
 
 statement ok
