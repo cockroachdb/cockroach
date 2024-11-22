@@ -143,6 +143,10 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
 		id := jobspb.JobID(*row[0].(*tree.DInt))
+		if _, skip := testingIgnoreIDs[id]; skip {
+			log.Warningf(ctx, "skipping execution of job %d as it is ignored by testing knob", id)
+			continue
+		}
 		claimedToResume[id] = struct{}{}
 	}
 	if err != nil {
@@ -151,6 +155,16 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 	r.filterAlreadyRunningAndCancelFromPreviousSessions(ctx, s, claimedToResume)
 	r.resumeClaimedJobs(ctx, s, claimedToResume)
 	return nil
+}
+
+var testingIgnoreIDs map[jobspb.JobID]struct{}
+
+// TestingSetIDsToIgnore is a test-only knob to set a list of job IDs that will
+// not be executed even after being claimed.
+func TestingSetIDsToIgnore(ignore map[jobspb.JobID]struct{}) func() {
+	orig := testingIgnoreIDs
+	testingIgnoreIDs = ignore
+	return func() { testingIgnoreIDs = orig }
 }
 
 // resumeClaimedJobs invokes r.resumeJob for each job in claimedToResume. It

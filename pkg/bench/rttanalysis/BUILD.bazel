@@ -57,6 +57,7 @@ go_test(
     exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/base",
+        "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
