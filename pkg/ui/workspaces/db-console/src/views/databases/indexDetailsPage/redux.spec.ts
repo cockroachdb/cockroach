@@ -155,7 +155,6 @@ describe("Index Details Page", function () {
           lastReset: util.minDate,
           databaseID: undefined,
         },
-        breadcrumbItems: null,
       },
       false,
     );
@@ -217,7 +216,6 @@ describe("Index Details Page", function () {
         indexRecommendations: [],
         databaseID: 10,
       },
-      breadcrumbItems: null,
     });
   });
 });
