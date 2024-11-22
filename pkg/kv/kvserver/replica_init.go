@@ -285,6 +285,9 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 	r.setStartKeyLocked(desc.StartKey)
 
 	r.shMu.state = s.ReplState
+	if r.shMu.state.ForceFlushIndex != (roachpb.ForceFlushIndex{}) {
+		r.flowControlV2.ForceFlushIndexChangedLocked(context.TODO(), r.shMu.state.ForceFlushIndex.Index)
+	}
 	r.shMu.lastIndexNotDurable = s.LastIndex
 	r.shMu.lastTermNotDurable = invalidLastTerm
 

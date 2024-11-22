@@ -296,7 +296,7 @@ Raft: term: 52 leader: 5 leaseholder: 10 mark: {Term:51 Index:28} next-unstable:
 handle-raft-ready-and-admit entries=v1/i28/t46/pri0/time2/len100 leader-term=52
 ----
 HandleRaftReady:
- RangeControllerFactory.New(replicaSet=[(n1,s2):5,(n11,s11):11], leaseholder=10, nextRaftIndex=28)
+ RangeControllerFactory.New(replicaSet=[(n1,s2):5,(n11,s11):11], leaseholder=10, nextRaftIndex=28, forceFlushIndex=0)
  RangeController.AdmitRaftMuLocked(5, term:52, admitted:[LowPri:26,NormalPri:26,AboveNormalPri:26,HighPri:26])
  RangeController.HandleRaftEventRaftMuLocked([28])
 .....
@@ -392,7 +392,7 @@ handle-raft-ready-and-admit
 ----
 HandleRaftReady:
  RangeController.CloseRaftMuLocked
- RangeControllerFactory.New(replicaSet=[(n1,s2):5,(n11,s11):11], leaseholder=10, nextRaftIndex=29)
+ RangeControllerFactory.New(replicaSet=[(n1,s2):5,(n11,s11):11], leaseholder=10, nextRaftIndex=29, forceFlushIndex=0)
  RangeController.HandleRaftEventRaftMuLocked([])
 .....
 
@@ -500,7 +500,7 @@ LogTracker: mark:{Term:50 Index:25}, stable:24, admitted:[24 24 24 24]
 # RangeController is created.
 set-enabled-level enabled-level=v1-encoding
 ----
- RangeControllerFactory.New(replicaSet=[(n11,s11):11,(n13,s13):13], leaseholder=5, nextRaftIndex=26)
+ RangeControllerFactory.New(replicaSet=[(n11,s11):11,(n13,s13):13], leaseholder=5, nextRaftIndex=26, forceFlushIndex=0)
 
 set-raft-state log-term=50 log-index=26 next-unstable-index=27
 ----
