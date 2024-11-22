@@ -170,6 +170,7 @@ CREATE TABLE t1 (date string)
 statement ok
 INSERT INTO t1 VALUES ('2024-07-26')
 
+onlyif config local-mixed-24.2 local-mixed-24.3
 statement error pq: ALTER COLUMN TYPE from string to date is only supported experimentally
 ALTER TABLE t1 ALTER COLUMN date TYPE DATE USING date::DATE
 

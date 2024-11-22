@@ -87,6 +87,7 @@ CREATE TABLE t5(a int primary key, b int);
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';
 
+onlyif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
 statement ok
 SET enable_experimental_alter_column_type_general = true;
 

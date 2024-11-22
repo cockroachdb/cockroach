@@ -3,7 +3,6 @@ CREATE TABLE defaultdb.act (
   k INT PRIMARY KEY,
   c1 INT4
 );
-SET enable_experimental_alter_column_type_general=TRUE;
 ----
 
 ops
