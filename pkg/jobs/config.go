@@ -22,8 +22,6 @@ const (
 	gcIntervalSettingKey           = "jobs.registry.interval.gc"
 	retentionTimeSettingKey        = "jobs.retention_time"
 	cancelUpdateLimitKey           = "jobs.cancel_update_limit"
-	retryInitialDelaySettingKey    = "jobs.registry.retry.initial_delay"
-	retryMaxDelaySettingKey        = "jobs.registry.retry.max_delay"
 	executionErrorsMaxEntriesKey   = "jobs.execution_errors.max_entries"
 	executionErrorsMaxEntrySizeKey = "jobs.execution_errors.max_entry_size"
 	debugPausePointsSettingKey     = "jobs.debug.pausepoints"
