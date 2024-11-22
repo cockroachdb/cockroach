@@ -30,6 +30,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/fsm",
         "//pkg/util/hlc",
+        "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
