@@ -485,10 +485,10 @@ func (w *kv) Ops(
 		}
 		fmt.Fprintf(&buf, ` ($%d, $%d)`, j+1, j+2)
 	}
-	writeStmtStr := buf.String()
+	//writeStmtStr := buf.String()
 
 	// Select for update statement
-	var sfuStmtStr string
+	// var sfuStmtStr string
 	if w.writesUseSelectForUpdate {
 		buf.Reset()
 		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
@@ -499,7 +499,7 @@ func (w *kv) Ops(
 			fmt.Fprintf(&buf, `$%d`, i+1)
 		}
 		buf.WriteString(`) FOR UPDATE`)
-		sfuStmtStr = buf.String()
+		// sfuStmtStr = buf.String()
 	}
 
 	// Span statement
@@ -525,7 +525,7 @@ func (w *kv) Ops(
 		fmt.Fprintf(&buf, `$%d`, i+1)
 	}
 	buf.WriteString(`)`)
-	delStmtStr := buf.String()
+	// delStmtStr := buf.String()
 
 	gen, _, kt, _ := w.createKeyGenerator()
 	ql := workload.QueryLoad{}
@@ -538,17 +538,17 @@ func (w *kv) Ops(
 		}
 		op.readStmt = op.sr.Define(readStmtStr)
 		op.followerReadStmt = op.sr.Define(followerReadStmtStr)
-		op.writeStmt = op.sr.Define(writeStmtStr)
-		if len(sfuStmtStr) > 0 {
-			op.sfuStmt = op.sr.Define(sfuStmtStr)
-		}
+		// op.writeStmt = op.sr.Define(writeStmtStr)
+		// if len(sfuStmtStr) > 0 {
+		//	op.sfuStmt = op.sr.Define(sfuStmtStr)
+		// }
 		op.spanStmt = op.sr.Define(spanStmtStr)
 		if w.txnQoS != `regular` {
 			stmt := op.sr.Define(fmt.Sprintf(
 				" SET default_transaction_quality_of_service = %s", w.txnQoS))
 			op.qosStmt = &stmt
 		}
-		op.delStmt = op.sr.Define(delStmtStr)
+		// op.delStmt = op.sr.Define(delStmtStr)
 		if err := op.sr.Init(ctx, "kv", mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}
