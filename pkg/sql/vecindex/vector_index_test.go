@@ -301,8 +301,13 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	require.NoError(s.T, s.runAllFixups())
 
 	if hideTree {
-		return fmt.Sprintf("Created index with %d vectors with %d dimensions.\n",
+		str := fmt.Sprintf("Created index with %d vectors with %d dimensions.\n",
 			vectors.Count, vectors.Dims)
+		if s.Index.cancel == nil {
+			// Only show stats when building the index is deterministic.
+			str += s.Index.FormatStats()
+		}
+		return str
 	}
 
 	return s.FormatTree(d)
@@ -368,13 +373,22 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 func (s *testState) Recall(d *datadriven.TestData) string {
 	searchSet := vecstore.SearchSet{MaxResults: 1}
 	options := SearchOptions{}
-	samples := 50
+	numSamples := 50
+	var samples []int
 	var err error
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
+		case "use-feature":
+			// Use single designated sample.
+			require.Len(s.T, arg.Vals, 1)
+			offset, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(s.T, err)
+			numSamples = 1
+			samples = []int{offset}
+
 		case "samples":
 			require.Len(s.T, arg.Vals, 1)
-			samples, err = strconv.Atoi(arg.Vals[0])
+			numSamples, err = strconv.Atoi(arg.Vals[0])
 			require.NoError(s.T, err)
 
 		case "topk":
@@ -386,6 +400,14 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 			require.Len(s.T, arg.Vals, 1)
 			options.BaseBeamSize, err = strconv.Atoi(arg.Vals[0])
 			require.NoError(s.T, err)
+		}
+	}
+
+	// Construct list of feature offsets.
+	if samples == nil {
+		samples = make([]int, numSamples)
+		for i := range samples {
+			samples[i] = s.Features.Count - numSamples + i
 		}
 	}
 
@@ -417,11 +439,11 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 
 	data := s.InMemStore.GetAllVectors()
 
-	// Search for last "samples" features.
+	// Search for sampled features.
 	var sumMAP float64
-	for feature := s.Features.Count - samples; feature < s.Features.Count; feature++ {
+	for i := range samples {
 		// Calculate truth set for the vector.
-		queryVector := s.Features.At(feature)
+		queryVector := s.Features.At(samples[i])
 		truth := calcTruth(queryVector, data)
 
 		// Calculate prediction set for the vector.
@@ -437,11 +459,11 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		sumMAP += findMAP(prediction, truth)
 	}
 
-	recall := sumMAP / float64(samples) * 100
-	quantizedLeafVectors := float64(searchSet.Stats.QuantizedLeafVectorCount) / float64(samples)
-	quantizedVectors := float64(searchSet.Stats.QuantizedVectorCount) / float64(samples)
-	fullVectors := float64(searchSet.Stats.FullVectorCount) / float64(samples)
-	partitions := float64(searchSet.Stats.PartitionCount) / float64(samples)
+	recall := sumMAP / float64(numSamples) * 100
+	quantizedLeafVectors := float64(searchSet.Stats.QuantizedLeafVectorCount) / float64(numSamples)
+	quantizedVectors := float64(searchSet.Stats.QuantizedVectorCount) / float64(numSamples)
+	fullVectors := float64(searchSet.Stats.FullVectorCount) / float64(numSamples)
+	partitions := float64(searchSet.Stats.PartitionCount) / float64(numSamples)
 
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("%.2f%% recall@%d\n", recall, searchSet.MaxResults))

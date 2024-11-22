@@ -187,7 +187,7 @@ func searchIndex(ctx context.Context, datasetName string) {
 	fmt.Printf("%d train vectors, %d test vectors, %d dimensions, %d/%d min/max partitions, base beam size %d\n",
 		data.Train.Count, data.Test.Count, data.Test.Dims,
 		indexOptions.MinPartitionSize, indexOptions.MaxPartitionSize, indexOptions.BaseBeamSize)
-	fmt.Println()
+	fmt.Println(index.FormatStats())
 
 	fmt.Printf("beam\trecall\tleaf\tall\tfull\tpartns\tqps\n")
 

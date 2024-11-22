@@ -18,7 +18,7 @@ import (
 
 // storeStatsAlpha specifies the ratio of new values to existing values in EMA
 // calculations.
-const storeStatsAlpha = 0.1
+const storeStatsAlpha = 0.05
 
 // lockType specifies the type of lock that transactions have acquired.
 type lockType int
@@ -156,6 +156,7 @@ func (s *InMemoryStore) SetRootPartition(ctx context.Context, txn Txn, partition
 	if !ok {
 		s.mu.stats.NumPartitions++
 	}
+	s.reportPartitionSizeLocked(partition.Count())
 
 	// Grow or shrink CVStats slice if a new level is being added or removed.
 	expectedLevels := int(partition.Level() - 1)
@@ -181,6 +182,7 @@ func (s *InMemoryStore) InsertPartition(
 	s.mu.nextKey++
 	s.mu.index[partitionKey] = partition
 	s.mu.stats.NumPartitions++
+	s.reportPartitionSizeLocked(partition.Count())
 	return partitionKey, nil
 }
 
@@ -215,10 +217,12 @@ func (s *InMemoryStore) AddToPartition(
 	if !ok {
 		return 0, ErrPartitionNotFound
 	}
+
 	if partition.Add(ctx, vector, childKey) {
-		return partition.Count(), nil
+		s.reportPartitionSizeLocked(partition.Count())
 	}
-	return -1, nil
+
+	return partition.Count(), nil
 }
 
 // RemoveFromPartition implements the Store interface.
@@ -235,19 +239,18 @@ func (s *InMemoryStore) RemoveFromPartition(
 		return 0, ErrPartitionNotFound
 	}
 
-	if !partition.ReplaceWithLastByKey(childKey) {
-		// Key cannot be found.
-		return -1, nil
+	if partition.ReplaceWithLastByKey(childKey) {
+		s.reportPartitionSizeLocked(partition.Count())
 	}
 
-	count := partition.Count()
-	if count == 0 && partition.Level() > LeafLevel {
+	if partition.Count() == 0 && partition.Level() > LeafLevel {
 		// A non-leaf partition has zero vectors. If this is still true at the
 		// end of the transaction, the K-means tree will be unbalanced, which
 		// violates a key constraint.
 		txn.(*inMemoryTxn).unbalancedKey = partitionKey
 	}
-	return count, nil
+
+	return partition.Count(), nil
 }
 
 // SearchPartitions implements the Store interface.
@@ -319,15 +322,6 @@ func (s *InMemoryStore) MergeStats(ctx context.Context, stats *IndexStats, skipM
 	defer s.mu.Unlock()
 
 	if !skipMerge {
-		// Merge VectorsPerPartition.
-		if s.mu.stats.VectorsPerPartition == 0 {
-			// Use first value if this is the first update.
-			s.mu.stats.VectorsPerPartition = stats.VectorsPerPartition
-		} else {
-			s.mu.stats.VectorsPerPartition = (1 - storeStatsAlpha) * s.mu.stats.VectorsPerPartition
-			s.mu.stats.VectorsPerPartition += stats.VectorsPerPartition * storeStatsAlpha
-		}
-
 		// Merge CVStats.
 		for i := range stats.CVStats {
 			if i >= len(s.mu.stats.CVStats) {
@@ -342,8 +336,8 @@ func (s *InMemoryStore) MergeStats(ctx context.Context, stats *IndexStats, skipM
 			if cvstats.Mean == 0 {
 				cvstats.Mean = sample.Mean
 			} else {
-				cvstats.Mean = sample.Mean*storeStatsAlpha + (1-storeStatsAlpha)*cvstats.Mean
-				cvstats.Variance = sample.Variance*storeStatsAlpha + (1-storeStatsAlpha)*cvstats.Variance
+				cvstats.Mean = storeStatsAlpha*sample.Mean + (1-storeStatsAlpha)*cvstats.Mean
+				cvstats.Variance = storeStatsAlpha*sample.Variance + (1-storeStatsAlpha)*cvstats.Variance
 			}
 		}
 	}
@@ -497,6 +491,21 @@ func (s *InMemoryStore) UnmarshalBinary(data []byte) error {
 	}
 
 	return nil
+}
+
+// reportPartitionSizeLocked updates the vectors per partition statistic. It is
+// called with the count of vectors in a partition when a partition is inserted
+// or updated.
+// NOTE: Callers must have acquired the s.mu lock before calling.
+func (s *InMemoryStore) reportPartitionSizeLocked(count int) {
+	if s.mu.stats.VectorsPerPartition == 0 {
+		// Use first value if this is the first update.
+		s.mu.stats.VectorsPerPartition = float64(count)
+	} else {
+		// Calculate exponential moving average.
+		s.mu.stats.VectorsPerPartition = (1 - storeStatsAlpha) * s.mu.stats.VectorsPerPartition
+		s.mu.stats.VectorsPerPartition += storeStatsAlpha * float64(count)
+	}
 }
 
 // acquireTxnLock acquires a data or partition lock within the scope of the
