@@ -56,6 +56,20 @@ func TestMetricsMetadata(t *testing.T) {
 	}
 }
 
+func TestGetRecordedMetricNames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	metricsMetadata, _, _ := s.MetricsRecorder().GetMetricsMetadata(true /* combine */)
+	recordedNames := s.MetricsRecorder().GetRecordedMetricNames(metricsMetadata)
+
+	require.Equal(t, len(metricsMetadata), len(recordedNames))
+	for _, v := range recordedNames {
+		require.True(t, strings.HasPrefix(v, "cr.node") || strings.HasPrefix(v, "cr.store"))
+	}
+}
+
 // TestStatusVars verifies that prometheus metrics are available via the
 // /_status/vars and /_status/load endpoints.
 func TestStatusVars(t *testing.T) {

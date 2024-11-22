@@ -6,7 +6,6 @@
 import { AxisUnits, TimeScale } from "@cockroachlabs/cluster-ui";
 import flatMap from "lodash/flatMap";
 import flow from "lodash/flow";
-import has from "lodash/has";
 import isEmpty from "lodash/isEmpty";
 import keys from "lodash/keys";
 import map from "lodash/map";
@@ -76,9 +75,10 @@ interface UrlState {
   charts: string;
 }
 
-export const GetSources = (
+export const getSources = (
   nodesSummary: NodesSummary,
   metricState: CustomMetricState,
+  metricsMetadata: MetricsMetadata,
 ): string[] => {
   if (!(nodesSummary?.nodeStatuses?.length > 0)) {
     return [];
@@ -89,7 +89,7 @@ export const GetSources = (
   if (metricState.nodeSource === "" && !metricState.perSource) {
     return [];
   }
-  if (isStoreMetric(nodesSummary.nodeStatuses[0], metricState.metric)) {
+  if (isStoreMetric(metricsMetadata.recordedNames, metricState.metric)) {
     // If a specific node is selected, return the storeIDs associated with that node.
     // Otherwise, we're at the cluster level, so we grab each store ID.
     return metricState.nodeSource
@@ -133,23 +133,18 @@ export class CustomChart extends React.Component<
   // Selector which computes dropdown options based on the metrics which are
   // currently being stored on the cluster.
   private metricOptions = createSelector(
-    (summary: NodesSummary) => summary.nodeStatuses,
-    (_summary: NodesSummary, metricsMetadata: MetricsMetadata) =>
-      metricsMetadata,
-    (nodeStatuses, metadata = {}): DropdownOption[] => {
-      if (isEmpty(nodeStatuses)) {
+    (metricsMetadata: MetricsMetadata) => metricsMetadata,
+    (metricsMetadata): DropdownOption[] => {
+      if (isEmpty(metricsMetadata?.metadata)) {
         return [];
       }
 
-      return keys(nodeStatuses[0].metrics).map(k => {
-        const fullMetricName = isStoreMetric(nodeStatuses[0], k)
-          ? "cr.store." + k
-          : "cr.node." + k;
-
+      return keys(metricsMetadata.metadata).map(k => {
+        const fullMetricName = metricsMetadata.recordedNames[k];
         return {
           value: fullMetricName,
           label: k,
-          description: metadata[k] && metadata[k].help,
+          description: metricsMetadata.metadata[k]?.help,
         };
       });
     },
@@ -243,7 +238,7 @@ export class CustomChart extends React.Component<
   // This function handles the logic related to creating Metric components
   // based on perNode and perTenant flags.
   renderMetricComponents = (metrics: CustomMetricState[], index: number) => {
-    const { nodesSummary, tenantOptions } = this.props;
+    const { nodesSummary, tenantOptions, metricsMetadata } = this.props;
     // We require nodes information to determine sources (storeIDs/nodeIDs) down below.
     if (!(nodesSummary?.nodeStatuses?.length > 0)) {
       return;
@@ -253,8 +248,8 @@ export class CustomChart extends React.Component<
       if (m.metric === "") {
         return "";
       }
+      const sources = getSources(nodesSummary, m, metricsMetadata);
       if (m.perSource && m.perTenant) {
-        const sources = GetSources(nodesSummary, m);
         return flatMap(sources, source => {
           return tenants.map(tenant => (
             <Metric
@@ -270,7 +265,6 @@ export class CustomChart extends React.Component<
           ));
         });
       } else if (m.perSource) {
-        const sources = GetSources(nodesSummary, m);
         return map(sources, source => (
           <Metric
             key={`${index}${i}${source}`}
@@ -284,7 +278,6 @@ export class CustomChart extends React.Component<
           />
         ));
       } else if (m.perTenant) {
-        const sources = GetSources(nodesSummary, m);
         return tenants.map(tenant => (
           <Metric
             key={`${index}${i}${tenant.value}`}
@@ -306,7 +299,7 @@ export class CustomChart extends React.Component<
             aggregator={m.aggregator}
             downsampler={m.downsampler}
             derivative={m.derivative}
-            sources={GetSources(nodesSummary, m)}
+            sources={sources}
             tenantSource={m.tenantSource}
           />
         );
@@ -356,7 +349,7 @@ export class CustomChart extends React.Component<
       <>
         {charts.map((chart, i) => (
           <CustomChartTable
-            metricOptions={this.metricOptions(nodesSummary, metricsMetadata)}
+            metricOptions={this.metricOptions(metricsMetadata)}
             nodeOptions={this.nodeOptions(nodesSummary)}
             tenantOptions={tenantOptions}
             currentTenant={currentTenant}
@@ -443,9 +436,12 @@ export default withRouter(
   connect(mapStateToProps, mapDispatchToProps)(CustomChart),
 );
 
-function isStoreMetric(nodeStatus: INodeStatus, metricName: string) {
+function isStoreMetric(
+  recordedNames: Record<string, string>,
+  metricName: string,
+) {
   if (metricName?.startsWith("cr.store")) {
     return true;
   }
-  return has(nodeStatus.store_statuses[0].metrics, metricName);
+  return recordedNames[metricName]?.startsWith("cr.store") || false;
 }

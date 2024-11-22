@@ -301,8 +301,10 @@ func (s *adminServer) AllMetricMetadata(
 ) (*serverpb.MetricMetadataResponse, error) {
 
 	md, _, _ := s.metricsRecorder.GetMetricsMetadata(true /* combine */)
+	metricNames := s.metricsRecorder.GetRecordedMetricNames(md)
 	resp := &serverpb.MetricMetadataResponse{
-		Metadata: md,
+		Metadata:      md,
+		RecordedNames: metricNames,
 	}
 
 	return resp, nil
