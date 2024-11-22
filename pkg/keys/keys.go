@@ -327,6 +327,11 @@ func RangeAppliedStateKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeAppliedStateKey()
 }
 
+// RangeForceFlushKey returns a system-local key for the range force flush key.
+func RangeForceFlushKey(rangeID roachpb.RangeID) roachpb.Key {
+	return MakeRangeIDPrefixBuf(rangeID).RangeForceFlushKey()
+}
+
 // RangeLeaseKey returns a system-local key for a range lease.
 func RangeLeaseKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeLeaseKey()
@@ -1127,6 +1132,12 @@ func (b RangeIDPrefixBuf) ReplicatedSharedLocksTransactionLatchingKey(txnID uuid
 // See comment on RangeAppliedStateKey function.
 func (b RangeIDPrefixBuf) RangeAppliedStateKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeAppliedStateSuffix...)
+}
+
+// RangeForceFlushKey returns a system-local key for the range force flush
+// key.
+func (b RangeIDPrefixBuf) RangeForceFlushKey() roachpb.Key {
+	return append(b.replicatedPrefix(), LocalRangeForceFlushSuffix...)
 }
 
 // RangeLeaseKey returns a system-local key for a range lease.
