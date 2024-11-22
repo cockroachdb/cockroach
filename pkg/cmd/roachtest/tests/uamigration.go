@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/stretchr/testify/require"
@@ -49,10 +50,27 @@ func runUAMigration(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.NoError(t, err, "cannot create TenantTwo")
 
 	stopOpts := option.DefaultStopOpts()
-	c.Stop(ctx, t.L(), stopOpts, c.All())
+	c.Stop(ctx, t.L(), stopOpts, c.Nodes(2))
 
 	settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_UA=true")
-	c.Start(ctx, t.L(), opts, settings, c.All())
+	c.Start(ctx, t.L(), opts, settings, c.Nodes(2))
+
+	numWarehouses := 10
+
+	roachNodes := c.Nodes(2)
+	workloadNode := c.Nodes(2)
+	init := roachtestutil.NewCommand("./cockroach workload init tpcc --split").
+		Arg("{pgurl%s}", roachNodes).
+		Flag("warehouses", numWarehouses)
+	run := roachtestutil.NewCommand("./cockroach workload run tpcc --duration 10m").
+		Arg("{pgurl%s}", roachNodes).
+		Flag("warehouses", numWarehouses).
+		Option("tolerate-errors")
+	err = c.RunE(ctx, option.WithNodes(workloadNode), init.String())
+	require.NoError(t, err, "failed to run tpcc init")
+
+	err = c.RunE(ctx, option.WithNodes(workloadNode), run.String())
+	require.NoError(t, err, "failed to run tpcc run")
 
 	query = `CREATE VIRTUAL CLUSTER 'foo'`
 	_, err = db.ExecContext(ctx, query)
@@ -68,6 +86,20 @@ func runUAMigration(ctx context.Context, t test.Test, c cluster.Cluster) {
 		err := rows.Scan(&id, &name)
 		require.NoError(t, err, "couldn't do SCAN")
 		t.L().Printf("SYSTEM.TENANTS : %d, %s", id, name)
+	}
+	require.NoError(t, rows.Err(), "some failure while reading")
+
+	dbTwo := c.Conn(ctx, t.L(), 2)
+	defer dbTwo.Close()
+	query = `select count(1) from crdb_internal.scan(crdb_internal.tenant_span(2)[1], crdb_internal.table_span(1)[1]);`
+	rows, err = dbTwo.QueryContext(ctx, query)
+	require.NoError(t, err, "failed to run crdb_internal.scan")
+	defer rows.Close()
+	for rows.Next() {
+		var id int
+		err := rows.Scan(&id)
+		require.NoError(t, err, "couldn't SCAN count")
+		require.Equal(t, 0, id)
 	}
 	require.NoError(t, rows.Err(), "some failure while reading")
 }
