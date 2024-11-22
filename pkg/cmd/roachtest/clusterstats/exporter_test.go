@@ -331,7 +331,7 @@ func TestExport(t *testing.T) {
 		statsWriter = func(ctx context.Context, tt test.Test, c cluster.Cluster, buffer *bytes.Buffer, dest string) error {
 			require.Equal(t, mockTest, tt)
 			require.Equal(t, mockCluster, c)
-			require.Equal(t, "/location/of/file/openmetrics.om", dest)
+			require.Equal(t, "/location/of/file/stats.om", dest)
 
 			require.Equal(t, parseData(expectedOutput), parseData(buffer.String()))
 			return nil
