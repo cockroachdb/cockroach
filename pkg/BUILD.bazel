@@ -965,7 +965,6 @@ GO_TARGETS = [
     "//pkg/ccl/pgcryptoccl/pgcryptocipherccl:pgcryptocipherccl_test",
     "//pkg/ccl/pgcryptoccl:pgcryptoccl",
     "//pkg/ccl/pgcryptoccl:pgcryptoccl_test",
-    "//pkg/ccl/plpgsqlccl:plpgsqlccl",
     "//pkg/ccl/revertccl:revertccl",
     "//pkg/ccl/revertccl:revertccl_test",
     "//pkg/ccl/schemachangerccl:schemachangerccl",
