@@ -254,7 +254,7 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 	destTestingKnobs := base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
-				if !descriptorRefreshHookEnabled.Load() {
+				if !descriptorRefreshHookEnabled.Swap(false) {
 					return
 				}
 				<-waitForRefresh
@@ -332,6 +332,7 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 		// Sanity: Execute the same query as prepared statement inside the reader
 		// catalog .
 		destPgxConn, err := pgx.Connect(ctx, destURL.String())
+		require.NoError(t, err)
 		_, err = destPgxConn.Prepare(ctx, query, query)
 		require.NoError(t, err)
 		rows, err := destPgxConn.Query(ctx, query)
@@ -409,6 +410,9 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 		for !iterationsDone {
 			uniqueIdx++
 			if !useAOST {
+				// Toggle the block on each iteration, so there is some risk
+				// of not all descriptor updates being updated.
+				descriptorRefreshHookEnabled.Swap(true)
 				select {
 				case waitForRefresh <- struct{}{}:
 				case <-iterationsDoneCh:
@@ -436,16 +440,22 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 				require.NoError(t, err)
 				rows, err = newPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
 				require.NoError(t, err)
+				rows.Close()
 				require.NoError(t, newPgxConn.Close(ctx))
 
-				tx := destRunner.Begin(t)
-				_, err = tx.Exec("SELECT * FROM t1")
-				checkAOSTError(err)
-				_, err = tx.Exec("SELECT * FROM v1")
-				checkAOSTError(err)
-				_, err = tx.Exec("SELECT * FROM t2")
-				checkAOSTError(err)
-				checkAOSTError(tx.Commit())
+				// Only use txn's with AOST, which should never hit retryable errors.
+				// Automatic retry's are enabled for PCR errors, but they can still
+				// happen in a txn. When AOST is off don't try the txn.
+				if useAOST {
+					tx := destRunner.Begin(t)
+					_, err = tx.Exec("SELECT * FROM t1")
+					checkAOSTError(err)
+					_, err = tx.Exec("SELECT * FROM v1")
+					checkAOSTError(err)
+					_, err = tx.Exec("SELECT * FROM t2")
+					checkAOSTError(err)
+					checkAOSTError(tx.Commit())
+				}
 
 				_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM t1,v1, t2")
 				checkAOSTError(err)
@@ -457,8 +467,8 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 		}
 		// Finally ensure the queries actually match.
 		require.NoError(t, grp.Wait())
-		// Check if the error was detected.
-		require.Equalf(t, !useAOST, errorDetected,
+		// When the AOST is shut off we retry, so no errors should occur.
+		require.Equalf(t, false, errorDetected,
 			"error was detected unexpectedly (AOST = %t on connection)", useAOST)
 	}
 	require.NoError(t, existingPgxConn.Close(ctx))
