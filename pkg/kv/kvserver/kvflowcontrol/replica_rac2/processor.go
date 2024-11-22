@@ -113,10 +113,11 @@ type ACWorkQueue interface {
 }
 
 type rangeControllerInitState struct {
-	term          uint64
-	replicaSet    rac2.ReplicaSet
-	leaseholder   roachpb.ReplicaID
-	nextRaftIndex uint64
+	term            uint64
+	replicaSet      rac2.ReplicaSet
+	leaseholder     roachpb.ReplicaID
+	nextRaftIndex   uint64
+	forceFlushIndex uint64
 	// These fields are required options for the RangeController specific to the
 	// replica and range, rather than the store or node, so we pass them as part
 	// of the range controller init state.
@@ -245,6 +246,12 @@ type Processor interface {
 	// Both Replica.raftMu and Replica.mu are held.
 	OnDescChangedLocked(
 		ctx context.Context, desc *roachpb.RangeDescriptor, tenantID roachpb.TenantID)
+
+	// ForceFlushIndexChangedLocked sets the force flush index. It may be rarely
+	// called with no change to the index.
+	//
+	// Both Replica.raftMu and Replica.mu are held.
+	ForceFlushIndexChangedLocked(ctx context.Context, index uint64)
 
 	// HandleRaftReadyRaftMuLocked corresponds to processing that happens when
 	// Replica.handleRaftReadyRaftMuLocked is called. It must be called even
@@ -403,6 +410,7 @@ type processorImpl struct {
 	// leaseholderID is the currently known leaseholder replica.
 	leaseholderID roachpb.ReplicaID
 
+	forceFlushIndex uint64
 	// State at a follower.
 	follower struct {
 		// isLeaderUsingV2Protocol is true when the leaderID indicated that it's
@@ -596,6 +604,15 @@ func (p *processorImpl) OnDescChangedLocked(
 	}
 }
 
+// ForceFlushIndexChangedLocked implements Processor.
+func (p *processorImpl) ForceFlushIndexChangedLocked(ctx context.Context, index uint64) {
+	p.forceFlushIndex = index
+	if p.leader.rc != nil {
+		p.leader.rc.ForceFlushIndexChangedLocked(ctx, index)
+		p.opts.RaftScheduler.EnqueueRaftReady(p.opts.RangeID)
+	}
+}
+
 // makeStateConsistentRaftMuLocked uses the union of the latest state
 // retrieved from RaftNode and the p.desc.replicas set to initialize or update
 // the internal state of processorImpl.
@@ -720,16 +737,17 @@ func (p *processorImpl) createLeaderStateRaftMuLocked(
 	}
 	p.term = term
 	rc := p.opts.RangeControllerFactory.New(ctx, rangeControllerInitState{
-		term:           term,
-		replicaSet:     p.desc.replicas,
-		leaseholder:    p.leaseholderID,
-		nextRaftIndex:  nextUnstableIndex,
-		rangeID:        p.opts.RangeID,
-		tenantID:       p.desc.tenantID,
-		localReplicaID: p.opts.ReplicaID,
-		raftInterface:  p.raftInterface,
-		msgAppSender:   p.opts.MsgAppSender,
-		muAsserter:     p.opts.ReplicaMutexAsserter,
+		term:            term,
+		replicaSet:      p.desc.replicas,
+		leaseholder:     p.leaseholderID,
+		nextRaftIndex:   nextUnstableIndex,
+		forceFlushIndex: p.forceFlushIndex,
+		rangeID:         p.opts.RangeID,
+		tenantID:        p.desc.tenantID,
+		localReplicaID:  p.opts.ReplicaID,
+		raftInterface:   p.raftInterface,
+		msgAppSender:    p.opts.MsgAppSender,
+		muAsserter:      p.opts.ReplicaMutexAsserter,
 	})
 
 	func() {
@@ -1232,10 +1250,11 @@ func (f RangeControllerFactoryImpl) New(
 			Knobs:                  f.knobs,
 		},
 		rac2.RangeControllerInitState{
-			Term:          state.term,
-			ReplicaSet:    state.replicaSet,
-			Leaseholder:   state.leaseholder,
-			NextRaftIndex: state.nextRaftIndex,
+			Term:            state.term,
+			ReplicaSet:      state.replicaSet,
+			Leaseholder:     state.leaseholder,
+			NextRaftIndex:   state.nextRaftIndex,
+			ForceFlushIndex: state.forceFlushIndex,
 		},
 	)
 }

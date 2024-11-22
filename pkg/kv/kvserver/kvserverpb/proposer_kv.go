@@ -70,5 +70,6 @@ func (r *ReplicatedEvalResult) IsTrivial() bool {
 	allowlist.PrevLeaseProposal = nil
 	allowlist.IsProbe = false // probes are trivial, they always get refused in CheckForcedErr
 	allowlist.State = nil
+	allowlist.DoTimelyApplicationToAllReplicas = false
 	return allowlist.IsZero()
 }
