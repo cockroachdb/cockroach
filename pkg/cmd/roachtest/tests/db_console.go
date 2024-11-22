@@ -224,7 +224,7 @@ func runDbConsoleCypress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal("cannot be run in local mode")
 	}
 
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 	cypressTest := newDbConsoleCypressTest(t, c, "cypress/e2e/health-check/*.ts", seedQueries)
 	db, err := c.ConnE(ctx, t.L(), cypressTest.testCluster.WorkloadNode()[0])
