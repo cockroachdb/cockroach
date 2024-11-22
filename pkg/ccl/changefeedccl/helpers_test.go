@@ -1285,9 +1285,7 @@ func verifyLogsWithEmittedBytesAndMessages(
 			emittedBytes += msg.EmittedBytes
 			emittedMessages += msg.EmittedMessages
 			require.Equal(t, interval, msg.LoggingInterval)
-			if closing {
-				require.Equal(t, true, msg.Closing)
-			}
+			require.Equal(t, closing, msg.Closing)
 		}
 		if emittedBytes == 0 || emittedMessages == 0 {
 			return errors.Newf(
