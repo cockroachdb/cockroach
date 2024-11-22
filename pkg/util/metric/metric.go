@@ -1192,6 +1192,14 @@ func (v *vector) recordLabels(labelValues []string) {
 	v.encounteredLabelValues = append(v.encounteredLabelValues, labelValues)
 }
 
+// clear flushes the labels from the vector.
+func (v *vector) clear() {
+	v.Lock()
+	defer v.Unlock()
+	v.encounteredLabelsLookup = make(map[string]struct{})
+	v.encounteredLabelValues = [][]string{}
+}
+
 // GaugeVec is a collector for gauges that have a variable set of labels.
 // This uses the prometheus.GaugeVec under the hood. The contained gauges are
 // not persisted by the internal TSDB, nor are they aggregated; see aggmetric
@@ -1409,6 +1417,12 @@ func (hv *HistogramVec) Observe(labels map[string]string, v float64) {
 	labelValues := hv.getOrderedValues(labels)
 	hv.recordLabels(labelValues)
 	hv.promVec.WithLabelValues(labelValues...).Observe(v)
+}
+
+// Clear removes all the metrics and the label vector, preserving the metadata and configuration.
+func (hv *HistogramVec) Clear() {
+	hv.vector.clear()
+	hv.promVec.Reset()
 }
 
 // GetMetadata implements Iterable.

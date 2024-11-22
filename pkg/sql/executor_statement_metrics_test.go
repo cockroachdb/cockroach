@@ -189,13 +189,13 @@ func Benchmark_recordStatementLatencyMetrics(b *testing.B) {
 
 func executorStub(detailEnabled bool) *connExecutor {
 	ex := &connExecutor{}
-	metrics := makeMetrics(false)
-	ex.metrics = &metrics
 	ex.server = &Server{
 		cfg: &ExecutorConfig{
 			Settings: cluster.MakeTestingClusterSettings(),
 		},
 	}
+	metrics := makeMetrics(false, &ex.server.cfg.Settings.SV)
+	ex.metrics = &metrics
 
 	detailedLatencyMetrics.Override(context.Background(), &ex.server.cfg.Settings.SV, detailEnabled)
 
