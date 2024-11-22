@@ -5,6 +5,14 @@
 
 package rttanalysis
 
-import "testing"
+import (
+	"testing"
 
-func TestBenchmarkExpectation(t *testing.T) { reg.RunExpectations(t) }
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+)
+
+func TestBenchmarkExpectation(t *testing.T) {
+	defer jobs.TestingSetIDsToIgnore(map[jobspb.JobID]struct{}{3001: {}, 3002: {}})()
+	reg.RunExpectations(t)
+}
