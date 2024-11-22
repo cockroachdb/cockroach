@@ -2524,20 +2524,18 @@ func (r *raft) deFortify(from pb.PeerID, term uint64) {
 
 	r.resetLeadEpoch()
 
-	if r.state != pb.StateLeader {
-		// The peer is not fortifying the leader anymore. As a result:
-		// 1. We don't want to wait out an entire election timeout before
-		//    campaigning.
-		// 2. But we do want to take advantage of randomized election timeouts built
-		//    into raft to prevent hung elections.
-		// We achieve both of these goals by "forwarding" electionElapsed to begin
-		// at r.electionTimeout. Also see atRandomizedElectionTimeout.
-		r.logger.Debugf(
-			"%d setting election elapsed to start from %d ticks after store liveness support expired",
-			r.id, r.electionTimeout,
-		)
-		r.electionElapsed = r.electionTimeout
-	}
+	// The peer is not fortifying the leader anymore. As a result:
+	// 1. We don't want to wait out an entire election timeout before
+	//    campaigning.
+	// 2. But we do want to take advantage of randomized election timeouts built
+	//    into raft to prevent hung elections.
+	// We achieve both of these goals by "forwarding" electionElapsed to begin
+	// at r.electionTimeout. Also see atRandomizedElectionTimeout.
+	r.logger.Debugf(
+		"%d setting election elapsed to start from %d ticks after store liveness support expired",
+		r.id, r.electionTimeout,
+	)
+	r.electionElapsed = r.electionTimeout
 }
 
 // restore recovers the state machine from a snapshot. It restores the log and the

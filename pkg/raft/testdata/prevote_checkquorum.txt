@@ -156,6 +156,7 @@ stabilize
 > 1 receiving messages
   3->1 MsgFortifyLeader Term:2 Log:0/0
   INFO 1 [term: 1] received a MsgFortifyLeader message with higher term from 3 [term: 2], new leader indicated, advancing term
+  DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 1 became follower at term 2
   3->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 > 2 receiving messages
@@ -360,6 +361,7 @@ stabilize
 > 3 receiving messages
   2->3 MsgFortifyLeader Term:3 Log:0/0
   INFO 3 [term: 2] received a MsgFortifyLeader message with higher term from 2 [term: 3], new leader indicated, advancing term
+  DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 3 became follower at term 3
   2->3 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
 > 1 handling Ready

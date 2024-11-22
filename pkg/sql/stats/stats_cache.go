@@ -225,19 +225,6 @@ func (sc *TableStatisticsCache) GetTableStats(
 	if !statsUsageAllowed(table, sc.settings) {
 		return nil, nil
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without stats for this table.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
 	forecast := forecastAllowed(table, sc.settings)
 	return sc.getTableStatsFromCache(
 		ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(),
@@ -639,9 +626,24 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 // need to run a query to get user defined type metadata.
 func (sc *TableStatisticsCache) parseStats(
 	ctx context.Context, datums tree.Datums,
-) (*TableStatistic, *types.T, error) {
+) (_ *TableStatistic, _ *types.T, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// In the event of a "safe" panic, we only want to log the error and
+			// continue executing the query without stats for this table. This is only
+			// possible because the code does not update shared state and does not
+			// manipulate locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
+				panic(r)
+			}
+		}
+	}()
+
 	var tsp *TableStatisticProto
-	var err error
 	tsp, err = NewTableStatisticProto(datums)
 	if err != nil {
 		return nil, nil, err
@@ -789,7 +791,7 @@ func (tsp *TableStatisticProto) IsAuto() bool {
 // type that doesn't exist) and returns the rest (with no error).
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID, forecast bool, st *cluster.Settings,
-) ([]*TableStatistic, map[descpb.ColumnID]*types.T, error) {
+) (_ []*TableStatistic, _ map[descpb.ColumnID]*types.T, err error) {
 	getTableStatisticsStmt := `
 SELECT
 	"tableID",
@@ -817,6 +819,23 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Guard against crashes in the code below.
+	defer func() {
+		if r := recover(); r != nil {
+			// In the event of a "safe" panic, we only want to log the error and
+			// continue executing the query without stats for this table. This is only
+			// possible because the code does not update shared state and does not
+			// manipulate locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
+				panic(r)
+			}
+		}
+	}()
 
 	var statsList []*TableStatistic
 	var udts map[descpb.ColumnID]*types.T
