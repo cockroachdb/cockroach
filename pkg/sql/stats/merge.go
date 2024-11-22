@@ -79,6 +79,10 @@ func stripOuterBuckets(
 	endIdx := len(histogram)
 	if histogram[0].UpperBound.IsMin(ctx, evalCtx) && histogram[0].NumEq == 0 {
 		startIdx = 1
+		// Set the first range counts to zero to counteract range counts added by
+		// addOuterBuckets.
+		histogram[startIdx].NumRange = 0
+		histogram[startIdx].DistinctRange = 0
 	}
 	if histogram[len(histogram)-1].UpperBound.IsMax(ctx, evalCtx) && histogram[len(histogram)-1].NumEq == 0 {
 		endIdx = len(histogram) - 1
@@ -102,7 +106,7 @@ func stripOuterBuckets(
 // Histogram (format is: {NumEq, NumRange, DistinctRange, UpperBound}):
 // [{1, 0, 0, 2}, {1, 0, 0, 3}, {1, 0, 0, 4}]
 //
-// Partial Statistic: {row, 8, dist: 4, null: 0, size: 1}
+// Partial Statistic: {row: 8, dist: 4, null: 0, size: 1}
 // CreatedAt: 2022-01-03
 // Histogram: [{2, 0, 0, 0}, {2, 0, 0, 1}, {2, 0, 0, 5}, {2, 0, 0, 6}]
 //

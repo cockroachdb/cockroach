@@ -1309,7 +1309,7 @@ LIMIT 3
     "upper_bound": "9999"
 }
 {
-    "distinct_range": 49.59173044047086,
+    "distinct_range": 49.591730440470876,
     "num_eq": 1,
     "num_range": 50,
     "upper_bound": "9998"
