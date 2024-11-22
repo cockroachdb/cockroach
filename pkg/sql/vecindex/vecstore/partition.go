@@ -7,6 +7,7 @@ package vecstore
 
 import (
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
@@ -63,6 +64,17 @@ func NewPartition(
 		quantizedSet: quantizedSet,
 		childKeys:    childKeys,
 		level:        level,
+	}
+}
+
+// Clone makes a deep copy of this partition. Changes to the original or clone
+// do not affect the other.
+func (p *Partition) Clone() *Partition {
+	return &Partition{
+		quantizer:    p.quantizer,
+		quantizedSet: p.quantizedSet.Clone(),
+		childKeys:    slices.Clone(p.childKeys),
+		level:        p.level,
 	}
 }
 

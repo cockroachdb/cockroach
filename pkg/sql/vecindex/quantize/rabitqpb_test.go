@@ -44,6 +44,19 @@ func TestRaBitCodeSet(t *testing.T) {
 	require.Equal(t, 4, cs.Count)
 	require.Equal(t, 3, cs.Width)
 	require.Equal(t, data, cs.Data)
+
+	// Clone.
+	data = []uint64{1, 2, 3, 4, 5, 6}
+	cs = MakeRaBitQCodeSetFromRawData(data, 2)
+	cs2 := cs.Clone()
+	cs.ReplaceWithLast(0)
+	cs2.Add(RaBitQCode{10, 20})
+	require.Equal(t, 2, cs.Count)
+	require.Equal(t, 2, cs.Width)
+	require.Equal(t, []uint64{5, 6, 3, 4}, cs.Data)
+	require.Equal(t, 4, cs2.Count)
+	require.Equal(t, 2, cs2.Width)
+	require.Equal(t, []uint64{1, 2, 3, 4, 5, 6, 10, 20}, cs2.Data)
 }
 
 func TestRaBitQuantizedVectorSet(t *testing.T) {
@@ -61,6 +74,18 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	require.Len(t, quantizedSet.CentroidDistances, 5)
 	require.Len(t, quantizedSet.DotProducts, 5)
 
+	// Ensure that cloning does not disturb anything.
+	cloned := quantizedSet.Clone().(*RaBitQuantizedVectorSet)
+	copy(cloned.Codes.At(0), []uint64{10, 20, 30})
+	cloned.Centroid[0] = 10
+	cloned.CodeCounts[0] = 10
+	cloned.CentroidDistances[0] = 10
+	cloned.DotProducts[0] = 10
+	cloned.ReplaceWithLast(1)
+	cloned.ReplaceWithLast(1)
+	cloned.ReplaceWithLast(1)
+	cloned.ReplaceWithLast(1)
+
 	quantizedSet.ReplaceWithLast(2)
 	require.Equal(t, 4, quantizedSet.Codes.Count)
 	require.Equal(t, RaBitQCode{1, 2, 3}, quantizedSet.Codes.At(2))
@@ -70,4 +95,11 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	require.Equal(t, float32(1.23), quantizedSet.CentroidDistances[2])
 	require.Len(t, quantizedSet.DotProducts, 4)
 	require.Equal(t, float32(4.56), quantizedSet.DotProducts[2])
+
+	// Check that clone is unaffected.
+	require.Equal(t, []float32{10, 2, 3}, cloned.Centroid)
+	require.Equal(t, RaBitQCodeSet{Count: 1, Width: 3, Data: []uint64{10, 20, 30}}, cloned.Codes)
+	require.Equal(t, []uint32{10}, cloned.CodeCounts)
+	require.Equal(t, []float32{10}, cloned.CentroidDistances)
+	require.Equal(t, []float32{10}, cloned.DotProducts)
 }

@@ -99,7 +99,7 @@ func (s *InMemoryStore) CommitTransaction(ctx context.Context, txn Txn) error {
 		defer s.mu.Unlock()
 
 		partition, ok := s.mu.index[inMemTxn.unbalancedKey]
-		if ok && partition.Count() == 0 {
+		if ok && partition.Count() == 0 && partition.Level() > LeafLevel {
 			panic(errors.AssertionFailedf(
 				"K-means tree is unbalanced, with empty non-leaf partition %d", inMemTxn.unbalancedKey))
 		}
@@ -139,7 +139,10 @@ func (s *InMemoryStore) GetPartition(
 	if !ok {
 		return nil, ErrPartitionNotFound
 	}
-	return partition, nil
+
+	// Make a deep copy of the partition, since the caller is allowed to modify
+	// it, and that shouldn't impact the store's copy.
+	return partition.Clone(), nil
 }
 
 // SetRootPartition implements the Store interface.
@@ -232,17 +235,19 @@ func (s *InMemoryStore) RemoveFromPartition(
 		return 0, ErrPartitionNotFound
 	}
 
-	if partition.ReplaceWithLastByKey(childKey) {
-		count := partition.Count()
-		if count == 0 && partition.Level() > LeafLevel {
-			// A non-leaf partition has zero vectors. If this is still true at the
-			// end of the transaction, the K-means tree will be unbalanced, which
-			// violates a key constraint.
-			txn.(*inMemoryTxn).unbalancedKey = partitionKey
-		}
-		return count, nil
+	if !partition.ReplaceWithLastByKey(childKey) {
+		// Key cannot be found.
+		return -1, nil
 	}
-	return -1, nil
+
+	count := partition.Count()
+	if count == 0 && partition.Level() > LeafLevel {
+		// A non-leaf partition has zero vectors. If this is still true at the
+		// end of the transaction, the K-means tree will be unbalanced, which
+		// violates a key constraint.
+		txn.(*inMemoryTxn).unbalancedKey = partitionKey
+	}
+	return count, nil
 }
 
 // SearchPartitions implements the Store interface.

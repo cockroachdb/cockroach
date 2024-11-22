@@ -27,6 +27,15 @@ func (vs *UnQuantizedVectorSet) GetCentroidDistances() []float32 {
 	return vs.CentroidDistances
 }
 
+// Clone implements the QuantizedVectorSet interface.
+func (vs *UnQuantizedVectorSet) Clone() QuantizedVectorSet {
+	return &UnQuantizedVectorSet{
+		Centroid:          slices.Clone(vs.Centroid),
+		CentroidDistances: slices.Clone(vs.CentroidDistances),
+		Vectors:           vs.Vectors.Clone(),
+	}
+}
+
 // ComputeSquaredDistances computes the exact squared distances between the
 // given query vector and the vectors in the set, and writes the distances to
 // the "squaredDistances" slice.

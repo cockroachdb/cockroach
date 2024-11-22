@@ -36,6 +36,16 @@ func MakeSetFromRawData(data []float32, dims int) Set {
 	}
 }
 
+// Clone performs a deep copy of the vector set. Changes to the original or
+// clone will not affect the other.
+func (vs *Set) Clone() Set {
+	return Set{
+		Dims:  vs.Dims,
+		Count: vs.Count,
+		Data:  slices.Clone(vs.Data),
+	}
+}
+
 // AsMatrix returns this set as a matrix, to be used with the num32 package.
 // NB: The underlying float32 slice is shared by the resulting matrix, so any
 // changes will affect both the vector set and matrix.
