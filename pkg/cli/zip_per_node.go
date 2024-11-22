@@ -128,28 +128,27 @@ func (zc *debugZipContext) collectPerNodeData(
 func makePerNodeZipRequests(zr *zipReporter, prefix, id string, status serverpb.StatusClient) []zipRequest {
 	var zipRequests []zipRequest
 
-	if !zipCtx.files.shouldIncludeFile(details) {
+	if zipCtx.files.shouldIncludeFile(details) {
+		zipRequests = append(zipRequests, zipRequest{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Redact: zipCtx.redact})
+			},
+			pathName: prefix + "/details",
+		})
+	} else {
 		zr.info("skipping %s", details)
 	}
 
-	zipRequests = append(zipRequests, zipRequest{
-		fn: func(ctx context.Context) (interface{}, error) {
-			return status.Details(ctx, &serverpb.DetailsRequest{NodeId: id, Redact: zipCtx.redact})
-		},
-		pathName: prefix + "/details",
-	})
-
 	if !zipCtx.files.shouldIncludeFile(gossip) {
+		zipRequests = append(zipRequests, zipRequest{
+			fn: func(ctx context.Context) (interface{}, error) {
+				return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: zipCtx.redact})
+			},
+			pathName: prefix + "/gossip",
+		})
+	} else {
 		zr.info("skipping %s", gossip)
-		return nil
 	}
-
-	zipRequests = append(zipRequests, zipRequest{
-		fn: func(ctx context.Context) (interface{}, error) {
-			return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: zipCtx.redact})
-		},
-		pathName: prefix + "/gossip",
-	})
 
 	return zipRequests
 }
