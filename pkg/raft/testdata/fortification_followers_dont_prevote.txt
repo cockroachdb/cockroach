@@ -292,6 +292,7 @@ stabilize
 > 1 receiving messages
   2->1 MsgFortifyLeader Term:2 Log:0/0
   INFO 1 [term: 1] received a MsgFortifyLeader message with higher term from 2 [term: 2], new leader indicated, advancing term
+  DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 1 became follower at term 2
   2->1 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 > 3 receiving messages
