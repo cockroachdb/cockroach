@@ -4818,6 +4818,9 @@ func TestProxyTracing(t *testing.T) {
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
 	kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
 	kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+	// Disable follower reads to ensure that the request is proxied, and not
+	// answered locally due to follower reads.
+	kvserver.FollowerReadsEnabled.Override(ctx, &st.SV, false)
 	closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
 	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 
@@ -4887,6 +4890,22 @@ func TestProxyTracing(t *testing.T) {
 		return nil
 	}
 
+	printTrace := func() {
+		t.Log("started printing a trace")
+		rows, err := conn.QueryContext(ctx, "SELECT message, tag, location FROM [SHOW TRACE FOR SESSION]")
+		require.NoError(t, err)
+		defer rows.Close()
+
+		// Iterate over the results and print them
+		for rows.Next() {
+			var msg, tag, loc string
+			err := rows.Scan(&msg, &tag, &loc)
+			require.NoError(t, err)
+			t.Logf("msg: %s, tag: %s, loc: %s", msg, tag, loc)
+		}
+		require.NoError(t, rows.Err())
+	}
+
 	// Wait until the leaseholder for the test table ranges are on n3.
 	testutils.SucceedsSoon(t, func() error {
 		return checkLeaseCount(3, numRanges)
@@ -4896,16 +4915,19 @@ func TestProxyTracing(t *testing.T) {
 
 	_, err = conn.Exec("SET TRACING = on; SELECT FROM t where i = 987654321; SET TRACING = off")
 	require.NoError(t, err)
-
 	// Expect the "proxy request complete" message to be in the trace and that it
 	// comes from the proxy node n2.
 	var msg, tag, loc string
 	if err = conn.QueryRowContext(ctx, `SELECT message, tag, location
-		FROM [SHOW TRACE FOR SESSION]
-		WHERE message LIKE '%proxy request complete%'
-		AND location LIKE '%server/node%'
-		AND tag LIKE '%n2%'`,
+			FROM [SHOW TRACE FOR SESSION]
+			WHERE message LIKE '%proxy request complete%'
+			AND location LIKE '%server/node%'
+			AND tag LIKE '%n2%'`,
 	).Scan(&msg, &tag, &loc); err != nil {
+		// If we fail for any reason, print the trace to help debugging.
+		printTrace()
+		// Make sure that node 3 still holds the leases.
+		require.NoError(t, checkLeaseCount(3, numRanges))
 		if errors.Is(err, gosql.ErrNoRows) {
 			t.Fatalf("request succeeded without proxying")
 		}
