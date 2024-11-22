@@ -101,6 +101,10 @@ func newMismatchedExternalDataRowTimestampError(
 	}
 }
 
+// ClientVisibleRetryError implements the ClientVisibleRetryError interface.
+func (e *mismatchedExternalDataRowTimestamp) ClientVisibleRetryError() {
+}
+
 func (e *mismatchedExternalDataRowTimestamp) SafeFormatError(p errors.Printer) (next error) {
 	p.Printf("PCR reader timestamp has moved forward, "+
 		"existing descriptor %s(%d) and timestamp: %s "+
