@@ -8,6 +8,7 @@ package kvcoord
 import (
 	"context"
 	"fmt"
+	"runtime/trace"
 	"sort"
 	"sync"
 
@@ -206,7 +207,9 @@ func (gt *grpcTransport) sendBatch(
 		gt.opts.metrics.LocalSentCount.Inc(1)
 	}
 	log.VEvent(ctx, 2, "sending batch request")
+	reg := trace.StartRegion(ctx, "send-batch-rpc")
 	reply, err := iface.Batch(ctx, ba)
+	reg.End()
 	log.VEvent(ctx, 2, "received batch response")
 	// If we queried a remote node, perform extra validation.
 	if reply != nil && !rpc.IsLocal(iface) {
