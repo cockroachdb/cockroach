@@ -1031,6 +1031,7 @@ stabilize
   INFO 1 [logterm: 4, index: 5, vote: 0] cast MsgVote for 2 [logterm: 4, index: 5] at term 5
 > 3 receiving messages
   2->3 MsgVote Term:5 Log:4/5
+  DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 3 [term: 4] received a MsgVote message with higher term from 2 [term: 5], advancing term
   INFO 3 became follower at term 5
   INFO 3 [logterm: 4, index: 5, vote: 0] cast MsgVote for 2 [logterm: 4, index: 5] at term 5
