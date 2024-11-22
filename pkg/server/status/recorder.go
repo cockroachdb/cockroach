@@ -486,22 +486,42 @@ func (mr *MetricsRecorder) GetMetricsMetadata(
 	mr.mu.logRegistry.WriteMetricsMetadata(srvMetrics)
 	mr.mu.sysRegistry.WriteMetricsMetadata(srvMetrics)
 
-	// Get a random storeID.
-	var sID roachpb.StoreID
-
-	storeFound := false
-	for storeID := range mr.mu.storeRegistries {
-		sID = storeID
-		storeFound = true
-		break
-	}
-
-	// Get metric metadata from that store because all stores have the same metadata.
-	if storeFound {
-		mr.mu.storeRegistries[sID].WriteMetricsMetadata(nodeMetrics)
-	}
-
+	mr.writeStoreMetricsMetadata(nodeMetrics)
 	return nodeMetrics, appMetrics, srvMetrics
+}
+
+// GetRecordedMetricNames takes a map of metric metadata and returns a map
+// of the metadata name to the name the metric is recorded with in tsdb.
+func (mr *MetricsRecorder) GetRecordedMetricNames(
+	allMetadata map[string]metric.Metadata,
+) map[string]string {
+	storeMetricsMap := make(map[string]metric.Metadata)
+	tsDbMetricNames := make(map[string]string, len(allMetadata))
+	mr.writeStoreMetricsMetadata(storeMetricsMap)
+	for k := range allMetadata {
+		prefix := nodeTimeSeriesPrefix
+		if _, ok := storeMetricsMap[k]; ok {
+			prefix = storeTimeSeriesPrefix
+		}
+
+		tsDbMetricNames[k] = fmt.Sprintf(prefix, k)
+	}
+	return tsDbMetricNames
+}
+
+// writeStoreMetricsMetadata Gets a store from mr.mu.storeRegistries and writes
+// the metrics metadata to the provided map.
+func (mr *MetricsRecorder) writeStoreMetricsMetadata(metricsMetadata map[string]metric.Metadata) {
+	if len(mr.mu.storeRegistries) == 0 {
+		return
+	}
+
+	// All store registries should have the same metadata, so only the metadata
+	// from the first store is used to write to metricsMetadata.
+	for _, registry := range mr.mu.storeRegistries {
+		registry.WriteMetricsMetadata(metricsMetadata)
+		return
+	}
 }
 
 // getNetworkActivity produces a map of network activity from this node to all
