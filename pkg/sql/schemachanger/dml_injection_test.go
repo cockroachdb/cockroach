@@ -182,7 +182,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		{
 			desc: "alter column type general",
 			setup: []string{
-				"SET enable_experimental_alter_column_type_general=TRUE",
 				"ALTER TABLE tbl ADD COLUMN new_col BIGINT NOT NULL DEFAULT 100",
 			},
 			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE TEXT",
@@ -191,7 +190,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		{
 			desc: "alter column type general compute",
 			setup: []string{
-				"SET enable_experimental_alter_column_type_general=TRUE",
 				"ALTER TABLE tbl ADD COLUMN new_col DATE NOT NULL DEFAULT '2013-05-06', " +
 					"ADD COLUMN new_comp DATE AS (new_col) STORED",
 			},

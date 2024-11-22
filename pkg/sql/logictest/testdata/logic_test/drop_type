@@ -1,5 +1,8 @@
 statement ok
 SET sql_safe_updates = false;
+
+onlyif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
+statement ok
 SET enable_experimental_alter_column_type_general = true;
 
 # Basic test -- create and drop a type.

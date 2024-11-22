@@ -1,5 +1,4 @@
 /* setup */
-SET enable_experimental_alter_column_type_general=TRUE;
 CREATE TABLE t (i INT PRIMARY KEY, j INT DEFAULT 99 ON UPDATE -1);
 INSERT INTO t VALUES (1,NULL),(2,1),(3,2);
 ----
