@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import { Caution, Search as IndexIcon } from "@cockroachlabs/icons";
-import { Heading } from "@cockroachlabs/ui-components";
+import { Heading, Icon } from "@cockroachlabs/ui-components";
 import { Col, Row, Tooltip } from "antd";
 import classNames from "classnames/bind";
 import flatMap from "lodash/flatMap";
@@ -29,10 +29,8 @@ import {
   StatementsListRequestFromDetails,
   StatementsUsingIndexRequest,
 } from "../api/indexDetailsApi";
-import { BreadcrumbItem, Breadcrumbs } from "../breadcrumbs";
 import { commonStyles } from "../common";
 import { CockroachCloudContext } from "../contexts";
-import { CaretRight } from "../icon/caretRight";
 import { Pagination } from "../pagination";
 import {
   calculateActiveFilters,
@@ -41,6 +39,7 @@ import {
   Filters,
 } from "../queryFilter";
 import { Search } from "../search";
+import Breadcrumbs from "../sharedFromCloud/breadcrumbs";
 import LoadingError from "../sqlActivity/errorComponent";
 import { filterStatementsData } from "../sqlActivity/util";
 import { EmptyStatementsPlaceholder } from "../statementsPage/emptyStatementsPlaceholder";
@@ -64,8 +63,6 @@ import {
   Count,
   DATE_FORMAT_24_TZ,
   EncodeDatabaseTableIndexUri,
-  EncodeDatabaseTableUri,
-  EncodeDatabaseUri,
   performanceTuningRecipes,
   unique,
   unset,
@@ -110,7 +107,6 @@ export interface IndexDetailsPageData {
   tableName: string;
   indexName: string;
   details: IndexDetails;
-  breadcrumbItems: BreadcrumbItem[];
   isTenant: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
@@ -381,34 +377,19 @@ export class IndexDetailsPage extends React.Component<
   }
 
   private renderBreadcrumbs() {
-    if (this.props.breadcrumbItems) {
-      return (
-        <Breadcrumbs
-          items={this.props.breadcrumbItems}
-          divider={<CaretRight className={cx("icon--xxs", "icon--primary")} />}
-        />
-      );
-    }
-
-    const isCockroachCloud = this.context;
     // If no props are passed, render db-console breadcrumb links by default.
     return (
       <Breadcrumbs
         items={[
           { link: DB_PAGE_PATH, name: "Databases" },
           {
-            link: isCockroachCloud
-              ? EncodeDatabaseUri(this.props.databaseName)
-              : databaseDetailsPagePath(this.props.details.databaseID),
+            link: databaseDetailsPagePath(this.props.details.databaseID),
             name: this.props.databaseName,
           },
           {
-            link: isCockroachCloud
-              ? EncodeDatabaseTableUri(
-                  this.props.databaseName,
-                  this.props.tableName,
-                )
-              : tableDetailsPagePath(parseInt(this.props.details.tableID, 10)),
+            link: tableDetailsPagePath(
+              parseInt(this.props.details.tableID, 10),
+            ),
             name: `Table: ${this.props.tableName}`,
           },
           {
@@ -420,7 +401,8 @@ export class IndexDetailsPage extends React.Component<
             name: `Index: ${this.props.indexName}`,
           },
         ]}
-        divider={<CaretRight className={cx("icon--xxs", "icon--primary")} />}
+        divider={<Icon iconName="CaretRight" size="tiny" />}
+        className={cx("header-breadcrumbs")}
       />
     );
   }
