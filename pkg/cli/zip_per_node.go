@@ -39,7 +39,8 @@ const heapPprof = "heap.pprof"
 const lsm = "lsm.txt"
 const rangesInfo = "ranges.json"
 const details = "details.json"
-const gossip = "gossip.json"
+const gossipFile = "gossip.json"
+const cpuProfileFile = "cpu.pprof"
 
 func (zc *debugZipContext) collectPerNodeData(
 	ctx context.Context,
@@ -75,7 +76,7 @@ func (zc *debugZipContext) collectPerNodeData(
 		nodePrinter.info("skipping excluded node")
 		return nil
 	}
-	err := zc.getNodeStatus(nodeStatus, nodePrinter, prefix, redactedNodeDetails)
+	err := getNodeStatus(zc.z, nodeStatus, nodePrinter, prefix, redactedNodeDetails)
 	if err != nil {
 		return err
 	}
@@ -85,7 +86,6 @@ func (zc *debugZipContext) collectPerNodeData(
 		return err
 	}
 
-	//TODO: Add filter for it
 	err = zc.getPerNodeMetadata(ctx, prefix, id, nodePrinter)
 	if err != nil {
 		return err
@@ -139,7 +139,7 @@ func makePerNodeZipRequests(zr *zipReporter, prefix, id string, status serverpb.
 		zr.info("skipping %s", details)
 	}
 
-	if !zipCtx.files.shouldIncludeFile(gossip) {
+	if zipCtx.files.shouldIncludeFile(gossipFile) {
 		zipRequests = append(zipRequests, zipRequest{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id, Redact: zipCtx.redact})
@@ -147,7 +147,7 @@ func makePerNodeZipRequests(zr *zipReporter, prefix, id string, status serverpb.
 			pathName: prefix + "/gossip",
 		})
 	} else {
-		zr.info("skipping %s", gossip)
+		zr.info("skipping %s", gossipFile)
 	}
 
 	return zipRequests
@@ -178,6 +178,10 @@ func (zc *debugZipContext) collectCPUProfiles(
 	}
 
 	zc.clusterPrinter.info("requesting CPU profiles")
+	if !zipCtx.files.shouldIncludeFile(cpuProfileFile) {
+		zc.clusterPrinter.info("skipping %s", cpuProfileFile)
+		return nil
+	}
 
 	if ni == nil {
 		return errors.AssertionFailedf("nodes list is empty; nothing to do")
@@ -236,7 +240,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 		nodeID := nodeList[i].NodeID
 		prefix := fmt.Sprintf("%s%s/%s", zc.prefix, nodesPrefix, fmt.Sprintf("%d", nodeID))
 		s := zc.clusterPrinter.start(redact.Sprintf("profile for node %d", nodeID))
-		if err := zc.z.createRawOrError(s, prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
+		if err := zc.z.createRawOrError(s, prefix+"/"+cpuProfileFile, pd.data, pd.err); err != nil {
 			return err
 		}
 	}
@@ -544,47 +548,49 @@ func (zc *debugZipContext) getCurrentHeapProfile(ctx context.Context, nodePrinte
 
 func (zc *debugZipContext) getStackInformation(ctx context.Context, nodePrinter *zipReporter, id string, prefix string) error {
 	if zipCtx.includeStacks {
-		if !zipCtx.files.shouldIncludeFile(stacksFile) {
-			nodePrinter.info("skipping %s", stacksFile)
-		}
-		var stacksData []byte
-		s := nodePrinter.start("requesting stacks")
-		requestErr := zc.runZipFn(ctx, s,
-			func(ctx context.Context) error {
-				stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
-					NodeId: id,
-					Type:   serverpb.StacksType_GOROUTINE_STACKS,
+		if zipCtx.files.shouldIncludeFile(stacksFile) {
+			s := nodePrinter.start("requesting stacks")
+			var stacksData []byte
+			requestErr := zc.runZipFn(ctx, s,
+				func(ctx context.Context) error {
+					stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
+						NodeId: id,
+						Type:   serverpb.StacksType_GOROUTINE_STACKS,
+					})
+					if err == nil {
+						stacksData = stacks.Data
+					}
+					return err
 				})
-				if err == nil {
-					stacksData = stacks.Data
-				}
+			if err := zc.z.createRawOrError(s, prefix+"/"+stacksFile, stacksData, requestErr); err != nil {
 				return err
-			})
-		if err := zc.z.createRawOrError(s, prefix+"/"+stacksFile, stacksData, requestErr); err != nil {
-			return err
+			}
+		} else {
+			nodePrinter.info("skipping %s", stacksFile)
 		}
 
 		var stacksDataWithLabels []byte
-		if !zipCtx.files.shouldIncludeFile(stacksWithLabel) {
-			nodePrinter.info("skipping %s", stacksWithLabel)
-		}
-		s = nodePrinter.start("requesting stacks with labels")
-		requestErr = zc.runZipFn(ctx, s,
-			func(ctx context.Context) error {
-				stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
-					NodeId: id,
-					Type:   serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1,
+		if zipCtx.files.shouldIncludeFile(stacksWithLabel) {
+			s := nodePrinter.start("requesting stacks with labels")
+			requestErr := zc.runZipFn(ctx, s,
+				func(ctx context.Context) error {
+					stacks, err := zc.status.Stacks(ctx, &serverpb.StacksRequest{
+						NodeId: id,
+						Type:   serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1,
+					})
+					if err == nil {
+						stacksDataWithLabels = stacks.Data
+					}
+					return err
 				})
-				if err == nil {
-					stacksDataWithLabels = stacks.Data
-				}
+			if zipCtx.redact {
+				stacksDataWithLabels = redactStackTrace(stacksDataWithLabels)
+			}
+			if err := zc.z.createRawOrError(s, prefix+"/"+stacksWithLabel, stacksDataWithLabels, requestErr); err != nil {
 				return err
-			})
-		if zipCtx.redact {
-			stacksDataWithLabels = redactStackTrace(stacksDataWithLabels)
-		}
-		if err := zc.z.createRawOrError(s, prefix+"/"+stacksWithLabel, stacksDataWithLabels, requestErr); err != nil {
-			return err
+			}
+		} else {
+			nodePrinter.info("skipping %s", stacksWithLabel)
 		}
 	} else {
 		nodePrinter.info("Skipping fetching goroutine stacks. Enable via the --" + cliflags.ZipIncludeGoroutineStacks.Name + " flag.")
@@ -629,18 +635,18 @@ func (zc *debugZipContext) getInternalTablesPerNode(nodeDetails serverpb.NodeDet
 	return nil
 }
 
-func (zc *debugZipContext) getNodeStatus(nodeStatus *statuspb.NodeStatus, nodePrinter *zipReporter, prefix string, redactedNodeDetails serverpb.NodeDetails) error {
+func getNodeStatus(z *zipper, nodeStatus *statuspb.NodeStatus, nodePrinter *zipReporter, prefix string, redactedNodeDetails serverpb.NodeDetails) error {
 	if !zipCtx.files.shouldIncludeFile("status.json") {
 		nodePrinter.info("skipping status.json")
 		return nil
 	}
 	if nodeStatus != nil {
 		// Use nodeStatus to populate the status.json file as it contains more data for a KV node.
-		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", *nodeStatus); err != nil {
+		if err := z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", *nodeStatus); err != nil {
 			return err
 		}
 	} else {
-		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", redactedNodeDetails); err != nil {
+		if err := z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", redactedNodeDetails); err != nil {
 			return err
 		}
 	}
