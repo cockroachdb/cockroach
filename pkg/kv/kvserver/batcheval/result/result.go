@@ -271,6 +271,9 @@ func (p *Result) MergeAndDestroy(q Result) error {
 			log.Fatalf(context.TODO(), "unhandled EvalResult: %s",
 				pretty.Diff(*q.Replicated.State, kvserverpb.ReplicaState{}))
 		}
+		if q.Replicated.State.ForceFlushIndex != (roachpb.ForceFlushIndex{}) {
+			return errors.AssertionFailedf("must not specify ForceFlushIndex")
+		}
 		q.Replicated.State = nil
 	}
 
@@ -349,6 +352,11 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		p.Replicated.IsProbe = q.Replicated.IsProbe
 	}
 	q.Replicated.IsProbe = false
+
+	if q.Replicated.DoTimelyApplicationToAllReplicas {
+		p.Replicated.DoTimelyApplicationToAllReplicas = true
+	}
+	q.Replicated.DoTimelyApplicationToAllReplicas = false
 
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents

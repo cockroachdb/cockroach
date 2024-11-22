@@ -69,6 +69,10 @@ func (rsl StateLoader) Load(
 		return kvserverpb.ReplicaState{}, err
 	}
 
+	if s.ForceFlushIndex, err = rsl.LoadRangeForceFlushIndex(ctx, reader); err != nil {
+		return kvserverpb.ReplicaState{}, err
+	}
+
 	as, err := rsl.LoadRangeAppliedState(ctx, reader)
 	if err != nil {
 		return kvserverpb.ReplicaState{}, err
@@ -350,6 +354,28 @@ func (rsl StateLoader) SetVersion(
 ) error {
 	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeVersionKey(),
 		hlc.Timestamp{}, version, storage.MVCCWriteOptions{Stats: ms})
+}
+
+// LoadRangeForceFlushIndex loads the force-flush index.
+func (rsl StateLoader) LoadRangeForceFlushIndex(
+	ctx context.Context, reader storage.Reader,
+) (roachpb.ForceFlushIndex, error) {
+	var ffIndex roachpb.ForceFlushIndex
+	// If not found, ffIndex.Index will stay 0.
+	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeForceFlushKey(),
+		hlc.Timestamp{}, &ffIndex, storage.MVCCGetOptions{})
+	return ffIndex, err
+}
+
+// SetForceFlushIndex sets the force-flush index.
+func (rsl StateLoader) SetForceFlushIndex(
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	ms *enginepb.MVCCStats,
+	ffIndex *roachpb.ForceFlushIndex,
+) error {
+	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeForceFlushKey(),
+		hlc.Timestamp{}, ffIndex, storage.MVCCWriteOptions{Stats: ms})
 }
 
 // UninitializedReplicaState returns the ReplicaState of an uninitialized
