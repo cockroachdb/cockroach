@@ -1536,13 +1536,6 @@ func TestLogic_plpgsql_builtins(
 	runLogicTest(t, "plpgsql_builtins")
 }
 
-func TestLogic_plpgsql_license(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "plpgsql_license")
-}
-
 func TestLogic_poison_after_push(
 	t *testing.T,
 ) {
