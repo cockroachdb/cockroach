@@ -26,7 +26,6 @@ go_library(
         "//pkg/ccl/oidcccl",
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/pgcryptoccl",
-        "//pkg/ccl/plpgsqlccl",
         "//pkg/ccl/securityccl/fipsccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/storageccl/engineccl",
