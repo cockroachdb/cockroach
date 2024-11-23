@@ -32,6 +32,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/retry",
         "//pkg/util/startup",
+        "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
