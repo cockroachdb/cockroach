@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -237,12 +238,83 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	}
 
 	for _, u := range permanentUpgrades {
+		// Check whether a 22.2 or older node has already run the last
+		// startupmigration that was added before the permanent upgrades framework
+		// was introduced. If it has, we don't want to run any permanent upgrades
+		// (a.k.a. bootstrap upgrades). Allowing the upgrade to run could be
+		// destructive. Specifically, the permanent upgrade that adds the root user
+		// will unconditionally remove any password that has been set. Not running
+		// any permanent upgrades is correct in this case, since all the
+		// non-flattened permanent upgrades are captured either by a legacy
+		// startupmigration, or would have already been added into system.migrations
+		// as part of the normal upgrade process.
+		//
+		// We need this check here because in PR #119142, the permanent upgrades
+		// were flattened so that they all have a version of 0.0-x. That means that
+		// the last element of the permanentUpgrades slice has a version of 0.0-4.
+		// Clusters that were bootstrapped with a version from v23.1.0 or later will
+		// have rows in system.migrations for versions 0.0-x, since that is the
+		// version where the permanent upgrades framework was introduced (in PR
+		// #119142). However, clusters that are were bootstrapped from a version
+		// earlier than v23.1 will not yet have these rows in system.migrations for
+		// versions 0.0-x, and those migrations will only be present under the
+		// legacy startupmigrations key.
+		//
+		// (These older clusters will have a row for the permanent upgrade for
+		// version 23.1-30, since that upgrade would have been applied while
+		// upgrading from v23.1 to v23.2. So we also could fix the problem by
+		// checking for the presence of that row.)
+		const latestStartupMigrationName = "create default databases"
+		startupMigrationAlreadyRan, err := checkOldStartupMigrationRan(
+			ctx, m.deps.Stopper, latestStartupMigrationName, m.deps.DB.KV(), m.codec)
+		if err != nil {
+			return err
+		}
+		if startupMigrationAlreadyRan {
+			log.Infof(ctx,
+				"skipping permanent upgrade for v%s because the corresponding startupmigration "+
+					"was already run by a v22.2 or older node",
+				u.Version())
+			// Mark the upgrade as completed so that we can get rid of this logic when
+			// compatibility with 22.2 is no longer necessary.
+			if err := startup.RunIdempotentWithRetry(ctx,
+				m.deps.Stopper.ShouldQuiesce(),
+				"mark upgrade complete", func(ctx context.Context) (err error) {
+					return migrationstable.MarkMigrationCompletedIdempotent(ctx, m.ie, u.Version())
+				}); err != nil {
+				return err
+			}
+			continue
+		}
+
 		log.Infof(ctx, "running permanent upgrade for version %s", u.Version())
 		if err := m.runMigration(ctx, u, user, u.Version(), !m.knobs.DontUseJobs); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// Check whether this is a cluster upgraded from a pre-23.1 version and the
+// old startupmigration with the given name has run. If it did, the
+// corresponding upgrade should not run.
+func checkOldStartupMigrationRan(
+	ctx context.Context, stopper *stop.Stopper, migrationName string, db *kv.DB, codec keys.SQLCodec,
+) (bool, error) {
+	if migrationName == "" {
+		return false, nil
+	}
+	migrationKey := append(codec.StartupMigrationKeyPrefix(), roachpb.RKey(migrationName)...)
+	kv, err := startup.RunIdempotentWithRetryEx(ctx,
+		stopper.ShouldQuiesce(),
+		"check old startup migration",
+		func(ctx context.Context) (kv kv.KeyValue, err error) {
+			return db.Get(ctx, migrationKey)
+		})
+	if err != nil {
+		return false, err
+	}
+	return kv.Exists(), nil
 }
 
 // runPermanentMigrationsWithoutJobsForTests runs all permanent migrations up to
