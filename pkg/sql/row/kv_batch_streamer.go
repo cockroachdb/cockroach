@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -111,7 +112,13 @@ func (f *txnKVStreamer) SetupNextFetch(
 	// TODO(yuzefovich): consider supporting COL_BATCH_RESPONSE scan format.
 	reqs := spansToRequests(spans, kvpb.BATCH_RESPONSE, false /* reverse */, f.rawMVCCValues, f.lockStrength, f.lockDurability, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
-		return err
+		// Mark this error as having come from the storage layer. This will
+		// allow us to avoid creating a sentry report since this error isn't
+		// actionable (e.g. we can get stop.ErrUnavailable here, which would be
+		// treated as "internal error" by the ColIndexJoin, which later would
+		// result in treating it as assertion failure because the error doesn't
+		// have the PG code - marking it as a storage error will skip that).
+		return colexecerror.NewStorageError(err)
 	}
 	// For the spans slice we only need to account for the overhead of
 	// roachpb.Span objects. This is because spans that correspond to
