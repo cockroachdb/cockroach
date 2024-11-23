@@ -142,7 +142,7 @@ func getMetricsWithSamplePeriod(
 	}
 	var response tspb.TimeSeriesQueryResponse
 	client := roachtestutil.DefaultHTTPClient(
-		c, t.L(), roachtestutil.HTTPTimeout(500*time.Millisecond),
+		c, t.L(), roachtestutil.HTTPTimeout(5*time.Second),
 		roachtestutil.VirtualCluster(virtualCluster),
 	)
 	err := client.PostProtobuf(ctx, url, &request, &response)
