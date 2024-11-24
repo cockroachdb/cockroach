@@ -490,6 +490,10 @@ type rowLevelAfterTriggerBuilder struct {
 	mutatedTable cat.Table
 	triggers     []cat.Trigger
 
+	// stmtTreeInitFn returns a statementTree that tracks the mutations in
+	// ancestor statements. It may be unset if there are no ancestor statements.
+	stmtTreeInitFn func() statementTree
+
 	// The following fields contain the columns from the mutation input needed to
 	// build the triggers. The columns must be remapped to the new memo when the
 	// triggers are built. If fetchCols, updateCols, or insertCols is set, then
@@ -515,13 +519,14 @@ func (mb *mutationBuilder) newRowLevelAfterTriggerBuilder(
 	mutation opt.Operator, triggers []cat.Trigger, fetchCols, updateCols, insertCols opt.ColList,
 ) *rowLevelAfterTriggerBuilder {
 	return &rowLevelAfterTriggerBuilder{
-		mutation:     mutation,
-		mutatedTable: mb.tab,
-		triggers:     triggers,
-		fetchCols:    fetchCols,
-		updateCols:   updateCols,
-		insertCols:   insertCols,
-		canaryCol:    mb.canaryColID,
+		mutation:       mutation,
+		mutatedTable:   mb.tab,
+		triggers:       triggers,
+		stmtTreeInitFn: mb.b.stmtTree.GetInitFnForPostQuery(),
+		fetchCols:      fetchCols,
+		updateCols:     updateCols,
+		insertCols:     insertCols,
+		canaryCol:      mb.canaryColID,
 	}
 }
 
@@ -536,7 +541,7 @@ func (tb *rowLevelAfterTriggerBuilder) Build(
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI,
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, tb.stmtTreeInitFn,
 		func(b *Builder) memo.RelExpr {
 			f := b.factory
 			md := f.Metadata()
