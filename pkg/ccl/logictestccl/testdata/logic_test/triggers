@@ -3643,6 +3643,335 @@ DROP TABLE t;
 DROP FUNCTION g;
 
 # ==============================================================================
+# Test restrictions on multiple mutations to the same table.
+# ==============================================================================
+
+subtest multiple_mutations
+
+statement ok
+CREATE TABLE t1 (a INT, b INT);
+CREATE TABLE t2 (a INT, b INT);
+CREATE TABLE parent (k INT PRIMARY KEY);
+CREATE TABLE child (k INT PRIMARY KEY, v INT REFERENCES parent(k) ON DELETE CASCADE);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO t2 VALUES (100, 200);
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE FUNCTION h() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    UPDATE t2 SET b = b + 100 WHERE a = 100;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE FUNCTION insert_t1() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN INSERT INTO t1 VALUES (1, 1); RETURN 0; END $$;
+CREATE FUNCTION delete_parent() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN DELETE FROM parent WHERE k = 1; RETURN 0; END $$;
+
+# ------------------------------------------------------------------------------
+# Test a BEFORE trigger with an INSERT statement.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON t1 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar BEFORE DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+# Multiple mutations of the same table are allowed if they all use INSERT
+# without ON CONFLICT.
+statement ok
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) SELECT insert_t1();
+
+statement ok
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) DELETE FROM parent WHERE k = 1;
+
+# Wrapping the DELETE on parent in a UDF causes the FK cascade (and therefore
+# the BEFORE trigger) to execute as part of the main query. However, INSERT
+# statements do not conflict with one another.
+statement ok
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) SELECT delete_parent();
+
+# The triggered INSERT conflicts with the outer UPDATE.
+statement error pgcode 0A000 pq: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) INSERT INTO t1 VALUES (1, 1);
+
+statement error pgcode 0A000 pq: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) SELECT insert_t1();
+
+# The triggered INSERT does not conflict with the outer UPDATE because it is run
+# as part of the FK cascade after the main query.
+statement ok
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) DELETE FROM parent WHERE k = 1;
+
+# Wrapping the DELETE on parent in a UDF causes the FK cascade (and therefore
+# the BEFORE trigger) to execute as part of the main query. As a result, the
+# triggered INSERT conflicts with the outer UPDATE.
+statement error pgcode 0A000 pq: while building cascade expression: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) SELECT delete_parent();
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+DROP TRIGGER bar ON child;
+
+# ------------------------------------------------------------------------------
+# Test a BEFORE trigger with an UPDATE statement.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON t1 FOR EACH ROW EXECUTE FUNCTION h();
+
+statement ok
+CREATE TRIGGER bar BEFORE DELETE ON child FOR EACH ROW EXECUTE FUNCTION h();
+
+# The triggered UPDATE conflicts with the outer INSERT.
+statement error pgcode 0A000 pq: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) INSERT INTO t1 VALUES (1, 2);
+
+statement error pgcode 0A000 pq: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) SELECT insert_t1();
+
+# The triggered UPDATE does not conflict with the outer INSERT because it is run
+# as part of the FK cascade after the main query.
+statement ok
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) DELETE FROM parent WHERE k = 1;
+
+# Wrapping the DELETE on parent in a UDF causes the FK cascade (and therefore
+# the BEFORE trigger) to execute as part of the main query. As a result, the
+# triggered UPDATE conflicts with the outer INSERT.
+statement error pgcode 0A000 pq: while building cascade expression: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) SELECT delete_parent();
+
+# Even though the triggered UPDATE executes twice, the mutations are allowed
+# because they are "siblings".
+statement ok
+WITH foo AS (INSERT INTO t1 VALUES (1, 2) RETURNING a) INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+WITH foo AS (INSERT INTO t1 VALUES (1, 2) RETURNING a) SELECT insert_t1();
+
+statement ok
+WITH foo AS (SELECT insert_t1()) SELECT insert_t1();
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+DROP TRIGGER bar ON child;
+
+# ------------------------------------------------------------------------------
+# Test an AFTER trigger with an INSERT statement.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT OR UPDATE ON t1 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE TRIGGER bar AFTER DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+# INSERT without ON CONFLICT is always allowed.
+statement ok
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) INSERT INTO t1 VALUES (1, 1);
+
+statement ok
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) SELECT insert_t1();
+
+statement ok
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) DELETE FROM parent WHERE k = 1;
+
+# Wrapping the DELETE on parent in a UDF causes the FK cascade (and therefore
+# the AFTER trigger) to execute as part of the main query. However, INSERT
+# statements do not conflict with one another.
+statement ok
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) SELECT delete_parent();
+
+# The triggered INSERT does not conflict with the outer UPDATE on t2 because the
+# trigger is run as a post-query.
+statement ok
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) INSERT INTO t1 VALUES (1, 1);
+
+# When the INSERT into t1 is wrapped in a UDF, the AFTER trigger is run within
+# the UDF, and so the triggered INSERT on t2 conflicts with the outer UPDATE.
+statement error pgcode 0A000 pq: while building trigger expression: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) SELECT insert_t1();
+
+# The triggered INSERT does not conflict with the outer UPDATE because it is run
+# after the FK cascade, which runs after the main query.
+statement ok
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) DELETE FROM parent WHERE k = 1;
+
+# Wrapping the DELETE on parent in a UDF causes the FK cascade (and therefore
+# the AFTER trigger) to execute as part of the main query. As a result, the
+# triggered INSERT conflicts with the outer UPDATE.
+statement error pgcode 0A000 pq: while building trigger expression: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) SELECT delete_parent();
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+DROP TRIGGER bar ON child;
+
+# ------------------------------------------------------------------------------
+# Test an AFTER trigger with an UPDATE statement.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT OR UPDATE ON t1 FOR EACH ROW EXECUTE FUNCTION h();
+
+statement ok
+CREATE TRIGGER bar AFTER DELETE ON child FOR EACH ROW EXECUTE FUNCTION h();
+
+# The triggered UPDATE does not conflict with the outer INSERT on t2 because the
+# trigger is run as a post-query.
+statement ok
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) INSERT INTO t1 VALUES (1, 1);
+
+# When the INSERT into t1 is wrapped in a UDF, the AFTER trigger is run within
+# the UDF, and so the triggered UPDATE on t2 conflicts with the outer INSERT.
+statement error pgcode 0A000 pq: while building trigger expression: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) SELECT insert_t1();
+
+# The triggered UPDATE does not conflict with the outer INSERT because it is run
+# after the FK cascade, which runs after the main query.
+statement ok
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) DELETE FROM parent WHERE k = 1;
+
+# Wrapping the DELETE on parent in a UDF causes the FK cascade (and therefore
+# the AFTER trigger) to execute as part of the main query. As a result, the
+# triggered UPDATE conflicts with the outer INSERT.
+statement error pgcode 0A000 pq: while building trigger expression: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (INSERT INTO t2 VALUES (1, 1) RETURNING a) SELECT delete_parent();
+
+# The triggered UPDATE does not conflict with the outer UPDATE on t2 because the
+# trigger is run as a post-query.
+statement ok
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) INSERT INTO t1 VALUES (1, 1);
+
+# Wrapping the INSERT on t1 in a UDF means the trigger is run within the scope
+# of the UDF, so the triggered UPDATE on t2 conflicts with the outer UPDATE.
+statement error pgcode 0A000 pq: while building trigger expression: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) SELECT insert_t1();
+
+# The triggered UPDATE does not conflict with the outer UPDATE because it is run
+# after the FK cascade, which runs after the main query.
+statement ok
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) DELETE FROM parent WHERE k = 1;
+
+# Wrapping the DELETE on parent in a UDF causes the FK cascade (and therefore
+# the AFTER trigger) to execute as part of the main query. As a result, the
+# triggered UPDATE conflicts with the outer UPDATE.
+statement error pgcode 0A000 pq: while building trigger expression: multiple mutations of the same table "t2" are not supported unless they all use INSERT without ON CONFLICT
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+WITH foo AS (UPDATE t2 SET b = 1 WHERE a = 1 RETURNING a) SELECT delete_parent();
+
+# Even though the trigger executes an UPDATE on t2 twice, the mutations are
+# allowed because they are executed as post-queries.
+statement ok
+WITH foo AS (INSERT INTO t1 VALUES (1, 2) RETURNING a) INSERT INTO t1 VALUES (1, 1);
+
+# Even though the trigger executes an UPDATE on t2 twice, the mutations are
+# allowed because one is executed as a post-query.
+statement ok
+WITH foo AS (INSERT INTO t1 VALUES (1, 2) RETURNING a) SELECT insert_t1();
+
+# Even though the trigger executes an UPDATE on t2 twice, the mutations are
+# allowed because they are "siblings".
+statement ok
+WITH foo AS (SELECT insert_t1()) SELECT insert_t1();
+
+statement ok
+DROP TRIGGER foo ON t1;
+
+statement ok
+DROP TRIGGER bar ON child;
+
+statement ok
+DROP FUNCTION insert_t1;
+DROP TABLE t1;
+DROP TABLE t2;
+DROP FUNCTION g;
+DROP FUNCTION h;
+
+# ------------------------------------------------------------------------------
+# Test a trigger conflicting with a FK cascade mutation.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    UPDATE child SET k = k + 1 WHERE True;
+    RETURN OLD;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+# The triggered UPDATE conflicts with the cascaded DELETE on child.
+statement error pgcode 0A000 pq: while building cascade expression: multiple mutations of the same table "child" are not supported unless they all use INSERT without ON CONFLICT
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+DELETE FROM parent WHERE k = 1;
+
+statement ok
+DROP TRIGGER foo ON child;
+
+statement ok
+CREATE TRIGGER foo AFTER DELETE ON child FOR EACH ROW EXECUTE FUNCTION g();
+
+# The triggered UPDATE does not conflict with the cascaded DELETE on child
+# because the trigger is run as a post-query.
+statement ok
+UPSERT INTO parent VALUES (1);
+UPSERT INTO child VALUES (1, 1);
+DELETE FROM parent WHERE k = 1;
+
+statement ok
+DROP FUNCTION delete_parent;
+DROP TABLE child;
+DROP TABLE parent;
+DROP FUNCTION g;
+
+# ==============================================================================
 # Test unsupported syntax.
 # ==============================================================================
 

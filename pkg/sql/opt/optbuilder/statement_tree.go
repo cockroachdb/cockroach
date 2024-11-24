@@ -42,8 +42,30 @@ import (
 // This set of children mutations is checked for conflicts during
 // CanMutateTable, which is equivalent to maintaining and traversing the entire
 // sub-tree of the popped statement.
+//
+// +----------------+
+// | After Triggers |
+// +----------------+
+// After triggers are an exceptional case because they are planned lazily during
+// execution, and unlike cascades, can include arbitrary logic. This means that
+// we can't know ahead of time which tables will be mutated by AFTER triggers.
+// Since AFTER triggers are post-queries, they do not conflict with the current
+// statement. However, they can conflict with ancestor statements, e.g., if they
+// are fired within a routine.
+//
+// We handle this by deferring the check for AFTER triggers until they are
+// actually built. We maintain references to all ancestor statementTreeNodes,
+// and use those to initialize the statement tree when building the AFTER
+// triggers. Since AFTER triggers are built after the outer query has finished
+// planning, all potentially conflicting mutations are known and reflected in
+// the initialized statement tree. Note that some care must be taken to ensure
+// that the statementTreeNode references remain valid and up-to-date (see the
+// stmts comment below).
 type statementTree struct {
-	stmts []statementTreeNode
+	// stmts is a stack of statement nodes, as described in the struct comment.
+	// It is a slice of pointers to ensure that slice appends don't invalidate
+	// references to existing nodes.
+	stmts []*statementTreeNode
 }
 
 // mutationType represents a set of mutation types that can be applied to a
@@ -86,17 +108,17 @@ func (n *statementTreeNode) childrenConflictWithMutation(
 // Push pushes a new statement onto the tree as a descendent of the current
 // statement. The newly pushed statement becomes the current statement.
 func (st *statementTree) Push() {
-	st.stmts = append(st.stmts, statementTreeNode{})
+	st.stmts = append(st.stmts, &statementTreeNode{})
 }
 
 // Pop sets the parent of the current statement as the new current statement.
 func (st *statementTree) Pop() {
-	popped := &st.stmts[len(st.stmts)-1]
+	popped := st.stmts[len(st.stmts)-1]
 	st.stmts = st.stmts[:len(st.stmts)-1]
 	if len(st.stmts) > 0 {
 		// Combine the popped statement's mutations and child mutations into the
 		// child statements of its parent (the new current statement).
-		curr := &st.stmts[len(st.stmts)-1]
+		curr := st.stmts[len(st.stmts)-1]
 		curr.childrenSimpleInsertTables.UnionWith(popped.simpleInsertTables)
 		curr.childrenSimpleInsertTables.UnionWith(popped.childrenSimpleInsertTables)
 		curr.childrenGeneralMutationTables.UnionWith(popped.generalMutationTables)
@@ -152,7 +174,7 @@ func (st *statementTree) CanMutateTable(
 		// visible.
 		offset = 2
 	}
-	curr := &st.stmts[len(st.stmts)-offset]
+	curr := st.stmts[len(st.stmts)-offset]
 	// Check the children of the current statement for a conflict.
 	if !isPostStmt && curr.childrenConflictWithMutation(tabID, typ) {
 		return false
@@ -164,7 +186,7 @@ func (st *statementTree) CanMutateTable(
 			// mutation to the parent statement.
 			break
 		}
-		n := &st.stmts[i]
+		n := st.stmts[i]
 		if n.conflictsWithMutation(tabID, typ) {
 			return false
 		}
@@ -185,4 +207,42 @@ func (st *statementTree) CanMutateTable(
 		}
 	}
 	return true
+}
+
+// GetInitFnForPostQuery returns a function that can be used to initialize the
+// statement tree for a post-query that is a child of the current statement.
+// This is necessary because the post-query is not built until after the main
+// statement has finished executing. The returned function may be nil if the
+// statement tree does not need to be initialized for the post-query.
+//
+// NOTE: cascades are checked up-front by Builder.checkMultipleMutationsCascade,
+// but the statement tree still must be propagated to them via this function in
+// case the cascade causes a trigger to fire.
+func (st *statementTree) GetInitFnForPostQuery() func() statementTree {
+	if len(st.stmts) <= 1 {
+		return nil
+	}
+	// Save references to the ancestor statementTreeNodes. Modifications to them
+	// after this point should be reflected in the references, ensuring that all
+	// ancestor mutations are visible by the time the post-query plan is built.
+	//
+	// This is necessary because the full set of mutations in the current
+	// statement may not be known at the time the statement tree is saved. For
+	// example, a CTE in which the first branch triggers a post-query, and the
+	// second is a mutation.
+	ancestorStatements := make([]*statementTreeNode, len(st.stmts)-1)
+	copy(ancestorStatements, st.stmts[:len(st.stmts)-1])
+	return func() statementTree {
+		// Combine the non-child mutated tables for all ancestor nodes into a single
+		// ancestor node. This provides all the information needed to check for
+		// conflicts in a trigger run as a post-query. We can omit the child
+		// mutation tables because they can only conflict with the ancestor nodes,
+		// and that case has already been checked.
+		var node statementTreeNode
+		for i := range ancestorStatements {
+			node.simpleInsertTables.UnionWith(ancestorStatements[i].simpleInsertTables)
+			node.generalMutationTables.UnionWith(ancestorStatements[i].generalMutationTables)
+		}
+		return statementTree{stmts: []*statementTreeNode{&node}}
+	}
 }
