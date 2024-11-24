@@ -61,6 +61,10 @@ type onDeleteCascadeBuilder struct {
 	// Note that the columns must be remapped to the new memo when the cascade is
 	// built.
 	oldValues opt.ColList
+
+	// stmtTreeInitFn returns a statementTree that tracks the mutations in
+	// ancestor statements. It may be unset if there are no ancestor statements.
+	stmtTreeInitFn func() statementTree
 }
 
 var _ memo.PostQueryBuilder = &onDeleteCascadeBuilder{}
@@ -73,6 +77,7 @@ func (mb *mutationBuilder) newOnDeleteCascadeBuilder(
 		fkInboundOrdinal: fkInboundOrdinal,
 		childTable:       childTable,
 		oldValues:        oldValues,
+		stmtTreeInitFn:   mb.b.stmtTreeInitFnForPostQuery(),
 	}
 }
 
@@ -87,7 +92,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI,
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
 		func(b *Builder) memo.RelExpr {
 			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
@@ -113,6 +118,9 @@ func (cb *onDeleteCascadeBuilder) Build(
 
 			// Set list of columns that will be fetched by the input expression.
 			mb.setFetchColIDs(mb.outScope.cols)
+
+			// Register the mutation with the statementTree
+			b.checkMultipleMutations(mb.tab, generalMutation)
 
 			// Cascades can fire triggers on the child table.
 			mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */)
@@ -156,6 +164,10 @@ type onDeleteFastCascadeBuilder struct {
 
 	origFilters memo.FiltersExpr
 	origFKCols  opt.ColList
+
+	// stmtTreeInitFn returns a statementTree that tracks the mutations in
+	// ancestor statements. It may be unset if there are no ancestor statements.
+	stmtTreeInitFn func() statementTree
 }
 
 var _ memo.PostQueryBuilder = &onDeleteFastCascadeBuilder{}
@@ -268,6 +280,7 @@ func (mb *mutationBuilder) tryNewOnDeleteFastCascadeBuilder(
 		childTable:       childTab,
 		origFilters:      filters,
 		origFKCols:       fkCols,
+		stmtTreeInitFn:   mb.b.stmtTreeInitFnForPostQuery(),
 	}, true
 }
 
@@ -282,7 +295,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 	_ *props.Relational,
 	_ opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI,
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
 		func(b *Builder) memo.RelExpr {
 			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
@@ -357,6 +370,9 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 			// Set list of columns that will be fetched by the input expression.
 			mb.setFetchColIDs(mb.outScope.cols)
 
+			// Register the mutation with the statementTree
+			b.checkMultipleMutations(mb.tab, generalMutation)
+
 			// Cascades can fire triggers on the child table.
 			mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */)
 
@@ -418,6 +434,10 @@ type onDeleteSetBuilder struct {
 	// Note that the columns must be remapped to the new memo when the cascade is
 	// built.
 	oldValues opt.ColList
+
+	// stmtTreeInitFn returns a statementTree that tracks the mutations in
+	// ancestor statements. It may be unset if there are no ancestor statements.
+	stmtTreeInitFn func() statementTree
 }
 
 var _ memo.PostQueryBuilder = &onDeleteSetBuilder{}
@@ -431,6 +451,7 @@ func (mb *mutationBuilder) newOnDeleteSetBuilder(
 		childTable:       childTable,
 		action:           action,
 		oldValues:        oldValues,
+		stmtTreeInitFn:   mb.b.stmtTreeInitFnForPostQuery(),
 	}
 }
 
@@ -445,7 +466,7 @@ func (cb *onDeleteSetBuilder) Build(
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI,
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
 		func(b *Builder) memo.RelExpr {
 			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
@@ -489,6 +510,9 @@ func (cb *onDeleteSetBuilder) Build(
 				}
 			}
 			mb.addUpdateCols(updateExprs)
+
+			// Register the mutation with the statementTree
+			b.checkMultipleMutations(mb.tab, generalMutation)
 
 			// Cascades can fire triggers on the child table.
 			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
@@ -651,6 +675,10 @@ type onUpdateCascadeBuilder struct {
 	// table. Note that the columns must be remapped to the new memo when the
 	// cascade is built.
 	newValues opt.ColList
+
+	// stmtTreeInitFn returns a statementTree that tracks the mutations in
+	// ancestor statements. It may be unset if there are no ancestor statements.
+	stmtTreeInitFn func() statementTree
 }
 
 var _ memo.PostQueryBuilder = &onUpdateCascadeBuilder{}
@@ -668,6 +696,7 @@ func (mb *mutationBuilder) newOnUpdateCascadeBuilder(
 		action:           action,
 		oldValues:        oldValues,
 		newValues:        newValues,
+		stmtTreeInitFn:   mb.b.stmtTreeInitFnForPostQuery(),
 	}
 }
 
@@ -682,7 +711,7 @@ func (cb *onUpdateCascadeBuilder) Build(
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI,
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
 		func(b *Builder) memo.RelExpr {
 			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
@@ -734,6 +763,9 @@ func (cb *onUpdateCascadeBuilder) Build(
 				}
 			}
 			mb.addUpdateCols(updateExprs)
+
+			// Register the mutation with the statementTree
+			b.checkMultipleMutations(mb.tab, generalMutation)
 
 			// Cascades can fire triggers on the child table.
 			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
@@ -934,16 +966,28 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 // buildTriggerCascadeHelper contains boilerplate for PostQueryBuilder.Build
 // implementations. It creates a Builder, sets up panic-to-error conversion,
 // and executes the given function.
+//
+// - stmtTreeInitFn is a closure that returns a statement tree describing
+// mutations which might conflict with AFTER triggers. It may be nil if there
+// is no "outer" mutation that might conflict. Cascades must propagate this
+// information as well, since they can themselves fire triggers.
 func buildTriggerCascadeHelper(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
+	stmtTreeInitFn func() statementTree,
 	fn func(b *Builder) memo.RelExpr,
 ) (_ memo.RelExpr, err error) {
 	factory := factoryI.(*norm.Factory)
 	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
+	if stmtTreeInitFn != nil {
+		b.stmtTree = stmtTreeInitFn()
+	}
+	// Push a new statement onto the statement tree.
+	b.stmtTree.Push()
+	defer b.stmtTree.Pop()
 
 	// Enact panic handling similar to Builder.Build().
 	defer func() {

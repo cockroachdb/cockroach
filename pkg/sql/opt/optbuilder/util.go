@@ -562,6 +562,32 @@ func (b *Builder) checkMultipleMutationsCascade(
 	}
 }
 
+// stmtTreeInitFnForPostQuery returns a function that can be used to initialize
+// the statement tree for a post-query plan.
+func (b *Builder) stmtTreeInitFnForPostQuery() func() statementTree {
+	if len(b.stmtTree.stmts) <= 1 {
+		return nil
+	}
+	// Save references to the ancestor statementTreeNodes. Modifications to them
+	// after this point should be reflected in the references, ensuring that all
+	// ancestor mutations are visible when the post-query is built.
+	ancestorStatements := make([]*statementTreeNode, len(b.stmtTree.stmts)-1)
+	copy(ancestorStatements, b.stmtTree.stmts[:len(b.stmtTree.stmts)-1])
+	return func() statementTree {
+		// Combine the non-child mutated tables for all ancestor nodes into a single
+		// ancestor node. This provides all the information needed to check for
+		// conflicts in a trigger run as a post-query. We can omit the child
+		// mutation tables because they can only conflict with the ancestor nodes,
+		// and that case has already been checked.
+		var node statementTreeNode
+		for i := range ancestorStatements {
+			node.simpleInsertTables.UnionWith(ancestorStatements[i].simpleInsertTables)
+			node.generalMutationTables.UnionWith(ancestorStatements[i].generalMutationTables)
+		}
+		return statementTree{stmts: []*statementTreeNode{&node}}
+	}
+}
+
 // resolveTableForMutation is a helper method for building mutations. It returns
 // the table in the catalog that matches the given TableExpr, along with the
 // table's MDDepName and alias, and the IDs of any columns explicitly specified
