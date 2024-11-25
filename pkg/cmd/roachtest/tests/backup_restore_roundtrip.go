@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -249,7 +250,7 @@ func startBackgroundWorkloads(
 	}
 	err = c.RunE(ctx, option.WithNodes(workloadNode), scInit.String())
 	if err != nil {
-		return nil, err
+		return nil, registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.Wrapf(err, "failed to init schema change workload"))
 	}
 
 	run := func() (func(), error) {
@@ -266,7 +267,10 @@ func startBackgroundWorkloads(
 			return c.RunE(ctx, option.WithNodes(workloadNode), tpccRun.String())
 		})
 		stopSC := workloadWithCancel(m, func(ctx context.Context) error {
-			return c.RunE(ctx, option.WithNodes(workloadNode), scRun.String())
+			if err := c.RunE(ctx, option.WithNodes(workloadNode), scRun.String()); err != nil {
+				return registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.Wrapf(err, "failed to run schema change workload"))
+			}
+			return nil
 		})
 
 		stopSystemWriter := workloadWithCancel(m, func(ctx context.Context) error {
