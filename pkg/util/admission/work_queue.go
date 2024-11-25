@@ -759,7 +759,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			q.mu.Unlock()
 
 			log.Infof(ctx, "async-path: len(waiting-work)=%d: enqueued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
-				queueLen, tenant.id, info.Priority,
+				queueLen, tenantID, info.Priority,
 				info.ReplicatedWorkInfo.RangeID,
 				info.ReplicatedWorkInfo.Origin,
 				info.ReplicatedWorkInfo.LogPosition,
@@ -908,6 +908,9 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	// releasing Admit can notice that item is no longer in the heap and call
 	// releaseWaitingWork to return item to the waitingWorkPool.
 	requestedCount := item.requestedCount
+	// Cannot read tenant after release q.mu, since tenant may get GC'd and
+	// reused.
+	tenantID := tenant.id
 	q.mu.Unlock()
 
 	if !item.replicated.Enabled {
@@ -922,7 +925,7 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 			q.mu.Unlock()
 
 			log.Infof(q.ambientCtx, "async-path: len(waiting-work)=%d dequeued t%d pri=%s r%s origin=n%s log-position=%s ingested=%t",
-				queueLen, tenant.id, item.priority,
+				queueLen, tenantID, item.priority,
 				item.replicated.RangeID,
 				item.replicated.Origin,
 				item.replicated.LogPosition,
@@ -931,7 +934,7 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		}
 		defer releaseWaitingWork(item)
 		q.onAdmittedReplicatedWork.admittedReplicatedWork(
-			roachpb.MustMakeTenantID(tenant.id),
+			roachpb.MustMakeTenantID(tenantID),
 			item.priority,
 			item.replicated,
 			item.requestedCount,
