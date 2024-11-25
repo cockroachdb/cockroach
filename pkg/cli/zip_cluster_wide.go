@@ -52,7 +52,7 @@ func makeClusterWideZipRequests(
 			pathName: prefix + eventsName,
 		})
 	} else {
-		zr.info("skipping %s", eventsFile)
+		zr.info("skipping %s due to file filters", eventsFile)
 	}
 
 	if zipCtx.files.shouldIncludeFile(rangeLogFile) {
@@ -63,7 +63,7 @@ func makeClusterWideZipRequests(
 			pathName: prefix + rangelogName,
 		})
 	} else {
-		zr.info("skipping %s", rangeLogFile)
+		zr.info("skipping %s due to file filters", rangeLogFile)
 	}
 
 	if zipCtx.files.shouldIncludeFile(settingsFile) {
@@ -74,18 +74,7 @@ func makeClusterWideZipRequests(
 			pathName: prefix + settingsName,
 		})
 	} else {
-		zr.info("skipping %s", settingsFile)
-	}
-
-	if zipCtx.files.shouldIncludeFile(eventsFile) {
-		zipRequests = append(zipRequests, zipRequest{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Events(ctx, &serverpb.EventsRequest{})
-			},
-			pathName: prefix + eventsName,
-		})
-	} else {
-		zr.info("skipping %s", eventsFile)
+		zr.info("skipping %s due to file filters", settingsFile)
 	}
 
 	if zipCtx.includeRangeInfo {
@@ -97,7 +86,7 @@ func makeClusterWideZipRequests(
 				pathName: prefix + problemRangesName,
 			})
 		} else {
-			zr.info("skipping %s", problemRangesFile)
+			zr.info("skipping %s due to file filters", problemRangesFile)
 		}
 
 	}
@@ -197,7 +186,7 @@ func (zc *debugZipContext) collectClusterData(
 			return err
 		})
 		if zipCtx.files.shouldIncludeFile(livenessFile) {
-			if cErr := zc.z.createJSONOrError(s, zc.prefix+livenessFile, nodes, err); cErr != nil {
+			if cErr := zc.z.createJSONOrError(s, zc.prefix+"/"+livenessFile, nodes, err); cErr != nil {
 				return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, cErr
 			}
 		}
@@ -207,64 +196,65 @@ func (zc *debugZipContext) collectClusterData(
 		}
 	}
 
-	s := zc.clusterPrinter.start("requesting tenant ranges")
-	err = zc.getTenantRange(ctx, s)
+	err = zc.getTenantRange(ctx)
 	if err != nil {
-		return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, s.fail(err)
+		return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, err
 	}
 
-	s = zc.clusterPrinter.start("collecting the inflight traces for jobs")
-	err = zc.getJobTraces(ctx, s)
+	err = zc.getJobTraces(ctx)
 	if err != nil {
-		return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, s.fail(err)
+		return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, err
 	}
 
 	return nodesList, nodesListRedacted, livenessByNodeID, nil
 }
 
-func (zc *debugZipContext) getTenantRange(ctx context.Context, s *zipReporter) error {
-	var tenantRanges *serverpb.TenantRangesResponse
-	if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
-		var err error
-		tenantRanges, err = zc.status.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
-		return err
-	}); requestErr != nil {
-		if err := zc.z.createError(s, zc.prefix+tenantRangesName, requestErr); err != nil {
+func (zc *debugZipContext) getTenantRange(ctx context.Context) error {
+	if zipCtx.includeRangeInfo {
+		var tenantRanges *serverpb.TenantRangesResponse
+		s := zc.clusterPrinter.start("requesting tenant ranges")
+		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
+			var err error
+			tenantRanges, err = zc.status.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
 			return err
-		}
-	} else {
-		s.done()
-		rangesFound := 0
-		for locality, rangeList := range tenantRanges.RangesByLocality {
-			name := fmt.Sprintf("%s/%s/%s", zc.prefix, tenantRangesName, locality)
-			if !zipCtx.files.shouldIncludeFile(name + ".json") {
-				s.info("skipping tenant ranges for locality %s", locality)
-				continue
+		}); requestErr != nil {
+			if err := zc.z.createError(s, zc.prefix+tenantRangesName, requestErr); err != nil {
+				return s.fail(err)
 			}
-
-			rangesFound += len(rangeList.Ranges)
-			sort.Slice(rangeList.Ranges, func(i, j int) bool {
-				return rangeList.Ranges[i].RangeID > rangeList.Ranges[j].RangeID
-			})
-			sLocality := zc.clusterPrinter.start(redact.Sprintf("writing tenant ranges for locality: %s", locality))
-			s := zc.clusterPrinter.start(redact.Sprintf("writing tenant ranges for locality %s", locality))
-			if err := zc.z.createJSON(s, name+".json", rangeList.Ranges); err != nil {
-				return err
+		} else {
+			s.done()
+			rangesFound := 0
+			for locality, rangeList := range tenantRanges.RangesByLocality {
+				rangesFound += len(rangeList.Ranges)
+				sort.Slice(rangeList.Ranges, func(i, j int) bool {
+					return rangeList.Ranges[i].RangeID > rangeList.Ranges[j].RangeID
+				})
+				sLocality := zc.clusterPrinter.start(redact.Sprintf("writing tenant ranges for locality: %s", locality))
+				name := fmt.Sprintf("%s/%s/%s", zc.prefix, tenantRangesName, locality)
+				if !zipCtx.files.shouldIncludeFile(locality + ".json") {
+					s.info("skipping tenant ranges for locality %s", locality)
+					continue
+				}
+				s := zc.clusterPrinter.start(redact.Sprintf("writing tenant ranges for locality %s", locality))
+				if err := zc.z.createJSON(s, name+".json", rangeList.Ranges); err != nil {
+					return s.fail(err)
+				}
+				sLocality.done()
 			}
-			sLocality.done()
+			zc.clusterPrinter.info("%d tenant ranges found", rangesFound)
 		}
-		zc.clusterPrinter.info("%d tenant ranges found", rangesFound)
 	}
 	return nil
 }
 
-func (zc *debugZipContext) getJobTraces(ctx context.Context, s *zipReporter) error {
+func (zc *debugZipContext) getJobTraces(ctx context.Context) error {
 	if zipCtx.includeRunningJobTraces {
+		s := zc.clusterPrinter.start("collecting the inflight traces for jobs")
 		if requestErr := zc.runZipFn(ctx, s, func(ctx context.Context) error {
 			return zc.dumpTraceableJobTraces(ctx)
 		}); requestErr != nil {
 			if err := zc.z.createError(s, zc.prefix+"/jobs", requestErr); err != nil {
-				return err
+				return s.fail(err)
 			}
 		} else {
 			s.done()

@@ -517,13 +517,13 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	zr *zipReporter, conn clisqlclient.Conn, base, table string, tableQuery TableQuery,
 ) error {
 	ctx := context.Background()
-	baseName := base + "/" + sanitizeFilename(table)
-
-	nameFormat := baseName + "." + zc.clusterPrinter.sqlOutputFilenameExtension
-	if !zipCtx.files.shouldIncludeFile(nameFormat) {
-		zr.start(redact.Sprintf("skipping table data for %s due to file filters", table))
+	fileName := sanitizeFilename(table)
+	baseName := base + "/" + fileName
+	fileNameWithExtension := fileName + "." + zc.clusterPrinter.sqlOutputFilenameExtension
+	if !zipCtx.files.shouldIncludeFile(fileNameWithExtension) {
+		s := zr.start(redact.Sprintf("skipping table data for %s due to file filters", table))
+		s.done()
 		return nil
-
 	}
 	s := zr.start(redact.Sprintf("retrieving SQL data for %s", table))
 	const maxRetries = 5
