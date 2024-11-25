@@ -72,3 +72,42 @@ func (r *ReplicatedEvalResult) IsTrivial() bool {
 	allowlist.State = nil
 	return allowlist.IsZero()
 }
+
+// SetRaftTruncatedState puts the given RaftTruncatedState into this evaluation
+// result. Since v25.1, it uses r.RaftTruncatedState field, and falls back to
+// r.State.TruncatedState for backwards compatibility in mixed-version clusters.
+//
+// TODO(#97613): use r.RaftTruncatedState unconditionally when the ReplicaState
+// field is removed.
+func (r *ReplicatedEvalResult) SetRaftTruncatedState(ts *RaftTruncatedState, v25dot1 bool) {
+	if v25dot1 {
+		r.RaftTruncatedState = ts
+	} else if r.State == nil {
+		r.State = &ReplicaState{TruncatedState: ts}
+	} else {
+		r.State.TruncatedState = ts
+	}
+}
+
+// UnsetRaftTruncatedState clears the RaftTruncatedState from this evaluation
+// result.
+func (r *ReplicatedEvalResult) UnsetRaftTruncatedState() {
+	if r.State != nil {
+		r.State.TruncatedState = nil
+	}
+	r.RaftTruncatedState = nil
+	r.RaftLogDelta = 0
+	r.RaftExpectedFirstIndex = 0
+}
+
+// GetRaftTruncatedState returns the RaftTruncateState present in this
+// evaluation result. Since v25.1, it can be present in one of the two places.
+// See SetRaftTruncatedState.
+func (r *ReplicatedEvalResult) GetRaftTruncatedState() *RaftTruncatedState {
+	if ts := r.RaftTruncatedState; ts != nil {
+		return ts
+	} else if r.State == nil {
+		return nil
+	}
+	return r.State.TruncatedState
+}
