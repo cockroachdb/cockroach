@@ -69,7 +69,9 @@ INFO 1 leader at term 1 does not support itself in the liveness fabric
 DEBUG 1 has not received messages from a quorum of peers in the last election timeout
 DEBUG 1 does not have store liveness support from a quorum of peers
 WARN 1 stepped down to follower since quorum is not active
+DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 1 became follower at term 1
+DEBUG 1 reset election elapsed to 0
 
 # Needs resetting post step-down.
 set-randomized-election-timeout 1 timeout=3
@@ -81,7 +83,6 @@ ok
 # which is what we're interested in for this test.
 tick-election 1
 ----
-DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 DEBUG 1 cannot campaign since it's not supported by a quorum in store liveness
 
 raft-state 1
@@ -96,8 +97,10 @@ stabilize
 > 1 handling Ready
   Ready MustSync=true:
   State:StateFollower
-  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+  HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
+  1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  1->3 MsgDeFortifyLeader Term:1 Log:0/0
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
@@ -111,9 +114,13 @@ stabilize
   DEBUG 2 is not fortifying 1; de-fortification is a no-op
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 2 is not fortifying 1; de-fortification is a no-op
+  1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  DEBUG 2 is not fortifying 1; de-fortification is a no-op
 > 3 receiving messages
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
+  1->3 MsgDeFortifyLeader Term:1 Log:0/0
+  DEBUG 3 is not fortifying 1; de-fortification is a no-op
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 3 is not fortifying 1; de-fortification is a no-op
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
@@ -226,7 +233,9 @@ INFO 2 leader at term 2 does not support itself in the liveness fabric
 DEBUG 2 has not received messages from a quorum of peers in the last election timeout
 DEBUG 2 does not have store liveness support from a quorum of peers
 WARN 2 stepped down to follower since quorum is not active
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 became follower at term 2
+DEBUG 2 reset election elapsed to 0
 
 # Tick 1 once to ensure it grants its prevote.
 set-randomized-election-timeout 1 timeout=5
@@ -292,6 +301,7 @@ stabilize 1 3
   3->1 MsgVote Term:3 Log:2/12
   INFO 1 [term: 2] received a MsgVote message with higher term from 3 [term: 3], advancing term
   INFO 1 became follower at term 3
+  DEBUG 1 reset election elapsed to 0
   INFO 1 [logterm: 2, index: 12, vote: 0] cast MsgVote for 3 [logterm: 2, index: 12] at term 3
 > 1 handling Ready
   Ready MustSync=true:
@@ -361,7 +371,7 @@ dropped: 3->2 MsgApp Term:3 Log:2/12 Commit:12 Entries:[3/13 EntryNormal ""]
 raft-state
 ----
 1: StateFollower (Voter) Term:3 Lead:3 LeadEpoch:1
-2: StateFollower (Voter) Term:2 Lead:0 LeadEpoch:1
+2: StateFollower (Voter) Term:2 Lead:0 LeadEpoch:0
 3: StateLeader (Voter) Term:3 Lead:3 LeadEpoch:1
 
 raft-log 3
@@ -383,21 +393,27 @@ ok
 # And as a result, it continues to send out de-fortification requests.
 tick-heartbeat 2
 ----
-DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
+ok
 
 stabilize
 ----
 > 2 handling Ready
   Ready MustSync=true:
   State:StateFollower
-  HardState Term:2 Vote:2 Commit:12 Lead:2 LeadEpoch:0
+  HardState Term:2 Vote:2 Commit:12 Lead:0 LeadEpoch:0
   Messages:
+  2->1 MsgDeFortifyLeader Term:2 Log:0/0
+  2->3 MsgDeFortifyLeader Term:2 Log:0/0
   2->1 MsgDeFortifyLeader Term:2 Log:0/0
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
 > 1 receiving messages
   2->1 MsgDeFortifyLeader Term:2 Log:0/0
   INFO 1 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
+  2->1 MsgDeFortifyLeader Term:2 Log:0/0
+  INFO 1 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
 > 3 receiving messages
+  2->3 MsgDeFortifyLeader Term:2 Log:0/0
+  INFO 3 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
   INFO 3 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
 
@@ -417,6 +433,7 @@ stabilize
   3->2 MsgFortifyLeader Term:3 Log:0/0
   INFO 2 [term: 2] received a MsgFortifyLeader message with higher term from 3 [term: 3], new leader indicated, advancing term
   INFO 2 became follower at term 3
+  DEBUG 2 reset election elapsed to 0
   3->2 MsgApp Term:3 Log:2/12 Commit:13 Entries:[3/13 EntryNormal ""]
 > 2 handling Ready
   Ready MustSync=true:
@@ -426,9 +443,16 @@ stabilize
   CommittedEntries:
   3/13 EntryNormal ""
   Messages:
+  2->1 MsgDeFortifyLeader Term:2 Log:0/0
+  2->3 MsgDeFortifyLeader Term:2 Log:0/0
   2->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   2->3 MsgAppResp Term:3 Log:0/13 Commit:13
+> 1 receiving messages
+  2->1 MsgDeFortifyLeader Term:2 Log:0/0
+  INFO 1 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
 > 3 receiving messages
+  2->3 MsgDeFortifyLeader Term:2 Log:0/0
+  INFO 3 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
   2->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   2->3 MsgAppResp Term:3 Log:0/13 Commit:13
 > 3 handling Ready

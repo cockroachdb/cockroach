@@ -486,7 +486,26 @@ func newRaft(c *Config) *raft {
 	if c.Applied > 0 {
 		raftlog.appliedTo(c.Applied, 0 /* size */)
 	}
-	r.becomeFollower(r.Term, r.lead)
+
+	if r.lead == r.id {
+		// If we were the leader, we must have waited out the leadMaxSupported. This
+		// is done in the kvserver layer before reaching this point. Therefore, it
+		// should be safe to defortify and become a follower while forgetting that
+		// we were the leader. If we don't forget that we were the leader, it will
+		// lead to situations where r.id == r.lead but r.state != StateLeader which
+		// might confuse the layers above raft.
+		r.deFortify(r.id, r.Term)
+		r.becomeFollower(r.Term, None)
+	} else {
+		// If we weren't the leader, we should NOT forget who the leader is to avoid
+		// regressing the leadMaxSupported. We can't just forget the leader because
+		// we might have been fortifying a leader before the restart and need to
+		// uphold our fortification promise after the restart as well. To do so, we
+		// need to remember the leader and the fortified epoch, otherwise we may
+		// vote for a different candidate or prematurely call an election, either of
+		// which could regress the LeadSupportUntil.
+		r.becomeFollower(r.Term, r.lead)
+	}
 
 	var nodesStrs []string
 	for _, n := range r.trk.VoterNodes() {
@@ -1039,6 +1058,7 @@ func (r *raft) reset(term uint64) {
 		r.setTerm(term)
 	}
 
+	r.lead = None
 	r.electionElapsed = 0
 	r.heartbeatElapsed = 0
 	r.resetRandomizedElectionTimeout()
@@ -1261,12 +1281,20 @@ func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
 		r.lead = None
 		lead = None
 	}
-	r.step = stepFollower
-	r.reset(term)
-	r.tick = r.tickElection
-	r.setLead(lead)
 	r.state = pb.StateFollower
+	r.step = stepFollower
+	r.tick = r.tickElection
+
+	// Start de-fortifying eagerly so we don't have to wait out a full heartbeat
+	// timeout before sending the first de-fortification message.
+	if r.shouldBcastDeFortify() {
+		r.bcastDeFortify()
+	}
+
+	r.reset(term)
+	r.setLead(lead)
 	r.logger.Infof("%x became follower at term %d", r.id, r.Term)
+	r.logger.Debugf("%x reset election elapsed to %d", r.id, r.electionElapsed)
 }
 
 func (r *raft) becomeCandidate() {
@@ -2167,7 +2195,7 @@ func stepCandidate(r *raft, m pb.Message) error {
 		case quorum.VoteLost:
 			// pb.MsgPreVoteResp contains future term of pre-candidate
 			// m.Term > r.Term; reuse r.Term
-			r.becomeFollower(r.Term, r.lead)
+			r.becomeFollower(r.Term, None)
 		}
 	}
 	return nil
@@ -2274,14 +2302,7 @@ func (r *raft) checkQuorumActive() {
 	}
 	if !quorumActiveByHeartbeats && !quorumActiveByFortification {
 		r.logger.Warningf("%x stepped down to follower since quorum is not active", r.id)
-		// NB: Stepping down because of CheckQuorum is a special, in that we know
-		// the LeadSupportUntil is in the past. This means that the leader can
-		// safely call a new election or vote for a different peer without
-		// regressing LeadSupportUntil. We don't need to/want to give this any
-		// special treatment -- instead, we handle this like the general step down
-		// case by simply remembering the term/lead information from our stint as
-		// the leader.
-		r.becomeFollower(r.Term, r.id)
+		r.becomeFollower(r.Term, None)
 	}
 	// Mark everyone (but ourselves) as inactive in preparation for the next
 	// CheckQuorum.
@@ -2710,9 +2731,12 @@ func (r *raft) switchToConfig(cfg quorum.Config, progressMap tracker.ProgressMap
 		// interruption). This might still drop some proposals but it's better than
 		// nothing.
 		//
-		// NB: Similar to the CheckQuorum step down case, we must remember our
-		// prior stint as leader, lest we regress the QSE.
-		r.becomeFollower(r.Term, r.lead)
+		// A learner can't campaign or participate in elections, and in order for a
+		// learner to get promoted to a voter, it needs a new leader to get elected
+		// and propose that change. Therefore, it should be safe at this point to
+		// defortify and forget that we were the leader at this term and step down.
+		r.deFortify(r.id, r.Term)
+		r.becomeFollower(r.Term, None)
 		return cs
 	}
 
@@ -2778,7 +2802,12 @@ func (r *raft) resetRandomizedElectionTimeout() {
 func (r *raft) transferLeader(to pb.PeerID) {
 	assertTrue(r.state == pb.StateLeader, "only the leader can transfer leadership")
 	r.send(pb.Message{To: to, Type: pb.MsgTimeoutNow})
-	r.becomeFollower(r.Term, r.lead)
+	// When a leader transfers leadership to another replica, it instructs the
+	// replica to campaign without performing the campaign checks. Therefore, it
+	// should be safe to defortify and forget the we were the leader at this term
+	// when stepping down.
+	r.deFortify(r.id, r.Term)
+	r.becomeFollower(r.Term, None)
 }
 
 func (r *raft) abortLeaderTransfer() {

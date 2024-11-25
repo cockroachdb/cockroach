@@ -5,12 +5,15 @@ add-nodes 3 voters=(1,2,3) index=10 async-storage-writes=true
 ----
 INFO 1 switched to configuration voters=(1 2 3)
 INFO 1 became follower at term 0
+DEBUG 1 reset election elapsed to 0
 INFO newRaft 1 [peers: [1,2,3], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
 INFO 2 switched to configuration voters=(1 2 3)
 INFO 2 became follower at term 0
+DEBUG 2 reset election elapsed to 0
 INFO newRaft 2 [peers: [1,2,3], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
 INFO 3 switched to configuration voters=(1 2 3)
 INFO 3 became follower at term 0
+DEBUG 3 reset election elapsed to 0
 INFO newRaft 3 [peers: [1,2,3], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
 
 campaign 1
@@ -36,11 +39,13 @@ stabilize
   1->2 MsgVote Term:1 Log:1/10
   INFO 2 [term: 0] received a MsgVote message with higher term from 1 [term: 1], advancing term
   INFO 2 became follower at term 1
+  DEBUG 2 reset election elapsed to 0
   INFO 2 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
 > 3 receiving messages
   1->3 MsgVote Term:1 Log:1/10
   INFO 3 [term: 0] received a MsgVote message with higher term from 1 [term: 1], advancing term
   INFO 3 became follower at term 1
+  DEBUG 3 reset election elapsed to 0
   INFO 3 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
 > 1 processing append thread
   Processing:

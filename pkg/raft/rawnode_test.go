@@ -594,31 +594,45 @@ func TestRawNodeRestart(t *testing.T) {
 		MustSync:         false,
 	}
 
-	storage := newTestMemoryStorage(withPeers(1))
+	storage := newTestMemoryStorage(withPeers(1, 2))
 	storage.SetHardState(st)
 	storage.Append(entries)
-	rawNode, err := NewRawNode(newTestConfig(1, 10, 1, storage))
+	rawNode1, err := NewRawNode(newTestConfig(1, 10, 1, storage))
 	require.NoError(t, err)
-	rd := rawNode.Ready()
+	rawNode2, err := NewRawNode(newTestConfig(2, 10, 1, storage))
+	require.NoError(t, err)
+	rd := rawNode1.Ready()
 	assert.Equal(t, want, rd)
-	rawNode.Advance(rd)
-	assert.False(t, rawNode.HasReady())
-	// Ensure that the HardState was correctly loaded post restart.
-	assert.Equal(t, uint64(1), rawNode.raft.Term)
-	assert.Equal(t, uint64(1), rawNode.raft.raftLog.committed)
-	assert.Equal(t, pb.PeerID(1), rawNode.raft.lead)
-	assert.True(t, rawNode.raft.state == pb.StateFollower)
-	assert.Equal(t, pb.Epoch(1), rawNode.raft.leadEpoch)
+	rawNode1.Advance(rd)
+	assert.False(t, rawNode1.HasReady())
+
+	// Ensure that the HardState was correctly loaded post rawNode1 restart.
+	assert.Equal(t, uint64(1), rawNode1.raft.Term)
+	assert.Equal(t, uint64(1), rawNode1.raft.raftLog.committed)
+	assert.True(t, rawNode1.raft.state == pb.StateFollower)
+	// Since rawNode1 was the leader, it should become a follower while forgetting
+	// that it was the leader/leadEpoch was for this term.
+	assert.Equal(t, None, rawNode1.raft.lead)
+	assert.Equal(t, pb.Epoch(0), rawNode1.raft.leadEpoch)
+
+	// Ensure that the HardState was correctly loaded post rawNode2 restart.
+	assert.Equal(t, uint64(1), rawNode2.raft.Term)
+	assert.Equal(t, uint64(1), rawNode2.raft.raftLog.committed)
+	assert.True(t, rawNode2.raft.state == pb.StateFollower)
+	// Since rawNode2 was a follower, it should remember who the leader was, and
+	// what the leadEpoch was.
+	assert.Equal(t, pb.PeerID(1), rawNode2.raft.lead)
+	assert.Equal(t, pb.Epoch(1), rawNode2.raft.leadEpoch)
 
 	// Ensure we campaign after the election timeout has elapsed.
-	for i := int64(0); i < rawNode.raft.randomizedElectionTimeout; i++ {
+	for i := int64(0); i < rawNode1.raft.randomizedElectionTimeout; i++ {
 		// TODO(arul): consider getting rid of this hack to reset the epoch so that
 		// we can call an election without panicking.
-		rawNode.raft.leadEpoch = 0
-		rawNode.raft.tick()
+		rawNode1.raft.leadEpoch = 0
+		rawNode1.raft.tick()
 	}
-	assert.Equal(t, pb.StateCandidate, rawNode.raft.state)
-	assert.Equal(t, uint64(2), rawNode.raft.Term) // this should in-turn bump the term
+	assert.Equal(t, pb.StateCandidate, rawNode1.raft.state)
+	assert.Equal(t, uint64(2), rawNode1.raft.Term) // this should in-turn bump the term
 }
 
 func TestRawNodeRestartFromSnapshot(t *testing.T) {
