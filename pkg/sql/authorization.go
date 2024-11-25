@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -574,7 +573,7 @@ func MemberOfWithAdminOption(
 
 	tableVersion := tableDesc.GetVersion()
 	if tableDesc.IsUncommittedVersion() {
-		return resolveMemberOfWithAdminOption(ctx, member, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+		return resolveMemberOfWithAdminOption(ctx, member, txn)
 	}
 	if txn.SessionData().AllowRoleMembershipsToChangeDuringTransaction {
 		defer func() {
@@ -594,7 +593,7 @@ func MemberOfWithAdminOption(
 	// Check version and maybe clear cache while holding the mutex.
 	// We use a closure here so that we release the lock here, then keep
 	// going and re-lock if adding the looked-up entry.
-	userMapping, found := func() (userRoleMembership, bool) {
+	userMapping, found, refreshCache := func() (userRoleMembership, bool, bool) {
 		roleMembersCache.Lock()
 		defer roleMembersCache.Unlock()
 		if roleMembersCache.tableVersion < tableVersion {
@@ -603,18 +602,25 @@ func MemberOfWithAdminOption(
 			roleMembersCache.tableVersion = tableVersion
 			roleMembersCache.userCache = make(map[username.SQLUsername]userRoleMembership)
 			roleMembersCache.boundAccount.Empty(ctx)
+			return nil, false, true
 		} else if roleMembersCache.tableVersion > tableVersion {
 			// If the cache is based on a newer table version, then this transaction
 			// should not use the cached data.
-			return nil, false
+			return nil, false, true
 		}
 		userMapping, ok := roleMembersCache.userCache[member]
-		return userMapping, ok
+		return userMapping, ok, len(roleMembersCache.userCache) == 0
 	}()
 
-	if found {
-		// Found: return.
-		return userMapping, nil
+	if !refreshCache {
+		// The cache always contains entries for every role that exists, so the
+		// only time we need to refresh the cache is if it has been invalidated
+		// by the tableVersion changing.
+		if found {
+			return userMapping, nil
+		} else {
+			return nil, sqlerrors.NewUndefinedUserError(member)
+		}
 	}
 
 	// If `txn` is high priority and in a retry, do not launch the singleflight to
@@ -623,7 +629,7 @@ func MemberOfWithAdminOption(
 	// instead just issue a read using `txn` to `system.role_members` table and
 	// return the result.
 	if txn.KV().UserPriority() == roachpb.MaxUserPriority && txn.KV().Epoch() > 0 {
-		return resolveMemberOfWithAdminOption(ctx, member, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+		return resolveMemberOfWithAdminOption(ctx, member, txn)
 	}
 
 	// Lookup memberships outside the lock. There will be at most one request
@@ -638,13 +644,13 @@ func MemberOfWithAdminOption(
 	// ensure that we are reading from the right version of the table.
 	newTxnTimestamp := txn.KV().ReadTimestamp()
 	future, _ := roleMembersCache.populateCacheGroup.DoChan(ctx,
-		fmt.Sprintf("%s-%d", member.Normalized(), tableVersion),
+		fmt.Sprintf("refreshMembershipCache-%d", tableVersion),
 		singleflight.DoOpts{
 			Stop:               roleMembersCache.stopper,
 			InheritCancelation: false,
 		},
 		func(ctx context.Context) (interface{}, error) {
-			var m map[username.SQLUsername]bool
+			var allMemberships map[username.SQLUsername]userRoleMembership
 			err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, newTxn isql.Txn) error {
 				// Run the membership read as high-priority, thereby pushing any intents
 				// out of its way. This prevents deadlocks in cases where a GRANT/REVOKE
@@ -659,47 +665,56 @@ func MemberOfWithAdminOption(
 				if err != nil {
 					return err
 				}
-				m, err = resolveMemberOfWithAdminOption(
-					ctx, member, newTxn,
-					useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
-				)
+				allMemberships, err = resolveAllMemberships(ctx, newTxn)
 				if err != nil {
 					return err
 				}
 				return err
 			})
-			return m, err
+			if err != nil {
+				return nil, err
+			}
+			func() {
+				// Update membership if the table version hasn't changed.
+				roleMembersCache.Lock()
+				defer roleMembersCache.Unlock()
+				if roleMembersCache.tableVersion != tableVersion {
+					// Table version has changed while we were looking: don't cache the data.
+					return
+				}
+
+				// Table version remains the same: update map, unlock, return.
+				sizeOfCache := int64(0)
+				for _, memberships := range allMemberships {
+					sizeOfEntry := int64(len(member.Normalized()))
+					for m := range memberships {
+						sizeOfEntry += int64(len(m.Normalized()))
+						sizeOfEntry += memsize.Bool
+					}
+					sizeOfCache += sizeOfEntry
+				}
+				if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfCache); err != nil {
+					// If there is no memory available to cache the entry, we can still
+					// proceed so that the query has a chance to succeed.
+					log.Ops.Warningf(ctx, "no memory available to cache role membership info: %v", err)
+				} else {
+					roleMembersCache.userCache = allMemberships
+				}
+			}()
+			return allMemberships, nil
 		})
-	var memberships map[username.SQLUsername]bool
+	var allMemberships map[username.SQLUsername]userRoleMembership
 	res := future.WaitForResult(ctx)
 	if res.Err != nil {
 		return nil, res.Err
 	}
-	memberships = res.Val.(map[username.SQLUsername]bool)
-
-	func() {
-		// Update membership if the table version hasn't changed.
-		roleMembersCache.Lock()
-		defer roleMembersCache.Unlock()
-		if roleMembersCache.tableVersion != tableVersion {
-			// Table version has changed while we were looking: don't cache the data.
-			return
-		}
-
-		// Table version remains the same: update map, unlock, return.
-		sizeOfEntry := int64(len(member.Normalized()))
-		for m := range memberships {
-			sizeOfEntry += int64(len(m.Normalized()))
-			sizeOfEntry += memsize.Bool
-		}
-		if err := roleMembersCache.boundAccount.Grow(ctx, sizeOfEntry); err != nil {
-			// If there is no memory available to cache the entry, we can still
-			// proceed so that the query has a chance to succeed.
-			log.Ops.Warningf(ctx, "no memory available to cache role membership info: %v", err)
-		} else {
-			roleMembersCache.userCache[member] = memberships
-		}
-	}()
+	allMemberships = res.Val.(map[username.SQLUsername]userRoleMembership)
+	memberships, found := allMemberships[member]
+	// The map contains entries for every role that exists, so if it's
+	// not present in the map, the role does not exist.
+	if !found {
+		return nil, sqlerrors.NewUndefinedUserError(member)
+	}
 	return memberships, nil
 }
 
@@ -782,18 +797,6 @@ func EnsureUserOnlyBelongsToRoles(
 	})
 }
 
-var defaultSingleQueryForRoleMembershipCache = metamorphic.ConstantWithTestBool(
-	"resolve-membership-single-scan-enabled",
-	true, /* defaultValue */
-)
-
-var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.auth.resolve_membership_single_scan.enabled",
-	"determines whether to populate the role membership cache with a single scan",
-	defaultSingleQueryForRoleMembershipCache,
-	settings.WithPublic)
-
 var enableGrantOptionInheritance = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.auth.grant_option_inheritance.enabled",
@@ -812,90 +815,140 @@ var enableGrantOptionForOwner = settings.RegisterBoolSetting(
 
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
 func resolveMemberOfWithAdminOption(
-	ctx context.Context, member username.SQLUsername, txn isql.Txn, singleQuery bool,
+	ctx context.Context, member username.SQLUsername, txn isql.Txn,
 ) (map[username.SQLUsername]bool, error) {
-	roleExists, err := RoleExists(ctx, txn, member)
+	allMemberships, err := resolveAllMemberships(ctx, txn)
 	if err != nil {
 		return nil, err
-	} else if !roleExists {
+	}
+
+	// allMemberships will have an entry for every user, so we first verify that
+	// the user exists.
+	ret, roleExists := allMemberships[member]
+	if !roleExists {
 		return nil, sqlerrors.NewUndefinedUserError(member)
 	}
-	ret := map[username.SQLUsername]bool{}
-	if member.IsNodeUser() {
-		ret[username.AdminRoleName()] = true
-	}
-	if singleQuery {
-		type membership struct {
-			role    username.SQLUsername
-			isAdmin bool
-		}
-		memberToRoles := make(map[username.SQLUsername][]membership)
-		if err := forEachRoleMembership(ctx, txn, func(ctx context.Context, role, member username.SQLUsername, isAdmin bool) error {
-			memberToRoles[member] = append(memberToRoles[member], membership{role, isAdmin})
-			return nil
-		}); err != nil {
-			return nil, err
-		}
 
-		// Recurse through all roles associated with the member.
+	return ret, nil
+}
+
+// membership represents a parent-child role relationship.
+type membership struct {
+	parent, child username.SQLUsername
+	isAdmin       bool
+}
+
+func resolveAllMemberships(
+	ctx context.Context, txn isql.Txn,
+) (map[username.SQLUsername]userRoleMembership, error) {
+	memberToDirectParents := make(map[username.SQLUsername][]membership)
+	if err := forEachRoleWithMemberships(
+		ctx, txn,
+		func(ctx context.Context, role username.SQLUsername, memberships []membership) error {
+			memberToDirectParents[role] = memberships
+			return nil
+		},
+	); err != nil {
+		return nil, err
+	}
+	// We need to add entries for the node and public roles, which do not have
+	// rows in system.users.
+	memberToDirectParents[username.NodeUserName()] = append(
+		memberToDirectParents[username.NodeUserName()],
+		membership{
+			parent:  username.AdminRoleName(),
+			child:   username.NodeUserName(),
+			isAdmin: true,
+		},
+	)
+	memberToDirectParents[username.PublicRoleName()] = []membership{}
+
+	// Recurse through all roles associated with each user.
+	ret := make(map[username.SQLUsername]userRoleMembership)
+	for member := range memberToDirectParents {
+		memberToAllAncestors := make(map[username.SQLUsername]bool)
 		var recurse func(u username.SQLUsername)
 		recurse = func(u username.SQLUsername) {
-			for _, membership := range memberToRoles[u] {
+			for _, membership := range memberToDirectParents[u] {
 				// If the parent role was seen before, we still might need to update
 				// the isAdmin flag for that role, but there's no need to recurse
 				// through the role's ancestry again.
-				prev, alreadySeen := ret[membership.role]
-				ret[membership.role] = prev || membership.isAdmin
+				prev, alreadySeen := memberToAllAncestors[membership.parent]
+				memberToAllAncestors[membership.parent] = prev || membership.isAdmin
 				if !alreadySeen {
-					recurse(membership.role)
+					recurse(membership.parent)
 				}
 			}
 		}
 		recurse(member)
-		return ret, nil
+		ret[member] = memberToAllAncestors
 	}
-
-	// Keep track of members we looked up.
-	visited := map[username.SQLUsername]struct{}{}
-	toVisit := []username.SQLUsername{member}
-	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
-
-	for len(toVisit) > 0 {
-		// Pop first element.
-		m := toVisit[0]
-		toVisit = toVisit[1:]
-		if _, ok := visited[m]; ok {
-			continue
-		}
-		visited[m] = struct{}{}
-
-		it, err := txn.QueryIteratorEx(
-			ctx, "expand-roles", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-			lookupRolesStmt, m.Normalized(),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		var ok bool
-		for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-			row := it.Cur()
-			roleName := tree.MustBeDString(row[0])
-			isAdmin := row[1].(*tree.DBool)
-
-			// system.role_members stores pre-normalized usernames.
-			role := username.MakeSQLUsernameFromPreNormalizedString(string(roleName))
-			ret[role] = bool(*isAdmin)
-
-			// We need to expand this role. Let the "pop" worry about already-visited elements.
-			toVisit = append(toVisit, role)
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return ret, nil
+}
+
+func forEachRoleWithMemberships(
+	ctx context.Context,
+	txn isql.Txn,
+	fn func(ctx context.Context, role username.SQLUsername, memberships []membership) error,
+) (retErr error) {
+	const query = `
+SELECT
+  u.username,
+  array_agg(rm.role ORDER BY rank),
+  array_agg(rm."isAdmin" ORDER BY rank)
+FROM system.users u
+LEFT OUTER JOIN (
+  SELECT *, rank() OVER (PARTITION BY member ORDER BY role)
+  FROM system.role_members
+) rm ON u.username = rm.member
+GROUP BY u.username;`
+	it, err := txn.QueryIteratorEx(ctx, "read-role-with-memberships", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride, query)
+	if err != nil {
+		return err
+	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+	var ok bool
+	var loopErr error
+	for ok, loopErr = it.Next(ctx); ok; ok, loopErr = it.Next(ctx) {
+		row := it.Cur()
+		child := tree.MustBeDString(row[0])
+		childName := username.MakeSQLUsernameFromPreNormalizedString(string(child))
+		parentNames := tree.MustBeDArray(row[1])
+		isAdmins := tree.MustBeDArray(row[2])
+
+		memberships := make([]membership, 0, parentNames.Len())
+		for i := 0; i < parentNames.Len(); i++ {
+			if parentNames.Array[i] == tree.DNull {
+				// A null element means this role has no parents.
+				continue
+			}
+			parent := tree.MustBeDString(parentNames.Array[i])
+			parentName := username.MakeSQLUsernameFromPreNormalizedString(string(parent))
+			isAdmin := tree.MustBeDBool(isAdmins.Array[i])
+			memberships = append(memberships, membership{
+				parent:  parentName,
+				child:   childName,
+				isAdmin: bool(isAdmin),
+			})
+		}
+
+		// The names in the system tables are already normalized.
+		if err := fn(
+			ctx,
+			childName,
+			memberships,
+		); err != nil {
+			return err
+		}
+	}
+	if loopErr != nil {
+		return loopErr
+	}
+	return nil
 }
 
 // UserHasRoleOption implements the AuthorizationAccessor interface.
