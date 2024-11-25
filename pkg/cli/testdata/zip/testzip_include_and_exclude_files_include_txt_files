@@ -1,0 +1,10 @@
+zip
+----
+debug/debug_zip_command_flags.txt
+debug/hot-ranges-tenant.sh
+debug/hot-ranges.sh
+debug/nodes/1/lsm.txt
+debug/nodes/1/stacks.txt
+debug/nodes/1/stacks_with_labels.txt
+debug/pprof-summary.sh
+debug/tenant_ranges.err.txt

@@ -52,7 +52,7 @@ func makeClusterWideZipRequests(
 			pathName: prefix + eventsName,
 		})
 	} else {
-		zr.info("skipping %s", eventsFile)
+		zr.info("skipping %s due to file filters", eventsFile)
 	}
 
 	if zipCtx.files.shouldIncludeFile(rangeLogFile) {
@@ -63,7 +63,7 @@ func makeClusterWideZipRequests(
 			pathName: prefix + rangelogName,
 		})
 	} else {
-		zr.info("skipping %s", rangeLogFile)
+		zr.info("skipping %s due to file filters", rangeLogFile)
 	}
 
 	if zipCtx.files.shouldIncludeFile(settingsFile) {
@@ -74,18 +74,7 @@ func makeClusterWideZipRequests(
 			pathName: prefix + settingsName,
 		})
 	} else {
-		zr.info("skipping %s", settingsFile)
-	}
-
-	if zipCtx.files.shouldIncludeFile(eventsFile) {
-		zipRequests = append(zipRequests, zipRequest{
-			fn: func(ctx context.Context) (interface{}, error) {
-				return admin.Events(ctx, &serverpb.EventsRequest{})
-			},
-			pathName: prefix + eventsName,
-		})
-	} else {
-		zr.info("skipping %s", eventsFile)
+		zr.info("skipping %s due to file filters", settingsFile)
 	}
 
 	if zipCtx.includeRangeInfo {
@@ -97,7 +86,7 @@ func makeClusterWideZipRequests(
 				pathName: prefix + problemRangesName,
 			})
 		} else {
-			zr.info("skipping %s", problemRangesFile)
+			zr.info("skipping %s due to file filters", problemRangesFile)
 		}
 
 	}
@@ -197,7 +186,7 @@ func (zc *debugZipContext) collectClusterData(
 			return err
 		})
 		if zipCtx.files.shouldIncludeFile(livenessFile) {
-			if cErr := zc.z.createJSONOrError(s, zc.prefix+livenessFile, nodes, err); cErr != nil {
+			if cErr := zc.z.createJSONOrError(s, zc.prefix+"/"+livenessFile, nodes, err); cErr != nil {
 				return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, cErr
 			}
 		}

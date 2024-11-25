@@ -1305,3 +1305,185 @@ func TestPartialZipForExcludedNodes(t *testing.T) {
 
 	require.True(t, oserror.IsNotExist(err), "node directory should not be present in the zip")
 }
+
+// This tests the operation of zip over excluded nodes.
+func TestIncludeFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.Cleanup()
+	zipName := filepath.Join(dir, "debug.zip")
+
+	// We want a low timeout so that the test doesn't take forever;
+	// however low timeouts make race runs flaky with false positives.
+	skip.UnderShort(t)
+	skip.UnderRace(t)
+
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+	// Reduce the number of output log files to just what's expected.
+	defer sc.SetupSingleFileLogging()()
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Insecure:          true,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, err := c.RunWithCapture("debug zip --concurrency=1 --include-files=*.json --cpu-profile-duration=0 " + dir + "/debug.zip")
+	require.NoError(t, err)
+
+	r, err := zip.OpenReader(zipName)
+	defer func() { _ = r.Close() }()
+	require.NoError(t, err)
+
+	for _, f := range r.File {
+		fmt.Println(f.Name)
+	}
+
+	d, _ := r.Open("debug/nodes/1")
+	defer func() {
+		if d != nil {
+			_ = d.Close()
+		}
+	}()
+}
+
+func TestZipIncludeAndExcludeFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name           string
+		commandflag    string
+		outputFileName string
+	}{
+		{
+			name:           "include all files",
+			commandflag:    "--include-files=*",
+			outputFileName: "testzip_include_and_exclude_files_include_all_files",
+		},
+		{
+			name:           "include only json files",
+			commandflag:    "--include-files=*.json",
+			outputFileName: "testzip_include_and_exclude_files_include_json_files",
+		},
+		{
+			name:           "include only txt files",
+			commandflag:    "--include-files=*.txt",
+			outputFileName: "testzip_include_and_exclude_files_include_txt_files",
+		},
+		{
+			name:           "include only log files",
+			commandflag:    "--include-files=*.log",
+			outputFileName: "testzip_include_and_exclude_files_include_log_files",
+		},
+		{
+			name:           "include json and log files",
+			commandflag:    "--include-files=*.log,*.json",
+			outputFileName: "testzip_include_and_exclude_files_include_log_and_json_files",
+		},
+		{
+			name:           "exclude all files",
+			commandflag:    "--exclude-files=*",
+			outputFileName: "testzip_include_and_exclude_files_exclude_all_files",
+		},
+		{
+			name:           "exclude only log files",
+			commandflag:    "--exclude-files=*.log",
+			outputFileName: "testzip_include_and_exclude_files_exclude_log_files",
+		},
+		{
+			name:           "exclude only txt files",
+			commandflag:    "--exclude-files=*.txt",
+			outputFileName: "testzip_include_and_exclude_files_exclude_txt_files",
+		},
+		{
+			name:           "exclude only json files",
+			commandflag:    "--exclude-files=*.json",
+			outputFileName: "testzip_include_and_exclude_files_exclude_json_files",
+		},
+	}
+
+	// We want a low timeout so that the test doesn't take forever;
+	// however low timeouts make race runs flaky with false positives.
+	skip.UnderShort(t)
+	skip.UnderRace(t)
+
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+	// Reduce the number of output log files to just what's expected.
+	defer sc.SetupSingleFileLogging()()
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Insecure:          true,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, cleanupFn := testutils.TempDir(t)
+			defer cleanupFn()
+			c := NewCLITest(TestCLIParams{
+				StoreSpecs: []base.StoreSpec{{
+					Path: dir,
+				}},
+			})
+			defer c.Cleanup()
+			zipName := filepath.Join(dir, "debug.zip")
+			var command = "debug zip " + dir + "/debug.zip --concurrency=1 --cpu-profile-duration=1s " + tc.commandflag
+			_, err := c.RunWithCapture(command)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			r, _ := zip.OpenReader(zipName)
+			defer func() {
+				if r != nil {
+					_ = r.Close()
+				}
+			}()
+
+			var fileLists []string
+			for _, f := range r.File {
+				fileLists = append(fileLists, f.Name)
+			}
+			sort.Strings(fileLists)
+			fileList := strings.Join(fileLists, "\n")
+
+			fileList = trimNonDeterministicZipOutputFiles(fileList)
+
+			datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", tc.outputFileName), func(t *testing.T, td *datadriven.TestData) string {
+				return fileList
+			})
+
+			err = r.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func trimNonDeterministicZipOutputFiles(out string) string {
+	re := regexp.MustCompile(`(?m).*\.log$`)
+	out = re.ReplaceAllString(out, `deterministic.log`)
+
+	return out
+}

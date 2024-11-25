@@ -320,10 +320,7 @@ func (fs *fileSelection) shouldIncludeFile(filename string) bool {
 			break
 		}
 	}
-	if !included {
-		return false
-	}
-	return true
+	return included
 }
 
 // to prevent interleaved output.
