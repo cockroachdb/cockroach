@@ -540,7 +540,9 @@ func TestRepartition(t *testing.T) {
 			{p(1, 1, 0), p(2, 1, 0), p(3, 1, 0)},
 			{p(1, 43, 0), p(2, 44, 0), p(3, 38, 0)},
 		} {
-			got := repartitionTopology(streamclient.Topology{Partitions: input}, parts)
+			got, err := repartitionTopology(streamclient.Topology{Partitions: input}, parts)
+
+			require.NoError(t, err)
 
 			var expectedSpans, gotSpans roachpb.Spans
 			for _, part := range input {

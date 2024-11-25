@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -491,10 +492,12 @@ func (p *replicationFlowPlanner) getSrcTenantID() (roachpb.TenantID, error) {
 	return p.srcTenantID, nil
 }
 
-func repartitionTopology(in streamclient.Topology, targetPartCount int) streamclient.Topology {
+func repartitionTopology(
+	in streamclient.Topology, targetPartCount int,
+) (streamclient.Topology, error) {
 	growth := targetPartCount / len(in.Partitions)
 	if growth <= 1 {
-		return in
+		return in, nil
 	}
 
 	// Copy the topology and allocate a new partition slice.
@@ -504,15 +507,32 @@ func repartitionTopology(in streamclient.Topology, targetPartCount int) streamcl
 	// output each containing some fraction of its spans.
 	for _, p := range in.Partitions {
 		chunk := len(p.Spans)/growth + 1
+
+		// If this partition has too few spans to split, just add it as is. This is
+		// not strictly required; we could just let the below logic make one chunk
+		// as an instance of the general case and get the same result. However if we
+		// skip it, we preserve the original "token" for small partitions, which has
+		// no effect in production code but avoids clobbering special "randomgen"
+		// tokens used in a handful of (small partition) unit tests.
+		if len(p.Spans) <= chunk {
+			out.Partitions = append(out.Partitions, p)
+			continue
+		}
+
+		// Add chunks of spans to the output partitions until all are added.
 		for len(p.Spans) > 0 {
 			c := p
 			c.Spans = p.Spans[:min(chunk, len(p.Spans))]
+			tok, err := protoutil.Marshal(&streampb.SourcePartition{Spans: c.Spans})
+			if err != nil {
+				return out, err
+			}
+			c.SubscriptionToken = tok
 			out.Partitions = append(out.Partitions, c)
 			p.Spans = p.Spans[len(c.Spans):]
 		}
 	}
-
-	return out
+	return out, nil
 }
 
 func (p *replicationFlowPlanner) constructPlanGenerator(
@@ -542,7 +562,10 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 
 		// If we have fewer partitions than we have nodes, try to repartition the
 		// topology to have more partitions.
-		topology = repartitionTopology(topology, len(sqlInstanceIDs)*8)
+		topology, err = repartitionTopology(topology, len(sqlInstanceIDs)*8)
+		if err != nil {
+			return nil, nil, err
+		}
 
 		if !p.createdInitialPlan() {
 			p.initialTopology = topology
