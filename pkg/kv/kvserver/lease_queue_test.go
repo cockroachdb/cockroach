@@ -303,7 +303,8 @@ func TestLeaseQueueSwitchesLeaseType(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)                 // override metamorphism
+	kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &st.SV, 0.0) // override metamorphism
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
