@@ -620,7 +620,6 @@ go_test(
     size = "enormous",
     srcs = [
         "admin_audit_log_test.go",
-        "alter_column_type_test.go",
         "ambiguous_commit_test.go",
         "as_of_test.go",
         "authorization_test.go",
