@@ -329,7 +329,7 @@ func RandDatumWithNullChance(
 	case types.TSQueryFamily:
 		return tree.NewDTSQuery(tsearch.RandomTSQuery(rng))
 	case types.PGVectorFamily:
-		return tree.NewDPGVector(vector.Random(rng))
+		return tree.NewDPGVector(vector.Random(rng, 100 /* maxDim */))
 	default:
 		panic(errors.AssertionFailedf("invalid type %v", typ.DebugString()))
 	}
