@@ -65,14 +65,9 @@ func TestInMemoryStore(t *testing.T) {
 		}, vectors)
 	})
 
-	t.Run("insert empty root partition into the store", func(t *testing.T) {
+	t.Run("search empty root partition", func(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
 		defer commitTransaction(ctx, t, store, txn)
-
-		vectors := vector.MakeSet(2)
-		quantizedSet := quantizer.Quantize(ctx, &vectors)
-		root := NewPartition(quantizer, quantizedSet, []ChildKey{}, LeafLevel)
-		require.NoError(t, store.SetRootPartition(ctx, txn, root))
 
 		searchSet := SearchSet{MaxResults: 2}
 		partitionCounts := []int{0}
@@ -373,7 +368,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 		dims: 2,
 		seed: 42,
 	}
-	store.mu.index = map[PartitionKey]*Partition{
+	store.mu.partitions = map[PartitionKey]*Partition{
 		10: {
 			quantizer: unquantizer,
 			quantizedSet: &quantize.UnQuantizedVectorSet{
@@ -422,11 +417,11 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	err = store2.UnmarshalBinary(data)
 	require.NoError(t, err)
 
-	require.Len(t, store2.mu.index, 2)
-	require.Equal(t, Level(1), store2.mu.index[10].level)
-	require.Equal(t, 3, store2.mu.index[10].quantizedSet.GetCount())
-	require.Equal(t, 2, store2.mu.index[20].quantizer.GetOriginalDims())
-	require.Len(t, store2.mu.index[20].childKeys, 3)
+	require.Len(t, store2.mu.partitions, 2)
+	require.Equal(t, Level(1), store2.mu.partitions[10].level)
+	require.Equal(t, 3, store2.mu.partitions[10].quantizedSet.GetCount())
+	require.Equal(t, 2, store2.mu.partitions[20].quantizer.GetOriginalDims())
+	require.Len(t, store2.mu.partitions[20].childKeys, 3)
 	require.Equal(t, PartitionKey(100), store2.mu.nextKey)
 	require.Len(t, store2.mu.vectors, 2)
 	require.Equal(t, vector.T{12, 13}, store2.mu.vectors[string([]byte{3, 4})])

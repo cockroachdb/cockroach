@@ -247,12 +247,12 @@ func downloadDataset(ctx context.Context, datasetName string) {
 
 	// Use progressWriter to track download progress
 	var buf bytes.Buffer
-	progressWriter := &progressWriter{
+	writer := &progressWriter{
 		Writer: &buf,
 		Total:  attrs.Size,
 	}
 
-	if _, err = io.Copy(progressWriter, reader); err != nil {
+	if _, err = io.Copy(writer, reader); err != nil {
 		log.Fatalf("Failed to copy object data: %v", err)
 	}
 
@@ -347,15 +347,6 @@ func buildIndex(ctx context.Context, datasetName string) {
 	if err != nil {
 		panic(err)
 	}
-
-	// Insert empty root partition.
-	func() {
-		txn := beginTransaction(ctx, store)
-		defer commitTransaction(ctx, store, txn)
-		if err := index.CreateRoot(ctx, txn); err != nil {
-			panic(err)
-		}
-	}()
 
 	// Create unique primary key for each vector in a single large byte buffer.
 	primaryKeys := make([]byte, data.Train.Count*4)
