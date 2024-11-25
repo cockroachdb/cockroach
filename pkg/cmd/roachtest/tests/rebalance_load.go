@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -329,6 +330,7 @@ func makeStoreCPUFn(
 			name:      "cr.node.sys.cpu.combined.percent-normalized",
 			queryType: total,
 			sources:   []string{fmt.Sprintf("%d", i+1)},
+			tenantID:  roachpb.SystemTenantID,
 		}
 	}
 
@@ -353,6 +355,14 @@ func makeStoreCPUFn(
 			}
 			// Take the latest CPU data point only.
 			cpu := result.Datapoints[len(result.Datapoints)-1].Value
+			// The datapoint is a float representing a percentage in [0,1.0]. Assert
+			// as much to avoid any surprises.
+			if cpu < 0 || cpu > 1 {
+				return nil, errors.Newf(
+					"node %d has core count normalized CPU utilization ts datapoint "+
+						"not in [0%,100%] (impossible!): %f [resp=%+v]", node, cpu, resp)
+			}
+
 			nodeIdx := node * storesPerNode
 			for storeOffset := 0; storeOffset < storesPerNode; storeOffset++ {
 				// The values will be a normalized float in [0,1.0], scale to a

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 )
@@ -40,6 +41,11 @@ type tsQuery struct {
 	name      string
 	queryType tsQueryType
 	sources   []string
+	// tenantID specifies which tenant to query metrics for. If uninitialized,
+	// the query will be for all tenants (default). Use roachpb.SystemTenantID as
+	// the value here to query just the system tenant metrics, in a multi-tenant
+	// cluster.
+	tenantID roachpb.TenantID
 }
 
 func mustGetMetrics(
@@ -110,6 +116,7 @@ func getMetricsWithSamplePeriod(
 				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
 				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
 				Sources:          tsQueries[i].sources,
+				TenantID:         tsQueries[i].tenantID,
 			}
 		case rate:
 			queries[i] = tspb.Query{
@@ -118,6 +125,7 @@ func getMetricsWithSamplePeriod(
 				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
 				Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
 				Sources:          tsQueries[i].sources,
+				TenantID:         tsQueries[i].tenantID,
 			}
 		default:
 			panic("unexpected")
