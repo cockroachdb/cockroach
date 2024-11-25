@@ -84,6 +84,8 @@ func colDatumToCSVString(col *coldata.Vec, rowIdx int) string {
 		// See the HACK comment in ColBatchToRows.
 		bytes := col.Bytes().Get(rowIdx)
 		return *(*string)(unsafe.Pointer(&bytes))
+	case types.TimestampTZFamily:
+		return col.Timestamp()[rowIdx].Format(timestampOutputFormat)
 	}
 	panic(fmt.Sprintf(`unhandled type %s`, col.Type()))
 }
