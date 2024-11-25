@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -218,6 +219,7 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 func (r *Registry) resumeJob(
 	ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session,
 ) (retErr error) {
+	ctx = logtags.AddTag(ctx, "job", jobID)
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 
 	job, err := r.loadJobForResume(ctx, jobID, s)
@@ -236,6 +238,7 @@ func (r *Registry) resumeJob(
 		return err
 	}
 	resumeCtx, cancel := r.makeCtx()
+	resumeCtx = logtags.AddTag(resumeCtx, "job", jobID)
 
 	// If the job's type was registered to disable tenant cost control, then
 	// exclude the job's costs from tenant accounting.
