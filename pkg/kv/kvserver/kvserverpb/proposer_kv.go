@@ -72,3 +72,31 @@ func (r *ReplicatedEvalResult) IsTrivial() bool {
 	allowlist.State = nil
 	return allowlist.IsZero()
 }
+
+func (r *ReplicatedEvalResult) SetRaftTruncatedState(ts *RaftTruncatedState, v25dot1 bool) {
+	if v25dot1 {
+		r.RaftTruncatedState = ts
+	} else if r.State == nil {
+		r.State = &ReplicaState{TruncatedState: ts}
+	} else {
+		r.State.TruncatedState = ts
+	}
+}
+
+func (r *ReplicatedEvalResult) UnsetRaftTruncatedState() {
+	if r.State != nil {
+		r.State.TruncatedState = nil
+	}
+	r.RaftTruncatedState = nil
+	r.RaftLogDelta = 0
+	r.RaftExpectedFirstIndex = 0
+}
+
+func (r *ReplicatedEvalResult) GetRaftTruncatedState() *RaftTruncatedState {
+	if ts := r.RaftTruncatedState; ts != nil {
+		return ts
+	} else if r.State == nil {
+		return nil
+	}
+	return r.State.TruncatedState
+}

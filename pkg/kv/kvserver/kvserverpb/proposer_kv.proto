@@ -12,6 +12,7 @@ import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
+import "kv/kvserver/kvserverpb/internal_raft.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "kv/kvserver/readsummary/rspb/summary.proto";
 import "util/hlc/timestamp.proto";
@@ -151,6 +152,11 @@ message ReplicatedEvalResult {
   storage.enginepb.MVCCStatsDelta delta = 18 [(gogoproto.nullable) = false];
   ChangeReplicas change_replicas = 12;
 
+  // RaftTruncatedState contains the new raft log truncated state when
+  // evaluating a TruncateLogRequest.
+  //
+  // Introduced in v25.1 to replace state.RaftTruncatedState.
+  RaftTruncatedState raft_truncated_state = 28;
   // RaftLogDelta is the delta in bytes caused by truncation of the raft log.
   // It is only populated when evaluating a TruncateLogRequest. The inclusive
   // index for the truncation is specified in State.TruncatedState. This delta

@@ -402,7 +402,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		res.State.GCThreshold = nil
 	}
 
-	if res.State != nil && res.State.TruncatedState != nil {
+	if truncatedState := res.GetRaftTruncatedState(); truncatedState != nil {
 		var err error
 		// Typically one should not be checking the cluster version below raft,
 		// since it can cause state machine divergence. However, this check is
@@ -424,13 +424,13 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
 		if apply {
 			if apply, err = handleTruncatedStateBelowRaftPreApply(
-				ctx, b.truncState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
+				ctx, b.truncState, truncatedState, b.r.raftMu.stateLoader, b.batch,
 			); err != nil {
 				return errors.Wrap(err, "unable to handle truncated state")
 			}
 		} else {
 			b.r.store.raftTruncator.addPendingTruncation(
-				ctx, (*raftTruncatorReplica)(b.r), *res.State.TruncatedState, res.RaftExpectedFirstIndex,
+				ctx, (*raftTruncatorReplica)(b.r), *truncatedState, res.RaftExpectedFirstIndex,
 				res.RaftLogDelta)
 		}
 		if apply {
@@ -446,7 +446,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			// coupled truncation mechanism in the other branch already ensures
 			// enacting truncations only after state machine synced.
 			if has, err := b.r.raftMu.sideloaded.HasAnyEntry(
-				ctx, b.truncState.Index, res.State.TruncatedState.Index+1, // include end Index
+				ctx, b.truncState.Index, truncatedState.Index+1, // include end Index
 			); err != nil {
 				return errors.Wrap(err, "failed searching for sideloaded entries")
 			} else if has {
@@ -455,9 +455,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		} else {
 			// The truncated state was discarded, or we are queuing a pending
 			// truncation, so make sure we don't apply it to our in-memory state.
-			res.State.TruncatedState = nil
-			res.RaftLogDelta = 0
-			res.RaftExpectedFirstIndex = 0
+			res.UnsetRaftTruncatedState()
 			if !looselyCoupledTruncation {
 				// TODO(ajwerner): consider moving this code.
 				// We received a truncation that doesn't apply to us, so we know that
