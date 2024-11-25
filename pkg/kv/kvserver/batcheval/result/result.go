@@ -239,7 +239,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 			return errors.AssertionFailedf("conflicting TruncatedState")
 		}
 		q.Replicated.State.TruncatedState = nil
-		q.Replicated.RaftExpectedFirstIndex = 0
 
 		if q.Replicated.State.GCThreshold != nil {
 			if p.Replicated.State.GCThreshold == nil {
@@ -275,6 +274,20 @@ func (p *Result) MergeAndDestroy(q Result) error {
 				pretty.Diff(*q.Replicated.State, kvserverpb.ReplicaState{}))
 		}
 		q.Replicated.State = nil
+	}
+
+	if p.Replicated.RaftTruncatedState == nil {
+		p.Replicated.RaftTruncatedState = q.Replicated.RaftTruncatedState
+		p.Replicated.RaftExpectedFirstIndex = q.Replicated.RaftExpectedFirstIndex
+	} else if q.Replicated.RaftTruncatedState != nil {
+		return errors.AssertionFailedf("conflicting RaftTruncatedState")
+	}
+	q.Replicated.RaftTruncatedState = nil
+	q.Replicated.RaftExpectedFirstIndex = 0
+
+	if p.Replicated.State != nil && p.Replicated.State.TruncatedState != nil &&
+		p.Replicated.RaftTruncatedState != nil {
+		return errors.AssertionFailedf("conflicting RaftTruncatedState")
 	}
 
 	if p.Replicated.Split == nil {
