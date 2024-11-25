@@ -546,21 +546,45 @@ func (f *FuncDepSet) CopyFrom(fdset *FuncDepSet) {
 }
 
 // RemapFrom copies the given FD into this FD, remapping column IDs according to
-// the from/to lists. Specifically, column from[i] is replaced with column
-// to[i] (see TranslateColSet).
-// Any columns not in the from list are removed from the FDs.
-func (f *FuncDepSet) RemapFrom(fdset *FuncDepSet, fromCols, toCols opt.ColList) {
+// the old/new lists. Specifically, column old[i] is replaced with column new[i]
+// (see TranslateColSet).
+//
+// Any columns not in the "old" list are removed from the FDs.
+func (f *FuncDepSet) RemapFrom(fdset *FuncDepSet, oldCols, newCols opt.ColList) {
 	f.CopyFrom(fdset)
 	colSet := f.ColSet()
-	fromSet := fromCols.ToSet()
+	fromSet := oldCols.ToSet()
 	if !colSet.SubsetOf(fromSet) {
 		f.ProjectCols(colSet.Intersection(fromSet))
 	}
-	for i := range f.deps {
-		f.deps[i].from = opt.TranslateColSetStrict(f.deps[i].from, fromCols, toCols)
-		f.deps[i].to = opt.TranslateColSetStrict(f.deps[i].to, fromCols, toCols)
+	n := 0
+	var newEquivCols []opt.ColSet
+	for i := 0; i < len(f.deps); i++ {
+		remappedFrom := opt.TranslateColSetStrict(f.deps[i].from, oldCols, newCols)
+		remappedTo := opt.TranslateColSetStrict(f.deps[i].to, oldCols, newCols)
+		if f.deps[i].equiv && remappedFrom.Len() != 1 {
+			// The original "from" column maps to more than one "to" column. Remove
+			// this FD, and keep track of the set of equivalent columns to be handled
+			// after the loop.
+			remappedFrom.UnionWith(remappedTo)
+			newEquivCols = append(newEquivCols, remappedFrom)
+			continue
+		}
+		f.deps[i].from = remappedFrom
+		f.deps[i].to = remappedTo
+		if n != i {
+			f.deps[n] = f.deps[i]
+		}
+		n++
 	}
-	f.key = opt.TranslateColSetStrict(f.key, fromCols, toCols)
+	f.deps = f.deps[:n]
+	f.key = opt.TranslateColSetStrict(f.key, oldCols, newCols)
+	if len(newEquivCols) > 0 {
+		for i := range newEquivCols {
+			f.addEquivalency(newEquivCols[i])
+		}
+		f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
+	}
 }
 
 // ColsAreStrictKey returns true if the given columns contain a strict key for the
