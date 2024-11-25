@@ -1354,35 +1354,56 @@ CREATE TABLE person (
                     )
         );
 
+skipif config local-mixed-24.2 local-mixed-24.3
+statement ok
+SET use_declarative_schema_changer = unsafe_always;
+
 statement ok
 BEGIN;
-SET LOCAL use_declarative_schema_changer = 'unsafe_always';
 ALTER PARTITION australia OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 2;
 ALTER PARTITION old_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 4;
 ALTER PARTITION yung_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 5;
 COMMIT;
 
-query TT
-SHOW CREATE person;
+query TI colnames
+WITH subzones AS (
+    SELECT
+        json_array_elements(
+            crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzones'
+        ) AS config
+    FROM system.zones
+    WHERE id = 'person'::REGCLASS::OID
+),
+subzone_configs AS (
+    SELECT
+        config ->> 'partitionName' AS name,
+        (config -> 'config' -> 'gc' ->> 'ttlSeconds')::INT AS ttl
+    FROM subzones
+)
+SELECT *
+FROM subzone_configs
+ORDER BY name;
 ----
-person  CREATE TABLE public.person (
-          name STRING NOT NULL,
-          country STRING NOT NULL,
-          birth_date DATE NOT NULL,
-          CONSTRAINT person_pkey PRIMARY KEY (country ASC, birth_date ASC, name ASC),
-          FAMILY fam_0_birth_date (birth_date),
-          FAMILY fam_1_country_name (country, name)
-        ) PARTITION BY LIST (country) (
-          PARTITION australia VALUES IN (('AU'), ('NZ')) PARTITION BY RANGE (birth_date) (
-            PARTITION old_au VALUES FROM (MINVALUE) TO ('1995-01-01'),
-            PARTITION yung_au VALUES FROM ('1995-01-01') TO (MAXVALUE)
-          )
-        );
-        ALTER PARTITION australia OF INDEX foo.public.person@person_pkey CONFIGURE ZONE USING
-          gc.ttlseconds = 2;
-        ALTER PARTITION old_au OF INDEX foo.public.person@person_pkey CONFIGURE ZONE USING
-          gc.ttlseconds = 4;
-        ALTER PARTITION yung_au OF INDEX foo.public.person@person_pkey CONFIGURE ZONE USING
-          gc.ttlseconds = 5
+name       ttl
+australia  2
+old_au     4
+yung_au    5
+
+# Ensure that configuring the zone on all subpartitions of a partition erases
+# the overarching partition's subzoneSpans to ensure that our keys are
+# non-overlapping.
+#
+# N.B. We expect 2 spans allocated for each subpartition (old_au, yung_au),
+# covering partition australia (instead of appending -- which would give us a
+# total of 6).
+query I
+SELECT json_array_length(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzoneSpans')
+FROM system.zones
+WHERE id = 'person'::REGCLASS::OID
+----
+4
+
+statement ok
+RESET use_declarative_schema_changer;
 
 subtest end

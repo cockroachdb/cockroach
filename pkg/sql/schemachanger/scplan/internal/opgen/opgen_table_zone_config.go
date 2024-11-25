@@ -29,7 +29,7 @@ func init() {
 				emit(func(this *scpb.TableZoneConfig, md *opGenContext) *scop.DiscardTableZoneConfig {
 					return &scop.DiscardTableZoneConfig{
 						TableID:    this.TableID,
-						ZoneConfig: this.ZoneConfig,
+						ZoneConfig: *this.ZoneConfig,
 					}
 				}),
 			),
