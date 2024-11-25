@@ -174,7 +174,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	defer tc.repl.mu.Unlock()
 
 	rsl := logstore.NewStateLoader(tc.repl.RangeID)
-	lo := tc.repl.shMu.state.TruncatedState.Index + 1
+	lo := tc.repl.shMu.raftTruncState.Index + 1
 	hi := tc.repl.shMu.lastIndexNotDurable + 1
 
 	tc.store.raftEntryCache.Clear(tc.repl.RangeID, hi)
