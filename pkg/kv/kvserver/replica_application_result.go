@@ -492,7 +492,7 @@ func (r *Replica) handleTruncatedStateResult(
 ) (raftLogDelta int64, expectedFirstIndexWasAccurate bool) {
 	r.mu.Lock()
 	expectedFirstIndexWasAccurate =
-		r.shMu.state.TruncatedState.Index+1 == expectedFirstIndexPreTruncation
+		r.shMu.raftTruncState.Index+1 == expectedFirstIndexPreTruncation
 	r.shMu.state.TruncatedState = t
 	r.shMu.raftTruncState = *t
 	r.mu.Unlock()

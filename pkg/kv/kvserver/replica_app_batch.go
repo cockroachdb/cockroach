@@ -49,6 +49,11 @@ type replicaAppBatch struct {
 	// backing memory has already been provided and which may thus be
 	// modified directly.
 	state kvserverpb.ReplicaState
+	// truncState is this batch's view of the raft log truncation state. It is
+	// copied from under the Replica.mu when the batch is initialized, and remains
+	// constant since raftMu is being held throughout the lifetime of this batch.
+	truncState kvserverpb.RaftTruncatedState
+
 	// closedTimestampSetter maintains historical information about the
 	// advancement of the closed timestamp.
 	closedTimestampSetter closedTimestampSetterInfo
@@ -422,7 +427,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
 		if apply {
 			if apply, err = handleTruncatedStateBelowRaftPreApply(
-				ctx, *b.state.TruncatedState, res.State.TruncatedState,
+				ctx, b.truncState, res.State.TruncatedState,
 				b.r.raftMu.stateLoader.StateLoader, b.batch,
 			); err != nil {
 				return errors.Wrap(err, "unable to handle truncated state")
@@ -445,7 +450,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			// coupled truncation mechanism in the other branch already ensures
 			// enacting truncations only after state machine synced.
 			if has, err := b.r.raftMu.sideloaded.HasAnyEntry(
-				ctx, b.state.TruncatedState.Index, res.State.TruncatedState.Index+1, // include end Index
+				ctx, b.truncState.Index, res.State.TruncatedState.Index+1, // include end Index
 			); err != nil {
 				return errors.Wrap(err, "failed searching for sideloaded entries")
 			} else if has {
