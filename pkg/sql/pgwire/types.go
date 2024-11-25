@@ -102,18 +102,15 @@ func writeTextUUID(b *writeBuffer, v uuid.UUID) {
 }
 
 func writeTextString(b *writeBuffer, s string, t *types.T) {
-	if paddingNeeded([]byte(s), t) {
-		b.writePaddedData([]byte(s), t)
-	} else {
-		b.writeLengthPrefixedString(s)
+	pad := paddingForCharType(len(s), t)
+	b.writeLengthPrefixedString(s, len(s)+pad)
+
+	// apply padding (in the form of blanks spaces) to the right of the write buffer
+	for pad > 0 {
+		n := min(pad, len(spaces))
+		b.write(spaces[:n])
+		pad -= n
 	}
-}
-
-func paddingNeeded(v []byte, t *types.T) bool {
-	blankPaddedCharType := t.Oid() == oid.T_bpchar
-	paddingNeeded := len(v) < int(t.Width())
-
-	return blankPaddedCharType && paddingNeeded
 }
 
 func writeTextTimestamp(b *writeBuffer, v time.Time) {
@@ -194,7 +191,8 @@ func writeTextDatumNotNull(
 		writeTextUUID(b, v.UUID)
 
 	case *tree.DIPAddr:
-		b.writeLengthPrefixedString(v.IPAddr.String())
+		ipAddrString := v.IPAddr.String()
+		b.writeLengthPrefixedString(ipAddrString, len(ipAddrString))
 
 	case *tree.DString:
 		writeTextString(b, string(*v), t)
@@ -252,7 +250,8 @@ func writeTextDatumNotNull(
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DJSON:
-		b.writeLengthPrefixedString(v.JSON.String())
+		jsonString := v.JSON.String()
+		b.writeLengthPrefixedString(jsonString, len(jsonString))
 
 	case *tree.DTSQuery:
 		b.textFormatter.FormatNode(v)
@@ -282,7 +281,7 @@ func writeTextDatumNotNull(
 
 	case *tree.DEnum:
 		// Enums are serialized with their logical representation.
-		b.writeLengthPrefixedString(v.LogicalRep)
+		b.writeLengthPrefixedString(v.LogicalRep, len(v.LogicalRep))
 
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
@@ -343,7 +342,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 		d := vecs.DecimalCols[colIdx].Get(rowIdx)
 		// The logic here is the simplification of tree.DDecimal.Format given
 		// that we use tree.FmtSimple.
-		b.writeLengthPrefixedString(d.String())
+		b.writeLengthPrefixedString(d.String(), len(d.String()))
 
 	case types.BytesFamily:
 		writeTextBytes(
@@ -377,7 +376,8 @@ func (b *writeBuffer) writeTextColumnarElement(
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case types.JsonFamily:
-		b.writeLengthPrefixedString(vecs.JSONCols[colIdx].Get(rowIdx).String())
+		jsonRowString := vecs.JSONCols[colIdx].Get(rowIdx).String()
+		b.writeLengthPrefixedString(jsonRowString, len(jsonRowString))
 
 	case types.EnumFamily:
 		// Enums are serialized with their logical representation.
@@ -385,7 +385,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 		if err != nil {
 			b.setError(err)
 		} else {
-			b.writeLengthPrefixedString(logical)
+			b.writeLengthPrefixedString(logical, len(logical))
 		}
 
 	default:
@@ -538,11 +538,26 @@ func writeBinaryBytes(b *writeBuffer, v []byte, t *types.T) {
 		v = []byte{0}
 	}
 
-	if paddingNeeded(v, t) {
-		b.writePaddedData(v, t)
-	} else {
-		b.writeLengthPrefixedByteSlice(v, int32(len(v)))
+	pad := paddingForCharType(len(v), t)
+	b.writeLengthPrefixedByteSlice(v, len(v)+pad)
+
+	// apply padding (in the form of blanks spaces) to the right of the write buffer
+	for pad > 0 {
+		n := min(pad, len(spaces))
+		b.write(spaces[:n])
+		pad -= n
 	}
+}
+
+func paddingForCharType(inputLength int, t *types.T) int {
+	blankPaddedCharType := t.Oid() == oid.T_bpchar
+	paddingNeeded := inputLength < int(t.Width())
+
+	if blankPaddedCharType && paddingNeeded {
+		return int(t.Width()) - inputLength
+	}
+
+	return 0
 }
 
 func writeBinaryString(b *writeBuffer, s string, t *types.T) {
@@ -552,11 +567,7 @@ func writeBinaryString(b *writeBuffer, s string, t *types.T) {
 		s = string([]byte{0})
 	}
 
-	if paddingNeeded([]byte(s), t) {
-		b.writePaddedData([]byte(s), t)
-	} else {
-		b.writeLengthPrefixedString(s)
-	}
+	writeTextString(b, s, t)
 }
 
 func writeBinaryTimestamp(b *writeBuffer, v time.Time) {
@@ -703,7 +714,7 @@ func writeBinaryDatumNotNull(
 		}
 
 	case *tree.DEnum:
-		b.writeLengthPrefixedString(v.LogicalRep)
+		b.writeLengthPrefixedString(v.LogicalRep, len(v.LogicalRep))
 
 	case *tree.DString:
 		writeBinaryString(b, string(*v), t)
@@ -916,7 +927,7 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 		if err != nil {
 			b.setError(err)
 		} else {
-			b.writeLengthPrefixedString(logical)
+			b.writeLengthPrefixedString(logical, len(logical))
 		}
 
 	default:
