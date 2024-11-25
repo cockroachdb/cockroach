@@ -413,8 +413,7 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	data, err := store.MarshalBinary()
 	require.NoError(t, err)
 
-	var store2 InMemoryStore
-	err = store2.UnmarshalBinary(data)
+	store2, err := LoadInMemoryStore(data)
 	require.NoError(t, err)
 
 	require.Len(t, store2.mu.partitions, 2)

@@ -467,24 +467,24 @@ func (s *InMemoryStore) MarshalBinary() (data []byte, err error) {
 	return protoutil.Marshal(&storeProto)
 }
 
-// UnmarshalBinary loads the in-memory store from bytes that were previously
+// LoadInMemoryStore loads the in-memory store from bytes that were previously
 // saved by MarshalBinary.
-func (s *InMemoryStore) UnmarshalBinary(data []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+func LoadInMemoryStore(data []byte) (*InMemoryStore, error) {
 	// Unmarshal bytes into a protobuf.
 	var storeProto StoreProto
 	if err := protoutil.Unmarshal(data, &storeProto); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Construct the InMemoryStore object.
-	s.seed = storeProto.Seed
-	s.mu.partitions = make(map[PartitionKey]*Partition, len(storeProto.Partitions))
-	s.mu.nextKey = storeProto.NextKey
-	s.mu.vectors = make(map[string]vector.T, len(storeProto.Vectors))
-	s.mu.stats = storeProto.Stats
+	inMemStore := &InMemoryStore{
+		dims: storeProto.Dims,
+		seed: storeProto.Seed,
+	}
+	inMemStore.mu.partitions = make(map[PartitionKey]*Partition, len(storeProto.Partitions))
+	inMemStore.mu.nextKey = storeProto.NextKey
+	inMemStore.mu.vectors = make(map[string]vector.T, len(storeProto.Vectors))
+	inMemStore.mu.stats = storeProto.Stats
 
 	raBitQuantizer := quantize.NewRaBitQuantizer(storeProto.Dims, storeProto.Seed)
 	unquantizer := quantize.NewUnQuantizer(storeProto.Dims)
@@ -503,16 +503,16 @@ func (s *InMemoryStore) UnmarshalBinary(data []byte) error {
 			partition.quantizer = unquantizer
 			partition.quantizedSet = partitionProto.UnQuantized
 		}
-		s.mu.partitions[partitionProto.PartitionKey] = &partition
+		inMemStore.mu.partitions[partitionProto.PartitionKey] = &partition
 	}
 
 	// Insert vectors into the in-memory store.
 	for i := range storeProto.Vectors {
 		vectorProto := storeProto.Vectors[i]
-		s.mu.vectors[string(vectorProto.PrimaryKey)] = vectorProto.Vector
+		inMemStore.mu.vectors[string(vectorProto.PrimaryKey)] = vectorProto.Vector
 	}
 
-	return nil
+	return inMemStore, nil
 }
 
 // acquireTxnLock acquires a data or partition lock within the scope of the
