@@ -361,6 +361,7 @@ func (p *ScheduledProcessor) Register(
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
 			r.Disconnect(kvpb.NewError(err))
+			r.drainAllocations(ctx)
 			p.reg.Unregister(ctx, r)
 		}
 		return f
