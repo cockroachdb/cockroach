@@ -26,6 +26,7 @@ import "gogoproto/gogo.proto";
 //
 // For the ReplicaState persisted on the Replica, all optional fields are
 // populated (i.e. no nil pointers or enums with the default value).
+// Exception: TruncatedState is nil.
 message ReplicaState {
   option (gogoproto.equal) = true;
 
@@ -48,6 +49,16 @@ message ReplicaState {
   // as part of ReplicatedEvalResult.
   roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
+  //
+  // Since v25.1, this field can only be used in ReplicatedEvalResult, for
+  // proposals that were evaluated before V25_1_MoveRaftTruncatedState version
+  // gate. Everywhere else it is set to nil. The log truncation state is stored
+  // in a separate unreplicated rangeID-local key, and Replica maintains a
+  // separate RaftTruncatedState in memory.
+  //
+  // TODO(#97613): finalize moving this field out of the ReplicaState. Remove it
+  // when v25.1 version gates are removed, and all the historical entries have
+  // been compacted out of raft logs.
   RaftTruncatedState truncated_state = 5;
   // GCThreshold is the GC threshold of the Range, typically updated when keys
   // are garbage collected. Reads and writes at timestamps <= this time will
