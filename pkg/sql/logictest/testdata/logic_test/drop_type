@@ -100,9 +100,13 @@ CREATE TYPE t AS ENUM ('hello');
 statement ok
 ALTER TABLE t1 ADD COLUMN x STRING;
 
+# This is skipped for the legacy schema changer because in that mode there isn't
+# any support for alter column types that require a backfill.
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t1 ALTER COLUMN x SET DATA TYPE t USING x::t
 
+skipif config local-legacy-schema-changer
 statement error pq: cannot drop type "t" because other objects \(\[test.public.t1\]\) still depend on it
 DROP TYPE t
 

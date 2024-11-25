@@ -87,21 +87,30 @@ func NewNonNullViolationError(columnName string) error {
 }
 
 func NewAlterColumnTypeColOwnsSequenceNotSupportedErr() error {
-	return unimplemented.NewWithIssuef(
-		48244, "ALTER COLUMN TYPE for a column that owns a sequence "+
-			"is currently not supported")
+	return errors.WithHint(
+		unimplemented.NewWithIssuef(
+			48244, "ALTER COLUMN TYPE requiring a rewrite of on-disk data is "+
+				"not supported for columns that own a sequence"),
+		"Consider modifying the sequence to assign a different column as its owner.",
+	)
 }
 
 func NewAlterColumnTypeColWithConstraintNotSupportedErr() error {
-	return unimplemented.NewWithIssuef(
-		48288, "ALTER COLUMN TYPE for a column that has a constraint "+
-			"is currently not supported")
+	return errors.WithHint(
+		unimplemented.NewWithIssuef(
+			48288, "ALTER COLUMN TYPE requiring a rewrite of on-disk data is "+
+				"not supported for columns that have constraints"),
+		"Consider temporarily dropping the constraint.",
+	)
 }
 
 func NewAlterColumnTypeColInIndexNotSupportedErr() error {
-	return unimplemented.NewWithIssuef(
-		47636, "ALTER COLUMN TYPE requiring rewrite of on-disk "+
-			"data is currently not supported for columns that are part of an index")
+	return errors.WithHint(
+		unimplemented.NewWithIssuef(
+			47636, "ALTER COLUMN TYPE requiring rewrite of on-disk "+
+				"data is currently not supported for columns that are part of an index"),
+		"Consider modifying the index.",
+	)
 }
 
 // NewInvalidAssignmentCastError creates an error that is used when a mutation
@@ -309,8 +318,8 @@ func NewDependentBlocksOpError(op, objType, objName, dependentType, dependentNam
 
 func NewAlterColTypeInCombinationNotSupportedError() error {
 	return unimplemented.NewWithIssuef(
-		49351, "ALTER COLUMN TYPE cannot be used in combination "+
-			"with other ALTER TABLE commands")
+		49351, "ALTER COLUMN TYPE operations that require rewriting on-disk "+
+			"data cannot be combined with other ALTER TABLE commands")
 }
 
 const PrimaryIndexSwapDetail = `CRDB's implementation for "ADD COLUMN", "DROP COLUMN", and "ALTER PRIMARY KEY" will drop the old/current primary index and create a new one.`
