@@ -1926,11 +1926,12 @@ func (rpcCtx *Context) wrapCtx(
 	if remoteNodeID == 0 {
 		rnodeID = redact.SafeString("?")
 	}
-	ctx = logtags.AddTag(ctx, RemoteNodeTag, rnodeID)
-	ctx = logtags.AddTag(ctx, RemoteAddressTag, target)
-	ctx = logtags.AddTag(ctx, Class, class)
-	ctx = logtags.AddTag(ctx, RpcTag, nil)
-	return ctx
+	l := &logtags.Buffer{}
+	l = l.Add(RemoteNodeTag, rnodeID)
+	l = l.Add(RemoteAddressTag, target)
+	l = l.Add(Class, class)
+	l = l.Add(RpcTag, nil)
+	return logtags.AddTags(ctx, l)
 }
 
 // grpcDialRaw connects to the remote node.
