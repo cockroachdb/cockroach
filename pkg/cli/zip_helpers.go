@@ -299,6 +299,33 @@ func (fs *fileSelection) isIncluded(filename string, ctime, mtime time.Time) boo
 	return true
 }
 
+// shouldIncludeFile determine whether the given file name is included in the selection based on
+// include & exclude patterns.
+func (fs *fileSelection) shouldIncludeFile(filename string) bool {
+	// To be included, a file must be included in at least one of the retrieval patterns.
+	included := false
+	for _, p := range fs.retrievalPatterns() {
+		if matched, _ := filepath.Match(p, filename); matched {
+			included = true
+			break
+		}
+	}
+	if !included {
+		return false
+	}
+	// Then it must not match any of the exclusion patterns.
+	for _, p := range fs.excludePatterns {
+		if matched, _ := filepath.Match(p, filename); matched {
+			included = false
+			break
+		}
+	}
+	if !included {
+		return false
+	}
+	return true
+}
+
 // to prevent interleaved output.
 var zipReportingMu syncutil.Mutex
 
