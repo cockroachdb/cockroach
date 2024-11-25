@@ -2258,6 +2258,12 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 		"CREATE UNIQUE INDEX unique_idx ON tab(composite_col)",
 	)
 
+	// Dropping the table is blocked.
+	dbA.ExpectErr(t,
+		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
+		"DROP TABLE tab",
+	)
+
 	// Creating triggers is also blocked.
 	dbA.ExpectErr(t,
 		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
