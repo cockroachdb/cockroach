@@ -1,0 +1,36 @@
+/* setup */
+CREATE TABLE t (
+    id INT PRIMARY KEY,
+    data INT,
+    INDEX idx (data)
+);
+
+/* test */
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 12;
+EXPLAIN (DDL) ALTER INDEX t@idx CONFIGURE ZONE USING num_replicas = 10;
+----
+Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CONFIGURE ZONE USING ‹num_replicas› = ‹10›; following ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›; ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹12›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 2 (idx), SeqNum: 1}
+ │         └── 1 Mutation operation
+ │              └── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 3 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
+      │    │    ├── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 2}
+      │    │    └── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 2 (idx), SeqNum: 1}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 3 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
+           │    ├── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 2}
+           │    └── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 2 (idx), SeqNum: 1}
+           └── 3 Mutation operations
+                ├── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+                ├── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+                └── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}

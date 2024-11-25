@@ -42,14 +42,18 @@ func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForAdd(
 }
 
 func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForDrop(
-	_ BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	elem := &scpb.NamedRangeZoneConfig{
-		RangeID:    rzo.rangeID,
-		ZoneConfig: rzo.zoneConfig,
-		SeqNum:     rzo.seqNum,
-	}
-	return elem, nil
+	b BuildCtx,
+) ([]scpb.Element, []scpb.Element) {
+	var elems []scpb.Element
+	// Ensure that we drop all elements associated with this named range. This
+	// becomes more relevant in explicit txns -- where there could be multiple
+	// zone config elements associated with this named range with increasing
+	// seqNums.
+	b.QueryByID(rzo.getTargetID()).FilterNamedRangeZoneConfig().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.NamedRangeZoneConfig) {
+			elems = append(elems, e)
+		})
+	return elems, nil
 }
 
 func (rzo *namedRangeZoneConfigObj) checkPrivilegeForSetZoneConfig(

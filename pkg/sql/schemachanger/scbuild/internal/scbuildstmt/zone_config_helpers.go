@@ -59,12 +59,14 @@ type zoneConfigObjBuilder interface {
 	// elements around.
 	getZoneConfigElemForAdd(b BuildCtx) (scpb.Element, []scpb.Element)
 
-	// getZoneConfigElemForDrop retrieves (scpb.Element, []scpb.Element) needed
-	// for dropping the zone config object. The slice of multiple elements
+	// getZoneConfigElemForDrop retrieves ([]scpb.Element, []scpb.Element) needed
+	// for dropping the zone config object. The second slice of multiple elements
 	// to be modified becomes more relevant for subzone configs -- as configuring
 	// the zone on indexes and partitions can shift the subzone spans for other
-	// elements around.
-	getZoneConfigElemForDrop(b BuildCtx) (scpb.Element, []scpb.Element)
+	// elements around. The first slice is used to ensure all references with
+	// varying `seqNum`s for the element are dropped (relevant only in explicit
+	// transactions).
+	getZoneConfigElemForDrop(b BuildCtx) ([]scpb.Element, []scpb.Element)
 
 	// getTargetID returns the target ID of the zone config object. This is either
 	// a database or a table ID.
@@ -168,7 +170,9 @@ func resolvePhysicalTableName(b BuildCtx, n *tree.SetZoneConfig) {
 
 // maybeMultiregionErrorWithHint returns an error if the user is trying to
 // update a zone config value that's protected for multi-region databases.
-func maybeMultiregionErrorWithHint(b BuildCtx, zco zoneConfigObject, options tree.KVOptions) error {
+func maybeMultiregionErrorWithHint(
+	b BuildCtx, zco zoneConfigObject, zs tree.ZoneSpecifier, options tree.KVOptions,
+) error {
 	hint := "to override this error, SET override_multi_region_zone_config = true and reissue the command"
 	// The request is to discard the zone configuration. Error in cases where
 	// the zone configuration being discarded was created by the multi-region
@@ -182,7 +186,7 @@ func maybeMultiregionErrorWithHint(b BuildCtx, zco zoneConfigObject, options tre
 			needToError = true
 		} else {
 			var err error
-			needToError, err = blockDiscardOfZoneConfigForMultiRegionObject(b, zco.getTargetID())
+			needToError, err = blockDiscardOfZoneConfigForMultiRegionObject(b, zs, zco.getTargetID())
 			if err != nil {
 				return err
 			}
@@ -226,8 +230,23 @@ func maybeMultiregionErrorWithHint(b BuildCtx, zco zoneConfigObject, options tre
 // do a more explicit comparison (with a generated zone configuration). If, down
 // the road, the rules around writing zone configurations change, the tests in
 // multi_region_zone_configs will fail and this function will need updating.
-func blockDiscardOfZoneConfigForMultiRegionObject(b BuildCtx, tblID catid.DescID) (bool, error) {
+func blockDiscardOfZoneConfigForMultiRegionObject(
+	b BuildCtx, zs tree.ZoneSpecifier, tblID catid.DescID,
+) (bool, error) {
+	isIndex := zs.TableOrIndex.Index != ""
+	isPartition := zs.Partition != ""
 	tableElems := b.QueryByID(tblID)
+
+	RBRElem := tableElems.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+	if isPartition {
+		// Multi-region abstractions only set partition-level zone configs for
+		// REGIONAL BY ROW tables.
+		return RBRElem != nil, nil
+	} else if isIndex {
+		// Multi-region will never set a zone config on an index, so no need to
+		// error if the user wants to drop the index zone config.
+		return false, nil
+	}
 
 	// It's a table zone config that the user is trying to discard. This
 	// should only be present on GLOBAL and REGIONAL BY TABLE tables in a
@@ -235,7 +254,6 @@ func blockDiscardOfZoneConfigForMultiRegionObject(b BuildCtx, tblID catid.DescID
 	globalElem := tableElems.FilterTableLocalityGlobal().MustGetZeroOrOneElement()
 	primaryRegionElem := tableElems.FilterTableLocalityPrimaryRegion().MustGetZeroOrOneElement()
 	secondaryRegionElem := tableElems.FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
-	RBRElem := tableElems.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
 
 	if globalElem != nil {
 		return true, nil
@@ -1132,7 +1150,6 @@ func prepareZoneConfig(
 	}
 
 	if n.Discard {
-		partialZone.DeleteTableConfig()
 		return nil, partialZone, nil
 	}
 
@@ -1221,7 +1238,7 @@ func isCorrespondingTemporaryIndex(
 	return maybeCorresponding != nil
 }
 
-// getSubzoneSpansWithIdx groups each subzone span by their subzoneIndexs
+// getSubzoneSpansWithIdx groups each subzone span by their subzoneIndexes
 // for a lookup of which subzone spans a particular subzone is referred to by.
 func getSubzoneSpansWithIdx(
 	numSubzones int, newSubzoneSpans []zonepb.SubzoneSpan,
@@ -1243,7 +1260,11 @@ func getSubzoneSpansWithIdx(
 // for existing subzone configs -- with the intent of updating its associated
 // subzone configs due to some other zone config change.
 func constructSideEffectIndexElem(
-	b BuildCtx, zco zoneConfigObject, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
+	b BuildCtx,
+	zco zoneConfigObject,
+	oldSubzoneIdx int32,
+	subzoneSpans []zonepb.SubzoneSpan,
+	subzone zonepb.Subzone,
 ) *scpb.IndexZoneConfig {
 	// Get the most recent seqNum so we can properly update the side
 	// effects.
@@ -1264,6 +1285,7 @@ func constructSideEffectIndexElem(
 		Subzone:      subzone,
 		SubzoneSpans: subzoneSpans,
 		SeqNum:       mostRecentElem.SeqNum + 1,
+		OldIdxRef:    oldSubzoneIdx,
 	}
 	return elem
 }
@@ -1274,7 +1296,11 @@ func constructSideEffectIndexElem(
 // configs -- with the intent of updating its associated subzone configs due to
 // some other zone config change.
 func constructSideEffectPartitionElem(
-	b BuildCtx, zco zoneConfigObject, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
+	b BuildCtx,
+	zco zoneConfigObject,
+	oldSubzoneIdx int32,
+	subzone zonepb.Subzone,
+	subzoneSpans []zonepb.SubzoneSpan,
 ) *scpb.PartitionZoneConfig {
 	// Get the most recent seqNum so we can properly update the side
 	// effects.
@@ -1297,6 +1323,7 @@ func constructSideEffectPartitionElem(
 		Subzone:       subzone,
 		SubzoneSpans:  subzoneSpans,
 		SeqNum:        mostRecentElem.SeqNum + 1,
+		OldIdxRef:     oldSubzoneIdx,
 	}
 	return elem
 }

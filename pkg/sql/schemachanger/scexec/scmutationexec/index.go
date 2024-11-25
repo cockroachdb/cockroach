@@ -494,13 +494,15 @@ func (m *deferredVisitor) MaybeAddSplitForIndex(
 }
 
 func (i *immediateVisitor) AddIndexZoneConfig(_ context.Context, op scop.AddIndexZoneConfig) error {
-	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(op.TableID, op.Subzone, op.SubzoneSpans)
+	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(
+		op.TableID, op.Subzone, op.SubzoneSpans, op.SubzoneIndexToDelete)
 	return nil
 }
 
 func (i *immediateVisitor) AddPartitionZoneConfig(
 	_ context.Context, op scop.AddPartitionZoneConfig,
 ) error {
-	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(op.TableID, op.Subzone, op.SubzoneSpans)
+	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(
+		op.TableID, op.Subzone, op.SubzoneSpans, op.SubzoneIndexToDelete)
 	return nil
 }

@@ -1,0 +1,28 @@
+/* setup */
+CREATE TABLE t (
+    id INT PRIMARY KEY,
+    data INT,
+    INDEX idx (data)
+);
+
+/* test */
+EXPLAIN (DDL) ALTER INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
+----
+Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
+ │         └── 1 Mutation operation
+ │              └── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── PUBLIC → ABSENT IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── ABSENT → PUBLIC IndexZoneConfig:{DescID: 104 (t), IndexID: 1 (t_pkey), SeqNum: 1}
+           └── 1 Mutation operation
+                └── AddIndexZoneConfig {"SubzoneIndexToDelete":-1,"TableID":104}

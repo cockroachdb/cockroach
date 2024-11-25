@@ -82,14 +82,14 @@ type ImmediateMutationStateUpdater interface {
 	UpdateZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig)
 
 	// UpdateSubzoneConfig upserts a subzone config.
-	UpdateSubzoneConfig(
-		tableid descpb.ID,
-		subzone zonepb.Subzone,
-		subzoneSpans []zonepb.SubzoneSpan,
-	)
+	UpdateSubzoneConfig(tableID descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan, idxRefToDelete int32)
 
 	// DeleteZoneConfig deletes the zone config for the given ID.
 	DeleteZoneConfig(id descpb.ID)
+
+	// DeleteSubzoneConfig deletes the given subzone config for the given table
+	// ID.
+	DeleteSubzoneConfig(tableID descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan)
 
 	// Reset schedules a reset of the in-txn catalog state
 	// to undo the modifications from earlier stages.
