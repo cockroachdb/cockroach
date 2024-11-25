@@ -331,6 +331,66 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 	return resp.resumeKey, err
 }
 
+func (s *fileSSTSink) writeKey(
+	ctx context.Context,
+	prefix []byte,
+	key storage.MVCCKey,
+	value storage.MVCCValue,
+	start hlc.Timestamp,
+	end hlc.Timestamp,
+) error {
+	// Initialize the writer if needed.
+	if s.out == nil {
+		if err := s.open(ctx); err != nil {
+			return err
+		}
+	}
+	prefixedKey := key
+	prefixedKey.Key = append(prefix, prefixedKey.Key...)
+	// In the case of compaction, we only keep one flushed file in memory since we are not dealing with
+	// export responses from KV.
+	if len(s.flushedFiles) == 0 {
+		f := backuppb.BackupManifest_File{
+			Span: roachpb.Span{
+				Key:    prefixedKey.Key,
+				EndKey: prefixedKey.Key,
+			},
+			StartTime: start,
+			EndTime:   end,
+			Path:      s.outName,
+		}
+		s.flushedFiles = append(s.flushedFiles, f)
+	} else {
+		// We should only have one flushed file in memory.
+		if len(s.flushedFiles) > 1 {
+			return errors.AssertionFailedf("expected only one flushed file in memory, found %d", len(s.flushedFiles))
+		}
+		s.flushedFiles[0].Span.EndKey = prefixedKey.Key
+	}
+	s.flushedRevStart.Forward(start)
+
+	if err := s.sst.PutMVCC(key, value); err != nil {
+		return err
+	}
+	s.flushedSize = s.sst.DataSize
+	s.completedSpans = 1
+	endRowKey, err := keys.EnsureSafeSplitKey(key.Key)
+	if err != nil {
+		return err
+	}
+	s.midRow = !endRowKey.Equal(key.Key)
+	if s.flushedSize > targetFileSize.Get(s.conf.settings) && !s.midRow {
+		s.stats.sizeFlushes++
+		log.VEventf(ctx, 2, "flushing backup file %s with size %d", s.outName, s.flushedSize)
+		if err := s.flushFile(ctx); err != nil {
+			return err
+		}
+	} else {
+		log.VEventf(ctx, 3, "continuing to write to backup file %s of size %d", s.outName, s.flushedSize)
+	}
+	return nil
+}
+
 // adjustFileEndKey checks if the export respsonse end key can be used as a
 // split point during restore. If the end key is not splitable (i.e. it splits
 // two column families in the same row), the function will attempt to adjust the

@@ -286,7 +286,7 @@ func inputReader(
 
 type mergedSST struct {
 	entry        execinfrapb.RestoreSpanEntry
-	iter         *storage.ReadAsOfIterator
+	iter         storage.SimpleMVCCIterator
 	cleanup      func()
 	completeUpTo hlc.Timestamp
 }
@@ -301,7 +301,7 @@ type resumeEntry struct {
 func (rd *restoreDataProcessor) openSSTs(
 	ctx context.Context, entry execinfrapb.RestoreSpanEntry, resume *resumeEntry,
 ) (mergedSST, *resumeEntry, error) {
-	// TODO(msbutler): use a a map of external storage factories to avoid reopening the same dir
+	// TODO(msbutler): use a a eap of external storage factories to avoid reopening the same dir
 	// in a given restore span entry
 	var dirs []cloud.ExternalStorage
 

@@ -618,3 +618,43 @@ func ResolveBackupManifests(
 	}
 	return validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, totalMemSize, nil
 }
+
+// ResolveBackupSubdir returns the resolved base full backup subdirectory from a specified sub-directory.
+// subdir may be a specified path or the string "LATEST" to resolve the latest subdirectory.
+func ResolveBackupSubdir(
+	ctx context.Context, p sql.JobExecContext, mainFullBackupURI string, subdir string,
+) (string, error) {
+	if strings.EqualFold(subdir, backupbase.LatestFileName) {
+		latest, err := ReadLatestFile(ctx, mainFullBackupURI, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+		if err != nil {
+			return "", err
+		}
+		return latest, nil
+	}
+	return subdir, nil
+}
+
+// ResolveBackupDirs resolves the sub-directory, base backup directory, and incremental backup directories for a
+// backup collection. incrementalURIs may be empty if an incremental location is not specified. subdir can be a resolved
+// sub-directory or the string "LATEST" to resolve the latest sub-directory.
+func ResolveBackupDirs(
+	ctx context.Context,
+	p sql.JobExecContext,
+	collectionURIs []string,
+	incrementalURIs []string,
+	subdir string,
+) (resolvedBaseDirs,
+	resolvedIncDirs []string, resolvedSubdir string, err error) {
+	resolvedSubdir, err = ResolveBackupSubdir(ctx, p, collectionURIs[0], subdir)
+	if err != nil {
+		return
+	}
+	resolvedBaseDirs, err = backuputils.AppendPaths(collectionURIs[:], resolvedSubdir)
+	if err != nil {
+		return
+	}
+	resolvedIncDirs, err = ResolveIncrementalsBackupLocation(
+		ctx, p.User(), p.ExecCfg(), incrementalURIs, collectionURIs, resolvedSubdir,
+	)
+	return
+}

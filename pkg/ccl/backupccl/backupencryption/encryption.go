@@ -348,7 +348,21 @@ func GetEncryptionFromBase(
 			return nil, err
 		}
 		defer exportStore.Close()
-		opts, err := ReadEncryptionOptions(ctx, exportStore)
+		return GetEncryptionFromBaseStore(ctx, exportStore, encryptionParams, kmsEnv)
+	}
+	return encryptionOptions, nil
+}
+
+// GetEncryptionFromBaseStore retrieves the encryption options of the base backup store.
+func GetEncryptionFromBaseStore(
+	ctx context.Context,
+	baseStore cloud.ExternalStorage,
+	encryptionParams jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (*jobspb.BackupEncryptionOptions, error) {
+	var encryptionOptions *jobspb.BackupEncryptionOptions
+	if encryptionParams.Mode != jobspb.EncryptionMode_None {
+		opts, err := ReadEncryptionOptions(ctx, baseStore)
 		if err != nil {
 			return nil, err
 		}
