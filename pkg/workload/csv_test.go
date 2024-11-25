@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
-	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 )
 
 func TestHandleCSV(t *testing.T) {
@@ -74,7 +73,7 @@ func BenchmarkWriteCSVRows(b *testing.B) {
 	defer cancel()
 
 	var batches []coldata.Batch
-	for _, table := range tpcc.FromWarehouses(1).Tables() {
+	for _, table := range bank.FromRows(1000).Tables() {
 		cb := coldata.NewMemBatch(nil /* types */, coldata.StandardColumnFactory)
 		var a bufalloc.ByteAllocator
 		table.InitialRows.FillBatch(0, cb, &a)
