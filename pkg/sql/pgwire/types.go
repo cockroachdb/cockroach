@@ -102,18 +102,38 @@ func writeTextUUID(b *writeBuffer, v uuid.UUID) {
 }
 
 func writeTextString(b *writeBuffer, s string, t *types.T) {
-	if paddingNeeded([]byte(s), t) {
-		b.writePaddedData([]byte(s), t)
+	if paddingNeeded(len(s), t) {
+		// Add t.Width() as length prefix.
+		b.writeLengthPrefixedString(s, t.Width())
+
+		remainingPadLength := int(t.Width()) - len(s)
+		applyPadding(b, remainingPadLength)
 	} else {
-		b.writeLengthPrefixedString(s)
+		b.writeLengthPrefixedString(s, int32(len(s)))
 	}
 }
 
-func paddingNeeded(v []byte, t *types.T) bool {
+// paddingNeeded checks if we are using a blank padded char type and
+// if the input is shorter then the specified width from t.Width().
+func paddingNeeded(inputLength int, t *types.T) bool {
 	blankPaddedCharType := t.Oid() == oid.T_bpchar
-	paddingNeeded := len(v) < int(t.Width())
+	paddingNeeded := inputLength < int(t.Width())
 
 	return blankPaddedCharType && paddingNeeded
+}
+
+// applyPadding applies padding (in the form of blanks spaces)
+// to the right of the values inside the write buffer
+// to fill all the remaining width from t.Width().
+func applyPadding(b *writeBuffer, remainingPadLength int) {
+	for remainingPadLength > 0 {
+		padChunkLength := min(remainingPadLength, len(spaces))
+
+		padChunk := spaces[:padChunkLength]
+		b.write(padChunk)
+
+		remainingPadLength -= padChunkLength
+	}
 }
 
 func writeTextTimestamp(b *writeBuffer, v time.Time) {
@@ -194,7 +214,7 @@ func writeTextDatumNotNull(
 		writeTextUUID(b, v.UUID)
 
 	case *tree.DIPAddr:
-		b.writeLengthPrefixedString(v.IPAddr.String())
+		b.writeLengthPrefixedString(v.IPAddr.String(), int32(len(v.IPAddr.String())))
 
 	case *tree.DString:
 		writeTextString(b, string(*v), t)
@@ -252,7 +272,7 @@ func writeTextDatumNotNull(
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case *tree.DJSON:
-		b.writeLengthPrefixedString(v.JSON.String())
+		b.writeLengthPrefixedString(v.JSON.String(), int32(len(v.JSON.String())))
 
 	case *tree.DTSQuery:
 		b.textFormatter.FormatNode(v)
@@ -282,7 +302,7 @@ func writeTextDatumNotNull(
 
 	case *tree.DEnum:
 		// Enums are serialized with their logical representation.
-		b.writeLengthPrefixedString(v.LogicalRep)
+		b.writeLengthPrefixedString(v.LogicalRep, int32(len(v.LogicalRep)))
 
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
@@ -343,7 +363,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 		d := vecs.DecimalCols[colIdx].Get(rowIdx)
 		// The logic here is the simplification of tree.DDecimal.Format given
 		// that we use tree.FmtSimple.
-		b.writeLengthPrefixedString(d.String())
+		b.writeLengthPrefixedString(d.String(), int32(len(d.String())))
 
 	case types.BytesFamily:
 		writeTextBytes(
@@ -377,7 +397,8 @@ func (b *writeBuffer) writeTextColumnarElement(
 		b.writeFromFmtCtx(b.textFormatter)
 
 	case types.JsonFamily:
-		b.writeLengthPrefixedString(vecs.JSONCols[colIdx].Get(rowIdx).String())
+		jsonRowString := vecs.JSONCols[colIdx].Get(rowIdx).String()
+		b.writeLengthPrefixedString(jsonRowString, int32(len(jsonRowString)))
 
 	case types.EnumFamily:
 		// Enums are serialized with their logical representation.
@@ -385,7 +406,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 		if err != nil {
 			b.setError(err)
 		} else {
-			b.writeLengthPrefixedString(logical)
+			b.writeLengthPrefixedString(logical, int32(len(logical)))
 		}
 
 	default:
@@ -538,8 +559,13 @@ func writeBinaryBytes(b *writeBuffer, v []byte, t *types.T) {
 		v = []byte{0}
 	}
 
-	if paddingNeeded(v, t) {
-		b.writePaddedData(v, t)
+	if paddingNeeded(len(v), t) {
+		// Add t.Width() as length prefix.
+		b.writeLengthPrefixedByteSlice(v, t.Width())
+
+		remainingPadLength := int(t.Width()) - len(v)
+		applyPadding(b, remainingPadLength)
+		// writePaddedData(b, v, t)
 	} else {
 		b.writeLengthPrefixedByteSlice(v, int32(len(v)))
 	}
@@ -552,10 +578,14 @@ func writeBinaryString(b *writeBuffer, s string, t *types.T) {
 		s = string([]byte{0})
 	}
 
-	if paddingNeeded([]byte(s), t) {
-		b.writePaddedData([]byte(s), t)
+	if paddingNeeded(len(s), t) {
+		// Add t.Width() as length prefix.
+		b.writeLengthPrefixedString(s, t.Width())
+
+		remainingPadLength := int(t.Width()) - len(s)
+		applyPadding(b, remainingPadLength)
 	} else {
-		b.writeLengthPrefixedString(s)
+		b.writeLengthPrefixedString(s, int32(len(s)))
 	}
 }
 
@@ -703,7 +733,7 @@ func writeBinaryDatumNotNull(
 		}
 
 	case *tree.DEnum:
-		b.writeLengthPrefixedString(v.LogicalRep)
+		b.writeLengthPrefixedString(v.LogicalRep, int32(len(v.LogicalRep)))
 
 	case *tree.DString:
 		writeBinaryString(b, string(*v), t)
@@ -916,7 +946,7 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 		if err != nil {
 			b.setError(err)
 		} else {
-			b.writeLengthPrefixedString(logical)
+			b.writeLengthPrefixedString(logical, int32(len(logical)))
 		}
 
 	default:
