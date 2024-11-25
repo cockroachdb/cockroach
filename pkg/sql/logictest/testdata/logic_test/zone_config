@@ -414,3 +414,39 @@ statement ok
 ALTER TABLE seq CONFIGURE ZONE USING gc.ttlseconds = 100000;
 
 subtest end
+
+subtest txn_zone_config
+
+skipif config local-mixed-24.2 local-mixed-24.3
+statement ok
+SET use_declarative_schema_changer = unsafe_always;
+
+skipif config 3node-tenant-default-configs
+statement ok
+BEGIN;
+ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 8;
+ALTER RANGE meta CONFIGURE ZONE DISCARD;
+ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 7;
+ALTER RANGE meta CONFIGURE ZONE USING gc.ttlseconds = 10000;
+COMMIT;
+
+skipif config 3node-tenant-default-configs
+query TI colnames
+WITH settings AS (
+    SELECT
+      (crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'numReplicas') AS replicas,
+      ((crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'gc') ->> 'ttlSeconds')::INT AS ttl
+    FROM system.zones
+    -- 16 is the ID for the meta range
+    WHERE id = 16
+)
+SELECT *
+FROM settings;
+----
+replicas  ttl
+7         10000
+
+statement ok
+RESET use_declarative_schema_changer;
+
+subtest end

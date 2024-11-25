@@ -1,0 +1,9 @@
+/* setup */
+
+/* test */
+ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 7;
+ALTER RANGE meta CONFIGURE ZONE USING gc.ttlseconds = 10000;
+EXPLAIN (DDL, SHAPE) ALTER RANGE meta CONFIGURE ZONE DISCARD;
+----
+Schema change plan for ALTER RANGE ‹meta› CONFIGURE ZONE DISCARD; following ALTER RANGE ‹meta› CONFIGURE ZONE USING ‹num_replicas› = ‹7›; ALTER RANGE ‹meta› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›;
+ └── execute 1 system table mutations transaction

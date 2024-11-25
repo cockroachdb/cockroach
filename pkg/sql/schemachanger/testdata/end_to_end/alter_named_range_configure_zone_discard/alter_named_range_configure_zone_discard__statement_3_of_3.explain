@@ -1,0 +1,20 @@
+/* setup */
+
+/* test */
+ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 7;
+ALTER RANGE meta CONFIGURE ZONE USING gc.ttlseconds = 10000;
+EXPLAIN (DDL) ALTER RANGE meta CONFIGURE ZONE DISCARD;
+----
+Schema change plan for ALTER RANGE ‹meta› CONFIGURE ZONE DISCARD; following ALTER RANGE ‹meta› CONFIGURE ZONE USING ‹num_replicas› = ‹7›; ALTER RANGE ‹meta› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT NamedRangeZoneConfig:{DescID: 16 (#16), SeqNum: 1}
+ │         │    └── PUBLIC → ABSENT NamedRangeZoneConfig:{DescID: 16 (#16), SeqNum: 2}
+ │         └── 2 Mutation operations
+ │              ├── DiscardNamedRangeZoneConfig {"RangeName":"meta"}
+ │              └── DiscardNamedRangeZoneConfig {"RangeName":"meta"}
+ └── PreCommitPhase
+      └── Stage 1 of 1 in PreCommitPhase
+           └── 1 Mutation operation
+                └── UndoAllInTxnImmediateMutationOpSideEffects
