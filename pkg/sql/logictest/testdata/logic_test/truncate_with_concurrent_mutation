@@ -79,32 +79,6 @@ TRUNCATE TABLE t4;
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = '';
 
-# Make sure table cannot be truncated when there is concurrent column type
-# change.
-statement ok
-CREATE TABLE t5(a int primary key, b int);
-
-statement ok
-SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec,newschemachanger.before.exec';
-
-onlyif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
-statement ok
-SET enable_experimental_alter_column_type_general = true;
-
-statement error pq: job \d+ was paused before it completed with reason: pause point
-ALTER TABLE t5 ALTER COLUMN b TYPE STRING;
-
-# The ALTER COLUMN TYPE operation is now managed by the declarative schema
-# changer. As a result, we no longer perform the computed column swap mutation,
-# which truncate was waiting on. Therefore, we only need to test this in the legacy
-# schema changer.
-onlyif config local-legacy-schema-changer
-statement error pq: unimplemented: cannot perform TRUNCATE on "t5" which has an ongoing column type change
-TRUNCATE TABLE t5;
-
-statement ok
-SET CLUSTER SETTING jobs.debug.pausepoints = '';
-
 # Make sure that table cannot be truncated is there is a ongoing row level TTL
 # change.
 statement ok

@@ -87,13 +87,6 @@ func TestLogic_alias_types(
 	runLogicTest(t, "alias_types")
 }
 
-func TestLogic_alter_column_type(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "alter_column_type")
-}
-
 func TestLogic_alter_database_convert_to_schema(
 	t *testing.T,
 ) {

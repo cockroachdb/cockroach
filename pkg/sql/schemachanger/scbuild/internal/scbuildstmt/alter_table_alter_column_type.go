@@ -107,8 +107,7 @@ func alterTableAlterColumnType(
 	case schemachange.ColumnConversionGeneral:
 		handleGeneralColumnConversion(b, stmt, t, tn, tbl, col, oldColType, &newColType)
 	default:
-		panic(scerrors.NotImplementedErrorf(t,
-			"alter type conversion %v not handled", kind))
+		panic(errors.AssertionFailedf("alter type conversion %v not handled", kind))
 	}
 }
 
@@ -266,6 +265,15 @@ func handleGeneralColumnConversion(
 	oldColType, newColType *scpb.ColumnType,
 ) {
 	failIfExperimentalSettingNotSet(b, oldColType, newColType)
+	failIfSafeUpdates(b)
+
+	// TODO(#47137): Only support alter statements that only have a single command.
+	switch s := stmt.(type) {
+	case *tree.AlterTable:
+		if len(s.Cmds) > 1 {
+			panic(sqlerrors.NewAlterColTypeInCombinationNotSupportedError())
+		}
+	}
 
 	// To handle the conversion, we remove the old column and add a new one with
 	// the correct type. The new column will temporarily have a computed expression
@@ -300,14 +308,6 @@ func handleGeneralColumnConversion(
 	for _, keyCol := range getIndexColumns(b.QueryByID(tbl.TableID), pk.IndexID, scpb.IndexColumn_KEY) {
 		if keyCol.ColumnID == col.ColumnID {
 			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
-		}
-	}
-
-	// TODO(#47137): Only support alter statements that only have a single command.
-	switch s := stmt.(type) {
-	case *tree.AlterTable:
-		if len(s.Cmds) > 1 {
-			panic(sqlerrors.NewAlterColTypeInCombinationNotSupportedError())
 		}
 	}
 
@@ -444,6 +444,24 @@ func failIfExperimentalSettingNotSet(b BuildCtx, oldColType, newColType *scpb.Co
 				"you can enable alter column type general support by running "+
 					"`SET enable_experimental_alter_column_type_general = true`"),
 			pgcode.ExperimentalFeature))
+	}
+}
+
+// failIfSafeUpdates checks if the sql_safe_updates is present, and if so, it
+// will fail the operation.
+func failIfSafeUpdates(b BuildCtx) {
+	if b.SessionData().SafeUpdates {
+		panic(
+			pgerror.WithCandidateCode(
+				errors.WithMessage(
+					errors.New(
+						"ALTER COLUMN TYPE requiring data rewrite may result in data loss "+
+							"for certain type conversions or when applying a USING clause"),
+					"rejected (sql_safe_updates = true)",
+				),
+				pgcode.Warning,
+			),
+		)
 	}
 }
 

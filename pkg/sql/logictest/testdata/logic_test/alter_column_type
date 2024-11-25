@@ -1,3 +1,5 @@
+# LogicTest: !local-legacy-schema-changer
+
 # A basic sanity check to demonstrate column type changes.
 subtest SanityCheck
 
@@ -343,7 +345,7 @@ CREATE TABLE t11 (x INT)
 statement ok
 CREATE TABLE t12 (x INT check (x > 0))
 
-statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
+statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported for columns that have constraints
 ALTER TABLE t12 ALTER COLUMN x TYPE STRING
 
 statement ok
@@ -352,7 +354,7 @@ SET experimental_enable_unique_without_index_constraints = true;
 statement ok
 CREATE TABLE uniq (x INT, y INT, UNIQUE WITHOUT INDEX (x, y))
 
-statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
+statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported for columns that have constraints
 ALTER TABLE uniq ALTER COLUMN x TYPE STRING
 
 # Ensure we cannot change the column type of a column stored in a secondary index.
@@ -428,10 +430,10 @@ CREATE TABLE t18 (x INT NOT NULL PRIMARY KEY);
 statement ok
 CREATE TABLE t19 (y INT NOT NULL REFERENCES t18 (x), INDEX(y));
 
-statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
+statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported for columns that have constraints
 ALTER TABLE t18 ALTER COLUMN x TYPE STRING
 
-statement error pq: unimplemented: ALTER COLUMN TYPE for a column that has a constraint is currently not supported
+statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported for columns that have constraints
 ALTER TABLE t19 ALTER COLUMN y TYPE STRING
 
 # Ensure ALTER COLUMN TYPE does not work inside a transaction.
@@ -454,11 +456,14 @@ CREATE TABLE t21 (x INT);
 statement ok
 INSERT INTO t21 VALUES (888),(-32760);
 
-statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
+statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
 ALTER TABLE t21 ALTER COLUMN x TYPE STRING, ALTER COLUMN x SET NOT NULL;
 
-statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
+statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
 ALTER TABLE t21 ALTER COLUMN x TYPE VARCHAR(30), ALTER COLUMN x SET NOT VISIBLE;
+
+statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
+ALTER TABLE t21 ADD COLUMN y BIGINT, ALTER COLUMN x SET DATA TYPE TEXT;
 
 query TTBTTTB rowsort
 SHOW COLUMNS FROM t21
@@ -472,7 +477,7 @@ CREATE TABLE t22 (x INT);
 statement ok
 INSERT INTO t22 VALUES (0),(-5);
 
-statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
+statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
 ALTER TABLE t22 ALTER COLUMN x SET NOT NULL, ALTER COLUMN x TYPE STRING;
 
 query TTBTTTB rowsort
@@ -910,8 +915,13 @@ CREATE TABLE T1_FOR_SEQ (C1 INT);
 statement ok
 CREATE SEQUENCE SEQ1 OWNED BY T1_FOR_SEQ.C1;
 
-statement error pq: unimplemented: ALTER COLUMN TYPE for a column that owns a sequence is currently not supported
+statement error pq: unimplemented: ALTER COLUMN TYPE requiring a rewrite of on-disk data is not supported for columns that own a sequence
 ALTER TABLE T1_FOR_SEQ ALTER COLUMN C1 SET DATA TYPE TEXT;
+
+# Changes that don't rewrite the data are allowed though
+skipif config local-mixed-24.2
+statement ok
+ALTER TABLE T1_FOR_SEQ ALTER COLUMN C1 SET DATA TYPE SMALLINT
 
 statement ok
 DROP TABLE T1_FOR_SEQ CASCADE;
@@ -940,7 +950,7 @@ ALTER TABLE t_bytes ALTER COLUMN c1 SET DATA TYPE STRING;
 # When the above alter is done in the legacy schema changer, the column is
 # rewritten, but with different result. The correct one is from the
 # declarative schema changer. So we skip when running the legacy schema changer.
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query T
 SELECT c1 FROM t_bytes ORDER BY c1;
 ----
@@ -950,7 +960,7 @@ hello
 # The legacy schema changer doesn't properly handle this case. It will actually
 # allow it, which is wrong. So we expect success for legacy, but correctly fail
 # for dsc.
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bytes ALTER COLUMN c2 SET DATA TYPE CHAR(4);
 
@@ -981,7 +991,7 @@ ALTER TABLE t_bytes ALTER COLUMN c3 SET DATA TYPE UUID USING c3::UUID;
 # The alter of C2 will produce different output depending on the schema changer.
 # The output for the the dsc is correct, but wrong for legacy. So, skipping if
 # legacy.
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query TT
 SELECT c2,c3 FROM t_bytes ORDER BY c1;
 ----
@@ -1095,14 +1105,14 @@ SELECT c1,c2,c3,c4,c5 FROM t_bit_string ORDER BY pk;
 NULL  NULL  NULL   NULL   NULL
 
 # Skip for the legacy schema changer as it doesn't allow multiple alters in one statement.
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bit_string ALTER COLUMN c1 SET DATA TYPE BIT(4), ALTER COLUMN c2 SET DATA TYPE VARBIT(4);
 
 statement ok
 UPDATE t_bit_string SET C2=B'1010' WHERE pk = 1;
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement ok
 ALTER TABLE t_bit_string ALTER COLUMN c1 SET DATA TYPE VARBIT(8), ALTER COLUMN c2 SET DATA TYPE VARBIT(4);
 
@@ -1134,7 +1144,7 @@ ALTER TABLE t_bit_string ALTER COLUMN c3 SET DATA TYPE BYTES USING C3::BYTES;
 
 # Skipping this for legacy since it allows the data type conversion when it
 # shouldn't be allowed.
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bit_string ALTER COLUMN c4 SET DATA TYPE CHAR(4);
 
@@ -1158,7 +1168,7 @@ NULL  NULL  NULL   NULL   NULL
 
 # Change c5 from VARCHAR(30) to CHAR(6). This is erroneously allowed in the
 # legacy schema changer so skipping in that mode.
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: validation of CHECK ".*" failed on row.*
 ALTER TABLE t_bit_string ALTER COLUMN c5 SET DATA TYPE CHAR(6);
 
@@ -1299,7 +1309,7 @@ SHOW COLUMNS FROM t_many;
 c1     INT2   true   NULL            ·  {t_many_pkey}  false
 rowid  INT8   false  unique_rowid()  ·  {t_many_pkey}  true
 
-statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
+statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
 alter table t_many alter column c1 set not null, alter column c1 set data type VARCHAR(10) using concat(c1::text, 'boo');
 
 statement ok
@@ -1390,23 +1400,18 @@ SELECT * FROM stored1 ORDER BY A;
 statement ok
 INSERT INTO stored1 VALUES (2147483648),(2147483647);
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: validate check constraint: integer out of range for type int4
-ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
-
-# Legacy blocks the type conversion entirely for computed columns
-onlyif config local-legacy-schema-changer
-statement error pq: unimplemented: ALTER COLUMN TYPE requiring an on-disk data rewrite with the legacy schema changer is not supported for computed columns
 ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
 
 statement ok
 DELETE FROM stored1 WHERE a = 2147483648;
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement ok
 ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1417,7 +1422,6 @@ stored1  CREATE TABLE public.stored1 (
            FAMILY f1 (a, comp1)
          )
 
-skipif config local-legacy-schema-changer
 query II
 SELECT * FROM stored1 ORDER BY A;
 ----
@@ -1427,25 +1431,25 @@ SELECT * FROM stored1 ORDER BY A;
 2000 2000
 2147483647  2147483647
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 # Attempt to convert to a type that is incompatible with the computed expression
 statement error pq: expected STORED COMPUTED COLUMN expression to have type bool, but 'a' has type int
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE BOOL;
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: expected STORED COMPUTED COLUMN expression to have type string, but 'a' has type int
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE TEXT;
 
 # Convert the type to something compatible, but specify a custom value for the
 # column with the USING expression. This will force a type conversion with a backfill.
-skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
+skipif config local-mixed-24.2 local-mixed-24.3
 statement ok
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT2 USING -1;
 
 statement ok
 INSERT INTO stored1 VALUES (-1000);
 
-skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
+skipif config local-mixed-24.2 local-mixed-24.3
 query TT
 SHOW CREATE TABLE stored1;
 ----
@@ -1456,7 +1460,7 @@ stored1  CREATE TABLE public.stored1 (
            FAMILY f1 (a, comp1)
          )
 
-skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
+skipif config local-mixed-24.2 local-mixed-24.3
 query II
 SELECT * FROM stored1 ORDER BY A;
 ----
@@ -1468,8 +1472,8 @@ SELECT * FROM stored1 ORDER BY A;
 2147483647  -1
 
 # Attempt to drop stored along with changing the column type
-skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
-statement error pq: unimplemented: ALTER COLUMN TYPE cannot be used in combination with other ALTER TABLE commands
+skipif config local-mixed-24.2 local-mixed-24.3
+statement error pq: unimplemented: ALTER COLUMN TYPE operations that require rewriting on-disk data cannot be combined with other ALTER TABLE commands
 ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT4 USING -1, ALTER COLUMN comp1 drop stored;
 
 statement ok
@@ -1487,18 +1491,18 @@ INSERT INTO virt1 VALUES (100), (2147483647);
 statement error pq: type change for virtual column "v1" cannot be altered with a USING expression
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT4 USING 10;
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement ok
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT4;
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query II
 SELECT * from virt1 ORDER BY c1;
 ----
 100 100
 2147483647 2147483647
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query TT
 SHOW CREATE TABLE virt1;
 ----
@@ -1508,28 +1512,28 @@ virt1      CREATE TABLE public.virt1 (
              CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
            )
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: validate check constraint: integer out of range for type int2
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
 
 statement ok
 DELETE FROM virt1 WHERE c1 = 2147483647;
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement ok
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
 
 statement ok
 INSERT INTO virt1 VALUES (-9999);
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query II
 SELECT * from virt1 ORDER BY c1;
 ----
 -9999 -9999
 100 100
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query TT
 SHOW CREATE TABLE virt1;
 ----
@@ -1539,11 +1543,11 @@ virt1      CREATE TABLE public.virt1 (
              CONSTRAINT virt1_pkey PRIMARY KEY (c1 ASC)
            )
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: expected STORED COMPUTED COLUMN expression to have type string, but 'c1' has type int
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE TEXT;
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: expected STORED COMPUTED COLUMN expression to have type float, but 'c1' has type int
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE FLOAT;
 
@@ -1615,11 +1619,11 @@ SELECT * FROM virt3 ORDER BY c1;
 1.235 1.235
 12.346 12.346
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement ok
 ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(6,2);
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query TT
 SELECT * FROM virt3 ORDER BY c1;
 ----
@@ -1627,7 +1631,7 @@ SELECT * FROM virt3 ORDER BY c1;
 1.235 1.24
 12.346 12.35
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query TT
 SHOW CREATE TABLE virt3;
 ----
@@ -1637,15 +1641,15 @@ virt3      CREATE TABLE public.virt3 (
              CONSTRAINT virt3_pkey PRIMARY KEY (c1 ASC)
            )
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: validate check constraint: .*value with precision 5, scale 4 must round to an absolute value less than 10\^1
 ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(5,4);
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement ok
 ALTER TABLE virt3 ALTER COLUMN v1 SET DATA TYPE DECIMAL(8,4);
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query TT
 SELECT * FROM virt3 ORDER BY c1;
 ----
@@ -1653,7 +1657,7 @@ SELECT * FROM virt3 ORDER BY c1;
 1.235 1.2350
 12.346 12.3460
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 query TT
 SHOW CREATE TABLE virt3;
 ----
@@ -1672,7 +1676,6 @@ subtest alter_dropped_col
 let $schema_changer_state
 SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
 
-skipif config local-legacy-schema-changer
 statement ok
 set use_declarative_schema_changer = 'unsafe_always';
 
@@ -1685,12 +1688,8 @@ begin;
 statement ok
 alter table t_droppedcol drop column dropme;
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-mixed-24.2
 statement error pq: column "dropme" does not exist
-alter table t_droppedcol alter column dropme set data type text;
-
-onlyif config local-legacy-schema-changer
-statement error pq: column "dropme" in the middle of being dropped
 alter table t_droppedcol alter column dropme set data type text;
 
 statement ok
