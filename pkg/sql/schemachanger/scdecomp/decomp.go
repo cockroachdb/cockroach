@@ -154,7 +154,6 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 		w.ev(scpb.Status_PUBLIC, &scpb.DatabaseZoneConfig{
 			DatabaseID: db.GetID(),
 			ZoneConfig: zoneConfig.ZoneConfigProto(),
-			SeqNum:     0,
 		})
 	}
 }
@@ -434,7 +433,6 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 				&scpb.TableZoneConfig{
 					TableID:    tbl.GetID(),
 					ZoneConfig: zc,
-					SeqNum:     0,
 				})
 			for i, subZoneCfg := range zc.Subzones {
 				if len(subZoneCfg.PartitionName) > 0 {
@@ -445,7 +443,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 							PartitionName: subZoneCfg.PartitionName,
 							Subzone:       subZoneCfg,
 							SubzoneSpans:  zc.FilterSubzoneSpansByIdx(int32(i)),
-							SeqNum:        0,
+							OldIdxRef:     -1,
 						})
 				} else {
 					w.ev(scpb.Status_PUBLIC,
@@ -454,7 +452,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 							IndexID:      catid.IndexID(subZoneCfg.IndexID),
 							Subzone:      subZoneCfg,
 							SubzoneSpans: zc.FilterSubzoneSpansByIdx(int32(i)),
-							SeqNum:       0,
+							OldIdxRef:    -1,
 						})
 				}
 			}
@@ -1048,7 +1046,6 @@ func WalkNamedRanges(
 		w.ev(scpb.Status_PUBLIC, &scpb.NamedRangeZoneConfig{
 			RangeID:    rangeID,
 			ZoneConfig: zoneConfig.ZoneConfigProto(),
-			SeqNum:     0,
 		})
 	}
 }

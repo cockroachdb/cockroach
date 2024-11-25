@@ -1,0 +1,12 @@
+/* setup */
+CREATE TABLE t (
+    id INT PRIMARY KEY,
+    data INT,
+    INDEX idx (data)
+);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
+----
+Schema change plan for ALTER INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›;
+ └── execute 1 system table mutations transaction

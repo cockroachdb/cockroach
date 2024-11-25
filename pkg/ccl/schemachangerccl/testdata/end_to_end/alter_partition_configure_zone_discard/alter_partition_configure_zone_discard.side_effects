@@ -1,0 +1,82 @@
+/* setup */
+CREATE TABLE t (
+    id INT PRIMARY KEY,
+    data STRING
+) PARTITION BY LIST (id) (
+    PARTITION p1 VALUES IN (1, 2, 3),
+    PARTITION p2 VALUES IN (4, 5, 6)
+);
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
+ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 12;
+ALTER PARTITION p2 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 10;
+ALTER PARTITION p1 OF INDEX t@t_pkey CONFIGURE ZONE DISCARD;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 11
+    target: PARTITION p1 OF INDEX defaultdb.public.t@t_pkey
+  resolvedOldConfig: 'inherited_constraints:false null_voter_constraints_is_empty:false inherited_lease_preferences:false '
+  sql:
+    descriptorId: 104
+    statement: ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹11›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #104
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 12
+    target: PARTITION p1 OF INDEX defaultdb.public.t@t_pkey
+  resolvedOldConfig: 'inherited_constraints:false null_voter_constraints_is_empty:false inherited_lease_preferences:false '
+  sql:
+    descriptorId: 104
+    statement: ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹12›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #104
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 10
+    target: PARTITION p2 OF INDEX defaultdb.public.t@t_pkey
+  resolvedOldConfig: 'inherited_constraints:false null_voter_constraints_is_empty:false inherited_lease_preferences:false '
+  sql:
+    descriptorId: 104
+    statement: ALTER PARTITION ‹p2› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹10›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #104
+checking for feature: CONFIGURE ZONE
+write *eventpb.RemoveZoneConfig to event log:
+  config:
+    target: PARTITION p1 OF INDEX defaultdb.public.t@t_pkey
+  sql:
+    descriptorId: 104
+    statement: ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE DISCARD
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 1 MutationType op
+upsert zone config for #104
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

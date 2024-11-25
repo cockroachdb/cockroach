@@ -1002,11 +1002,31 @@ type AddDatabaseZoneConfig struct {
 	ZoneConfig zonepb.ZoneConfig
 }
 
-// DiscardZoneConfig discards the zone config for the given descriptor ID.
+// DiscardZoneConfig discards the zone config for the given ID. For table IDs,
+// we use DiscardTableZoneConfig as some extra work is needed for subzones.
 type DiscardZoneConfig struct {
 	immediateMutationOp
-	DescID     descpb.ID
+	DescID descpb.ID
+}
+
+// DiscardTableZoneConfig discards the zone config for the given table ID. If
+// the table has subzones, we mark the table's zone config as a subzone
+// placeholder.
+type DiscardTableZoneConfig struct {
+	immediateMutationOp
+	TableID    descpb.ID
 	ZoneConfig *zonepb.ZoneConfig
+}
+
+// DiscardSubzoneConfig discards the subzone config for the given descriptor ID.
+// If this is the only subzone for the table, we delete the entry from
+// system.zones.
+type DiscardSubzoneConfig struct {
+	immediateMutationOp
+	TableID              descpb.ID
+	Subzone              zonepb.Subzone
+	SubzoneSpans         []zonepb.SubzoneSpan
+	SubzoneIndexToDelete int32
 }
 
 // AddTableZoneConfig adds a zone config to a table.
@@ -1019,15 +1039,17 @@ type AddTableZoneConfig struct {
 // AddIndexZoneConfig adds a zone config to an index.
 type AddIndexZoneConfig struct {
 	immediateMutationOp
-	TableID      descpb.ID
-	Subzone      zonepb.Subzone
-	SubzoneSpans []zonepb.SubzoneSpan
+	TableID              descpb.ID
+	Subzone              zonepb.Subzone
+	SubzoneSpans         []zonepb.SubzoneSpan
+	SubzoneIndexToDelete int32
 }
 
 // AddPartitionZoneConfig adds a zone config to a partition.
 type AddPartitionZoneConfig struct {
 	immediateMutationOp
-	TableID      descpb.ID
-	Subzone      zonepb.Subzone
-	SubzoneSpans []zonepb.SubzoneSpan
+	TableID              descpb.ID
+	Subzone              zonepb.Subzone
+	SubzoneSpans         []zonepb.SubzoneSpan
+	SubzoneIndexToDelete int32
 }

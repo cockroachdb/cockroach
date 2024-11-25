@@ -43,14 +43,17 @@ func (dzo *databaseZoneConfigObj) getZoneConfigElemForAdd(
 }
 
 func (dzo *databaseZoneConfigObj) getZoneConfigElemForDrop(
-	_ BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	elem := &scpb.DatabaseZoneConfig{
-		DatabaseID: dzo.databaseID,
-		ZoneConfig: dzo.zoneConfig,
-		SeqNum:     dzo.seqNum,
-	}
-	return elem, nil
+	b BuildCtx,
+) ([]scpb.Element, []scpb.Element) {
+	var elems []scpb.Element
+	// Ensure that we drop all elements associated with this database. This
+	// becomes more relevant in explicit txns -- where there could be multiple
+	// zone config elements associated with this database with increasing seqNums.
+	b.QueryByID(dzo.getTargetID()).FilterDatabaseZoneConfig().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DatabaseZoneConfig) {
+			elems = append(elems, e)
+		})
+	return elems, nil
 }
 
 func (dzo *databaseZoneConfigObj) checkPrivilegeForSetZoneConfig(
@@ -102,7 +105,7 @@ func (dzo *databaseZoneConfigObj) checkZoneConfigChangePermittedForMultiRegion(
 		return nil
 	}
 
-	return maybeMultiregionErrorWithHint(b, dzo, options)
+	return maybeMultiregionErrorWithHint(b, dzo, zs, options)
 }
 
 func (dzo *databaseZoneConfigObj) getTargetID() catid.DescID {

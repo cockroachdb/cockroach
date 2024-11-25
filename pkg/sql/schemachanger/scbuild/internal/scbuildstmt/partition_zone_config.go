@@ -75,13 +75,16 @@ func (pzo *partitionZoneConfigObj) getZoneConfigElemForAdd(
 						PartitionName: sub.PartitionName,
 						Subzone:       sub,
 						SubzoneSpans:  spans,
+						OldIdxRef:     -1,
 						SeqNum:        pzo.seqNum + 1,
 					}
 				} else {
-					szCfgsToUpdate = append(szCfgsToUpdate, constructSideEffectPartitionElem(b, pzo, sub, spans))
+					szCfgsToUpdate = append(szCfgsToUpdate,
+						constructSideEffectPartitionElem(b, pzo, -1, sub, spans))
 				}
 			} else {
-				szCfgsToUpdate = append(szCfgsToUpdate, constructSideEffectIndexElem(b, pzo, sub, spans))
+				szCfgsToUpdate = append(szCfgsToUpdate,
+					constructSideEffectIndexElem(b, pzo, -1, spans, sub))
 			}
 		}
 	}
@@ -91,10 +94,86 @@ func (pzo *partitionZoneConfigObj) getZoneConfigElemForAdd(
 
 func (pzo *partitionZoneConfigObj) getZoneConfigElemForDrop(
 	b BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	// TODO(annie): this will need to be revised in order to implement subzone
-	// discards. This is fine for now as we fallback before we can get here.
-	return pzo.getZoneConfigElemForAdd(b)
+) ([]scpb.Element, []scpb.Element) {
+	var subzonesToWrite []zonepb.Subzone
+	var err error
+
+	parentZoneConfig := pzo.getTableZoneConfig()
+	if parentZoneConfig != nil {
+		// Get the list of subzones after we have dropped the target; this is so we
+		// can correctly generate the list of subzone spans to upsert.
+		modifiedZc := protoutil.Clone(parentZoneConfig).(*zonepb.ZoneConfig)
+		modifiedZc.DeleteSubzone(uint32(pzo.indexID), pzo.partitionName)
+		subzonesToWrite = modifiedZc.Subzones
+	} else {
+		// Likely in an explicit txn that has not created an overarching
+		// TableZoneConfig yet.
+		var toDropElems []scpb.Element
+		// Ensure that we drop all elements associated with this partition. This
+		// becomes more relevant in explicit txns -- where there could be multiple
+		// zone config elements associated with this partition with increasing
+		// seqNums.
+		b.QueryByID(pzo.getTargetID()).FilterPartitionZoneConfig().
+			ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.PartitionZoneConfig) {
+				if e.PartitionName == pzo.partitionName && e.IndexID == pzo.indexID {
+					toDropElems = append(toDropElems, e)
+				}
+			})
+
+		if len(toDropElems) == 0 {
+			panic(errors.AssertionFailedf(
+				"attempted to drop subzone config for table [%d], partition %s of index %d that "+
+					"does not exist", pzo.tableID, pzo.partitionName, pzo.indexID))
+		}
+		return toDropElems, nil
+	}
+	ss, err := generateSubzoneSpans(b, pzo.tableID, subzonesToWrite)
+	if err != nil {
+		panic(err)
+	}
+
+	// TODO(annie): This does a little more work than necessary -- we should be
+	// able to just update the affected subzone spans. This can be done by
+	// comparing the parent's subzone spans with `ss`.
+	//
+	// Update the partition that is represented by pzo, along with all other
+	// subzones. These other subzones are "side effects" that will need their
+	// subzoneSpans updated in some way.
+	idxToSpansMap := getSubzoneSpansWithIdx(len(subzonesToWrite), ss)
+	var szCfgsToUpdate []scpb.Element
+	for i, sub := range subzonesToWrite {
+		if spans, ok := idxToSpansMap[int32(i)]; ok {
+			oldIdxRefToDelete := parentZoneConfig.GetSubzoneIndex(sub.IndexID, sub.PartitionName)
+			if len(sub.PartitionName) > 0 {
+				szCfgsToUpdate = append(szCfgsToUpdate,
+					constructSideEffectPartitionElem(b, pzo, oldIdxRefToDelete, sub, spans))
+			} else {
+				szCfgsToUpdate = append(szCfgsToUpdate,
+					constructSideEffectIndexElem(b, pzo, oldIdxRefToDelete, spans, sub))
+			}
+		}
+	}
+
+	var toDropElems []scpb.Element
+	if pzo.seqNum > 0 {
+		for i := range pzo.seqNum {
+			toDropElems = append(toDropElems, &scpb.PartitionZoneConfig{
+				TableID:       pzo.tableID,
+				IndexID:       pzo.indexID,
+				PartitionName: pzo.partitionName,
+				SeqNum:        i + 1,
+			})
+		}
+	} else {
+		toDropElems = append(toDropElems, &scpb.PartitionZoneConfig{
+			TableID:       pzo.tableID,
+			IndexID:       pzo.indexID,
+			PartitionName: pzo.partitionName,
+			SeqNum:        0,
+		})
+	}
+
+	return toDropElems, szCfgsToUpdate
 }
 
 func (pzo *partitionZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {
@@ -226,6 +305,11 @@ func (pzo *partitionZoneConfigObj) applyZoneConfig(
 	subzonePlaceholder := false
 	// No zone was found. Possibly a SubzonePlaceholder depending on the index.
 	if partialZone == nil {
+		// If we are trying to discard a zone config that doesn't exist in
+		// system.zones, make this a no-op.
+		if n.Discard {
+			return nil, nil
+		}
 		partialZone = zonepb.NewZoneConfig()
 		subzonePlaceholder = true
 	}

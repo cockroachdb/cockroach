@@ -12,11 +12,25 @@ import (
 )
 
 func (i *immediateVisitor) DiscardZoneConfig(ctx context.Context, op scop.DiscardZoneConfig) error {
+	i.ImmediateMutationStateUpdater.DeleteZoneConfig(op.DescID)
+	return nil
+}
+
+func (i *immediateVisitor) DiscardTableZoneConfig(
+	ctx context.Context, op scop.DiscardTableZoneConfig,
+) error {
 	zc := op.ZoneConfig
 	if zc.IsSubzonePlaceholder() && len(zc.Subzones) == 0 {
-		i.ImmediateMutationStateUpdater.DeleteZoneConfig(op.DescID)
+		i.ImmediateMutationStateUpdater.DeleteZoneConfig(op.TableID)
 	} else {
-		i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.DescID, zc)
+		i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.TableID, zc)
 	}
+	return nil
+}
+
+func (i *immediateVisitor) DiscardSubzoneConfig(
+	ctx context.Context, op scop.DiscardSubzoneConfig,
+) error {
+	i.ImmediateMutationStateUpdater.DeleteSubzoneConfig(op.TableID, op.Subzone, op.SubzoneSpans)
 	return nil
 }
