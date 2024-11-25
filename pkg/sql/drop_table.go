@@ -71,6 +71,10 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 
 	for _, toDel := range td {
 		droppedDesc := toDel.desc
+		// Disallow the DROP if this table's schema is locked.
+		if err := checkSchemaChangeIsAllowed(droppedDesc, n); err != nil {
+			return nil, err
+		}
 		for _, fk := range droppedDesc.InboundForeignKeys() {
 			if _, ok := td[fk.GetOriginTableID()]; !ok {
 				if err := p.canRemoveFKBackreference(ctx, droppedDesc.Name, fk, n.DropBehavior); err != nil {

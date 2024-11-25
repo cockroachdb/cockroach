@@ -32,6 +32,7 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 			b.MarkNameAsNonExistent(name)
 			continue
 		}
+		panicIfSchemaChangeIsDisallowed(elts, n)
 		// Mutate the AST to have the fully resolved name from above, which will be
 		// used for both event logging and errors.
 		name.ObjectNamePrefix = b.NamePrefix(tbl)

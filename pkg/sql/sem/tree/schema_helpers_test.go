@@ -74,6 +74,10 @@ func TestIsAllowedLDRSchemaChange(t *testing.T) {
 			stmt:      "ALTER TABLE t RESET (ttl, ttl_expiration_expression)",
 			isAllowed: false,
 		},
+		{
+			stmt:      "DROP TABLE t",
+			isAllowed: false,
+		},
 	} {
 		t.Run(tc.stmt, func(t *testing.T) {
 			stmt, err := parser.ParseOne(tc.stmt)
