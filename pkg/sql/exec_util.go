@@ -780,7 +780,13 @@ var (
 	}
 	MetaDistSQLSelect = metric.Metadata{
 		Name:        "sql.distsql.select.count",
-		Help:        "Number of DistSQL SELECT statements",
+		Help:        "Number of SELECT statements planned to be distributed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaDistSQLSelectDistributed = metric.Metadata{
+		Name:        "sql.distsql.select.distributed_exec.count",
+		Help:        "Number of SELECT statements that were distributed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
