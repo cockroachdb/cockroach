@@ -430,13 +430,12 @@ func loadStore(fileName string) *vecstore.InMemoryStore {
 		panic(err)
 	}
 
-	var inMemStore vecstore.InMemoryStore
-	err = inMemStore.UnmarshalBinary(data)
+	inMemStore, err := vecstore.LoadInMemoryStore(data)
 	if err != nil {
 		panic(err)
 	}
 
-	return &inMemStore
+	return inMemStore
 }
 
 // loadDataset deserializes a dataset saved as a gob file.
