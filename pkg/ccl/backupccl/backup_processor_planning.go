@@ -54,13 +54,13 @@ func distBackupPlanSpecs(
 	var introducedSpanPartitions []sql.SpanPartition
 	var err error
 	if len(spans) > 0 {
-		spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, spans)
+		spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, spans, sql.PartitionSpansBoundDefault)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if len(introducedSpans) > 0 {
-		introducedSpanPartitions, err = dsp.PartitionSpans(ctx, planCtx, introducedSpans)
+		introducedSpanPartitions, err = dsp.PartitionSpans(ctx, planCtx, introducedSpans, sql.PartitionSpansBoundDefault)
 		if err != nil {
 			return nil, err
 		}
