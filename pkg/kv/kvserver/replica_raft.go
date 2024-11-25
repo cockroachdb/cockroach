@@ -1158,26 +1158,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if app.Commit != 0 && !r.IsInitialized() {
 				log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s", r)
 			}
-			// TODO(pavelkalinnikov): construct and store this in Replica.
-			// TODO(pavelkalinnikov): fields like raftEntryCache are the same across all
-			// ranges, so can be passed to LogStore methods instead of being stored in it.
-			s := logstore.LogStore{
-				RangeID:     r.RangeID,
-				Engine:      r.store.TODOEngine(),
-				Sideload:    r.raftMu.sideloaded,
-				StateLoader: r.raftMu.stateLoader.StateLoader,
-				// NOTE: we use the same SyncWaiter callback loop for all raft log
-				// writes performed by a given range. This ensures that callbacks are
-				// processed in order.
-				SyncWaiter: r.store.syncWaiters[int(r.RangeID)%len(r.store.syncWaiters)],
-				EntryCache: r.store.raftEntryCache,
-				Settings:   r.store.cfg.Settings,
-				Metrics: logstore.Metrics{
-					RaftLogCommitLatency: r.store.metrics.RaftLogCommitLatency,
-				},
-				DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
-					r.store.TestingKnobs().DisableSyncLogWriteToss,
-			}
 			// TODO(pav-kv): make this branch unconditional.
 			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
 				// Enqueue raft log entries into admission queues. This is
@@ -1198,7 +1178,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 
 			r.mu.raftTracer.MaybeTrace(msgStorageAppend)
-			if state, err = s.StoreEntries(ctx, state, app, cb, &stats.append); err != nil {
+			if state, err = r.raftMu.logStorage.StoreEntries(
+				ctx, state, app, cb, &stats.append,
+			); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
 		}
