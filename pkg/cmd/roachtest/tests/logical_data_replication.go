@@ -293,8 +293,8 @@ func TestLDRSchemaChange(
 	// and right sides.
 	setup.left.sysSQL.Exec(t, fmt.Sprintf("CREATE INDEX idx_left ON %s.%s(v, k)", ldrWorkload.dbName, ldrWorkload.tableNames[0]))
 	setup.right.sysSQL.Exec(t, fmt.Sprintf("CREATE INDEX idx_right ON %s.%s(v, k)", ldrWorkload.dbName, ldrWorkload.tableNames[0]))
-	setup.left.sysSQL.Exec(t, "DROP INDEX idx_left")
-	setup.right.sysSQL.Exec(t, "DROP INDEX idx_right")
+	setup.left.sysSQL.Exec(t, fmt.Sprintf("DROP INDEX %s.%s@idx_left", ldrWorkload.dbName, ldrWorkload.tableNames[0]))
+	setup.right.sysSQL.Exec(t, fmt.Sprintf("DROP INDEX %s.%s@idx_right", ldrWorkload.dbName, ldrWorkload.tableNames[0]))
 
 	// Verify that a non-allowlisted schema change fails.
 	setup.left.sysSQL.ExpectErr(t,
