@@ -121,7 +121,7 @@ func DeleteTableWithPredicate(
 							delRangeRequest)
 
 						if err != nil {
-							log.Errorf(ctx, "delete range %s - %s failed: %s", span.Key, span.EndKey, err.String())
+							log.Errorf(ctx, "delete range %s - %s failed: %v", span.Key, span.EndKey, err)
 							return errors.Wrapf(err.GoError(), "delete range %s - %s", span.Key, span.EndKey)
 						}
 						span = nil
