@@ -442,6 +442,13 @@ type Replica struct {
 	shMu struct {
 		// The state of the Raft state machine.
 		state kvserverpb.ReplicaState
+		// raftTruncState contains the raft log truncation state, i.e. the ID of the
+		// last entry of the log prefix that has been compacted out from the raft
+		// log storage.
+		//
+		// Invariant: raftTruncState == *state.TruncatedState.
+		// TODO(pav-kv): remove state.TruncatedState.
+		raftTruncState kvserverpb.RaftTruncatedState
 		// Last index/term written to the raft log (not necessarily durable locally
 		// or committed by the group). Note that lastTermNotDurable may be 0 (and
 		// thus invalid) even when lastIndexNotDurable is known, in which case the
@@ -1731,6 +1738,10 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	ctx context.Context, reader storage.Reader,
 ) {
+	if ts := r.shMu.state.TruncatedState; ts == nil || *ts != r.shMu.raftTruncState {
+		log.Fatalf(ctx, "TruncatedState mismatch: %+v vs %+v", ts, r.shMu.raftTruncState)
+	}
+
 	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.shMu.state.Desc)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
