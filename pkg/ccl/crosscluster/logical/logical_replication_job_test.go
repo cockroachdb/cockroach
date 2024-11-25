@@ -493,6 +493,34 @@ func TestRestoreFromLDR(t *testing.T) {
 	dbC.CheckQueryResults(t, "SELECT * FROM tab", [][]string{{"1", "hello", "2"}})
 }
 
+func TestImportIntoLDR(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dataDir, dirCleanupFunc := testutils.TempDir(t)
+	defer dirCleanupFunc()
+	args := testClusterBaseClusterArgs
+	args.ServerArgs.ExternalIODir = dataDir
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, args, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+
+	var jobBID jobspb.JobID
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
+	dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab", dbAURL.String()).Scan(&jobBID)
+
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+
+	dbA.Exec(t, "EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM tab;")
+	dbA.ExpectErr(t, "which is apart of a Logical Data Replication stream", "IMPORT INTO tab CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')")
+
+	dbB.ExpectErr(t, "which is apart of a Logical Data Replication stream", "IMPORT INTO tab CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')")
+}
+
 func TestLogicalStreamIngestionErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
