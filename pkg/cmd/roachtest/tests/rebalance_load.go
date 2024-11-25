@@ -80,8 +80,6 @@ func registerRebalanceLoad(r registry.Registry) {
 		appNode := c.Node(c.Spec().NodeCount)
 		numNodes := len(roachNodes)
 		numStores := numNodes
-		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
-			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		if c.Spec().SSDs > 1 && !c.Spec().RAID0 {
 			numStores *= c.Spec().SSDs
 			startOpts.RoachprodOpts.StoreCount = c.Spec().SSDs
