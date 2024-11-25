@@ -1240,7 +1240,7 @@ func TestGRPCDeadlinePropagation(t *testing.T) {
 	require.Nil(t, err)
 	require.Nil(t, cs.SendMsg(&kvpb.BatchRequest{}))
 	var br kvpb.BatchResponse
-	require.Nil(t, cs.RecvMsg(&br))
+	require.NoError(t, cs.RecvMsg(&br))
 	require.Nil(t, cs.CloseSend())
 
 	// The server should have heard about the deadline, and it should be nearly

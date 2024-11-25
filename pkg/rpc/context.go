@@ -1685,7 +1685,9 @@ func (c growStackCodec) Unmarshal(data []byte, v interface{}) error {
 // Install the growStackCodec over the default proto codec in order to grow the
 // stack for BatchRequest RPCs prior to unmarshaling.
 func init() {
-	encoding.RegisterCodec(growStackCodec{Codec: codec{}})
+	encoding.RegisterCodec(gobCodec{fallbackCodec: codec{}})
+	//encoding.RegisterCodec(growStackCodec{Codec: codec{}})
+
 }
 
 // onlyOnceDialer implements the grpc.WithDialer interface but only

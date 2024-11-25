@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -22,7 +23,7 @@ import (
 func TestCodecMarshalUnmarshal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testCodec := codec{}
+	testCodec := gobCodec{fallbackCodec: codec{}}
 	for _, test := range []struct {
 		name             string
 		filledMsgBuilder func() interface{}
@@ -55,6 +56,17 @@ func TestCodecMarshalUnmarshal(t *testing.T) {
 				}
 			},
 			func() interface{} { return &kvpb.GetRequest{} }},
+		{"kvpb.BatchRequest",
+			func() interface{} {
+				b := &kvpb.BatchRequest{
+					Header: kvpb.Header{
+						Timestamp: hlc.Timestamp{WallTime: 1234},
+					},
+				}
+				b.Add(kvpb.NewScan(roachpb.Key("a"), roachpb.Key("b")))
+				return b
+			},
+			func() interface{} { return &kvpb.BatchRequest{} }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			input := test.filledMsgBuilder()
@@ -62,7 +74,8 @@ func TestCodecMarshalUnmarshal(t *testing.T) {
 			marshaled, err := testCodec.Marshal(input)
 			require.NoError(t, err, "marshal failed")
 			output := test.emptyMsgBuilder()
-			t.Logf("unmarshaling")
+			require.NotEmpty(t, marshaled)
+			t.Logf("unmarshaling %d bytes", len(marshaled))
 			err = testCodec.Unmarshal(marshaled, output)
 			require.NoError(t, err, "unmarshal failed")
 			// reflect.DeepEqual/require.Equal can fail
