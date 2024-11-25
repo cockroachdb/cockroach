@@ -830,8 +830,8 @@ func (dsp *DistSQLPlanner) Run(
 
 	log.VEvent(ctx, 2, "running DistSQL plan")
 
-	dsp.distSQLSrv.ServerConfig.Metrics.QueryStart()
-	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
+	dsp.distSQLSrv.ServerConfig.Metrics.RunStart(len(flows) > 1 /* distributed */)
+	defer dsp.distSQLSrv.ServerConfig.Metrics.RunStop()
 
 	recv.outputTypes = plan.GetResultTypes()
 	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&dsp.st.SV) &&
@@ -858,6 +858,9 @@ func (dsp *DistSQLPlanner) Run(
 				dsp.cancelFlowsCoordinator.addFlowsToCancel(flows)
 			}
 		}()
+		if planCtx.planner != nil {
+			planCtx.planner.curPlan.flags.Set(planFlagDistributedExecution)
+		}
 	}
 
 	// Currently, we get the statement only if there is a planner available in
