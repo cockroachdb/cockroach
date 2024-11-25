@@ -470,9 +470,9 @@ func dropRaftMessagesFrom(
 			DropStoreLivenessMsg: func(msg *storelivenesspb.Message) bool {
 				drop := shouldDropFromStore(msg.From.StoreID)
 				if drop {
-					t.Logf("dropping msg %s from store %d: to %d", msg.Type, msg.From.StoreID, msg.To.StoreID)
+					t.Logf("dropping StoreLiveness msg %s from store %d: to %d", msg.Type, msg.From.StoreID, msg.To.StoreID)
 				} else {
-					t.Logf("allowing msg %s from store %d: to %d", msg.Type, msg.From.StoreID, msg.To.StoreID)
+					t.Logf("allowing StoreLiveness msg %s from store %d: to %d", msg.Type, msg.From.StoreID, msg.To.StoreID)
 				}
 				return drop
 			},
