@@ -3471,6 +3471,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.RaftLeaderInvalidLeaseCount.Update(raftLeaderInvalidLeaseCount)
 	s.metrics.RaftLeaderNotFortifiedCount.Update(raftLeaderNotFortifiedCount)
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
+	if leaseExpirationCount != 0 {
+		log.Infof(ctx, "!!!!! here")
+	}
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
 	s.metrics.LeaseLeaderCount.Update(leaseLeaderCount)

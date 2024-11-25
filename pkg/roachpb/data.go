@@ -1990,6 +1990,11 @@ func LeaseTypes() []LeaseType {
 	return []LeaseType{LeaseExpiration, LeaseEpoch, LeaseLeader}
 }
 
+// EpochAndLeaderLeaseType returns a list of {epcoh, leader} lease types.
+func EpochAndLeaderLeaseType() []LeaseType {
+	return []LeaseType{LeaseEpoch, LeaseLeader}
+}
+
 // Type returns the lease type.
 func (l Lease) Type() LeaseType {
 	if l.Epoch != 0 && l.Term != 0 {
