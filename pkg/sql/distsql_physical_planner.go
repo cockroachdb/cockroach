@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"reflect"
 	"sort"
 
@@ -1963,9 +1964,8 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	return sqlInstanceID, nil
 }
 
-func (dsp *DistSQLPlanner) useGossipPlanning(_ context.Context, planCtx *PlanningCtx) bool {
-	// TODO(dt): enable this by default, e.g. // && !dsp.distSQLSrv.Settings.Version.IsActive(ctx, clusterversion.V23_1)
-	return dsp.codec.ForSystemTenant() && planCtx.localityFilter.Empty()
+func (dsp *DistSQLPlanner) useGossipPlanning(ctx context.Context, planCtx *PlanningCtx) bool {
+	return dsp.codec.ForSystemTenant() && planCtx.localityFilter.Empty() && !dsp.distSQLSrv.Settings.Version.IsActive(ctx, clusterversion.V23_1)
 }
 
 // convertOrdering maps the columns in props.ordering to the output columns of a
