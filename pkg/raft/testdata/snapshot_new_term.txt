@@ -33,13 +33,16 @@ transfer-leadership from=1 to=2
 ----
 INFO 1 [term 1] starts to transfer leadership to 2
 INFO 1 sends MsgTimeoutNow to 2 immediately as 2 already has up-to-date log
+DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 1 became follower at term 1
+DEBUG 1 reset election elapsed to 0
 
 stabilize 1 2
 ----
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   State:StateFollower
+  HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   1->2 MsgTimeoutNow Term:1 Log:0/0
 > 2 receiving messages
@@ -60,9 +63,9 @@ stabilize 1 2
   INFO 2 has received 1 MsgVoteResp votes and 0 vote rejections
 > 1 receiving messages
   2->1 MsgVote Term:2 Log:1/11
-  DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 1 [term: 1] received a MsgVote message with higher term from 2 [term: 2], advancing term
   INFO 1 became follower at term 2
+  DEBUG 1 reset election elapsed to 0
   INFO 1 [logterm: 1, index: 11, vote: 0] cast MsgVote for 2 [logterm: 1, index: 11] at term 2
 > 1 handling Ready
   Ready MustSync=true:
@@ -143,6 +146,7 @@ stabilize
   INFO 3 [term: 1] received a MsgSnap message with higher term from 2 [term: 2], new leader indicated, advancing term
   DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 3 became follower at term 2
+  DEBUG 3 reset election elapsed to 0
   INFO log [committed=11, applied=11, applying=11, unstable.offset=12, unstable.offsetInProgress=12, len(unstable.Entries)=0] starts to restore snapshot [index: 12, term: 2]
   INFO 3 switched to configuration voters=(1 2 3)
   INFO 3 [commit: 12, lastindex: 12, lastterm: 2] restored snapshot [index: 12, term: 2]

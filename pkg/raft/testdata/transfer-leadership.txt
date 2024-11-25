@@ -33,13 +33,16 @@ transfer-leadership from=1 to=2
 ----
 INFO 1 [term 1] starts to transfer leadership to 2
 INFO 1 sends MsgTimeoutNow to 2 immediately as 2 already has up-to-date log
+DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 1 became follower at term 1
+DEBUG 1 reset election elapsed to 0
 
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   State:StateFollower
+  HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
   Messages:
   1->2 MsgTimeoutNow Term:1 Log:0/0
 > 2 receiving messages
@@ -60,15 +63,16 @@ stabilize
   INFO 2 has received 1 MsgVoteResp votes and 0 vote rejections
 > 1 receiving messages
   2->1 MsgVote Term:2 Log:1/11
-  DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 1 [term: 1] received a MsgVote message with higher term from 2 [term: 2], advancing term
   INFO 1 became follower at term 2
+  DEBUG 1 reset election elapsed to 0
   INFO 1 [logterm: 1, index: 11, vote: 0] cast MsgVote for 2 [logterm: 1, index: 11] at term 2
 > 3 receiving messages
   2->3 MsgVote Term:2 Log:1/11
   DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 3 [term: 1] received a MsgVote message with higher term from 2 [term: 2], advancing term
   INFO 3 became follower at term 2
+  DEBUG 3 reset election elapsed to 0
   INFO 3 [logterm: 1, index: 11, vote: 0] cast MsgVote for 2 [logterm: 1, index: 11] at term 2
 > 1 handling Ready
   Ready MustSync=true:
@@ -190,13 +194,16 @@ transfer-leadership from=2 to=3
 ----
 INFO 2 [term 2] starts to transfer leadership to 3
 INFO 2 sends MsgTimeoutNow to 3 immediately as 3 already has up-to-date log
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 became follower at term 2
+DEBUG 2 reset election elapsed to 0
 
 stabilize
 ----
 > 2 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   State:StateFollower
+  HardState Term:2 Vote:2 Commit:12 Lead:0 LeadEpoch:0
   Messages:
   2->3 MsgTimeoutNow Term:2 Log:0/0
 > 3 receiving messages
@@ -220,12 +227,13 @@ stabilize
   DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 1 [term: 2] received a MsgVote message with higher term from 3 [term: 3], advancing term
   INFO 1 became follower at term 3
+  DEBUG 1 reset election elapsed to 0
   INFO 1 [logterm: 2, index: 12, vote: 0] cast MsgVote for 3 [logterm: 2, index: 12] at term 3
 > 2 receiving messages
   3->2 MsgVote Term:3 Log:2/12
-  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 2 [term: 2] received a MsgVote message with higher term from 3 [term: 3], advancing term
   INFO 2 became follower at term 3
+  DEBUG 2 reset election elapsed to 0
   INFO 2 [logterm: 2, index: 12, vote: 0] cast MsgVote for 3 [logterm: 2, index: 12] at term 3
 > 1 handling Ready
   Ready MustSync=true:

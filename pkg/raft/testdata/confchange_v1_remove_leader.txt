@@ -138,14 +138,17 @@ stabilize 1
   1->2 MsgApp Term:1 Log:1/8 Commit:7
   1->3 MsgApp Term:1 Log:1/8 Commit:7
   INFO 1 switched to configuration voters=(2 3) learners=(1)
+  DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
   INFO 1 became follower at term 1
+  DEBUG 1 reset election elapsed to 0
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   State:StateFollower
+  HardState Term:1 Vote:1 Commit:7 Lead:0 LeadEpoch:0
 
 raft-state
 ----
-1: StateFollower (Non-Voter) Term:1 Lead:0 LeadEpoch:1
+1: StateFollower (Non-Voter) Term:1 Lead:0 LeadEpoch:0
 2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
 3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:1
 
@@ -206,7 +209,7 @@ stabilize
 # n1 can no longer propose.
 propose 1 baz
 ----
-INFO 1 not forwarding to itself at term 1; dropping proposal
+INFO 1 no leader at term 1; dropping proposal
 raft proposal dropped
 
 # Nor can it campaign to become leader.

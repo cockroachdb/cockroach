@@ -7,15 +7,19 @@ add-nodes 4 voters=(1) index=2 disable-conf-change-validation=true
 ----
 INFO 1 switched to configuration voters=(1)
 INFO 1 became follower at term 0
+DEBUG 1 reset election elapsed to 0
 INFO newRaft 1 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
 INFO 2 switched to configuration voters=(1)
 INFO 2 became follower at term 0
+DEBUG 2 reset election elapsed to 0
 INFO newRaft 2 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
 INFO 3 switched to configuration voters=(1)
 INFO 3 became follower at term 0
+DEBUG 3 reset election elapsed to 0
 INFO newRaft 3 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
 INFO 4 switched to configuration voters=(1)
 INFO 4 became follower at term 0
+DEBUG 4 reset election elapsed to 0
 INFO newRaft 4 [peers: [1], term: 0, commit: 2, applied: 2, lastindex: 2, lastterm: 1]
 
 campaign 1
