@@ -66,34 +66,35 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 22 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
- │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 105 (sq1+)}
- │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (sq1+), Name: "admin"}
- │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (sq1+), Name: "root"}
- │         │    ├── ABSENT → DESCRIPTOR_ADDED Sequence:{DescID: 105 (sq1+)}
- │         │    ├── ABSENT → PUBLIC           SequenceOption:{DescID: 105 (sq1+), Name: "START"}
- │         │    ├── ABSENT → PUBLIC           SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 101 (public)}
- │         │    ├── ABSENT → WRITE_ONLY       Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
- │         │    ├── ABSENT → PUBLIC           ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
- │         │    ├── ABSENT → PUBLIC           ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
- │         │    ├── ABSENT → PUBLIC           ColumnName:{DescID: 105 (sq1+), Name: "value", ColumnID: 1 (value+)}
- │         │    ├── ABSENT → PUBLIC           PrimaryIndex:{DescID: 105 (sq1+), IndexID: 1 (primary+)}
- │         │    ├── ABSENT → PUBLIC           IndexName:{DescID: 105 (sq1+), Name: "primary", IndexID: 1 (primary+)}
- │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
- │         │    ├── ABSENT → DELETE_ONLY      Column:{DescID: 104 (t), ColumnID: 2 (j+)}
- │         │    ├── ABSENT → PUBLIC           ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
- │         │    ├── ABSENT → PUBLIC           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+), TypeName: "INT8"}
- │         │    ├── ABSENT → PUBLIC           ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j+), ReferencedSequenceIDs: [105 (sq1+)], Expr: nextval(105:::REGCLASS)}
- │         │    ├── ABSENT → BACKFILL_ONLY    PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
- │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 2 (t_pkey+)}
- │         │    ├── ABSENT → PUBLIC           IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey+)}
- │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 2 (j+), IndexID: 2 (t_pkey+)}
+ │         ├── 23 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC        Owner:{DescID: 105 (sq1+)}
+ │         │    ├── ABSENT → PUBLIC        UserPrivileges:{DescID: 105 (sq1+), Name: "admin"}
+ │         │    ├── ABSENT → PUBLIC        UserPrivileges:{DescID: 105 (sq1+), Name: "root"}
+ │         │    ├── ABSENT → PUBLIC        Sequence:{DescID: 105 (sq1+)}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+ │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 101 (public)}
+ │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC        Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
+ │         │    ├── ABSENT → PUBLIC        ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
+ │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 105 (sq1+), Name: "value", ColumnID: 1 (value+)}
+ │         │    ├── ABSENT → PUBLIC        PrimaryIndex:{DescID: 105 (sq1+), IndexID: 1 (primary+)}
+ │         │    ├── ABSENT → PUBLIC        IndexName:{DescID: 105 (sq1+), Name: "primary", IndexID: 1 (primary+)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 1 (primary+)}
+ │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 2 (j+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j+), TypeName: "INT8"}
+ │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j+), ReferencedSequenceIDs: [105 (sq1+)], Expr: nextval(105:::REGCLASS)}
+ │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 2 (t_pkey+)}
+ │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey+)}
+ │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j+), IndexID: 2 (t_pkey+)}
  │         ├── 3 elements transitioning toward TRANSIENT_ABSENT
- │         │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
- │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 3}
- │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 2 (j+), IndexID: 3}
- │         └── 37 Mutation operations
+ │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (k), IndexID: 3}
+ │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j+), IndexID: 3}
+ │         └── 40 Mutation operations
  │              ├── CreateSequenceDescriptor {"SequenceID":105}
  │              ├── SetSequenceOptions {"Key":"START","SequenceID":105,"Value":"32"}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":101}}
@@ -125,9 +126,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │              ├── MakeBackfillingIndexDeleteOnly {"IndexID":1,"TableID":105}
  │              ├── MakeValidatedColumnNotNullPublic {"ColumnID":1,"TableID":105}
  │              ├── MakeBackfilledIndexMerging {"IndexID":1,"TableID":105}
+ │              ├── MakeWriteOnlyColumnPublic {"ColumnID":1,"TableID":105}
  │              ├── MakeMergedIndexWriteOnly {"IndexID":1,"TableID":105}
  │              ├── SetIndexName {"IndexID":1,"Name":"primary","TableID":105}
  │              ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":105}
+ │              ├── InitSequence {"SequenceID":105}
+ │              ├── MarkDescriptorAsPublic {"DescriptorID":105}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
@@ -188,10 +192,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │              └── ValidateIndex {"IndexID":2,"TableID":104}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 6 elements transitioning toward PUBLIC
-      │    │    ├── DESCRIPTOR_ADDED      → PUBLIC           Sequence:{DescID: 105 (sq1+)}
-      │    │    ├── ABSENT                → PUBLIC           TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
-      │    │    ├── WRITE_ONLY            → PUBLIC           Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
+      │    ├── 3 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY            → PUBLIC           Column:{DescID: 104 (t), ColumnID: 2 (j+)}
       │    │    ├── VALIDATED             → PUBLIC           PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey-)}
       │    │    └── ABSENT                → PUBLIC           IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 2 (t_pkey+)}
@@ -202,15 +203,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │    ├── 2 elements transitioning toward ABSENT
       │    │    ├── PUBLIC                → VALIDATED        PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    └── PUBLIC                → ABSENT           IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
-      │    └── 15 Mutation operations
-      │         ├── MakeWriteOnlyColumnPublic {"ColumnID":1,"TableID":105}
+      │    └── 12 Mutation operations
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"t_pkey","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":104}
-      │         ├── InitSequence {"SequenceID":105}
-      │         ├── MarkDescriptorAsPublic {"DescriptorID":105}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":104}

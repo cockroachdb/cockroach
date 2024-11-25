@@ -11,6 +11,7 @@ import (
 	"math"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -18,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 // runSampleTest feeds rows with the given ranks through a reservoir
@@ -169,4 +172,47 @@ corn, the green oats, and the haystacks piled up in the meadows looked beautiful
 		t.Fatal(err)
 	}
 	runTest(original4, expected4)
+}
+
+// TestSampleReservoirMemAccounting is a regression test for a bug in the memory
+// accounting that could lead to "no bytes in account to release" error
+// (#128241).
+//
+// In particular, it constructs such sequence of events that we hit the memory
+// budget error in the middle of copying a new row into the reservoir, and then
+// later (before the fix was applied) we pop the partially modified row from it,
+// deviating from the accounting done so far.
+func TestSampleReservoirMemAccounting(t *testing.T) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+
+	getStringDatum := func(l int) rowenc.EncDatum {
+		d := tree.DString(strings.Repeat("a", l))
+		return rowenc.DatumToEncDatum(types.String, &d)
+	}
+	// First two rows need 152 bytes each. The third row has the smallest rank,
+	// so it wants to replace one of the other rows, but it has a large datum
+	// exceeding the memory limit altogether.
+	const memLimit = 304
+	rows := []rowenc.EncDatumRow{
+		{getStringDatum(0), getStringDatum(0)},                 // rank 3
+		{getStringDatum(0), getStringDatum(0)},                 // rank 2
+		{getStringDatum(maxBytesPerSample), getStringDatum(0)}, // rank 1
+	}
+	monitor := mon.NewMonitor(mon.Options{
+		Name:      "test-monitor",
+		Limit:     memLimit,
+		Increment: 1,
+		Settings:  st,
+	})
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
+	memAcc := monitor.MakeBoundAccount()
+	var sr SampleReservoir
+	sr.Init(2, 1, []*types.T{types.String, types.String}, &memAcc, intsets.MakeFast(0, 1))
+	require.NoError(t, sr.SampleRow(ctx, &evalCtx, rows[0], 3))
+	require.NoError(t, sr.SampleRow(ctx, &evalCtx, rows[1], 2))
+	err := sr.SampleRow(ctx, &evalCtx, rows[2], 1)
+	require.Error(t, err)
+	require.True(t, testutils.IsError(err, "memory budget exceeded"))
 }
