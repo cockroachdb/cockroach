@@ -213,8 +213,9 @@ func defaultWorkloadDriver(
 }
 
 type replicateTPCC struct {
-	warehouses int
-	duration   time.Duration
+	warehouses     int
+	duration       time.Duration
+	repairOrderIDs bool
 }
 
 func (tpcc replicateTPCC) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
@@ -231,7 +232,9 @@ func (tpcc replicateTPCC) sourceRunCmd(tenantName string, nodes option.NodeListO
 		Flag("warehouses", tpcc.warehouses).
 		MaybeFlag(tpcc.duration > 0, "duration", tpcc.duration).
 		Option("tolerate-errors").
-		Arg("{pgurl%s:%s}", nodes, tenantName)
+		MaybeOption(tpcc.repairOrderIDs, "repair-order-ids").
+		Arg("{pgurl%s:%s}", nodes, tenantName).
+		WithEqualsSyntax()
 	return cmd.String()
 }
 
