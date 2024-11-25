@@ -3258,16 +3258,6 @@ func (r *Replica) followerSendSnapshot(
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
 
-	// We avoid shipping over the past Raft log in the snapshot by changing the
-	// truncated state (we're allowed to -- it's an unreplicated key and not
-	// subject to mapping across replicas). The actual sending happens in
-	// kvBatchSnapshotStrategy.Send and results in no log entries being sent at
-	// all. Note that Metadata.Index is really the applied index of the replica.
-	snap.State.TruncatedState = &kvserverpb.RaftTruncatedState{
-		Index: kvpb.RaftIndex(snap.RaftSnap.Metadata.Index),
-		Term:  kvpb.RaftTerm(snap.RaftSnap.Metadata.Term),
-	}
-
 	// See comment on DeprecatedUsingAppliedStateKey for why we need to set this
 	// explicitly for snapshots going out to followers.
 	snap.State.DeprecatedUsingAppliedStateKey = true
