@@ -124,7 +124,6 @@ go_library(
         "mixed_version_sql_stats.go",
         "multi_region_system_database.go",
         "multi_store_remove.go",
-        "multiregion_leasing.go",
         "multitenant.go",
         "multitenant_distsql.go",
         "multitenant_shared_process.go",
