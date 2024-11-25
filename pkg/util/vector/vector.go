@@ -271,9 +271,10 @@ func Mult(t T, t2 T) (T, error) {
 	return ret, nil
 }
 
-// Random returns a random vector.
-func Random(rng *rand.Rand) T {
-	n := 1 + rng.Intn(1000)
+// Random returns a random vector with the number of dimensions in [1, maxDim]
+// range.
+func Random(rng *rand.Rand, maxDim int) T {
+	n := 1 + rng.Intn(maxDim)
 	v := make(T, n)
 	for i := range v {
 		for {
