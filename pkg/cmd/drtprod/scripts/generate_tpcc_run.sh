@@ -58,13 +58,13 @@ for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
 
   # Print or use the PGURLS for the current workload node
   echo "pgurl for Nodes ${START_OFFSET}:${END_OFFSET}"
-  PGURLS=$(roachprod pgurl $CLUSTER:$START_OFFSET-$END_OFFSET)
-
 
   # Create the workload script
   cat <<EOF >/tmp/tpcc_run_${suffix}.sh
 #!/usr/bin/env bash
 
+PGURLS=\$(./roachprod pgurl $CLUSTER:$START_OFFSET-$END_OFFSET | sed s/\'//g)
+read -r -a PGURLS_ARR <<< "\$PGURLS"
 j=0
 while true; do
     echo ">> Starting tpcc workload"
@@ -73,7 +73,7 @@ while true; do
     ./cockroach workload run tpcc $@ \
         --tolerate-errors \
         --families \
-         $PGURLS  | tee \$LOG
+         \${PGURLS_ARR[@]}  | tee \$LOG
     if [ \$? -eq 0 ]; then
         rm "\$LOG"
     fi
@@ -85,7 +85,7 @@ EOF
   roachprod put $WORKLOAD_CLUSTER:$((NODE + 1)) /tmp/tpcc_run_${suffix}.sh
   roachprod ssh $WORKLOAD_CLUSTER:$((NODE + 1)) -- "chmod +x tpcc_run_${suffix}.sh"
   if [ "$execute_script" = "true" ]; then
-      roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_run_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_run_${suffix}.sh"
+      roachprod run "${WORKLOAD_CLUSTER}":$((NODE + 1)) -- "sudo systemd-run --unit tpcc_run_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_run_${suffix}.sh"
   else
     echo "Run --> roachprod run "${WORKLOAD_CLUSTER}":$((NODE + 1)) -- \"sudo systemd-run --unit tpcc_run_${suffix} --same-dir --uid \\\$(id -u) --gid \\\$(id -g) bash ${pwd}/tpcc_run_${suffix}.sh\""
     fi
