@@ -520,7 +520,8 @@ func logAppend(
 // which is aware of the current log state.
 func Compact(
 	ctx context.Context,
-	currentTruncatedState, suggestedTruncatedState *kvserverpb.RaftTruncatedState,
+	currentTruncatedState kvserverpb.RaftTruncatedState,
+	suggestedTruncatedState *kvserverpb.RaftTruncatedState,
 	loader StateLoader,
 	readWriter storage.ReadWriter,
 ) (apply bool, _ error) {
