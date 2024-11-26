@@ -43,25 +43,26 @@ func WriteInitialReplicaState(
 	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
 ) (enginepb.MVCCStats, error) {
-	rsl := Make(desc.RangeID)
-	var s kvserverpb.ReplicaState
-	s.TruncatedState = &kvserverpb.RaftTruncatedState{
+	truncState := &kvserverpb.RaftTruncatedState{
 		Term:  RaftInitialLogTerm,
 		Index: RaftInitialLogIndex,
 	}
-	s.RaftAppliedIndex = s.TruncatedState.Index
-	s.RaftAppliedIndexTerm = s.TruncatedState.Term
-	s.Desc = &roachpb.RangeDescriptor{
-		RangeID: desc.RangeID,
+	s := kvserverpb.ReplicaState{
+		RaftAppliedIndex:     truncState.Index,
+		RaftAppliedIndexTerm: truncState.Term,
+		Desc: &roachpb.RangeDescriptor{
+			RangeID: desc.RangeID,
+		},
+		Lease:       &lease,
+		Stats:       &ms,
+		GCThreshold: &gcThreshold,
+		GCHint:      &gcHint,
 	}
-	s.Stats = &ms
-	s.Lease = &lease
-	s.GCThreshold = &gcThreshold
-	s.GCHint = &gcHint
 	if (replicaVersion != roachpb.Version{}) {
 		s.Version = &replicaVersion
 	}
 
+	rsl := Make(desc.RangeID)
 	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
 	} else if (existingLease != roachpb.Lease{}) {
@@ -86,6 +87,11 @@ func WriteInitialReplicaState(
 		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
+	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
+	// the Raft log engine is separated. Figure out the ordering required here.
+	if err := rsl.SetRaftTruncatedState(ctx, readWriter, truncState); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
 	newMS, err := rsl.Save(ctx, readWriter, s)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
