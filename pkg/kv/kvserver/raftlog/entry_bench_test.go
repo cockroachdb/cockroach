@@ -9,9 +9,12 @@ package raftlog
 import (
 	"fmt"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func BenchmarkNewEntry(b *testing.B) {
+	defer leaktest.AfterTest(b)()
 	ent, metaB := mkBenchEnt(b)
 	b.ResetTimer()
 	for _, fromRawValue := range []bool{false, true} {
