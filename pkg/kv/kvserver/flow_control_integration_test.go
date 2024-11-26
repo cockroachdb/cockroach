@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -592,18 +593,16 @@ func TestFlowControlCrashedNode(t *testing.T) {
 	// mechanism below, and for quiesced ranges, that can effectively disable
 	// the last-updated mechanism since quiesced ranges aren't being ticked, and
 	// we only check the last-updated state when ticked. So we disable range
-	// quiescence.
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
-	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
-
+	// quiescence by turning on leader leases, regardless of any metamorphism.
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+	// Using a manual clock here ensures that StoreLiveness support, once
+	// established, never expires. By extension, leadership should stay sticky.
+	manualClock := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
 			RaftConfig: base.RaftConfig{
-				// Suppress timeout-based elections. This test doesn't want to
-				// deal with leadership changing hands.
-				RaftElectionTimeoutTicks: 1000000,
 				// Reduce the RangeLeaseDuration to speeds up failure detection
 				// below.
 				RangeLeaseDuration: time.Second,
@@ -627,6 +626,9 @@ func TestFlowControlCrashedNode(t *testing.T) {
 					DisableWorkQueueGranting: func() bool {
 						return true
 					},
+				},
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
 				},
 			},
 		},
