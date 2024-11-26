@@ -11197,3 +11197,119 @@ CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 		sqlDB.Exec(t, `DROP DATABASE test`)
 	}
 }
+
+// TestBackupRandomizedMixVersion tests a sequence of sql statements on an
+// upgrading cluster. The timeline of the upgrading cluster will be randomly
+// chosen, implying a given sql statement may be executed in the old, mixed, or
+// new cluster version. Certain SQL statements have a minimum valid cluster version,
+// constraining the space of possible cluster version upgrade timelines.
+func TestBackupRandomizedMixedVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts,
+		InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/foo'`)
+
+	seqCount := 4
+	stmtSequence := []versionStatement{
+		{
+			statement:       "BACKUP INTO dest WITH incremental_location = foo",
+			minValidVersion: NewCoordinator,
+		},
+		{
+			statement:       "BACKUP INTO LATEST IN dest WITH incremental_location = foo",
+			minValidVersion: NewCoordinator,
+		},
+		{
+			statement:       "SHOW BACKUP IN dest WITH incremental_location = foo",
+			minValidVersion: NewCoordinator,
+		},
+		{
+			statement:       "RESTORE FROM LATEST IN dest WITH incremental_location = foo",
+			minValidVersion: NewCoordinator,
+		},
+	}
+
+	// TODO (msbutler): batch stmt sequences in one roachtest.
+	// If a stmt sequence is invalid for the version state sequence,
+	// just skip executing that statement sequence.
+	states := generateRandomVersionSequence(seqCount)
+	for {
+		if checkValidStmtSequence(states, stmtSequence) {
+			break
+		}
+		states = generateRandomVersionSequence(seqCount)
+	}
+
+	for i, stmt := range stmtSequence {
+		adityasWishfulThinkingClusterUpgradeFunc(states[i])
+		sqlDB.Exec(t, stmt.statement)
+		// TODO (msbutler) return informative error message along the lines of:
+		// this statment sequence %v failed on command i for this version sequence %v
+	}
+}
+
+type versionState int
+
+const (
+	// OldVersion implies the cluster will be on the old version
+	OldVersion versionState = iota
+
+	// OldCoordinator implies the cluster will be in a mixed version state and all queries will be
+	// coordinated by a node on the old version
+	OldCoordinator
+
+	// NewCoordinator implies the cluster will be in a mixed version state and all queries will be
+	// coordinated by a node on the new version
+	NewCoordinator
+
+	// NewVersion implies the cluster will be on the new version
+	NewVersion
+)
+
+func MinVersionState() versionState {
+	return OldVersion
+}
+
+func MaxVersionState() versionState {
+	return NewVersion
+}
+
+func adityasWishfulThinkingClusterUpgradeFunc(versionState) {
+	fmt.Println("Do you believe in airplanes in the night sky like shooting staaaaars")
+}
+
+// GenerateRandomVersionSequence creates a random and monotonic
+// sequence of version states. E.g. for seqCount = 2, two valid sequences are:
+// [OldVersion,NewCoordinator], or [NewCoordinator,NewCoordinator].
+// TODO (msbutler): make every valid sequence equally possible.
+func generateRandomVersionSequence(seqCount int) []versionState {
+	states := make([]versionState, seqCount)
+	lowestVersion := MinVersionState()
+	for i, _ := range states {
+		versionRange := int(MaxVersionState()-lowestVersion) + 1
+		lowestVersion = versionState(rand.Intn(versionRange)) + lowestVersion
+		states[i] = lowestVersion
+	}
+	return states
+}
+
+// checkValidStmtSequence checks that a sequence of statements should run successfully for the
+// given version upgrade sequence
+func checkValidStmtSequence(states []versionState, stmts []versionStatement) bool {
+	for i, state := range states {
+		if state < stmts[i].minValidVersion {
+			return false
+		}
+	}
+	return true
+}
+
+type versionStatement struct {
+	statement       string
+	minValidVersion versionState
+}
