@@ -135,11 +135,10 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 					) {
 						// For setting up a builder inside tests we will ensure that the new schema
 						// changer will allow non-fully implemented operations.
-						sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+						sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafeAlways
 						sd.TempTablesEnabled = true
 						sd.ApplicationName = ""
 						sd.EnableUniqueWithoutIndexConstraints = true // this allows `ADD UNIQUE WITHOUT INDEX` in the testing suite.
-						sd.AlterColumnTypeGeneralEnabled = true
 					})),
 					sctestdeps.WithTestingKnobs(&scexec.TestingKnobs{
 						BeforeStage: func(p scplan.Plan, stageIdx int) error {
