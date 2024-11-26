@@ -150,7 +150,7 @@ func constructMetadataSST(
 	stats []*stats.TableStatisticProto,
 ) error {
 	// TODO(dt): use a seek-optimized SST writer instead.
-	sst := storage.MakeBackupSSTWriter(ctx, dest.Settings(), w)
+	sst := storage.MakeTransportSSTWriter(ctx, dest.Settings(), w)
 	defer sst.Close()
 
 	// The following steps must be done in-order, by key prefix.
@@ -291,7 +291,7 @@ func WriteDescsSST(
 		return err
 	}
 	defer w.Close()
-	descSST := storage.MakeBackupSSTWriter(ctx, dest.Settings(), w)
+	descSST := storage.MakeTransportSSTWriter(ctx, dest.Settings(), w)
 	defer descSST.Close()
 
 	if err := writeDescsToMetadata(ctx, descSST, m); err != nil {
@@ -327,7 +327,7 @@ func writeFilesSST(
 		return err
 	}
 	defer w.Close()
-	fileSST := storage.MakeBackupSSTWriter(ctx, dest.Settings(), w)
+	fileSST := storage.MakeTransportSSTWriter(ctx, dest.Settings(), w)
 	defer fileSST.Close()
 
 	// Sort and write all of the files into a single file info SST.
