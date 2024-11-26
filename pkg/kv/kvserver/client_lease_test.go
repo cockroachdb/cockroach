@@ -1595,10 +1595,13 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunTrueAndFalse(t, "expLease", func(t *testing.T, expLease bool) {
+	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
+		if leaseType == roachpb.LeaseLeader {
+			kvserver.RejectLeaseOnLeaderUnknown.Override(ctx, &st.SV, true)
+		}
 
 		manual := hlc.NewHybridManualClock()
 		args := base.TestClusterArgs{
@@ -1617,12 +1620,12 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 				},
 			},
 		}
-		tc := testcluster.StartTestCluster(t, 2, args)
+		tc := testcluster.StartTestCluster(t, 3, args)
 		defer tc.Stopper().Stop(ctx)
 
 		// Create range and upreplicate.
 		key := tc.ScratchRange(t)
-		tc.AddVotersOrFatal(t, key, tc.Target(1))
+		tc.AddVotersOrFatal(t, key, tc.Target(1), tc.Target(2))
 		desc := tc.LookupRangeOrFatal(t, key)
 
 		// Make sure n1 has an epoch lease.
@@ -1632,19 +1635,30 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, roachpb.LeaseEpoch, prevLease.Type())
 
+		// For the leader leases variant of the test, create a partition such that
+		// the leadership moves, and only acquire the lease on the newly elected
+		// leader.
+		newLeaseHolderNodeIdx := 1
+		if leaseType == roachpb.LeaseLeader {
+			dropRaftMessagesFrom(t, tc.Servers[1], desc, []roachpb.ReplicaID{1}, nil)
+			dropRaftMessagesFrom(t, tc.Servers[2], desc, []roachpb.ReplicaID{1}, nil)
+			dropRaftMessagesFrom(t, tc.Servers[0], desc, []roachpb.ReplicaID{2, 3}, nil)
+
+			leaderID := waitForPartitionedLeaderStepDownAndNewLeaderToStepUp(t, tc, desc, 0 /* partitionedNodeIdx */, 1 /* otherNodeIdx */)
+			leaderReplDesc, found := desc.Replicas().GetReplicaDescriptorByID(leaderID)
+			require.True(t, found)
+			newLeaseHolderNodeIdx = int(leaderReplDesc.NodeID - 1)
+		}
+
 		for _, s := range tc.Servers {
 			// Non-cooperatively move the lease to n2.
-			kvserver.ExpirationLeasesOnly.Override(ctx, &s.ClusterSettings().SV, expLease)
+			kvserver.OverrideDefaultLeaseType(ctx, &s.ClusterSettings().SV, leaseType)
 		}
-		t1 := tc.Target(1)
+		t1 := tc.Target(newLeaseHolderNodeIdx)
 		newLease, err := tc.MoveRangeLeaseNonCooperatively(ctx, desc, t1, manual)
 		require.NoError(t, err)
 		require.NotNil(t, newLease)
-		if expLease {
-			require.Equal(t, roachpb.LeaseExpiration, newLease.Type())
-		} else {
-			require.Equal(t, roachpb.LeaseEpoch, newLease.Type())
-		}
+		require.Equal(t, leaseType, newLease.Type())
 
 		// Check that n1's liveness epoch was bumped.
 		l0 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
