@@ -54,29 +54,42 @@ func runUAMigration(ctx context.Context, t test.Test, c cluster.Cluster) {
 	settings := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), opts, settings, c.All())
 
-	db := c.Conn(ctx, t.L(), 1)
-	defer db.Close()
+	dbOne := c.Conn(ctx, t.L(), 1)
+	defer dbOne.Close()
 
+	// Create TenantTwo
 	query := `select crdb_internal.create_tenant('{"id": 2, "name": "system2", "service_mode": "shared"}'::jsonb);`
-	_, err := db.ExecContext(ctx, query)
+	_, err := dbOne.ExecContext(ctx, query)
 	require.NoError(t, err, "cannot create TenantTwo")
 
-	stopOpts := option.DefaultStopOpts()
-	c.Stop(ctx, t.L(), stopOpts, c.Nodes(2))
+	nodeTwo := c.Nodes(2)
 
+	// Stop node 2
+	stopOpts := option.DefaultStopOpts()
+	c.Stop(ctx, t.L(), stopOpts, nodeTwo)
+
+	// Start node 2
 	settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_UA=true")
-	c.Start(ctx, t.L(), opts, settings, c.Nodes(2))
+	c.Start(ctx, t.L(), opts, settings, nodeTwo)
 
 	numWarehouses := 10
 
-	roachNodes := c.Nodes(2)
-	workloadNode := c.Nodes(2)
+	// nodeOne := c.Nodes(1)
+
+	// TODO(shubham): run workloads in parallel too
+
+	// Run workloads
+	workloadNode := nodeTwo
 	init := roachtestutil.NewCommand("./cockroach workload init tpcc --split").
-		Arg("{pgurl%s}", roachNodes).
+		Arg("{pgurl%s}", workloadNode).
 		Flag("warehouses", numWarehouses)
-	run := roachtestutil.NewCommand("./cockroach workload run tpcc --duration 10m").
-		Arg("{pgurl%s}", roachNodes).
+
+	runDuration := 1 * time.Minute
+
+	run := roachtestutil.NewCommand("./cockroach workload run tpcc").
+		Arg("{pgurl%s}", workloadNode).
 		Flag("warehouses", numWarehouses).
+		Flag("duration", runDuration).
 		Option("tolerate-errors")
 	err = c.RunE(ctx, option.WithNodes(workloadNode), init.String())
 	require.NoError(t, err, "failed to run tpcc init")
@@ -84,12 +97,18 @@ func runUAMigration(ctx context.Context, t test.Test, c cluster.Cluster) {
 	err = c.RunE(ctx, option.WithNodes(workloadNode), run.String())
 	require.NoError(t, err, "failed to run tpcc run")
 
-	query = `CREATE VIRTUAL CLUSTER 'foo'`
-	_, err = db.ExecContext(ctx, query)
-	require.NoError(t, err, "cannot create foo")
+	dbTwo := c.Conn(ctx, t.L(), 2)
+	defer dbTwo.Close()
 
+	// Verify if we are able to create a virtual cluster on TenantTwo as its a
+	// system tenant
+	query = `CREATE VIRTUAL CLUSTER 'foo'`
+	_, err = dbTwo.ExecContext(ctx, query)
+	require.NoError(t, err, "cannot create tenant foo")
+
+	// Print the content of tenants system table in TenantTwo
 	query = `SELECT id, name FROM system.tenants`
-	rows, err := db.QueryContext(ctx, query)
+	rows, err := dbTwo.QueryContext(ctx, query)
 	require.NoError(t, err, "failed to query system.tenants")
 	defer rows.Close()
 	for rows.Next() {
@@ -97,13 +116,14 @@ func runUAMigration(ctx context.Context, t test.Test, c cluster.Cluster) {
 		var name string
 		err := rows.Scan(&id, &name)
 		require.NoError(t, err, "couldn't do SCAN")
-		t.L().Printf("SYSTEM.TENANTS : %d, %s", id, name)
+		t.L().Printf("tenant : %d, %s", id, name)
 	}
-	require.NoError(t, rows.Err(), "some failure while reading")
+	require.NoError(t, rows.Err(), "some failure while reading result")
 
-	dbTwo := c.Conn(ctx, t.L(), 2)
-	defer dbTwo.Close()
-	query = `select count(1) from crdb_internal.scan(crdb_internal.tenant_span(2)[1], crdb_internal.table_span(1)[1]);`
+	// Verify we didn't write to anywhere in TenantTwo's keyspace except its
+	// table keyspace
+	query = `SELECT count(1) FROM crdb_internal.scan(
+		crdb_internal.tenant_span(2)[1], crdb_internal.table_span(1)[1]);`
 	rows, err = dbTwo.QueryContext(ctx, query)
 	require.NoError(t, err, "failed to run crdb_internal.scan")
 	defer rows.Close()
