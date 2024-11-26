@@ -47,16 +47,98 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStoreRangeLease verifies that regular ranges (not some special ones at
-// the start of the key space) get epoch-based range leases if enabled and
-// expiration-based otherwise.
+// TestStoreRangeLeas verifies that regular ranges (not special ones
+// at the start of the kye space) acquire leader leases once things settle. It's
+// the Leader Leasee variant for TestStoreRangeLeaseEpochLeases.
 func TestStoreRangeLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+	// TODO(arul): Once https://github.com/cockroachdb/cockroach/issues/118435
+	// we can remove this. Leader leases require us to reject lease requests
+	// on replicas that are not the leader, as otherwise we'll
+	kvserver.RejectLeaseOnLeaderUnknown.Override(ctx, &st.SV, true)
+
+	manualClock := hlc.NewHybridManualClock()
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						WallClock: manualClock,
+					},
+					Store: &kvserver.StoreTestingKnobs{
+						DisableMergeQueue: true,
+					},
+				},
+			},
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+	store := tc.GetFirstStoreFromServer(t, 0)
+	// NodeLivenessKeyMax is a static split point, so this is always
+	// the start key of the first range that uses epoch-based
+	// leases. Splitting on it here is redundant, but we want to include
+	// it in our tests of lease types below.
+	splitKeys := []roachpb.Key{
+		keys.NodeLivenessKeyMax, roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"),
+	}
+	for _, splitKey := range splitKeys {
+		// NB: Splitting requires acquiring a lease, which is what establishes a
+		// leader. If there's no leader, the proposed lease acquisition will be for
+		// an expiration based lease, even if we're configured to use leader leases.
+		tc.SplitRangeOrFatal(t, splitKey)
+	}
+
+	// Expire all leases and send a write request to trigger a lease acquisitions.
+	// At this point, we have a leader, so the lease acquisition should be for a
+	// leader lease.
+	manualClock.Increment(tc.Servers[0].RaftConfig().RangeLeaseDuration.Nanoseconds())
+	for _, key := range splitKeys {
+		incArgs := incrementArgs(key, int64(5))
+
+		testutils.SucceedsSoon(t, func() error {
+			_, err := kv.SendWrapped(ctx, store.TestSender(), incArgs)
+			return err.GoError()
+		})
+	}
+
+	// The beginning of the keyspace always uses expiration-based leases.
+	rLeft := store.LookupReplica(roachpb.RKeyMin)
+	lease, _ := rLeft.GetLease()
+	if lt := lease.Type(); lt != roachpb.LeaseExpiration {
+		t.Fatalf("expected lease type expiration; got %d", lt)
+	}
+
+	// After the expiration based lease, expect the lease type that the test has
+	// enabled for all ranges.
+	for _, key := range splitKeys {
+		repl := store.LookupReplica(roachpb.RKey(key))
+		desc := tc.LookupRangeOrFatal(t, key)
+		t.Logf("desc: %v", desc)
+		lease, _ = repl.GetLease()
+		if lt := lease.Type(); lt != roachpb.LeaseLeader {
+			t.Errorf("expected lease type %s; got %s for key %v", roachpb.LeaseLeader, lease, key)
+		}
+	}
+}
+
+// TestStoreRangeLeaseEpochLeases verifies that regular ranges (not some special
+// ones at the start of the key space) get epoch-based range leases if enabled
+// and expiration-based otherwise.
+func TestStoreRangeLeaseEpochLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch) // override metamorphism
 
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
