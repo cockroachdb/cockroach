@@ -66,7 +66,7 @@ func TestParseVector(t *testing.T) {
 func TestRoundtripRandomPGVector(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 1000; i++ {
-		v := Random(rng)
+		v := Random(rng, 1000 /* maxDim */)
 		encoded, err := Encode(nil, v)
 		assert.NoError(t, err)
 		roundtripped, err := Decode(encoded)
