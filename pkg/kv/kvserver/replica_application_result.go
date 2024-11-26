@@ -493,7 +493,6 @@ func (r *Replica) handleTruncatedStateResult(
 	r.mu.Lock()
 	expectedFirstIndexWasAccurate =
 		r.shMu.raftTruncState.Index+1 == expectedFirstIndexPreTruncation
-	r.shMu.state.TruncatedState = t
 	r.shMu.raftTruncState = *t
 	r.mu.Unlock()
 

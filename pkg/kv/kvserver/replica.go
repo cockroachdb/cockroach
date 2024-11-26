@@ -1738,14 +1738,21 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 	ctx context.Context, reader storage.Reader,
 ) {
-	if ts := r.shMu.state.TruncatedState; ts == nil || *ts != r.shMu.raftTruncState {
-		log.Fatalf(ctx, "TruncatedState mismatch: %+v vs %+v", ts, r.shMu.raftTruncState)
+	if ts := r.shMu.state.TruncatedState; ts != nil {
+		log.Fatalf(ctx, "non-empty RaftTruncatedState in ReplicaState: %+v", ts)
+	} else if loaded, err := r.mu.stateLoader.LoadRaftTruncatedState(ctx, reader); err != nil {
+		log.Fatalf(ctx, "%s", err)
+	} else if ts := r.shMu.raftTruncState; loaded != ts {
+		log.Fatalf(ctx, "on-disk and in-memory RaftTruncatedState diverged: %s",
+			redact.Safe(pretty.Diff(loaded, ts)))
 	}
 
+	// TODO(pav-kv): don't load RaftTruncatedState.
 	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.shMu.state.Desc)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
+	diskState.TruncatedState = nil
 
 	// We don't care about this field; see comment on
 	// DeprecatedUsingAppliedStateKey for more details. This can be removed once

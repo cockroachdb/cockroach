@@ -23,9 +23,10 @@ import (
 // is used to initialize the in-memory Replica instance.
 // TODO(pavelkalinnikov): integrate with kvstorage.Replica.
 type LoadedReplicaState struct {
-	ReplicaID roachpb.ReplicaID
-	LastIndex kvpb.RaftIndex
-	ReplState kvserverpb.ReplicaState
+	ReplicaID  roachpb.ReplicaID
+	LastIndex  kvpb.RaftIndex
+	ReplState  kvserverpb.ReplicaState
+	TruncState kvserverpb.RaftTruncatedState
 
 	hardState raftpb.HardState
 }
@@ -58,9 +59,12 @@ func LoadReplicaState(
 	if ls.LastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
 		return LoadedReplicaState{}, err
 	}
+	// TODO(pav-kv): load RaftTruncatedState separately from the replicated state.
 	if ls.ReplState, err = sl.Load(ctx, eng, desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
+	ls.TruncState = *ls.ReplState.TruncatedState
+	ls.ReplState.TruncatedState = nil
 
 	if err := ls.check(storeID); err != nil {
 		return LoadedReplicaState{}, err
