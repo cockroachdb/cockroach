@@ -17,7 +17,6 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/data.proto";
 import "sql/execinfrapb/data.proto";
-import "sql/sessiondatapb/session_data.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
