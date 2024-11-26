@@ -149,11 +149,6 @@ func replicaIsSuspect(repl *Replica) bool {
 		return true
 	}
 
-	// NodeLiveness can be nil in tests/benchmarks.
-	if repl.store.cfg.NodeLiveness == nil {
-		return false
-	}
-
 	// If a replica doesn't have an active raft group, we should check whether
 	// or not the node is active. If not, we should consider the replica suspect
 	// because it has probably already been removed from its raft group but

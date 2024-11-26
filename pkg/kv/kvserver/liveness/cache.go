@@ -49,6 +49,7 @@ type Cache struct {
 	clock      *hlc.Clock
 	nodeDialer *nodedialer.Dialer
 	st         *cluster.Settings
+	isTestMode bool
 	mu         struct {
 		syncutil.RWMutex
 		// lastNodeUpdate stores timestamps of StoreDescriptor updates in Gossip.
@@ -214,6 +215,18 @@ func (c *Cache) self() (_ Record, ok bool) {
 // includes the raw, encoded value that the database has for this liveness
 // record in addition to the decoded liveness proto.
 func (c *Cache) getLiveness(nodeID roachpb.NodeID) (_ Record, ok bool) {
+	// In test mode, create a node vitality that is always live.
+	if c.isTestMode {
+		now := c.clock.Now()
+		return Record{
+			Liveness: livenesspb.Liveness{
+				NodeID:     nodeID,
+				Epoch:      1,
+				Expiration: now.AddDuration(time.Minute).ToLegacyTimestamp(),
+				Draining:   false,
+				Membership: livenesspb.MembershipStatus_ACTIVE,
+			}}, true
+	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if l, ok := c.mu.nodes[nodeID]; ok {
@@ -255,28 +268,6 @@ func (c *Cache) convertToNodeVitality(l livenesspb.Liveness) livenesspb.NodeVita
 		TimeUntilNodeDead.Get(&c.st.SV),
 		TimeAfterNodeSuspect.Get(&c.st.SV),
 	)
-}
-
-// getIsLiveMap returns a map of nodeID to boolean liveness status of
-// each node. This excludes nodes that were removed completely (dead +
-// decommissioned)
-func (c *Cache) getIsLiveMap() livenesspb.IsLiveMap {
-	lMap := livenesspb.IsLiveMap{}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	now := c.clock.Now()
-	for nID, l := range c.mu.nodes {
-		isLive := l.IsLive(now)
-		if l.Membership.Decommissioned() {
-			// This is a node that was completely removed. Skip over it.
-			continue
-		}
-		lMap[nID] = livenesspb.IsLiveMapEntry{
-			Liveness: l.Liveness,
-			IsLive:   isLive,
-		}
-	}
-	return lMap
 }
 
 // getAllLivenessEntries returns a copy of all the entries currently in the

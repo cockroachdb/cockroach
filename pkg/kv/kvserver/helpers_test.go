@@ -102,10 +102,6 @@ func (s *Store) ComputeMVCCStats(reader storage.Reader) (enginepb.MVCCStats, err
 	return totalStats, err
 }
 
-func (s *Store) UpdateLivenessMap() {
-	s.updateLivenessMap()
-}
-
 // ConsistencyQueueShouldQueue invokes the shouldQueue method on the
 // store's consistency queue.
 func ConsistencyQueueShouldQueue(

@@ -813,8 +813,7 @@ func (r *Replica) GetRangeLeaseDuration() time.Duration {
 // shouldUseExpirationLeaseRLocked. We can merge these once there are no more
 // callers: when expiration leases don't quiesce and are always eagerly renewed.
 func (r *Replica) requiresExpirationLeaseRLocked() bool {
-	return r.store.cfg.NodeLiveness == nil ||
-		r.shMu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
+	return r.shMu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
 
 // shouldUseExpirationLeaseRLocked returns true if this range should be using an

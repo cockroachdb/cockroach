@@ -1103,10 +1103,6 @@ type Store struct {
 
 	scheduler *raftScheduler
 
-	// livenessMap is a map from nodeID to a bool indicating
-	// liveness. It is updated periodically in raftTickLoop()
-	// and reactively in nodeIsLiveCallback() on liveness updates.
-	livenessMap atomic.Value
 	// ioThresholds is analogous to livenessMap, but stores the *IOThresholds for
 	// the stores in the cluster . It is gossip-backed but is not updated
 	// reactively, i.e. will refresh on each tick loop iteration only.
@@ -2340,9 +2336,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Register a callback to unquiesce any ranges with replicas on a
 	// node transitioning from non-live to live.
-	if s.cfg.NodeLiveness != nil {
-		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
-	}
+	s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
 
 	// SystemConfigProvider can be nil during some tests.
 	if scp := s.cfg.SystemConfigProvider; scp != nil {
