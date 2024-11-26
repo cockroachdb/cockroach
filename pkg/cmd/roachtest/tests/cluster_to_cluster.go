@@ -213,18 +213,29 @@ func defaultWorkloadDriver(
 }
 
 type replicateTPCC struct {
-	warehouses int
+	warehouses     int
+	duration       time.Duration
+	repairOrderIDs bool
+	tolerateErrors bool
 }
 
 func (tpcc replicateTPCC) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
-	return fmt.Sprintf(`./cockroach workload init tpcc --data-loader import --warehouses %d {pgurl%s:%s}`,
-		tpcc.warehouses, nodes, tenantName)
+	cmd := roachtestutil.NewCommand(`./cockroach workload init tpcc`).
+		Flag("data-loader", "import").
+		Flag("warehouses", tpcc.warehouses).
+		Arg("{pgurl%s:%s}", nodes, tenantName)
+	return cmd.String()
 }
 
 func (tpcc replicateTPCC) sourceRunCmd(tenantName string, nodes option.NodeListOption) string {
-	// added --tolerate-errors flags to prevent test from flaking due to a transaction retry error
-	return fmt.Sprintf(`./cockroach workload run tpcc --warehouses %d --tolerate-errors {pgurl%s:%s}`,
-		tpcc.warehouses, nodes, tenantName)
+	cmd := roachtestutil.NewCommand(`./cockroach workload run tpcc`).
+		Flag("warehouses", tpcc.warehouses).
+		MaybeFlag(tpcc.duration > 0, "duration", tpcc.duration).
+		MaybeOption(tpcc.tolerateErrors, "tolerate-errors").
+		MaybeOption(tpcc.repairOrderIDs, "repair-order-ids").
+		Arg("{pgurl%s:%s}", nodes, tenantName).
+		WithEqualsSyntax()
+	return cmd.String()
 }
 
 func (tpcc replicateTPCC) runDriver(
@@ -1111,11 +1122,8 @@ func registerClusterToCluster(r registry.Registry) {
 			dstNodes:  4,
 			cpus:      8,
 			pdSize:    1000,
-			// 500 warehouses adds 30 GB to source
-			//
-			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
-			// job speeds up.
-			workload:           replicateTPCC{warehouses: 1000},
+
+			workload:           replicateTPCC{warehouses: 1000, tolerateErrors: true},
 			timeout:            3 * time.Hour,
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
