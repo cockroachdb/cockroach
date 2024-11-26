@@ -457,7 +457,20 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		randomNode := c.Node(c.CRDBNodes().SeededRandNode(rng)[0])
 		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", "tpcc", headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
-		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
+		doneCh := make(chan struct{})
+		t.Go(func(taskCtx context.Context, l *logger.Logger) error {
+			defer func() { doneCh <- struct{}{} }()
+			return c.RunE(ctx, option.WithNodes(randomNode), cmd)
+		})
+
+		time.Sleep(5 * time.Second)
+		c.CaptureSideEyeSnapshot(ctx, l)
+
+		select {
+		case <-doneCh:
+		case <-ctx.Done():
+		}
+		return nil
 	}
 
 	// Add a lot of cold data to this cluster. This further stresses the version

@@ -680,6 +680,7 @@ type clusterImpl struct {
 		// running on this cluster. Empty if the Side-Eye integration is not active.
 		sideEyeEnvName string
 	}
+	sideEyeClient *sideeyeclient.SideEyeClient
 }
 
 // Name returns the cluster name, i.e. something like `teamcity-....`
@@ -781,7 +782,8 @@ type clusterConfig struct {
 	// Side-Eye client can be used to programmatically take snapshots of this
 	// cluster using the cluster's name; snapshots are taken when the test times
 	// out.
-	sideEyeToken string
+	sideEyeToken  string
+	sideEyeClient *sideeyeclient.SideEyeClient
 }
 
 // clusterFactory is a creator of clusters.
@@ -3171,9 +3173,7 @@ func (c *clusterImpl) UpdateSideEyeEnvironmentName(
 // swallowed.
 //
 // Returns the URL of the captured snapshot, or "" if not successful.
-func (c *clusterImpl) CaptureSideEyeSnapshot(
-	ctx context.Context, l *logger.Logger, client *sideeyeclient.SideEyeClient,
-) string {
+func (c *clusterImpl) CaptureSideEyeSnapshot(ctx context.Context, l *logger.Logger) string {
 	l.PrintfCtx(ctx, "capturing snapshot of the cluster with Side-Eye...")
 
 	if c.arch == vm.ArchARM64 {
@@ -3187,7 +3187,7 @@ func (c *clusterImpl) CaptureSideEyeSnapshot(
 		return ""
 	}
 
-	snapURL, ok := roachprod.CaptureSideEyeSnapshot(ctx, l, envName, client)
+	snapURL, ok := roachprod.CaptureSideEyeSnapshot(ctx, l, envName, c.sideEyeClient)
 	if !ok {
 		return ""
 	}

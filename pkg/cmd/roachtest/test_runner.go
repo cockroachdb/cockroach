@@ -225,6 +225,8 @@ type clustersOpt struct {
 	// Side-Eye. If set, each node in the cluster will run the Side-Eye agent.
 	sideEyeToken string
 
+	sideEyeClient *sideeyeclient.SideEyeClient
+
 	// preAllocateClusterFn is a function called right before allocating a
 	// cluster. It allows the caller to e.g. inject errors for testing.
 	preAllocateClusterFn func(
@@ -541,13 +543,14 @@ func (r *testRunner) allocateCluster(
 	}
 
 	cfg := clusterConfig{
-		nameOverride: clustersOpt.clusterName, // only set if we hit errClusterFound above
-		spec:         t.Cluster,
-		artifactsDir: lopt.artifactsDir,
-		username:     clustersOpt.user,
-		localCluster: clustersOpt.typ == localCluster,
-		arch:         arch,
-		sideEyeToken: clustersOpt.sideEyeToken,
+		nameOverride:  clustersOpt.clusterName, // only set if we hit errClusterFound above
+		spec:          t.Cluster,
+		artifactsDir:  lopt.artifactsDir,
+		username:      clustersOpt.user,
+		localCluster:  clustersOpt.typ == localCluster,
+		arch:          arch,
+		sideEyeToken:  clustersOpt.sideEyeToken,
+		sideEyeClient: clustersOpt.sideEyeClient,
 	}
 	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
 }
@@ -1588,7 +1591,7 @@ func (r *testRunner) teardownTest(
 			// If the Side-Eye integration was configured, capture a snapshot of the
 			// cluster to help with debugging.
 			if r.sideEyeClient != nil {
-				snapURL = c.CaptureSideEyeSnapshot(ctx, t.L(), r.sideEyeClient)
+				snapURL = c.CaptureSideEyeSnapshot(ctx, t.L())
 			}
 		}
 

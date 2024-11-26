@@ -547,6 +547,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	//
 	// TODO(knz): Find a way to combine this common logic for both methods.
 
+	log.Event(ctx, "darryl: SQL server prestart")
+	defer log.Event(ctx, "darryl: SQL server prestart finished")
+
 	// Start a context for the asynchronous network workers.
 	workersCtx := s.AnnotateCtx(context.Background())
 
@@ -903,11 +906,13 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlServer.sqlInstanceReader, instanceID)
 
+	log.Event(ctx, "darryl: starting tenant side cost controller")
 	// Start the cost controller for this secondary tenant.
 	if err := s.costController.Start(
 		workersCtx, s.stopper, instanceID, s.sqlServer.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
+		log.Errorf(ctx, "darryl: tenant side cost controller failed to start with: %s", err)
 		return err
 	}
 

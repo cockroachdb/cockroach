@@ -378,6 +378,7 @@ func (c *tenantSideCostController) Start(
 	externalUsageFn multitenant.ExternalUsageFn,
 	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn,
 ) error {
+	defer log.Event(ctx, "darryl: tenant side cost controller started")
 	if instanceID == 0 {
 		return errors.New("invalid SQLInstanceID")
 	}

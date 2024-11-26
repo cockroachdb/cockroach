@@ -130,10 +130,11 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		typ:         clusterType,
 		clusterName: roachtestflags.ClusterNames,
 		// Precedence for resolving the user: cli arg, env.ROACHPROD_USER, current user.
-		user:         getUser(roachtestflags.Username),
-		cpuQuota:     roachtestflags.CPUQuota,
-		clusterID:    roachtestflags.ClusterID,
-		sideEyeToken: sideEyeToken,
+		user:          getUser(roachtestflags.Username),
+		cpuQuota:      roachtestflags.CPUQuota,
+		clusterID:     roachtestflags.ClusterID,
+		sideEyeToken:  sideEyeToken,
+		sideEyeClient: runner.sideEyeClient,
 	}
 	switch {
 	case roachtestflags.DebugAlways:
