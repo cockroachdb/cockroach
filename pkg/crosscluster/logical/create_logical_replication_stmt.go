@@ -281,7 +281,25 @@ func createLogicalReplicationStreamPlanHook(
 			defaultConflictResolution = *cr
 		}
 
-		var jobID jobspb.JobID
+		jr := jobs.Record{
+			JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
+			Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, cleanedURI),
+			Username:    p.User(),
+			Details: jobspb.LogicalReplicationDetails{
+				StreamID:                  uint64(spec.StreamID),
+				SourceClusterID:           spec.SourceClusterID,
+				ReplicationStartTime:      replicationStartTime,
+				SourceClusterConnStr:      string(streamAddress),
+				ReplicationPairs:          repPairs,
+				TableNames:                srcTableNames,
+				DefaultConflictResolution: defaultConflictResolution,
+				Discard:                   discard,
+				Mode:                      mode,
+				MetricsLabel:              options.metricsLabel,
+			},
+			Progress: progress,
+		}
+
 		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			dstTableDescs := make([]*tabledesc.Mutable, 0, len(srcTableDescs))
 			for _, pair := range repPairs {
@@ -304,25 +322,6 @@ func createLogicalReplicationStreamPlanHook(
 				}
 			}
 
-			jr := jobs.Record{
-				JobID:       p.ExecCfg().JobRegistry.MakeJobID(),
-				Description: fmt.Sprintf("LOGICAL REPLICATION STREAM into %s from %s", targetsDescription, cleanedURI),
-				Username:    p.User(),
-				Details: jobspb.LogicalReplicationDetails{
-					StreamID:                  uint64(spec.StreamID),
-					SourceClusterID:           spec.SourceClusterID,
-					ReplicationStartTime:      replicationStartTime,
-					SourceClusterConnStr:      string(streamAddress),
-					ReplicationPairs:          repPairs,
-					TableNames:                srcTableNames,
-					DefaultConflictResolution: defaultConflictResolution,
-					Discard:                   discard,
-					Mode:                      mode,
-					MetricsLabel:              options.metricsLabel,
-				},
-				Progress: progress,
-			}
-			jobID = jr.JobID
 			if err := replicationutils.LockLDRTables(ctx, txn, dstTableDescs, jr.JobID); err != nil {
 				return err
 			}
@@ -333,7 +332,7 @@ func createLogicalReplicationStreamPlanHook(
 		}); err != nil {
 			return err
 		}
-		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
+		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jr.JobID))}
 		return nil
 	}
 
