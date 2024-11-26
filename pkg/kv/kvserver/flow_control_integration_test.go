@@ -1596,7 +1596,7 @@ func TestFlowControlQuiescedRange(t *testing.T) {
 	disableFallbackTokenDispatch.Store(true)
 
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch) // override metamorphism
 	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
 
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
@@ -1736,7 +1736,7 @@ func TestFlowControlUnquiescedRange(t *testing.T) {
 	disablePiggybackTokenDispatch.Store(true)
 
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch) // override metamorphism
 	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
 
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
@@ -3472,7 +3472,7 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 
 			settings := cluster.MakeTestingClusterSettings()
 			// Override metamorphism to allow range quiescence.
-			kvserver.ExpirationLeasesOnly.Override(ctx, &settings.SV, false)
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseEpoch)
 			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
