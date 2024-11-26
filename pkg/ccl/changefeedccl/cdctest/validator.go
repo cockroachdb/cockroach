@@ -7,16 +7,23 @@ package cdctest
 
 import (
 	"bytes"
+	"context"
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // Validator checks for violations of our changefeed ordering and delivery
@@ -510,6 +517,69 @@ func (v *FingerprintValidator) NoteRow(
 	return nil
 }
 
+// fetchTableColTypes fetches the column types for the given table tableName.
+// Note that the table has to exist at the updated timestamp.
+func (v *FingerprintValidator) fetchTableColTypes(
+	tableName string, updated hlc.Timestamp,
+) (map[string]*types.T, error) {
+	parts := strings.Split(tableName, ".")
+	var table string
+	switch len(parts) {
+	case 1:
+		table = parts[0]
+	case 2:
+		table = parts[1]
+	default:
+		return nil, errors.Errorf("could not parse table %s", parts)
+	}
+
+	colToType := make(map[string]*types.T)
+	if err := v.sqlDBFunc(func(db *gosql.DB) error {
+		var rows *gosql.Rows
+		queryStr := fmt.Sprintf(`SELECT a.attname AS column_name, t.oid AS type_oid, t.typname AS type_name
+		FROM pg_attribute a JOIN pg_type t ON a.atttypid = t.oid AS OF SYSTEM TIME '%s'
+		WHERE a.attrelid = $1::regclass AND a.attnum > 0`, updated.AsOfSystemTime())
+		rows, err := db.Query(queryStr, table)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		type result struct {
+			keyColumn string
+			oid       string
+			typeName  string
+		}
+
+		var results []result
+		for rows.Next() {
+			var keyColumn, oidStr, typeName string
+			if err := rows.Scan(&keyColumn, &oidStr, &typeName); err != nil {
+				return err
+			}
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			results = append(results, result{
+				keyColumn: keyColumn,
+				oid:       oidStr,
+				typeName:  typeName,
+			})
+			oidNum, err := strconv.Atoi(oidStr)
+			if err != nil {
+				return err
+			}
+			colToType[keyColumn] = types.OidToType[oid.Oid(oidNum)]
+		}
+		if len(results) == 0 {
+			return errors.Errorf("no columns found for table %s", table)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return colToType, nil
+}
+
 // applyRowUpdate applies the update represented by `row` to the scratch table.
 func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 	defer func() {
@@ -517,34 +587,70 @@ func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 	}()
 
 	var args []interface{}
-	var primaryKeyDatums []interface{}
-	if err := gojson.Unmarshal([]byte(row.key), &primaryKeyDatums); err != nil {
+	keyJSON, err := json.ParseJSON(row.key)
+	if err != nil {
 		return err
 	}
-	if len(primaryKeyDatums) != len(v.primaryKeyCols) {
-		return errors.Errorf(`expected primary key columns %s got datums %s`,
-			v.primaryKeyCols, primaryKeyDatums)
+	keyJSONAsArray, ok := keyJSON.AsArray()
+	if !ok || len(keyJSONAsArray) != len(v.primaryKeyCols) {
+		return errors.Errorf(
+			`notArray: %t expected primary key columns %s got datums %s`,
+			ok, v.primaryKeyCols, keyJSONAsArray)
 	}
 
 	var stmtBuf bytes.Buffer
-	type wrapper struct {
-		After map[string]interface{} `json:"after"`
-	}
-	var value wrapper
-	if err := gojson.Unmarshal([]byte(row.value), &value); err != nil {
+	valueJSON, err := json.ParseJSON(row.value)
+	if err != nil {
 		return err
 	}
-	if value.After != nil {
+	afterJSON, err := valueJSON.FetchValKey("after")
+	if err != nil {
+		return err
+	}
+
+	if afterJSON != nil && afterJSON.Type() != json.NullJSONType {
 		// UPDATE or INSERT
 		fmt.Fprintf(&stmtBuf, `UPSERT INTO %s (`, v.fprintTable)
-		for col, colValue := range value.After {
+		iter, err := afterJSON.ObjectIter()
+		if err != nil {
+			return err
+		}
+		colNames := make([]string, 0)
+		for iter.Next() {
+			colNames = append(colNames, iter.Key())
+		}
+
+		typeofCol, err := v.fetchTableColTypes(v.origTable, row.updated)
+		for _, colValue := range colNames {
 			if len(args) != 0 {
 				stmtBuf.WriteString(`,`)
 			}
-			stmtBuf.WriteString(col)
-			args = append(args, colValue)
+			stmtBuf.WriteString(colValue)
+			if err != nil {
+				return err
+			}
+			colType, exists := typeofCol[colValue]
+			if !exists {
+				return errors.Errorf("column %s not found in table %s", colValue, v.origTable)
+			}
+			jsonValue, err := afterJSON.FetchValKey(colValue)
+			if err != nil {
+				return err
+			}
+			str, err := jsonValue.AsText()
+			if err != nil {
+				return err
+			}
+			if str != nil {
+				datum, _ := rowenc.ParseDatumStringAs(context.Background(), colType, *str,
+					eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), nil)
+				args = append(args, datum)
+			} else {
+				args = append(args, nil)
+			}
 		}
-		for i := len(value.After) - v.fprintOrigColumns; i < v.fprintTestColumns; i++ {
+
+		for i := len(colNames) - v.fprintOrigColumns; i < v.fprintTestColumns; i++ {
 			fmt.Fprintf(&stmtBuf, `, test%d`, i)
 			args = append(args, nil)
 		}
@@ -558,7 +664,14 @@ func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 		stmtBuf.WriteString(`)`)
 
 		// Also verify that the key matches the value.
-		primaryKeyDatums = make([]interface{}, len(v.primaryKeyCols))
+		type wrapper struct {
+			After map[string]interface{} `json:"after"`
+		}
+		var value wrapper
+		if err := gojson.Unmarshal([]byte(row.value), &value); err != nil {
+			return err
+		}
+		primaryKeyDatums := make([]interface{}, len(v.primaryKeyCols))
 		for idx, primaryKeyCol := range v.primaryKeyCols {
 			primaryKeyDatums[idx] = value.After[primaryKeyCol]
 		}
@@ -581,12 +694,12 @@ func (v *FingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 	} else {
 		// DELETE
 		fmt.Fprintf(&stmtBuf, `DELETE FROM %s WHERE `, v.fprintTable)
-		for i, datum := range primaryKeyDatums {
+		for i, datum := range keyJSONAsArray {
 			if len(args) != 0 {
 				stmtBuf.WriteString(` AND `)
 			}
-			fmt.Fprintf(&stmtBuf, `%s = $%d`, v.primaryKeyCols[i], i+1)
-			args = append(args, datum)
+			fmt.Fprintf(&stmtBuf, `to_json(%s)::text = $%d`, v.primaryKeyCols[i], i+1)
+			args = append(args, datum.String())
 		}
 	}
 
