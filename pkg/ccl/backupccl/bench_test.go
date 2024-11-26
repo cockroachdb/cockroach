@@ -88,7 +88,7 @@ func BenchmarkIteratorMemory(b *testing.B) {
 	}
 
 	writeSST := func(w io.WriteCloser, store cloud.ExternalStorage, payloadSize int, numKeys int) {
-		sst := storage.MakeBackupSSTWriter(ctx, store.Settings(), w)
+		sst := storage.MakeTransportSSTWriter(ctx, store.Settings(), w)
 
 		buf := make([]byte, payloadSize)
 		key := storage.MVCCKey{Timestamp: now}

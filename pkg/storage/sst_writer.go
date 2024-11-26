@@ -78,7 +78,9 @@ func (*noopFinishAbort) Finish() error {
 func (*noopFinishAbort) Abort() {}
 
 // MakeIngestionWriterOptions returns writer options suitable for writing SSTs
-// that will subsequently be ingested (e.g. with AddSSTable).
+// that will subsequently be ingested (e.g. with AddSSTable). These options are
+// also used when constructing sstables for backups (because these sstables may
+// ultimately be ingested during online restore).
 func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstable.WriterOptions {
 	// All supported versions understand TableFormatPebblev4. If columnar blocks
 	// are enabled and the active cluster version is at least 24.3, use
@@ -112,9 +114,14 @@ func makeSSTRewriteOptions(
 	return MakeIngestionWriterOptions(ctx, cs), sstable.TableFormatPebblev2
 }
 
-// MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs which
-// are typically only ever iterated in their entirety.
-func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer) SSTWriter {
+// MakeTransportSSTWriter creates a new SSTWriter tailored for sstables
+// constructed exclusively for transport, which are typically only ever iterated
+// in their entirety and not durably persisted. At the time of writing, this is
+// used by export requests. During a backup, the export requests will construct
+// sstables using this writer, those sstables will be sent over the network,
+// scanned and their keys inserted into new sstables (NB: constructed using
+// MakeIngestionSSTWriter) that ultimately are uploaded to object storage.
+func MakeTransportSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer) SSTWriter {
 	// By default, take a conservative approach and assume we don't have newer
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
@@ -145,6 +152,8 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 // MakeIngestionSSTWriter creates a new SSTWriter tailored for ingestion SSTs.
 // These SSTs have bloom filters enabled (as set in DefaultPebbleOptions). If
 // the cluster settings permit value blocks, the SST may contain value blocks.
+// This writer is used when constructing sstables for backups too, because
+// backup sstables may ultimately be ingested during online restore.
 func MakeIngestionSSTWriter(
 	ctx context.Context, cs *cluster.Settings, w objstorage.Writable,
 ) SSTWriter {
@@ -170,12 +179,15 @@ func WithCompressionFromClusterSetting(
 }
 
 // MakeIngestionSSTWriterWithOverrides creates a new SSTWriter tailored for
-// ingestion SSTs. These SSTs have bloom filters enabled (as set in
-// DefaultPebbleOptions) and format set to the highest permissible by the
-// cluster settings. Callers that expect to write huge SSTs, say 200+MB, which
-// could contain multiple versions for the same key, should pass in a
-// WithValueBlocksDisabled option. This is because value blocks are buffered
-// in-memory while writing the SST (see
+// ingestion SSTs. Note that writer is used when constructing sstables for
+// backups, because backup sstables may ultimately be ingested during online
+// restore.
+//
+// These SSTs have bloom filters enabled (as set in DefaultPebbleOptions) and
+// format set to the highest permissible by the cluster settings. Callers that
+// expect to write huge SSTs, say 200+MB, which could contain multiple versions
+// for the same key, should pass in a WithValueBlocksDisabled option. This is
+// because value blocks are buffered in-memory while writing the SST (see
 // https://github.com/cockroachdb/cockroach/issues/117113).
 func MakeIngestionSSTWriterWithOverrides(
 	ctx context.Context, cs *cluster.Settings, w objstorage.Writable, overrides ...SSTWriterOption,
