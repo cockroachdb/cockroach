@@ -422,21 +422,8 @@ func (tc *Collection) markAsShadowedName(id descpb.ID) {
 	}] = struct{}{}
 }
 
-func (tc *Collection) isShadowedName(nameKey catalog.NameKey) bool {
-	var k descpb.NameInfo
-	switch t := nameKey.(type) {
-	case descpb.NameInfo:
-		k = t
-	case *descpb.NameInfo:
-		k = *t
-	default:
-		k = descpb.NameInfo{
-			ParentID:       nameKey.GetParentID(),
-			ParentSchemaID: nameKey.GetParentSchemaID(),
-			Name:           nameKey.GetName(),
-		}
-	}
-	_, ok := tc.shadowedNames[k]
+func (tc *Collection) isShadowedName(nameKey descpb.NameInfo) bool {
+	_, ok := tc.shadowedNames[nameKey]
 	return ok
 }
 
@@ -976,7 +963,7 @@ func (tc *Collection) aggregateAllLayers(
 	})
 	// Add stored namespace entries which are not shadowed.
 	_ = stored.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-		if tc.isShadowedName(e) {
+		if tc.isShadowedName(catalog.MakeNameInfo(e)) {
 			return nil
 		}
 		// Temporary schemas don't have descriptors and are persisted only
