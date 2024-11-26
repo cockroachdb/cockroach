@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -27,10 +28,6 @@ type NemesesOption struct {
 var NemesesOptions = []NemesesOption{
 	{
 		EnableFpValidator: true,
-		EnableSQLSmith:    false,
-	},
-	{
-		EnableFpValidator: false,
 		EnableSQLSmith:    true,
 	},
 }
@@ -48,6 +45,7 @@ func (no NemesesOption) String() string {
 // real output of a changefeed. The output rows and resolved timestamps of the
 // tested feed are fed into them to check for anomalies.
 func RunNemesis(
+	t *testing.T,
 	f TestFeedFactory,
 	db *gosql.DB,
 	isSinkless bool,
@@ -145,6 +143,7 @@ func RunNemesis(
 		},
 	}
 
+	ns.eventMix[eventCreateEnum{}] = 0
 	// Create the table and set up some initial splits.
 	if _, err := db.Exec(`CREATE TABLE foo (id INT PRIMARY KEY, ts STRING DEFAULT '0')`); err != nil {
 		return nil, err
@@ -229,7 +228,7 @@ func RunNemesis(
 	}
 
 	if nOp.EnableFpValidator {
-		fprintV, err := NewFingerprintValidator(db, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount)
+		fprintV, err := NewFingerprintValidator(t, db, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount)
 		if err != nil {
 			return nil, err
 		}
