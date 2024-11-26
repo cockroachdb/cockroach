@@ -104,8 +104,8 @@ func (c *cachedCatalogReader) IsIDInCache(id descpb.ID) bool {
 }
 
 // IsNameInCache is part of the CatalogReader interface.
-func (c *cachedCatalogReader) IsNameInCache(key catalog.NameKey) bool {
-	return c.cache.LookupNamespaceEntry(catalog.MakeNameInfo(key)) != nil
+func (c *cachedCatalogReader) IsNameInCache(key descpb.NameInfo) bool {
+	return c.cache.LookupNamespaceEntry(key) != nil
 }
 
 // IsDescIDKnownToNotExist is part of the CatalogReader interface.
