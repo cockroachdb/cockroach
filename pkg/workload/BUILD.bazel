@@ -58,6 +58,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql/memsize",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
