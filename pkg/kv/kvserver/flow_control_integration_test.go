@@ -2817,6 +2817,14 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			bypassReplicaUnreachable.Store(false)
 			ctx := context.Background()
 			settings := cluster.MakeTestingClusterSettings()
+			// This test doesn't want leadership changing hands, and leader leases (by
+			// virtue of raft fortification) help ensure this. Override to disable any
+			// metamorphosis.
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+			// Using a manual clock here ensures that StoreLiveness support, once
+			// established, never expires. By extension, leadership should stay
+			// sticky.
+			manualClock := hlc.NewHybridManualClock()
 			for i := 0; i < numServers; i++ {
 				stickyServerArgs[i] = base.TestServerArgs{
 					Settings: settings,
@@ -2826,14 +2834,10 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 							StickyVFSID: strconv.FormatInt(int64(i), 10),
 						},
 					},
-					RaftConfig: base.RaftConfig{
-						// Suppress timeout-based elections. This test doesn't want to
-						// deal with leadership changing hands.
-						RaftElectionTimeoutTicks: 1000000,
-					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							StickyVFSRegistry: fs.NewStickyRegistry(),
+							WallClock:         manualClock,
 						},
 						Store: &kvserver.StoreTestingKnobs{
 							RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
