@@ -226,8 +226,13 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	_, ingestionJobID := replicationtestutils.GetStreamJobIds(t, ctx, sqlDB, "30")
 
-	// Start the ingestion stream and wait for at least one AddSSTable to ensure the job is running.
-	allowResponse <- struct{}{}
+	// Start the ingestion stream and wait (for up to a minute) for at least one
+	// AddSSTable to ensure the job is running.
+	select {
+	case allowResponse <- struct{}{}:
+	case <-time.After(time.Minute):
+		t.Fatal("timed out waiting for stream ingestion to send an sst")
+	}
 	close(allowResponse)
 
 	// Wait for the job to signal that it is ready to be cutover, after it has
