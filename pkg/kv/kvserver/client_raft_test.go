@@ -1146,10 +1146,6 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		log.Infof(ctx, "test: partitioning node")
 		const partitionNodeIdx = 0
 		partitionStore := tc.GetFirstStoreFromServer(t, partitionNodeIdx)
-		partRepl, err := partitionStore.GetReplica(rngDesc.RangeID)
-		require.NoError(t, err)
-		partReplDesc, err := partRepl.GetReplicaDescriptor()
-		require.NoError(t, err)
 		partitionedStoreSender := partitionStore.TestSender()
 		const otherStoreIdx = 1
 		otherStore := tc.GetFirstStoreFromServer(t, otherStoreIdx)
@@ -1162,24 +1158,9 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 			dropRaftMessagesFrom(t, tc.Servers[0], rngDesc, []roachpb.ReplicaID{2, 3}, nil)
 		}
 
-		// Wait until another replica campaigns and becomes leader, replacing the
-		// partitioned one.
-		log.Infof(ctx, "test: waiting for leadership to fail over")
-		testutils.SucceedsSoon(t, func() error {
-			if partRepl.RaftStatus().RaftState == raftpb.StateLeader {
-				return errors.New("partitioned replica should have stepped down")
-			}
-			lead := otherRepl.RaftStatus().Lead
-			if lead == raft.None {
-				return errors.New("no leader yet")
-			}
-			if roachpb.ReplicaID(lead) == partReplDesc.ReplicaID {
-				return errors.New("partitioned replica is still leader")
-			}
-			return nil
-		})
-
-		leaderReplicaID := roachpb.ReplicaID(otherRepl.RaftStatus().Lead)
+		leaderReplicaID := waitForPartitionedLeaderStepDownAndNewLeaderToStepUp(
+			t, tc, rngDesc, partitionNodeIdx, otherStoreIdx,
+		)
 		log.Infof(ctx, "test: the leader is replica ID %d", leaderReplicaID)
 		if leaderReplicaID != 2 && leaderReplicaID != 3 {
 			t.Fatalf("expected leader to be 1 or 2, was: %d", leaderReplicaID)
