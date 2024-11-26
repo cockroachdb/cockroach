@@ -3968,3 +3968,16 @@ statement error pgcode 42601 variable sub-expressions are not allowed in EXPRESS
 ALTER TABLE t_124546 ADD CONSTRAINT ident UNIQUE ( ( EXISTS ( TABLE error FOR READ ONLY ) ) DESC ) STORING ( ident , ident );
 
 subtest end
+
+subtest validate_not_null_during_sc
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(n IS NOT NULL\)
+BEGIN;
+create table t1_135692(n int);
+alter table t1_135692 alter column n set not null;
+insert into t1_135692 values (null);
+
+statement ok
+ROLLBACK;
+
+subtest end
