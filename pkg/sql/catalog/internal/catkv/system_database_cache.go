@@ -87,14 +87,14 @@ func (c *SystemDatabaseCache) lookupDescriptor(
 func (c *SystemDatabaseCache) lookupDescriptorID(
 	version clusterversion.ClusterVersion, key descpb.NameInfo,
 ) (descpb.ID, hlc.Timestamp) {
-	if key.GetParentID() == descpb.InvalidID &&
-		key.GetParentSchemaID() == descpb.InvalidID &&
-		key.GetName() == catconstants.SystemDatabaseName {
+	if key.ParentID == descpb.InvalidID &&
+		key.ParentSchemaID == descpb.InvalidID &&
+		key.Name == catconstants.SystemDatabaseName {
 		return keys.SystemDatabaseID, hlc.Timestamp{}
 	}
-	if key.GetParentID() == keys.SystemDatabaseID &&
-		key.GetParentSchemaID() == descpb.InvalidID &&
-		key.GetName() == catconstants.PublicSchemaName {
+	if key.ParentID == keys.SystemDatabaseID &&
+		key.ParentSchemaID == descpb.InvalidID &&
+		key.Name == catconstants.PublicSchemaName {
 		return keys.SystemPublicSchemaID, hlc.Timestamp{}
 	}
 	if c == nil {
