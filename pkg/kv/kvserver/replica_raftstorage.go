@@ -342,10 +342,15 @@ func snapshot(
 		return OutgoingSnapshot{}, errors.Mark(errors.Errorf("couldn't find range descriptor"), errMarkSnapshotError)
 	}
 
+	// TODO(sep-raft-log): do not load the state that is not useful for sending
+	// snapshots, e.g. RaftTruncatedState.
 	state, err := rsl.Load(ctx, snap, &desc)
 	if err != nil {
 		return OutgoingSnapshot{}, err
 	}
+	// There is no need in sending TruncatedState because the receiver assigns it
+	// to match snap.RaftSnap.Metadata.{Index,Term}. See (*Replica).applySnapshot.
+	state.TruncatedState = nil
 
 	return OutgoingSnapshot{
 		EngineSnap: snap,
