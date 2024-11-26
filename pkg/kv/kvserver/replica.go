@@ -1746,12 +1746,10 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 			redact.Safe(pretty.Diff(loaded, ts)))
 	}
 
-	// TODO(pav-kv): don't load RaftTruncatedState.
 	diskState, err := r.mu.stateLoader.Load(ctx, reader, r.shMu.state.Desc)
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-	diskState.TruncatedState = nil
 
 	// We don't care about this field; see comment on
 	// DeprecatedUsingAppliedStateKey for more details. This can be removed once
