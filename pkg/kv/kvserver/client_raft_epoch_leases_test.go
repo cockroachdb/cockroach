@@ -22,10 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -235,6 +238,7 @@ func TestRequestsOnLaggingReplicaEpochLeases(t *testing.T) {
 	clusterArgs := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
+			Settings: st,
 			// Reduce the election timeout some to speed up the test.
 			RaftConfig: base.RaftConfig{RaftElectionTimeoutTicks: 10},
 			Knobs: base.TestingKnobs{
@@ -463,4 +467,231 @@ func TestRequestsOnLaggingReplicaEpochLeases(t *testing.T) {
 		require.Equal(t, leaderReplicaID, nlhe.Lease.Replica.ReplicaID)
 		break
 	}
+}
+
+// TestSnapshotAfterTruncationWithUncommittedTail is similar in spirit to
+// TestSnapshotAfterTruncation/differentTerm. However, it differs in that we
+// take care to ensure that the partitioned Replica has a long uncommitted tail
+// of Raft entries that is not entirely overwritten by the snapshot it receives
+// after the partition heals. If the recipient of the snapshot did not purge its
+// Raft entry cache when receiving the snapshot, it could get stuck repeatedly
+// rejecting attempts to catch it up. This serves as a regression test for the
+// bug seen in #37056.
+//
+// This test is only run with Epoch leases.
+func TestSnapshotAfterTruncationWithUncommittedTailEpochLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	// Only run the test with epoch based leases.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
+
+	manualClock := hlc.NewHybridManualClock()
+	tc := testcluster.StartTestCluster(t, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						WallClock: manualClock,
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+	store := tc.GetFirstStoreFromServer(t, 0)
+
+	key := tc.ScratchRangeWithExpirationLease(t)
+	incA := int64(5)
+	incB := int64(7)
+	incC := int64(9)
+	incAB := incA + incB
+	incABC := incAB + incC
+
+	// Set up a key to replicate across the cluster. We're going to modify this
+	// key and truncate the raft logs from that command after partitioning one
+	// of the nodes to check that it gets the new value after it reconnects.
+	// We're then going to continue modifying this key to make sure that the
+	// temporarily partitioned node can continue to receive updates.
+	incArgs := incrementArgs(key, incA)
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 2)...))
+	tc.WaitForValues(t, key, []int64{incA, incA, incA})
+
+	// We partition the original leader from the other two replicas. This allows
+	// us to build up a large uncommitted Raft log on the partitioned node.
+	const partStore = 0
+	partRepl := tc.GetFirstStoreFromServer(t, partStore).LookupReplica(roachpb.RKey(key))
+	partReplDesc, err := partRepl.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	partReplSender := tc.GetFirstStoreFromServer(t, partStore).TestSender()
+
+	// Partition the original leader from its followers. We do this by installing
+	// unreliableRaftHandler listeners on all three Stores. The handler on the
+	// partitioned store filters out all messages while the handler on the other
+	// two stores only filters out messages from the partitioned store. The
+	// configuration looks like:
+	//
+	//           [0]
+	//          x  x
+	//         /    \
+	//        x      x
+	//      [1]<---->[2]
+	//
+	log.Infof(ctx, "test: installing unreliable Raft transports")
+	for _, s := range []int{0, 1, 2} {
+		h := &unreliableRaftHandler{
+			rangeID:                    partRepl.RangeID,
+			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
+		}
+		if s != partStore {
+			// Only filter messages from the partitioned store on the other
+			// two stores.
+			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+				return req.FromReplica.StoreID == partRepl.StoreID()
+			}
+			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
+				return hb.FromReplicaID == partReplDesc.ReplicaID
+			}
+		}
+		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
+	}
+
+	// Perform a series of writes on the partitioned replica. The writes will
+	// not succeed before their context is canceled, but they will be appended
+	// to the partitioned replica's Raft log because it is currently the Raft
+	// leader.
+	log.Infof(ctx, "test: sending writes to partitioned replica")
+	g := ctxgroup.WithContext(ctx)
+	otherKeys := make([]roachpb.Key, 32)
+	otherKeys[0] = key.Next()
+	for i := 1; i < 32; i++ {
+		otherKeys[i] = otherKeys[i-1].Next()
+	}
+	for i := range otherKeys {
+		// This makes the race detector happy.
+		otherKey := otherKeys[i]
+		g.GoCtx(func(ctx context.Context) error {
+			cCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+			defer cancel()
+			incArgsOther := incrementArgs(otherKey, 1)
+			if _, pErr := kv.SendWrapped(cCtx, partReplSender, incArgsOther); pErr == nil {
+				return errors.New("unexpected success")
+			} else if !testutils.IsPError(pErr, "context deadline exceeded") {
+				return pErr.GoError()
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Transfer the lease to one of the followers and perform a write. The
+	// partition ensures that this will require a Raft leadership change. It's
+	// unpredictable which one of the followers will become leader. Only the
+	// leader will be allowed to acquire the lease (see
+	// TestSnapshotAfterTruncationWithUncommittedTail), so it's also unpredictable
+	// who will get the lease. We try repeatedly sending requests to both
+	// candidates until one of them succeeds.
+	var nonPartitionedSenders [2]kv.Sender
+	nonPartitionedSenders[0] = tc.GetFirstStoreFromServer(t, 1).TestSender()
+	nonPartitionedSenders[1] = tc.GetFirstStoreFromServer(t, 2).TestSender()
+
+	log.Infof(ctx, "test: sending write to transfer lease")
+	incArgs = incrementArgs(key, incB)
+	var i int
+	var newLeaderRepl *kvserver.Replica
+	var newLeaderReplSender kv.Sender
+	testutils.SucceedsSoon(t, func() error {
+		manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
+		i++
+		sender := nonPartitionedSenders[i%2]
+		_, pErr := kv.SendWrapped(ctx, sender, incArgs)
+		if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); ok {
+			return pErr.GoError()
+		} else if pErr != nil {
+			t.Fatal(pErr)
+		}
+
+		// A request succeeded, proving that there is a new leader and leaseholder.
+		// Remember who that is.
+		newLeaderStoreIdx := 1 + (i % 2)
+		newLeaderRepl = tc.GetFirstStoreFromServer(t, newLeaderStoreIdx).LookupReplica(roachpb.RKey(key))
+		newLeaderReplSender = tc.GetFirstStoreFromServer(t, newLeaderStoreIdx).TestSender()
+		return nil
+	})
+	log.Infof(ctx, "test: waiting for values...")
+	tc.WaitForValues(t, key, []int64{incA, incAB, incAB})
+	log.Infof(ctx, "test: waiting for values... done")
+
+	index := newLeaderRepl.GetLastIndex()
+
+	// Truncate the log at index+1 (log entries < N are removed, so this
+	// includes the increment).
+	log.Infof(ctx, "test: truncating log")
+	truncArgs := truncateLogArgs(index+1, partRepl.RangeID)
+	truncArgs.Key = partRepl.Desc().StartKey.AsRawKey()
+	testutils.SucceedsSoon(t, func() error {
+		manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
+		_, pErr := kv.SendWrappedWith(ctx, newLeaderReplSender, kvpb.Header{RangeID: partRepl.RangeID}, truncArgs)
+		if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); ok {
+			return pErr.GoError()
+		} else if pErr != nil {
+			t.Fatal(pErr)
+		}
+		return nil
+	})
+	waitForTruncationForTesting(t, newLeaderRepl, index+1)
+
+	snapsMetric := tc.GetFirstStoreFromServer(t, partStore).Metrics().RangeSnapshotsAppliedByVoters
+	snapsBefore := snapsMetric.Count()
+
+	// Remove the partition. Snapshot should follow.
+	log.Infof(ctx, "test: removing the partition")
+	for _, s := range []int{0, 1, 2} {
+		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, &unreliableRaftHandler{
+			rangeID:                    partRepl.RangeID,
+			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
+			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+					// Make sure that even going forward no MsgApp for what we just truncated can
+					// make it through. The Raft transport is asynchronous so this is necessary
+					// to make the test pass reliably.
+					// NB: the Index on the message is the log index that _precedes_ any of the
+					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
+					return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
+				},
+				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+			},
+		})
+	}
+
+	// The partitioned replica should catch up after a snapshot.
+	testutils.SucceedsSoon(t, func() error {
+		snapsAfter := snapsMetric.Count()
+		if !(snapsAfter > snapsBefore) {
+			return errors.New("expected at least 1 snapshot to catch the partitioned replica up")
+		}
+		return nil
+	})
+	tc.WaitForValues(t, key, []int64{incAB, incAB, incAB})
+
+	// Perform another write. The partitioned replica should be able to receive
+	// replicated updates.
+	incArgs = incrementArgs(key, incC)
+	if _, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSenderI().(kv.Sender), incArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	tc.WaitForValues(t, key, []int64{incABC, incABC, incABC})
 }

@@ -865,11 +865,15 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	// Only run the test with Leader leases.
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
 	manualClock := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
+				Settings: st,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						WallClock: manualClock,
@@ -923,24 +927,12 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	//        x      x
 	//      [1]<---->[2]
 	//
-	log.Infof(ctx, "test: installing unreliable Raft transports")
-	for _, s := range []int{0, 1, 2} {
-		h := &unreliableRaftHandler{
-			rangeID:                    partRepl.RangeID,
-			IncomingRaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
-		}
-		if s != partStore {
-			// Only filter messages from the partitioned store on the other
-			// two stores.
-			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
-				return req.FromReplica.StoreID == partRepl.StoreID()
-			}
-			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
-				return hb.FromReplicaID == partReplDesc.ReplicaID
-			}
-		}
-		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
-	}
+	log.Infof(ctx, "test: partitioning n1 from n2, n3")
+	desc, err := tc.LookupRange(key)
+	require.NoError(t, err)
+	dropRaftMessagesFrom(t, tc.Servers[1], desc, []roachpb.ReplicaID{1}, nil)
+	dropRaftMessagesFrom(t, tc.Servers[2], desc, []roachpb.ReplicaID{1}, nil)
+	dropRaftMessagesFrom(t, tc.Servers[0], desc, []roachpb.ReplicaID{2, 3}, nil)
 
 	// Perform a series of writes on the partitioned replica. The writes will
 	// not succeed before their context is canceled, but they will be appended
@@ -972,40 +964,47 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Transfer the lease to one of the followers and perform a write. The
-	// partition ensures that this will require a Raft leadership change. It's
-	// unpredictable which one of the followers will become leader. Only the
-	// leader will be allowed to acquire the lease (see
-	// TestSnapshotAfterTruncationWithUncommittedTail), so it's also unpredictable
-	// who will get the lease. We try repeatedly sending requests to both
-	// candidates until one of them succeeds.
-	var nonPartitionedSenders [2]kv.Sender
-	nonPartitionedSenders[0] = tc.GetFirstStoreFromServer(t, 1).TestSender()
-	nonPartitionedSenders[1] = tc.GetFirstStoreFromServer(t, 2).TestSender()
+	// The partition ensures that the Raft leadership changes. The previous leader
+	// (1) will step down and one of the followers (2 or 3) will become the new
+	// leader. Either one can, and when one does, it'll be able to acquire the
+	// lease. We'll first wait for a new leader to be established, have it acquire
+	// the lease, and service a write request.
+	log.Infof(ctx, "test: establishing new leader/leaseholder and sending writes")
 
-	log.Infof(ctx, "test: sending write to transfer lease")
+	const otherStoreIdx = 1
+	otherStore := tc.GetFirstStoreFromServer(t, otherStoreIdx)
+	otherRepl, err := otherStore.GetReplica(desc.RangeID)
+	require.NoError(t, err)
+
 	incArgs = incrementArgs(key, incB)
-	var i int
 	var newLeaderRepl *kvserver.Replica
 	var newLeaderReplSender kv.Sender
+
+	// Have StoreLiveness support for the partitioned store expire.
+	manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
+
 	testutils.SucceedsSoon(t, func() error {
-		manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
-		i++
-		sender := nonPartitionedSenders[i%2]
-		_, pErr := kv.SendWrapped(ctx, sender, incArgs)
-		if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); ok {
-			return pErr.GoError()
-		} else if pErr != nil {
-			t.Fatal(pErr)
+		if partRepl.RaftStatus().RaftState == raftpb.StateLeader {
+			return errors.New("partitioned replica should have stepped down")
+		}
+		lead := otherRepl.RaftStatus().Lead
+		if lead == raft.None {
+			return errors.New("no leader yet")
+		}
+		if roachpb.ReplicaID(lead) == partReplDesc.ReplicaID {
+			return errors.New("partitioned replica is still leader")
 		}
 
-		// A request succeeded, proving that there is a new leader and leaseholder.
-		// Remember who that is.
-		newLeaderStoreIdx := 1 + (i % 2)
-		newLeaderRepl = tc.GetFirstStoreFromServer(t, newLeaderStoreIdx).LookupReplica(roachpb.RKey(key))
-		newLeaderReplSender = tc.GetFirstStoreFromServer(t, newLeaderStoreIdx).TestSender()
+		// Remember who the leader/leaseholder is and also send it a write request.
+		newLeaderReplDesc, found := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(lead))
+		require.True(t, found)
+		newLeaderRepl = tc.GetFirstStoreFromServer(t, int(newLeaderReplDesc.NodeID-1)).LookupReplica(roachpb.RKey(key))
+		newLeaderReplSender = tc.GetFirstStoreFromServer(t, int(newLeaderReplDesc.NodeID-1)).TestSender()
+		_, pErr := kv.SendWrapped(ctx, newLeaderReplSender, incArgs)
+		require.Nil(t, pErr)
 		return nil
 	})
+
 	log.Infof(ctx, "test: waiting for values...")
 	tc.WaitForValues(t, key, []int64{incA, incAB, incAB})
 	log.Infof(ctx, "test: waiting for values... done")
@@ -1051,6 +1050,10 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 			},
 		})
+		store := tc.GetFirstStoreFromServer(t, s)
+		store.StoreLivenessTransport().ListenMessages(
+			store.StoreID(), store.TestingStoreLivenessSupportManager(),
+		)
 	}
 
 	// The partitioned replica should catch up after a snapshot.
