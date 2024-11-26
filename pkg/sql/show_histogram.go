@@ -38,7 +38,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 		name:    fmt.Sprintf("SHOW HISTOGRAM %d", n.HistogramID),
 		columns: showHistogramColumns,
 
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (_ planNode, err error) {
 			row, err := p.InternalSQLTxn().QueryRowEx(
 				ctx,
 				"read-histogram",
