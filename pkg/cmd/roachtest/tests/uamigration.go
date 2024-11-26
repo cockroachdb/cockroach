@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -20,7 +21,7 @@ import (
 func registerUATests(r registry.Registry) {
 	{
 		r.Add(registry.TestSpec{
-			Name:             "uamigration",
+			Name:             "ua/migration",
 			Owner:            registry.OwnerSQLFoundations,
 			Cluster:          r.MakeClusterSpec(3),
 			CompatibleClouds: registry.AllClouds,
@@ -28,6 +29,17 @@ func registerUATests(r registry.Registry) {
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runUAMigration(ctx, t, c)
+			},
+		})
+		r.Add(registry.TestSpec{
+			Name:             "ua/cluster-with-t2-system-tenant",
+			Owner:            registry.OwnerSQLFoundations,
+			Cluster:          r.MakeClusterSpec(3),
+			CompatibleClouds: registry.AllClouds,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runSystemTenantTwo(ctx, t, c)
 			},
 		})
 	}
@@ -102,4 +114,35 @@ func runUAMigration(ctx context.Context, t test.Test, c cluster.Cluster) {
 		require.Equal(t, 0, id)
 	}
 	require.NoError(t, rows.Err(), "some failure while reading")
+}
+
+// Run workload with tenant {2} as system tenant
+func runSystemTenantTwo(ctx context.Context, t test.Test, c cluster.Cluster) {
+	opts := option.DefaultStartOpts()
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_UA=true")
+
+	c.Start(ctx, t.L(), opts, settings, c.All())
+	db := c.Conn(ctx, t.L(), 1)
+	defer db.Close()
+
+	// Workload settings
+	roachNodes, workloadNodes := c.Nodes(2), c.Nodes(1)
+	numWarehouses := 10
+	duration := time.Minute * 10
+
+	init := roachtestutil.NewCommand("./cockroach workload init tpcc").
+		Arg("{pgurl%s}", roachNodes).
+		Option("split").
+		Flag("warehouses", numWarehouses)
+	err := c.RunE(ctx, option.WithNodes(workloadNodes), init.String())
+	require.NoError(t, err, "failed to run tpcc init")
+
+	run := roachtestutil.NewCommand("./cockroach workload run tpcc").
+		Arg("{pgurl%s}", roachNodes).
+		Flag("duration", duration).
+		Flag("warehouses", numWarehouses).
+		Option("tolerate-errors")
+	err = c.RunE(ctx, option.WithNodes(workloadNodes), run.String())
+	require.NoError(t, err, "failed to run tpcc run")
 }

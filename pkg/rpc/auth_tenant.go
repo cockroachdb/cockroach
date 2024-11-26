@@ -39,9 +39,11 @@ func tenantIDFromString(commonName, field string) (roachpb.TenantID, error) {
 	if err != nil {
 		return roachpb.TenantID{}, authErrorf("could not parse tenant ID from %s: %s", field, err)
 	}
-	// if tenID < roachpb.MinTenantID.ToUint64() || tenID > roachpb.MaxTenantID.ToUint64() {
-	// 	return roachpb.TenantID{}, authErrorf("invalid tenant ID %d in %s", tenID, field)
-	// }
+	if (tenID < roachpb.MinTenantID.ToUint64() && tenID != roachpb.TenantOne.InternalValue) ||
+		tenID > roachpb.MaxTenantID.ToUint64() {
+		return roachpb.TenantID{}, authErrorf("invalid tenant ID %d in %s", tenID, field)
+	}
+
 	return roachpb.MustMakeTenantID(tenID), nil
 }
 
