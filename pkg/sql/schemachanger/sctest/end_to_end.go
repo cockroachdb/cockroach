@@ -139,7 +139,7 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 						sd.TempTablesEnabled = true
 						sd.ApplicationName = ""
 						sd.EnableUniqueWithoutIndexConstraints = true // this allows `ADD UNIQUE WITHOUT INDEX` in the testing suite.
-						sd.AlterColumnTypeGeneralEnabled = true
+						sd.AllowAlterColumnTypeInExplicitTxn = true
 					})),
 					sctestdeps.WithTestingKnobs(&scexec.TestingKnobs{
 						BeforeStage: func(p scplan.Plan, stageIdx int) error {

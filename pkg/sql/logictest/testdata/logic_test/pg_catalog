@@ -2936,6 +2936,7 @@ enforce_home_region                                        off                 N
 enforce_home_region_follower_reads_enabled                 off                 NULL      NULL        NULL        string
 escape_string_warning                                      on                  NULL      NULL        NULL        string
 expect_and_ignore_not_visible_columns_in_copy              off                 NULL      NULL        NULL        string
+experimental_allow_alter_column_type_in_explicit_txn       off                 NULL      NULL        NULL        string
 experimental_enable_implicit_column_partitioning           off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables                            off                 NULL      NULL        NULL        string
 experimental_enable_unique_without_index_constraints       on                  NULL      NULL        NULL        string
@@ -3133,6 +3134,7 @@ enforce_home_region                                        off                 N
 enforce_home_region_follower_reads_enabled                 off                 NULL  user     NULL      off                 off
 escape_string_warning                                      on                  NULL  user     NULL      on                  on
 expect_and_ignore_not_visible_columns_in_copy              off                 NULL  user     NULL      off                 off
+experimental_allow_alter_column_type_in_explicit_txn       off                 NULL  user     NULL      off                 off
 experimental_enable_implicit_column_partitioning           off                 NULL  user     NULL      off                 off
 experimental_enable_temp_tables                            off                 NULL  user     NULL      off                 off
 experimental_enable_unique_without_index_constraints       on                  NULL  user     NULL      off                 off
@@ -3327,6 +3329,7 @@ enforce_home_region                                        NULL    NULL     NULL
 enforce_home_region_follower_reads_enabled                 NULL    NULL     NULL     NULL        NULL
 escape_string_warning                                      NULL    NULL     NULL     NULL        NULL
 expect_and_ignore_not_visible_columns_in_copy              NULL    NULL     NULL     NULL        NULL
+experimental_allow_alter_column_type_in_explicit_txn       NULL    NULL     NULL     NULL        NULL
 experimental_enable_implicit_column_partitioning           NULL    NULL     NULL     NULL        NULL
 experimental_enable_temp_tables                            NULL    NULL     NULL     NULL        NULL
 experimental_enable_unique_without_index_constraints       NULL    NULL     NULL     NULL        NULL

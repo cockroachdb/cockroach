@@ -1874,6 +1874,22 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	`experimental_allow_alter_column_type_in_explicit_txn`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`experimental_allow_alter_column_type_in_explicit_txn`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("experimental_allow_alter_column_type_in_explicit_txn", s)
+			if err != nil {
+				return err
+			}
+			m.SetAllowAlterColumnTypeInExplicitTxn(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowAlterColumnTypeInExplicitTxn), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// TODO(rytaft): remove this once unique without index constraints are fully
 	// supported.
 	`experimental_enable_unique_without_index_constraints`: {

@@ -563,6 +563,9 @@ message LocalOnlySessionData {
   // RecursionDepthLimit is the maximum depth that nested trigger-function calls
   // can reach.
   int64 recursion_depth_limit = 144;
+  // AllowAlterColumnTypeInExplicitTxn if set will allow ALTER COLUMN TYPE in an
+  // explicit transaction.
+  bool allow_alter_column_type_in_explicit_txn = 145;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

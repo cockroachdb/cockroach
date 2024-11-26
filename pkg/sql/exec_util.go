@@ -3487,6 +3487,10 @@ func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
 }
 
+func (m *sessionDataMutator) SetAllowAlterColumnTypeInExplicitTxn(val bool) {
+	m.data.AllowAlterColumnTypeInExplicitTxn = val
+}
+
 func (m *sessionDataMutator) SetEnableSuperRegions(val bool) {
 	m.data.EnableSuperRegions = val
 }

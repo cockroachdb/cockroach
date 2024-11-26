@@ -265,6 +265,7 @@ func handleGeneralColumnConversion(
 	col *scpb.Column,
 	oldColType, newColType *scpb.ColumnType,
 ) {
+	failIfExplicitTransaction(b)
 	failIfExperimentalSettingNotSet(b, oldColType, newColType)
 
 	// To handle the conversion, we remove the old column and add a new one with
@@ -427,6 +428,15 @@ func updateColumnType(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
 	// type for the column.
 	b.Drop(oldColType)
 	b.Add(newColType)
+}
+
+// failIfExplicitTransaction checks if the current operation is within an
+// explicit transaction and the override setting is not enabled. If so, it
+// raises an error.
+func failIfExplicitTransaction(b BuildCtx) {
+	if !b.SessionData().AllowAlterColumnTypeInExplicitTxn && !b.EvalCtx().TxnIsSingleStmt {
+		panic(sqlerrors.NewAlterColTypeInTxnNotSupportedErr())
+	}
 }
 
 // failIfExperimentalSettingNotSet checks if the current version requires a
