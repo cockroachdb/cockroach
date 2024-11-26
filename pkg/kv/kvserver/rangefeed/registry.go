@@ -360,9 +360,7 @@ func (reg *registry) PublishToOverlapping(
 // TODO: this should be revisited as part of
 // https://github.com/cockroachdb/cockroach/issues/110634
 func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Error) {
-	reg.forOverlappingRegs(ctx, all, func(r registration) (bool, *kvpb.Error) {
-		return true /* disconned */, pErr
-	})
+	reg.DisconnectWithErr(ctx, all, pErr)
 }
 
 // DisconnectWithErr disconnects all registrations that overlap the specified
