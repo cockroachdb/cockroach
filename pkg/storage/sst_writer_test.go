@@ -56,7 +56,7 @@ func makePebbleSST(t testing.TB, kvs []MVCCKeyValue, ingestion bool) []byte {
 	if ingestion {
 		w = MakeIngestionSSTWriter(ctx, st, f)
 	} else {
-		w = MakeBackupSSTWriter(ctx, st, &f.Buffer)
+		w = MakeTransportSSTWriter(ctx, st, &f.Buffer)
 	}
 	defer w.Close()
 

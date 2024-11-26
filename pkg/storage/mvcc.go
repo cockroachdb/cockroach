@@ -7791,7 +7791,7 @@ func MVCCExportToSST(
 ) (kvpb.BulkOpSummary, ExportRequestResumeInfo, error) {
 	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
 	defer span.Finish()
-	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
+	sstWriter := MakeTransportSSTWriter(ctx, cs, dest)
 	defer sstWriter.Close()
 
 	summary, resumeInfo, exportErr := mvccExportToWriter(ctx, reader, opts, &sstWriter)
