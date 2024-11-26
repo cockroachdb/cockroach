@@ -2004,6 +2004,18 @@ func (l Lease) Type() LeaseType {
 	return LeaseExpiration
 }
 
+// SupportsQuiescence returns whether the lease supports quiescence or not.
+func (l Lease) SupportsQuiescence() bool {
+	switch l.Type() {
+	case LeaseExpiration, LeaseLeader:
+		return false
+	case LeaseEpoch:
+		return true
+	default:
+		panic("unexpected lease type")
+	}
+}
+
 // Speculative returns true if this lease instance doesn't correspond to a
 // committed lease (or at least to a lease that's *known* to have committed).
 // For example, nodes sometimes guess who a leaseholder might be and synthesize

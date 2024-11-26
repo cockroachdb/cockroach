@@ -35,7 +35,7 @@ var RaftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
 		"roll out Leader leases across the ranges in a cluster.",
 	// TODO(nvanbenschoten): make this a metamorphic constant once raft leader
 	// fortification and leader leases are sufficiently stable.
-	envutil.EnvOrDefaultFloat64("COCKROACH_LEADER_FORTIFICATION_FRACTION_ENABLED", 0.0),
+	envutil.EnvOrDefaultFloat64("COCKROACH_LEADER_FORTIFICATION_FRACTION_ENABLED", 1.0),
 	settings.FloatInRange(0.0, 1.0),
 	settings.WithPublic,
 )
