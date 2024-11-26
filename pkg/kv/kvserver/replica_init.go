@@ -185,9 +185,10 @@ func newUninitializedReplicaWithoutRaftGroup(
 	}
 	r.lastProblemRangeReplicateEnqueueTime.Store(store.Clock().PhysicalTime())
 
-	// NB: the state will be loaded when the replica gets initialized.
+	// NB: state and raftTruncState will be loaded when the replica gets
+	// initialized.
 	r.shMu.state = uninitState
-	r.shMu.raftTruncState = *uninitState.TruncatedState
+
 	r.rangeStr.store(replicaID, uninitState.Desc)
 	// Add replica log tag - the value is rangeStr.String().
 	r.AmbientContext.AddLogTag("r", &r.rangeStr)
@@ -286,7 +287,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState
 	r.setStartKeyLocked(desc.StartKey)
 
 	r.shMu.state = s.ReplState
-	r.shMu.raftTruncState = *s.ReplState.TruncatedState
+	r.shMu.raftTruncState = s.TruncState
 	r.shMu.lastIndexNotDurable = s.LastIndex
 	r.shMu.lastTermNotDurable = invalidLastTerm
 
