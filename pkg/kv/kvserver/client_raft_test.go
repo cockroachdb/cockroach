@@ -2517,15 +2517,21 @@ func TestQuotaPool(t *testing.T) {
 	// apply_to_all is set (metamorphically), the quota pool will be disabled.
 	// See getQuotaPoolEnabledRLocked.
 	kvflowcontrol.Mode.Override(ctx, &settings.SV, kvflowcontrol.ApplyToElastic)
+	// Disable metamorphism and always run with fortification enabled, as it helps
+	// guard against unexpected leadership changes that the test doesn't expect.
+	kvserver.RaftLeaderFortificationFractionEnabled.Override(ctx, &settings.SV, 1.0)
+	// Using a manual clock here ensures that StoreLiveness support, once
+	// established, never expires. By extension, leadership should stay sticky.
+	manualClock := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, numReplicas,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				Settings: settings,
-				RaftConfig: base.RaftConfig{
-					// Suppress timeout-based elections to avoid leadership changes in ways
-					// this test doesn't expect.
-					RaftElectionTimeoutTicks: 100000,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						WallClock: manualClock,
+					},
 				},
 			},
 		})
