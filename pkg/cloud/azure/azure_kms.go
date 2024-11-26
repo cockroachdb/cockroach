@@ -195,6 +195,14 @@ func (k *azureKMS) MasterKeyID() string {
 	return k.customerMasterKeyID
 }
 
+func (k *azureKMS) MasterKeyID24_3Compatible() string {
+	return k.customerMasterKeyID
+}
+
+func (k *azureKMS) ReplicaIDs() []string {
+	return []string{k.customerMasterKeyID}
+}
+
 func (k *azureKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
 	val, err := k.kms.Encrypt(ctx, k.customerMasterKeyID, k.customerMasterKeyVersion, kms.KeyOperationsParameters{
 		Value:     data,

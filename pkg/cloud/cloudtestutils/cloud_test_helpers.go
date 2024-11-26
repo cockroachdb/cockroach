@@ -621,7 +621,17 @@ func RequireKMSInaccessibleErrorContaining(
 		Settings:         cluster.MakeTestingClusterSettings(),
 		ExternalIOConfig: &base.ExternalIODirConfig{},
 	})
-	require.NoError(t, err)
+
+	if err != nil {
+		// At time of writing, AWS will fail in the initialization stage, but the
+		// GCP and Azure will fail at Encrypt/Decrypt.
+		require.True(t, cloud.IsKMSInaccessible(err), "error not kms inaccessible")
+		if !testutils.IsError(err, errRE) {
+			t.Fatalf("expected error '%s', got: %s", errRE, err)
+		}
+		return
+	}
+
 	defer func() {
 		require.NoError(t, k.Close())
 	}()

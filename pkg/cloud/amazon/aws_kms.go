@@ -31,8 +31,10 @@ const (
 )
 
 type awsKMS struct {
-	kms                 *kms.Client
-	customerMasterKeyID string
+	kms                               *kms.Client
+	customerMasterKeyID               string
+	customerMasterKeyID24_3Compatible string // TODO(benbardin): Remove when 24.3 compatibility is dropped.
+	replicaIDs                        []string
 }
 
 var _ cloud.KMS = &awsKMS{}
@@ -228,13 +230,53 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		}
 	}
 
+	kmsClient := kms.NewFromConfig(cfg, func(options *kms.Options) {
+		if endpointURI != "" {
+			options.BaseEndpoint = aws.String(endpointURI)
+		}
+	})
+
+	// Translate to ARN if an alias is given.
+	// This is because aliases are region specific. They require an explicit
+	// API call into the alias's active region.
+	// ARNs, however, are stored alongside multi-region replica keys. Or at least
+	// they seem to be, they can be retrieved with an API call to any replica
+	// key's region.
+	// So, to make replicas useful when a full region is unavailable, we write
+	// the full KMS ARN. No aliases.
+	resp, err := kmsClient.DescribeKey(ctx, &kms.DescribeKeyInput{KeyId: &kmsURIParams.customerMasterKeyID})
+	if err != nil {
+		return nil, cloud.KMSInaccessible(errors.Wrap(err, "could not describe key"))
+	}
+	customerMasterKeyID := *resp.KeyMetadata.Arn // Note this is the ARN of the underlying key, not the ARN of any alias.
+
+	// For backwards compatibility, include the user-provided key ID in ReplicaIDs
+	// in case it's an alias.
+	// Aliases are written literally on <=24.3, and translated to ARN IDs on >=25.1.
+	// If this is in fact an ARN, it will be a duplicate of a value below, but this is
+	// harmless.
+	// TODO(benbardin): Remove when 24.3 compatibility is dropped.
+	customerMasterKeyID24_3Compatible := kmsURIParams.customerMasterKeyID
+	replicaIDs := []string{customerMasterKeyID24_3Compatible}
+
+	config := resp.KeyMetadata.MultiRegionConfiguration
+	if config == nil {
+		// If this is not a multi-region configuration, there are no replicas.
+		// Use only this key's ARN in the Replica ID list.
+		replicaIDs = append(replicaIDs, *resp.KeyMetadata.Arn)
+	} else {
+		// This is a multi-region configuration. Return the primary and all replicas.
+		replicaIDs = append(replicaIDs, *config.PrimaryKey.Arn)
+		for _, key := range config.ReplicaKeys {
+			replicaIDs = append(replicaIDs, *key.Arn)
+		}
+	}
+
 	kms := &awsKMS{
-		kms: kms.NewFromConfig(cfg, func(options *kms.Options) {
-			if endpointURI != "" {
-				options.BaseEndpoint = aws.String(endpointURI)
-			}
-		}),
-		customerMasterKeyID: kmsURIParams.customerMasterKeyID,
+		kms:                               kmsClient,
+		customerMasterKeyID:               customerMasterKeyID,
+		customerMasterKeyID24_3Compatible: customerMasterKeyID24_3Compatible,
+		replicaIDs:                        replicaIDs,
 	}
 
 	if reuse {
@@ -248,6 +290,16 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 // MasterKeyID implements the KMS interface.
 func (k *awsKMS) MasterKeyID() string {
 	return k.customerMasterKeyID
+}
+
+// MasterKeyID24_3Compatible implements the KMS interface.
+func (k *awsKMS) MasterKeyID24_3Compatible() string {
+	return k.customerMasterKeyID24_3Compatible
+}
+
+// ReplicaIDs implements the KMS interface.
+func (k *awsKMS) ReplicaIDs() []string {
+	return k.replicaIDs
 }
 
 // Encrypt implements the KMS interface.

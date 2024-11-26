@@ -4481,6 +4481,8 @@ type testKMS struct {
 
 var _ cloud.KMS = &testKMS{}
 
+const replicaIDsParam = "TEST_REPLICA_IDS"
+
 func (k *testKMS) MasterKeyID() string {
 	kmsURL, err := url.ParseRequestURI(k.uri)
 	if err != nil {
@@ -4488,6 +4490,26 @@ func (k *testKMS) MasterKeyID() string {
 	}
 
 	return strings.TrimPrefix(kmsURL.Path, "/")
+}
+
+func (k *testKMS) MasterKeyID24_3Compatible() string {
+	return fmt.Sprintf("%s-24_3", k.MasterKeyID())
+}
+
+func (k *testKMS) ReplicaIDs() []string {
+	replicaIDs := []string{k.MasterKeyID()}
+
+	kmsURL, err := url.ParseRequestURI(k.uri)
+	if err != nil {
+		return []string{}
+	}
+	replicaIDsStr := kmsURL.Query().Get(replicaIDsParam)
+	if replicaIDsStr == "" {
+		return replicaIDs
+	}
+
+	replicaIDs = append(replicaIDs, strings.Split(replicaIDsStr, ",")...)
+	return replicaIDs
 }
 
 // Encrypt appends the KMS URI master key ID to data.
@@ -4516,13 +4538,16 @@ func MakeTestKMS(_ context.Context, uri string, _ cloud.KMSEnv) (cloud.KMS, erro
 	return &testKMS{uri}, nil
 }
 
-func constructMockKMSURIsWithKeyID(keyIDs []string) []string {
-	q := make(url.Values)
-	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
-	q.Add(amazon.KMSRegionParam, "blah")
+func constructMockKMSURIsWithKeyID(keyIDs []string, replicaIDs [][]string) []string {
 
 	var uris []string
-	for _, keyID := range keyIDs {
+	for i, keyID := range keyIDs {
+		q := make(url.Values)
+		q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
+		q.Add(amazon.KMSRegionParam, "blah")
+		if replicaIDs != nil {
+			q.Add(replicaIDsParam, strings.Join(replicaIDs[i], ","))
+		}
 		uris = append(uris, fmt.Sprintf("testkms:///%s?%s", keyID, q.Encode()))
 	}
 
@@ -4544,26 +4569,38 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 	}{
 		{
 			name:                  "inc-full-matching-set",
-			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
-			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"def", "abc"}),
+			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}, nil),
+			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"def", "abc"}, nil),
 			expectError:           false,
 		},
 		{
 			name:                  "inc-subset-of-full",
-			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
-			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc"}),
+			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}, nil),
+			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc"}, nil),
 			expectError:           false,
 		},
 		{
 			name:                  "inc-expands-set-of-full",
-			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
-			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "def", "ghi"}),
+			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}, nil),
+			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "def", "ghi"}, nil),
 			expectError:           true,
 		},
 		{
 			name:                  "inc-has-mismatch",
-			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
-			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "ghi"}),
+			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}, nil),
+			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "ghi"}, nil),
+			expectError:           true,
+		},
+		{
+			name:                  "replica-id-matches",
+			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}, nil),
+			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "ghi"}, [][]string{{}, {"def", "jkl"}}),
+			expectError:           false,
+		},
+		{
+			name:                  "replica-id-does-not-match",
+			fullBackupURIs:        constructMockKMSURIsWithKeyID([]string{"abc", "def"}, nil),
+			incrementalBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "ghi"}, [][]string{{}, {"jkl", "mno"}}),
 			expectError:           true,
 		},
 	} {
@@ -4619,11 +4656,11 @@ func TestGetEncryptedDataKeyByKMSMasterKeyID(t *testing.T) {
 	}{
 		{
 			name:           "single-uri",
-			fullBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc"}),
+			fullBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc"}, nil),
 		},
 		{
 			name:           "multiple-unique-uris",
-			fullBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "def"}),
+			fullBackupURIs: constructMockKMSURIsWithKeyID([]string{"abc", "def"}, nil),
 		},
 	} {
 		expectedMap := backupencryption.NewEncryptedDataKeyMap()
@@ -4633,6 +4670,7 @@ func TestGetEncryptedDataKeyByKMSMasterKeyID(t *testing.T) {
 			require.NoError(t, err)
 
 			masterKeyID := testKMS.MasterKeyID()
+			masterKeyID24_3 := testKMS.MasterKeyID24_3Compatible()
 			require.NoError(t, err)
 
 			encryptedDataKey, err := testKMS.Encrypt(ctx, plaintextDataKey)
@@ -4646,6 +4684,7 @@ func TestGetEncryptedDataKeyByKMSMasterKeyID(t *testing.T) {
 			}
 
 			expectedMap.AddEncryptedDataKey(backupencryption.PlaintextMasterKeyID(masterKeyID), encryptedDataKey)
+			expectedMap.AddEncryptedDataKey(backupencryption.PlaintextMasterKeyID(masterKeyID24_3), encryptedDataKey)
 		}
 
 		gotMap, gotDefaultKMSInfo, err := backupencryption.GetEncryptedDataKeyByKMSMasterKeyID(ctx,

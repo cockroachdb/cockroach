@@ -252,11 +252,17 @@ func TestKMSAgainstMockAWS(t *testing.T) {
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		defer r.Body.Close()
+		bodyStr := string(body)
 		// Default to replying with static placeholder "ciphertext", unless req is
 		// a decrypt req, in which case send static "decrypted" plaintext resp.
-		resp := `{"CiphertextBlob": "dW51c2Vk"}` // "unused".
-		if strings.Contains(string(body), "Ciphertext") {
+		var resp string
+		if strings.Contains(bodyStr, "Ciphertext") {
 			resp = `{"Plaintext": "aGVsbG8gd29ybGQ="}` // base64 for 'hello world'
+		} else if strings.Contains(bodyStr, "Plaintext") {
+			resp = `{"CiphertextBlob": "dW51c2Vk"}` // "unused".
+		} else {
+			// DescribeKey()
+			resp = `{"KeyMetadata": {"Arn":"dW51c2Vk"}}` // "unused" again.
 		}
 		_, err = w.Write([]byte(resp))
 		require.NoError(t, err)
@@ -404,7 +410,7 @@ func TestAWSKMSInaccessibleError(t *testing.T) {
 	t.Run("incorrect-kms", func(t *testing.T) {
 		incorrectKey := keyID + "-non-existent"
 		uri := fmt.Sprintf("%s:///%s?%s", awsKMSScheme, incorrectKey, q.Encode())
-		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "(NotFound|InvalidCiphertext)")
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "NotFound")
 	})
 
 	t.Run("no-kms-permission", func(t *testing.T) {
@@ -415,7 +421,7 @@ func TestAWSKMSInaccessibleError(t *testing.T) {
 		q2.Set(AssumeRoleParam, roleChain[0])
 
 		uri := fmt.Sprintf("%s:///%s?%s", awsKMSScheme, keyID, q2.Encode())
-		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "(not authorized to perform: kms:Encrypt|InvalidCiphertext)")
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "not authorized to perform")
 	})
 
 	t.Run("cannot-assume-role", func(t *testing.T) {
@@ -426,7 +432,7 @@ func TestAWSKMSInaccessibleError(t *testing.T) {
 		q2.Set(AssumeRoleParam, roleChain[len(roleChain)-1])
 
 		uri := fmt.Sprintf("%s:///%s?%s", awsKMSScheme, keyID, q2.Encode())
-		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "(not authorized to perform: sts:AssumeRole|InvalidCiphertext)")
+		cloudtestutils.RequireKMSInaccessibleErrorContaining(ctx, t, uri, "not authorized to perform: sts:AssumeRole")
 	})
 
 }
