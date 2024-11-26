@@ -51,5 +51,5 @@ roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpcc_init_${suffix}.sh"
 if [ "$execute_script" = "true" ]; then
   roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh"
 else
-  echo "Run --> roachprod run "${WORKLOAD_CLUSTER}":1 -- \"sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \\\$(id -u) --gid \\\$(id -g) bash ${pwd}/tpch_init_${suffix}.sh\""
+  echo "Run --> roachprod run "${WORKLOAD_CLUSTER}":1 -- \"sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \\\$(id -u) --gid \\\$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh\""
 fi
