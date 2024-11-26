@@ -56,15 +56,15 @@ func LoadReplicaState(
 	if ls.hardState, err = sl.LoadHardState(ctx, eng); err != nil {
 		return LoadedReplicaState{}, err
 	}
+	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, eng); err != nil {
+		return LoadedReplicaState{}, err
+	}
 	if ls.LastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	// TODO(pav-kv): load RaftTruncatedState separately from the replicated state.
 	if ls.ReplState, err = sl.Load(ctx, eng, desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	ls.TruncState = *ls.ReplState.TruncatedState
-	ls.ReplState.TruncatedState = nil
 
 	if err := ls.check(storeID); err != nil {
 		return LoadedReplicaState{}, err
