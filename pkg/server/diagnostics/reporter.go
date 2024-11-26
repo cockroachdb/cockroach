@@ -9,9 +9,11 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -45,6 +48,11 @@ import (
 	"github.com/mitchellh/reflectwalk"
 	"google.golang.org/protobuf/proto"
 )
+
+// TelemetryHttpTimeout allows for configuration of the client timeout
+// for sending telemetry reports. It is not expected that customers
+// whould tweak this.
+var TelemetryHttpTimeout = envutil.EnvOrDefaultDuration("COCKROACH_TELEMETRY_HTTP_CLIENT_TIMEOUT", 5*time.Minute)
 
 // NodeStatusGenerator abstracts the status.MetricRecorder for read access.
 type NodeStatusGenerator interface {
@@ -99,6 +107,11 @@ type Reporter struct {
 	// regardless of whether the response we get back is successful or
 	// not.
 	LastSuccessfulTelemetryPing atomic.Int64
+
+	client struct {
+		sync.Once
+		*httputil.Client
+	}
 }
 
 // shouldReportDiagnostics determines using the diagnostics report setting in
@@ -184,7 +197,18 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 		return
 	}
 
-	res, err := httputil.Post(
+	r.client.Do(func() {
+		timeout := TelemetryHttpTimeout
+		if timeout > 5*time.Minute {
+			timeout = 5 * time.Minute
+		}
+		if timeout < 3*time.Second {
+			timeout = 3 * time.Second
+		}
+		r.client.Client = httputil.NewClientWithTimeout(timeout)
+	})
+
+	res, err := r.client.Post(
 		ctx, url.String(), "application/x-protobuf", bytes.NewReader(b),
 	)
 	if err != nil {
@@ -192,6 +216,13 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 			// This is probably going to be relatively common in production
 			// environments where network access is usually curtailed.
 			log.Warningf(ctx, "failed to report node usage metrics: %v", err)
+		}
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			// We consider timeout errors to signal successful "contact" with
+			// telemetry server. They can happen for a number of reasons
+			// outside of the cluster's control.
+			r.LastSuccessfulTelemetryPing.Store(timeutil.Now().Unix())
 		}
 		return
 	}
