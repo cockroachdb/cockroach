@@ -2057,112 +2057,137 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	var injectLeaseTransferError atomic.Value
-	testingEvalFilter := func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
-		if args, ok := filterArgs.Req.(*kvpb.TransferLeaseRequest); ok {
-			if val := injectLeaseTransferError.Load(); val != nil && val.(bool) {
-				// Note that we can't just return an error here as we only
-				// end up counting failures in the metrics if the command
-				// makes it through to being executed. So use a fake replica ID.
-				args.Lease.Replica.ReplicaID = 1000
+
+	testutils.RunValues(t, "lease-type", roachpb.EpochAndLeaderLeaseType(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
+
+		var injectLeaseTransferError atomic.Value
+		testingEvalFilter := func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
+			if args, ok := filterArgs.Req.(*kvpb.TransferLeaseRequest); ok {
+				if val := injectLeaseTransferError.Load(); val != nil && val.(bool) {
+					// Note that we can't just return an error here as we only
+					// end up counting failures in the metrics if the command
+					// makes it through to being executed. So use a fake replica ID.
+					args.Lease.Replica.ReplicaID = 1000
+				}
 			}
+			return nil
 		}
-		return nil
-	}
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
-	manualClock := hlc.NewHybridManualClock()
-	tc := testcluster.StartTestCluster(t, 2,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Settings: st,
-				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-							TestingEvalFilter: testingEvalFilter,
+
+		manualClock := hlc.NewHybridManualClock()
+		tc := testcluster.StartTestCluster(t, 2,
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Settings: st,
+					Knobs: base.TestingKnobs{
+						Store: &kvserver.StoreTestingKnobs{
+							EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+								TestingEvalFilter: testingEvalFilter,
+							},
+						},
+						Server: &server.TestingKnobs{
+							WallClock: manualClock,
 						},
 					},
-					Server: &server.TestingKnobs{
-						WallClock: manualClock,
-					},
 				},
-			},
-		})
-	defer tc.Stopper().Stop(ctx)
-	// Up-replicate to two replicas.
-	expirationKey := tc.ScratchRangeWithExpirationLease(t)
-	expirationDesc := tc.LookupRangeOrFatal(t, expirationKey)
-	tc.AddVotersOrFatal(t, expirationKey, tc.Target(1))
+			})
+		defer tc.Stopper().Stop(ctx)
 
-	epochKey := tc.ScratchRange(t)
-	tc.AddVotersOrFatal(t, epochKey, tc.Target(1))
+		// Up-replicate to two replicas.
+		expirationKey := tc.ScratchRangeWithExpirationLease(t)
+		expirationDesc := tc.LookupRangeOrFatal(t, expirationKey)
+		tc.AddVotersOrFatal(t, expirationKey, tc.Target(1))
 
-	// Now, a successful transfer from LHS replica 0 to replica 1.
-	injectLeaseTransferError.Store(false)
-	tc.TransferRangeLeaseOrFatal(t, expirationDesc, tc.Target(1))
-	// Wait for all replicas to process.
-	testutils.SucceedsSoon(t, func() error {
-		for i := 0; i < 2; i++ {
-			r := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(expirationKey))
-			if l, _ := r.GetLease(); l.Replica.StoreID != tc.Target(1).StoreID {
-				return errors.Errorf("expected lease to transfer to replica 2: got %s", l)
+		key := tc.ScratchRange(t)
+		tc.AddVotersOrFatal(t, key, tc.Target(1))
+
+		// Now, a successful transfer from LHS replica 0 to replica 1.
+		injectLeaseTransferError.Store(false)
+		tc.TransferRangeLeaseOrFatal(t, expirationDesc, tc.Target(1))
+		// Wait for all replicas to process.
+		testutils.SucceedsSoon(t, func() error {
+			for i := 0; i < 2; i++ {
+				r := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(expirationKey))
+				if l, _ := r.GetLease(); l.Replica.StoreID != tc.Target(1).StoreID {
+					return errors.Errorf("expected lease to transfer to replica 2: got %s", l)
+				}
 			}
+			return nil
+		})
+
+		// Next a failed transfer from RHS replica 0 to replica 1.
+		injectLeaseTransferError.Store(true)
+		splitDesc := tc.LookupRangeOrFatal(t, key)
+		err := tc.TransferRangeLease(splitDesc, tc.Target(1))
+		// We expect this to fail.
+		require.Error(t, err)
+
+		metrics := tc.GetFirstStoreFromServer(t, 0).Metrics()
+		if a, e := metrics.LeaseTransferSuccessCount.Count(), int64(1); a != e {
+			t.Errorf("expected %d lease transfer successes; got %d", e, a)
 		}
-		return nil
-	})
-
-	// Next a failed transfer from RHS replica 0 to replica 1.
-	injectLeaseTransferError.Store(true)
-	splitDesc := tc.LookupRangeOrFatal(t, epochKey)
-	err := tc.TransferRangeLease(splitDesc, tc.Target(1))
-	// We expect this to fail.
-	require.Error(t, err)
-
-	metrics := tc.GetFirstStoreFromServer(t, 0).Metrics()
-	if a, e := metrics.LeaseTransferSuccessCount.Count(), int64(1); a != e {
-		t.Errorf("expected %d lease transfer successes; got %d", e, a)
-	}
-	// We mostly expect precisely one error, but there's a retry loop in
-	// `AdminTransferLease` that prevents transfers to followers who might need a
-	// snapshot. This can sometimes lead to additional errors being reported.
-	if a := metrics.LeaseTransferErrorCount.Count(); a == 0 {
-		t.Errorf("expected at least one lease transfer errors; got %d", a)
-	}
-
-	// Expire current leases and put a key to the epoch based scratch range to
-	// get a lease.
-	testutils.SucceedsSoon(t, func() error {
-		manualClock.Increment(tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().LeaseExpiration())
-		if err := tc.GetFirstStoreFromServer(t, 0).DB().Put(context.Background(), epochKey, "foo"); err != nil {
-			return err
+		// We mostly expect precisely one error, but there's a retry loop in
+		// `AdminTransferLease` that prevents transfers to followers who might need a
+		// snapshot. This can sometimes lead to additional errors being reported.
+		if a := metrics.LeaseTransferErrorCount.Count(); a == 0 {
+			t.Errorf("expected at least one lease transfer errors; got %d", a)
 		}
 
-		// Update replication gauges for all stores and verify we have 1 each of
-		// expiration and epoch leases. Also verify that we have no leader leases.
-		var expirationLeases int64
-		var epochLeases int64
-		var leaderLeases int64
-		for i := range tc.Servers {
-			if err := tc.GetFirstStoreFromServer(t, i).ComputeMetrics(context.Background()); err != nil {
+		// Expire current leases and put a key to the epoch based scratch range to
+		// get a lease.
+		testutils.SucceedsSoon(t, func() error {
+			manualClock.Increment(tc.GetFirstStoreFromServer(t, 0).GetStoreConfig().LeaseExpiration())
+			if err := tc.GetFirstStoreFromServer(t, 0).DB().Put(context.Background(), key, "foo"); err != nil {
 				return err
 			}
-			metrics = tc.GetFirstStoreFromServer(t, i).Metrics()
-			expirationLeases += metrics.LeaseExpirationCount.Value()
-			epochLeases += metrics.LeaseEpochCount.Value()
-			leaderLeases += metrics.LeaseLeaderCount.Value()
-		}
-		if a, e := expirationLeases, int64(1); a != e {
-			return errors.Errorf("expected %d expiration lease count; got %d", e, a)
-		}
-		if a, e := epochLeases, int64(1); a < e {
-			return errors.Errorf("expected greater than %d epoch lease count; got %d", e, a)
-		}
-		if a, e := leaderLeases, int64(0); a != e {
-			return errors.Errorf("expected exactly %d leader lease count; got %d", e, a)
-		}
-		return nil
+
+			// Update replication gauages for all stores. Then, depending on the version
+			// of the test, verify they're correct. In particular:
+			// - For the epoch lease variant, we expect 1 epoch lease and 1 expiration
+			// lease. No leader leases.
+			// - For the leader leases variant, we expect 1 leader lease.
+			var expirationLeases int64
+			var epochLeases int64
+			var leaderLeases int64
+			for i := range tc.Servers {
+				if err := tc.GetFirstStoreFromServer(t, i).ComputeMetrics(context.Background()); err != nil {
+					return err
+				}
+				metrics = tc.GetFirstStoreFromServer(t, i).Metrics()
+				expirationLeases += metrics.LeaseExpirationCount.Value()
+				epochLeases += metrics.LeaseEpochCount.Value()
+				leaderLeases += metrics.LeaseLeaderCount.Value()
+			}
+			switch leaseType {
+			case roachpb.LeaseLeader:
+				if a, e := expirationLeases, int64(0); a != e {
+					return errors.Errorf("expected %d expiration lease count; got %d", e, a)
+				}
+				if a, e := epochLeases, int64(0); a != e {
+					return errors.Errorf("expected %d epoch lease count; got %d", e, a)
+				}
+				if a, e := leaderLeases, int64(1); a < e {
+					return errors.Errorf("expected greater than %d leader lease count; got %d", e, a)
+				}
+			case roachpb.LeaseEpoch:
+				if a, e := expirationLeases, int64(1); a != e {
+					// For the NodeLiveness range.
+					return errors.Errorf("expected %d expiration lease count; got %d", e, a)
+				}
+				if a, e := epochLeases, int64(1); a < e {
+					return errors.Errorf("expected greater than %d epoch lease count; got %d", e, a)
+				}
+				if a, e := leaderLeases, int64(0); a != e {
+					return errors.Errorf("expected exactly %d leader lease count; got %d", e, a)
+				}
+			default:
+				panic("unexpected lease type")
+			}
+			return nil
+		})
 	})
 }
 
