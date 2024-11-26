@@ -9,7 +9,9 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -286,11 +288,28 @@ func TestServerReport(t *testing.T) {
 	}
 }
 
+type TimeoutError struct{}
+
+func (t TimeoutError) Error() string {
+	return "timeout"
+}
+
+func (t TimeoutError) Timeout() bool {
+	return true
+}
+
+func (t TimeoutError) Temporary() bool {
+	panic("implement me")
+}
+
+var _ net.Error = TimeoutError{}
+
 func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	diagnostics.TelemetryHttpTimeout = 3 * time.Second
 	rt := startReporterTest(t)
 	defer rt.Close()
 
@@ -301,6 +320,7 @@ func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
 		name                  string
 		respError             error
 		respCode              int
+		waitSeconds           int
 		expectTimestampUpdate bool
 	}{
 		{
@@ -326,20 +346,30 @@ func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
 			respError:             errors.New("connection refused"),
 			expectTimestampUpdate: false,
 		},
+		{
+			name:                  "client timeout",
+			respError:             TimeoutError{},
+			waitSeconds:           5,
+			expectTimestampUpdate: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			defer rt.diagServer.SetRespError(tc.respError)()
 			defer rt.diagServer.SetRespCode(tc.respCode)()
+			defer rt.diagServer.SetWaitSeconds(tc.waitSeconds)()
+			rt.timesource.Advance(time.Hour)
 
 			dr := rt.server.DiagnosticsReporter().(*diagnostics.Reporter)
 
-			before := timeutil.Now().Unix()
+			before := rt.timesource.Now().Unix()
 			oldTimestamp := dr.LastSuccessfulTelemetryPing.Load()
 			require.LessOrEqual(t, dr.LastSuccessfulTelemetryPing.Load(), before)
+
+			rt.timesource.Advance(time.Hour)
 			dr.ReportDiagnostics(ctx)
 
 			if tc.expectTimestampUpdate {
-				require.GreaterOrEqual(t, dr.LastSuccessfulTelemetryPing.Load(), before)
+				require.Greater(t, dr.LastSuccessfulTelemetryPing.Load(), before)
 			} else {
 				require.Equal(t, oldTimestamp, dr.LastSuccessfulTelemetryPing.Load())
 			}
@@ -451,6 +481,7 @@ type reporterTest struct {
 	serverArgs   base.TestServerArgs
 	server       serverutils.TestServerInterface
 	serverDB     *gosql.DB
+	timesource   *timeutil.ManualTime
 }
 
 func (t *reporterTest) Close() {
@@ -466,6 +497,7 @@ func startReporterTest(t *testing.T) *reporterTest {
 		cloudEnable: cloudinfo.Disable(),
 		settings:    cluster.MakeTestingClusterSettings(),
 		diagServer:  diagutils.NewServer(),
+		timesource:  timeutil.NewManualTime(timeutil.Now()),
 	}
 
 	url := rt.diagServer.URL()
@@ -478,6 +510,7 @@ func startReporterTest(t *testing.T) *reporterTest {
 		Server: &server.TestingKnobs{
 			DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
 				OverrideReportingURL: &url,
+				TimeSource:           rt.timesource,
 			},
 		},
 	}
