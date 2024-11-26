@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -592,18 +593,16 @@ func TestFlowControlCrashedNode(t *testing.T) {
 	// mechanism below, and for quiesced ranges, that can effectively disable
 	// the last-updated mechanism since quiesced ranges aren't being ticked, and
 	// we only check the last-updated state when ticked. So we disable range
-	// quiescence.
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
-	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
-
+	// quiescence by turning on leader leases, regardless of any metamorphism.
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+	// Using a manual clock here ensures that StoreLiveness support, once
+	// established, never expires. By extension, leadership should stay sticky.
+	manualClock := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
 			RaftConfig: base.RaftConfig{
-				// Suppress timeout-based elections. This test doesn't want to
-				// deal with leadership changing hands.
-				RaftElectionTimeoutTicks: 1000000,
 				// Reduce the RangeLeaseDuration to speeds up failure detection
 				// below.
 				RangeLeaseDuration: time.Second,
@@ -627,6 +626,9 @@ func TestFlowControlCrashedNode(t *testing.T) {
 					DisableWorkQueueGranting: func() bool {
 						return true
 					},
+				},
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
 				},
 			},
 		},
@@ -712,7 +714,13 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
 	kvflowcontrol.Mode.Override(ctx, &st.SV, kvflowcontrol.ApplyToAll)
-
+	// This test doesn't want leadership changing hands, and leader leases (by
+	// virtue of raft fortification) help ensure this. Override to disable any
+	// metamorphosis.
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+	// Using a manual clock here ensures that StoreLiveness support, once
+	// established, never expires. By extension, leadership should stay sticky.
+	manualClock := hlc.NewHybridManualClock()
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
 			Settings: st,
@@ -722,14 +730,10 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
-			RaftConfig: base.RaftConfig{
-				// Suppress timeout-based elections. This test doesn't want to
-				// deal with leadership changing hands.
-				RaftElectionTimeoutTicks: 1000000,
-			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyVFSRegistry: fs.NewStickyRegistry(),
+					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -1003,17 +1007,21 @@ func TestFlowControlRaftTransportBreak(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
-
+	// This test doesn't want leadership changing hands, and leader leases (by
+	// virtue of raft fortification) help ensure this. Override to disable any
+	// metamorphosis.
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+	// Using a manual clock here ensures that StoreLiveness support, once
+	// established, never expires. By extension, leadership should stay sticky.
+	manualClock := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
-			RaftConfig: base.RaftConfig{
-				// Suppress timeout-based elections. This test doesn't want to
-				// deal with leadership changing hands.
-				RaftElectionTimeoutTicks: 1000000,
-			},
 			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
+				},
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
@@ -1594,7 +1602,7 @@ func TestFlowControlQuiescedRange(t *testing.T) {
 	disableFallbackTokenDispatch.Store(true)
 
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch) // override metamorphism
 	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
 
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
@@ -1734,7 +1742,7 @@ func TestFlowControlUnquiescedRange(t *testing.T) {
 	disablePiggybackTokenDispatch.Store(true)
 
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch) // override metamorphism
 	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
 
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
@@ -2541,16 +2549,21 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 			var disableWorkQueueGranting atomic.Bool
 			disableWorkQueueGranting.Store(true)
 			settings := cluster.MakeTestingClusterSettings()
+			// This test doesn't want leadership changing hands, and leader leases (by
+			// virtue of raft fortification) help ensure this. Override to disable any
+			// metamorphosis.
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+			// Using a manual clock here ensures that StoreLiveness support, once
+			// established, never expires. By extension, leadership should stay
+			// sticky.
+			manualClock := hlc.NewHybridManualClock()
 			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
-					Settings: settings,
-					RaftConfig: base.RaftConfig{
-						// Suppress timeout-based elections. This test doesn't want to
-						// deal with leadership changing hands.
-						RaftElectionTimeoutTicks: 1000000,
-					},
 					Knobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							WallClock: manualClock,
+						},
 						Store: &kvserver.StoreTestingKnobs{
 							FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 								UseOnlyForScratchRanges: true,
@@ -2693,15 +2706,19 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 		}, func(t *testing.T, mode kvflowcontrol.ModeT) {
 			ctx := context.Background()
 			settings := cluster.MakeTestingClusterSettings()
-			kvserver.ExpirationLeasesOnly.Override(ctx, &settings.SV, true)
+			// This test doesn't want leadership changing hands, and leader leases (by
+			// virtue of raft fortification) help ensure this. Override to disable any
+			// metamorphosis.
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+			// Using a manual clock here ensures that StoreLiveness support, once
+			// established, never expires. By extension, leadership should stay
+			// sticky.
+			manualClock := hlc.NewHybridManualClock()
 			tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
 					Settings: settings,
 					RaftConfig: base.RaftConfig{
-						// Suppress timeout-based elections. This test doesn't want to
-						// deal with leadership changing hands.
-						RaftElectionTimeoutTicks: 1000000,
 						// Reduce the RangeLeaseDuration to speeds up failure detection
 						// below.
 						RangeLeaseDuration: time.Second,
@@ -2720,6 +2737,9 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 							DisableWorkQueueGranting: func() bool {
 								return true
 							},
+						},
+						Server: &server.TestingKnobs{
+							WallClock: manualClock,
 						},
 					},
 				},
@@ -2808,6 +2828,14 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 			bypassReplicaUnreachable.Store(false)
 			ctx := context.Background()
 			settings := cluster.MakeTestingClusterSettings()
+			// This test doesn't want leadership changing hands, and leader leases (by
+			// virtue of raft fortification) help ensure this. Override to disable any
+			// metamorphosis.
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+			// Using a manual clock here ensures that StoreLiveness support, once
+			// established, never expires. By extension, leadership should stay
+			// sticky.
+			manualClock := hlc.NewHybridManualClock()
 			for i := 0; i < numServers; i++ {
 				stickyServerArgs[i] = base.TestServerArgs{
 					Settings: settings,
@@ -2817,14 +2845,10 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 							StickyVFSID: strconv.FormatInt(int64(i), 10),
 						},
 					},
-					RaftConfig: base.RaftConfig{
-						// Suppress timeout-based elections. This test doesn't want to
-						// deal with leadership changing hands.
-						RaftElectionTimeoutTicks: 1000000,
-					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							StickyVFSRegistry: fs.NewStickyRegistry(),
+							WallClock:         manualClock,
 						},
 						Store: &kvserver.StoreTestingKnobs{
 							RaftReportUnreachableBypass: func(_ roachpb.ReplicaID) bool {
@@ -3074,15 +3098,18 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 			settings := cluster.MakeTestingClusterSettings()
 			var disableWorkQueueGranting atomic.Bool
 			disableWorkQueueGranting.Store(true)
+			// This test doesn't want leadership changing hands, and leader leases (by
+			// virtue of raft fortification) help ensure this. Override to disable any
+			// metamorphosis.
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+			// Using a manual clock here ensures that StoreLiveness support, once
+			// established, never expires. By extension, leadership should stay
+			// sticky.
+			manualClock := hlc.NewHybridManualClock()
 			tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
 					Settings: settings,
-					RaftConfig: base.RaftConfig{
-						// Suppress timeout-based elections. This test doesn't want to deal
-						// with leadership changing hands unless intentional.
-						RaftElectionTimeoutTicks: 1000000,
-					},
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
 							FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -3097,6 +3124,9 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 							DisableWorkQueueGranting: func() bool {
 								return disableWorkQueueGranting.Load()
 							},
+						},
+						Server: &server.TestingKnobs{
+							WallClock: manualClock,
 						},
 					},
 				},
@@ -3453,7 +3483,7 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 
 			settings := cluster.MakeTestingClusterSettings()
 			// Override metamorphism to allow range quiescence.
-			kvserver.ExpirationLeasesOnly.Override(ctx, &settings.SV, false)
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseEpoch)
 			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
@@ -3911,18 +3941,23 @@ func TestFlowControlV1ToV2Transition(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 
 	argsPerServer := make(map[int]base.TestServerArgs)
+	// This test doesn't want leadership changing hands, and leader leases (by
+	// virtue of raft fortification) help ensure this. Override to disable any
+	// metamorphosis.
+	kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+	// Using a manual clock here ensures that StoreLiveness support, once
+	// established, never expires. By extension, leadership should stay sticky.
+	manualClock := hlc.NewHybridManualClock()
 	for i := range serverLevels {
 		// Every node starts off using the v1 protocol but we will ratchet up the
 		// levels on servers at different times as we go to test the transition.
 		serverLevels[i].Store(kvflowcontrol.V2NotEnabledWhenLeader)
 		argsPerServer[i] = base.TestServerArgs{
 			Settings: settings,
-			RaftConfig: base.RaftConfig{
-				// Suppress timeout-based elections. This test doesn't want to deal
-				// with leadership changing hands unintentionally.
-				RaftElectionTimeoutTicks: 1000000,
-			},
 			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
+				},
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
@@ -4550,6 +4585,13 @@ func TestFlowControlSendQueue(t *testing.T) {
 	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, 2<<20)
 	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, 4<<20)
 
+	// This test doesn't want leadership changing hands, and leader leases (by
+	// virtue of raft fortification) help ensure this. Override to disable any
+	// metamorphosis.
+	kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+	// Using a manual clock here ensures that StoreLiveness support, once
+	// established, never expires. By extension, leadership should stay sticky.
+	manualClock := hlc.NewHybridManualClock()
 	stickyArgsPerServer := make(map[int]base.TestServerArgs)
 	for i := range disableWorkQueueGrantingServers {
 		// Start with admission (logical token return) disabled across all nodes.
@@ -4562,14 +4604,10 @@ func TestFlowControlSendQueue(t *testing.T) {
 					StickyVFSID: strconv.FormatInt(int64(i), 10),
 				},
 			},
-			RaftConfig: base.RaftConfig{
-				// Suppress timeout-based elections. This test doesn't want to deal
-				// with leadership changing hands unintentionally.
-				RaftElectionTimeoutTicks: 1000000,
-			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyVFSRegistry: fs.NewStickyRegistry(),
+					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -4923,15 +4961,17 @@ func TestFlowControlRepeatedlySwitchMode(t *testing.T) {
 
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
+	// This test doesn't want leadership changing hands, and leader leases (by
+	// virtue of raft fortification) help ensure this. Override to disable any
+	// metamorphosis.
+	kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+	// Using a manual clock here ensures that StoreLiveness support, once
+	// established, never expires. By extension, leadership should stay sticky.
+	manualClock := hlc.NewHybridManualClock()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Settings: settings,
-			RaftConfig: base.RaftConfig{
-				// Suppress timeout-based elections. This test doesn't want to
-				// deal with leadership changing hands.
-				RaftElectionTimeoutTicks: 1000000,
-			},
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -4942,6 +4982,9 @@ func TestFlowControlRepeatedlySwitchMode(t *testing.T) {
 							return kvflowcontrol.Tokens(1 << 20 /* 1MiB */)
 						},
 					},
+				},
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
 				},
 			},
 		},
