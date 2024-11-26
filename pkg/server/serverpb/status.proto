@@ -24,16 +24,13 @@ import "server/status/statuspb/status.proto";
 import "sql/appstatspb/app_stats.proto";
 import "sql/contentionpb/contention.proto";
 import "sql/sqlstats/insights/insights.proto";
-import "storage/enginepb/engine.proto";
 import "storage/enginepb/mvcc.proto";
-import "storage/enginepb/rocksdb.proto";
 import "kv/kvserver/kvserverpb/lease_status.proto";
 import "kv/kvserver/kvserverpb/state.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "util/hlc/timestamp.proto";
 import "util/log/logpb/log.proto";
 import "util/unresolved_addr.proto";
-import "util/tracing/tracingpb/tracing.proto";
 
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
