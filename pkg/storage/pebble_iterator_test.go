@@ -105,7 +105,7 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 	ctx := context.Background()
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	var f bytes.Buffer
-	w := MakeBackupSSTWriter(ctx, st, &f)
+	w := MakeTransportSSTWriter(ctx, st, &f)
 
 	// Create an example sstable.
 	var rawValue [64]byte

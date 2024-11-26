@@ -54,7 +54,7 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 	// Create SST with keys equal to intents at txn2TS.
 	cs := cluster.MakeTestingClusterSettings()
 	var sstFile bytes.Buffer
-	sstWriter := MakeBackupSSTWriter(context.Background(), cs, &sstFile)
+	sstWriter := MakeTransportSSTWriter(context.Background(), cs, &sstFile)
 	defer sstWriter.Close()
 	for _, k := range intents {
 		key := MVCCKey{Key: roachpb.Key(k), Timestamp: txn2TS}
