@@ -463,12 +463,12 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 			return c.RunE(ctx, option.WithNodes(randomNode), cmd)
 		})
 
-		time.Sleep(5 * time.Second)
-		c.CaptureSideEyeSnapshot(ctx, l)
-
 		select {
 		case <-doneCh:
 		case <-ctx.Done():
+		case <-time.After(10 * time.Minute):
+			c.CaptureSideEyeSnapshot(ctx, l)
+			t.Fatal("timed out waiting for tpcc import to finish")
 		}
 		return nil
 	}

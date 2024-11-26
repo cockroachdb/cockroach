@@ -207,7 +207,7 @@ func NewSeparateProcessTenantServer(
 		// in-process with KV instances have no such optimization to take
 		// advantage of to begin with.
 		nodeIDGetter:          nil,
-		costControllerFactory: NewTenantSideCostController,
+		costControllerFactory: NewNoopTenantSideCostController,
 		spanLimiterFactory: func(ie isql.Executor, st *cluster.Settings, knobs *spanconfig.TestingKnobs) spanconfig.Limiter {
 			return spanconfiglimiter.New(ie, st, knobs)
 		},
