@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -59,11 +58,6 @@ type eventStream struct {
 	stats *rangeStatsPoller
 
 	// The remaining fields are used to process rangefeed messages.
-	// addMu is non-nil during initial scans, where it serializes the onValue and
-	// checkpoint calls that initial scans make from its parallel scan workers; it
-	// is set to nil after initial scan since rangefeed says all other calls are
-	// done serially from the event loop worker.
-	addMu              *syncutil.Mutex
 	seb                streamEventBatcher
 	lastCheckpointTime time.Time
 	lastCheckpointLen  int
@@ -180,7 +174,6 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		}
 	}
 	if s.spec.PreviousReplicatedTimestamp.IsEmpty() {
-		s.addMu = &syncutil.Mutex{}
 		log.Infof(ctx, "starting event stream with initial scan at %s", initialTimestamp)
 		opts = append(opts,
 			rangefeed.WithInitialScan(s.onInitialScanDone),
@@ -274,18 +267,10 @@ func (s *eventStream) Close(ctx context.Context) {
 }
 
 func (s *eventStream) onInitialScanDone(ctx context.Context) {
-	// We no longer expect concurrent onValue calls so we can remove the mu.
-	s.addMu = nil
+	log.VInfof(ctx, 2, "initial scan completed")
 }
 
 func (s *eventStream) onValues(ctx context.Context, values []kv.KeyValue) {
-	// During initial-scan we expect concurrent onValue calls from the parallel
-	// scan workers, but once the initial scan ends the mu will be nilled out and
-	// we can avoid the locking overhead here.
-	if s.addMu != nil {
-		s.addMu.Lock()
-		defer s.addMu.Unlock()
-	}
 	for _, i := range values {
 		s.seb.addKV(streampb.StreamEvent_KV{KeyValue: roachpb.KeyValue{Key: i.Key, Value: *i.Value}})
 	}
@@ -293,13 +278,6 @@ func (s *eventStream) onValues(ctx context.Context, values []kv.KeyValue) {
 }
 
 func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
-	// During initial-scan we expect concurrent onValue calls from the parallel
-	// scan workers, but once the initial scan ends the mu will be nilled out and
-	// we can avoid the locking overhead here.
-	if s.addMu != nil {
-		s.addMu.Lock()
-		defer s.addMu.Unlock()
-	}
 	s.seb.addKV(streampb.StreamEvent_KV{
 		KeyValue: roachpb.KeyValue{Key: value.Key, Value: value.Value}, PrevValue: value.PrevValue,
 	})
@@ -328,11 +306,6 @@ func (s *eventStream) onDeleteRange(ctx context.Context, delRange *kvpb.RangeFee
 	s.setErr(s.maybeFlushBatch(ctx))
 }
 func (s *eventStream) onMetadata(ctx context.Context, metadata *kvpb.RangeFeedMetadata) {
-	if s.addMu != nil {
-		// Split points can be sent concurrently during the initial scan.
-		s.addMu.Lock()
-		defer s.addMu.Unlock()
-	}
 	log.VInfof(ctx, 2, "received metadata event: %s, fromManualSplit: %t, parent start key %s", metadata.Span, metadata.FromManualSplit, metadata.ParentStartKey)
 	if metadata.FromManualSplit && !metadata.Span.Key.Equal(metadata.ParentStartKey) {
 		// Only send new manual split keys (i.e. a child rangefeed start key that
@@ -345,10 +318,6 @@ func (s *eventStream) onMetadata(ctx context.Context, metadata *kvpb.RangeFeedMe
 func (s *eventStream) maybeCheckpoint(
 	ctx context.Context, advanced bool, frontier rangefeed.VisitableFrontier,
 ) {
-	if s.addMu != nil {
-		s.addMu.Lock()
-		defer s.addMu.Unlock()
-	}
 	age := timeutil.Since(s.lastCheckpointTime)
 	if (advanced && age > s.spec.Config.MinCheckpointFrequency) || (age > 2*s.spec.Config.MinCheckpointFrequency) {
 		s.sendCheckpoint(ctx, frontier)
