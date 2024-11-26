@@ -280,6 +280,18 @@ func (ex *connExecutor) execStmtInOpenState(
 	res RestrictedCommandResult,
 	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	type localVars struct {
+		logErr      error
+		cancelQuery context.CancelFunc
+		ast         tree.Statement
+		stmt        Statement
+	}
+
+	// vars contains local variables that are heap allocated, usually because
+	// they are referenced by closures. Grouping them into a single struct
+	// requires only a single heap allocation.
+	var vars localVars
+
 	// We need this to be function rather than a static bool, because a portal's
 	// "pausability" can be revoked in `dispatchToExecutionEngine()` if the
 	// underlying statement contains sub/post queries. Thus, we should evaluate
@@ -339,13 +351,13 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}()
 
-	ast := parserStmt.AST
+	vars.ast = parserStmt.AST
 	var sp *tracing.Span
 	if !isPausablePortal() || !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
 		ctx, sp = tracing.ChildSpan(ctx, "sql query")
 		// TODO(andrei): Consider adding the placeholders as tags too.
 		sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
-		ctx = withStatement(ctx, ast)
+		ctx = withStatement(ctx, vars.ast)
 		if isPausablePortal() {
 			portal.pauseInfo.execStmtInOpenState.spCtx = ctx
 		}
@@ -357,13 +369,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, ast)
+		ev, payload := ex.makeErrEvent(err, vars.ast)
 		return ev, payload, nil
 	}
 
-	var stmt Statement
 	var queryID clusterunique.ID
-
 	if isPausablePortal() {
 		if !portal.pauseInfo.isQueryIDSet() {
 			portal.pauseInfo.execStmtInOpenState.queryID = ex.server.cfg.GenerateID()
@@ -384,9 +394,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
 
 	if isExtendedProtocol {
-		stmt = makeStatementFromPrepared(portal.Stmt, queryID)
+		vars.stmt = makeStatementFromPrepared(portal.Stmt, queryID)
 	} else {
-		stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
+		vars.stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
 	}
 
 	var queryTimeoutTicker *time.Timer
@@ -398,16 +408,15 @@ func (ex *connExecutor) execStmtInOpenState(
 	var queryDoneAfterFunc chan struct{}
 	var txnDoneAfterFunc chan struct{}
 
-	var cancelQuery context.CancelFunc
 	addActiveQuery := func() {
-		ctx, cancelQuery = ctxlog.WithCancel(ctx)
-		ex.incrementStartedStmtCounter(ast)
+		ctx, vars.cancelQuery = ctxlog.WithCancel(ctx)
+		ex.incrementStartedStmtCounter(vars.ast)
 		func(st *txnState) {
 			st.mu.Lock()
 			defer st.mu.Unlock()
 			st.mu.stmtCount++
 		}(&ex.state)
-		ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
+		ex.addActiveQuery(parserStmt, pinfo, queryID, vars.cancelQuery)
 	}
 
 	// For pausable portal, the active query needs to be set up only when
@@ -415,7 +424,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	if !isPausablePortal() || !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
 		addActiveQuery()
 		if isPausablePortal() {
-			portal.pauseInfo.execStmtInOpenState.cancelQueryFunc = cancelQuery
+			portal.pauseInfo.execStmtInOpenState.cancelQueryFunc = vars.cancelQuery
 			portal.pauseInfo.execStmtInOpenState.cancelQueryCtx = ctx
 		}
 		defer func() {
@@ -429,21 +438,21 @@ func (ex *connExecutor) execStmtInOpenState(
 						retPayload = portal.pauseInfo.execStmtInOpenState.retPayload
 					}
 					if retErr == nil && !payloadHasError(retPayload) {
-						ex.incrementExecutedStmtCounter(ast)
+						ex.incrementExecutedStmtCounter(vars.ast)
 					}
 				},
 			)
 		}()
 	} else {
 		ctx = portal.pauseInfo.execStmtInOpenState.cancelQueryCtx
-		cancelQuery = portal.pauseInfo.execStmtInOpenState.cancelQueryFunc
+		vars.cancelQuery = portal.pauseInfo.execStmtInOpenState.cancelQueryFunc
 	}
 
 	// Make sure that we always unregister the query.
 	defer func() {
 		processCleanupFunc("cancel query", func() {
-			ex.removeActiveQuery(queryID, ast)
-			cancelQuery()
+			ex.removeActiveQuery(queryID, vars.ast)
+			vars.cancelQuery()
 		})
 
 		// Note ex.metrics is Server.Metrics for the connExecutor that serves the
@@ -501,7 +510,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 		// Enforce license policies. Throttling can occur if there is no valid
 		// license or if the existing one has expired.
-		if isSQLOkayToThrottle(ast) {
+		if isSQLOkayToThrottle(vars.ast) {
 			if notice, err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
 				return makeErrEvent(err)
 			} else if notice != nil {
@@ -511,7 +520,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	// Special top-level handling for EXPLAIN ANALYZE.
-	if e, ok := ast.(*tree.ExplainAnalyze); ok {
+	if e, ok := vars.ast.(*tree.ExplainAnalyze); ok {
 		switch e.Mode {
 		case tree.ExplainDebug:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
@@ -543,21 +552,21 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(errors.AssertionFailedf("unsupported EXPLAIN ANALYZE mode %s", e.Mode))
 		}
 		// Strip off the explain node to execute the inner statement.
-		stmt.AST = e.Statement
-		ast = e.Statement
+		vars.stmt.AST = e.Statement
+		vars.ast = e.Statement
 		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
 		// stmt.SQL?
 
 		// Clear any ExpectedTypes we set if we prepared this statement (they
 		// reflect the column types of the EXPLAIN itself and not those of the inner
 		// statement).
-		stmt.ExpectedTypes = nil
+		vars.stmt.ExpectedTypes = nil
 	}
 
 	// Special top-level handling for EXECUTE. This must happen after the handling
 	// for EXPLAIN ANALYZE (in order to support EXPLAIN ANALYZE EXECUTE) but
 	// before setting up the instrumentation helper.
-	if e, ok := ast.(*tree.Execute); ok {
+	if e, ok := vars.ast.(*tree.Execute); ok {
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
 		name := e.Name.String()
@@ -574,17 +583,17 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 
 		// TODO(radu): what about .SQL, .NumAnnotations, .NumPlaceholders?
-		stmt.Statement = ps.Statement
-		stmt.Prepared = ps
-		stmt.ExpectedTypes = ps.Columns
-		stmt.StmtNoConstants = ps.StatementNoConstants
-		stmt.StmtSummary = ps.StatementSummary
+		vars.stmt.Statement = ps.Statement
+		vars.stmt.Prepared = ps
+		vars.stmt.ExpectedTypes = ps.Columns
+		vars.stmt.StmtNoConstants = ps.StatementNoConstants
+		vars.stmt.StmtSummary = ps.StatementSummary
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
 			ih.SetDiscardRows()
 		}
-		ast = stmt.Statement.AST
+		vars.ast = vars.stmt.Statement.AST
 	}
 
 	// For pausable portal, the instrumentation helper needs to be set up only
@@ -592,7 +601,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	if !isPausablePortal() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
 		ctx = ih.Setup(
 			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-			stmt.StmtNoConstants, os.ImplicitTxn.Get(),
+			vars.stmt.StmtNoConstants, os.ImplicitTxn.Get(),
 			// This goroutine is the only one that can modify
 			// txnState.mu.priority, so we don't need to get a mutex here.
 			ex.state.mu.priority,
@@ -643,8 +652,8 @@ func (ex *connExecutor) execStmtInOpenState(
 				&ex.extraTxnState.accumulatedStats,
 				ihToFinish.collectExecStats,
 				p,
-				ast,
-				stmt.SQL,
+				vars.ast,
+				vars.stmt.SQL,
 				curRes,
 				retPayload,
 				retErr,
@@ -673,7 +682,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			txnTimeoutTicker = time.AfterFunc(
 				timerDuration,
 				func() {
-					cancelQuery()
+					vars.cancelQuery()
 					txnTimedOut = true
 					txnDoneAfterFunc <- struct{}{}
 				})
@@ -682,7 +691,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// We exempt `SET` statements from the statement timeout, particularly so as
 	// not to block the `SET statement_timeout` command itself.
-	if ex.sessionData().StmtTimeout > 0 && ast.StatementTag() != "SET" {
+	if ex.sessionData().StmtTimeout > 0 && vars.ast.StatementTag() != "SET" {
 		timerDuration :=
 			ex.sessionData().StmtTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
 		// There's no need to proceed with execution if the timer has already expired.
@@ -694,7 +703,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		queryTimeoutTicker = time.AfterFunc(
 			timerDuration,
 			func() {
-				cancelQuery()
+				vars.cancelQuery()
 				// Also cancel the transactions context, so that there is no danger
 				// getting stuck rolling back.
 				ex.state.txnCancelFn()
@@ -709,7 +718,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			if perr, ok := retPayload.(payloadWithError); ok {
 				execErr = perr.errorCause()
 			}
-			filter(ctx, ex.sessionData(), stmt.AST.String(), execErr)
+			filter(ctx, ex.sessionData(), vars.stmt.AST.String(), execErr)
 		}
 
 		// Do the auto-commit, if necessary. In the extended protocol, the
@@ -719,7 +728,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		// As portals are from extended protocol, we don't auto commit for them.
 		if canAutoCommit && !isExtendedProtocol {
-			retEv, retPayload = ex.handleAutoCommit(ctx, ast)
+			retEv, retPayload = ex.handleAutoCommit(ctx, vars.ast)
 		}
 	}(ctx)
 
@@ -740,10 +749,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
-	p.stmt = stmt
-	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
+	p.stmt = vars.stmt
+	p.semaCtx.Annotations = tree.MakeAnnotations(vars.stmt.NumAnnotations)
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
+	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
 	// This flag informs logging decisions.
@@ -751,16 +760,13 @@ func (ex *connExecutor) execStmtInOpenState(
 	// some special plan initialization for logging.
 	dispatchToExecEngine := false
 
-	// resErr is used to capture the error returned by the result of the
-	// statement execution for logging.
-	var resErr error
 	defer processCleanupFunc("log statement", func() {
 		// If we did not dispatch to the execution engine, we need to initialize
 		// the plan here.
 		if !dispatchToExecEngine {
 			p.curPlan.init(&p.stmt, &p.instrumentation)
 			if p, ok := retPayload.(payloadWithError); ok {
-				resErr = p.errorCause()
+				vars.logErr = p.errorCause()
 			}
 		}
 
@@ -795,7 +801,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			rowsAffected,
 			ex.state.mu.stmtCount,
 			bulkJobId,
-			resErr,
+			vars.logErr,
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
@@ -834,7 +840,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			if isPausablePortal() {
 				resToPushErr = portal.pauseInfo.curRes
 			}
-			resErr = resToPushErr.ErrAllowReleased()
+			vars.logErr = resToPushErr.ErrAllowReleased()
 			// Detect context cancelation and overwrite whatever error might have been
 			// set on the result before. The idea is that once the query's context is
 			// canceled, all sorts of actors can detect the cancelation and set all
@@ -846,7 +852,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				// intercept the event and payload returned here to ensure that the query
 				// is not retried.
 				retEv = eventNonRetriableErr{
-					IsCommit: fsm.FromBool(isCommit(ast)),
+					IsCommit: fsm.FromBool(isCommit(vars.ast)),
 				}
 				errToPush := cancelchecker.QueryCanceledError
 				// For pausable portal, we can arrive here after encountering a timeout
@@ -859,7 +865,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				}
 				resToPushErr.SetError(errToPush)
 				retPayload = eventNonRetriableErrPayload{err: errToPush}
-				resErr = errToPush
+				vars.logErr = errToPush
 				// Cancel the txn if we are inside an implicit txn too.
 				if ex.implicitTxn() && ex.state.txnCancelFn != nil {
 					ex.state.txnCancelFn()
@@ -881,23 +887,23 @@ func (ex *connExecutor) execStmtInOpenState(
 			// A timed out query should never produce retryable errors/events/payloads
 			// so we intercept and overwrite them all here.
 			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(ast)),
+				IsCommit: fsm.FromBool(isCommit(vars.ast)),
 			}
 			res.SetError(sqlerrors.QueryTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
-			resErr = sqlerrors.QueryTimeoutError
+			vars.logErr = sqlerrors.QueryTimeoutError
 		} else if txnTimedOut {
 			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(ast)),
+				IsCommit: fsm.FromBool(isCommit(vars.ast)),
 			}
 			res.SetError(sqlerrors.TxnTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
-			resErr = sqlerrors.TxnTimeoutError
+			vars.logErr = sqlerrors.TxnTimeoutError
 		}
 
 	}(ctx, res)
 
-	switch s := ast.(type) {
+	switch s := vars.ast.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is only allowed if we are in an implicit txn.
 		if os.ImplicitTxn.Get() {
@@ -913,7 +919,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	case *tree.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no plan for it.
-		ev, payload := ex.commitSQLTransaction(ctx, ast, ex.commitSQLTransactionInternal)
+		ev, payload := ex.commitSQLTransaction(ctx, vars.ast, ex.commitSQLTransactionInternal)
 		return ev, payload, nil
 
 	case *tree.RollbackTransaction:
@@ -960,8 +966,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		var typeHints tree.PlaceholderTypes
 		// We take max(len(s.Types), stmt.NumPlaceHolders) as the length of types.
 		numParams := len(s.Types)
-		if stmt.NumPlaceholders > numParams {
-			numParams = stmt.NumPlaceholders
+		if vars.stmt.NumPlaceholders > numParams {
+			numParams = vars.stmt.NumPlaceholders
 		}
 		if len(s.Types) > 0 {
 			typeHints = make(tree.PlaceholderTypes, numParams)
@@ -981,8 +987,8 @@ func (ex *connExecutor) execStmtInOpenState(
 				// string and store it in tree.Prepare.
 				SQL:             tree.AsStringWithFlags(s.Statement, tree.FmtParsable),
 				AST:             s.Statement,
-				NumPlaceholders: stmt.NumPlaceholders,
-				NumAnnotations:  stmt.NumAnnotations,
+				NumPlaceholders: vars.stmt.NumPlaceholders,
+				NumAnnotations:  vars.stmt.NumAnnotations,
 			},
 			ex.server.cfg.GenerateID(),
 			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
@@ -997,7 +1003,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			// The call to addPreparedStmt changed the planner stmt to the
 			// statement being prepared. Set it back to the PREPARE statement,
 			// so that it's logged correctly.
-			p.stmt = stmt
+			p.stmt = vars.stmt
 			p.extendedEvalCtx.Placeholders = oldPlaceholders
 		}()
 		if _, err := ex.addPreparedStmt(
@@ -1011,7 +1017,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	dispatchToExecEngine = true
 
 	// Check if we need to auto-commit the transaction due to DDL.
-	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, ast); ev != nil {
+	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, vars.ast); ev != nil {
 		return ev, payload, nil
 	}
 
@@ -1023,7 +1029,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// the statement, and this function is idempotent, we don't need to
 	// call it again during execution.
 	if portal == nil {
-		if err := ex.handleAOST(ctx, ast); err != nil {
+		if err := ex.handleAOST(ctx, vars.ast); err != nil {
 			return makeErrEvent(err)
 		}
 	}
@@ -1142,7 +1148,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	var rollbackHomeRegionSavepoint *tree.RollbackToSavepoint
 	var releaseHomeRegionSavepoint *tree.ReleaseSavepoint
 	enforceHomeRegion := p.EnforceHomeRegion()
-	_, isSelectStmt := stmt.AST.(*tree.Select)
+	_, isSelectStmt := vars.stmt.AST.(*tree.Select)
 	// TODO(sql-sessions): ensure this is not broken for pausable portals.
 	// https://github.com/cockroachdb/cockroach/issues/99408
 	if enforceHomeRegion && ex.state.mu.txn.IsOpen() && isSelectStmt {
@@ -1196,7 +1202,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			rec := stmtThresholdSpan.FinishAndGetRecording(tracingpb.RecordingVerbose)
 			// NB: This recording does not include the commit for implicit
 			// transactions if the statement didn't auto-commit.
-			redactableStmt := p.FormatAstAsRedactableString(stmt.AST, &p.semaCtx.Annotations)
+			redactableStmt := p.FormatAstAsRedactableString(vars.stmt.AST, &p.semaCtx.Annotations)
 			logTraceAboveThreshold(
 				ctx,
 				rec,                /* recording */
@@ -1268,7 +1274,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		if canAutoRetry {
 			ev := eventRetriableErr{
-				IsCommit:     fsm.FromBool(isCommit(ast)),
+				IsCommit:     fsm.FromBool(isCommit(vars.ast)),
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
 			payload := eventRetriableErrPayload{
@@ -1288,7 +1294,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	case tree.StoredProcTxnCommit:
 		// Commit the current transaction. The connExecutor will open a new
 		// transaction, and then return to executing the same CALL statement.
-		ev, payload := ex.commitSQLTransaction(ctx, ast, ex.commitSQLTransactionInternal)
+		ev, payload := ex.commitSQLTransaction(ctx, vars.ast, ex.commitSQLTransactionInternal)
 		if payload != nil {
 			return ev, payload, nil
 		}
@@ -1296,7 +1302,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	case tree.StoredProcTxnRollback:
 		// Abort the current transaction. The connExecutor will open a new
 		// transaction, and then return to executing the same CALL statement.
-		ev, payload := ex.rollbackSQLTransaction(ctx, ast)
+		ev, payload := ex.rollbackSQLTransaction(ctx, vars.ast)
 		if payload != nil {
 			return ev, payload, nil
 		}
