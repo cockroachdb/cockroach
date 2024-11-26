@@ -194,7 +194,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		path := strconv.FormatInt(timeutil.Now().UnixNano(), 10)
 
 		var sstFile bytes.Buffer
-		sst := storage.MakeBackupSSTWriter(ctx, cs, &sstFile)
+		sst := storage.MakeTransportSSTWriter(ctx, cs, &sstFile)
 		defer sst.Close()
 		ts := hlc.NewClockForTesting(nil).Now()
 		value := roachpb.MakeValueFromString("bar")

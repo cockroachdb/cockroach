@@ -44,7 +44,7 @@ func TestFileSSTSinkExtendOneFile(t *testing.T) {
 
 	getKeys := func(prefix string, n int) []byte {
 		var b bytes.Buffer
-		sst := storage.MakeBackupSSTWriter(ctx, cluster.MakeTestingClusterSettings(), &b)
+		sst := storage.MakeTransportSSTWriter(ctx, cluster.MakeTestingClusterSettings(), &b)
 		for i := 0; i < n; i++ {
 			require.NoError(t, sst.PutUnversioned([]byte(fmt.Sprintf("%s%08d", prefix, i)), nil))
 		}
@@ -640,7 +640,7 @@ func TestFileSSTSinkCopyPointKeys(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			sst := storage.MakeBackupSSTWriter(ctx, settings, buf)
+			sst := storage.MakeTransportSSTWriter(ctx, settings, buf)
 			sink := fileSSTSink{sst: sst}
 			compareSST := true
 
@@ -819,7 +819,7 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			sst := storage.MakeBackupSSTWriter(ctx, settings, buf)
+			sst := storage.MakeTransportSSTWriter(ctx, settings, buf)
 			sink := fileSSTSink{sst: sst}
 			compareSST := true
 
@@ -995,7 +995,7 @@ func (b *exportedSpanBuilder) buildWithEncoding(stringToKey func(string) roachpb
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettings()
 	buf := &bytes.Buffer{}
-	sst := storage.MakeBackupSSTWriter(ctx, settings, buf)
+	sst := storage.MakeTransportSSTWriter(ctx, settings, buf)
 	for _, d := range b.keyValues {
 		v := roachpb.Value{}
 		v.SetBytes(d.value)
