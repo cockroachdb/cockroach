@@ -658,10 +658,13 @@ func (r *Replica) applySnapshot(
 	// has not yet been updated. Any errors past this point must therefore be
 	// treated as fatal.
 
+	// TODO(pav-kv): load RaftTruncatedState separately.
 	state, err := stateloader.Make(desc.RangeID).Load(ctx, r.store.TODOEngine(), desc)
 	if err != nil {
 		log.Fatalf(ctx, "unable to load replica state: %s", err)
 	}
+	truncState := *state.TruncatedState
+	state.TruncatedState = nil
 
 	if uint64(state.RaftAppliedIndex) != nonemptySnap.Metadata.Index {
 		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
@@ -749,7 +752,7 @@ func (r *Replica) applySnapshot(
 	// by r.leasePostApply, but we called those above, so now it's safe to
 	// wholesale replace r.mu.state.
 	r.shMu.state = state
-	r.shMu.raftTruncState = *state.TruncatedState
+	r.shMu.raftTruncState = truncState
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	r.shMu.raftLogSizeTrusted = false
