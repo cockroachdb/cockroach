@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
@@ -329,7 +330,13 @@ func RandDatumWithNullChance(
 	case types.TSQueryFamily:
 		return tree.NewDTSQuery(tsearch.RandomTSQuery(rng))
 	case types.PGVectorFamily:
-		return tree.NewDPGVector(vector.Random(rng))
+		var maxDim = 1000
+		if util.RaceEnabled {
+			// Some tests might be significantly slower under race, so we reduce
+			// the dimensionality.
+			maxDim = 50
+		}
+		return tree.NewDPGVector(vector.Random(rng, maxDim))
 	default:
 		panic(errors.AssertionFailedf("invalid type %v", typ.DebugString()))
 	}
