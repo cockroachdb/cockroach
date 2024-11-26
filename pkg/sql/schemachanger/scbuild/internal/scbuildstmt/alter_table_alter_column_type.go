@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -265,6 +266,7 @@ func handleGeneralColumnConversion(
 	col *scpb.Column,
 	oldColType, newColType *scpb.ColumnType,
 ) {
+	failIfExplicitTransaction(b)
 	failIfExperimentalSettingNotSet(b, oldColType, newColType)
 
 	// To handle the conversion, we remove the old column and add a new one with
@@ -427,6 +429,15 @@ func updateColumnType(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
 	// type for the column.
 	b.Drop(oldColType)
 	b.Add(newColType)
+}
+
+// failIfExplicitTransaction blocks the operation if it's part of an explicit
+// transaction, unless the schema changer mode is set to 'unsafe_always'.
+func failIfExplicitTransaction(b BuildCtx) {
+	if !b.EvalCtx().TxnIsSingleStmt &&
+		b.SessionData().NewSchemaChangerMode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
+		panic(sqlerrors.NewAlterColTypeInTxnNotSupportedErr())
+	}
 }
 
 // failIfExperimentalSettingNotSet checks if the current version requires a

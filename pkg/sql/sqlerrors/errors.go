@@ -313,6 +313,12 @@ func NewAlterColTypeInCombinationNotSupportedError() error {
 			"with other ALTER TABLE commands")
 }
 
+func NewAlterColTypeInTxnNotSupportedErr() error {
+	return unimplemented.NewWithIssuef(
+		49351, "ALTER COLUMN TYPE requiring a rewrite of on-disk data is "+
+			"not supported inside a transaction")
+}
+
 const PrimaryIndexSwapDetail = `CRDB's implementation for "ADD COLUMN", "DROP COLUMN", and "ALTER PRIMARY KEY" will drop the old/current primary index and create a new one.`
 
 // NewColumnReferencedByPrimaryKeyError is returned when attempting to drop a
