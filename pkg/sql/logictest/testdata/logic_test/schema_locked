@@ -32,6 +32,9 @@ t  CREATE TABLE public.t (
    ) WITH (schema_locked = true)
 
 statement ok
+ALTER TABLE t RESET (schema_locked)
+
+statement ok
 DROP TABLE t;
 
 # This subtest ensures storage parameter "schema_locked" can only be set/reset
@@ -58,6 +61,9 @@ ALTER TABLE t SET (schema_locked=f);
 
 statement ok
 ROLLBACK
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
 
 statement ok
 DROP TABLE t
@@ -116,6 +122,9 @@ statement ok
 COMMENT ON TABLE t IS 't is a table';
 COMMENT ON INDEX t@idx IS 'idx is an index';
 COMMENT ON COLUMN t.i IS 'i is a column';
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
 
 statement ok
 DROP TABLE t;
