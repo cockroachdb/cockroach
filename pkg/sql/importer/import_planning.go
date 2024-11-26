@@ -814,6 +814,10 @@ func importPlanHook(
 				return err
 			}
 
+			if len(found.LDRJobIDs) > 0 {
+				return errors.Newf("cannot run an import on table %s which is apart of a Logical Data Replication stream", table)
+			}
+
 			// Validate target columns.
 			var intoCols []string
 			isTargetCol := make(map[string]bool)
