@@ -85,7 +85,7 @@ func (c *SystemDatabaseCache) lookupDescriptor(
 // lookupDescriptorID looks for the corresponding descriptor name -> ID entry in
 // the cache.
 func (c *SystemDatabaseCache) lookupDescriptorID(
-	version clusterversion.ClusterVersion, key catalog.NameKey,
+	version clusterversion.ClusterVersion, key descpb.NameInfo,
 ) (descpb.ID, hlc.Timestamp) {
 	if key.GetParentID() == descpb.InvalidID &&
 		key.GetParentSchemaID() == descpb.InvalidID &&
@@ -172,7 +172,7 @@ func (c *SystemDatabaseCache) nameCandidatesForUpdate(
 	}
 	diff := make([]nstree.NamespaceEntry, 0, len(systemNames))
 	for _, e := range systemNames {
-		if cached.LookupNamespaceEntry(e) == nil {
+		if cached.LookupNamespaceEntry(catalog.MakeNameInfo(e)) == nil {
 			diff = append(diff, e)
 		}
 	}

@@ -350,7 +350,7 @@ func (tc *Collection) DeleteDescToBatch(
 func (tc *Collection) InsertNamespaceEntryToBatch(
 	ctx context.Context, kvTrace bool, e catalog.NameEntry, b *kv.Batch,
 ) error {
-	if ns := tc.cr.Cache().LookupNamespaceEntry(e); ns != nil {
+	if ns := tc.cr.Cache().LookupNamespaceEntry(catalog.MakeNameInfo(e)); ns != nil {
 		tc.markAsShadowedName(ns.GetID())
 	}
 	tc.markAsShadowedName(e.GetID())
@@ -373,7 +373,7 @@ func (tc *Collection) InsertNamespaceEntryToBatch(
 func (tc *Collection) UpsertNamespaceEntryToBatch(
 	ctx context.Context, kvTrace bool, e catalog.NameEntry, b *kv.Batch,
 ) error {
-	if ns := tc.cr.Cache().LookupNamespaceEntry(e); ns != nil {
+	if ns := tc.cr.Cache().LookupNamespaceEntry(catalog.MakeNameInfo(e)); ns != nil {
 		tc.markAsShadowedName(ns.GetID())
 	}
 	tc.markAsShadowedName(e.GetID())
@@ -396,7 +396,7 @@ func (tc *Collection) UpsertNamespaceEntryToBatch(
 func (tc *Collection) DeleteNamespaceEntryToBatch(
 	ctx context.Context, kvTrace bool, k catalog.NameKey, b *kv.Batch,
 ) error {
-	if ns := tc.cr.Cache().LookupNamespaceEntry(k); ns != nil {
+	if ns := tc.cr.Cache().LookupNamespaceEntry(catalog.MakeNameInfo(k)); ns != nil {
 		tc.markAsShadowedName(ns.GetID())
 	}
 	nameKey := catalogkeys.EncodeNameKey(tc.codec(), k)
@@ -659,7 +659,7 @@ func (tc *Collection) lookupDescriptorID(
 	if err != nil {
 		return descpb.InvalidID, err
 	}
-	if e := read.LookupNamespaceEntry(&key); e != nil {
+	if e := read.LookupNamespaceEntry(key); e != nil {
 		return e.GetID(), nil
 	}
 	return descpb.InvalidID, nil
