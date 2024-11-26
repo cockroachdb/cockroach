@@ -162,17 +162,20 @@ func (sr *schemaResolver) LookupObject(
 		b = b.WithOffline()
 	}
 	g := b.MaybeGet()
-	tn := tree.MakeQualifiedTypeName(dbName, scName, obName)
 	switch flags.DesiredObjectKind {
 	case tree.TableObject:
-		prefix, desc, err = descs.PrefixAndTable(ctx, g, &tn)
+		tn := tree.NewTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(obName))
+		prefix, desc, err = descs.PrefixAndTable(ctx, g, tn)
 	case tree.TypeObject:
-		prefix, desc, err = descs.PrefixAndType(ctx, g, &tn)
+		tn := tree.NewQualifiedTypeName(dbName, scName, obName)
+		prefix, desc, err = descs.PrefixAndType(ctx, g, tn)
 	case tree.AnyObject:
-		prefix, desc, err = descs.PrefixAndTable(ctx, g, &tn)
+		tn := tree.NewTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(obName))
+		prefix, desc, err = descs.PrefixAndTable(ctx, g, tn)
 		if err != nil {
 			if sqlerrors.IsUndefinedRelationError(err) || errors.Is(err, catalog.ErrDescriptorWrongType) {
-				prefix, desc, err = descs.PrefixAndType(ctx, g, &tn)
+				tn := tree.NewQualifiedTypeName(dbName, scName, obName)
+				prefix, desc, err = descs.PrefixAndType(ctx, g, tn)
 			}
 		}
 	default:
