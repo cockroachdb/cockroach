@@ -127,11 +127,6 @@ func (rsl StateLoader) Save(
 	if err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
-	// the Raft log engine is separated. Figure out the ordering required here.
-	if err := rsl.SetRaftTruncatedState(ctx, readWriter, state.TruncatedState); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
 	if state.Version != nil {
 		if err := rsl.SetVersion(ctx, readWriter, ms, state.Version); err != nil {
 			return enginepb.MVCCStats{}, err
