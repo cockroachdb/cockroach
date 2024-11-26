@@ -302,12 +302,16 @@ func (h *uniqueCheckHelper) init(mb *mutationBuilder, uniqueOrdinal int) bool {
 			return false
 		}
 
+		if columnIsUniversallyUnique(mb.outScope.expr, colID, "promise_unique") {
+			return false
+		}
+
 		// If one of the columns is a UUID (or UUID casted to STRING or BYTES) set
 		// to gen_random_uuid() and we don't require uniqueness checks for
 		// gen_random_uuid(), unique check not needed.
 		switch mb.md.ColumnMeta(colID).Type.Family() {
 		case types.UuidFamily, types.StringFamily, types.BytesFamily:
-			if columnIsGenRandomUUID(mb.outScope.expr, colID) {
+			if columnIsUniversallyUnique(mb.outScope.expr, colID, "gen_random_uuid") {
 				requireCheck := UniquenessChecksForGenRandomUUIDClusterMode.Get(&mb.b.evalCtx.Settings.SV)
 				if !requireCheck {
 					return false
@@ -663,9 +667,9 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 	), ordinals
 }
 
-// columnIsGenRandomUUID returns true if the expression returns the function
-// gen_random_uuid() for the given column.
-func columnIsGenRandomUUID(e memo.RelExpr, col opt.ColumnID) bool {
+// columnIsUniversallyUnique returns true if the expression returns a
+// universally unique value for the given column.
+func columnIsUniversallyUnique(e memo.RelExpr, col opt.ColumnID, fnName string) bool {
 	isGenRandomUUIDFunction := func(scalar opt.ScalarExpr) bool {
 		if cast, ok := scalar.(*memo.CastExpr); ok &&
 			(cast.Typ.Family() == types.StringFamily || cast.Typ.Family() == types.BytesFamily) &&
@@ -677,7 +681,7 @@ func columnIsGenRandomUUID(e memo.RelExpr, col opt.ColumnID) bool {
 			scalar = cast.Input
 		}
 		if function, ok := scalar.(*memo.FunctionExpr); ok {
-			if function.Name == "gen_random_uuid" {
+			if function.Name == fnName {
 				return true
 			}
 		}
@@ -688,7 +692,7 @@ func columnIsGenRandomUUID(e memo.RelExpr, col opt.ColumnID) bool {
 	case opt.ProjectOp:
 		p := e.(*memo.ProjectExpr)
 		if p.Passthrough.Contains(col) {
-			return columnIsGenRandomUUID(p.Input, col)
+			return columnIsUniversallyUnique(p.Input, col, fnName)
 		}
 		for i := range p.Projections {
 			if p.Projections[i].Col == col {

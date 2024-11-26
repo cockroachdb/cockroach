@@ -562,6 +562,15 @@ func (b *Builder) buildFunction(
 		args[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope, nil, nil, colRefs)
 	}
 
+	/*
+		if def.Name == "promise_unique" {
+			if len(args) != 1 {
+				panic(errors.AssertionFailedf("wrong number of args"))
+			}
+			return b.finishBuildScalar(f, args[0], inScope, outScope, outCol)
+		}
+	*/
+
 	// Construct a private FuncOpDef that refers to a resolved function overload.
 	out = b.factory.ConstructFunction(args, &memo.FunctionPrivate{
 		Name:       def.Name,

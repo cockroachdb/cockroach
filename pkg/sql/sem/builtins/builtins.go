@@ -8938,6 +8938,17 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Stable,
 		},
 	),
+	"promise_unique": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
+			ReturnType: tree.IdentityReturnType(0),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return args[0], nil
+			},
+			Info:       "marks the value as unique",
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
