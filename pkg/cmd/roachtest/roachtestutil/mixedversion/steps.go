@@ -272,6 +272,42 @@ func (s disableSeparateProcessThrottlingStep) Run(
 		"ALTER TENANT %q GRANT CAPABILITY exempt_from_rate_limiting = true",
 		s.virtualClusterName,
 	)
+	if err = h.System.Exec(rng, stmt); err != nil {
+		return err
+	}
+
+	rows, err := h.System.Query(rng, "SHOW TENANTS")
+	if err != nil {
+		return err
+	}
+
+	var tenantID int64
+	for rows.Next() {
+		var name string
+		var dataState string
+		var serviceMode string
+		if err := rows.Scan(&tenantID, &name, &dataState, &serviceMode); err != nil {
+			return err
+		}
+
+		if name == s.virtualClusterName {
+			break
+		}
+	}
+
+	stmt = fmt.Sprintf(
+		"SELECT crdb_internal.update_tenant_resource_limits(%d, %s, %s, %s, now(), 0); ",
+		tenantID, "1000000000000", "1000000000000", "1000000000000",
+	)
+	if err = h.System.Exec(rng, stmt); err != nil {
+		return err
+	}
+
+	stmt = fmt.Sprintf(
+		"ALTER TENANT %q SET CLUSTER SETTING sql.explain_analyze.include_ru_estimation.enabled = false; ",
+		s.virtualClusterName,
+	)
+
 	return h.System.Exec(rng, stmt)
 }
 

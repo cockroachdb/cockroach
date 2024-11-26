@@ -470,7 +470,6 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		randomNode := c.Node(c.CRDBNodes().SeededRandNode(rng)[0])
 		cmd := roachtestutil.NewCommand("%s workload fixtures import bank", test.DefaultCockroachPath).
 			Arg("{pgurl%s}", randomNode).
-			Flag("payload-bytes", 10240).
 			Flag("rows", bankRows).
 			Flag("seed", 4).
 			Flag("db", "bigbank").
