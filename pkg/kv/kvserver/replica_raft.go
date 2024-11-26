@@ -2945,7 +2945,8 @@ func (r *Replica) acquireMergeLock(
 // snapshot.
 func handleTruncatedStateBelowRaftPreApply(
 	ctx context.Context,
-	currentTruncatedState, suggestedTruncatedState *kvserverpb.RaftTruncatedState,
+	currentTruncatedState kvserverpb.RaftTruncatedState,
+	suggestedTruncatedState *kvserverpb.RaftTruncatedState,
 	loader logstore.StateLoader,
 	readWriter storage.ReadWriter,
 ) (_apply bool, _ error) {
