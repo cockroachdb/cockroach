@@ -2623,6 +2623,18 @@ func runSchemaChangesInTxn(
 	// update the table descriptor directly.
 	for _, c := range constraintAdditionMutations {
 		if ck := c.AsCheck(); ck != nil {
+			if ck.IsNotNullColumnConstraint() {
+				// Remove the  check constraint we added.
+				for i := range tableDesc.Checks {
+					if tableDesc.Checks[i].ConstraintID == ck.GetConstraintID() {
+						tableDesc.Checks = append(tableDesc.Checks[:i], tableDesc.Checks[i+1:]...)
+					}
+					colID := ck.GetReferencedColumnID(0)
+					col := catalog.FindColumnByID(tableDesc, colID)
+					col.ColumnDesc().Nullable = false
+					continue
+				}
+			}
 			tableDesc.Checks = append(tableDesc.Checks, ck.CheckDesc())
 		} else if fk := c.AsForeignKey(); fk != nil {
 			var referencedTableDesc *tabledesc.Mutable

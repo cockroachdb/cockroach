@@ -4147,3 +4147,17 @@ statement ok
 SET use_declarative_schema_changer = $schema_changer_state
 
 subtest end
+
+
+subtest validate_not_null_during_sc
+
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(n IS NOT NULL\)
+BEGIN;
+create table t1_135692(n int);
+alter table t1_135692 alter column n set not null;
+insert into t1_135692 values (null);
+
+statement ok
+ROLLBACK;
+
+subtest end
