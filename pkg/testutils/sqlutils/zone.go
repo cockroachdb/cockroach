@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 )
 
@@ -58,16 +57,16 @@ func DeleteZoneConfig(t testing.TB, sqlDB *SQLRunner, target string) {
 // SetZoneConfig updates the specified zone config through the SQL interface.
 func SetZoneConfig(t testing.TB, sqlDB *SQLRunner, target string, config string) {
 	t.Helper()
-	sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE = %s",
-		target, lexbase.EscapeSQLString(config)))
+	sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE USING %s",
+		target, config))
 }
 
 // TxnSetZoneConfig updates the specified zone config through the SQL interface
 // using the provided transaction.
 func TxnSetZoneConfig(t testing.TB, sqlDB *SQLRunner, txn *gosql.Tx, target string, config string) {
 	t.Helper()
-	_, err := txn.Exec(fmt.Sprintf("ALTER %s CONFIGURE ZONE = %s",
-		target, lexbase.EscapeSQLString(config)))
+	_, err := txn.Exec(fmt.Sprintf("ALTER %s CONFIGURE ZONE USING %s",
+		target, config))
 	if err != nil {
 		t.Fatal(err)
 	}
