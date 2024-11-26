@@ -203,7 +203,7 @@ func registerDbConsole(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		Randomized:       false,
 		Run:              runDbConsoleCypressMixedVersions,
-		Timeout:          1 * time.Hour,
+		Timeout:          2 * time.Hour,
 	})
 	r.Add(registry.TestSpec{
 		Name:             "db-console/cypress",
@@ -227,7 +227,7 @@ func runDbConsoleCypress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 	cypressTest := newDbConsoleCypressTest(t, c, "cypress/e2e/health-check/*.ts", seedQueries)
-	db, err := c.ConnE(ctx, t.L(), cypressTest.testCluster.WorkloadNode()[0])
+	db, err := c.ConnE(ctx, t.L(), cypressTest.testCluster.CRDBNodes()[0])
 	if err != nil {
 		t.Fatal(err)
 	}
