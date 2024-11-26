@@ -11,8 +11,6 @@ syntax = "proto3";
 package cockroach.sql.catalog.catpb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb";
 
-import "gogoproto/gogo.proto";
-
 // SystemColumnKind is an enum representing the different kind of system
 // columns that can be synthesized by the execution engine.
 enum SystemColumnKind {
