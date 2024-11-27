@@ -144,6 +144,10 @@ func (t testWrapper) Go(_ task.Func, _ ...task.Option) {
 	panic("implement me")
 }
 
+func (t testWrapper) NewGroup() task.Group {
+	panic("implement me")
+}
+
 var _ test2.Test = testWrapper{}
 
 // ArtifactsDir is part of the test.Test interface.

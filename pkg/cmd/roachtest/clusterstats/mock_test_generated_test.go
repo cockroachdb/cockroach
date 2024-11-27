@@ -343,6 +343,20 @@ func (mr *MockTestMockRecorder) Name() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockTest)(nil).Name))
 }
 
+// NewGroup mocks base method.
+func (m *MockTest) NewGroup() task.Group {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewGroup")
+	ret0, _ := ret[0].(task.Group)
+	return ret0
+}
+
+// NewGroup indicates an expected call of NewGroup.
+func (mr *MockTestMockRecorder) NewGroup() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewGroup", reflect.TypeOf((*MockTest)(nil).NewGroup))
+}
+
 // PerfArtifactsDir mocks base method.
 func (m *MockTest) PerfArtifactsDir() string {
 	m.ctrl.T.Helper()
