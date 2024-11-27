@@ -349,7 +349,7 @@ func TestDiskRowContainer(t *testing.T) {
 		addRowsRepeatedly()
 		// Reset and add the rows in a different order.
 		require.NoError(t, d.UnsafeReset(ctx))
-		rand.Shuffle(len(rows), func(i, j int) {
+		rng.Shuffle(len(rows), func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		addRowsRepeatedly()
@@ -420,7 +420,7 @@ func makeUniqueRows(
 	}
 	rows = deDupedRows
 	// Shuffle so that not adding in sorted order.
-	rand.Shuffle(len(rows), func(i, j int) {
+	rng.Shuffle(len(rows), func(i, j int) {
 		rows[i], rows[j] = rows[j], rows[i]
 	})
 	return len(rows), rows

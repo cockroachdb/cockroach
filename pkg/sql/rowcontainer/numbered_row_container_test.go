@@ -111,7 +111,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 			require.Equal(t, rows[accesses[i]].String(types), row.String(types))
 		}
 		// Reset and reorder the rows for the next pass.
-		rand.Shuffle(numRows, func(i, j int) {
+		rng.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		require.NoError(t, rc.UnsafeReset(ctx))
@@ -205,7 +205,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 		fmt.Printf("hits: %d, misses: %d, maxCacheSize: %d\n",
 			rc.rowIter.hitCount, rc.rowIter.missCount, rc.rowIter.maxCacheSize)
 		// Reset and reorder the rows for the next pass.
-		rand.Shuffle(numRows, func(i, j int) {
+		rng.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		require.NoError(t, rc.UnsafeReset(ctx))
@@ -310,7 +310,7 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 			}
 		}
 		// Reset and reorder the rows for the next pass.
-		rand.Shuffle(numRows, func(i, j int) {
+		rng.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		for _, rc := range containers {
