@@ -491,7 +491,7 @@ func (r *Replica) leasePostApplyLocked(
 		}
 
 		if r.store.TestingKnobs().LeaseUpgradeInterceptor != nil {
-			r.store.TestingKnobs().LeaseUpgradeInterceptor(newLease)
+			r.store.TestingKnobs().LeaseUpgradeInterceptor(r.RangeID, newLease)
 		}
 		// Ignore the returned handle as we won't block on it.
 		_ = r.requestLeaseLocked(ctx, st, nil /* limiter */)
