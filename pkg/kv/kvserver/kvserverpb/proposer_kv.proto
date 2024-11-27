@@ -269,6 +269,16 @@ message ReplicatedEvalResult {
 
   LinkExternalSSTable link_external_sstable = 27 [(gogoproto.customname) = "LinkExternalSSTable"];
 
+  // DoTimelyApplicationToAllReplicas is set to true when this proposal needs
+  // to be applied on all replicas in a timely manner for various reasons
+  // (currently for certain proposals during a split or merge or below-raft
+  // migration).
+  //
+  // Must only be set to true when the cluster version is
+  // V25_1_AddRangeForceFlushKey, since it causes below Raft code to write a
+  // replicated range-id local key.
+  bool do_timely_application_to_all_replicas = 29;
+
   reserved 1, 5, 7, 9, 10, 14, 15, 16, 19, 10001 to 10013;
 }
 

@@ -86,4 +86,10 @@ func TestMergeAndDestroy(t *testing.T) {
 		ForceFlushIndex: roachpb.ForceFlushIndex{Index: 3},
 	}
 	require.ErrorContains(t, r0.MergeAndDestroy(r3), "must not specify ForceFlushIndex")
+
+	var r4 Result
+	r4.Replicated.DoTimelyApplicationToAllReplicas = true
+	require.False(t, r0.Replicated.DoTimelyApplicationToAllReplicas)
+	require.NoError(t, r0.MergeAndDestroy(r4))
+	require.True(t, r0.Replicated.DoTimelyApplicationToAllReplicas)
 }
