@@ -85,28 +85,34 @@ func runUAMigration(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	numWarehouses := 10
 
-	// nodeOne := c.Nodes(1)
+	nodeOne := c.Nodes(1)
 
 	// TODO(shubham): run workloads in parallel too
 
 	// Run workloads
-	workloadNode := nodeTwo
-	init := roachtestutil.NewCommand("./cockroach workload init tpcc --split").
-		Arg("{pgurl%s}", workloadNode).
-		Flag("warehouses", numWarehouses)
 
-	runDuration := 1 * time.Minute
+	runWorkload := func(nodes option.NodeListOption) {
+		init := roachtestutil.NewCommand("./cockroach workload init tpcc --split").
+			Arg("{pgurl%s}", nodes).
+			Flag("warehouses", numWarehouses)
 
-	run := roachtestutil.NewCommand("./cockroach workload run tpcc").
-		Arg("{pgurl%s}", workloadNode).
-		Flag("warehouses", numWarehouses).
-		Flag("duration", runDuration).
-		Option("tolerate-errors")
-	err = c.RunE(ctx, option.WithNodes(workloadNode), init.String())
-	require.NoError(t, err, "failed to run tpcc init")
+		runDuration := 1 * time.Minute
 
-	err = c.RunE(ctx, option.WithNodes(workloadNode), run.String())
-	require.NoError(t, err, "failed to run tpcc run")
+		run := roachtestutil.NewCommand("./cockroach workload run tpcc").
+			Arg("{pgurl%s}", nodes).
+			Flag("warehouses", numWarehouses).
+			Flag("duration", runDuration).
+			Option("tolerate-errors")
+
+		err = c.RunE(ctx, option.WithNodes(nodes), init.String())
+		require.NoError(t, err, "failed to run tpcc init")
+
+		err = c.RunE(ctx, option.WithNodes(nodes), run.String())
+		require.NoError(t, err, "failed to run tpcc run")
+	}
+
+	runWorkload(nodeTwo)
+	runWorkload(nodeOne)
 
 	dbTwo := c.Conn(ctx, t.L(), 2)
 	defer dbTwo.Close()
