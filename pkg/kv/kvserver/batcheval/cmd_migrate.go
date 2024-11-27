@@ -84,7 +84,8 @@ func Migrate(
 	pd.Replicated.State.Version = &migrationVersion
 	// TODO: explain with reference to the waitForApplication call in
 	// replica_write.go for a MigrateRequest.
-	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_1_AddRangeForceFlushKey) {
+	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_1_AddRangeForceFlushKey) ||
+		cArgs.EvalCtx.EvalKnobs().OverrideDoTimelyApplicationToAllReplicas {
 		pd.Replicated.DoTimelyApplicationToAllReplicas = true
 	}
 	return pd, nil
