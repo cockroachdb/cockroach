@@ -307,3 +307,41 @@ func TestParquetResolvedTimestamps(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
+
+func TestParquetDuplicateColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE t (id INT8 PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO t VALUES (1)`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH format=parquet,initial_scan='only' AS SELECT id FROM t`)
+		defer closeFeed(t, foo)
+
+		assertPayloads(t, foo, []string{
+			`t: [1]->id:1,__crdb__event_type:"c"`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
+
+func TestParquetNoUserDefinedPrimaryKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE t (id INT8)`)
+		sqlDB.Exec(t, `INSERT INTO t VALUES (9)`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH format=parquet,initial_scan='only' AS SELECT id FROM t`)
+		defer closeFeed(t, foo)
+
+		assertPayloads(t, foo, []string{
+			`t: []->id:9,__crdb__event_type:"c"`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
