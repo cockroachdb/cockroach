@@ -38,7 +38,7 @@ type kvStreamerResultDiskBuffer struct {
 	iterResultID int
 
 	engine      diskmap.Factory
-	memAcc      *mon.BoundAccount
+	memAcc      mon.BoundAccount
 	diskMonitor *mon.BytesMonitor
 	rowScratch  rowenc.EncDatumRow
 	alloc       tree.DatumAlloc
@@ -49,7 +49,7 @@ var _ kvstreamer.ResultDiskBuffer = &kvStreamerResultDiskBuffer{}
 // NewKVStreamerResultDiskBuffer return a new kvstreamer.ResultDiskBuffer that
 // is backed by a disk row container.
 func NewKVStreamerResultDiskBuffer(
-	engine diskmap.Factory, memAcc *mon.BoundAccount, diskMonitor *mon.BytesMonitor,
+	engine diskmap.Factory, memAcc mon.BoundAccount, diskMonitor *mon.BytesMonitor,
 ) kvstreamer.ResultDiskBuffer {
 	return &kvStreamerResultDiskBuffer{
 		engine:      engine,

@@ -64,6 +64,7 @@ func NewDiskBackedNumberedRowContainer(
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
 	deDuperMemMonitor *mon.BytesMonitor,
+	unlimitedMemMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 ) *DiskBackedNumberedRowContainer {
 	d := &DiskBackedNumberedRowContainer{
@@ -72,7 +73,7 @@ func NewDiskBackedNumberedRowContainer(
 		rowIterMemAcc: memoryMonitor.MakeBoundAccount(),
 	}
 	d.rc = &DiskBackedRowContainer{}
-	d.rc.Init(nil /*ordering*/, types, evalCtx, engine, memoryMonitor, diskMonitor)
+	d.rc.Init(nil /* ordering */, types, evalCtx, engine, memoryMonitor, unlimitedMemMonitor, diskMonitor)
 	if deDup {
 		ordering := make(colinfo.ColumnOrdering, len(types))
 		for i := range types {
@@ -80,7 +81,7 @@ func NewDiskBackedNumberedRowContainer(
 			ordering[i].Direction = encoding.Ascending
 		}
 		deduper := &DiskBackedRowContainer{}
-		deduper.Init(ordering, types, evalCtx, engine, deDuperMemMonitor, diskMonitor)
+		deduper.Init(ordering, types, evalCtx, engine, deDuperMemMonitor, unlimitedMemMonitor, diskMonitor)
 		deduper.DoDeDuplicate()
 		d.deduper = deduper
 	}

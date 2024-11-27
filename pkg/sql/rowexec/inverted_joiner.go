@@ -62,9 +62,10 @@ type invertedJoiner struct {
 
 	fetchSpec fetchpb.IndexFetchSpec
 
-	runningState      invertedJoinerState
-	deDuperMemMonitor *mon.BytesMonitor
-	diskMonitor       *mon.BytesMonitor
+	runningState        invertedJoinerState
+	deDuperMemMonitor   *mon.BytesMonitor
+	unlimitedMemMonitor *mon.BytesMonitor
+	diskMonitor         *mon.BytesMonitor
 
 	// prefixEqualityCols are the ordinals of the columns from the join input
 	// that represent join values for the non-inverted prefix columns of
@@ -320,6 +321,7 @@ func newInvertedJoiner(
 	// Initialize memory monitors and row container for index rows.
 	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "invertedjoiner-limited")
 	ij.deDuperMemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "invertedjoiner-deduper-limited")
+	ij.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, "invertedjoiner-unlimited")
 	ij.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "invertedjoiner-disk")
 	ij.indexRows = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */
@@ -328,6 +330,7 @@ func newInvertedJoiner(
 		ij.FlowCtx.Cfg.TempStorage,
 		ij.MemMonitor,
 		ij.deDuperMemMonitor,
+		ij.unlimitedMemMonitor,
 		ij.diskMonitor,
 	)
 
@@ -755,6 +758,9 @@ func (ij *invertedJoiner) close() {
 		if ij.deDuperMemMonitor != nil {
 			ij.deDuperMemMonitor.Stop(ij.Ctx())
 		}
+		if ij.unlimitedMemMonitor != nil {
+			ij.unlimitedMemMonitor.Stop(ij.Ctx())
+		}
 		if ij.diskMonitor != nil {
 			ij.diskMonitor.Stop(ij.Ctx())
 		}
@@ -771,6 +777,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
+	maxAllocatedMem := ij.MemMonitor.MaximumBytes() + ij.deDuperMemMonitor.MaximumBytes() + ij.unlimitedMemMonitor.MaximumBytes()
 	ret := execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
@@ -783,7 +790,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 		},
 		Exec: execinfrapb.ExecStats{
-			MaxAllocatedMem:  optional.MakeUint(uint64(ij.MemMonitor.MaximumBytes() + ij.deDuperMemMonitor.MaximumBytes())),
+			MaxAllocatedMem:  optional.MakeUint(uint64(maxAllocatedMem)),
 			MaxAllocatedDisk: optional.MakeUint(uint64(ij.diskMonitor.MaximumBytes())),
 		},
 		Output: ij.OutputHelper.Stats(),

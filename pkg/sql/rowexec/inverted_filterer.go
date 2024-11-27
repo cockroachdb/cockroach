@@ -42,9 +42,10 @@ type invertedFilterer struct {
 	input          execinfra.RowSource
 	invertedColIdx uint32
 
-	deDuperMemMonitor *mon.BytesMonitor
-	diskMonitor       *mon.BytesMonitor
-	rc                *rowcontainer.DiskBackedNumberedRowContainer
+	deDuperMemMonitor   *mon.BytesMonitor
+	unlimitedMemMonitor *mon.BytesMonitor
+	diskMonitor         *mon.BytesMonitor
+	rc                  *rowcontainer.DiskBackedNumberedRowContainer
 
 	invertedEval batchedInvertedExprEvaluator
 	// The invertedEval result.
@@ -113,6 +114,7 @@ func newInvertedFilterer(
 	// Initialize memory monitor and row container for input rows.
 	ifr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "inverted-filterer-limited")
 	ifr.deDuperMemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "inverted-filterer-deduper-limited")
+	ifr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, "inverted-filterer-unlimited")
 	ifr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "inverted-filterer-disk")
 	ifr.rc = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */
@@ -121,6 +123,7 @@ func newInvertedFilterer(
 		ifr.FlowCtx.Cfg.TempStorage,
 		ifr.MemMonitor,
 		ifr.deDuperMemMonitor,
+		ifr.unlimitedMemMonitor,
 		ifr.diskMonitor,
 	)
 
@@ -311,6 +314,9 @@ func (ifr *invertedFilterer) close() {
 		if ifr.deDuperMemMonitor != nil {
 			ifr.deDuperMemMonitor.Stop(ifr.Ctx())
 		}
+		if ifr.unlimitedMemMonitor != nil {
+			ifr.unlimitedMemMonitor.Stop(ifr.Ctx())
+		}
 		if ifr.diskMonitor != nil {
 			ifr.diskMonitor.Stop(ifr.Ctx())
 		}
@@ -323,10 +329,11 @@ func (ifr *invertedFilterer) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
+	maxAllocatedMem := ifr.MemMonitor.MaximumBytes() + ifr.deDuperMemMonitor.MaximumBytes() + ifr.unlimitedMemMonitor.MaximumBytes()
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Exec: execinfrapb.ExecStats{
-			MaxAllocatedMem:  optional.MakeUint(uint64(ifr.MemMonitor.MaximumBytes() + ifr.deDuperMemMonitor.MaximumBytes())),
+			MaxAllocatedMem:  optional.MakeUint(uint64(maxAllocatedMem)),
 			MaxAllocatedDisk: optional.MakeUint(uint64(ifr.diskMonitor.MaximumBytes())),
 		},
 		Output: ifr.OutputHelper.Stats(),

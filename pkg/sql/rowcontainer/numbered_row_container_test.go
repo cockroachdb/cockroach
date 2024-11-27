@@ -94,7 +94,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	}
 	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, typs, ordering)
 	rc := NewDiskBackedNumberedRowContainer(
-		true /* deDup */, typs, &evalCtx, tempEngine, memoryMonitor, deDuperMemMonitor, diskMonitor,
+		true /* deDup */, typs, &evalCtx, tempEngine, memoryMonitor, deDuperMemMonitor, evalCtx.TestingMon, diskMonitor,
 	)
 	defer rc.Close(ctx)
 
@@ -175,7 +175,8 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	}
 	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
 	rc := NewDiskBackedNumberedRowContainer(
-		false /* deDup */, types, &evalCtx, tempEngine, memoryMonitor, nil /* deDuperMemMonitor */, diskMonitor,
+		false /* deDup */, types, &evalCtx, tempEngine, memoryMonitor,
+		nil /* deDuperMemMonitor */, evalCtx.TestingMon, diskMonitor,
 	)
 	defer rc.Close(ctx)
 
@@ -382,7 +383,10 @@ func makeNumberedContainerUsingNRC(
 	diskMonitor *mon.BytesMonitor,
 ) numberedContainerUsingNRC {
 	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
-	rc := NewDiskBackedNumberedRowContainer(false /* deDup */, types, evalCtx, engine, memoryMonitor, nil /* deDuperMemMonitor */, diskMonitor)
+	rc := NewDiskBackedNumberedRowContainer(
+		false /* deDup */, types, evalCtx, engine, memoryMonitor,
+		nil /* deDuperMemMonitor */, evalCtx.TestingMon, diskMonitor,
+	)
 	_, err := rc.SpillToDisk(ctx)
 	require.NoError(t, err)
 	return numberedContainerUsingNRC{rc: rc, memoryMonitor: memoryMonitor}
@@ -434,7 +438,8 @@ func makeNumberedContainerUsingIRC(
 ) numberedContainerUsingIRC {
 	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
 	rc := NewDiskBackedIndexedRowContainer(
-		nil /* ordering */, types, evalCtx, engine, memoryMonitor, diskMonitor)
+		nil /* ordering */, types, evalCtx, engine, memoryMonitor, evalCtx.TestingMon, diskMonitor,
+	)
 	require.NoError(t, rc.SpillToDisk(ctx))
 	return numberedContainerUsingIRC{rc: rc, memoryMonitor: memoryMonitor}
 }

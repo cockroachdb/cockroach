@@ -33,7 +33,8 @@ type sorterBase struct {
 	i    rowcontainer.RowIterator
 
 	// Only set if the ability to spill to disk is enabled.
-	diskMonitor *mon.BytesMonitor
+	unlimitedMemMonitor *mon.BytesMonitor
+	diskMonitor         *mon.BytesMonitor
 }
 
 func (s *sorterBase) init(
@@ -63,6 +64,7 @@ func (s *sorterBase) init(
 		return err
 	}
 
+	s.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, redact.Sprintf("%s-unlimited", processorName))
 	s.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, redact.Sprintf("%s-disk", processorName))
 	rc := rowcontainer.DiskBackedRowContainer{}
 	rc.Init(
@@ -71,6 +73,7 @@ func (s *sorterBase) init(
 		s.FlowCtx.EvalCtx,
 		flowCtx.Cfg.TempStorage,
 		memMonitor,
+		s.unlimitedMemMonitor,
 		s.diskMonitor,
 	)
 	s.rows = &rc
@@ -113,6 +116,9 @@ func (s *sorterBase) close() {
 		}
 		s.rows.Close(s.Ctx())
 		s.MemMonitor.Stop(s.Ctx())
+		if s.unlimitedMemMonitor != nil {
+			s.unlimitedMemMonitor.Stop(s.Ctx())
+		}
 		if s.diskMonitor != nil {
 			s.diskMonitor.Stop(s.Ctx())
 		}
@@ -128,7 +134,7 @@ func (s *sorterBase) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Exec: execinfrapb.ExecStats{
-			MaxAllocatedMem:  optional.MakeUint(uint64(s.MemMonitor.MaximumBytes())),
+			MaxAllocatedMem:  optional.MakeUint(uint64(s.MemMonitor.MaximumBytes() + s.unlimitedMemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: optional.MakeUint(uint64(s.diskMonitor.MaximumBytes())),
 		},
 		Output: s.OutputHelper.Stats(),

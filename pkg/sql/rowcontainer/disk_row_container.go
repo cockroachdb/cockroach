@@ -36,7 +36,7 @@ type DiskRowContainer struct {
 	// bufferedRows buffers writes to the diskMap.
 	bufferedRows diskmap.SortedDiskMapBatchWriter
 	// memAcc keeps track of memory usage of scratchKey and scratchVal.
-	memAcc     *mon.BoundAccount
+	memAcc     mon.BoundAccount
 	scratchKey []byte
 	scratchVal []byte
 
@@ -99,7 +99,7 @@ var _ DeDupingRowContainer = &DiskRowContainer{}
 //   - e is the underlying store that rows are stored on.
 func MakeDiskRowContainer(
 	ctx context.Context,
-	memAcc *mon.BoundAccount,
+	memAcc mon.BoundAccount,
 	diskMonitor *mon.BytesMonitor,
 	typs []*types.T,
 	ordering colinfo.ColumnOrdering,
@@ -354,7 +354,7 @@ func (d *DiskRowContainer) Reorder(ctx context.Context, ordering colinfo.ColumnO
 	// We need to create a new DiskRowContainer since its ordering can only be
 	// changed at initialization.
 	memAcc := d.memAcc.Monitor().MakeBoundAccount()
-	newContainer, err := MakeDiskRowContainer(ctx, &memAcc, d.diskMonitor, d.types, ordering, d.engine)
+	newContainer, err := MakeDiskRowContainer(ctx, memAcc, d.diskMonitor, d.types, ordering, d.engine)
 	if err != nil {
 		return err
 	}

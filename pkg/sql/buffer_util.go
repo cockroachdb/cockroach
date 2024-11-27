@@ -23,10 +23,11 @@ import (
 // should be used by planNodes (or similar components) whenever they need to
 // buffer data. init or initWithDedup must be called before the first use.
 type rowContainerHelper struct {
-	memMonitor  *mon.BytesMonitor
-	diskMonitor *mon.BytesMonitor
-	rows        *rowcontainer.DiskBackedRowContainer
-	scratch     rowenc.EncDatumRow
+	memMonitor          *mon.BytesMonitor
+	unlimitedMemMonitor *mon.BytesMonitor
+	diskMonitor         *mon.BytesMonitor
+	rows                *rowcontainer.DiskBackedRowContainer
+	scratch             rowenc.EncDatumRow
 }
 
 func (c *rowContainerHelper) Init(
@@ -39,8 +40,8 @@ func (c *rowContainerHelper) Init(
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
-		colinfo.NoOrdering, typs, &evalContext.Context,
-		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
+		colinfo.NoOrdering, typs, &evalContext.Context, distSQLCfg.TempStorage,
+		c.memMonitor, c.unlimitedMemMonitor, c.diskMonitor,
 	)
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
 }
@@ -65,8 +66,8 @@ func (c *rowContainerHelper) InitWithDedup(
 		ordering[i].Direction = encoding.Ascending
 	}
 	c.rows.Init(
-		ordering, typs, &evalContext.Context,
-		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
+		ordering, typs, &evalContext.Context, distSQLCfg.TempStorage,
+		c.memMonitor, c.unlimitedMemMonitor, c.diskMonitor,
 	)
 	c.rows.DoDeDuplicate()
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
@@ -89,13 +90,16 @@ func (c *rowContainerHelper) InitWithParentMon(
 		ctx, parent, distSQLCfg, evalContext.SessionData(),
 		redact.Sprintf("%s-limited", opName),
 	)
+	c.unlimitedMemMonitor = execinfra.NewMonitor(
+		ctx, parent, redact.Sprintf("%s-unlimited", opName),
+	)
 	c.diskMonitor = execinfra.NewMonitor(
 		ctx, distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName),
 	)
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
-		colinfo.NoOrdering, typs, &evalContext.Context,
-		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
+		colinfo.NoOrdering, typs, &evalContext.Context, distSQLCfg.TempStorage,
+		c.memMonitor, c.unlimitedMemMonitor, c.diskMonitor,
 	)
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
 }
@@ -109,6 +113,9 @@ func (c *rowContainerHelper) initMonitors(
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		ctx, evalContext.Planner.Mon(), distSQLCfg, evalContext.SessionData(),
 		redact.Sprintf("%s-limited", opName),
+	)
+	c.unlimitedMemMonitor = execinfra.NewMonitor(
+		ctx, evalContext.Planner.Mon(), redact.Sprintf("%s-unlimited", opName),
 	)
 	c.diskMonitor = execinfra.NewMonitor(
 		ctx, distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName),
@@ -156,6 +163,7 @@ func (c *rowContainerHelper) Close(ctx context.Context) {
 	if c.rows != nil {
 		c.rows.Close(ctx)
 		c.memMonitor.Stop(ctx)
+		c.unlimitedMemMonitor.Stop(ctx)
 		c.diskMonitor.Stop(ctx)
 		c.rows = nil
 	}

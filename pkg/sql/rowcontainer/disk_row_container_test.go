@@ -174,7 +174,7 @@ func TestDiskRowContainer(t *testing.T) {
 				row := randgen.RandEncDatumRowOfTypes(rng, typs)
 				func() {
 					memAcc := evalCtx.TestingMon.MakeBoundAccount()
-					d, _ := MakeDiskRowContainer(ctx, &memAcc, diskMonitor, typs, ordering, tempEngine)
+					d, _ := MakeDiskRowContainer(ctx, memAcc, diskMonitor, typs, ordering, tempEngine)
 					defer d.Close(ctx)
 					if err := d.AddRow(ctx, row); err != nil {
 						t.Fatal(err)
@@ -238,7 +238,7 @@ func TestDiskRowContainer(t *testing.T) {
 			rows := randgen.RandEncDatumRowsOfTypes(rng, numRows, types)
 			func() {
 				memAcc := evalCtx.TestingMon.MakeBoundAccount()
-				d, _ := MakeDiskRowContainer(ctx, &memAcc, diskMonitor, types, ordering, tempEngine)
+				d, _ := MakeDiskRowContainer(ctx, memAcc, diskMonitor, types, ordering, tempEngine)
 				defer d.Close(ctx)
 				for i := 0; i < len(rows); i++ {
 					if err := d.AddRow(ctx, rows[i]); err != nil {
@@ -321,7 +321,7 @@ func TestDiskRowContainer(t *testing.T) {
 		types := randgen.RandSortingTypes(rng, numCols)
 		numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
 		memAcc := evalCtx.TestingMon.MakeBoundAccount()
-		d, _ := MakeDiskRowContainer(ctx, &memAcc, diskMonitor, types, ordering, tempEngine)
+		d, _ := MakeDiskRowContainer(ctx, memAcc, diskMonitor, types, ordering, tempEngine)
 		defer d.Close(ctx)
 		d.DoDeDuplicate()
 		addRowsRepeatedly := func() {
@@ -364,7 +364,7 @@ func TestDiskRowContainer(t *testing.T) {
 		rows := randgen.RandEncDatumRowsOfTypes(rng, numRows, types)
 		memAcc := evalCtx.TestingMon.MakeBoundAccount()
 		// There are no ordering columns when using the numberedRowIterator.
-		d, _ := MakeDiskRowContainer(ctx, &memAcc, diskMonitor, types, nil, tempEngine)
+		d, _ := MakeDiskRowContainer(ctx, memAcc, diskMonitor, types, nil, tempEngine)
 		defer d.Close(ctx)
 		for i := 0; i < numRows; i++ {
 			require.NoError(t, d.AddRow(ctx, rows[i]))
@@ -448,7 +448,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	memAcc := evalCtx.TestingMon.MakeBoundAccount()
 	d, _ := MakeDiskRowContainer(
 		ctx,
-		&memAcc,
+		memAcc,
 		monitor,
 		[]*types.T{types.Int},
 		colinfo.ColumnOrdering{colinfo.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
@@ -482,7 +482,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	defer diskMonitor.Stop(ctx)
 
 	memAcc := evalCtx.TestingMon.MakeBoundAccount()
-	d, _ := MakeDiskRowContainer(ctx, &memAcc, diskMonitor, types.OneIntCol, nil /* ordering */, tempEngine)
+	d, _ := MakeDiskRowContainer(ctx, memAcc, diskMonitor, types.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const numCols = 1
@@ -604,7 +604,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 
 	memAcc := evalCtx.TestingMon.MakeBoundAccount()
-	d, _ := MakeDiskRowContainer(ctx, &memAcc, monitor, types.OneIntCol, nil /* ordering */, tempEngine)
+	d, _ := MakeDiskRowContainer(ctx, memAcc, monitor, types.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const (

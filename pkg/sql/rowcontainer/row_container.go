@@ -418,9 +418,9 @@ type DiskBackedRowContainer struct {
 
 	// The following fields are used to create a DiskRowContainer when spilling
 	// to disk.
-	engine      diskmap.Factory
-	memMonitor  *mon.BytesMonitor
-	diskMonitor *mon.BytesMonitor
+	engine              diskmap.Factory
+	unlimitedMemMonitor *mon.BytesMonitor
+	diskMonitor         *mon.BytesMonitor
 }
 
 var _ ReorderableRowContainer = &DiskBackedRowContainer{}
@@ -444,6 +444,7 @@ func (f *DiskBackedRowContainer) Init(
 	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
+	unlimitedMemMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 ) {
 	mrc := MemRowContainer{}
@@ -451,7 +452,7 @@ func (f *DiskBackedRowContainer) Init(
 	f.mrc = &mrc
 	f.src = &mrc
 	f.engine = engine
-	f.memMonitor = memoryMonitor
+	f.unlimitedMemMonitor = unlimitedMemMonitor
 	f.diskMonitor = diskMonitor
 	f.encodings = make([]catenumpb.DatumEncoding, len(ordering))
 	for i, orderInfo := range ordering {
@@ -636,15 +637,8 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if f.UsingDisk() {
 		return errors.New("already using disk")
 	}
-	// If we were to do accounting against the memory monitor, we might hit an
-	// error when moving the rows from the in-memory row container to the disk
-	// row container. To go around this problem, we temporarily use a standalone
-	// memory account, and once we're done moving the rows, we reconcile the
-	// accounting system. (Iterating over the in-memory row container via the
-	// final iterator frees up the budget, so we shouldn't hit the error after
-	// all rows are popped.)
-	tempMemAcc := mon.NewStandaloneUnlimitedAccount()
-	drc, err := MakeDiskRowContainer(ctx, tempMemAcc, f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
+	memAcc := f.unlimitedMemMonitor.MakeBoundAccount()
+	drc, err := MakeDiskRowContainer(ctx, memAcc, f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
 	if err != nil {
 		return err
 	}
@@ -675,10 +669,7 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	}
 	f.mrc.Clear(ctx)
 	f.spilled = true
-	// Now reconcile the accounting.
-	memAcc := f.memMonitor.MakeBoundAccount()
-	drc.memAcc = &memAcc
-	return drc.memAcc.Grow(ctx, tempMemAcc.Used())
+	return nil
 }
 
 // DiskBackedIndexedRowContainer is a wrapper around DiskBackedRowContainer
@@ -742,6 +733,7 @@ func NewDiskBackedIndexedRowContainer(
 	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
+	unlimitedMemMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 ) *DiskBackedIndexedRowContainer {
 	d := DiskBackedIndexedRowContainer{}
@@ -752,7 +744,7 @@ func NewDiskBackedIndexedRowContainer(
 	d.storedTypes[len(d.storedTypes)-1] = types.Int
 	d.scratchEncRow = make(rowenc.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
-	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor)
+	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, unlimitedMemMonitor, diskMonitor)
 	d.maxCacheSize = maxIndexedRowsCacheSize
 	d.cacheMemAcc = memoryMonitor.MakeBoundAccount()
 	return &d

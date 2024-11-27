@@ -550,7 +550,7 @@ func NewColIndexJoin(
 			// which will close the acc.
 			diskBufferMemAcc := streamerBudgetAcc.Monitor().MakeBoundAccount()
 			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
-				flowCtx.Cfg.TempStorage, &diskBufferMemAcc, diskMonitor,
+				flowCtx.Cfg.TempStorage, diskBufferMemAcc, diskMonitor,
 			)
 		}
 		kvFetcher = row.NewStreamingKVFetcher(
