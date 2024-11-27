@@ -356,7 +356,7 @@ export function EncodeUriName(name: string): string {
   return encodeURIComponent(name).replace(/%25/g, "%252525");
 }
 
-export function EncodeDatabasesUri(db: string): string {
+function encodeDatabasesUri(db: string): string {
   return `/databases/${EncodeUriName(db)}`;
 }
 
@@ -366,13 +366,13 @@ export function EncodeDatabasesToIndexUri(
   table: string,
   indexName: string,
 ): string {
-  return `${EncodeDatabasesUri(db)}/${EncodeUriName(schema)}/${EncodeUriName(
+  return `${encodeDatabasesUri(db)}/${EncodeUriName(schema)}/${EncodeUriName(
     table,
   )}/${EncodeUriName(indexName)}`;
 }
 
-export function EncodeDatabaseTableUri(db: string, table: string): string {
-  return `${EncodeDatabaseUri(db)}/table/${EncodeUriName(table)}`;
+function encodeDatabaseTableUri(db: string, table: string): string {
+  return `${encodeDatabaseUri(db)}/table/${EncodeUriName(table)}`;
 }
 
 export function EncodeDatabaseTableIndexUri(
@@ -380,12 +380,12 @@ export function EncodeDatabaseTableIndexUri(
   table: string,
   indexName: string,
 ): string {
-  return `${EncodeDatabaseTableUri(db, table)}/index/${EncodeUriName(
+  return `${encodeDatabaseTableUri(db, table)}/index/${EncodeUriName(
     indexName,
   )}`;
 }
 
-export function EncodeDatabaseUri(db: string): string {
+function encodeDatabaseUri(db: string): string {
   return `/database/${EncodeUriName(db)}`;
 }
 
