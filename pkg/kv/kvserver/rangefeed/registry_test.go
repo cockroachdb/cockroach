@@ -313,7 +313,7 @@ func TestRegistryBasic(t *testing.T) {
 
 	// Unregister the rBC registration as if it was being unregistered via the
 	// processor.
-	rBC.setShouldUnregister(true)
+	rBC.setShouldUnregister()
 	reg.unregisterMarkedRegistrations(ctx)
 	require.Equal(t, 0, reg.Len())
 	require.Equal(t, 0, int(reg.metrics.RangeFeedRegistrations.Value()),
