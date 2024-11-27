@@ -70,6 +70,13 @@ func (r *ReplicatedEvalResult) IsTrivial() bool {
 	allowlist.PrevLeaseProposal = nil
 	allowlist.IsProbe = false // probes are trivial, they always get refused in CheckForcedErr
 	allowlist.State = nil
+	// DoTimelyApplicationToAllReplicas is trivial since it can be combined in
+	// an apply.Batch -- this is done by using the Command index in
+	// apply.Batch.Stage to set the ForceFlushIndex. Different replicas can
+	// combine different sets of Commands in an apply.Batch, but since the
+	// Command index that specified DoTimelyApplicationToAllReplicas is the
+	// same, the state machine will have the same state.
+	allowlist.DoTimelyApplicationToAllReplicas = false
 	return allowlist.IsZero()
 }
 

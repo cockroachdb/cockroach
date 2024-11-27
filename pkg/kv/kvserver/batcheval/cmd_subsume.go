@@ -10,6 +10,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -156,5 +157,12 @@ func Subsume(
 	reply.ReadSummary = &priorReadSum
 	reply.ClosedTimestamp = cArgs.EvalCtx.GetCurrentClosedTimestamp(ctx)
 
-	return result.Result{}, nil
+	var pd result.Result
+	// Set DoTimelyApplicationToAllReplicas so that merges are applied on all
+	// replicas. This is needed since Replica.AdminMerge calls
+	// waitForApplication when sending a kvpb.SubsumeRequest.
+	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_1_AddRangeForceFlushKey) {
+		pd.Replicated.DoTimelyApplicationToAllReplicas = true
+	}
+	return pd, nil
 }
