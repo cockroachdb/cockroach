@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
-    name = "cockroach-go-testserver-24_2_test",
+    name = "cockroach-go-testserver-24_3_test",
     size = "enormous",
     srcs = ["generated_test.go"],
     data = [
@@ -11,7 +11,7 @@ go_test(
         "//pkg/sql/logictest:testdata",  # keep
     ],
     exec_properties = {"test.Pool": "large"},
-    shard_count = 6,
+    shard_count = 5,
     tags = ["cpu:2"],
     deps = [
         "//pkg/base",
