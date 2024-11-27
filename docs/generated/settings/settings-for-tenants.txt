@@ -87,10 +87,12 @@ kv.dist_sender.circuit_breaker.probe.interval	duration	3s	interval between repli
 kv.dist_sender.circuit_breaker.probe.threshold	duration	3s	duration of errors or stalls after which a replica will be probed	application
 kv.dist_sender.circuit_breaker.probe.timeout	duration	3s	timeout for replica probes	application
 kv.dist_sender.circuit_breakers.mode	enumeration	liveness range only	set of ranges to trip circuit breakers for failing or stalled replicas [no ranges = 0, liveness range only = 1, all ranges = 2]	application
+kv.dist_sender.concurrency_limit	integer	3840	maximum number of asynchronous send requests	application
 kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records	system-visible
 kv.rangefeed.client.stream_startup_rate	integer	100	controls the rate per second the client will initiate new rangefeed stream for a single range; 0 implies unlimited	application
 kv.rangefeed.closed_timestamp_refresh_interval	duration	3s	the interval at which closed-timestamp updatesare delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval	system-visible
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled	system-visible
+kv.streamer.concurrency_limit	integer	960	maximum number of asynchronous requests by a single streamer	application
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions	application
 kv.transaction.max_refresh_spans_bytes	integer	4194304	maximum number of bytes used to track refresh spans in serializable transactions	application
 kv.transaction.randomized_anchor_key.enabled	boolean	false	dictates whether a transactions anchor key is randomized or not	application

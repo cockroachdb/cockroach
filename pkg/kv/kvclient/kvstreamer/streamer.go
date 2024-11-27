@@ -350,6 +350,7 @@ var streamerConcurrencyLimit = settings.RegisterIntSetting(
 	"maximum number of asynchronous requests by a single streamer",
 	defaultStreamerStreamsPerVCPU*max(kvcoord.MinViableProcs, int64(runtime.GOMAXPROCS(0))),
 	settings.PositiveInt,
+	settings.WithPublic,
 )
 
 type sendFn func(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error)
