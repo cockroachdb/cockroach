@@ -34,6 +34,7 @@ func SetupTestDirectory(
 	require.NoError(t, directoryServer.Start(ctx))
 
 	// Dial the test directory server.
+	//lint:ignore SA1019 grpc.DialContext is deprecated
 	conn, err := grpc.DialContext(
 		ctx,
 		"",

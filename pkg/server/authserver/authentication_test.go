@@ -900,6 +900,7 @@ func TestGRPCAuthentication(t *testing.T) {
 		}, false},
 	}
 
+	//lint:ignore SA1019 grpc.DialContext is deprecated
 	conn, err := grpc.DialContext(ctx, ts.RPCAddr(),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			InsecureSkipVerify: true,
@@ -931,6 +932,7 @@ func TestGRPCAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	//lint:ignore SA1019 grpc.DialContext is deprecated
 	conn, err = grpc.DialContext(ctx, ts.RPCAddr(),
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	if err != nil {
