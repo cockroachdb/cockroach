@@ -12,7 +12,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -64,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -936,7 +936,7 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 				RemoveOnceDereferenced: true,
 				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
 					if desc.GetName() == "foo" {
-						log.Infof(ctx, "lease acquirer stack trace: %s", debug.Stack())
+						log.Infof(ctx, "lease acquirer stack trace: %s", debugutil.Stack())
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
@@ -1323,7 +1323,7 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 				// see a block event dump a stack to aid in debugging.
 				log.Infof(ctx,
 					"Lease acquisition of ID %d resulted in a block event. Stack trace to follow:\n%s",
-					id, debug.Stack())
+					id, debugutil.Stack())
 			},
 		},
 	}

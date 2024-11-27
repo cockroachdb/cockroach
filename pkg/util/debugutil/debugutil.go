@@ -8,8 +8,11 @@ package debugutil
 import (
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sync/atomic"
 
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 	"github.com/elastic/gosigar"
 )
 
@@ -42,4 +45,10 @@ func init() {
 		}
 		return false
 	}(os.Getppid()))
+}
+
+// Stack wraps the output of debug.Stack() with redact.Safe() to avoid
+// unnecessary redaction.
+func Stack() interfaces.SafeValue {
+	return redact.Safe(string(debug.Stack()))
 }

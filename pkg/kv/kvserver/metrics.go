@@ -8,7 +8,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 func init() {
@@ -3004,7 +3005,7 @@ type tenantMetricsRef struct {
 	// in assertions on failure.
 	_stack struct {
 		syncutil.Mutex
-		string
+		interfaces.SafeValue
 	}
 }
 
@@ -3012,7 +3013,7 @@ func (ref *tenantMetricsRef) assert(ctx context.Context) {
 	if atomic.LoadInt32(&ref._state) != 0 {
 		ref._stack.Lock()
 		defer ref._stack.Unlock()
-		log.FatalfDepth(ctx, 1, "tenantMetricsRef already finalized in:\n%s", ref._stack.string)
+		log.FatalfDepth(ctx, 1, "tenantMetricsRef already finalized in:\n%s", ref._stack.SafeValue)
 	}
 }
 
@@ -3162,7 +3163,7 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 		return          // unreachable
 	}
 	ref._stack.Lock()
-	ref._stack.string = string(debug.Stack())
+	ref._stack.SafeValue = debugutil.Stack()
 	ref._stack.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()

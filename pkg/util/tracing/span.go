@@ -7,15 +7,17 @@ package tracing
 
 import (
 	"fmt"
-	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 	"github.com/petermattis/goid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -133,7 +135,7 @@ type Span struct {
 
 	// finishStack is set if debugUseAfterFinish is set. It represents the stack
 	// that called Finish(), in order to report it on further use.
-	finishStack string
+	finishStack interfaces.SafeValue
 }
 
 // IsNoop returns true if this span is a black hole - it doesn't correspond to a
@@ -168,9 +170,9 @@ func (sp *Span) detectUseAfterFinish() bool {
 	// In test builds, we panic on span use after Finish. This is in preparation
 	// of span pooling, at which point use-after-Finish would become corruption.
 	if alreadyFinished && sp.i.tracer.PanicOnUseAfterFinish() {
-		var finishStack string
-		if sp.finishStack == "" {
-			finishStack = "<stack not captured. Set debugUseAfterFinish>"
+		var finishStack interfaces.SafeValue
+		if sp.finishStack == nil {
+			finishStack = redact.Safe("<stack not captured. Set debugUseAfterFinish>")
 		} else {
 			finishStack = sp.finishStack
 		}
@@ -248,7 +250,7 @@ func (sp *Span) finishInternal() {
 		return
 	}
 	if sp.Tracer().debugUseAfterFinish {
-		sp.finishStack = string(debug.Stack())
+		sp.finishStack = debugutil.Stack()
 	}
 	atomic.StoreInt32(&sp.finished, 1)
 	sp.i.Finish()
@@ -741,7 +743,7 @@ func (sp *Span) reset(
 	// detect use-after-Finish. Similarly, we do the write atomically to prevent
 	// reorderings.
 	atomic.StoreInt32(&sp.finished, 0)
-	sp.finishStack = ""
+	sp.finishStack = nil
 }
 
 // SetOtelStatus sets the status of the OpenTelemetry span (if any).

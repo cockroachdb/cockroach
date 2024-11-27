@@ -1,9 +1,23 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "debugutil",
     srcs = ["debugutil.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/debugutil",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_elastic_gosigar//:gosigar"],
+    deps = [
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
+        "@com_github_elastic_gosigar//:gosigar",
+    ],
+)
+
+go_test(
+    name = "debugutil_test",
+    srcs = ["debugutil_test.go"],
+    embed = [":debugutil"],
+    deps = [
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
+    ],
 )

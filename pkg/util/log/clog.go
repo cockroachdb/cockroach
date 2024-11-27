@@ -17,11 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 // logging is the global state of the logging setup.
@@ -94,7 +96,7 @@ type loggingT struct {
 		// active indicates that at least one event has been logged
 		// to this logger already.
 		active        bool
-		firstUseStack string
+		firstUseStack interfaces.SafeValue
 
 		// redactionPolicyManaged indicates whether we're running as part of a managed
 		// service (sourced from COCKROACH_REDACTION_POLICY_MANAGED env var). Impacts
@@ -446,7 +448,7 @@ func setActive() {
 	defer logging.mu.Unlock()
 	if !logging.mu.active {
 		logging.mu.active = true
-		logging.mu.firstUseStack = string(debug.Stack())
+		logging.mu.firstUseStack = debugutil.Stack()
 	}
 }
 

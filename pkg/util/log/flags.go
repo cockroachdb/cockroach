@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 type config struct {
@@ -82,7 +83,7 @@ func init() {
 //
 // This is used to assert that configuration is performed
 // before logging has been used for the first time.
-func IsActive() (active bool, firstUse string) {
+func IsActive() (active bool, firstUse interfaces.SafeValue) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 	return logging.mu.active, logging.mu.firstUseStack

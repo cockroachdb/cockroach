@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/util/debugutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
@@ -15,6 +16,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//interfaces",
     ],
 )
 
