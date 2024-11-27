@@ -228,6 +228,8 @@ func newProxyHandler(
 		if !ok {
 			return nil, errors.New("unsupported test directory server")
 		}
+
+		//lint:ignore SA1019 grpc.DialContext is deprecated
 		conn, err = grpc.DialContext(
 			ctx,
 			"",
@@ -238,6 +240,7 @@ func newProxyHandler(
 			return nil, err
 		}
 	} else if handler.DirectoryAddr != "" {
+		//lint:ignore SA1019 grpc.Dial is deprecated
 		conn, err = grpc.Dial(
 			handler.DirectoryAddr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -258,6 +261,8 @@ func newProxyHandler(
 		dialerFunc := func(ctx context.Context, addr string) (net.Conn, error) {
 			return ln.DialContext(ctx)
 		}
+
+		//lint:ignore SA1019 grpc.DialContext is deprecated
 		conn, err = grpc.DialContext(
 			ctx,
 			"",
