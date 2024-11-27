@@ -1137,55 +1137,71 @@ func TestDiskStatsMap(t *testing.T) {
 	}
 }
 
-// TestRevertToEpochIfTooManyRanges verifies that leases switch from epoch back
-// to expiration after a short time interval if there are enough ranges on a node.
-func TestRevertToEpochIfTooManyRanges(t *testing.T) {
+// TestRevertToEpochIfTooManyRanges verifies that leases switch from expiration
+// to epoch or leader leases if there are above a certain threshold ranges on
+// a node.
+func TestRevertToEpochOrLeaderIfTooManyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	const expirationThreshold = 100
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	// Use expiration leases by default, but decrease the limit for the test to
-	// avoid having to create too many splits.
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
-	kvserver.ExpirationLeasesMaxReplicasPerNode.Override(ctx, &st.SV, expirationThreshold)
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
-	defer s.Stopper().Stop(ctx)
 
-	// Create range and upreplicate.
-	key := roachpb.Key("a")
-	require.NoError(t, kvDB.AdminSplit(ctx, key, hlc.MaxTimestamp))
+	testutils.RunValues(t, "leaseType", roachpb.EpochAndLeaderLeaseType(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		st := cluster.MakeTestingClusterSettings()
+		// Override the default lease type to the desired one. It won't actually
+		// take effect though, as we're explicitly turning on expiration based
+		// leases below. However, it's enough for us to prefer between epoch or
+		// leader leases if we decide not to acquire an expiration based lease.
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
+		// Use expiration leases by default, but decrease the limit for the test to
+		// avoid having to create too many splits.
+		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+		kvserver.ExpirationLeasesMaxReplicasPerNode.Override(ctx, &st.SV, expirationThreshold)
+		s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
+		defer s.Stopper().Stop(ctx)
 
-	// Make sure the lease is an expiration lease.
-	lease, _, err := s.GetRangeLease(ctx, key, roachpb.QueryLocalNodeOnly)
-	require.NoError(t, err)
-	require.Equal(t, roachpb.LeaseExpiration, lease.Current().Type())
+		// Create range and upreplicate.
+		key := roachpb.Key("a")
+		require.NoError(t, kvDB.AdminSplit(ctx, key, hlc.MaxTimestamp))
 
-	node := s.Node().(*Node)
-
-	// Force a metrics computation and check the current number of ranges. There
-	// are 68 ranges by default in 24.1.
-	require.NoError(t, node.computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.MetricsForInterval{}, 0))
-	num := node.storeCfg.RangeCount.Load()
-	require.Greaterf(t, num, int64(50), "Expected more than 50 ranges, only found %d", num)
-
-	// Add 50 more ranges to push over the 100 replica expiration limit.
-	for i := 0; i < 50; i++ {
-		require.NoError(t, kvDB.AdminSplit(ctx, roachpb.Key("a"+strconv.Itoa(i)), hlc.MaxTimestamp))
-	}
-	// Check metrics again. This has the impact of updating the RangeCount.
-	require.NoError(t, node.computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.MetricsForInterval{}, 0))
-	num = node.storeCfg.RangeCount.Load()
-	require.Greaterf(t, num, int64(expirationThreshold), "Expected more than 100 ranges, only found %d", num)
-
-	// Verify the lease switched back to Epoch automatically.
-	testutils.SucceedsSoon(t, func() error {
-		lease, _, err = s.GetRangeLease(ctx, key, roachpb.QueryLocalNodeOnly)
+		// Make sure the lease is an expiration lease.
+		lease, _, err := s.GetRangeLease(ctx, key, roachpb.QueryLocalNodeOnly)
 		require.NoError(t, err)
-		if lease.Current().Type() != roachpb.LeaseEpoch {
-			return errors.New("Lease is still expiration")
+		require.Equal(t, roachpb.LeaseExpiration, lease.Current().Type())
+
+		node := s.Node().(*Node)
+
+		testutils.SucceedsSoon(t, func() error {
+			if len(node.storeCfg.NodeLiveness.ScanNodeVitalityFromCache()) != 1 {
+				return errors.New("waiting for NodeLiveness information to be gossiped")
+			}
+			return nil
+		})
+
+		// Force a metrics computation and check the current number of ranges. There
+		// are 68 ranges by default in 24.1.
+		require.NoError(t, node.computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.MetricsForInterval{}, 0))
+		num := node.storeCfg.RangeCount.Load()
+		require.Greaterf(t, num, int64(50), "Expected more than 50 ranges, only found %d", num)
+
+		// Add 50 more ranges to push over the 100 replica expiration limit.
+		for i := 0; i < 50; i++ {
+			require.NoError(t, kvDB.AdminSplit(ctx, roachpb.Key("a"+strconv.Itoa(i)), hlc.MaxTimestamp))
 		}
-		return nil
+		// Check metrics again. This has the impact of updating the RangeCount.
+		require.NoError(t, node.computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.MetricsForInterval{}, 0))
+		num = node.storeCfg.RangeCount.Load()
+		require.Greaterf(t, num, int64(expirationThreshold), "Expected more than 100 ranges, only found %d", num)
+
+		// Verify the lease switched back to Epoch automatically.
+		testutils.SucceedsSoon(t, func() error {
+			lease, _, err = s.GetRangeLease(ctx, key, roachpb.QueryLocalNodeOnly)
+			require.NoError(t, err)
+			if lease.Current().Type() != leaseType {
+				return errors.Newf("Lease is still %s", lease.Current().Type())
+			}
+			return nil
+		})
 	})
 }
