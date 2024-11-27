@@ -12,6 +12,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/raft/raftpb",
