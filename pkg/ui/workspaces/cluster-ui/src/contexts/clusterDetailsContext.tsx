@@ -5,11 +5,13 @@
 
 import { createContext } from "react";
 
-type ClusterDetailsContextType = {
+export type ClusterDetailsContextType = {
   isTenant?: boolean;
+  clusterId?: string;
 };
 
 // This is used by CC to fill in details such as whether we have a tenant or not.
 export const ClusterDetailsContext = createContext<ClusterDetailsContextType>({
   isTenant: false,
+  clusterId: null,
 });
