@@ -7,6 +7,7 @@ import moment from "moment-timezone";
 import { useMemo } from "react";
 import useSWR from "swr";
 
+import { useSwrKeyWithClusterId } from "../../util";
 import { fetchDataJSON } from "../fetchData";
 
 import {
@@ -71,7 +72,7 @@ export const convertTableMetaUpdateJobFromServer = (
 // 10 seconds otherwise.
 export const useTableMetaUpdateJob = () => {
   const { data, isLoading, mutate } = useSWR(
-    "tableMetaUpdateJob",
+    useSwrKeyWithClusterId({ name: "tableMetaUpdateJob" }),
     getTableMetaUpdateJobInfo,
     {
       focusThrottleInterval: 10000,

@@ -10,10 +10,17 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react";
+import { renderHook } from "@testing-library/react-hooks";
 import moment from "moment-timezone";
-import React from "react";
+import React, { ReactNode } from "react";
 
-import { useScheduleFunction } from "./hooks";
+import { ClusterDetailsContext, ClusterDetailsContextType } from "../contexts";
+
+import { useScheduleFunction, useSwrKeyWithClusterId } from "./hooks";
+
+interface Props {
+  children?: ReactNode;
+}
 
 describe("useScheduleFunction", () => {
   let mockFn: jest.Mock;
@@ -136,3 +143,55 @@ describe("useScheduleFunction", () => {
     expect(mockFn).toBeCalledTimes(0);
   });
 });
+
+describe("useSwrKeyWithClusterId", () => {
+  it("should include null clusterId from context", () => {
+    const wrapper = makeContextProvidedWrapper({
+      isTenant: false,
+      clusterId: null,
+    });
+
+    const { result } = renderHook(
+      () => useSwrKeyWithClusterId({ name: "myKey" }),
+      { wrapper },
+    );
+
+    expect(result.current).toStrictEqual({ clusterId: null, name: "myKey" });
+  });
+  it("should include set clusterId from context", () => {
+    const wrapper = makeContextProvidedWrapper({
+      isTenant: false,
+      clusterId: "1234",
+    });
+
+    const { result } = renderHook(
+      () => useSwrKeyWithClusterId({ name: "myKey" }),
+      { wrapper },
+    );
+
+    expect(result.current).toStrictEqual({ clusterId: "1234", name: "myKey" });
+  });
+  it("should have undefined clusterId from if none is resent on context", () => {
+    const wrapper = makeContextProvidedWrapper({});
+
+    const { result } = renderHook(
+      () => useSwrKeyWithClusterId({ name: "myKey" }),
+      { wrapper },
+    );
+
+    expect(result.current).toStrictEqual({
+      clusterId: undefined,
+      name: "myKey",
+    });
+  });
+});
+
+const makeContextProvidedWrapper = (ctx: ClusterDetailsContextType) => {
+  return ({ children }: Props) => {
+    return (
+      <ClusterDetailsContext.Provider value={ctx}>
+        {children}
+      </ClusterDetailsContext.Provider>
+    );
+  };
+};

@@ -8,7 +8,7 @@ import moment from "moment-timezone";
 import { useMemo } from "react";
 import useSWR from "swr";
 
-import { TimestampToMoment } from "src/util";
+import { TimestampToMoment, useSwrKeyWithClusterId } from "src/util";
 
 import { getIndexStats, resetIndexStats } from "../indexDetailsApi";
 import { QualifiedIdentifier } from "../safesql";
@@ -50,7 +50,7 @@ export const useTableIndexStats = ({
 }: GetTableIndexesRequest) => {
   const makeRequest = dbName && tableName;
   const { data, isLoading, error, mutate } = useSWR(
-    ["tableIndexes", dbName, tableName],
+    useSwrKeyWithClusterId({ name: "tableIndexes", dbName, tableName }),
     makeRequest
       ? () =>
           getIndexStats(

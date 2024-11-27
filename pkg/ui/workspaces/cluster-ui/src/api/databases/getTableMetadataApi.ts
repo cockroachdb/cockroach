@@ -7,6 +7,7 @@ import moment from "moment-timezone";
 import useSWR from "swr";
 
 import { StoreID } from "../../types/clusterTypes";
+import { useSwrKeyWithClusterId } from "../../util";
 import { fetchDataJSON } from "../fetchData";
 import { PaginationRequest, ResultsWithPagination } from "../types";
 
@@ -130,23 +131,29 @@ async function getTableMetadata(
 }
 
 const createKey = (req: ListTableMetadataRequest) => {
-  const { dbId, sortBy, sortOrder, pagination, storeIds, name } = req;
-  return [
-    "tableMetadata",
+  const {
     dbId,
     sortBy,
     sortOrder,
-    pagination.pageSize,
-    pagination.pageNum,
+    pagination: { pageSize, pageNum },
     storeIds,
     name,
-  ].join("|");
+  } = req;
+  return {
+    name: "tableMetadata",
+    tableName: name,
+    dbId,
+    sortBy,
+    sortOrder,
+    pageSize,
+    pageNum,
+    storeIds,
+  };
 };
 
 export const useTableMetadata = (req: ListTableMetadataRequest) => {
-  const key = createKey(req);
   const { data, error, isLoading, mutate } = useSWR<TableMetadataResponse>(
-    key,
+    useSwrKeyWithClusterId(createKey(req)),
     () => getTableMetadata(req),
     {
       revalidateOnFocus: false,

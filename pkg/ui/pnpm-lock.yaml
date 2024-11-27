@@ -254,6 +254,9 @@ importers:
       '@testing-library/react':
         specifier: ^12.1.0
         version: 12.1.0(react-dom@16.12.0)(react@16.12.0)
+      '@testing-library/react-hooks':
+        specifier: ^6.0.0
+        version: 6.0.0(react-dom@16.12.0)(react-test-renderer@16.13.1)(react@16.12.0)
       '@testing-library/user-event':
         specifier: ^13.5.0
         version: 13.5.0(@testing-library/dom@8.11.1)
@@ -7480,6 +7483,30 @@ packages:
       redent: 3.0.0
     dev: true
 
+  /@testing-library/react-hooks@6.0.0(react-dom@16.12.0)(react-test-renderer@16.13.1)(react@16.12.0):
+    resolution: {integrity: sha512-Y8ayCUFPiNttX9zmwP2bDv4uYzgsgOMHxAsOrD7th7Xuj1j1rHkxf+VzRqdr7zJlSeYPzl67754qAnZ9O1ahYg==}
+    engines: {node: '>=12'}
+    peerDependencies:
+      react: '>=16.9.0'
+      react-dom: '>=16.9.0'
+      react-test-renderer: '>=16.9.0'
+    peerDependenciesMeta:
+      react-dom:
+        optional: true
+      react-test-renderer:
+        optional: true
+    dependencies:
+      '@babel/runtime': 7.12.13
+      '@types/react': 16.14.8
+      '@types/react-dom': 16.9.3
+      '@types/react-test-renderer': 18.3.0
+      filter-console: 0.1.1
+      react: 16.12.0
+      react-dom: 16.12.0(react@16.12.0)
+      react-error-boundary: 3.1.4(react@16.12.0)
+      react-test-renderer: 16.13.1(react@16.12.0)
+    dev: true
+
   /@testing-library/react@12.1.0(react-dom@16.12.0)(react@16.12.0):
     resolution: {integrity: sha512-Ge3Ht3qXE82Yv9lyPpQ7ZWgzo/HgOcHu569Y4ZGWcZME38iOFiOg87qnu6hTEa8jTJVL7zYovnvD3GE2nsNIoQ==}
     engines: {node: '>=12'}
@@ -8009,6 +8036,12 @@ packages:
 
   /@types/react-syntax-highlighter@11.0.5:
     resolution: {integrity: sha512-VIOi9i2Oj5XsmWWoB72p3KlZoEbdRAcechJa8Ztebw7bDl2YmR+odxIqhtJGp1q2EozHs02US+gzxJ9nuf56qg==}
+    dependencies:
+      '@types/react': 16.14.8
+    dev: true
+
+  /@types/react-test-renderer@18.3.0:
+    resolution: {integrity: sha512-HW4MuEYxfDbOHQsVlY/XtOvNHftCVEPhJF2pQXXwcUiUF+Oyb0usgp48HSgpK5rt8m9KZb22yqOeZm+rrVG8gw==}
     dependencies:
       '@types/react': 16.14.8
     dev: true
@@ -13945,6 +13978,11 @@ packages:
     engines: {node: '>=8'}
     dependencies:
       to-regex-range: 5.0.1
+
+  /filter-console@0.1.1:
+    resolution: {integrity: sha512-zrXoV1Uaz52DqPs+qEwNJWJFAWZpYJ47UNmpN9q4j+/EYsz85uV0DC9k8tRND5kYmoVzL0W+Y75q4Rg8sRJCdg==}
+    engines: {node: '>=8'}
+    dev: true
 
   /finalhandler@1.0.6:
     resolution: {integrity: sha512-immlyyYCPWG2tajlYBhZ6cjLAv1QAclU8tKS0d27ZtPqm/+iddy16GT3xLExg+V4lIETLpPwaYQAlZHNE//dPA==}
@@ -20522,6 +20560,16 @@ packages:
       prop-types: 15.8.1
       react: 16.12.0
       react-dom: 16.12.0(react@16.12.0)
+    dev: true
+
+  /react-error-boundary@3.1.4(react@16.12.0):
+    resolution: {integrity: sha512-uM9uPzZJTF6wRQORmSrvOIgt4lJ9MC1sNgEOj2XGsDTRE4kmpWxg7ENK9EWNKJRMAOY9z0MuF4yIfl6gp4sotA==}
+    engines: {node: '>=10', npm: '>=6'}
+    peerDependencies:
+      react: '>=16.13.1'
+    dependencies:
+      '@babel/runtime': 7.12.13
+      react: 16.12.0
     dev: true
 
   /react-error-overlay@6.0.11:

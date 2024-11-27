@@ -4,7 +4,9 @@
 // included in the /LICENSE file.
 
 import moment from "moment/moment";
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useContext } from "react";
+
+import { ClusterDetailsContext } from "../contexts";
 
 export const usePrevious = <T>(value: T): T | undefined => {
   const ref = useRef<T>();
@@ -93,4 +95,15 @@ export const useScheduleFunction = (
   }, [schedule, clearSchedule]);
 
   return [scheduleNow, clearSchedule];
+};
+
+export const useSwrKeyWithClusterId = (
+  args: Record<any, any>,
+): Record<any, any> => {
+  const { clusterId } = useContext(ClusterDetailsContext);
+  const ret = {
+    ...args,
+    clusterId,
+  };
+  return ret;
 };
