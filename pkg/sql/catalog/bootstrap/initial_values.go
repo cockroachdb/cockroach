@@ -133,14 +133,21 @@ func copySystemTableKVs(
 		ret = append(ret, kvs...)
 	}
 
+	// Permanent upgrades also populates some of these tables so we have to
+	// ensure there isn't any conflict,
+	// * For `location` table we are good since we check for any existing rows,
+	// and skip if there is any.
+	// * Upgrade for `system.settings` also checks for conflict and do nothing.
 	tables := []catconstants.SystemTableName{
-		catconstants.ZonesTableName, // we need to filter out data for tables we don't need
 		catconstants.TenantSettingsTableName,
 		// Latest value for `tenant_id_seq` can be read using `.Scan` because in
 		// `updateTenantIDSequence` we use `.Put` to update instead of
 		// `InternalExecutor`.
 		catconstants.TenantIDSequenceTableName,
-		catconstants.RoleIDSequenceName,
+		catconstants.LocationsTableName,
+		catconstants.SettingsTableName,
+		catconstants.RangeEventTableName,
+		catconstants.ReportsMetaTableName,
 	}
 
 	batch := kvTxn.NewBatch()

@@ -582,8 +582,8 @@ func addSystemDatabaseToSchema(
 ) {
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
+	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
 	if roachpb.EnableExperimentalUA || target.codec.TenantID != roachpb.TenantTwo {
-		addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
 		addSystemTenantEntry(target)
 	}
 }
