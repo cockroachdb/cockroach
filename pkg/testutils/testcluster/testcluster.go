@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"net"
 	"reflect"
 	"runtime"
@@ -1585,6 +1586,28 @@ func (tc *TestCluster) WaitForNodeLiveness(t serverutils.TestFataler) {
 		}
 		return nil
 	})
+}
+
+// EnsureStoreLivenessHeartbeatsToSelfHaveStarted makes sure that the store
+// liveness heartbeat to self has started (and not empty). Returns the timestamp
+// of the latest supportFrom() from itself.
+func (tc *TestCluster) EnsureStoreLivenessHeartbeatsToSelfHaveStarted(
+	t serverutils.TestFataler, nodeIdx int) hlc.Timestamp {
+	store, err := tc.Servers[nodeIdx].GetStores().(*kvserver.Stores).
+		GetStore(tc.Servers[nodeIdx].GetFirstStoreID())
+	require.NoError(t, err)
+	s1Ident := slpb.StoreIdent{NodeID: roachpb.NodeID(nodeIdx + 1), StoreID: store.StoreID()}
+	_, ts := store.TestingStoreLivenessSupportManager().SupportFrom(s1Ident)
+	testutils.SucceedsSoon(t, func() error {
+		_, curTS := store.TestingStoreLivenessSupportManager().SupportFrom(s1Ident)
+
+		if curTS.LessEq(ts) {
+			return errors.New("store liveness timestamp hasn't advanced yet")
+		}
+		ts = curTS
+		return nil
+	})
+	return ts
 }
 
 // ReplicationMode implements TestClusterInterface.
