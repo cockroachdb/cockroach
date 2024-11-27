@@ -138,8 +138,9 @@ type testRangeControllerFactory struct {
 func (f *testRangeControllerFactory) New(
 	ctx context.Context, state rangeControllerInitState,
 ) rac2.RangeController {
-	fmt.Fprintf(f.b, " RangeControllerFactory.New(replicaSet=%s, leaseholder=%s, nextRaftIndex=%d)\n",
-		state.replicaSet, state.leaseholder, state.nextRaftIndex)
+	fmt.Fprintf(f.b,
+		" RangeControllerFactory.New(replicaSet=%s, leaseholder=%s, nextRaftIndex=%d, forceFlushIndex=%d)\n",
+		state.replicaSet, state.leaseholder, state.nextRaftIndex, state.forceFlushIndex)
 	rc := &testRangeController{b: f.b, waited: true}
 	f.rcs = append(f.rcs, rc)
 	return rc
@@ -225,6 +226,10 @@ func (c *testRangeController) SetLeaseholderRaftMuLocked(
 	ctx context.Context, replica roachpb.ReplicaID,
 ) {
 	fmt.Fprintf(c.b, " RangeController.SetLeaseholderRaftMuLocked(%s)\n", replica)
+}
+
+func (c *testRangeController) ForceFlushIndexChangedLocked(ctx context.Context, index uint64) {
+	fmt.Fprintf(c.b, " RangeController.ForceFlushIndexChangedLocked(%d)\n", index)
 }
 
 func (c *testRangeController) CloseRaftMuLocked(ctx context.Context) {

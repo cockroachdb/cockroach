@@ -749,6 +749,9 @@ func (r *Replica) applySnapshot(
 	// by r.leasePostApply, but we called those above, so now it's safe to
 	// wholesale replace r.mu.state.
 	r.shMu.state = state
+	if r.shMu.state.ForceFlushIndex != (roachpb.ForceFlushIndex{}) {
+		r.flowControlV2.ForceFlushIndexChangedLocked(ctx, r.shMu.state.ForceFlushIndex.Index)
+	}
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	r.shMu.raftLogSizeTrusted = false

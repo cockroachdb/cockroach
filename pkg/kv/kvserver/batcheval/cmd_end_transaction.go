@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -1363,6 +1364,10 @@ func splitTriggerHelper(
 		// hand side range (i.e. it goes from zero to its stats).
 		RHSDelta: *h.AbsPostSplitRight(),
 	}
+	// TODO: explain with reference to comment in split_delay_helper.go.
+	if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_1_AddRangeForceFlushKey) {
+		pd.Replicated.DoTimelyApplicationToAllReplicas = true
+	}
 
 	pd.Local.Metrics = &result.Metrics{
 		SplitsWithEstimatedStats:     h.splitsWithEstimates,
@@ -1458,6 +1463,14 @@ func mergeTrigger(
 	var pd result.Result
 	pd.Replicated.Merge = &kvserverpb.Merge{
 		MergeTrigger: *merge,
+	}
+	// TODO: explain with reference to kvserver.AdminMerge. This is not
+	// technically necessary since the call to waitForApplication happens
+	// earlier in kvserver.AdminMerge, when sending a kvpb.SubsumeRequest, but
+	// since we have force-flushed once during the merge txn anyway, let's
+	// complete the story and finish the merge on all replicas.
+	if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_1_AddRangeForceFlushKey) {
+		pd.Replicated.DoTimelyApplicationToAllReplicas = true
 	}
 
 	{

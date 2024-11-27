@@ -158,7 +158,9 @@ func (b *replicaAppBatch) Stage(
 	// non-trivial commands will be in their own batch, so delaying their
 	// non-trivial ReplicatedState updates until later (without ever staging
 	// them in the batch) is sufficient.
-	b.stageTrivialReplicatedEvalResult(ctx, cmd)
+	if err := b.stageTrivialReplicatedEvalResult(ctx, cmd); err != nil {
+		return nil, err
+	}
 	b.ab.numEntriesProcessed++
 	size := len(cmd.Data)
 	b.ab.numEntriesProcessedBytes += int64(size)
@@ -538,7 +540,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 // inspect the command's ReplicatedEvalResult.
 func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	ctx context.Context, cmd *replicatedCmd,
-) {
+) error {
 	b.state.RaftAppliedIndex = cmd.Index()
 	b.state.RaftAppliedIndexTerm = kvpb.RaftTerm(cmd.Term)
 
@@ -560,6 +562,15 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	// serialize on the stats key.
 	deltaStats := res.Delta.ToStats()
 	b.state.Stats.Add(deltaStats)
+
+	if res.DoTimelyApplicationToAllReplicas && !b.changeRemovesReplica {
+		b.state.ForceFlushIndex = roachpb.ForceFlushIndex{Index: cmd.Entry.Index}
+		if err := b.r.raftMu.stateLoader.SetForceFlushIndex(
+			ctx, b.batch, b.state.Stats, &b.state.ForceFlushIndex); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ApplyToStateMachine implements the apply.Batch interface. The method handles
@@ -641,6 +652,10 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 		r.mu.largestPreviousMaxRangeSizeBytes = 0
 	}
 
+	if b.state.ForceFlushIndex != r.shMu.state.ForceFlushIndex {
+		r.shMu.state.ForceFlushIndex = b.state.ForceFlushIndex
+		r.flowControlV2.ForceFlushIndexChangedLocked(ctx, b.state.ForceFlushIndex.Index)
+	}
 	// Check the queuing conditions while holding the lock.
 	needsSplitBySize := r.needsSplitBySizeRLocked()
 	needsMergeBySize := r.needsMergeBySizeRLocked()
