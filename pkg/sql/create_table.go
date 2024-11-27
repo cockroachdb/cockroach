@@ -1366,6 +1366,7 @@ func NewTableDesc(
 	evalCtx *eval.Context,
 	sessionData *sessiondata.SessionData,
 	persistence tree.Persistence,
+	colToSequenceRefs map[tree.Name]*tabledesc.Mutable,
 	inOpts ...NewTableDescOption,
 ) (*tabledesc.Mutable, error) {
 
@@ -1660,6 +1661,14 @@ func NewTableDesc(
 			}
 			col := cdd[i].ColumnDescriptor
 			idx := cdd[i].PrimaryKeyOrUniqueIndexDescriptor
+
+			// If necessary add any sequence references for this column, which is
+			// only needed for SERIAL / IDENTITY columns on create.
+			if colToSequenceRefs != nil {
+				if seqDesc := colToSequenceRefs[d.Name]; seqDesc != nil {
+					col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.GetID())
+				}
+			}
 
 			// Do not include virtual tables in these statistics.
 			if !descpb.IsVirtualTable(id) {
@@ -2429,6 +2438,7 @@ func newTableDesc(
 			params.EvalContext(),
 			params.SessionData(),
 			n.Persistence,
+			colNameToOwnedSeq,
 		)
 	})
 	if err != nil {

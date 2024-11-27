@@ -1269,6 +1269,11 @@ func applyColumnMutation(
 		if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, tableDesc, col, tree.DropDefault); err != nil {
 			return err
 		}
+		// Drop the identity flag first, so that it is treated like a normal column.
+		// Otherwise, we will run into the assertion saying that uses sequences should
+		// exist.
+		col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+
 		// Drop the identity sequence and remove it from the column OwnsSequenceIds and DefaultExpr.
 		// Use tree.DropCascade behavior to remove dependencies on the column.
 		if err := params.p.dropSequencesOwnedByCol(params.ctx, col, true /* queueJob */, tree.DropCascade); err != nil {
@@ -1276,7 +1281,6 @@ func applyColumnMutation(
 		}
 
 		// Remove column identity descriptors
-		col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
 		col.ColumnDesc().GeneratedAsIdentitySequenceOption = nil
 
 	}
@@ -1318,6 +1322,10 @@ func updateNonComputedColExpr(
 	exprField **string,
 	op tree.SchemaExprContext,
 ) error {
+	if col.IsGeneratedAsIdentity() {
+		return sqlerrors.NewSyntaxErrorf("column %q is an identity column", col.GetName())
+	}
+
 	// If a DEFAULT or ON UPDATE expression starts using a sequence and is then
 	// modified to not use that sequence, we need to drop the dependency from
 	// the sequence to the column. The way this is done is by wiping all
@@ -1327,10 +1335,6 @@ func updateNonComputedColExpr(
 		if err := params.p.removeSequenceDependencies(params.ctx, tab, col); err != nil {
 			return err
 		}
-	}
-
-	if col.IsGeneratedAsIdentity() {
-		return sqlerrors.NewSyntaxErrorf("column %q is an identity column", col.GetName())
 	}
 
 	if newExpr == nil {
