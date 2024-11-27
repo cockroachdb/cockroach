@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
@@ -31,6 +32,7 @@ import (
 //	RaftAdmissionMetaOverhead/bytes=1.0_MiB,raft-ac-10   148µs ± 4%   151µs ± 5%     ~     (p=0.095 n=5+5)
 //	RaftAdmissionMetaOverhead/bytes=2.0_MiB,raft-ac-10   290µs ± 3%   292µs ± 1%     ~     (p=0.151 n=5+5)
 func BenchmarkRaftAdmissionMetaOverhead(b *testing.B) {
+	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
 	const KiB = 1 << 10

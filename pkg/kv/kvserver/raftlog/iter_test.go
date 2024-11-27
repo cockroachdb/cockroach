@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
@@ -144,9 +145,11 @@ func (it *modelIter) Entry() raftpb.Entry {
 }
 
 func TestIteratorEmptyLog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
 	for _, hi := range []uint64{0, 1} {
 		it := NewIterator(rangeID, eng, IterOptions{Hi: hi})
 		ok, err := it.SeekGE(0)
@@ -159,6 +162,7 @@ func TestIteratorEmptyLog(t *testing.T) {
 // TestIterator sets up a few raft logs and iterates all conceivable chunks of
 // them with both the real and a model iterator, comparing the results.
 func TestIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	for _, tc := range []struct {

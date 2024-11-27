@@ -9,11 +9,14 @@ package raftlog
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
 func TestNewEntry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	// TODO(replication): Add more cases.
 	testcases := map[string]struct {
 		data        []byte
