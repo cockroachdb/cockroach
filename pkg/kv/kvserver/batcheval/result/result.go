@@ -353,6 +353,11 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.IsProbe = false
 
+	if q.Replicated.DoTimelyApplicationToAllReplicas {
+		p.Replicated.DoTimelyApplicationToAllReplicas = true
+	}
+	q.Replicated.DoTimelyApplicationToAllReplicas = false
+
 	if p.Local.EncounteredIntents == nil {
 		p.Local.EncounteredIntents = q.Local.EncounteredIntents
 	} else {

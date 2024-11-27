@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -1363,6 +1364,14 @@ func splitTriggerHelper(
 		// hand side range (i.e. it goes from zero to its stats).
 		RHSDelta: *h.AbsPostSplitRight(),
 	}
+	// Set DoTimelyApplicationToAllReplicas since splits that are not applied on
+	// all replicas eventually cause snapshots for the RHS to be sent to
+	// replicas that already have the unsplit range, *and* these snapshots are
+	// rejected (which is very wasteful). See the long comment in
+	// split_delay_helper.go for more details.
+	if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_1_AddRangeForceFlushKey) {
+		pd.Replicated.DoTimelyApplicationToAllReplicas = true
+	}
 
 	pd.Local.Metrics = &result.Metrics{
 		SplitsWithEstimatedStats:     h.splitsWithEstimates,
@@ -1458,6 +1467,15 @@ func mergeTrigger(
 	var pd result.Result
 	pd.Replicated.Merge = &kvserverpb.Merge{
 		MergeTrigger: *merge,
+	}
+	// Set DoTimelyApplicationToAllReplicas so that merges are applied on all
+	// replicas. This is not technically necessary since even though
+	// Replica.AdminMerge calls waitForApplication, that call happens earlier in
+	// the merge distributed txn, when sending a kvpb.SubsumeRequest. But since
+	// we have force-flushed once during the merge txn anyway, we choose to
+	// complete the merge story and finish the merge on all replicas.
+	if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_1_AddRangeForceFlushKey) {
+		pd.Replicated.DoTimelyApplicationToAllReplicas = true
 	}
 
 	{
