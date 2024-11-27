@@ -37,7 +37,7 @@ type CatalogReader interface {
 
 	// IsNameInCache return true when all the by-name catalog data for this name
 	// key is known to be in the cache.
-	IsNameInCache(key catalog.NameKey) bool
+	IsNameInCache(key descpb.NameInfo) bool
 
 	// IsDescIDKnownToNotExist returns true when we know that there definitely
 	// exists no descriptor in storage with that ID.
@@ -136,7 +136,7 @@ func (cr catalogReader) IsIDInCache(_ descpb.ID) bool {
 }
 
 // IsNameInCache is part of the CatalogReader interface.
-func (cr catalogReader) IsNameInCache(_ catalog.NameKey) bool {
+func (cr catalogReader) IsNameInCache(_ descpb.NameInfo) bool {
 	return false
 }
 

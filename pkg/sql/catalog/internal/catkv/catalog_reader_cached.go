@@ -104,7 +104,7 @@ func (c *cachedCatalogReader) IsIDInCache(id descpb.ID) bool {
 }
 
 // IsNameInCache is part of the CatalogReader interface.
-func (c *cachedCatalogReader) IsNameInCache(key catalog.NameKey) bool {
+func (c *cachedCatalogReader) IsNameInCache(key descpb.NameInfo) bool {
 	return c.cache.LookupNamespaceEntry(key) != nil
 }
 
@@ -384,19 +384,18 @@ func (c *cachedCatalogReader) GetByNames(
 ) (nstree.Catalog, error) {
 	numUncached := 0
 	// Move any uncached name keys to the front of the slice.
-	for i := range nameInfos {
-		ni := &nameInfos[i]
-		if c.byNameState[*ni].hasGetNamespaceEntries || c.hasScanAll {
+	for i, ni := range nameInfos {
+		if c.byNameState[ni].hasGetNamespaceEntries || c.hasScanAll {
 			continue
 		}
 		if id, ts := c.systemDatabaseCache.lookupDescriptorID(c.version, ni); id != descpb.InvalidID {
 			c.cache.UpsertNamespaceEntry(ni, id, ts)
-			s := c.byNameState[*ni]
+			s := c.byNameState[ni]
 			s.hasGetNamespaceEntries = true
-			c.setByNameState(*ni, s)
+			c.setByNameState(ni, s)
 			continue
 		}
-		nameInfos[i], nameInfos[numUncached] = nameInfos[numUncached], *ni
+		nameInfos[i], nameInfos[numUncached] = nameInfos[numUncached], ni
 		numUncached++
 	}
 	if numUncached > 0 && !c.hasScanAll {

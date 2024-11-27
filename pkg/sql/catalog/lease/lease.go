@@ -1202,7 +1202,7 @@ func (m *Manager) resolveName(
 		if err != nil {
 			return err
 		}
-		if e := c.LookupNamespaceEntry(&req[0]); e != nil {
+		if e := c.LookupNamespaceEntry(req[0]); e != nil {
 			id = e.GetID()
 		}
 		return nil

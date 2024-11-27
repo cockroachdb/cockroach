@@ -553,7 +553,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return continueLookups, descpb.InvalidID, nil
 	}
 	lookupStoreCacheID := func() (continueOrHalt, descpb.ID, error) {
-		ni := &descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
+		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
 		if tc.isShadowedName(ni) {
 			return continueLookups, descpb.InvalidID, nil
 		}
@@ -587,11 +587,11 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		if flags.layerFilters.withoutStorage {
 			return haltLookups, descpb.InvalidID, nil
 		}
-		ni := &descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
+		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
 		if tc.isShadowedName(ni) {
 			return haltLookups, descpb.InvalidID, nil
 		}
-		read, err := tc.cr.GetByNames(ctx, txn, []descpb.NameInfo{*ni})
+		read, err := tc.cr.GetByNames(ctx, txn, []descpb.NameInfo{ni})
 		if err != nil {
 			return haltLookups, descpb.InvalidID, err
 		}
