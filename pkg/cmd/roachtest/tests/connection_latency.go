@@ -48,14 +48,8 @@ func runConnectionLatencyTest(
 		return fmt.Sprintf("postgres://%[1]s@%[2]s:{pgport:1}?sslcert=%[3]s/client.%[1]s.crt&sslkey=%[3]s/client.%[1]s.key&sslrootcert=%[3]s/ca.crt&sslmode=require", install.DefaultUser, host, install.CockroachNodeCertsDir)
 	}
 
-	// Only create the user once.
-	if password {
-		err = c.RunE(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("./workload init connectionlatency --secure '%s'", urlTemplate("localhost")))
-		require.NoError(t, err)
-	} else {
-		err = c.RunE(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("./workload init connectionlatency --secure '%s'", urlTemplate("localhost")))
-		require.NoError(t, err)
-	}
+	err = c.RunE(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("./workload init connectionlatency --secure '%s'", urlTemplate("localhost")))
+	require.NoError(t, err)
 
 	runWorkload := func(roachNodes, loadNode option.NodeListOption, locality string) {
 		var urlString string
