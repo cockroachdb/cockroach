@@ -433,6 +433,9 @@ type replicationSpec struct {
 	// multiregion specifies multiregion cluster specs
 	multiregion multiRegionSpecs
 
+	// withReader creates the reader tenant as well.
+	withReader bool
+
 	// overrideTenantTTL specifies the TTL that will be applied by the system tenant on
 	// both the source and destination tenant range.
 	overrideTenantTTL time.Duration
@@ -696,6 +699,9 @@ func (rd *replicationDriver) preStreamingWorkload(ctx context.Context) {
 func (rd *replicationDriver) startReplicationStream(ctx context.Context) int {
 	streamReplStmt := fmt.Sprintf("CREATE TENANT %q FROM REPLICATION OF %q ON '%s'",
 		rd.setup.dst.name, rd.setup.src.name, rd.setup.src.pgURL.String())
+	if rd.rs.withReader {
+		streamReplStmt += " WITH READ VIRTUAL CLUSTER"
+	}
 	rd.setup.dst.sysSQL.Exec(rd.t, streamReplStmt)
 	rd.replicationStartHook(ctx, rd)
 	return getIngestionJobID(rd.t, rd.setup.dst.sysSQL, rd.setup.dst.name)
@@ -878,6 +884,26 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 	return nil
 }
 
+func (rd *replicationDriver) maybeRunReaderTenantWorkload(
+	ctx context.Context, workloadMonitor cluster.Monitor,
+) {
+	if rd.rs.withReader {
+		rd.t.Status("running reader tenant workload")
+		readerTenantName := fmt.Sprintf("%s-readonly", rd.setup.dst.name)
+		workloadMonitor.Go(func(ctx context.Context) error {
+			err := rd.c.RunE(ctx, option.WithNodes(rd.setup.workloadNode), rd.rs.workload.sourceRunCmd(readerTenantName, rd.setup.dst.gatewayNodes))
+			// The workload should only return an error if the roachtest driver cancels the
+			// ctx after the rd.additionalDuration has elapsed after the initial scan completes.
+			if err != nil && ctx.Err() == nil {
+				// Implies the workload context was not cancelled and the workload cmd returned a
+				// different error.
+				return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
+			}
+			return nil
+		})
+	}
+}
+
 // checkParticipatingNodes asserts that multiple nodes in the source and dest cluster are
 // participating in the replication stream.
 //
@@ -990,6 +1016,8 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.metrics.initialScanEnd = newMetricSnapshot(metricSnapper, timeutil.Now())
 	rd.t.Status(fmt.Sprintf(`initial scan complete. run workload and repl. stream for another %s minutes`,
 		rd.rs.additionalDuration))
+
+	rd.maybeRunReaderTenantWorkload(ctx, workloadMonitor)
 
 	select {
 	case <-workloadDoneCh:
@@ -1127,8 +1155,11 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            3 * time.Hour,
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
-			clouds:             registry.AllClouds,
-			suites:             registry.Suites(registry.Nightly),
+			// The order_status and delivery txns should go through, as they are read
+			// only.
+			withReader: true,
+			clouds:     registry.AllClouds,
+			suites:     registry.Suites(registry.Nightly),
 		},
 		{
 			name:      "c2c/kv0",
@@ -1138,13 +1169,14 @@ func registerClusterToCluster(r registry.Registry) {
 			cpus:      8,
 			pdSize:    100,
 			workload: replicateKV{
-				readPercent:             0,
+				readPercent:             50,
 				maxBlockBytes:           1024,
 				initWithSplitAndScatter: true,
 			},
 			timeout:                              1 * time.Hour,
 			additionalDuration:                   10 * time.Minute,
 			cutover:                              5 * time.Minute,
+			withReader:                           true,
 			sometimesTestFingerprintMismatchCode: true,
 			clouds:                               registry.OnlyGCE,
 			suites:                               registry.Suites(registry.Nightly),
@@ -1286,14 +1318,15 @@ func registerClusterToCluster(r registry.Registry) {
 			cpus:     4,
 			pdSize:   10,
 			workload: replicateKV{
-				readPercent:             0,
-				debugRunDuration:        1 * time.Minute,
+				readPercent:             50,
+				debugRunDuration:        10 * time.Minute,
 				initWithSplitAndScatter: true,
 				maxBlockBytes:           1024},
-			timeout:                   5 * time.Minute,
+			timeout:                   30 * time.Minute,
 			additionalDuration:        0 * time.Minute,
 			cutover:                   30 * time.Second,
 			skipNodeDistributionCheck: true,
+			withReader:                true,
 			skip:                      "for local ad hoc testing",
 			clouds:                    registry.AllClouds,
 			suites:                    registry.Suites(registry.Nightly),
