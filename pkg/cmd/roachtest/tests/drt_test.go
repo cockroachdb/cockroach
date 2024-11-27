@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	gomock "github.com/golang/mock/gomock"
@@ -530,7 +531,8 @@ func TestTPCCChaosEventProcessor(t *testing.T) {
 			l, err := (&logger.Config{}).NewLogger("")
 			require.NoError(t, err)
 
-			ep.listen(ctx, l)
+			tasker := task.NewManager(ctx, l)
+			ep.listen(ctx, tasker, l)
 			for _, chaosEvent := range tc.chaosEvents {
 				ch <- chaosEvent
 			}

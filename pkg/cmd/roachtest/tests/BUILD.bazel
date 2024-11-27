@@ -348,6 +348,7 @@ go_test(
     deps = [
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
+        "//pkg/cmd/roachtest/roachtestutil/task",
         "//pkg/cmd/roachtest/spec",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",

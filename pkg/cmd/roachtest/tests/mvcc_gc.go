@@ -18,10 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -134,7 +136,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 		wlCtx, wlCancel := context.WithCancel(ctx)
 		defer wlCancel()
 		wlFailure := make(chan error, 1)
-		go func() {
+		t.Go(func(context.Context, *logger.Logger) error {
 			defer close(wlFailure)
 			cmd = roachtestutil.NewCommand("./cockroach workload run kv").
 				Flag("cycle-length", 20000).
@@ -146,7 +148,8 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 				String()
 			err := c.RunE(wlCtx, option.WithNodes(c.Node(1)), cmd)
 			wlFailure <- err
-		}()
+			return nil
+		}, task.Name("workload"))
 
 		m := queryTableMetaOrFatal(t, conn, "kv", "kv")
 

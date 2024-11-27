@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
@@ -279,17 +280,19 @@ func (j jepsenConfig) startTest(
 			}
 			t.Fatalf("error installing Jepsen deps: %+v", err)
 		}
-		go func() {
+		t.Go(func(context.Context, *logger.Logger) error {
 			errCh <- run("bash", "-e", "-c", fmt.Sprintf(
 				`"cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && ~/lein run %s > invoke.log 2>&1"`,
 				testArgs))
-		}()
+			return nil
+		})
 	} else {
-		go func() {
+		t.Go(func(context.Context, *logger.Logger) error {
 			errCh <- run("bash", "-e", "-c", fmt.Sprintf(
 				`"cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && java -jar %s %s > invoke.log 2>&1"`,
 				j.binaryName(), testArgs))
-		}()
+			return nil
+		})
 	}
 	return errCh
 }

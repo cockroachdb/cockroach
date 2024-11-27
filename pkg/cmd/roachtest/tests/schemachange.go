@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -53,17 +54,10 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach workload init kv --drop --db=test {pgurl:1}`)
 			for node := 1; node <= c.Spec().NodeCount; node++ {
 				node := node
-				// TODO(dan): Ideally, the test would fail if this queryload failed,
-				// but we can't put it in monitor as-is because the test deadlocks.
-				go func() {
+				t.Go(func(taskCtx context.Context, _ *logger.Logger) error {
 					const cmd = `./cockroach workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=127 --db=test {pgurl%s}`
-					l, err := t.L().ChildLogger(fmt.Sprintf(`kv-%d`, node))
-					if err != nil {
-						t.Fatal(err)
-					}
-					defer l.Close()
-					_ = c.RunE(ctx, option.WithNodes(c.Node(node)), fmt.Sprintf(cmd, c.Nodes(node)))
-				}()
+					return c.RunE(taskCtx, option.WithNodes(c.Node(node)), fmt.Sprintf(cmd, c.Nodes(node)))
+				}, task.Name(fmt.Sprintf(`kv-%d`, node)))
 			}
 
 			m = c.NewMonitor(ctx, c.All())

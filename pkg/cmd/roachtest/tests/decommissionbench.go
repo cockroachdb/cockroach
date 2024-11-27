@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -313,20 +314,22 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 	})
 }
 
-// fireAfter executes fn after the duration elapses. If the context expires
-// first, it will not be executed.
-func fireAfter(ctx context.Context, duration time.Duration, fn func()) {
-	go func() {
+// fireAfter executes fn after the duration elapses. If the passed context, or
+// tasker context, expires first, it will not be executed.
+func fireAfter(ctx context.Context, t task.Tasker, duration time.Duration, fn func()) {
+	t.Go(func(taskCtx context.Context, _ *logger.Logger) error {
 		var fireTimer timeutil.Timer
 		defer fireTimer.Stop()
 		fireTimer.Reset(duration)
 		select {
 		case <-ctx.Done():
+		case <-taskCtx.Done():
 		case <-fireTimer.C:
 			fireTimer.Read = true
 			fn()
 		}
-	}()
+		return nil
+	})
 }
 
 // createDecommissionBenchPerfArtifacts initializes a histogram registry for
@@ -992,7 +995,7 @@ func runSingleDecommission(
 
 	if estimateDuration {
 		estimateDecommissionDuration(
-			ctx, h.t.L(), tickByName, snapshotRateMb, bytesUsed, candidateStores,
+			ctx, h.t, h.t.L(), tickByName, snapshotRateMb, bytesUsed, candidateStores,
 			rangeCount, avgBytesPerReplica,
 		)
 	}
@@ -1148,6 +1151,7 @@ func logLSMHealth(ctx context.Context, l *logger.Logger, c cluster.Cluster, targ
 // recorded perf artifacts as ticks.
 func estimateDecommissionDuration(
 	ctx context.Context,
+	t task.Tasker,
 	log *logger.Logger,
 	tickByName func(name string),
 	snapshotRateMb int,
@@ -1185,7 +1189,7 @@ func estimateDecommissionDuration(
 		rangeCount, humanizeutil.IBytes(avgBytesPerReplica), minDuration, estDuration,
 	)
 
-	fireAfter(ctx, estDuration, func() {
+	fireAfter(ctx, t, estDuration, func() {
 		tickByName(estimatedMetric)
 	})
 }
