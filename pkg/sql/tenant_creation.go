@@ -195,11 +195,7 @@ func BootstrapTenant(
 		return tid, err
 	}
 
-	// if tid == roachpb.TenantTwo {
-	// 	kvs = append(kvs, C)
-	// }
-
-	{
+	if tid != roachpb.TenantTwo {
 		// Populate the version setting for the tenant. This will allow the tenant
 		// to know what migrations need to be run in the future. The choice to use
 		// the active cluster version here is intentional; it allows tenants
