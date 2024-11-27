@@ -52,6 +52,16 @@ type BatchEvalTestingKnobs struct {
 	// its record (which can be resolved synchronously with EndTxn). This is
 	// useful in certain tests.
 	DisableTxnAutoGC bool
+
+	// OverrideDoTimelyApplicationToAllReplicas overrides the cluster version
+	// check for the timely replication directive which force flushes rac2 send
+	// queues to all replicas, if present for *Migrate* requests only. When set
+	// to true, the directive is always set, when set to false, the default
+	// behavior is used.
+	//
+	// NOTE: This currently only applies to Migrate requests and only ignores the
+	// cluster version.
+	OverrideDoTimelyApplicationToAllReplicas bool
 }
 
 // IntentResolverTestingKnobs contains testing helpers that are used during
