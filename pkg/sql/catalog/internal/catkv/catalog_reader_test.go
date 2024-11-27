@@ -109,7 +109,7 @@ func TestDataDriven(t *testing.T) {
 					var name string
 					var dbID, scID int
 					d.ScanArgs(t, "name_key", &dbID, &scID, &name)
-					ni := &descpb.NameInfo{
+					ni := descpb.NameInfo{
 						ParentID:       descpb.ID(dbID),
 						ParentSchemaID: descpb.ID(scID),
 						Name:           name,

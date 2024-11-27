@@ -160,13 +160,24 @@ type NameKey interface {
 	GetParentSchemaID() descpb.ID
 }
 
+var _ NameKey = descpb.NameInfo{}
+
+func MakeNameInfo(nk NameKey) descpb.NameInfo {
+	if ni, ok := nk.(descpb.NameInfo); ok {
+		return ni
+	}
+	return descpb.NameInfo{
+		ParentID:       nk.GetParentID(),
+		ParentSchemaID: nk.GetParentSchemaID(),
+		Name:           nk.GetName(),
+	}
+}
+
 // NameEntry corresponds to an entry in the namespace table.
 type NameEntry interface {
 	NameKey
 	GetID() descpb.ID
 }
-
-var _ NameKey = descpb.NameInfo{}
 
 // LeasableDescriptor is an interface for objects which can be leased via the
 // descriptor leasing system.
