@@ -2465,8 +2465,12 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 		}
 		if colContainsNull {
 			og.candidateExpectedCommitErrors.add(pgcode.NotNullViolation)
-			// If executed within the same txn as CREATE TABLE.
-			stmt.potentialExecErrors.add(pgcode.NotNullViolation)
+		}
+		// If we are running with the legacy schema changer, the not null constraint
+		// is enforced during the job phase. So it's still possible to INSERT not null
+		// data before then.
+		if !og.useDeclarativeSchemaChanger {
+			og.potentialCommitErrors.add(pgcode.NotNullViolation)
 		}
 	}
 
