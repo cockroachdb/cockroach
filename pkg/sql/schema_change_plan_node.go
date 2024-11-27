@@ -141,7 +141,10 @@ func (p *planner) waitForDescriptorSchemaChanges(
 
 	knobs := p.ExecCfg().DeclarativeSchemaChangerTestingKnobs
 	if knobs != nil && knobs.BeforeWaitingForConcurrentSchemaChanges != nil {
-		knobs.BeforeWaitingForConcurrentSchemaChanges(scs.stmts)
+		err := knobs.BeforeWaitingForConcurrentSchemaChanges(scs.stmts)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Drop all leases and locks due to the current transaction, and, in the

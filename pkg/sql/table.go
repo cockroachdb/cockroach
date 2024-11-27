@@ -272,7 +272,7 @@ func (p *planner) writeSchemaChange(
 	}
 	// Exit early with an error if the table is undergoing a declarative schema
 	// change.
-	if catalog.HasConcurrentDeclarativeSchemaChange(tableDesc) {
+	if tableDesc.HasConcurrentSchemaChanges() {
 		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
 	if !tableDesc.IsNew() {
