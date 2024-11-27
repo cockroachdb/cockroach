@@ -44,7 +44,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -7876,4 +7879,68 @@ func TestLeaseTimeoutWithConcurrentTransactions(t *testing.T) {
 
 	err = group.Wait()
 	require.NoError(t, err)
+}
+
+func TestConcurrentDropAndCreateTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "slow test")
+	ctx := context.Background()
+
+	var blockDropHook atomic.Bool
+	executeCreateTable := make(chan struct{})
+	createComplete := make(chan struct{})
+	var waitedDetected atomic.Bool
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, stageIdx int) error {
+					// Pause at each post commit phase once the hook is enabled.
+					if !blockDropHook.Load() || p.Params.ExecutionPhase <= scop.PreCommitPhase {
+						return nil
+					}
+					// Execute a create table concurrently.
+					executeCreateTable <- struct{}{}
+					<-createComplete
+					return nil
+				},
+				BeforeWaitingForConcurrentSchemaChanges: func(stmts []string) error {
+					waitedDetected.Swap(true)
+					// Note: The error returned here will drop the connection, since
+					// it can't be bubbled back to the client.
+					return pgerror.New(pgcode.Internal, "concurrent wait detected")
+				},
+			},
+			SQLLeaseManager: &lease.ManagerTestingKnobs{},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE SCHEMA sc1")
+	runner.Exec(t, "CREATE TABLE sc1.tbl1(n int PRIMARY KEY)")
+	runner.Exec(t, "CREATE TABLE tbl1(n int PRIMARY KEY REFERENCES sc1.tbl1(n))")
+	grp := ctxgroup.WithContext(ctx)
+
+	// Start a thread to drop the schema.
+	grp.GoCtx(func(ctx context.Context) error {
+		defer close(executeCreateTable)
+		blockDropHook.Swap(true)
+		_, err := sqlDB.Exec("DROP SCHEMA sc1 CASCADE")
+		return err
+	})
+
+	defer close(createComplete)
+	for range executeCreateTable {
+		_, err := sqlDB.Exec("CREATE TABLE sc1.t(n int)")
+		// Confirm that either a concurrent wait will occur or the schema will not be visible.
+		// Note: When the concurrent wait hook is hit the connection will be dropped, so the
+		// atomic will tell us if a wait occurred.
+		if !(testutils.IsError(err, "driver: bad connection") && waitedDetected.Swap(false)) &&
+			!testutils.IsError(err, `cannot create "sc1.t" because the target database or schema does not exist`) {
+			require.NoError(t, err, "unexpected error detected")
+		}
+		createComplete <- struct{}{}
+	}
+	require.NoError(t, grp.Wait())
 }
