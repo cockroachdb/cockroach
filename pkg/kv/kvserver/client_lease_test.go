@@ -1575,7 +1575,7 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 	})
 
 	// Expect it to be upgraded to an epoch based lease.
-	epochL := tc.WaitForLeaseUpgrade(ctx, t, desc)
+	epochL, _ := tc.WaitForLeaseUpgrade(ctx, t, desc)
 	require.Equal(t, roachpb.LeaseEpoch, epochL.Type())
 
 	// Expect it to have been upgraded from an expiration based lease.

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -1129,7 +1130,7 @@ func (tc *TestCluster) MaybeWaitForLeaseUpgrade(
 // is upgraded to either a leader-lease or an epoch-based lease.
 func (tc *TestCluster) WaitForLeaseUpgrade(
 	ctx context.Context, t serverutils.TestFataler, desc roachpb.RangeDescriptor,
-) roachpb.Lease {
+) (roachpb.Lease, kvserverpb.LeaseStatus) {
 	require.False(t, kvserver.ExpirationLeasesOnly.Get(&tc.Server(0).ClusterSettings().SV),
 		"cluster configured to only use expiration leases")
 	var l roachpb.Lease
@@ -1143,7 +1144,11 @@ func (tc *TestCluster) WaitForLeaseUpgrade(
 		t.Logf("lease is now of type: %s", l.Type())
 		return nil
 	})
-	return l
+
+	store := tc.GetFirstStoreFromServer(t, 0)
+	repl := store.LookupReplica(desc.StartKey)
+
+	return l, repl.CurrentLeaseStatus(ctx)
 }
 
 // RemoveLeaseHolderOrFatal is a convenience version of TransferRangeLease and RemoveVoter
