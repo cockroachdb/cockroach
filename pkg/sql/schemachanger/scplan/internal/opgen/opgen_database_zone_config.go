@@ -8,6 +8,8 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -27,10 +29,18 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.DatabaseZoneConfig, md *opGenContext) *scop.DiscardZoneConfig {
-					// If we are dropping a database with table dependencies, let the GC
-					// job take care of dropping this zone config -- as its table
-					// dependencies need this zone config.
-					if checkIfDescriptorHasGCDependents(this.DatabaseID, md) {
+					// If this belongs to a drop instead of a CONFIGURE ZONE DISCARD, let
+					// the GC job take care of dropping the zone config.
+					filterDatabase := func(e scpb.Element) bool {
+						id, err := screl.Schema.GetAttribute(screl.ReferencedDescID, e)
+						if err != nil {
+							panic(errors.NewAssertionErrorWithWrappedErrf(
+								err, "failed to retrieve descriptor ID for %T", e,
+							))
+						}
+						return id == this.DatabaseID
+					}
+					if checkIfDescriptorHasGCDependents(filterDatabase, md) {
 						return nil
 					}
 					return &scop.DiscardZoneConfig{
