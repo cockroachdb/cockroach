@@ -1603,11 +1603,9 @@ BEGIN
 statement ok
 ALTER TABLE t ALTER COLUMN a DROP NOT NULL
 
-# Since the non-null constraint is dropped in the schema changer after the
-# transaction commits, it's still enforced during the rest of the transaction.
-# The error is about a check constraint because we generate a check constraint
-# when dropping not-null constraints in the schema changer.
-statement error failed to satisfy CHECK constraint \(a IS NOT NULL\)
+# Since the non-null constraint is dropped with in the txn, it will no
+# long be enforced now.
+statement ok
 INSERT INTO t VALUES (NULL)
 
 statement ok
