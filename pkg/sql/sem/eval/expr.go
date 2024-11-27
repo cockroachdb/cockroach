@@ -208,17 +208,36 @@ func (e *evaluator) EvalCollateExpr(
 		return nil, err
 	}
 	unwrapped := UnwrapDatum(ctx, e.ctx(), d)
-	if unwrapped == tree.DNull {
-		return tree.DNull, nil
+
+	// buildCollated is a recursive helper function to handle evaluating COLLATE
+	// on arrays.
+	var buildCollated func(tree.Datum) (tree.Datum, error)
+	buildCollated = func(datum tree.Datum) (tree.Datum, error) {
+		if datum == tree.DNull {
+			return tree.DNull, nil
+		}
+		switch d := datum.(type) {
+		case *tree.DString:
+			return tree.NewDCollatedString(string(*d), expr.Locale, &e.CollationEnv)
+		case *tree.DCollatedString:
+			return tree.NewDCollatedString(d.Contents, expr.Locale, &e.CollationEnv)
+		case *tree.DArray:
+			a := tree.NewDArray(types.MakeCollatedType(d.ParamTyp, expr.Locale))
+			a.Array = make(tree.Datums, 0, len(d.Array))
+			for _, elem := range d.Array {
+				collatedElem, err := buildCollated(elem)
+				if err != nil {
+					return nil, err
+				}
+				if err := a.Append(collatedElem); err != nil {
+					return nil, err
+				}
+			}
+			return a, nil
+		}
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible type for COLLATE: %s", datum)
 	}
-	switch d := unwrapped.(type) {
-	case *tree.DString:
-		return tree.NewDCollatedString(string(*d), expr.Locale, &e.CollationEnv)
-	case *tree.DCollatedString:
-		return tree.NewDCollatedString(d.Contents, expr.Locale, &e.CollationEnv)
-	default:
-		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible type for COLLATE: %s", d)
-	}
+	return buildCollated(unwrapped)
 }
 
 func (e *evaluator) EvalColumnAccessExpr(

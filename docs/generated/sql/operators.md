@@ -170,6 +170,7 @@
 <tr><td><a href="bytes.html">bytes</a> <code><</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes[]</a> <code><</code> <a href="bytes.html">bytes[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="collate.html">collatedstring</a> <code><</code> <a href="collate.html">collatedstring</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>collatedstring{*} <code><</code> collatedstring{*}</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code><</code> <a href="date.html">date</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code><</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code><</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -247,6 +248,7 @@
 <tr><td><a href="bytes.html">bytes</a> <code><=</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes[]</a> <code><=</code> <a href="bytes.html">bytes[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="collate.html">collatedstring</a> <code><=</code> <a href="collate.html">collatedstring</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>collatedstring{*} <code><=</code> collatedstring{*}</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code><=</code> <a href="date.html">date</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code><=</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code><=</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -318,6 +320,7 @@
 <tr><td><a href="bytes.html">bytes</a> <code>=</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes[]</a> <code>=</code> <a href="bytes.html">bytes[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="collate.html">collatedstring</a> <code>=</code> <a href="collate.html">collatedstring</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>collatedstring{*} <code>=</code> collatedstring{*}</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>=</code> <a href="date.html">date</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>=</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>=</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -451,6 +454,7 @@
 <tr><td><a href="bytes.html">bytes</a> <code>IS NOT DISTINCT FROM</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes[]</a> <code>IS NOT DISTINCT FROM</code> <a href="bytes.html">bytes[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="collate.html">collatedstring</a> <code>IS NOT DISTINCT FROM</code> <a href="collate.html">collatedstring</a></td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>collatedstring{*} <code>IS NOT DISTINCT FROM</code> collatedstring{*}</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>IS NOT DISTINCT FROM</code> <a href="date.html">date</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>IS NOT DISTINCT FROM</code> <a href="timestamp.html">timestamp</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="date.html">date</a> <code>IS NOT DISTINCT FROM</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
