@@ -7,6 +7,7 @@ package storage
 
 import (
 	"context"
+	"slices"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
@@ -38,10 +39,11 @@ type pebbleMapBatchWriter struct {
 
 	// makeKey is a function that transforms a key into a byte slice with a prefix
 	// to be written to the underlying store.
-	makeKey           func(k []byte) []byte
-	batch             *pebble.Batch
+	makeKey func(k []byte) []byte
+	batch   *pebble.Batch
+	// onFlush will be called after every batch commit.
+	onFlush           func()
 	numPutsSinceFlush int
-	store             *pebble.DB
 }
 
 // pebbleMapIterator iterates over the keys of a pebbleMap in sorted order.
@@ -57,9 +59,10 @@ type pebbleMapIterator struct {
 	makeKeyScratch []byte
 }
 
-// pebbleMap is a SortedDiskMap, similar to rocksDBMap, that uses pebble as its
-// underlying storage engine.
+// pebbleMap is a SortedDiskMap that uses pebble as its underlying storage
+// engine.
 type pebbleMap struct {
+	// prefix always stores the unique prefix shared by all keys in the map.
 	prefix          []byte
 	store           *pebble.DB
 	allowDuplicates bool
@@ -135,11 +138,26 @@ func (r *pebbleMap) NewBatchWriterCapacity(capacityBytes int) diskmap.SortedDisk
 	if r.allowDuplicates {
 		makeKey = r.makeKeyWithSequence
 	}
-	return &pebbleMapBatchWriter{
+	b := &pebbleMapBatchWriter{
 		capacity: capacityBytes,
 		makeKey:  makeKey,
 		batch:    r.store.NewBatch(),
-		store:    r.store,
+	}
+	b.onFlush = func() {
+		// If we happened to have Put very large keys, we want to lose
+		// references to them.
+		r.gcPrefixSlice()
+		b.numPutsSinceFlush = 0
+		b.batch = r.store.NewBatch()
+	}
+	return b
+}
+
+const maxPrefixCapReuse = 1 << 20 /* 1 MiB */
+
+func (r *pebbleMap) gcPrefixSlice() {
+	if cap(r.prefix) > maxPrefixCapReuse {
+		r.prefix = slices.Clone(r.prefix)
 	}
 }
 
@@ -236,8 +254,7 @@ func (b *pebbleMapBatchWriter) Flush() error {
 	if err := b.batch.Commit(pebble.NoSync); err != nil {
 		return err
 	}
-	b.numPutsSinceFlush = 0
-	b.batch = b.store.NewBatch()
+	b.onFlush()
 	return nil
 }
 
