@@ -4207,68 +4207,68 @@ func TestTransferRaftLeadership(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			RaftConfig: base.RaftConfig{
-				// Suppress timeout-based elections (which also includes a previous
-				// leader stepping down due to a quorum check). Running tests on a
-				// heavily loaded CPU is enough to reach the raft election timeout and
-				// cause leadership to change hands in ways this test doesn't expect.
-				RaftElectionTimeoutTicks: 100000,
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-	store0 := tc.GetFirstStoreFromServer(t, 0)
-	store1 := tc.GetFirstStoreFromServer(t, 1)
+	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(),
+		func(t *testing.T, leaseType roachpb.LeaseType) {
+			ctx := context.Background()
+			st := cluster.MakeTestingClusterSettings()
+			kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 
-	key := tc.ScratchRangeWithExpirationLease(t)
-	repl0 := store0.LookupReplica(keys.MustAddr(key))
-	require.NotNil(t, repl0, "no replica found for key '%s'", key)
-	rd0, err := repl0.GetReplicaDescriptor()
-	require.NoError(t, err)
+			tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Settings: st,
+				},
+			})
+			defer tc.Stopper().Stop(ctx)
+			store0 := tc.GetFirstStoreFromServer(t, 0)
+			store1 := tc.GetFirstStoreFromServer(t, 1)
 
-	tc.AddVotersOrFatal(t, key, tc.Target(1))
+			key := tc.ScratchRangeWithExpirationLease(t)
+			repl0 := store0.LookupReplica(keys.MustAddr(key))
+			require.NotNil(t, repl0, "no replica found for key '%s'", key)
+			rd0, err := repl0.GetReplicaDescriptor()
+			require.NoError(t, err)
 
-	// NB: if we don't wait until node 2 applies the config change and becomes
-	// voter, it may refuse to campaign for leadership. The large Raft election
-	// timeout set in this test will prevent the current leader from retrying the
-	// transfer. See issue #99213.
-	require.NoError(t, tc.WaitForVoters(key, tc.Target(1)))
+			tc.AddVotersOrFatal(t, key, tc.Target(1))
 
-	repl1 := store1.LookupReplica(keys.MustAddr(key))
-	require.NotNil(t, repl1, "no replica found for key '%s'", key)
-	rd1, err := repl1.GetReplicaDescriptor()
-	require.NoError(t, err)
-	require.Equal(t, roachpb.VOTER_FULL, rd1.Type)
+			// NB: if we don't wait until node 2 applies the config change and becomes
+			// voter, it may refuse to campaign for leadership. The large Raft election
+			// timeout set in this test will prevent the current leader from retrying the
+			// transfer. See issue #99213.
+			require.NoError(t, tc.WaitForVoters(key, tc.Target(1)))
 
-	_, pErr := kv.SendWrappedWith(ctx, store0, kvpb.Header{RangeID: repl0.RangeID}, getArgs(key))
-	require.NoError(t, pErr.GoError())
+			repl1 := store1.LookupReplica(keys.MustAddr(key))
+			require.NotNil(t, repl1, "no replica found for key '%s'", key)
+			rd1, err := repl1.GetReplicaDescriptor()
+			require.NoError(t, err)
+			require.Equal(t, roachpb.VOTER_FULL, rd1.Type)
 
-	status := repl0.RaftStatus()
-	require.NotNil(t, status)
-	require.Equal(t, raftpb.PeerID(rd0.ReplicaID), status.Lead)
+			_, pErr := kv.SendWrappedWith(ctx, store0, kvpb.Header{RangeID: repl0.RangeID}, getArgs(key))
+			require.NoError(t, pErr.GoError())
 
-	origCount0 := store0.Metrics().RangeRaftLeaderTransfers.Count()
-	// Transfer the lease. We'll then check that the leadership follows
-	// automatically.
-	transferLeaseArgs := adminTransferLeaseArgs(key, store1.StoreID())
-	_, pErr = kv.SendWrappedWith(ctx, store0, kvpb.Header{RangeID: repl0.RangeID}, transferLeaseArgs)
-	require.NoError(t, pErr.GoError())
+			status := repl0.RaftStatus()
+			require.NotNil(t, status)
+			require.Equal(t, raftpb.PeerID(rd0.ReplicaID), status.Lead)
 
-	// Verify leadership is transferred.
-	testutils.SucceedsSoon(t, func() error {
-		if status := repl0.RaftStatus(); status == nil {
-			return errors.New("raft status is nil")
-		} else if a, e := status.Lead, raftpb.PeerID(rd1.ReplicaID); a != e {
-			return errors.Errorf("expected raft leader be %d; got %d", e, a)
-		}
-		return nil
-	})
-	// And metrics are updated.
-	require.Greater(t, store0.Metrics().RangeRaftLeaderTransfers.Count(), origCount0)
+			origCount0 := store0.Metrics().RangeRaftLeaderTransfers.Count()
+			// Transfer the lease. We'll then check that the leadership follows
+			// automatically.
+			transferLeaseArgs := adminTransferLeaseArgs(key, store1.StoreID())
+			_, pErr = kv.SendWrappedWith(ctx, store0, kvpb.Header{RangeID: repl0.RangeID}, transferLeaseArgs)
+			require.NoError(t, pErr.GoError())
+
+			// Verify leadership is transferred.
+			testutils.SucceedsSoon(t, func() error {
+				if status := repl0.RaftStatus(); status == nil {
+					return errors.New("raft status is nil")
+				} else if a, e := status.Lead, raftpb.PeerID(rd1.ReplicaID); a != e {
+					return errors.Errorf("expected raft leader be %d; got %d", e, a)
+				}
+				return nil
+			})
+			// And metrics are updated.
+			require.Greater(t, store0.Metrics().RangeRaftLeaderTransfers.Count(), origCount0)
+		})
 }
 
 // Test that a single blocked replica does not block other replicas.
