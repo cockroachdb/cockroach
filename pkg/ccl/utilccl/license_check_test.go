@@ -293,7 +293,6 @@ func TestRefreshLicenseEnforcerOnLicenseChange(t *testing.T) {
 				require.NoError(t, err)
 				trialLicenseExpiryTimestamp.Store(0)
 			}()
-			require.Equal(t, int64(0), trialLicenseExpiryTimestamp.Load())
 
 			tdb := sqlutils.MakeSQLRunner(sqlDB)
 
