@@ -148,12 +148,6 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 		return nil, scerrors.NotImplementedErrorf(n, "referencing an index without a table "+
 			"prefix is not supported in the DSC")
 	}
-
-	if !zs.TargetsTable() {
-		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on system ranges "+
-			"are not supported in the DSC")
-	}
-
 	// If this is an ALTER ALL PARTITIONS statement, fallback to the legacy schema
 	// changer.
 	if zs.TargetsPartition() && zs.StarIndex {

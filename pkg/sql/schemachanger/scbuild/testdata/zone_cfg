@@ -1,0 +1,153 @@
+setup
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TABLE defaultdb.foo (
+    i INT8 PRIMARY KEY,
+    -- j gets added by the test
+    k INT8 CHECK (k > 10),
+    l INT8 NOT NULL UNIQUE,
+    m INT8 REFERENCES foo (l),
+    n UUID,
+    UNIQUE WITHOUT INDEX (n),
+    o INT -- this column can be dropped
+);
+ALTER TABLE defaultdb.foo CONFIGURE ZONE USING gc.ttlseconds=10;
+CREATE INDEX idx ON defaultdb.foo(k, l);
+CREATE TABLE defaultdb.foo_index_zone_cfg (
+    i INT8 PRIMARY KEY,
+    -- j gets added by the test
+    k INT8 CHECK (k > 10),
+    l INT8 NOT NULL UNIQUE,
+    m INT8 REFERENCES foo (l),
+    n UUID,
+    UNIQUE WITHOUT INDEX (n),
+    o INT -- this column can be dropped
+);
+CREATE INDEX idx ON defaultdb.foo_index_zone_cfg(k, l);
+ALTER INDEX defaultdb.foo_index_zone_cfg@idx CONFIGURE ZONE USING gc.ttlseconds=10;
+----
+
+build
+ALTER TABLE defaultdb.foo_index_zone_cfg ADD COLUMN j INT
+----
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 3}, PUBLIC], PUBLIC]
+  {indexId: 3, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
+- [[Column:{DescID: 105, ColumnID: 7}, PUBLIC], ABSENT]
+  {columnId: 7, tableId: 105}
+- [[ColumnName:{DescID: 105, Name: j, ColumnID: 7}, PUBLIC], ABSENT]
+  {columnId: 7, name: j, tableId: 105}
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 7, TypeName: INT8}, PUBLIC], ABSENT]
+  {columnId: 7, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+- [[IndexColumn:{DescID: 105, ColumnID: 7, IndexID: 1}, PUBLIC], ABSENT]
+  {columnId: 7, indexId: 1, kind: STORED, ordinalInKind: 5, tableId: 105}
+
+unimplemented
+ALTER TABLE defaultdb.foo_index_zone_cfg ADD PRIMARY KEY (i, n)
+----
+
+build
+ALTER TABLE defaultdb.foo_index_zone_cfg DROP COLUMN k
+----
+- [[Column:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, tableId: 105}
+- [[ColumnName:{DescID: 105, Name: k, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: k, tableId: 105}
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, ABSENT], PUBLIC]
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, indexId: 1, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 2, indexId: 1, kind: STORED, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 4, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 4, indexId: 1, kind: STORED, ordinalInKind: 2, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 5, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 5, indexId: 1, kind: STORED, ordinalInKind: 3, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 6, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 6, indexId: 1, kind: STORED, ordinalInKind: 4, tableId: 105}
+- [[PrimaryIndex:{DescID: 105, IndexID: 1, ConstraintID: 2}, ABSENT], PUBLIC]
+  {constraintId: 2, indexId: 1, isUnique: true, tableId: 105}
+- [[IndexName:{DescID: 105, Name: foo_index_zone_cfg_pkey, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, name: foo_index_zone_cfg_pkey, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 3}, ABSENT], PUBLIC]
+  {columnId: 2, indexId: 3, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, indexId: 3, ordinalInKind: 1, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, ABSENT], PUBLIC]
+  {columnId: 1, indexId: 3, kind: KEY_SUFFIX, tableId: 105}
+- [[SecondaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
+  {indexId: 3, isCreatedExplicitly: true, tableId: 105}
+- [[IndexName:{DescID: 105, Name: idx, IndexID: 3}, ABSENT], PUBLIC]
+  {indexId: 3, name: idx, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 3}, ABSENT], PUBLIC]
+  {indexId: 3, tableId: 105}
+- [[CheckConstraint:{DescID: 105, IndexID: 0, ConstraintID: 4, ReferencedColumnIDs: [2]}, ABSENT], PUBLIC]
+  {columnIds: [2], constraintId: 4, expr: 'k > 10:::INT8', referencedColumnIds: [2], tableId: 105}
+- [[IndexZoneConfig:{DescID: 105, IndexID: 3, SeqNum: 0}, ABSENT], PUBLIC]
+  {indexId: 3, oldIdxRef: -1, subzone: {config: {gc: {ttlSeconds: 10}, inheritedConstraints: true, inheritedLeasePreferences: true}, indexId: 3}, subzoneSpans: [{key: iw==}], tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
+- [[PrimaryIndex:{DescID: 105, IndexID: 5, ConstraintID: 6, TemporaryIndexID: 6, SourceIndexID: 1}, PUBLIC], ABSENT]
+  {constraintId: 6, indexId: 5, isUnique: true, sourceIndexId: 1, tableId: 105, temporaryIndexId: 6}
+- [[IndexName:{DescID: 105, Name: foo_index_zone_cfg_pkey, IndexID: 5}, PUBLIC], ABSENT]
+  {indexId: 5, name: foo_index_zone_cfg_pkey, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 5, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 5}, PUBLIC], ABSENT]
+  {columnId: 3, indexId: 5, kind: STORED, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 4, IndexID: 5}, PUBLIC], ABSENT]
+  {columnId: 4, indexId: 5, kind: STORED, ordinalInKind: 1, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 5, IndexID: 5}, PUBLIC], ABSENT]
+  {columnId: 5, indexId: 5, kind: STORED, ordinalInKind: 2, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 6, IndexID: 5}, PUBLIC], ABSENT]
+  {columnId: 6, indexId: 5, kind: STORED, ordinalInKind: 3, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 5}, PUBLIC], ABSENT]
+  {indexId: 5, tableId: 105}
+- [[TemporaryIndex:{DescID: 105, IndexID: 6, ConstraintID: 7, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+  {constraintId: 7, indexId: 6, isUnique: true, sourceIndexId: 1, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 6}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 6, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 6}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 3, indexId: 6, kind: STORED, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 4, IndexID: 6}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 4, indexId: 6, kind: STORED, ordinalInKind: 1, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 5, IndexID: 6}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 5, indexId: 6, kind: STORED, ordinalInKind: 2, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 6, IndexID: 6}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 6, indexId: 6, kind: STORED, ordinalInKind: 3, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 6}, TRANSIENT_ABSENT], ABSENT]
+  {indexId: 6, tableId: 105}
+
+build
+DROP INDEX defaultdb.foo_index_zone_cfg@idx
+----
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 3}, ABSENT], PUBLIC]
+  {columnId: 2, indexId: 3, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, indexId: 3, ordinalInKind: 1, tableId: 105}
+- [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 3}, ABSENT], PUBLIC]
+  {columnId: 1, indexId: 3, kind: KEY_SUFFIX, tableId: 105}
+- [[SecondaryIndex:{DescID: 105, IndexID: 3, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC]
+  {indexId: 3, isCreatedExplicitly: true, tableId: 105}
+- [[IndexName:{DescID: 105, Name: idx, IndexID: 3}, ABSENT], PUBLIC]
+  {indexId: 3, name: idx, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 3}, ABSENT], PUBLIC]
+  {indexId: 3, tableId: 105}
+- [[IndexZoneConfig:{DescID: 105, IndexID: 3, SeqNum: 0}, ABSENT], PUBLIC]
+  {indexId: 3, oldIdxRef: -1, subzone: {config: {gc: {ttlSeconds: 10}, inheritedConstraints: true, inheritedLeasePreferences: true}, indexId: 3}, subzoneSpans: [{key: iw==}], tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
