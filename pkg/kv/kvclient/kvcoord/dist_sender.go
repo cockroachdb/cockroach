@@ -380,6 +380,7 @@ var senderConcurrencyLimit = settings.RegisterIntSetting(
 	"maximum number of asynchronous send requests",
 	DefaultSenderStreamsPerVCPU*max(MinViableProcs, int64(runtime.GOMAXPROCS(0))),
 	settings.NonNegativeInt,
+	settings.WithPublic,
 )
 
 // FollowerReadsUnhealthy controls whether we will send follower reads to nodes
