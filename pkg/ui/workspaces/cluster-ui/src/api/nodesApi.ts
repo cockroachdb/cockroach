@@ -5,13 +5,13 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { useContext, useMemo } from "react";
-import useSWR from "swr";
 
 import { fetchData } from "src/api";
 import { getRegionFromLocality } from "src/store/nodes";
 
 import { ClusterDetailsContext } from "../contexts";
 import { NodeID, StoreID } from "../types/clusterTypes";
+import { useSwrWithClusterId } from "../util";
 
 const NODES_PATH = "_status/nodes_ui";
 
@@ -26,10 +26,9 @@ export type NodeStatus = {
 };
 
 export const useNodeStatuses = () => {
-  const clusterDetails = useContext(ClusterDetailsContext);
-  const isTenant = clusterDetails.isTenant;
-  const { data, isLoading, error } = useSWR(
-    NODES_PATH,
+  const { isTenant } = useContext(ClusterDetailsContext);
+  const { data, isLoading, error } = useSwrWithClusterId(
+    "nodesUI",
     !isTenant ? getNodes : null,
     {
       revalidateOnFocus: false,
