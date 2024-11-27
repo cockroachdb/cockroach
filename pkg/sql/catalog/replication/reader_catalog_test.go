@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -253,7 +254,7 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 	destTestingKnobs := base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
-				if !descriptorRefreshHookEnabled.Load() {
+				if !descriptorRefreshHookEnabled.Swap(false) {
 					return
 				}
 				<-waitForRefresh
@@ -270,6 +271,8 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 	srcRunner := sqlutils.MakeSQLRunner(srcConn)
 
 	ddlToExec := []string{
+		"CREATE USER bob password 'bob'",
+		"GRANT ADMIN TO bob;",
 		"CREATE SEQUENCE sq1;",
 		"CREATE TYPE IF NOT EXISTS status AS ENUM ('open', 'closed', 'inactive');",
 		"CREATE TABLE t1(j int default nextval('sq1'), val status);",
@@ -297,6 +300,9 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 	// Connect only after the reader catalog is setup, so the connection
 	// executor is aware.
 	destConn := destTenant.SQLConn(t)
+	destURL, destURLCleanup := destTenant.PGUrl(t, serverutils.UserPassword("bob", "bob"), serverutils.ClientCerts(false))
+	defer destURLCleanup()
+	require.NoError(t, err)
 	destRunner := sqlutils.MakeSQLRunner(destConn)
 
 	check := func(query string, isEqual bool) {
@@ -322,6 +328,17 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 		} else {
 			require.NotEqualValues(t, srcRes, destRes)
 		}
+
+		// Sanity: Execute the same query as prepared statement inside the reader
+		// catalog .
+		destPgxConn, err := pgx.Connect(ctx, destURL.String())
+		require.NoError(t, err)
+		_, err = destPgxConn.Prepare(ctx, query, query)
+		require.NoError(t, err)
+		rows, err := destPgxConn.Query(ctx, query)
+		require.NoError(t, err)
+		defer rows.Close()
+		require.NoError(t, destPgxConn.Close(ctx))
 	}
 
 	compareEqual := func(query string) {
@@ -333,6 +350,10 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 
 	var newTS hlc.Timestamp
 	descriptorRefreshHookEnabled.Store(true)
+	existingPgxConn, err := pgx.Connect(ctx, destURL.String())
+	require.NoError(t, err)
+	_, err = existingPgxConn.Prepare(ctx, "basic select", "SELECT * FROM t1, v1, t2")
+	require.NoError(t, err)
 	for _, useAOST := range []bool{false, true} {
 		if useAOST {
 			closeWaitForRefresh()
@@ -385,8 +406,13 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 			destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost='on'")
 		}
 		iterationsDone := false
+		uniqueIdx := 0
 		for !iterationsDone {
+			uniqueIdx++
 			if !useAOST {
+				// Toggle the block on each iteration, so there is some risk
+				// of not all descriptor updates being updated.
+				descriptorRefreshHookEnabled.Swap(true)
 				select {
 				case waitForRefresh <- struct{}{}:
 				case <-iterationsDoneCh:
@@ -397,14 +423,39 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 			case <-iterationsDoneCh:
 				iterationsDone = true
 			default:
-				tx := destRunner.Begin(t)
-				_, err := tx.Exec("SELECT * FROM t1")
-				checkAOSTError(err)
-				_, err = tx.Exec("SELECT * FROM v1")
-				checkAOSTError(err)
-				_, err = tx.Exec("SELECT * FROM t2")
-				checkAOSTError(err)
-				checkAOSTError(tx.Commit())
+				// Prepare on an existing connection.
+				rows, err := existingPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
+				require.NoError(t, err)
+				rows.Close()
+				uniqueQuery := fmt.Sprintf("SELECT a.j + %d FROM t1 as a, v1 as b, t2 as c ", uniqueIdx)
+				_, err = existingPgxConn.Prepare(ctx, fmt.Sprintf("q%d", uniqueIdx), uniqueQuery)
+				require.NoError(t, err)
+				rows, err = existingPgxConn.Query(ctx, uniqueQuery)
+				require.NoError(t, err)
+				rows.Close()
+				// Open new connections.
+				newPgxConn, err := pgx.Connect(ctx, destURL.String())
+				require.NoError(t, err)
+				_, err = newPgxConn.Prepare(ctx, "basic select", "SELECT * FROM t1, v1, t2")
+				require.NoError(t, err)
+				rows, err = newPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
+				require.NoError(t, err)
+				rows.Close()
+				require.NoError(t, newPgxConn.Close(ctx))
+
+				// Only use txn's with AOST, which should never hit retryable errors.
+				// Automatic retry's are enabled for PCR errors, but they can still
+				// happen in a txn. When AOST is off don't try the txn.
+				if useAOST {
+					tx := destRunner.Begin(t)
+					_, err = tx.Exec("SELECT * FROM t1")
+					checkAOSTError(err)
+					_, err = tx.Exec("SELECT * FROM v1")
+					checkAOSTError(err)
+					_, err = tx.Exec("SELECT * FROM t2")
+					checkAOSTError(err)
+					checkAOSTError(tx.Commit())
+				}
 
 				_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM t1,v1, t2")
 				checkAOSTError(err)
@@ -414,13 +465,13 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 				checkAOSTError(err)
 			}
 		}
-
 		// Finally ensure the queries actually match.
 		require.NoError(t, grp.Wait())
-		// Check if the error was detected.
-		require.Equalf(t, !useAOST, errorDetected,
+		// When the AOST is shut off we retry, so no errors should occur.
+		require.Equalf(t, false, errorDetected,
 			"error was detected unexpectedly (AOST = %t on connection)", useAOST)
 	}
+	require.NoError(t, existingPgxConn.Close(ctx))
 	now = newTS
 	compareEqual("SELECT * FROM t1 ORDER BY j")
 	compareEqual("SELECT * FROM v1 ORDER BY 1")
@@ -459,7 +510,6 @@ func TestReaderCatalogTSAdvanceWithLongTxn(t *testing.T) {
 
 	ddlToExec := []string{
 		"CREATE USER roacher WITH CREATEROLE;",
-		"GRANT ADMIN TO roacher;",
 		"ALTER USER roacher SET timezone='America/New_York';",
 		"CREATE SEQUENCE sq1;",
 		"CREATE TABLE t1(n int default nextval('sq1'), val TEXT);",

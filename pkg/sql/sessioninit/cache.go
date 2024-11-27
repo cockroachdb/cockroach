@@ -123,6 +123,15 @@ func (a *Cache) GetAuthInfo(
 	err = db.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
+		// When running on a PCR reader catalog we need to ensure all descriptors
+		// have matching timestamps for external row data. Certain system tables
+		// like users and role_options are replicated, which can cause mixed
+		// external row data timestamps, which can lead to a retryable error.
+		// To avoid this we will set a replication safe AOST timestamp when running
+		// on a reader catalog.
+		if err := txn.Descriptors().MaybeSetReplicationSafeTS(ctx, txn.KV()); err != nil {
+			return err
+		}
 		_, usersTableDesc, err = descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), UsersTableName)
 		if err != nil {
 			return err

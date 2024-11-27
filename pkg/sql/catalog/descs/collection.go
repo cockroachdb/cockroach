@@ -1258,6 +1258,22 @@ func (tc *Collection) GetIndexComment(
 	return tc.GetComment(catalogkeys.MakeCommentKey(uint32(tableID), uint32(indexID), catalogkeys.IndexCommentType))
 }
 
+// MaybeSetReplicationSafeTS modifies a txn to apply the replication safe timestamp,
+// if we are executing against a PCR reader catalog.
+func (tc *Collection) MaybeSetReplicationSafeTS(ctx context.Context, txn *kv.Txn) error {
+	now := txn.DB().Clock().Now()
+	desc, err := tc.leased.lm.Acquire(ctx, now, keys.SystemDatabaseID)
+	if err != nil {
+		return err
+	}
+	defer desc.Release(ctx)
+
+	if desc.Underlying().(catalog.DatabaseDescriptor).GetReplicatedPCRVersion() == 0 {
+		return nil
+	}
+	return txn.SetFixedTimestamp(ctx, tc.leased.lm.GetSafeReplicationTS())
+}
+
 // GetConstraintComment implements the scdecomp.CommentGetter interface.
 func (tc *Collection) GetConstraintComment(
 	tableID descpb.ID, constraintID catid.ConstraintID,
