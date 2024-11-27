@@ -139,6 +139,13 @@ message ReplicaState {
   // with other related ranges to reduce load on pebble.
   roachpb.GCHint gc_hint = 15 [(gogoproto.customname) = "GCHint"];
 
+  // ForceFlushIndex is only non-empty for the Range Raft state machine cached
+  // in memory (see the comment at the top of ReplicaState). It is never used
+  // for proposer-evaluated Raft (this represents a Raft index, which is
+  // unknown to the proposer evaluator). It is persisted on the Replica with
+  // the RangeForceFlushKey.
+  roachpb.ForceFlushIndex force_flush_index = 16 [(gogoproto.nullable) = false];
+
   reserved 8, 9, 10;
 }
 

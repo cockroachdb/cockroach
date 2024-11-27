@@ -10,7 +10,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEvalResultIsZero(t *testing.T) {
@@ -78,4 +80,10 @@ func TestMergeAndDestroy(t *testing.T) {
 	if f, exp := *r1.Local.Metrics, (Metrics{LeaseRequestSuccess: 9, ResolveAbort: 13}); f != exp {
 		t.Fatalf("expected %d, got %d", exp, f)
 	}
+
+	var r3 Result
+	r3.Replicated.State = &kvserverpb.ReplicaState{
+		ForceFlushIndex: roachpb.ForceFlushIndex{Index: 3},
+	}
+	require.ErrorContains(t, r0.MergeAndDestroy(r3), "must not specify ForceFlushIndex")
 }
