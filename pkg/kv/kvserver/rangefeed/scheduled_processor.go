@@ -165,8 +165,10 @@ func (p *ScheduledProcessor) processRequests(ctx context.Context) {
 		default:
 			if p.pendingUnregistrations.Swap(false) {
 				p.reg.unregisterMarkedRegistrations(ctx)
-				// If we have no more registrations, we can stop this
-				// processor.
+				// If we have no more registrations, we can stop this processor. Note
+				// that stopInternal sets p.stopping to true so any register requests
+				// being concurrenly enqueued will fail-fast before being added to the
+				// registry.
 				if p.reg.Len() == 0 {
 					p.stopInternal(ctx, nil)
 				}
@@ -640,20 +642,25 @@ func (p *ScheduledProcessor) enqueueRequest(req request) {
 	}
 }
 
-// unregisterClientAsync instructs the processor to scan the registration for
-// clients to unregister on the next request. This doesn't send and actual
-// request to the request queue to ensure that it is non-blocking.
+// unregisterClientAsync instructs the processor to unregister the given
+// registration. This doesn't send an actual request to the request queue to
+// ensure that it is non-blocking.
+//
+// Rather, the registration has its shouldUnregister flag set and the
+// processor's pendingUnregistrations flag is set. During processRequests, if
+// pendingUnregistrations is true, we remove any marked registrations from the
+// registry.
 //
 // We are OK with these being processed out of order since these requests
 // originate from a registration cleanup, so the registration in question is no
-// longer processing event.
+// longer processing events.
 func (p *ScheduledProcessor) unregisterClientAsync(r registration) {
 	select {
 	case <-p.stoppedC:
 		return
 	default:
 	}
-	r.setShouldUnregister(true)
+	r.setShouldUnregister()
 	p.pendingUnregistrations.Store(true)
 	p.scheduler.Enqueue(RequestQueued)
 }

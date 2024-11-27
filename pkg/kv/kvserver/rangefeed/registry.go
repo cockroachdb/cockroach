@@ -68,12 +68,14 @@ type registration interface {
 	// ID returns the id field of the registration as a uintptr.
 	ID() uintptr
 
-	// shouldUnregister returns true if this registration should
-	// be unregistered.
+	// shouldUnregister returns true if this registration should be unregistered
+	// by unregisterMarkedRegistrations. UnregisterMarkedRegistrations is called
+	// by the rangefeed scheduler when it has been informed of an unregister
+	// request.
 	shouldUnregister() bool
-	// setShouldUnregister sets shouldUnregister to the given
-	// value.
-	setShouldUnregister(bool)
+	// setShouldUnregister sets shouldUnregister to true. Used by the rangefeed
+	// processor in response to an unregister request.
+	setShouldUnregister()
 }
 
 // baseRegistration is a common base for all registration types. It is intended
@@ -138,8 +140,8 @@ func (r *baseRegistration) shouldUnregister() bool {
 	return r.shouldUnreg.Load()
 }
 
-func (r *baseRegistration) setShouldUnregister(b bool) {
-	r.shouldUnreg.Store(b)
+func (r *baseRegistration) setShouldUnregister() {
+	r.shouldUnreg.Store(true)
 }
 
 func (r *baseRegistration) getWithDiff() bool {
@@ -420,6 +422,12 @@ func (reg *registry) remove(ctx context.Context, toDelete []interval.Interface) 
 	}
 }
 
+// unregisterMarkedRegistrations iterates the registery and removes any
+// registrations where shouldUnregister() returns true. This is called by the
+// rangefeed processor in response to an async unregistration request.
+//
+// See the comment on (*ScheduledProcessor).unregisterClientAsync for more
+// details.
 func (reg *registry) unregisterMarkedRegistrations(ctx context.Context) {
 	var toDelete []interval.Interface
 	reg.tree.Do(func(i interval.Interface) (done bool) {
