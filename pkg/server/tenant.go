@@ -207,7 +207,7 @@ func NewSeparateProcessTenantServer(
 		// in-process with KV instances have no such optimization to take
 		// advantage of to begin with.
 		nodeIDGetter:          nil,
-		costControllerFactory: NewNoopTenantSideCostController,
+		costControllerFactory: NewTenantSideCostController,
 		spanLimiterFactory: func(ie isql.Executor, st *cluster.Settings, knobs *spanconfig.TestingKnobs) spanconfig.Limiter {
 			return spanconfiglimiter.New(ie, st, knobs)
 		},
@@ -906,7 +906,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlServer.sqlInstanceReader, instanceID)
 
-	log.Event(ctx, "darryl: starting tenant side cost controller")
 	// Start the cost controller for this secondary tenant.
 	if err := s.costController.Start(
 		workersCtx, s.stopper, instanceID, s.sqlServer.sqlLivenessSessionID,
@@ -1445,6 +1444,7 @@ func (noopTenantSideCostController) Start(
 	externalUsageFn multitenant.ExternalUsageFn,
 	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn,
 ) error {
+	log.Error(ctx, "darryl: noopTenantSideCostController.Start called")
 	return nil
 }
 
