@@ -163,6 +163,10 @@ func ValidateTokensReturned(
 				}
 			}
 			return nil
-		}, 5*time.Second)
+			// We wait up to 10 minutes for the tokens to be returned. In tests which
+			// purposefully create a send queue towards a node, the queue may take a
+			// while to drain. The tokens will not be returned until the queue is
+			// empty and there are no inflight requests.
+		}, 10*time.Minute)
 	}
 }
