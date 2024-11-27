@@ -72,6 +72,7 @@ func CreateTestTableDescriptor(
 			&evalCtx,
 			sessionData,
 			tree.PersistencePermanent,
+			nil, /* colToSequenceRefs */
 		)
 		return desc, err
 	case *tree.CreateSequence:

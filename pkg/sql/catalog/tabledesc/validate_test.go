@@ -2212,6 +2212,7 @@ func TestValidateTableDesc(t *testing.T) {
 						ID:                      1,
 						Name:                    "bar",
 						GeneratedAsIdentityType: catpb.GeneratedAsIdentityType_GENERATED_ALWAYS,
+						UsesSequenceIds:         []descpb.ID{32},
 						OnUpdateExpr:            proto.String("'blah'"),
 					},
 				},
@@ -2232,7 +2233,9 @@ func TestValidateTableDesc(t *testing.T) {
 						ID:                      1,
 						Name:                    "bar",
 						GeneratedAsIdentityType: catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT,
-						OnUpdateExpr:            proto.String("'blah'"),
+						UsesSequenceIds:         []descpb.ID{32},
+
+						OnUpdateExpr: proto.String("'blah'"),
 					},
 				},
 				Families: []descpb.ColumnFamilyDescriptor{
@@ -3064,6 +3067,17 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				}
 			})},
+		{err: `column is identity without sequence references "bar"`,
+			desc: descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "bar", GeneratedAsIdentityType: catpb.GeneratedAsIdentityType_GENERATED_ALWAYS},
+				},
+				NextColumnID: 2,
+			}},
 	}
 
 	for i, d := range testData {
