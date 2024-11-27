@@ -463,7 +463,7 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 			require.Equal(t, i, idx)
 		}
 		// Reset and reorder the rows for the next run.
-		rand.Shuffle(numRows, func(i, j int) {
+		rng.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		require.NoError(t, rc.UnsafeReset(ctx))
