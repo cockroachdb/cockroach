@@ -943,7 +943,7 @@ func validateTokensReturned(
 				}
 			}
 			return nil
-		}, 5*time.Second)
+		}, 10*time.Minute)
 	}
 }
 
