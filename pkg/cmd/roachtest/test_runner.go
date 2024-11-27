@@ -1070,6 +1070,14 @@ func getGoCoverArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
 	getArtifacts(ctx, c, t, t.GoCoverArtifactsDir(), dstDirFn)
 }
 
+// getCpuProfileArtifacts retrieves the pprof (CPU profile) artifacts for the test.
+func getCpuProfileArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
+	dstDirFn := func(nodeIdx int) string {
+		return fmt.Sprintf("%s/%d.%s", t.ArtifactsDir(), nodeIdx, cpuProfilesDir)
+	}
+	getArtifacts(ctx, c, t, filepath.Join("logs", cpuProfilesDir), dstDirFn)
+}
+
 // An error is returned if the test is still running (on another goroutine) when
 // this returns. This happens when the test doesn't respond to cancellation.
 //
@@ -1109,6 +1117,10 @@ func (r *testRunner) runTest(
 		// Add the runID, testRunID, and cluster name to grafanaTags. These are the three
 		// template variables grafana uses to filter tests by.
 		c.grafanaTags = []string{vm.SanitizeLabel(runID), vm.SanitizeLabel(testRunID), vm.SanitizeLabel(c.Name())}
+	}
+
+	if err := maybeSetupCpuProfiling(ctx, t, c); err != nil {
+		shout(ctx, l, stdout, "failed to set up cpu profiling for cluster [%s] - %s", c.Name(), err)
 	}
 
 	// sideEyeTimeoutSnapshotURL may be set during teardown to communicate to the
@@ -1613,14 +1625,31 @@ func (r *testRunner) teardownTest(
 	}
 
 	// Test was successful. If we are collecting code coverage, copy the files now.
+	var stopped bool
 	if t.goCoverEnabled {
 		t.L().Printf("Stopping all nodes to obtain go cover artifacts")
 		if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All()); err != nil {
 			t.L().PrintfCtx(ctx, "error stopping cluster: %v", err)
 		}
 
+		stopped = true
 		t.L().Printf("Retrieving go cover artifacts")
 		getGoCoverArtifacts(ctx, c, t)
+	}
+
+	if roachtestflags.ForceCpuProfile {
+		// No need to stop the cluster again if it's already been stopped above.
+		if !stopped {
+			t.L().Printf("Stopping all nodes to obtain pprof artifacts")
+			if err := c.StopE(ctx, t.L(), option.DefaultStopOpts(), c.All()); err != nil {
+				t.L().PrintfCtx(ctx, "error stopping cluster: %v", err)
+			}
+
+			stopped = true
+		}
+
+		t.L().Printf("Retrieving pprof artifacts")
+		getCpuProfileArtifacts(ctx, c, t)
 	}
 	return "", nil
 }
@@ -2177,4 +2206,29 @@ func monitorForPreemptedVMs(ctx context.Context, t test.Test, c cluster.Cluster,
 			}
 		}
 	}()
+}
+
+func maybeSetupCpuProfiling(ctx context.Context, t *testImpl, c *clusterImpl) error {
+	if !roachtestflags.ForceCpuProfile {
+		return nil
+	}
+
+	db := c.Conn(ctx, t.L(), 1, option.VirtualClusterName("system"))
+	defer db.Close()
+
+	for _, stmt := range []string{
+		`SET CLUSTER SETTING server.cpu_profile.duration = '20s';`,
+		`SET CLUSTER SETTING server.cpu_profile.interval  = '1m';`,
+		// NB: the docs say that the profiling becomes unconditional if
+		// you set the threshold to 0. This is incorrect, the database
+		// has no such functionality. We set it to 1 as we expect the
+		// CPU usage % to be greater than 1% either way.
+		`SET CLUSTER SETTING server.cpu_profile.cpu_usage_combined_threshold = '1';`,
+		`SET CLUSTER SETTING server.cpu_profile.total_dump_size_limit = '256 MiB';`,
+	} {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
