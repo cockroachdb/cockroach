@@ -410,7 +410,10 @@ func (izo *indexZoneConfigObj) fillIndexFromZoneSpecifier(b BuildCtx, zs tree.Zo
 		indexID = primaryIndexElem.IndexID
 	} else {
 		indexElems := b.ResolveIndex(tableID, tree.Name(indexName), ResolveParams{})
-		indexID = indexElems.FilterIndexName().MustGetOneElement().IndexID
+		indexID = indexElems.FilterIndexName().
+			Filter(func(current scpb.Status, _ scpb.TargetStatus, _ *scpb.IndexName) bool {
+				return current == scpb.Status_PUBLIC
+			}).MustGetOneElement().IndexID
 	}
 	izo.indexID = indexID
 }
