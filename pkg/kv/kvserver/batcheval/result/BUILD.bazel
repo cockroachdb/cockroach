@@ -26,6 +26,8 @@ go_test(
     embed = [":result"],
     deps = [
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
         "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
     ],
 )

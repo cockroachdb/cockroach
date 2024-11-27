@@ -560,3 +560,12 @@ message GCHint {
   optional util.hlc.Timestamp gc_timestamp_next = 3 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "GCTimestampNext"];
 }
+
+// ForceFlushIndex represents an index up to (and including) which RACv2 must
+// force-flush send-queues being maintained for replicas for a range.
+message ForceFlushIndex {
+  option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = true;
+
+  optional uint64 index = 1 [(gogoproto.nullable) = false];
+}
