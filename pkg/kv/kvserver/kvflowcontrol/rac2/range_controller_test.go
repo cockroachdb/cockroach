@@ -9,7 +9,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -240,8 +239,12 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 			testRepl.info.Match+1, rss.mu.sendQueue.indexToSend,
 			rss.mu.sendQueue.indexToSend,
 			rss.mu.sendQueue.nextRaftIndex, rss.mu.sendQueue.preciseSizeSum)
-		if rss.mu.sendQueue.forceFlushScheduled {
-			fmt.Fprintf(&b, " force-flushing")
+		if rss.mu.sendQueue.forceFlushStopIndex.active() {
+			var stopStr string
+			if !rss.mu.sendQueue.forceFlushStopIndex.untilInfinity() {
+				stopStr = fmt.Sprintf(" (stop=%d)", rss.mu.sendQueue.forceFlushStopIndex)
+			}
+			fmt.Fprintf(&b, " force-flushing%s", stopStr)
 		}
 		if rss.mu.sendQueue.deductedForSchedulerTokens > 0 {
 			fmt.Fprintf(&b, " deducted=%v", rss.mu.sendQueue.deductedForSchedulerTokens)
@@ -355,10 +358,11 @@ func (s *testingRCState) getOrInitRange(
 		}
 
 		init := RangeControllerInitState{
-			Term:          1,
-			ReplicaSet:    r.replicas(),
-			Leaseholder:   r.localReplicaID,
-			NextRaftIndex: r.nextRaftIndex,
+			Term:            1,
+			ReplicaSet:      r.replicas(),
+			Leaseholder:     r.localReplicaID,
+			NextRaftIndex:   r.nextRaftIndex,
+			ForceFlushIndex: r.forceFlushIndex,
 		}
 		options.ReplicaMutexAsserter.RaftMu.Lock()
 		testRC.rc = NewRangeController(s.testCtx, options, init)
@@ -545,11 +549,12 @@ func (r *testingRCRange) admit(ctx context.Context, storeID roachpb.StoreID, av 
 }
 
 type testingRange struct {
-	rangeID        roachpb.RangeID
-	tenantID       roachpb.TenantID
-	localReplicaID roachpb.ReplicaID
-	nextRaftIndex  uint64
-	replicaSet     map[roachpb.ReplicaID]testingReplica
+	rangeID         roachpb.RangeID
+	tenantID        roachpb.TenantID
+	localReplicaID  roachpb.ReplicaID
+	nextRaftIndex   uint64
+	forceFlushIndex uint64
+	replicaSet      map[roachpb.ReplicaID]testingReplica
 }
 
 // Used by simulation test.
@@ -1196,6 +1201,35 @@ func TestRangeController(t *testing.T) {
 				}()
 				return state.rangeStateString()
 
+			case "set_force_flush_index":
+				var rangeID int
+				d.ScanArgs(t, "range_id", &rangeID)
+				var index int
+				d.ScanArgs(t, "index", &index)
+				mode := MsgAppPull
+				if d.HasArg("push-mode") {
+					mode = MsgAppPush
+				}
+				testRC := state.ranges[roachpb.RangeID(rangeID)]
+				func() {
+					testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
+					defer testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+					testRC.rc.opts.ReplicaMutexAsserter.ReplicaMu.Lock()
+					defer testRC.rc.opts.ReplicaMutexAsserter.ReplicaMu.Unlock()
+					testRC.rc.ForceFlushIndexChangedLocked(ctx, uint64(index))
+				}()
+				// Send an empty raft event in order to trigger any potential changes.
+				event := testRC.makeRaftEventWithReplicasState()
+				event.MsgAppMode = mode
+				func() {
+					testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Lock()
+					defer testRC.rc.opts.ReplicaMutexAsserter.RaftMu.Unlock()
+					require.NoError(t, testRC.rc.HandleRaftEventRaftMuLocked(ctx, event))
+				}()
+				// Sleep for a bit to allow any timers to fire.
+				time.Sleep(20 * time.Millisecond)
+				return state.sendStreamString(roachpb.RangeID(rangeID))
+
 			case "close_rcs":
 				for _, r := range state.ranges {
 					func() {
@@ -1313,7 +1347,7 @@ func TestRangeController(t *testing.T) {
 								} else {
 									fromIndex := event.sendingEntryRange[replicaID].fromIndex
 									toIndex := event.sendingEntryRange[replicaID].toIndex
-									entries, err := testRC.raftLog.Entries(fromIndex, toIndex+1, math.MaxUint64)
+									entries, err := testRC.raftLog.Entries(fromIndex, toIndex+1, infinityEntryIndex)
 									require.NoError(t, err)
 									msgApp.Entries = entries
 								}
