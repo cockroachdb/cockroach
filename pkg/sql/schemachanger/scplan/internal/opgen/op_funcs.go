@@ -195,11 +195,15 @@ func checkIfDescriptorIsWithoutData(id descpb.ID, md *opGenContext) bool {
 // checkIfDescriptorHasGCDependents will determine if a descriptor has data
 // dependencies it still needs to GC. This allows us to determine when we can
 // need to skip certain operations like deleting a zone config.
-func checkIfDescriptorHasGCDependents(_ descpb.ID, md *opGenContext) bool {
-	for _, t := range md.Targets {
+func checkIfDescriptorHasGCDependents(md *opGenContext) bool {
+	for idx, t := range md.Targets {
 		switch t.Element().(type) {
 		case *scpb.IndexData, *scpb.TableData:
-			return true
+			// Check if this descriptor has any data marked for an absent state.
+			if t.TargetStatus == scpb.Status_ABSENT &&
+				md.Initial[idx] == scpb.Status_PUBLIC {
+				return true
+			}
 		}
 	}
 	return false

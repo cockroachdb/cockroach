@@ -30,7 +30,7 @@ func init() {
 					// If we are dropping a database with table dependencies, let the GC
 					// job take care of dropping this zone config -- as its table
 					// dependencies need this zone config.
-					if checkIfDescriptorHasGCDependents(this.DatabaseID, md) {
+					if checkIfDescriptorHasGCDependents(md) {
 						return nil
 					}
 					return &scop.DiscardZoneConfig{

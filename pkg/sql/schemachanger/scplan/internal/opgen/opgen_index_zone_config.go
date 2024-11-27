@@ -28,7 +28,10 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.IndexZoneConfig) *scop.DiscardSubzoneConfig {
+				emit(func(this *scpb.IndexZoneConfig, md *opGenContext) *scop.DiscardSubzoneConfig {
+					if checkIfDescriptorHasGCDependents(md) {
+						return nil
+					}
 					return &scop.DiscardSubzoneConfig{
 						TableID:      this.TableID,
 						Subzone:      this.Subzone,
