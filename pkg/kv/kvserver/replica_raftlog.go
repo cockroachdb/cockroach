@@ -9,10 +9,57 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
+
+// raftLogState describes the current state of the raft log storage.
+//
+// TODO(pav-kv): rename the fields to be less verbose, and add methods
+// reflecting the raft log access patterns (append, compact, etc).
+// TODO(pav-kv): encapsulate this state in the LogStore type, instead of
+// modifying it manually. We should have a self-sufficient write-through raft
+// log storage data structure.
+// TODO(pav-kv): some users confuse this state with the latest raft log state.
+// The latter is only known to the raft.RawNode. Audit the users and check
+// whether they should be reading the RawNode log state instead.
+type raftLogState struct {
+	// raftTruncState contains the raft log truncation state, i.e. the ID of the
+	// last entry of the log prefix that has been compacted out from the raft log
+	// storage.
+	raftTruncState kvserverpb.RaftTruncatedState
+	// Last index/term written to the raft log (not necessarily durable locally or
+	// committed by the group). Note that lastTermNotDurable may be 0 (and thus
+	// invalid) even when lastIndexNotDurable is known, in which case the term
+	// will have to be retrieved from the Raft log entry. Use the invalidLastTerm
+	// constant for this case.
+	lastIndexNotDurable kvpb.RaftIndex
+	lastTermNotDurable  kvpb.RaftTerm
+	// raftLogSize is the approximate size in bytes of the persisted raft log,
+	// including sideloaded entries' payloads. The value itself is not persisted
+	// and is computed lazily, paced by the raft log truncation queue which will
+	// recompute the log size when it finds it uninitialized. This recomputation
+	// mechanism isn't relevant for ranges which see regular write activity (for
+	// those the log size will deviate from zero quickly, and so it won't be
+	// recomputed but will undercount until the first truncation is carried out),
+	// but it prevents a large dormant Raft log from sitting around forever, which
+	// has caused problems in the past.
+	//
+	// Note that both raftLogSize and raftLogSizeTrusted do not include the effect
+	// of pending log truncations (see Replica.pendingLogTruncations). Hence, they
+	// are fine for metrics etc., but not for deciding whether we should create
+	// another pending truncation. For the latter, we compute the
+	// post-pending-truncation size using pendingLogTruncations.
+	raftLogSize int64
+	// If raftLogSizeTrusted is false, don't trust the above raftLogSize until it
+	// has been recomputed.
+	raftLogSizeTrusted bool
+	// raftLogLastCheckSize is the value of raftLogSize the last time the Raft log
+	// was checked for truncation or at the time of the last Raft log truncation.
+	raftLogLastCheckSize int64
+}
 
 // replicaLogStorage implements the raft.LogStorage interface.
 //
