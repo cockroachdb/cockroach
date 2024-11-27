@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1662,82 +1662,98 @@ func TestLeaseRequestBumpsEpoch(t *testing.T) {
 	})
 }
 
-// TestLeaseRequestFromExpirationToEpochDoesNotRegressExpiration tests that a
-// promotion from an expiration-based lease to an epoch-based lease does not
-// permit the expiration time of the lease to regress. This is enforced using
-// the min_expiration field on the epoch-based lease.
-func TestLeaseRequestFromExpirationToEpochDoesNotRegressExpiration(t *testing.T) {
+// TestLeaseRequestFromExpirationToEpochOrLeaderDoesNotRegressExpiration tests
+// that a promotion from an expiration-based lease to an epoch-based lease or
+// leader lease does not permit the expiration time of the lease to regress.
+// This is enforced using the min_expiration field.
+func TestLeaseRequestFromExpirationToEpochOrLeaderDoesNotRegressExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true) // override metamorphism
+	testutils.RunValues(t, "lease-type", roachpb.EpochAndLeaderLeaseType(),
+		func(t *testing.T, leaseType roachpb.LeaseType) {
+			ctx := context.Background()
+			st := cluster.MakeTestingClusterSettings()
+			kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true) // override metamorphism
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			Settings: st,
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
+			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Settings: st,
+				},
+			})
+			defer tc.Stopper().Stop(ctx)
 
-	// Create scratch range.
-	key := tc.ScratchRange(t)
-	desc := tc.LookupRangeOrFatal(t, key)
+			// Create scratch range.
+			key := tc.ScratchRange(t)
+			desc := tc.LookupRangeOrFatal(t, key)
 
-	// Pause n1's node liveness heartbeats, to allow its liveness expiration to
-	// fall behind.
-	l0 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
-	l0.PauseHeartbeatLoopForTest()
-	l, ok := l0.GetLiveness(tc.Server(0).NodeID())
-	require.True(t, ok)
+			var ts hlc.Timestamp
+			if leaseType == roachpb.LeaseEpoch {
+				// Pause n1's node liveness heartbeats, to allow its liveness expiration to
+				// fall behind.
+				l0 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
+				l0.PauseHeartbeatLoopForTest()
+				l, ok := l0.GetLiveness(tc.Server(0).NodeID())
+				require.True(t, ok)
+				ts = l.Expiration.ToTimestamp()
+			} else if leaseType == roachpb.LeaseLeader {
+				// Pause n1's store liveness heartbeats, to allow its liveness
+				// expiration to fall behind.
+				store, err := tc.Servers[0].GetStores().(*kvserver.Stores).
+					GetStore(tc.Servers[0].GetFirstStoreID())
+				require.NoError(t, err)
+				s1Ident := slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: store.StoreID()}
+				_, ts = store.TestingStoreLivenessSupportManager().SupportFrom(s1Ident)
 
-	// Make sure n1 has an expiration-based lease.
-	s0 := tc.GetFirstStoreFromServer(t, 0)
-	repl := s0.LookupReplica(desc.StartKey)
-	require.NotNil(t, repl)
-	expLease := repl.CurrentLeaseStatus(ctx)
-	require.True(t, expLease.IsValid())
-	require.Equal(t, roachpb.LeaseExpiration, expLease.Lease.Type())
+				// Stop store liveness heartbeats.
+				dropStoreLivenessHeartbeatsFrom(t, tc.Servers[0], desc, []roachpb.ReplicaID{1}, nil)
+			}
 
-	// Wait for the expiration-based lease to have a later expiration than the
-	// expiration timestamp in n1's liveness record.
-	testutils.SucceedsSoon(t, func() error {
-		expLease = repl.CurrentLeaseStatus(ctx)
-		if expLease.Expiration().Less(l.Expiration.ToTimestamp()) {
-			return errors.Errorf("lease %v not extended beyond liveness %v", expLease, l)
-		}
-		return nil
-	})
+			// Make sure n1 has an expiration-based lease.
+			s0 := tc.GetFirstStoreFromServer(t, 0)
+			repl := s0.LookupReplica(desc.StartKey)
+			require.NotNil(t, repl)
+			expLease := repl.CurrentLeaseStatus(ctx)
+			require.True(t, expLease.IsValid())
+			require.Equal(t, roachpb.LeaseExpiration, expLease.Lease.Type())
 
-	// Enable epoch-based leases. This will cause automatic lease renewal to try
-	// to promote the expiration-based lease to an epoch-based lease.
-	//
-	// Since we have disabled the background node liveness heartbeat loop, it is
-	// critical that this lease promotion synchronously heartbeats node liveness
-	// before acquiring the epoch-based lease.
-	kvserver.ExpirationLeasesOnly.Override(ctx, &s0.ClusterSettings().SV, false)
+			// Wait for the expiration-based lease to have a later expiration than the
+			// expiration timestamp in n1's liveness record.
+			testutils.SucceedsSoon(t, func() error {
+				expLease = repl.CurrentLeaseStatus(ctx)
+				if expLease.Expiration().Less(ts) {
+					return errors.Errorf("lease %v not extended beyond liveness %v", expLease, ts)
+				}
+				return nil
+			})
 
-	// Wait for that lease promotion to occur.
-	var epochLease kvserverpb.LeaseStatus
-	testutils.SucceedsSoon(t, func() error {
-		epochLease = repl.CurrentLeaseStatus(ctx)
-		if epochLease.Lease.Type() != roachpb.LeaseEpoch {
-			return errors.Errorf("lease %v not upgraded to epoch-based", epochLease)
-		}
-		return nil
-	})
+			// Enable the specified lease type. This will cause automatic lease
+			// renewal to try to promote the expiration-based.
+			//
+			// For epoch based leases, since we have disabled the background node
+			// liveness heartbeat loop, it is critical that this lease promotion
+			// synchronously heartbeats node liveness before acquiring the
+			// epoch-based lease.
+			kvserver.OverrideDefaultLeaseType(ctx, &s0.ClusterSettings().SV, leaseType)
 
-	// Once the lease has been promoted to an epoch-based lease, the effective
-	// expiration (maintained indirectly in the liveness record and directly in
-	// the lease through its min_expiration field) must be greater than or equal
-	// to that in the preceding expiration-based lease. If this were to regress, a
-	// non-cooperative lease failover to a third lease held by a different node
-	// could overlap in MVCC time with the first lease (i.e. its start time could
-	// precede expLease.Expiration), violating the lease disjointness property.
-	//
-	// If we disable the `expPromo` and branch in leases/build.go, this assertion
-	// fails.
-	require.True(t, expLease.Expiration().LessEq(epochLease.Expiration()))
+			// Wait for that lease promotion to occur.
+			_, curLeaseStatus := tc.WaitForLeaseUpgrade(ctx, t, desc)
+			require.Equal(t, leaseType, curLeaseStatus.Lease.Type())
+
+			// Once the lease has been promoted to an epoch-based/leader lease, the
+			// effective expiration (maintained for epoch leases indirectly in the
+			// liveness record and directly in the lease through its min_expiration
+			// field, and for leader lease indirectly in the leadSupportUntil and
+			// directly in the lease through its min_expiration) must be greater than
+			// or equal to that in the preceding expiration-based lease. If this were
+			// to regress, a non-cooperative lease failover to a third lease held by a
+			// different node could overlap in MVCC time with the first lease (i.e.
+			// its start time could precede expLease.Expiration), violating the lease
+			// disjointness property.
+			//
+			// If we disable the `expPromo` and branch in leases/build.go, this
+			// assertion fails.
+			require.True(t, expLease.Expiration().LessEq(curLeaseStatus.Expiration()))
+		})
 }
