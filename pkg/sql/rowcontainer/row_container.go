@@ -418,8 +418,9 @@ type DiskBackedRowContainer struct {
 
 	// The following fields are used to create a DiskRowContainer when spilling
 	// to disk.
-	engine      diskmap.Factory
-	diskMonitor *mon.BytesMonitor
+	engine              diskmap.Factory
+	unlimitedMemMonitor *mon.BytesMonitor
+	diskMonitor         *mon.BytesMonitor
 }
 
 var _ ReorderableRowContainer = &DiskBackedRowContainer{}
@@ -435,6 +436,8 @@ var _ DeDupingRowContainer = &DiskBackedRowContainer{}
 //   - memoryMonitor is used to monitor the DiskBackedRowContainer's memory usage.
 //     If this monitor denies an allocation, the DiskBackedRowContainer will
 //     spill to disk.
+//   - unlimitedMemMonitor is used to monitor the memory usage of the internal
+//     disk row container if the DiskBackedRowContainer spills to disk.
 //   - diskMonitor is used to monitor the DiskBackedRowContainer's disk usage if
 //     and when it spills to disk.
 func (f *DiskBackedRowContainer) Init(
@@ -443,6 +446,7 @@ func (f *DiskBackedRowContainer) Init(
 	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
+	unlimitedMemMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 ) {
 	mrc := MemRowContainer{}
@@ -450,6 +454,7 @@ func (f *DiskBackedRowContainer) Init(
 	f.mrc = &mrc
 	f.src = &mrc
 	f.engine = engine
+	f.unlimitedMemMonitor = unlimitedMemMonitor
 	f.diskMonitor = diskMonitor
 	f.encodings = make([]catenumpb.DatumEncoding, len(ordering))
 	for i, orderInfo := range ordering {
@@ -617,6 +622,10 @@ func (f *DiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (
 	if !sqlerrors.IsOutOfMemoryError(err) {
 		return false, nil
 	}
+	if f.UsingDisk() {
+		// Return the original error if we already spilled to disk.
+		return false, err
+	}
 	if spillErr := f.SpillToDisk(ctx); spillErr != nil {
 		return false, spillErr
 	}
@@ -630,7 +639,8 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if f.UsingDisk() {
 		return errors.New("already using disk")
 	}
-	drc, err := MakeDiskRowContainer(ctx, f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
+	memAcc := f.unlimitedMemMonitor.MakeBoundAccount()
+	drc, err := MakeDiskRowContainer(ctx, memAcc, f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
 	if err != nil {
 		return err
 	}
@@ -718,6 +728,8 @@ var _ IndexedRowContainer = &DiskBackedIndexedRowContainer{}
 //   - engine is the underlying store that rows are stored on when the container
 //     spills to disk.
 //   - memoryMonitor is used to monitor this container's memory usage.
+//   - unlimitedMemMonitor is used to track memory usage of the internal disk
+//     row container if DiskBackedIndexedRowContainer spills to disk.
 //   - diskMonitor is used to monitor this container's disk usage.
 func NewDiskBackedIndexedRowContainer(
 	ordering colinfo.ColumnOrdering,
@@ -725,6 +737,7 @@ func NewDiskBackedIndexedRowContainer(
 	evalCtx *eval.Context,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
+	unlimitedMemMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 ) *DiskBackedIndexedRowContainer {
 	d := DiskBackedIndexedRowContainer{}
@@ -735,7 +748,7 @@ func NewDiskBackedIndexedRowContainer(
 	d.storedTypes[len(d.storedTypes)-1] = types.Int
 	d.scratchEncRow = make(rowenc.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
-	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor)
+	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, unlimitedMemMonitor, diskMonitor)
 	d.maxCacheSize = maxIndexedRowsCacheSize
 	d.cacheMemAcc = memoryMonitor.MakeBoundAccount()
 	return &d

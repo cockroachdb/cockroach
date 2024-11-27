@@ -21,6 +21,7 @@ go_library(
         "//pkg/col/typeconv",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvstreamer",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/settings",
