@@ -378,7 +378,7 @@ func (c *tenantSideCostController) Start(
 	externalUsageFn multitenant.ExternalUsageFn,
 	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn,
 ) error {
-	defer log.Event(ctx, "darryl: tenant side cost controller started")
+	defer log.Error(ctx, "darryl: tenant side cost controller started")
 	if instanceID == 0 {
 		return errors.New("invalid SQLInstanceID")
 	}
@@ -816,8 +816,10 @@ func (c *tenantSideCostController) mainLoop(ctx context.Context) {
 // OnRequestWait is part of the multitenant.TenantSideKVInterceptor interface.
 func (c *tenantSideCostController) OnRequestWait(ctx context.Context) error {
 	if multitenant.HasTenantCostControlExemption(ctx) {
+		log.Error(ctx, "darryl: tenant has cost control exemption")
 		return nil
 	}
+	log.Error(ctx, "darryl: tenant does not have cost control exemption")
 
 	// Note that the tenantSideController might not be started yet; that is ok
 	// because we initialize the limiter with some initial tokens and a reasonable
@@ -835,8 +837,10 @@ func (c *tenantSideCostController) OnResponseWait(
 	targetReplica *roachpb.ReplicaDescriptor,
 ) error {
 	if multitenant.HasTenantCostControlExemption(ctx) {
+		log.Errorf(ctx, "darryl: OnResponseWait is exempt from cost control")
 		return nil
 	}
+	log.Errorf(ctx, "darryl: OnResponseWait is NOT exempt from cost control")
 
 	// Account for the cost of write requests and read responses.
 	var batchInfo tenantcostmodel.BatchInfo

@@ -418,6 +418,128 @@ func maxSupportedTPCCWarehouses(
 	return warehouses
 }
 
+func runMTImport(ctx context.Context, t test.Test, c cluster.Cluster) {
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
+	startOpts := option.StartVirtualClusterOpts(
+		"mt",
+		c.CRDBNodes(),
+		option.StorageCluster(c.CRDBNodes()),
+	)
+
+	c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, install.MakeClusterSettings())
+
+	time.Sleep(10 * time.Second)
+
+	importTPCC := func() error {
+		randomNode := c.Node(2)
+		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", "tpcc", 909, fmt.Sprintf("{pgurl%s}", randomNode))
+		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
+	}
+
+	// Add a lot of cold data to this cluster. This further stresses the version
+	// upgrade machinery, in which a) all ranges are touched and b) work proportional
+	// to the amount data may be carried out.
+	importLargeBank := func() error {
+		randomNode := c.Node(1)
+		cmd := roachtestutil.NewCommand("%s workload fixtures import bank", test.DefaultCockroachPath).
+			Arg("{pgurl%s}", randomNode).
+			Flag("payload-bytes", 10240).
+			Flag("rows", 65104166/2).
+			Flag("seed", 4).
+			Flag("db", "bigbank").
+			String()
+		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
+	}
+
+	settings := []string{
+		"sql.split_at.allow_for_secondary_tenant.enabled",
+		"sql.scatter.allow_for_secondary_tenant.enabled",
+	}
+
+	db := c.Conn(ctx, t.L(), 1)
+
+	for _, s := range settings {
+		// Only enable the relevant settings if they are not already
+		// enabled by default.
+		_, err := db.Exec(
+			fmt.Sprintf(`ALTER TENANT mt SET CLUSTER SETTING %s = true`, s),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if res, err := db.QueryContext(
+		ctx, fmt.Sprintf("ALTER TENANT %q GRANT CAPABILITY exempt_from_rate_limiting = true", "mt"),
+	); err != nil {
+		t.Fatalf("failed to set exempt tenant from rate limiting: %v", err)
+	} else {
+		for res.Next() {
+			str := ""
+			err = res.Scan(&str)
+			require.NoError(t, err)
+			fmt.Printf("darryl: res: %v\n", str)
+		}
+	}
+
+	rows, err := db.QueryContext(ctx, "SHOW TENANTS")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var tenantID int64
+	for rows.Next() {
+		var name string
+		var dataState string
+		var serviceMode string
+		if err := rows.Scan(&tenantID, &name, &dataState, &serviceMode); err != nil {
+			t.Fatal(err)
+		}
+
+		if name == "mt" {
+			break
+		}
+	}
+
+	stmt := fmt.Sprintf(
+		"SELECT crdb_internal.update_tenant_resource_limits(%d, %s, %s, %s, now(), 0); ",
+		tenantID, "CAST('+Inf' AS FLOAT)", "CAST('+Inf' AS FLOAT)", "0",
+	)
+	if _, err = db.ExecContext(ctx, stmt); err != nil {
+		t.Fatal(err)
+	}
+
+	c.SetDefaultVirtualCluster("mt")
+
+	time.Sleep(10 * time.Second)
+
+	bankCh := make(chan error)
+	tpccCh := make(chan error)
+
+	go func() {
+		defer close(tpccCh)
+		tpccCh <- importTPCC()
+	}()
+	go func() {
+		defer close(bankCh)
+		bankCh <- importLargeBank()
+	}()
+
+	select {
+	case err := <-bankCh:
+		if err != nil {
+			t.Error(err)
+		}
+		err = <-tpccCh
+		if err != nil {
+			t.Error(err)
+		}
+	case <-time.After(15 * time.Minute):
+		c.CaptureSideEyeSnapshot(ctx, t.L())
+		t.Error("timed out waiting for tpcc import to finish")
+	}
+}
+
 // runTPCCMixedHeadroom runs a mixed-version test that imports a large
 // `bank` dataset, and runs multiple database upgrades while a TPCC
 // workload is running. The number of database upgrades is randomized
@@ -457,20 +579,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		randomNode := c.Node(c.CRDBNodes().SeededRandNode(rng)[0])
 		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", "tpcc", headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
-		doneCh := make(chan struct{})
-		t.Go(func(taskCtx context.Context, l *logger.Logger) error {
-			defer func() { doneCh <- struct{}{} }()
-			return c.RunE(ctx, option.WithNodes(randomNode), cmd)
-		})
-
-		select {
-		case <-doneCh:
-		case <-ctx.Done():
-		case <-time.After(10 * time.Minute):
-			c.CaptureSideEyeSnapshot(ctx, l)
-			t.Fatal("timed out waiting for tpcc import to finish")
-		}
-		return nil
+		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
 	}
 
 	// Add a lot of cold data to this cluster. This further stresses the version
@@ -615,6 +724,19 @@ func registerTPCC(r registry.Registry) {
 		Randomized:        true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCMixedHeadroom(ctx, t, c)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:              "mt-import",
+		Timeout:           7 * time.Hour,
+		Owner:             registry.OwnerTestEng,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
+		Cluster:           r.MakeClusterSpec(4, spec.WorkloadNode()),
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Randomized:        true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runMTImport(ctx, t, c)
 		},
 	})
 

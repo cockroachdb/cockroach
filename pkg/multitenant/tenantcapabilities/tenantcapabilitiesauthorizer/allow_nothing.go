@@ -64,7 +64,9 @@ func (n *AllowNothingAuthorizer) HasNodelocalStorageCapability(
 }
 
 // IsExemptFromRateLimiting implements the tenantcapabilities.Authorizer interface.
-func (n *AllowNothingAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.TenantID) bool {
+func (n *AllowNothingAuthorizer) IsExemptFromRateLimiting(
+	ctx context.Context, id roachpb.TenantID,
+) bool {
 	return false
 }
 

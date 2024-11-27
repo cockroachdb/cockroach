@@ -113,10 +113,9 @@ func (l *limiter) AvailableTokens(now time.Time) float64 {
 // to be accounted for. It's also called before a KV operation starts, in order
 // to block if the token bucket is in debt.
 func (l *limiter) Wait(ctx context.Context, needed float64) error {
-	//r := newWaitRequest(needed)
-	//defer putWaitRequest(r)
-	//return l.qp.Acquire(ctx, r)
-	return nil
+	r := newWaitRequest(needed)
+	defer putWaitRequest(r)
+	return l.qp.Acquire(ctx, r)
 }
 
 // RemoveTokens removes tokens from the bucket immediately, potentially putting
@@ -292,6 +291,10 @@ func (req *waitRequest) Acquire(
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	l := res.(*limiter)
 	now := l.qp.TimeSource().Now()
+
+	if l.qp.tb.available < req.needed {
+		log.Errorf(ctx, "darryl: not enough tokens available. needed: %f, available: %f", req.needed, l.qp.tb.available)
+	}
 
 	fulfilled, tryAgainAfter = l.qp.tb.TryToFulfill(now, req.needed)
 	if !fulfilled {
