@@ -451,11 +451,6 @@ RESET use_declarative_schema_changer;
 
 subtest end
 
-statement ok
-RESET use_declarative_schema_changer;
-
-subtest end
-
 # Ensure that temp indexes created during a backfill can properly be
 # zone-configured.
 subtest zc_backfill
