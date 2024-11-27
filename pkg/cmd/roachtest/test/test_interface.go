@@ -83,6 +83,7 @@ type Test interface {
 
 	Go(task.Func, ...task.Option)
 	GoWithCancel(task.Func, ...task.Option) context.CancelFunc
+	NewGroup() task.Group
 
 	// DeprecatedWorkload returns the path to the workload binary.
 	// Don't use this, invoke `./cockroach workload` instead.
