@@ -1513,79 +1513,92 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 	}
 }
 
-// TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes does what it
-// says on the tin.
-func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) {
+// TestLeaseTransfersUseExpirationLeaseAndPromoteCorrectly ensures that lease
+// transfers use expiration based leases which are eventually promoted to either
+// an epoch based lease or a leader lease, depending on cluster settings.
+func TestLeaseTransfersUseExpirationLeasesAndPromoteCorrectly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	mu := struct {
-		syncutil.Mutex
-		lease *roachpb.Lease
-	}{}
+	testutils.RunValues(t, "lease-type", roachpb.EpochAndLeaderLeaseType(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		mu := struct {
+			syncutil.Mutex
+			lease   *roachpb.Lease
+			rangeID roachpb.RangeID
+		}{}
 
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
 
-	manualClock := hlc.NewHybridManualClock()
-	tci := serverutils.StartCluster(t, 2, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			Settings: st,
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					// Never ticked -- demonstrating that we're not relying on
-					// internal timers to upgrade leases.
-					WallClock: manualClock,
-				},
-				Store: &kvserver.StoreTestingKnobs{
-					// Disable proactive renewal of expiration based leases. Lease
-					// upgrades happen immediately after applying without needing active
-					// renewal.
-					DisableAutomaticLeaseRenewal: true,
-					LeaseUpgradeInterceptor: func(lease *roachpb.Lease) {
-						mu.Lock()
-						defer mu.Unlock()
-						mu.lease = lease
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
+		if leaseType == roachpb.LeaseLeader {
+			kvserver.RejectLeaseOnLeaderUnknown.Override(ctx, &st.SV, true)
+		}
+
+		manualClock := hlc.NewHybridManualClock()
+		tci := serverutils.StartCluster(t, 2, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						// Never ticked -- demonstrating that we're not relying on
+						// internal timers to upgrade leases.
+						WallClock: manualClock,
+					},
+					Store: &kvserver.StoreTestingKnobs{
+						// Disable proactive renewal of expiration based leases. Lease
+						// upgrades happen immediately after applying without needing active
+						// renewal.
+						DisableAutomaticLeaseRenewal: true,
+						LeaseUpgradeInterceptor: func(rangeID roachpb.RangeID, lease *roachpb.Lease) {
+							mu.Lock()
+							defer mu.Unlock()
+							if mu.rangeID == rangeID {
+								mu.lease = lease
+							}
+						},
 					},
 				},
 			},
-		},
+		})
+		tc := tci.(*testcluster.TestCluster)
+		defer tc.Stopper().Stop(ctx)
+
+		scratchKey := tc.ScratchRange(t)
+		// Add a replica; we're going to move the lease to it below.
+		desc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+		mu.Lock()
+		mu.rangeID = desc.RangeID
+		mu.Unlock()
+
+		n2 := tc.Server(1)
+		n2Target := tc.Target(1)
+
+		// Transfer the lease from n1 to n2.
+		tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
+		testutils.SucceedsSoon(t, func() error {
+			li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
+			require.NoError(t, err)
+			if !li.Current().OwnedBy(n2.GetFirstStoreID()) {
+				return errors.New("lease still owned by n1")
+			}
+			return nil
+		})
+
+		// Expect it to be upgraded to an epoch based lease.
+		upgradedL := tc.WaitForLeaseUpgrade(ctx, t, desc)
+		require.Equal(t, leaseType, upgradedL.Type())
+
+		// Expect it to have been upgraded from an expiration based lease.
+		mu.Lock()
+		expirationL := mu.lease
+		mu.Unlock()
+		require.Equal(t, roachpb.LeaseExpiration, expirationL.Type())
+
+		// Expect the two leases to have the same sequence number.
+		require.Equal(t, expirationL.Sequence, upgradedL.Sequence, "expiration %s; upgraded %s", expirationL, upgradedL)
 	})
-	tc := tci.(*testcluster.TestCluster)
-	defer tc.Stopper().Stop(ctx)
-
-	scratchKey := tc.ScratchRange(t)
-	// Add a replica; we're going to move the lease to it below.
-	desc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
-
-	n2 := tc.Server(1)
-	n2Target := tc.Target(1)
-
-	// Transfer the lease from n1 to n2.
-	tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
-	testutils.SucceedsSoon(t, func() error {
-		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
-		require.NoError(t, err)
-		if !li.Current().OwnedBy(n2.GetFirstStoreID()) {
-			return errors.New("lease still owned by n1")
-		}
-		return nil
-	})
-
-	// Expect it to be upgraded to an epoch based lease.
-	epochL := tc.WaitForLeaseUpgrade(ctx, t, desc)
-	require.Equal(t, roachpb.LeaseEpoch, epochL.Type())
-
-	// Expect it to have been upgraded from an expiration based lease.
-	mu.Lock()
-	expirationL := mu.lease
-	mu.Unlock()
-	require.Equal(t, roachpb.LeaseExpiration, expirationL.Type())
-
-	// Expect the two leases to have the same sequence number.
-	require.Equal(t, expirationL.Sequence, epochL.Sequence)
 }
 
 // TestLeaseRequestBumpsEpoch tests that a non-cooperative lease acquisition of
