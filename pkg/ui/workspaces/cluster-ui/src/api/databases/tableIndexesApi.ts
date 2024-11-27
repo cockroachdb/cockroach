@@ -6,9 +6,8 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import moment from "moment-timezone";
 import { useMemo } from "react";
-import useSWR from "swr";
 
-import { TimestampToMoment } from "src/util";
+import { TimestampToMoment, useSwrWithClusterId } from "src/util";
 
 import { getIndexStats, resetIndexStats } from "../indexDetailsApi";
 import { QualifiedIdentifier } from "../safesql";
@@ -49,8 +48,8 @@ export const useTableIndexStats = ({
   tableName,
 }: GetTableIndexesRequest) => {
   const makeRequest = dbName && tableName;
-  const { data, isLoading, error, mutate } = useSWR(
-    ["tableIndexes", dbName, tableName],
+  const { data, isLoading, error, mutate } = useSwrWithClusterId(
+    { name: "tableIndexes", dbName, tableName },
     makeRequest
       ? () =>
           getIndexStats(

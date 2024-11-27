@@ -5,11 +5,10 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import moment from "moment-timezone";
-import useSWRImmutable from "swr/immutable";
 
 import { fetchData } from "src/api";
 
-import { TimestampToMoment } from "../util";
+import { TimestampToMoment, useSwrImmutableWithClusterId } from "../util";
 
 import { ADMIN_API_PREFIX } from "./util";
 
@@ -97,8 +96,12 @@ export const useClusterSettings = (req: GetClusterSettingRequest) => {
   const protoReq = new cockroach.server.serverpb.SettingsRequest({
     keys: req.names,
   });
-  const { data, isLoading, error } = useSWRImmutable(req.names, () =>
-    getClusterSettings(protoReq, "1M").then(formatProtoResponse),
+  const { data, isLoading, error } = useSwrImmutableWithClusterId(
+    {
+      name: "clusterSettings",
+      settings: req.names,
+    },
+    () => getClusterSettings(protoReq, "1M").then(formatProtoResponse),
   );
 
   // If we don't have data we'll return a map of empty settings.
