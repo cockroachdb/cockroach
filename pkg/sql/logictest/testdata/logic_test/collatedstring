@@ -610,3 +610,118 @@ SELECT string_field FROM test_collate WHERE string_field >= 'baz' ORDER BY id
 Str_Collate_1
 Foo
 Baz
+
+subtest collate_array
+
+# Test collation of string arrays.
+
+query T
+SELECT NULL COLLATE "en_US_u_ks_level2"
+----
+NULL
+
+query T
+SELECT NULL::STRING[] COLLATE "en_US_u_ks_level2"
+----
+NULL
+
+query T
+SELECT ARRAY['a'] COLLATE "en_US_u_ks_level2"
+----
+{a}
+
+query T
+SELECT ARRAY[]::STRING[] COLLATE "en_US_u_ks_level2"
+----
+{}
+
+query T
+SELECT ARRAY[NULL] COLLATE "en_US_u_ks_level2"
+----
+{NULL}
+
+query T
+SELECT ARRAY[NULL]::STRING[] COLLATE "en_US_u_ks_level2"
+----
+{NULL}
+
+query T
+SELECT ARRAY['a', NULL] COLLATE "en_US_u_ks_level2"
+----
+{a,NULL}
+
+query T
+SELECT ARRAY['a' COLLATE "en_US_u_ks_level2"] COLLATE "en_US_u_ks_level2"
+----
+{a}
+
+query T
+SELECT '{}'::STRING[] COLLATE "en_US_u_ks_level2"
+----
+{}
+
+query T
+SELECT '{a}'::STRING[] COLLATE "en_US_u_ks_level2"
+----
+{a}
+
+query T
+SELECT '{a,b,c}'::STRING[] COLLATE "en_US_u_ks_level2"
+----
+{a,b,c}
+
+query T
+SELECT ARRAY['a' COLLATE "en_US_u_ks_level2", 'b' COLLATE "en_US_u_ks_level2", NULL] COLLATE "en_US_u_ks_level2"
+----
+{a,b,NULL}
+
+# TODO(32552): We don't fully support nested arrays, but we can do a hacky check
+# here by turning off DistSQL and only using the ARRAY scalar constructor. These
+# results don't match PostgreSQL, but we're mostly just checking that we don't
+# error or panic when using this syntax.
+
+statement ok
+SET distsql = off
+
+query T
+SELECT ARRAY[ARRAY['a' COLLATE "en_US_u_ks_level2"]]
+----
+{"{a}"}
+
+query T
+SELECT ARRAY[ARRAY['a'] COLLATE "en_US_u_ks_level2"]
+----
+{"{a}"}
+
+query T
+SELECT ARRAY[ARRAY['a']] COLLATE "en_US_u_ks_level2"
+----
+{"{a}"}
+
+statement ok
+RESET distsql
+
+query T
+SELECT string_to_array('a/b/c', '/') COLLATE "en_US_u_ks_level2"
+----
+{a,b,c}
+
+statement ok
+CREATE TABLE str_arr (a STRING[], b STRING COLLATE "en_US_u_ks_level2")
+
+statement ok
+INSERT INTO str_arr VALUES ('{d,e,f}', 'd'), ('{h,i,j}', 'h'), (NULL, NULL)
+
+query T rowsort
+SELECT a COLLATE "en_US_u_ks_level2" FROM str_arr
+----
+{d,e,f}
+{h,i,j}
+NULL
+
+query T
+SELECT b COLLATE "en_US_u_ks_level2" FROM str_arr ORDER BY 1
+----
+NULL
+d
+h
