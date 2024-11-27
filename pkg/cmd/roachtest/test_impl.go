@@ -33,10 +33,15 @@ import (
 // each node in the cluster.
 const perfArtifactsDir = "perf"
 
-// goCoverArtifactsDir the directory on cluster nodes in which go coverage
+// goCoverArtifactsDir is the directory on cluster nodes in which go coverage
 // profiles are dumped. At the end of a test this directory is copied into the
 // test's ArtifactsDir() from each node in the cluster.
 const goCoverArtifactsDir = "gocover"
+
+// cpuProfilesDir is the directory on cluster nodes in which pprof (CPU) profiles
+// are dumped. At the end of a test, this directory is copied into the test's
+// ArtifactsDir() from each node in the cluster if --force-cpu-profile is set.
+const cpuProfilesDir = "pprof_dump"
 
 type testStatus struct {
 	msg      string
