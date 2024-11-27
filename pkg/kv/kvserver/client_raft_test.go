@@ -4337,7 +4337,8 @@ func TestRangeQuiescence(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	// Only epoch based leases can be quiesced.
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
