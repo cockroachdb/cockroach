@@ -115,7 +115,8 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	})
 
 	t.Run("AddRowOutOfMem", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
+		const scratchMemUse = 8
+		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(scratchMemUse+1))
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 		defer diskMonitor.Stop(ctx)
@@ -131,13 +132,14 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		if diskMonitor.AllocBytes() == 0 {
 			t.Fatal("disk monitor reports no disk usage")
 		}
-		if memoryMonitor.AllocBytes() > 0 {
+		if memoryMonitor.AllocBytes() > scratchMemUse {
 			t.Fatal("memory monitor reports unexpected usage")
 		}
 	})
 
 	t.Run("AddRowOutOfDisk", func(t *testing.T) {
-		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
+		const scratchMemUse = 8
+		memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(scratchMemUse))
 		defer memoryMonitor.Stop(ctx)
 		diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
 		rc := getRowContainer()
@@ -155,7 +157,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		if diskMonitor.AllocBytes() != 0 {
 			t.Fatal("disk monitor reports unexpected usage")
 		}
-		if memoryMonitor.AllocBytes() != 0 {
+		if memoryMonitor.AllocBytes() > scratchMemUse {
 			t.Fatal("memory monitor reports unexpected usage")
 		}
 	})

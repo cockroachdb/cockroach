@@ -210,10 +210,22 @@ func RandSortingType(rng *rand.Rand) *types.T {
 
 // RandSortingTypes returns a slice of numCols random ColumnType values
 // which are key-encodable.
-func RandSortingTypes(rng *rand.Rand, numCols int) []*types.T {
+func RandSortingTypes(rng *rand.Rand, numCols int, typesToAvoid ...types.Family) []*types.T {
 	types := make([]*types.T, numCols)
 	for i := range types {
-		types[i] = RandSortingType(rng)
+		for {
+			types[i] = RandSortingType(rng)
+			ok := true
+			for _, t := range typesToAvoid {
+				if types[i].Family() == t {
+					ok = false
+					break
+				}
+			}
+			if ok {
+				break
+			}
+		}
 	}
 	return types
 }

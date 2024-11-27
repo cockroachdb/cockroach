@@ -419,6 +419,7 @@ type DiskBackedRowContainer struct {
 	// The following fields are used to create a DiskRowContainer when spilling
 	// to disk.
 	engine      diskmap.Factory
+	memMonitor  *mon.BytesMonitor
 	diskMonitor *mon.BytesMonitor
 }
 
@@ -450,6 +451,7 @@ func (f *DiskBackedRowContainer) Init(
 	f.mrc = &mrc
 	f.src = &mrc
 	f.engine = engine
+	f.memMonitor = memoryMonitor
 	f.diskMonitor = diskMonitor
 	f.encodings = make([]catenumpb.DatumEncoding, len(ordering))
 	for i, orderInfo := range ordering {
@@ -617,6 +619,10 @@ func (f *DiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (
 	if !sqlerrors.IsOutOfMemoryError(err) {
 		return false, nil
 	}
+	if f.UsingDisk() {
+		// Return the original error if we already spilled to disk.
+		return false, err
+	}
 	if spillErr := f.SpillToDisk(ctx); spillErr != nil {
 		return false, spillErr
 	}
@@ -630,7 +636,15 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if f.UsingDisk() {
 		return errors.New("already using disk")
 	}
-	drc, err := MakeDiskRowContainer(ctx, f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
+	// If we were to do accounting against the memory monitor, we might hit an
+	// error when moving the rows from the in-memory row container to the disk
+	// row container. To go around this problem, we temporarily use a standalone
+	// memory account, and once we're done moving the rows, we reconcile the
+	// accounting system. (Iterating over the in-memory row container via the
+	// final iterator frees up the budget, so we shouldn't hit the error after
+	// all rows are popped.)
+	tempMemAcc := mon.NewStandaloneUnlimitedAccount()
+	drc, err := MakeDiskRowContainer(ctx, tempMemAcc, f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
 	if err != nil {
 		return err
 	}
@@ -661,7 +675,10 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	}
 	f.mrc.Clear(ctx)
 	f.spilled = true
-	return nil
+	// Now reconcile the accounting.
+	memAcc := f.memMonitor.MakeBoundAccount()
+	drc.memAcc = &memAcc
+	return drc.memAcc.Grow(ctx, tempMemAcc.Used())
 }
 
 // DiskBackedIndexedRowContainer is a wrapper around DiskBackedRowContainer

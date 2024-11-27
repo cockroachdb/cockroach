@@ -286,7 +286,8 @@ func TestDiskBackedRowContainer(t *testing.T) {
 	})
 
 	t.Run("AddRowOutOfMem", func(t *testing.T) {
-		memReserved, diskReserved := mon.NewStandaloneBudget(1), mon.NewStandaloneBudget(math.MaxInt64)
+		const scratchMemUse = 8
+		memReserved, diskReserved := mon.NewStandaloneBudget(scratchMemUse+1), mon.NewStandaloneBudget(math.MaxInt64)
 		rc, memoryMonitor, diskMonitor, cleanup := getRowContainer(memReserved, diskReserved)
 		defer cleanup(ctx)
 
@@ -299,13 +300,14 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		if diskMonitor.AllocBytes() == 0 {
 			t.Fatal("disk monitor reports no disk usage")
 		}
-		if memoryMonitor.AllocBytes() > 0 {
+		if memoryMonitor.AllocBytes() > scratchMemUse {
 			t.Fatal("memory monitor reports unexpected usage")
 		}
 	})
 
 	t.Run("AddRowOutOfDisk", func(t *testing.T) {
-		memReserved, diskReserved := mon.NewStandaloneBudget(1), mon.NewStandaloneBudget(1)
+		const scratchMemUse = 8
+		memReserved, diskReserved := mon.NewStandaloneBudget(scratchMemUse+1), mon.NewStandaloneBudget(1)
 		rc, memoryMonitor, diskMonitor, cleanup := getRowContainer(memReserved, diskReserved)
 		defer cleanup(ctx)
 
@@ -321,7 +323,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		if diskMonitor.AllocBytes() != 0 {
 			t.Fatal("disk monitor reports unexpected usage")
 		}
-		if memoryMonitor.AllocBytes() != 0 {
+		if memoryMonitor.AllocBytes() > scratchMemUse {
 			t.Fatal("memory monitor reports unexpected usage")
 		}
 	})

@@ -545,11 +545,12 @@ func newJoinReader(
 
 		var diskBuffer kvstreamer.ResultDiskBuffer
 		if jr.streamerInfo.maintainOrdering {
+			diskBufferMemAcc := jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
 				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
 			)
 			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
-				jr.FlowCtx.Cfg.TempStorage, jr.streamerInfo.diskMonitor,
+				jr.FlowCtx.Cfg.TempStorage, &diskBufferMemAcc, jr.streamerInfo.diskMonitor,
 			)
 		}
 		singleRowLookup := readerType == indexJoinReaderType || spec.LookupColumnsAreKey
@@ -733,6 +734,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		jr.FlowCtx.EvalCtx,
 		jr.FlowCtx.Cfg.TempStorage,
 		jr.limitedMemMonitor,
+		nil, /* deDuperMemMonitor */
 		jr.diskMonitor,
 	)
 	if limit < mon.DefaultPoolAllocationSize {

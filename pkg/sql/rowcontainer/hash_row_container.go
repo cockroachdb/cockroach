@@ -515,6 +515,7 @@ type HashDiskRowContainer struct {
 	DiskRowContainer
 	columnEncoder
 
+	memMonitor  *mon.BytesMonitor
 	diskMonitor *mon.BytesMonitor
 	// shouldMark specifies whether the caller cares about marking rows. If not,
 	// rows are stored with one less column (which usually specifies that row's
@@ -532,9 +533,10 @@ var encodedTrue = encoding.EncodeBoolValue(nil, encoding.NoColumnID, true)
 // as the underlying store that rows are stored on. shouldMark specifies whether
 // the HashDiskRowContainer should set itself up to mark rows.
 func MakeHashDiskRowContainer(
-	diskMonitor *mon.BytesMonitor, e diskmap.Factory,
+	memMonitor, diskMonitor *mon.BytesMonitor, e diskmap.Factory,
 ) HashDiskRowContainer {
 	return HashDiskRowContainer{
+		memMonitor:  memMonitor,
 		diskMonitor: diskMonitor,
 		engine:      e,
 	}
@@ -563,7 +565,8 @@ func (h *HashDiskRowContainer) Init(
 	}
 
 	var err error
-	h.DiskRowContainer, err = MakeDiskRowContainer(ctx, h.diskMonitor, storedTypes, storedEqColsToOrdering(storedEqCols), h.engine)
+	memAcc := h.memMonitor.MakeBoundAccount()
+	h.DiskRowContainer, err = MakeDiskRowContainer(ctx, &memAcc, h.diskMonitor, storedTypes, storedEqColsToOrdering(storedEqCols), h.engine)
 	return err
 }
 
@@ -949,7 +952,7 @@ func (h *HashDiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if h.UsingDisk() {
 		return errors.New("already using disk")
 	}
-	hdrc := MakeHashDiskRowContainer(h.diskMonitor, h.engine)
+	hdrc := MakeHashDiskRowContainer(h.memoryMonitor, h.diskMonitor, h.engine)
 	defer func() {
 		if h.src != &hdrc {
 			// For whatever reason, we weren't able to spill, so in order to not
