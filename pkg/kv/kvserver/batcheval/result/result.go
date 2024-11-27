@@ -267,6 +267,9 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		if q.Replicated.State.Stats != nil {
 			return errors.AssertionFailedf("must not specify Stats")
 		}
+		if q.Replicated.State.ForceFlushIndex != (roachpb.ForceFlushIndex{}) {
+			return errors.AssertionFailedf("must not specify ForceFlushIndex")
+		}
 		if (*q.Replicated.State != kvserverpb.ReplicaState{}) {
 			log.Fatalf(context.TODO(), "unhandled EvalResult: %s",
 				pretty.Diff(*q.Replicated.State, kvserverpb.ReplicaState{}))
