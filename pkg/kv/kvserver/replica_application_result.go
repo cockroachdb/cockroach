@@ -503,9 +503,10 @@ func (r *Replica) handleTruncatedStateResult(
 	t *kvserverpb.RaftTruncatedState,
 	expectedFirstIndexPreTruncation kvpb.RaftIndex,
 ) (raftLogDelta int64, expectedFirstIndexWasAccurate bool) {
-	r.mu.Lock()
+	r.raftMu.AssertHeld()
 	expectedFirstIndexWasAccurate =
 		r.shMu.raftTruncState.Index+1 == expectedFirstIndexPreTruncation
+	r.mu.Lock()
 	r.shMu.raftTruncState = *t
 	r.mu.Unlock()
 
