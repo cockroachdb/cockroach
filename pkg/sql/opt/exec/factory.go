@@ -175,6 +175,10 @@ const (
 	// SubqueryAllRows - the subquery is an argument to ARRAY. The result is a
 	// tuple of rows.
 	SubqueryAllRows
+	// SubqueryDiscardAllRows - the subquery is executed for its side effects
+	// (e.g. it is adding to a bufferNode). The result is empty, and will never be
+	// used.
+	SubqueryDiscardAllRows
 )
 
 // TableColumnOrdinal is the 0-based ordinal index of a cat.Table column.

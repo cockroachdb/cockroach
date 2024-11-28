@@ -942,7 +942,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT a FROM t FOR UPDATE
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: (a)
@@ -972,7 +972,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT a FROM t FOR UPDATE
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: (a)
@@ -1006,7 +1006,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT a FROM t FOR UPDATE
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: (a)

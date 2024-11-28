@@ -157,7 +157,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: (aisle)
@@ -243,7 +243,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT 'matilda' AS person
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: (person)

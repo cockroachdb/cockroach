@@ -626,7 +626,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: (z)

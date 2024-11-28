@@ -134,6 +134,8 @@ func emitInternal(
 			mode = "any rows"
 		case exec.SubqueryAllRows:
 			mode = "all rows"
+		case exec.SubqueryDiscardAllRows:
+			mode = "discard all rows"
 		default:
 			return errors.Errorf("invalid SubqueryMode %d", s.Mode)
 		}
