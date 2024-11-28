@@ -2155,9 +2155,11 @@ func stepLeader(r *raft, m pb.Message) error {
 // stepCandidate is shared by StateCandidate and StatePreCandidate; the difference is
 // whether they respond to MsgVoteResp or MsgPreVoteResp.
 func stepCandidate(r *raft, m pb.Message) error {
-	if IsMsgFromLeader(m.Type) {
+	if IsMsgFromLeader(m.Type) && m.Type != pb.MsgDeFortifyLeader {
 		// If this is a message from a leader of r.Term, transition to a follower
 		// with the sender of the message as the leader, then process the message.
+		// One exception is MsgDeFortifyLeader where it doesn't mean that there is
+		// currently an active leader for this term.
 		assertTrue(m.Term == r.Term, "message term should equal current term")
 		r.becomeFollower(m.Term, m.From)
 		return r.step(r, m) // stepFollower
