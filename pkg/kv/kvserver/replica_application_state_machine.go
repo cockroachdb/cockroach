@@ -143,6 +143,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	b.batch = r.store.TODOEngine().NewBatch()
 	r.mu.RLock()
 	b.state = r.shMu.state
+	b.truncState = r.shMu.raftTruncState
 	b.state.Stats = &sm.stats
 	*b.state.Stats = *r.shMu.state.Stats
 	b.closedTimestampSetter = r.mu.closedTimestampSetter
@@ -282,6 +283,16 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	}
 
 	isRaftLogTruncationDeltaTrusted := true
+	handleTruncatedState := func(state *kvserverpb.RaftTruncatedState) {
+		raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
+			ctx, state, rResult.RaftExpectedFirstIndex)
+		if !expectedFirstIndexWasAccurate && rResult.RaftExpectedFirstIndex != 0 {
+			isRaftLogTruncationDeltaTrusted = false
+		}
+		rResult.RaftLogDelta += raftLogDelta
+		rResult.RaftExpectedFirstIndex = 0
+	}
+
 	if rResult.State != nil {
 		if newLease := rResult.State.Lease; newLease != nil {
 			sm.r.handleLeaseResult(ctx, newLease, rResult.PriorReadSummary)
@@ -289,17 +300,14 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.PriorReadSummary = nil
 		}
 
-		// This strongly coupled truncation code will be removed in the release
-		// following LooselyCoupledRaftLogTruncation.
+		// TODO(#93248): the strongly coupled truncation code will be removed once
+		// the loosely coupled truncations are the default.
 		if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
-			raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
-				ctx, newTruncState, rResult.RaftExpectedFirstIndex)
-			if !expectedFirstIndexWasAccurate && rResult.RaftExpectedFirstIndex != 0 {
-				isRaftLogTruncationDeltaTrusted = false
+			if rResult.RaftTruncatedState != nil {
+				log.Fatalf(ctx, "double RaftTruncatedState in ReplicatedEvalResult")
 			}
-			rResult.RaftLogDelta += raftLogDelta
+			handleTruncatedState(newTruncState)
 			rResult.State.TruncatedState = nil
-			rResult.RaftExpectedFirstIndex = 0
 		}
 
 		if newVersion := rResult.State.Version; newVersion != nil {
@@ -316,11 +324,15 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.State = nil
 		}
 	}
+	if newTruncState := rResult.RaftTruncatedState; newTruncState != nil {
+		handleTruncatedState(newTruncState)
+		rResult.RaftTruncatedState = nil
+	}
 
 	if rResult.RaftLogDelta != 0 {
-		// This code path will be taken exactly when the preceding block has
-		// newTruncState != nil. It is needlessly confusing that these two are not
-		// in the same place.
+		// This code path will be taken exactly when one of the preceding blocks has
+		// invoked handleTruncatedState. It is needlessly confusing that these two
+		// are not in the same place.
 		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta, isRaftLogTruncationDeltaTrusted)
 		rResult.RaftLogDelta = 0
 	}

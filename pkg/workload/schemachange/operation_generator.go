@@ -2550,8 +2550,7 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		// Some type conversions are allowed, but the values stored with the old column
 		// type are out of range for the new type.
 		stmt.potentialExecErrors.add(pgcode.NumericValueOutOfRange)
-		// TODO(49351): We will remove this when we support alter
-		// type inside a transaction.
+		// This can happen for any attempt to use the legacy schema changer.
 		stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
 		// We fail if the column we are attempting to alter has a TTL expression.
 		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)

@@ -84,13 +84,9 @@ func (rsl StateLoader) Load(
 	s.Stats = &ms
 	s.RaftClosedTimestamp = as.RaftClosedTimestamp
 
-	// The truncated state should not be optional (i.e. the pointer is
-	// pointless), but it is and the migration is not worth it.
-	truncState, err := rsl.LoadRaftTruncatedState(ctx, reader)
-	if err != nil {
-		return kvserverpb.ReplicaState{}, err
-	}
-	s.TruncatedState = &truncState
+	// Invariant: TruncatedState == nil. The field is being phased out. The
+	// RaftTruncatedState must be loaded separately.
+	s.TruncatedState = nil
 
 	version, err := rsl.LoadVersion(ctx, reader)
 	if err != nil {
@@ -125,11 +121,6 @@ func (rsl StateLoader) Save(
 		return enginepb.MVCCStats{}, err
 	}
 	if err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
-	// the Raft log engine is separated. Figure out the ordering required here.
-	if err := rsl.SetRaftTruncatedState(ctx, readWriter, state.TruncatedState); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if state.Version != nil {
@@ -385,7 +376,7 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 	return kvserverpb.ReplicaState{
 		Desc:           &roachpb.RangeDescriptor{RangeID: rangeID},
 		Lease:          &roachpb.Lease{},
-		TruncatedState: &kvserverpb.RaftTruncatedState{},
+		TruncatedState: nil, // Invariant: always nil.
 		GCThreshold:    &hlc.Timestamp{},
 		Stats:          &enginepb.MVCCStats{},
 		GCHint:         &roachpb.GCHint{},
