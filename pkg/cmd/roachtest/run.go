@@ -21,10 +21,8 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/operations"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -37,7 +35,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
 )
 
 type testResult int
@@ -589,154 +586,4 @@ func getDatadogTags() []string {
 	}
 
 	return strings.Split(rawTags, ",")
-}
-
-// runOperation sequentially runs one operation matched by the passed-in filter.
-func runOperation(register func(registry.Registry), filter string, clusterName string) error {
-	//lint:ignore SA1019 deprecated
-	rand.Seed(roachtestflags.GlobalSeed)
-	r := makeTestRegistry()
-	// NB: root logger with no path always tees to Stdout.
-	l, err := logger.RootLogger("", logger.NoTee)
-	if err != nil {
-		return err
-	}
-	// Install goroutine leak checker and run it at the end of the entire operation
-	// run. This is good hygiene for operations, as operations can one day be
-	// called from roachtests as well.
-	defer leaktest.AfterTest(l)()
-
-	register(&r)
-	ctx := context.Background()
-	ctx = newDatadogContext(ctx)
-
-	datadogEventsClient := datadogV1.NewEventsApi(datadog.NewAPIClient(datadog.NewConfiguration()))
-	datadogTags := getDatadogTags()
-
-	// TODO(bilal): This is excessive for just getting the number of nodes in the
-	// cluster. We should expose a roachprod.Nodes method or so.
-	nodes, err := roachprod.PgURL(ctx, l, clusterName, roachtestflags.CertsDir, roachprod.PGURLOptions{})
-	if err != nil {
-		return errors.Wrap(err, "roachtest: run-operation: error when getting number of nodes")
-	}
-
-	config := struct {
-		ClusterSettings install.ClusterSettings
-		StartOpts       option.StartOpts
-		ClusterSpec     spec.ClusterSpec
-	}{
-		ClusterSettings: install.MakeClusterSettings(),
-		StartOpts:       option.NewStartOpts(option.NoBackupSchedule),
-		ClusterSpec:     spec.ClusterSpec{NodeCount: len(nodes)},
-	}
-	if roachtestflags.ConfigPath != "" {
-		configFileData, err := os.ReadFile(roachtestflags.ConfigPath)
-		if err != nil {
-			return errors.Wrap(err, "failed to read config")
-		}
-		if err = yaml.UnmarshalStrict(configFileData, &config); err != nil {
-			return errors.Wrapf(err, "failed to unmarshal config: %s", roachtestflags.ConfigPath)
-		}
-	}
-
-	cSpec := spec.ClusterSpec{NodeCount: len(nodes)}
-	op := &operationImpl{
-		clusterSettings: config.ClusterSettings,
-		startOpts:       config.StartOpts,
-		l:               l,
-	}
-	c := &dynamicClusterImpl{
-		&clusterImpl{
-			name:       clusterName,
-			cloud:      roachtestflags.Cloud,
-			spec:       cSpec,
-			f:          op,
-			l:          l,
-			expiration: cSpec.Expiration(),
-			destroyState: destroyState{
-				owned: false,
-			},
-			localCertsDir: roachtestflags.CertsDir,
-		},
-	}
-
-	specs, err := opsToRun(r, filter)
-	if err != nil {
-		return err
-	}
-	var opSpec *registry.OperationSpec
-	if len(specs) > 1 {
-		opSpec = &specs[rand.Intn(len(specs))]
-		l.Printf("more than one operation found for filter %s, randomly selected %s to run", filter, opSpec.Name)
-	} else if len(specs) == 1 {
-		opSpec = &specs[0]
-	} else {
-		return errors.Errorf("no operations found for filter %s", filter)
-	}
-	op.spec = opSpec
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	// Cancel this context if we get an interrupt.
-	CtrlC(ctx, l, cancel, nil /* registry */)
-
-	op.mu.cancel = cancel
-	op.Status(fmt.Sprintf("checking if operation %s dependencies are met", opSpec.Name))
-
-	if roachtestflags.SkipDependencyCheck {
-		op.Status("skipping dependency check")
-	} else if ok, err := operations.CheckDependencies(ctx, c, l, opSpec); !ok || err != nil {
-		if err != nil {
-			op.Fatalf("error checking dependencies: %s", err)
-		}
-		op.Status("operation dependencies not met. Use --skip-dependency-check to skip this check.")
-		return nil
-	}
-
-	// operationRunID is used for datadog event aggregation and logging.
-	operationRunID := rand.Uint64()
-	maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpStarted, operationRunID, datadogTags)
-	op.Status(fmt.Sprintf("running operation %s with run id %d", opSpec.Name, operationRunID))
-	var cleanup registry.OperationCleanup
-	func() {
-		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
-		defer cancel()
-
-		cleanup = opSpec.Run(ctx, op, c)
-	}()
-	if op.Failed() {
-		op.Status("operation failed")
-		maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpError, operationRunID, datadogTags)
-		return op.mu.failures[0]
-	}
-
-	maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpRan, operationRunID, datadogTags)
-	if cleanup == nil {
-		op.Status("operation ran successfully")
-		return nil
-	}
-
-	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", roachtestflags.WaitBeforeCleanup))
-	select {
-	// Don't exit if the context is done due to a Ctrl-C, instead still run the
-	// cleanup code.
-	case <-ctx.Done():
-	case <-time.After(roachtestflags.WaitBeforeCleanup):
-	}
-	op.Status("running cleanup")
-	func() {
-		ctx, cancel := context.WithTimeout(context.Background(), opSpec.Timeout)
-		defer cancel()
-
-		cleanup.Cleanup(ctx, op, c)
-	}()
-
-	if op.Failed() {
-		op.Status("operation cleanup failed")
-		maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpError, operationRunID, datadogTags)
-		return op.mu.failures[0]
-	}
-	maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpFinishedCleanup, operationRunID, datadogTags)
-
-	return nil
 }
