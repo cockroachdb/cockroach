@@ -4405,74 +4405,92 @@ func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-	})
-	defer tc.Stopper().Stop(ctx)
+	testutils.RunValues(t, "leaseType", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 
-	_, desc, err := tc.Servers[0].ScratchRangeEx()
-	key := desc.StartKey.AsRawKey()
-	require.NoError(t, err)
-	require.NoError(t, tc.WaitForSplitAndInitialization(key))
+		tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+			},
+		})
+		defer tc.Stopper().Stop(ctx)
 
-	// Block incoming snapshots on s2 until channel is signaled.
-	blockSnapshot := make(chan struct{})
-	handlerFuncs := noopRaftHandlerFuncs()
-	handlerFuncs.snapErr = func(header *kvserverpb.SnapshotRequest_Header) error {
-		select {
-		case <-blockSnapshot:
-		case <-tc.Stopper().ShouldQuiesce():
-		}
-		return nil
-	}
-	s2, err := tc.Server(1).GetStores().(*kvserver.Stores).GetStore(tc.Server(1).GetFirstStoreID())
-	require.NoError(t, err)
-	tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(s2.StoreID(), &unreliableRaftHandler{
-		rangeID:                    desc.RangeID,
-		IncomingRaftMessageHandler: s2,
-		unreliableRaftHandlerFuncs: handlerFuncs,
-	})
+		_, desc, err := tc.Servers[0].ScratchRangeEx()
+		key := desc.StartKey.AsRawKey()
+		require.NoError(t, err)
+		require.NoError(t, tc.WaitForSplitAndInitialization(key))
 
-	// Try to up-replicate to s2. Should block on a learner snapshot after the new
-	// replica on s2 has been created, but before it has been initialized. While
-	// the replica is uninitialized, it should remain quiesced, even while it is
-	// receiving Raft traffic from the leader.
-	replicateErrChan := make(chan error)
-	go func() {
-		_, err := tc.AddVoters(key, tc.Target(1))
-		select {
-		case replicateErrChan <- err:
-		case <-tc.Stopper().ShouldQuiesce():
-		}
-	}()
-	testutils.SucceedsSoon(t, func() error {
-		repl, err := s2.GetReplica(desc.RangeID)
-		if err == nil {
-			// IMPORTANT: the replica should always be quiescent while uninitialized.
-			require.False(t, repl.IsInitialized())
-			require.True(t, repl.IsQuiescent())
-		}
-		return err
-	})
-
-	// Let the snapshot through. The up-replication attempt should succeed. The
-	// replica should now be initialized, and the replica should quiesce again
-	// unless kv.expiration_leases_only.enabled is true.
-	close(blockSnapshot)
-	require.NoError(t, <-replicateErrChan)
-	repl, err := s2.GetReplica(desc.RangeID)
-	require.NoError(t, err)
-	require.True(t, repl.IsInitialized())
-	require.False(t, repl.IsQuiescent())
-	if !kvserver.ExpirationLeasesOnly.Get(&tc.Servers[0].ClusterSettings().SV) {
-		testutils.SucceedsSoon(t, func() error {
-			if !repl.IsQuiescent() {
-				return errors.Errorf("%s not quiescent", repl)
+		// Block incoming snapshots on s2 until channel is signaled.
+		blockSnapshot := make(chan struct{})
+		handlerFuncs := noopRaftHandlerFuncs()
+		handlerFuncs.snapErr = func(header *kvserverpb.SnapshotRequest_Header) error {
+			select {
+			case <-blockSnapshot:
+			case <-tc.Stopper().ShouldQuiesce():
 			}
 			return nil
+		}
+		s2, err := tc.Server(1).GetStores().(*kvserver.Stores).GetStore(tc.Server(1).GetFirstStoreID())
+		require.NoError(t, err)
+		tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(s2.StoreID(), &unreliableRaftHandler{
+			rangeID:                    desc.RangeID,
+			IncomingRaftMessageHandler: s2,
+			unreliableRaftHandlerFuncs: handlerFuncs,
 		})
-	}
+
+		// Try to up-replicate to s2. Should block on a learner snapshot after the new
+		// replica on s2 has been created, but before it has been initialized. While
+		// the replica is uninitialized, it should remain quiesced, even while it is
+		// receiving Raft traffic from the leader.
+		replicateErrChan := make(chan error)
+		go func() {
+			_, err := tc.AddVoters(key, tc.Target(1))
+			select {
+			case replicateErrChan <- err:
+			case <-tc.Stopper().ShouldQuiesce():
+			}
+		}()
+		testutils.SucceedsSoon(t, func() error {
+			repl, err := s2.GetReplica(desc.RangeID)
+			if err == nil {
+				// IMPORTANT: the replica should always be quiescent while uninitialized.
+				require.False(t, repl.IsInitialized())
+				require.True(t, repl.IsQuiescent())
+			}
+			return err
+		})
+
+		// Let the snapshot through. The up-replication attempt should succeed. The
+		// replica should now be initialized, and the replica should quiesce again
+		// if it has an epoch based lease. Otherwise, if it holds a leader lease
+		// or an expiration based lease, both of which do not support quiescence,
+		// it shouldn't quiesce.
+		close(blockSnapshot)
+		require.NoError(t, <-replicateErrChan)
+		repl, err := s2.GetReplica(desc.RangeID)
+		require.NoError(t, err)
+		require.True(t, repl.IsInitialized())
+		require.False(t, repl.IsQuiescent())
+		switch leaseType {
+		case roachpb.LeaseEpoch:
+			testutils.SucceedsSoon(t, func() error {
+				if !repl.IsQuiescent() {
+					return errors.Errorf("%s not quiescent", repl)
+				}
+				return nil
+			})
+		case roachpb.LeaseExpiration, roachpb.LeaseLeader:
+			require.Never(t, func() bool {
+				return repl.IsQuiescent()
+			},
+				time.Second*3, 100*time.Millisecond, "replica shouldn't quiesce")
+		default:
+			panic("unexpected lease type")
+		}
+	})
 }
 
 // TestFailedConfChange verifies correct behavior after a configuration change
