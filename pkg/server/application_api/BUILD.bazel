@@ -40,9 +40,9 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/crosscluster",
         "//pkg/ccl/utilccl/licenseccl",
         "//pkg/config/zonepb",
+        "//pkg/crosscluster",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
