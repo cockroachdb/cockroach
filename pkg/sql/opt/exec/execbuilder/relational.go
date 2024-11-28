@@ -1211,7 +1211,13 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 				// expressions in the metadata.
 				if !addedWithBindings {
 					b.mem.Metadata().ForEachWithBinding(func(id opt.WithID, expr opt.Expr) {
-						f.Metadata().AddWithBinding(id, expr)
+						// Make sure to check for an existing With binding, since we may
+						// have already rewritten the bound expression and added it to the
+						// new memo if the associated WithExpr is part of the right input of
+						// the apply-join.
+						if !f.Metadata().HasWithBinding(id) {
+							f.Metadata().AddWithBinding(id, expr)
+						}
 					})
 					addedWithBindings = true
 				}
