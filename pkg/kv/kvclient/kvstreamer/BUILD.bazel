@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "avg_response_estimator.go",
         "budget.go",
+        "metrics.go",
         "requests_provider.go",
         "results_buffer.go",
         "size.go",
@@ -30,6 +31,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/stop",

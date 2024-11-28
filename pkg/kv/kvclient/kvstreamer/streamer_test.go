@@ -50,8 +50,10 @@ func getStreamer(
 		panic(err)
 	}
 	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState)
+	metrics := kvstreamer.MakeMetrics()
 	return kvstreamer.NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),
+		&metrics,
 		s.AppStopper(),
 		leafTxn,
 		func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
@@ -113,9 +115,11 @@ func TestStreamerLimitations(t *testing.T) {
 	})
 
 	t.Run("unexpected RootTxn", func(t *testing.T) {
+		metrics := kvstreamer.MakeMetrics()
 		require.Panics(t, func() {
 			kvstreamer.NewStreamer(
 				s.DistSenderI().(*kvcoord.DistSender),
+				&metrics,
 				s.AppStopper(),
 				kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID()),
 				nil, /* sendFn */
