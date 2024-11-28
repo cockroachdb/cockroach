@@ -1613,4 +1613,36 @@ CREATE TABLE drop_region_126549.t1 (n string PRIMARY KEY, INDEX((lower(n)))) LOC
 statement ok
 ALTER DATABASE drop_region_126549 DROP REGION "us-east-1";
 
+subtest alter_type_mr
+
+statement ok
+USE region_test_db;
+
+statement ok
+CREATE TABLE chgme (C1 INT) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO chgme VALUES (0),(1);
+
+let $sql_safe_updates_state
+SELECT value FROM information_schema.session_variables where variable='sql_safe_updates';
+
+statement ok
+SET sql_safe_updates = false;
+
+statement ok
+ALTER TABLE chgme ALTER COLUMN C1 SET DATA TYPE TEXT;
+
+statement ok
+SET sql_safe_updates = $sql_safe_updates_state;
+
+query T
+SELECT * FROM chgme ORDER BY C1;
+----
+0
+1
+
+statement ok
+DROP TABLE chgme;
+
 subtest end

@@ -343,7 +343,8 @@ func snapshot(
 	}
 
 	// TODO(sep-raft-log): do not load the state that is not useful for sending
-	// snapshots, e.g. RaftTruncatedState.
+	// snapshots, e.g. Lease, GCThreshold, etc. Only applied indices and the
+	// descriptor are used, everything else is included in the snapshot data.
 	state, err := rsl.Load(ctx, snap, &desc)
 	if err != nil {
 		return OutgoingSnapshot{}, err
@@ -658,9 +659,14 @@ func (r *Replica) applySnapshot(
 	// has not yet been updated. Any errors past this point must therefore be
 	// treated as fatal.
 
-	state, err := stateloader.Make(desc.RangeID).Load(ctx, r.store.TODOEngine(), desc)
+	sl := stateloader.Make(desc.RangeID)
+	state, err := sl.Load(ctx, r.store.TODOEngine(), desc)
 	if err != nil {
 		log.Fatalf(ctx, "unable to load replica state: %s", err)
+	}
+	truncState, err := sl.LoadRaftTruncatedState(ctx, r.store.TODOEngine())
+	if err != nil {
+		log.Fatalf(ctx, "unable to load raft truncated state: %s", err)
 	}
 
 	if uint64(state.RaftAppliedIndex) != nonemptySnap.Metadata.Index {
@@ -749,6 +755,7 @@ func (r *Replica) applySnapshot(
 	// by r.leasePostApply, but we called those above, so now it's safe to
 	// wholesale replace r.mu.state.
 	r.shMu.state = state
+	r.shMu.raftTruncState = truncState
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	r.shMu.raftLogSizeTrusted = false

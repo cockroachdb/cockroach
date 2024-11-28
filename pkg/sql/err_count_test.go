@@ -71,7 +71,6 @@ func TestUnimplementedCounts(t *testing.T) {
 
 	if _, err := db.Exec(`
 CREATE TABLE t(x INT8); 
-SET enable_experimental_alter_column_type_general = true;
 BEGIN;
 `); err != nil {
 		t.Fatal(err)

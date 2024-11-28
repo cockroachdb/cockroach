@@ -1018,6 +1018,9 @@ skipif config local-legacy-schema-changer local-mixed-24.2
 statement error pq: column "y" cannot be cast automatically to type public.greeting\nHINT: You might need to specify "USING y::public.greeting".
 ALTER TABLE enum_data_type ALTER COLUMN y SET DATA TYPE greeting;
 
+# This and all subsequent attempts to alter a column type that require a backfill
+# are skipped in the legacy schema changer, as it does not support such operations.
+skipif config local-legacy-schema-changer
 statement error pq: invalid cast: int -> greeting
 ALTER TABLE enum_data_type ALTER COLUMN y SET DATA TYPE greeting USING y::greeting;
 
@@ -1026,6 +1029,7 @@ skipif config local-legacy-schema-changer local-mixed-24.2
 statement error pq: column "x" cannot be cast automatically to type public.greeting\nHINT: You might need to specify "USING x::public.greeting".
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting;
 
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting USING x::greeting;
 
@@ -1057,6 +1061,7 @@ statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting
 
 # Now, set it to string.
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE STRING
 
@@ -1080,10 +1085,12 @@ statement ok
 CREATE TABLE enum_data_type (x greeting);
 INSERT INTO enum_data_type VALUES ('hello'), ('hi')
 
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE dbs USING
   (CASE WHEN x = 'hello' THEN 'cockroach' ELSE 'postgres' END)
 
+skipif config local-legacy-schema-changer
 query T rowsort
 SELECT * FROM enum_data_type
 ----
@@ -1104,18 +1111,22 @@ statement ok
 CREATE TABLE enum_data_type (x STRING);
 INSERT INTO enum_data_type VALUES ('notagreeting')
 
+skipif config local-legacy-schema-changer
 statement error pq: .*invalid input value for enum greeting: "notagreeting"
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting USING x::greeting
 
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE enum_data_type
   ALTER COLUMN x SET DATA TYPE greeting USING (CASE WHEN x = 'notagreeting' THEN 'hello' ELSE 'hi' END)
 
+skipif config local-legacy-schema-changer
 query T
 SELECT * FROM enum_data_type
 ----
 hello
 
+skipif config local-legacy-schema-changer
 query T
 SELECT to_json('hello'::greeting)
 ----

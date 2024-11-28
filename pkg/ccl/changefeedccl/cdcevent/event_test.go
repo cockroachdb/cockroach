@@ -596,19 +596,13 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	// Use alter column type to force column reordering.
-	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true`)
-	// TODO(#133040): force the legacy schema changer. When run with the DSC,
-	// the ordering changes in the column family. This needs to be revisited in 133040.
-	sqlDB.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 
 	type decodeExpectation struct {
 		expectUnwatchedErr bool
+		expectDeleteRange  bool
 
 		keyValues []string
 		allValues []string
-
-		refreshDescriptor bool
 	}
 
 	for _, tc := range []struct {
@@ -620,10 +614,11 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 		expectECFamily   []decodeExpectation
 	}{
 		{
-			testName:   "main/main_cols",
+			testName:   "main/main_cols_rewrite",
 			familyName: "main",
 			actions: []string{
 				"INSERT INTO foo (i,j,a,b) VALUES (0,1,'2002-05-02','b0')",
+				// STRING -> DATE forces column rewrite
 				"ALTER TABLE foo ALTER COLUMN a SET DATA TYPE DATE USING a::DATE",
 				"INSERT INTO foo (i,j,a,b) VALUES (1,2,'2021-01-01','b1')",
 			},
@@ -633,9 +628,20 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 					allValues: []string{"0", "1", "2002-05-02", "b0"},
 				},
 				{
-					keyValues: []string{"1", "0"},
-					allValues: []string{"0", "1", "2002-05-02", "b0"},
+					expectDeleteRange: true,
 				},
+			},
+		},
+		{
+			testName:   "main/main_cols_no_rewrite",
+			familyName: "main",
+			actions: []string{
+				"INSERT INTO foo (i,j,a,b) VALUES (0,1,'2002-05-02','b0')",
+				// STRING -> VARCHAR(100) doesn't force a column rewrite
+				"ALTER TABLE foo ALTER COLUMN a SET DATA TYPE VARCHAR(100)",
+				"INSERT INTO foo (i,j,a,b) VALUES (1,2,'2021-01-01','b1')",
+			},
+			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"1", "0"},
 					allValues: []string{"0", "1", "2002-05-02", "b0"},
@@ -647,11 +653,36 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			},
 		},
 		{
-			testName:   "ec/ec_cols",
+			testName:   "ec/ec_cols_rewrite",
 			familyName: "ec",
 			actions: []string{
 				"INSERT INTO foo (i,j,e,c) VALUES (2,3,'e2','2024-08-02')",
+				// STRING -> DATE forces column rewrite
 				"ALTER TABLE foo ALTER COLUMN c SET DATA TYPE DATE USING c::DATE",
+				"INSERT INTO foo (i,j,e,c) VALUES (3,4,'e3','2024-05-21')",
+			},
+			expectMainFamily: []decodeExpectation{
+				{
+					expectUnwatchedErr: true,
+				},
+				{
+					expectDeleteRange: true,
+				},
+			},
+			expectECFamily: []decodeExpectation{
+				{
+					keyValues: []string{"3", "2"},
+					allValues: []string{"2024-08-02", "e2"},
+				},
+			},
+		},
+		{
+			testName:   "ec/ec_cols_no_rewrite",
+			familyName: "ec",
+			actions: []string{
+				"INSERT INTO foo (i,j,e,c) VALUES (2,3,'e2','2024-08-02')",
+				// STRING -> CHAR(30) doesn't force a column rewrite
+				"ALTER TABLE foo ALTER COLUMN c SET DATA TYPE CHAR(30)",
 				"INSERT INTO foo (i,j,e,c) VALUES (3,4,'e3','2024-05-21')",
 			},
 			expectMainFamily: []decodeExpectation{
@@ -663,14 +694,6 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 				},
 			},
 			expectECFamily: []decodeExpectation{
-				{
-					keyValues: []string{"3", "2"},
-					allValues: []string{"2024-08-02", "e2"},
-				},
-				{
-					keyValues: []string{"3", "2"},
-					allValues: []string{"2024-08-02", "e2"},
-				},
 				{
 					keyValues: []string{"3", "2"},
 					allValues: []string{"2024-08-02", "e2"},
@@ -695,26 +718,13 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 					expectUnwatchedErr: true,
 				},
 				{
-					expectUnwatchedErr: true,
+					expectDeleteRange: true,
 				},
 			},
 			expectECFamily: []decodeExpectation{
 				{
 					keyValues: []string{"5", "4"},
 					allValues: []string{"2012-11-06", "NULL", "e4"},
-				},
-				{
-					keyValues:         []string{"5", "4"},
-					allValues:         []string{"2012-11-06", "NULL", "e4"},
-					refreshDescriptor: true,
-				},
-				{
-					keyValues: []string{"5", "4"},
-					allValues: []string{"2012-11-06", "NULL", "e4"},
-				},
-				{
-					keyValues: []string{"6", "5"},
-					allValues: []string{"2014-05-06", "NULL", "e5"},
 				},
 			},
 		},
@@ -735,7 +745,7 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			)`)
 
 			tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
-			popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), tableDesc)
+			popRow, cleanup := cdctest.MakeRangeFeedValueReaderExtended(t, s.ExecutorConfig(), tableDesc)
 			defer cleanup()
 
 			targetType := jobspb.ChangefeedTargetSpecification_EACH_FAMILY
@@ -760,8 +770,26 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectECFamily)
 			for i := 0; i < expectedEvents; i++ {
-				v := popRow(t)
+				v, deleteRange := popRow(t)
 
+				if deleteRange != nil {
+					// Should not see a RangeFeedValue and a RangeFeedDeleteRange
+					require.Nil(t, v)
+					// A delete range does not have an associated family ID. To determine
+					// if a delete range was expected, we will check one of the next
+					// expected families.
+					if len(tc.expectMainFamily) > 0 {
+						require.True(t, tc.expectMainFamily[0].expectDeleteRange)
+						continue
+					}
+					if len(tc.expectECFamily) > 0 {
+						require.True(t, tc.expectECFamily[0].expectDeleteRange)
+						continue
+					}
+					t.Fatal("encountered an unexpected RangeFeedDeleteRange event")
+				}
+
+				require.NotNil(t, v)
 				eventFamilyID, err := TestingGetFamilyIDFromKey(decoder, v.Key, v.Timestamp())
 				require.NoError(t, err)
 

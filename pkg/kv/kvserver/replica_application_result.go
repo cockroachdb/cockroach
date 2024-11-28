@@ -492,8 +492,8 @@ func (r *Replica) handleTruncatedStateResult(
 ) (raftLogDelta int64, expectedFirstIndexWasAccurate bool) {
 	r.mu.Lock()
 	expectedFirstIndexWasAccurate =
-		r.shMu.state.TruncatedState.Index+1 == expectedFirstIndexPreTruncation
-	r.shMu.state.TruncatedState = t
+		r.shMu.raftTruncState.Index+1 == expectedFirstIndexPreTruncation
+	r.shMu.raftTruncState = *t
 	r.mu.Unlock()
 
 	// Clear any entries in the Raft log entry cache for this range up

@@ -634,9 +634,14 @@ onlyif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
 statement ok
 SET enable_experimental_alter_column_type_general=true
 
+# Skipping in legacy mode, as it does not support altering column types that
+# require a backfill. Subsequent column type alterations are also skipped for
+# the same reason.
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_alter ALTER c TYPE FLOAT;
 
+skipif config local-legacy-schema-changer
 statement error pgcode 42P13 pq: return type mismatch in function declared to return t_alter
 SELECT f_rtbl();
 
@@ -648,12 +653,15 @@ SELECT f_rtbl();
 ----
 (1,foobar,2)
 
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_alter ALTER b TYPE CHAR(3)
 
+skipif config local-legacy-schema-changer
 statement error pgcode 42P13 pq: return type mismatch in function declared to return t_alter
 SELECT f_rtbl();
 
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE t_alter ALTER b TYPE TEXT
 

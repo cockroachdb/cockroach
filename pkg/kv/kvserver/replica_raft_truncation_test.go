@@ -98,7 +98,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 				}
 
 				// Apply truncation.
-				apply, err := handleTruncatedStateBelowRaftPreApply(ctx, &currentTruncatedState, suggestedTruncatedState, loader, eng)
+				apply, err := handleTruncatedStateBelowRaftPreApply(ctx, currentTruncatedState, suggestedTruncatedState, loader, eng)
 				require.NoError(t, err)
 				fmt.Fprintf(&buf, "apply: %t\n", apply)
 
