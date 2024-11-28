@@ -896,8 +896,8 @@ type existingSendStreamState struct {
 // constructRaftEventForReplica is called iff latestFollowerStateInfo.State is
 // StateReplicate.
 //
-// latestFollowerStateInfo includes the effect of RaftEvent.Entries and
-// RaftEvent.MsgApps on followerStataInfo.Next. msgApps is the map entry in
+// latestReplicaStateInfo includes the effect of RaftEvent.Entries and
+// RaftEvent.MsgApps on ReplicaStateInfo.Next. msgApps is the map entry in
 // RaftEvent.MsgApps for this replica. For other parameters, see the struct
 // declarations.
 func constructRaftEventForReplica(
@@ -990,7 +990,7 @@ func constructRaftEventForReplica(
 			msgAppFirstIndex = next
 			msgAppUBIndex = latestReplicaStateInfo.Next
 		} else {
-			// NB: always the case in push mode.
+			// NB: always the case in pull mode.
 			//
 			// next is in the past. No need to change it. Nothing is "sent".
 			msgAppFirstIndex = 0
@@ -1002,8 +1002,11 @@ func constructRaftEventForReplica(
 	scratch = scratchSendingEntries
 	var sendingEntries []entryFCState
 	if msgAppFirstIndex < msgAppUBIndex {
-		// NB: never in push mode.
-
+		// NB: never in pull mode.
+		if buildutil.CrdbTestBuild && mode == MsgAppPull {
+			panic(errors.AssertionFailedf("msgAppFirstIndex %d < msgAppUBIndex %d in pull mode",
+				msgAppFirstIndex, msgAppUBIndex))
+		}
 		if msgAppFirstIndex == firstNewEntryIndex {
 			// Common case. Sub-slice and don't use scratch.
 			// We've already ensured that msgAppUBIndex is <= lastNewEntryIndex.
@@ -2579,7 +2582,8 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 		// MsgAppPull mode (i.e., followers). Populate sendingEntries.
 		n := len(event.sendingEntries)
 		if n != 0 {
-			panic(errors.AssertionFailedf("pull mode must not have sending entries"))
+			panic(errors.AssertionFailedf("pull mode must not have sending entries (leader=%t)",
+				rss.parent.desc.ReplicaID == rss.parent.parent.opts.LocalReplicaID))
 		}
 		if directive.forceFlush {
 			if !rss.mu.sendQueue.forceFlushScheduled {
