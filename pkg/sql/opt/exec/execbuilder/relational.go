@@ -3180,16 +3180,12 @@ func (b *Builder) buildWith(with *memo.WithExpr) (_ execPlan, outputCols colOrdM
 	// remove it, since subquery execution also guarantees complete execution.
 
 	// Add the buffer as a subquery so it gets executed ahead of time, and is
-	// available to be referenced by other queries.
+	// available to be referenced by other queries. Use SubqueryDiscardAllRows to
+	// avoid buffering the results in the subquery, since the bufferNode will
+	// already save the rows.
 	b.subqueries = append(b.subqueries, exec.Subquery{
 		ExprNode: with.OriginalExpr,
-		// TODO(justin): this is wasteful: both the subquery and the bufferNode
-		// will buffer up all the results.  This should be fixed by either making
-		// the buffer point directly to the subquery results or adding a new
-		// subquery mode that reads and discards all rows. This could possibly also
-		// be fixed by ensuring that bufferNode exhausts its input (and forcing it
-		// to behave like a spoolNode) and using the EXISTS mode.
-		Mode:     exec.SubqueryAllRows,
+		Mode:     exec.SubqueryDiscardAllRows,
 		Root:     buffer,
 		RowCount: int64(with.Relational().Statistics().RowCountIfAvailable()),
 	})
