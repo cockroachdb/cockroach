@@ -138,14 +138,19 @@ func copySystemTableKVs(
 		catconstants.ReportsMetaTableName,
 	}
 
+	sourceDescMap, err := GetSystemTableDescsID(ctx, isqlTxn)
+	if err != nil {
+		return nil, err
+	}
 	batch := kvTxn.NewBatch()
 	for _, table := range tables {
-		desc, ok := descMap[string(table)]
+		descID, ok := sourceDescMap[string(table)]
 		if !ok {
 			log.Ops.Errorf(ctx, "descID not found for : %s", table)
 			return nil, errors.Errorf("descID not found for : %s", table)
 		}
-		span := sourceCodec.TableSpan(uint32(desc.GetID()))
+
+		span := sourceCodec.TableSpan(descID)
 		batch.Scan(span.Key, span.EndKey)
 	}
 
@@ -255,6 +260,25 @@ func systemTenantTableKVs(
 	}
 
 	return ret, nil
+}
+
+// TODO(shubham): We don't need to fetch information for all the tables.
+func GetSystemTableDescsID(ctx context.Context, txn isql.Txn) (map[string]uint32, error) {
+	q := `SELECT table_id, name FROM crdb_internal.tables WHERE database_name = 'system'`
+	rows, err := txn.QueryBufferedEx(ctx, "get-tables-descriptor-ids",
+		txn.KV(), sessiondata.NodeUserSessionDataOverride, q)
+	if err != nil {
+		return nil, err
+	}
+
+	tablesDescInfo := make(map[string]uint32, len(rows))
+	for _, row := range rows {
+		id := uint32(tree.MustBeDInt(row[0]))
+		name := string(tree.MustBeDString(row[1]))
+		tablesDescInfo[name] = id
+	}
+
+	return tablesDescInfo, nil
 }
 
 // GetTenantRecords
