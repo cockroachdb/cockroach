@@ -21,6 +21,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
+        "//pkg/util/debugutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
