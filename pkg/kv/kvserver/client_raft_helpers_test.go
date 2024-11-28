@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -527,6 +529,46 @@ func dropRaftMessagesFrom(
 			},
 		},
 	})
+}
+
+// waitForPartitionedLeaderStepDownAndNewLeaderToStepUp is supplied a
+// partitioned node ID, presumed to be the leader for the range described by the
+// supplied descriptor, and it then waits for the leader to step down (by virtue
+// of CheckQuourum). It then waits for a new leader to be elected, as seen by
+// the other node supplied, and returns the newly elected leader's ID.
+func waitForPartitionedLeaderStepDownAndNewLeaderToStepUp(
+	t *testing.T,
+	tc *testcluster.TestCluster,
+	desc roachpb.RangeDescriptor,
+	partitionNodeIdx, otherNodeIdx int,
+) (leaderReplicaID roachpb.ReplicaID) {
+	partitionStore := tc.GetFirstStoreFromServer(t, partitionNodeIdx)
+	partRepl, err := partitionStore.GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	partReplDesc, err := partRepl.GetReplicaDescriptor()
+	require.NoError(t, err)
+	otherStore := tc.GetFirstStoreFromServer(t, otherNodeIdx)
+	otherRepl, err := otherStore.GetReplica(desc.RangeID)
+	require.NoError(t, err)
+
+	// Wait until another replica campaigns and becomes leader, replacing the
+	// partitioned one.
+	t.Logf("test: waiting for leadership to fail over")
+	testutils.SucceedsSoon(t, func() error {
+		if partRepl.RaftStatus().RaftState == raftpb.StateLeader {
+			return errors.New("partitioned replica should have stepped down")
+		}
+		lead := otherRepl.RaftStatus().Lead
+		if lead == raft.None {
+			return errors.New("no leader yet")
+		}
+		if roachpb.ReplicaID(lead) == partReplDesc.ReplicaID {
+			return errors.New("partitioned replica is still leader")
+		}
+		return nil
+	})
+
+	return roachpb.ReplicaID(otherRepl.RaftStatus().Lead)
 }
 
 // getMapsDiff returns the difference between the values of corresponding
