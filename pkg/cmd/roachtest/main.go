@@ -189,12 +189,15 @@ the cluster nodes on start.
 		Long: `Run an automated operation on an existing roachprod cluster.
 If multiple operations are matched by the passed-in regex filter, one operation
 is chosen at random and run. The provided cluster name must already exist in roachprod;
-this command does no setup/teardown of clusters.`,
+this command does no setup/teardown of clusters.
+
+This command can be used to run operation in parallel and infinitely on a cluster. 
+Check --parallelism, --run-forever and --wait-before-next-execution flags`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("\nRunning operation %s on %s.\n\n", args[1], args[0])
 			cmd.SilenceUsage = true
-			return runOperation(operations.RegisterOperations, args[1], args[0])
+			return runOperations(operations.RegisterOperations, args[1], args[0])
 		},
 	}
 	roachtestflags.AddRunOpsFlags(runOperationCmd.Flags())
