@@ -217,6 +217,7 @@ func (r Result) Release(ctx context.Context) {
 // TODO(yuzefovich): support pipelining of Enqueue and GetResults calls.
 type Streamer struct {
 	distSender *kvcoord.DistSender
+	metrics    *Metrics
 	stopper    *stop.Stopper
 	// sd can be nil in tests.
 	sd *sessiondata.SessionData
@@ -378,6 +379,7 @@ type sendFn func(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, erro
 // parameters of all received responses.
 func NewStreamer(
 	distSender *kvcoord.DistSender,
+	metrics *Metrics,
 	stopper *stop.Stopper,
 	txn *kv.Txn,
 	sendFn func(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error),
@@ -408,6 +410,7 @@ func NewStreamer(
 	}
 	s := &Streamer{
 		distSender:             distSender,
+		metrics:                metrics,
 		stopper:                stopper,
 		sd:                     sd,
 		headOfLineOnlyFraction: headOfLineOnlyFraction,
@@ -415,6 +418,7 @@ func NewStreamer(
 		lockStrength:           lockStrength,
 		lockDurability:         lockDurability,
 	}
+	s.metrics.OperatorsCount.Inc(1)
 
 	if kvPairsRead == nil {
 		kvPairsRead = new(int64)
@@ -827,6 +831,7 @@ func (s *Streamer) Close(ctx context.Context) {
 		// exited.
 		s.results.close(ctx)
 	}
+	s.metrics.OperatorsCount.Dec(1)
 	*s = Streamer{}
 }
 
@@ -891,7 +896,6 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			return
 		}
 
-		w.s.requestsToServe.Lock()
 		// The coordinator goroutine is the only one that removes requests from
 		// w.s.requestsToServe, so we can keep the reference to next request
 		// without holding the lock.
@@ -900,8 +904,11 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 		// issueRequestsForAsyncProcessing() another request with higher urgency
 		// is added; however, this is not a problem - we wait for available
 		// budget here on a best-effort basis.
-		nextReq := w.s.requestsToServe.nextLocked()
-		w.s.requestsToServe.Unlock()
+		nextReq := func() singleRangeBatch {
+			w.s.requestsToServe.Lock()
+			defer w.s.requestsToServe.Unlock()
+			return w.s.requestsToServe.nextLocked()
+		}()
 		// If we already have minTargetBytes set on the first request to be
 		// issued, then use that.
 		atLeastBytes := nextReq.minTargetBytes
@@ -1069,6 +1076,13 @@ func (w *workerCoordinator) getMaxNumRequestsToIssue(ctx context.Context) (_ int
 	}
 	// The whole quota is currently used up, so we blockingly acquire a quota of
 	// 1.
+	numBatches := func() int64 {
+		w.s.requestsToServe.Lock()
+		defer w.s.requestsToServe.Unlock()
+		return int64(w.s.requestsToServe.lengthLocked())
+	}()
+	w.s.metrics.BatchesThrottled.Inc(numBatches)
+	defer w.s.metrics.BatchesThrottled.Dec(numBatches)
 	alloc, err := w.asyncSem.Acquire(ctx, 1)
 	if err != nil {
 		w.s.results.setError(err)
@@ -1359,6 +1373,10 @@ func (w *workerCoordinator) performRequestAsync(
 		},
 		func(ctx context.Context) {
 			defer w.asyncRequestCleanup(false /* budgetMuAlreadyLocked */)
+			w.s.metrics.BatchesSent.Inc(1)
+			w.s.metrics.BatchesInProgress.Inc(1)
+			defer w.s.metrics.BatchesInProgress.Dec(1)
+
 			ba := &kvpb.BatchRequest{}
 			ba.Header.WaitPolicy = w.lockWaitPolicy
 			ba.Header.TargetBytes = targetBytes

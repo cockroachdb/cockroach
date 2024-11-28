@@ -182,6 +182,7 @@ func NewKVFetcher(
 // If maintainOrdering is true, then diskBuffer must be non-nil.
 func NewStreamingKVFetcher(
 	distSender *kvcoord.DistSender,
+	metrics *kvstreamer.Metrics,
 	stopper *stop.Stopper,
 	txn *kv.Txn,
 	st *cluster.Settings,
@@ -204,6 +205,7 @@ func NewStreamingKVFetcher(
 	sendFn := makeSendFunc(txn, ext, &batchRequestsIssued)
 	streamer := kvstreamer.NewStreamer(
 		distSender,
+		metrics,
 		stopper,
 		txn,
 		sendFn,
