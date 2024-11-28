@@ -100,7 +100,12 @@ case "$component" in
     ;;
   roachprod)
       # Roachprod binary.
-      bazel_args=(//pkg/cmd/roachprod --crdb_test)
+      # This binary is built to support the logic behind `roachprod update`.
+      # Hence, we do not need to add `--crdb_test` to the build args as we do
+      # for `roachtest`. Adding the build flag causes the binary to log
+      # metamorphic vars on each command invocation, which is not ideal from a
+      # user experience perspective.
+      bazel_args=(//pkg/cmd/roachprod)
       artifacts=("pkg/cmd/roachprod/roachprod_/roachprod:bin/roachprod.$os-$arch")
       ;;
   *)
