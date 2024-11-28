@@ -8,10 +8,10 @@ package kvserver
 import (
 	"context"
 	"runtime"
-	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -38,7 +38,7 @@ func (s *Store) maybeAssertNoHole(ctx context.Context, from, to roachpb.RKey) fu
 	}
 
 	goroutineStopped := make(chan struct{})
-	caller := string(debug.Stack())
+	caller := debugutil.Stack()
 	if from.Equal(roachpb.RKeyMax) {
 		// There will be a hole to the right of RKeyMax but it's just the end of
 		// the addressable keyspace.
