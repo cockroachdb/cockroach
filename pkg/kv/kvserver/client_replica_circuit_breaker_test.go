@@ -750,208 +750,212 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
 
-	// Use a context timeout, to prevent test hangs on failures.
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
+	testutils.RunValues(t, "lease-type", roachpb.ExpirationAndLeaderLeaseType(),
+		func(t *testing.T, leaseType roachpb.LeaseType) {
+			// Use a context timeout, to prevent test hangs on failures.
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
 
-	// Always use expiration-based leases, such that the lease will expire when we
-	// partition off Raft traffic on n3.
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+			// Use expiration-based or leader-based leases, such that the lease will
+			// expire when we partition off Raft traffic on n3.
+			st := cluster.MakeTestingClusterSettings()
+			kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 
-	// Use a manual clock, so we can expire leases at will.
-	manualClock := hlc.NewHybridManualClock()
+			// Use a manual clock, so we can expire leases at will.
+			manualClock := hlc.NewHybridManualClock()
 
-	// Set up a 3-node cluster.
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					WallClock: manualClock,
+			// Set up a 3-node cluster.
+			tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							WallClock: manualClock,
+						},
+						// This test is requiring clients to go to the leaseholder first
+						// to get URE errors in the case of a partial partition. If this
+						// is not set, the test fails because it is counting the number
+						// of URE errors it encounters.
+						KVClient: &kvcoord.ClientTestingKnobs{RouteToLeaseholderFirst: true},
+					},
+					Settings: st,
+					RaftConfig: base.RaftConfig{
+						// Speed up the test.
+						RaftTickInterval:           200 * time.Millisecond,
+						RaftElectionTimeoutTicks:   5,
+						RaftHeartbeatIntervalTicks: 1,
+					},
 				},
-				// This test is requiring clients to go to the leaseholder first
-				// to get URE errors in the case of a partial partition. If this
-				// is not set, the test fails because it is counting the number
-				// of URE errors it encounters.
-				KVClient: &kvcoord.ClientTestingKnobs{RouteToLeaseholderFirst: true},
-			},
-			Settings: st,
-			RaftConfig: base.RaftConfig{
-				// Speed up the test.
-				RaftTickInterval:           200 * time.Millisecond,
-				RaftElectionTimeoutTicks:   5,
-				RaftHeartbeatIntervalTicks: 1,
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
+			})
+			defer tc.Stopper().Stop(ctx)
 
-	n1 := tc.Server(0)
-	n2 := tc.Server(1)
-	n3 := tc.Server(2)
-	db1 := n1.ApplicationLayer().DB()
-	db2 := n2.ApplicationLayer().DB()
-	db3 := n3.ApplicationLayer().DB()
-	dbs := []*kv.DB{db1, db2, db3}
+			n1 := tc.Server(0)
+			n2 := tc.Server(1)
+			n3 := tc.Server(2)
+			db1 := n1.ApplicationLayer().DB()
+			db2 := n2.ApplicationLayer().DB()
+			db3 := n3.ApplicationLayer().DB()
+			dbs := []*kv.DB{db1, db2, db3}
 
-	// Specify the key and value to use.
-	prefix := append(n1.ApplicationLayer().Codec().TenantPrefix(), keys.ScratchRangeMin...)
-	key := append(prefix.Clone(), []byte("/foo")...)
-	value := []byte("bar")
+			// Specify the key and value to use.
+			prefix := append(n1.ApplicationLayer().Codec().TenantPrefix(), keys.ScratchRangeMin...)
+			key := append(prefix.Clone(), []byte("/foo")...)
+			value := []byte("bar")
 
-	// Split off a range and upreplicate it.
-	_, _, err := n1.StorageLayer().SplitRange(prefix)
-	require.NoError(t, err)
-	desc := tc.AddVotersOrFatal(t, prefix, tc.Targets(1, 2)...)
-	t.Logf("split off range %s", desc)
+			// Split off a range and upreplicate it.
+			_, _, err := n1.StorageLayer().SplitRange(prefix)
+			require.NoError(t, err)
+			desc := tc.AddVotersOrFatal(t, prefix, tc.Targets(1, 2)...)
+			t.Logf("split off range %s", desc)
 
-	repl1 := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(prefix))
-	repl2 := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(prefix))
-	repl3 := tc.GetFirstStoreFromServer(t, 2).LookupReplica(roachpb.RKey(prefix))
-	repls := []*kvserver.Replica{repl1, repl2, repl3}
+			repl1 := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(prefix))
+			repl2 := tc.GetFirstStoreFromServer(t, 1).LookupReplica(roachpb.RKey(prefix))
+			repl3 := tc.GetFirstStoreFromServer(t, 2).LookupReplica(roachpb.RKey(prefix))
+			repls := []*kvserver.Replica{repl1, repl2, repl3}
 
-	// Set up test helpers.
-	requireRUEs := func(t *testing.T, dbs []*kv.DB) {
-		t.Helper()
-		for _, db := range dbs {
-			backoffMetric := (db.NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender)).Wrapped().(*kvcoord.DistSender).Metrics().InLeaseTransferBackoffs
-			initialBackoff := backoffMetric.Count()
-			err := db.Put(ctx, key, value)
-			// Verify that we did not perform any backoff while executing this request.
-			require.EqualValues(t, 0, backoffMetric.Count()-initialBackoff)
-			require.Error(t, err)
-			require.True(t, errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil)),
-				"expected ReplicaUnavailableError, got %v", err)
-		}
-		t.Logf("writes failed with ReplicaUnavailableError")
-	}
-
-	requireNoRUEs := func(t *testing.T, dbs []*kv.DB) {
-		t.Helper()
-		for _, db := range dbs {
-			require.NoError(t, db.Put(ctx, key, value))
-		}
-		t.Logf("writes succeeded")
-	}
-
-	// Move the leaseholder to n3, and wait for it to become the Raft leader too.
-	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
-	t.Logf("transferred range lease to n3")
-
-	require.Eventually(t, func() bool {
-		for _, repl := range repls {
-			if repl.RaftStatus().Lead != 3 {
-				return false
+			// Set up test helpers.
+			requireRUEs := func(t *testing.T, dbs []*kv.DB) {
+				t.Helper()
+				for _, db := range dbs {
+					backoffMetric := (db.NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender)).Wrapped().(*kvcoord.DistSender).Metrics().InLeaseTransferBackoffs
+					initialBackoff := backoffMetric.Count()
+					err := db.Put(ctx, key, value)
+					// Verify that we did not perform any backoff while executing this request.
+					require.EqualValues(t, 0, backoffMetric.Count()-initialBackoff)
+					require.Error(t, err)
+					require.True(t, errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil)),
+						"expected ReplicaUnavailableError, got %v", err)
+				}
+				t.Logf("writes failed with ReplicaUnavailableError")
 			}
-		}
-		return true
-	}, 5*time.Second, 100*time.Millisecond)
-	t.Logf("transferred raft leadership to n3")
 
-	requireNoRUEs(t, dbs)
-
-	// Partition Raft traffic on n3 away from n1 and n2, and eagerly trip its
-	// breaker. Note that we don't partition RPC traffic, such that client
-	// requests and node liveness heartbeats still succeed.
-	partitioned := &atomic.Bool{}
-	partitioned.Store(true)
-	dropRaftMessagesFrom(t, n1, desc, []roachpb.ReplicaID{3}, partitioned)
-	dropRaftMessagesFrom(t, n2, desc, []roachpb.ReplicaID{3}, partitioned)
-	dropRaftMessagesFrom(t, n3, desc, []roachpb.ReplicaID{1, 2}, partitioned)
-	t.Logf("partitioned n3 raft traffic from n1 and n2")
-
-	repl3.TripBreaker()
-	t.Logf("tripped n3 circuit breaker")
-
-	// While n3 is the leaseholder, all gateways should return RUE.
-	requireRUEs(t, dbs)
-
-	// Expire the lease, but not Raft leadership. All gateways should still return
-	// RUE, since followers return NLHE pointing to the Raft leader, and it will
-	// return RUE.
-	lease, _ := repl3.GetLease()
-	manualClock.Forward(lease.Expiration.WallTime)
-	t.Logf("expired n3 lease")
-
-	requireRUEs(t, dbs)
-
-	// Wait for the leadership to move. Writes should now succeed -- they will
-	// initially go to n3, the previous leaseholder, but it will return NLHE. The
-	// DistSender will retry the other replicas, which eventually acquire a new
-	// lease and serve the write.
-	var leader raftpb.PeerID
-	require.Eventually(t, func() bool {
-		for _, repl := range repls {
-			l := repl.RaftStatus().Lead
-			if l == 3 {
-				return false
+			requireNoRUEs := func(t *testing.T, dbs []*kv.DB) {
+				t.Helper()
+				for _, db := range dbs {
+					require.NoError(t, db.Put(ctx, key, value))
+				}
+				t.Logf("writes succeeded")
 			}
-			if repl.ReplicaID() != 3 && l == 0 {
-				// The old leader (3) steps down because of check quorum. A new leader
-				// should be elected amongst 1 and 2, and both of them should know who
-				// that is before we proceed with the test.
-				return false
-			} else if repl.ReplicaID() != 3 {
-				leader = l
-			}
-		}
-		return true
-	}, 5*time.Second, 100*time.Millisecond)
-	t.Logf("raft leadership moved to n%d", leader)
 
-	requireNoRUEs(t, dbs)
+			// Move the leaseholder to n3, and wait for it to become the Raft leader
+			// too.
+			tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
+			t.Logf("transferred range lease to n3")
 
-	// Also partition n1 and n2 away from each other, and trip their breakers. All
-	// nodes are now completely partitioned away from each other.
-	dropRaftMessagesFrom(t, n1, desc, []roachpb.ReplicaID{2, 3}, partitioned)
-	dropRaftMessagesFrom(t, n2, desc, []roachpb.ReplicaID{1, 3}, partitioned)
+			require.Eventually(t, func() bool {
+				for _, repl := range repls {
+					if repl.RaftStatus().Lead != 3 {
+						return false
+					}
+				}
+				return true
+			}, 5*time.Second, 100*time.Millisecond)
+			t.Logf("transferred raft leadership to n3")
 
-	repl1.TripBreaker()
-	repl2.TripBreaker()
-	t.Logf("partitioned all nodes and tripped their breakers")
+			requireNoRUEs(t, dbs)
 
-	// n1 or n2 still has the lease. Writes should return a
-	// ReplicaUnavailableError.
-	requireRUEs(t, dbs)
+			// Partition Raft traffic on n3 away from n1 and n2, and eagerly trip its
+			// breaker. Note that we don't partition RPC traffic, such that client
+			// requests and node liveness heartbeats still succeed.
+			partitioned := &atomic.Bool{}
+			partitioned.Store(true)
+			dropRaftMessagesFrom(t, n1, desc, []roachpb.ReplicaID{3}, partitioned)
+			dropRaftMessagesFrom(t, n2, desc, []roachpb.ReplicaID{3}, partitioned)
+			dropRaftMessagesFrom(t, n3, desc, []roachpb.ReplicaID{1, 2}, partitioned)
+			t.Logf("partitioned n3 raft traffic from n1 and n2")
 
-	// Expire the lease, but not raft leadership. Writes should still error
-	// because the leader's circuit breaker is tripped.
-	lease, _ = repl1.GetLease()
-	manualClock.Forward(lease.Expiration.WallTime)
-	t.Logf("expired n%d lease", lease.Replica.ReplicaID)
+			repl3.TripBreaker()
+			t.Logf("tripped n3 circuit breaker")
 
-	requireRUEs(t, dbs)
+			// While n3 is the leaseholder, all gateways should return RUE.
+			requireRUEs(t, dbs)
 
-	// Wait for raft leadership to expire. Writes should error after the
-	// DistSender attempts all 3 replicas and they all fail.
-	require.Eventually(t, func() bool {
-		for _, repl := range repls {
-			if repl.RaftStatus().Lead != 0 {
-				return false
-			}
-		}
-		return true
-	}, 5*time.Second, 100*time.Millisecond)
-	t.Logf("no raft leader")
+			// Expire the lease, but not Raft leadership. All gateways should still
+			// return RUE, since followers return NLHE pointing to the Raft leader,
+			// and it will return RUE.
+			lease, _ := repl3.GetLease()
+			manualClock.Increment(tc.Servers[0].RaftConfig().RangeLeaseDuration.Nanoseconds())
+			t.Logf("expired n%d lease", lease.Replica.ReplicaID)
 
-	requireRUEs(t, dbs)
+			requireRUEs(t, dbs)
 
-	// Recover the partition. Writes should soon recover.
-	partitioned.Store(false)
-	t.Logf("partitioned healed")
+			// Wait for the leadership to move. Writes should now succeed -- they will
+			// initially go to n3, the previous leaseholder, but it will return NLHE.
+			// The DistSender will retry the other replicas, which eventually acquire
+			// a new lease and serve the write.
+			var leader raftpb.PeerID
+			require.Eventually(t, func() bool {
+				for _, repl := range repls {
+					l := repl.RaftStatus().Lead
+					if l == 3 {
+						return false
+					}
+					if repl.ReplicaID() != 3 && l == 0 {
+						// The old leader (3) steps down because of check quorum. A new
+						// leader should be elected amongst 1 and 2, and both of them should
+						// know who that is before we proceed with the test.
+						return false
+					} else if repl.ReplicaID() != 3 {
+						leader = l
+					}
+				}
+				return true
+			}, 10*time.Second, 100*time.Millisecond)
+			t.Logf("raft leadership moved to n%d", leader)
 
-	require.Eventually(t, func() bool {
-		for _, db := range dbs {
-			if err := db.Put(ctx, key, value); err != nil {
-				return false
-			}
-		}
-		return true
-	}, 5*time.Second, 100*time.Millisecond)
-	t.Logf("writes succeeded")
+			requireNoRUEs(t, dbs)
 
-	require.NoError(t, ctx.Err())
+			// Also partition n1 and n2 away from each other, and trip their breakers.
+			// All nodes are now completely partitioned away from each other.
+			dropRaftMessagesFrom(t, n1, desc, []roachpb.ReplicaID{2, 3}, partitioned)
+			dropRaftMessagesFrom(t, n2, desc, []roachpb.ReplicaID{1, 3}, partitioned)
+
+			repl1.TripBreaker()
+			repl2.TripBreaker()
+			t.Logf("partitioned all nodes and tripped their breakers")
+
+			// n1 or n2 still has the lease. Writes should return a
+			// ReplicaUnavailableError.
+			requireRUEs(t, dbs)
+
+			// Expire the lease, but not raft leadership. Writes should still error
+			// because the leader's circuit breaker is tripped.
+			lease, _ = repl1.GetLease()
+			manualClock.Increment(tc.Servers[0].RaftConfig().RangeLeaseDuration.Nanoseconds())
+			t.Logf("expired n%d lease", lease.Replica.ReplicaID)
+
+			requireRUEs(t, dbs)
+
+			// Wait for raft leadership to expire. Writes should error after the
+			// DistSender attempts all 3 replicas and they all fail.
+			require.Eventually(t, func() bool {
+				for _, repl := range repls {
+					if repl.RaftStatus().RaftState == raftpb.StateLeader {
+						return false
+					}
+				}
+				return true
+			}, 10*time.Second, 100*time.Millisecond)
+			t.Logf("no raft leader")
+
+			requireRUEs(t, dbs)
+
+			// Recover the partition. Writes should soon recover.
+			partitioned.Store(false)
+			t.Logf("partitioned healed")
+
+			require.Eventually(t, func() bool {
+				for _, db := range dbs {
+					if err := db.Put(ctx, key, value); err != nil {
+						return false
+					}
+				}
+				return true
+			}, 10*time.Second, 100*time.Millisecond)
+			t.Logf("writes succeeded")
+
+			require.NoError(t, ctx.Err())
+		})
 }
 
 // Test infrastructure below.
