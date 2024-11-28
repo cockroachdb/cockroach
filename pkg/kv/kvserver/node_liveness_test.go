@@ -1120,13 +1120,17 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 	defer s.Stopper().Stop(ctx)
 	nl := s.NodeLiveness().(*liveness.NodeLiveness)
 
+	testutils.SucceedsSoon(t, func() error {
+		return verifyLivenessServer(s, 1)
+	})
+
 	// We want to control the heartbeats.
 	nl.PauseHeartbeatLoopForTest()
 
 	sem = make(chan struct{})
 
 	l, ok := nl.Self()
-	assert.True(t, ok)
+	require.True(t, ok)
 
 	hbCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
