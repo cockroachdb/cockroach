@@ -5238,422 +5238,443 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	noopProposalFilter := kvserverbase.ReplicaProposalFilter(func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
-		return nil
-	})
-	var proposalFilter atomic.Value
-	proposalFilter.Store(noopProposalFilter)
-	testingProposalFilter := func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
-		return proposalFilter.Load().(kvserverbase.ReplicaProposalFilter)(args)
-	}
-
-	increment := func(t *testing.T, db *kv.DB, key roachpb.Key, by int64) {
-		b := &kv.Batch{}
-		b.AddRawRequest(incrementArgs(key, by))
-		require.NoError(t, db.Run(ctx, b))
-	}
-	ensureNoTombstone := func(t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID) {
-		t.Helper()
-		var tombstone kvserverpb.RangeTombstone
-		tombstoneKey := keys.RangeTombstoneKey(rangeID)
-		ok, err := storage.MVCCGetProto(
-			ctx, store.TODOEngine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-		)
-		require.NoError(t, err)
-		require.False(t, ok)
-	}
-	getHardState := func(
-		t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID,
-	) raftpb.HardState {
-		hs, err := stateloader.Make(rangeID).LoadHardState(ctx, store.TODOEngine())
-		require.NoError(t, err)
-		return hs
-	}
-	partitionReplicaOnSplit := func(t *testing.T, tc *testcluster.TestCluster, key roachpb.Key, basePartition *testClusterPartitionedRange, partRange **testClusterPartitionedRange) {
-		// Set up a hook to partition the RHS range at its initial range ID
-		// before proposing the split trigger.
-		var setupOnce sync.Once
-		f := kvserverbase.ReplicaProposalFilter(func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
-			req, ok := args.Req.GetArg(kvpb.EndTxn)
-			if !ok {
-				return nil
-			}
-			endTxn := req.(*kvpb.EndTxnRequest)
-			if endTxn.InternalCommitTrigger == nil || endTxn.InternalCommitTrigger.SplitTrigger == nil {
-				return nil
-			}
-			split := endTxn.InternalCommitTrigger.SplitTrigger
-
-			if !split.RightDesc.StartKey.Equal(key) {
-				return nil
-			}
-			setupOnce.Do(func() {
-				replDesc, ok := split.RightDesc.GetReplicaDescriptor(1)
-				require.True(t, ok)
-				var err error
-				*partRange, err = basePartition.extend(tc, split.RightDesc.RangeID, replDesc.ReplicaID,
-					0 /* partitionedNode */, true /* activated */, unreliableRaftHandlerFuncs{})
-				require.NoError(t, err)
-				proposalFilter.Store(noopProposalFilter)
-			})
+	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		noopProposalFilter := kvserverbase.ReplicaProposalFilter(func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 			return nil
 		})
-		proposalFilter.Store(f)
-	}
-
-	// The basic setup for all of these tests are that we have a LHS range on 3
-	// nodes and we've partitioned store 0 for the LHS range. The tests will now
-	// perform a split, remove the RHS, add it back and validate assumptions.
-	//
-	// Different outcomes will occur depending on whether and how the RHS is
-	// partitioned and whether the server is killed. In all cases we want the
-	// split to succeed and the RHS to eventually also be on all 3 nodes.
-	setup := func(t *testing.T) (
-		tc *testcluster.TestCluster,
-		db *kv.DB,
-		keyA, keyB roachpb.Key,
-		lhsID roachpb.RangeID,
-		lhsPartition *testClusterPartitionedRange,
-	) {
-		lisReg := listenerutil.NewListenerRegistry()
-		const numServers int = 3
-		stickyServerArgs := make(map[int]base.TestServerArgs)
-		for i := 0; i < numServers; i++ {
-			stickyServerArgs[i] = base.TestServerArgs{
-				StoreSpecs: []base.StoreSpec{
-					{
-						InMemory:    true,
-						StickyVFSID: strconv.FormatInt(int64(i), 10),
-					},
-				},
-				Knobs: base.TestingKnobs{
-					Server: &server.TestingKnobs{
-						StickyVFSRegistry: fs.NewStickyRegistry(),
-					},
-					Store: &kvserver.StoreTestingKnobs{
-						// Newly-started stores (including the "rogue" one) should not GC
-						// their replicas. We'll turn this back on when needed.
-						DisableReplicaGCQueue: true,
-						TestingProposalFilter: testingProposalFilter,
-					},
-				},
-				RaftConfig: base.RaftConfig{
-					// Make the tick interval short so we don't need to wait too long for the
-					// partitioned leader to time out.
-					RaftTickInterval: 10 * time.Millisecond,
-				},
-			}
+		var proposalFilter atomic.Value
+		proposalFilter.Store(noopProposalFilter)
+		testingProposalFilter := func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
+			return proposalFilter.Load().(kvserverbase.ReplicaProposalFilter)(args)
 		}
 
-		tc = testcluster.StartTestCluster(t, numServers,
-			base.TestClusterArgs{
-				ReplicationMode:     base.ReplicationManual,
-				ReusableListenerReg: lisReg,
-				ServerArgsPerNode:   stickyServerArgs,
+		increment := func(t *testing.T, db *kv.DB, key roachpb.Key, by int64) {
+			b := &kv.Batch{}
+			b.AddRawRequest(incrementArgs(key, by))
+			require.NoError(t, db.Run(ctx, b))
+		}
+		ensureNoTombstone := func(t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID) {
+			t.Helper()
+			var tombstone kvserverpb.RangeTombstone
+			tombstoneKey := keys.RangeTombstoneKey(rangeID)
+			ok, err := storage.MVCCGetProto(
+				ctx, store.TODOEngine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+			)
+			require.NoError(t, err)
+			require.False(t, ok)
+		}
+		getHardState := func(
+			t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID,
+		) raftpb.HardState {
+			hs, err := stateloader.Make(rangeID).LoadHardState(ctx, store.TODOEngine())
+			require.NoError(t, err)
+			return hs
+		}
+		partitionReplicaOnSplit := func(t *testing.T, tc *testcluster.TestCluster, key roachpb.Key, basePartition *testClusterPartitionedRange, partRange **testClusterPartitionedRange) {
+			// Set up a hook to partition the RHS range at its initial range ID
+			// before proposing the split trigger.
+			var setupOnce sync.Once
+			f := kvserverbase.ReplicaProposalFilter(func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
+				req, ok := args.Req.GetArg(kvpb.EndTxn)
+				if !ok {
+					return nil
+				}
+				endTxn := req.(*kvpb.EndTxnRequest)
+				if endTxn.InternalCommitTrigger == nil || endTxn.InternalCommitTrigger.SplitTrigger == nil {
+					return nil
+				}
+				split := endTxn.InternalCommitTrigger.SplitTrigger
+
+				if !split.RightDesc.StartKey.Equal(key) {
+					return nil
+				}
+				setupOnce.Do(func() {
+					replDesc, ok := split.RightDesc.GetReplicaDescriptor(1)
+					require.True(t, ok)
+					var err error
+					*partRange, err = basePartition.extend(tc, split.RightDesc.RangeID, replDesc.ReplicaID,
+						0 /* partitionedNode */, true /* activated */, unreliableRaftHandlerFuncs{})
+					require.NoError(t, err)
+					proposalFilter.Store(noopProposalFilter)
+				})
+				return nil
 			})
-
-		tc.Stopper().AddCloser(stop.CloserFn(lisReg.Close))
-		db = tc.GetFirstStoreFromServer(t, 1).DB()
-
-		// Split off a non-system range so we don't have to account for node liveness
-		// traffic.
-		scratchTableKey := tc.ScratchRangeWithExpirationLease(t)
-		// Put some data in the range so we'll have something to test for.
-		keyA = append(append(roachpb.Key{}, scratchTableKey...), 'a')
-		keyB = append(append(roachpb.Key{}, scratchTableKey...), 'b')
-		// First put the range on all three nodes.
-		desc := tc.AddVotersOrFatal(t, scratchTableKey, tc.Targets(1, 2)...)
-
-		// Set up a partition for the LHS range only. Initially it is not active.
-		lhsPartition, err := setupPartitionedRange(tc, desc.RangeID,
-			0 /* replicaID */, 0 /* partitionedNode */, false /* activated */, unreliableRaftHandlerFuncs{})
-		require.NoError(t, err)
-		// Wait for all nodes to catch up.
-		increment(t, db, keyA, 5)
-		tc.WaitForValues(t, keyA, []int64{5, 5, 5})
-
-		// Transfer the lease off of node 0.
-		tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
-
-		// Make sure everybody knows about that transfer.
-		increment(t, db, keyA, 1)
-		tc.WaitForValues(t, keyA, []int64{6, 6, 6})
-		lhsPartition.activate()
-
-		increment(t, db, keyA, 1)
-		tc.WaitForValues(t, keyA, []int64{6, 7, 7})
-		return tc, db, keyA, keyB, lhsID, lhsPartition
-	}
-
-	// In this case we only have the LHS partitioned. The RHS will learn about its
-	// identity as the replica in the split and after being re-added will learn
-	// about the new replica ID and will lay down a tombstone. At this point we'll
-	// partition the RHS and ensure that the split does not clobber the RHS's hard
-	// state.
-	t.Run("(1) no RHS partition", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition := setup(t)
-
-		defer tc.Stopper().Stop(ctx)
-		tc.SplitRangeOrFatal(t, keyB)
-
-		// Write a value which we can observe to know when the split has been
-		// applied by the LHS.
-		increment(t, db, keyA, 1)
-		tc.WaitForValues(t, keyA, []int64{6, 8, 8})
-
-		increment(t, db, keyB, 6)
-		// Wait for all non-partitioned nodes to catch up.
-		tc.WaitForValues(t, keyB, []int64{0, 6, 6})
-
-		rhsInfo, err := getRangeInfo(ctx, db, keyB)
-		require.NoError(t, err)
-		rhsID := rhsInfo.Desc.RangeID
-		_, store0Exists := rhsInfo.Desc.GetReplicaDescriptor(1)
-		require.True(t, store0Exists)
-
-		// Remove and re-add the RHS to create a new uninitialized replica at
-		// a higher replica ID. This will lead to a tombstone being written.
-		tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
-		// Unsuccessful because the RHS will not accept the learner snapshot
-		// and will be rolled back. Nevertheless it will have learned that it
-		// has been removed at the old replica ID.
-		_, err = tc.Servers[0].DB().AdminChangeReplicas(
-			ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
-			kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
-		)
-		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
-
-		// Without a partitioned RHS we'll end up always writing a tombstone here because
-		// the RHS will be created at the initial replica ID because it will get
-		// raft message when the other nodes split and then after the above call
-		// it will find out about its new replica ID and write a tombstone for the
-		// old one.
-		waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).TODOEngine(), rhsID)
-		lhsPartition.deactivate()
-		tc.WaitForValues(t, keyA, []int64{8, 8, 8})
-		hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
-		require.Equal(t, uint64(0), hs.Commit)
-		testutils.SucceedsSoon(t, func() error {
-			_, err := tc.AddVoters(keyB, tc.Target(0))
-			return err
-		})
-		tc.WaitForValues(t, keyB, []int64{6, 6, 6})
-	})
-
-	// This case is like the previous case except the store crashes after
-	// laying down a tombstone.
-	t.Run("(2) no RHS partition, with restart", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition := setup(t)
-		defer tc.Stopper().Stop(ctx)
-
-		tc.SplitRangeOrFatal(t, keyB)
-
-		// Write a value which we can observe to know when the split has been
-		// applied by the LHS.
-		increment(t, db, keyA, 1)
-		tc.WaitForValues(t, keyA, []int64{6, 8, 8})
-
-		increment(t, db, keyB, 6)
-		// Wait for all non-partitioned nodes to catch up.
-		tc.WaitForValues(t, keyB, []int64{0, 6, 6})
-
-		rhsInfo, err := getRangeInfo(ctx, db, keyB)
-		require.NoError(t, err)
-		rhsID := rhsInfo.Desc.RangeID
-		_, store0Exists := rhsInfo.Desc.GetReplicaDescriptor(1)
-		require.True(t, store0Exists)
-
-		// Remove and re-add the RHS to create a new uninitialized replica at
-		// a higher replica ID. This will lead to a tombstone being written.
-		tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
-		// Unsuccessfuly because the RHS will not accept the learner snapshot
-		// and will be rolled back. Nevertheless it will have learned that it
-		// has been removed at the old replica ID.
-		_, err = tc.Servers[0].DB().AdminChangeReplicas(
-			ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
-			kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
-		)
-		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
-
-		// Without a partitioned RHS we'll end up always writing a tombstone here because
-		// the RHS will be created at the initial replica ID because it will get
-		// raft message when the other nodes split and then after the above call
-		// it will find out about its new replica ID and write a tombstone for the
-		// old one.
-		waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).TODOEngine(), rhsID)
-
-		// We do all of this incrementing to ensure that nobody will ever
-		// succeed in sending a message the new RHS replica after we restart
-		// the store. Previously there were races which could happen if we
-		// stopped the store immediately. Sleeps worked but this feels somehow
-		// more principled.
-		curB := int64(6)
-		for curB < 100 {
-			curB++
-			increment(t, db, keyB, 1)
-			tc.WaitForValues(t, keyB, []int64{0, curB, curB})
+			proposalFilter.Store(f)
 		}
 
-		// Restart store 0 so that it forgets about the newer replicaID.
-		tc.StopServer(0)
-		lhsPartition.deactivate()
-		require.NoError(t, tc.RestartServer(0))
-
-		tc.WaitForValues(t, keyA, []int64{8, 8, 8})
-		hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
-		require.Equal(t, uint64(0), hs.Commit)
-		testutils.SucceedsSoon(t, func() error {
-			_, err := tc.AddVoters(keyB, tc.Target(0))
-			return err
-		})
-		tc.WaitForValues(t, keyB, []int64{curB, curB, curB})
-	})
-
-	// In this case the RHS will be partitioned from hearing anything about
-	// the initial replica ID of the RHS after the split. It will learn about
-	// the higher replica ID and have that higher replica ID in memory when
-	// the split is processed. We partition the RHS's new replica ID before
-	// processing the split to ensure that the RHS doesn't get initialized.
-	t.Run("(3) initial replica RHS partition, no restart", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition := setup(t)
-		defer tc.Stopper().Stop(ctx)
-		var rhsPartition *testClusterPartitionedRange
-		partitionReplicaOnSplit(t, tc, keyB, lhsPartition, &rhsPartition)
-		tc.SplitRangeOrFatal(t, keyB)
-
-		// Write a value which we can observe to know when the split has been
-		// applied by the LHS.
-		increment(t, db, keyA, 1)
-		tc.WaitForValues(t, keyA, []int64{6, 8, 8})
-
-		increment(t, db, keyB, 6)
-		// Wait for all non-partitioned nodes to catch up.
-		tc.WaitForValues(t, keyB, []int64{0, 6, 6})
-
-		rhsInfo, err := getRangeInfo(ctx, db, keyB)
-		require.NoError(t, err)
-		rhsID := rhsInfo.Desc.RangeID
-		_, store0Exists := rhsInfo.Desc.GetReplicaDescriptor(1)
-		require.True(t, store0Exists)
-
-		// Remove and re-add the RHS to create a new uninitialized replica at
-		// a higher replica ID. This will lead to a tombstone being written.
-		tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
-		// Unsuccessful because the RHS will not accept the learner snapshot and
-		// will be rolled back. Nevertheless it will have learned that it has been
-		// removed at the old replica ID. We don't use tc.AddVoters because that
-		// will retry until it runs out of time, since we're creating a
-		// retriable-looking situation here that will persist.
-		_, err = tc.Servers[0].DB().AdminChangeReplicas(
-			ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
-			kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
-		)
-		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
-		// Ensure that the replica exists with the higher replica ID.
-		repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(rhsInfo.Desc.RangeID)
-		require.NoError(t, err)
-		require.Equal(t, repl.ReplicaID(), rhsInfo.Desc.NextReplicaID)
-		rhsPartition.addReplica(rhsInfo.Desc.NextReplicaID)
-
-		// Ensure that there's no tombstone.
-		// The RHS on store 0 never should have heard about its original ID.
-		ensureNoTombstone(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
-		lhsPartition.deactivate()
-		tc.WaitForValues(t, keyA, []int64{8, 8, 8})
-		hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
-		require.Equal(t, uint64(0), hs.Commit)
-		// Now succeed in adding the RHS. Use SucceedsSoon because in rare cases
-		// the learner snapshot can fail due to a race with a raft snapshot from
-		// a raft leader on a different node.
-		testutils.SucceedsSoon(t, func() error {
-			_, err := tc.AddVoters(keyB, tc.Target(0))
-			return err
-		})
-		tc.WaitForValues(t, keyB, []int64{6, 6, 6})
-	})
-
-	// This case is set up like the previous one except after the RHS learns about
-	// its higher replica ID the store crashes and forgets. The RHS replica gets
-	// initialized by the split.
-	t.Run("(4) initial replica RHS partition, with restart", func(t *testing.T) {
-		tc, db, keyA, keyB, _, lhsPartition := setup(t)
-		defer tc.Stopper().Stop(ctx)
-		var rhsPartition *testClusterPartitionedRange
-
-		partitionReplicaOnSplit(t, tc, keyB, lhsPartition, &rhsPartition)
-		tc.SplitRangeOrFatal(t, keyB)
-
-		// Write a value which we can observe to know when the split has been
-		// applied by the LHS.
-		increment(t, db, keyA, 1)
-		tc.WaitForValues(t, keyA, []int64{6, 8, 8})
-
-		increment(t, db, keyB, 6)
-		// Wait for all non-partitioned nodes to catch up.
-		tc.WaitForValues(t, keyB, []int64{0, 6, 6})
-
-		rhsInfo, err := getRangeInfo(ctx, db, keyB)
-		require.NoError(t, err)
-		rhsID := rhsInfo.Desc.RangeID
-		_, store0Exists := rhsInfo.Desc.GetReplicaDescriptor(1)
-		require.True(t, store0Exists)
-
-		// Remove and re-add the RHS to create a new uninitialized replica at
-		// a higher replica ID. This will lead to a tombstone being written.
-		tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
-		// Unsuccessfuly because the RHS will not accept the learner snapshot
-		// and will be rolled back. Nevertheless it will have learned that it
-		// has been removed at the old replica ID.
+		// The basic setup for all of these tests are that we have a LHS range on 3
+		// nodes and we've partitioned store 0 for the LHS range. The tests will now
+		// perform a split, remove the RHS, add it back and validate assumptions.
 		//
-		// Not using tc.AddVoters because we expect an error, but that error
-		// would be retried internally.
-		_, err = tc.Servers[0].DB().AdminChangeReplicas(
-			ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
-			kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
-		)
-		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
-		// Ensure that there's no tombstone.
-		// The RHS on store 0 never should have heard about its original ID.
-		ensureNoTombstone(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
+		// Different outcomes will occur depending on whether and how the RHS is
+		// partitioned and whether the server is killed. In all cases we want the
+		// split to succeed and the RHS to eventually also be on all 3 nodes.
+		setup := func(t *testing.T) (
+			tc *testcluster.TestCluster,
+			db *kv.DB,
+			keyA, keyB roachpb.Key,
+			lhsID roachpb.RangeID,
+			lhsPartition *testClusterPartitionedRange,
+		) {
+			lisReg := listenerutil.NewListenerRegistry()
+			const numServers int = 3
+			stickyServerArgs := make(map[int]base.TestServerArgs)
+			for i := 0; i < numServers; i++ {
+				st := cluster.MakeTestingClusterSettings()
+				kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 
-		// Now, before we deactivate the LHS partition, partition the newer replica
-		// on the RHS too.
-		rhsPartition.addReplica(rhsInfo.Desc.NextReplicaID)
+				stickyServerArgs[i] = base.TestServerArgs{
+					Settings: st,
+					StoreSpecs: []base.StoreSpec{
+						{
+							InMemory:    true,
+							StickyVFSID: strconv.FormatInt(int64(i), 10),
+						},
+					},
+					Knobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							StickyVFSRegistry: fs.NewStickyRegistry(),
+						},
+						Store: &kvserver.StoreTestingKnobs{
+							// Newly-started stores (including the "rogue" one) should not GC
+							// their replicas. We'll turn this back on when needed.
+							DisableReplicaGCQueue: true,
+							TestingProposalFilter: testingProposalFilter,
+						},
+					},
+					RaftConfig: base.RaftConfig{
+						// Make the tick interval short so we don't need to wait too long for the
+						// partitioned leader to time out.
+						RaftTickInterval: 10 * time.Millisecond,
+						// Make the lease duration a little shorter to make the test finish
+						// faster with leader leases.
+						RangeLeaseDuration: 1000 * time.Millisecond,
+					},
+				}
+			}
 
-		// We do all of this incrementing to ensure that nobody will ever
-		// succeed in sending a message the new RHS replica after we restart
-		// the store. Previously there were races which could happen if we
-		// stopped the store immediately. Sleeps worked but this feels somehow
-		// more principled.
-		curB := int64(6)
-		for curB < 100 {
-			curB++
-			increment(t, db, keyB, 1)
-			tc.WaitForValues(t, keyB, []int64{0, curB, curB})
+			tc = testcluster.StartTestCluster(t, numServers,
+				base.TestClusterArgs{
+					ReplicationMode:     base.ReplicationManual,
+					ReusableListenerReg: lisReg,
+					ServerArgsPerNode:   stickyServerArgs,
+				})
+
+			tc.Stopper().AddCloser(stop.CloserFn(lisReg.Close))
+			db = tc.GetFirstStoreFromServer(t, 1).DB()
+
+			// Split off a non-system range so we don't have to account for node liveness
+			// traffic.
+			scratchTableKey := tc.ScratchRangeWithExpirationLease(t)
+			// Put some data in the range so we'll have something to test for.
+			keyA = append(append(roachpb.Key{}, scratchTableKey...), 'a')
+			keyB = append(append(roachpb.Key{}, scratchTableKey...), 'b')
+			// First put the range on all three nodes.
+			desc := tc.AddVotersOrFatal(t, scratchTableKey, tc.Targets(1, 2)...)
+
+			// Set up a partition for the LHS range only. Initially it is not active.
+			lhsPartition, err := setupPartitionedRange(tc, desc.RangeID,
+				0 /* replicaID */, 0 /* partitionedNode */, false /* activated */, unreliableRaftHandlerFuncs{})
+			require.NoError(t, err)
+			// Wait for all nodes to catch up.
+			increment(t, db, keyA, 5)
+			tc.WaitForValues(t, keyA, []int64{5, 5, 5})
+
+			// Transfer the lease off of node 0.
+			tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(2))
+
+			// Make sure everybody knows about that transfer.
+			increment(t, db, keyA, 1)
+			tc.WaitForValues(t, keyA, []int64{6, 6, 6})
+			lhsPartition.activate()
+
+			increment(t, db, keyA, 1)
+			tc.WaitForValues(t, keyA, []int64{6, 7, 7})
+			return tc, db, keyA, keyB, lhsID, lhsPartition
 		}
 
-		tc.StopServer(0)
-		lhsPartition.deactivate()
-		require.NoError(t, tc.RestartServer(0))
+		// In this case we only have the LHS partitioned. The RHS will learn about its
+		// identity as the replica in the split and after being re-added will learn
+		// about the new replica ID and will lay down a tombstone. At this point we'll
+		// partition the RHS and ensure that the split does not clobber the RHS's hard
+		// state.
+		t.Run("(1) no RHS partition", func(t *testing.T) {
+			tc, db, keyA, keyB, _, lhsPartition := setup(t)
 
-		tc.WaitForValues(t, keyA, []int64{8, 8, 8})
-		// In this case the store has forgotten that it knew the RHS of the split
-		// could not exist. We ensure that it has been initialized to the initial
-		// commit value, which is 10.
-		testutils.SucceedsSoon(t, func() error {
+			defer tc.Stopper().Stop(ctx)
+			tc.SplitRangeOrFatal(t, keyB)
+
+			// Write a value which we can observe to know when the split has been
+			// applied by the LHS.
+			increment(t, db, keyA, 1)
+			tc.WaitForValues(t, keyA, []int64{6, 8, 8})
+
+			increment(t, db, keyB, 6)
+			// Wait for all non-partitioned nodes to catch up.
+			tc.WaitForValues(t, keyB, []int64{0, 6, 6})
+
+			rhsInfo, err := getRangeInfo(ctx, db, keyB)
+			require.NoError(t, err)
+			rhsID := rhsInfo.Desc.RangeID
+			_, store0Exists := rhsInfo.Desc.GetReplicaDescriptor(1)
+			require.True(t, store0Exists)
+
+			// Remove and re-add the RHS to create a new uninitialized replica at
+			// a higher replica ID. This will lead to a tombstone being written.
+			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+			// Unsuccessful because the RHS will not accept the learner snapshot
+			// and will be rolled back. Nevertheless it will have learned that it
+			// has been removed at the old replica ID.
+			_, err = tc.Servers[0].DB().AdminChangeReplicas(
+				ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
+				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+			)
+			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
+
+			// Without a partitioned RHS we'll end up always writing a tombstone here because
+			// the RHS will be created at the initial replica ID because it will get
+			// raft message when the other nodes split and then after the above call
+			// it will find out about its new replica ID and write a tombstone for the
+			// old one.
+			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).TODOEngine(), rhsID)
+			lhsPartition.deactivate()
+			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
-			if hs.Commit != uint64(10) {
-				return errors.Errorf("hard state not yet initialized: got %v, expected %v",
-					hs.Commit, uint64(10))
+			require.Equal(t, uint64(0), hs.Commit)
+			testutils.SucceedsSoon(t, func() error {
+				_, err := tc.AddVoters(keyB, tc.Target(0))
+				return err
+			})
+			tc.WaitForValues(t, keyB, []int64{6, 6, 6})
+		})
+
+		// This case is like the previous case except the store crashes after
+		// laying down a tombstone.
+		t.Run("(2) no RHS partition, with restart", func(t *testing.T) {
+			tc, db, keyA, keyB, _, lhsPartition := setup(t)
+			defer tc.Stopper().Stop(ctx)
+
+			tc.SplitRangeOrFatal(t, keyB)
+
+			// Write a value which we can observe to know when the split has been
+			// applied by the LHS.
+			increment(t, db, keyA, 1)
+			tc.WaitForValues(t, keyA, []int64{6, 8, 8})
+
+			increment(t, db, keyB, 6)
+			// Wait for all non-partitioned nodes to catch up.
+			tc.WaitForValues(t, keyB, []int64{0, 6, 6})
+
+			rhsInfo, err := getRangeInfo(ctx, db, keyB)
+			require.NoError(t, err)
+			rhsID := rhsInfo.Desc.RangeID
+			_, store0Exists := rhsInfo.Desc.GetReplicaDescriptor(1)
+			require.True(t, store0Exists)
+
+			// Remove and re-add the RHS to create a new uninitialized replica at
+			// a higher replica ID. This will lead to a tombstone being written.
+			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+			// Unsuccessfuly because the RHS will not accept the learner snapshot
+			// and will be rolled back. Nevertheless it will have learned that it
+			// has been removed at the old replica ID.
+			_, err = tc.Servers[0].DB().AdminChangeReplicas(
+				ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
+				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+			)
+			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
+
+			// Without a partitioned RHS we'll end up always writing a tombstone here because
+			// the RHS will be created at the initial replica ID because it will get
+			// raft message when the other nodes split and then after the above call
+			// it will find out about its new replica ID and write a tombstone for the
+			// old one.
+			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).TODOEngine(), rhsID)
+
+			// We do all of this incrementing to ensure that nobody will ever
+			// succeed in sending a message the new RHS replica after we restart
+			// the store. Previously there were races which could happen if we
+			// stopped the store immediately. Sleeps worked but this feels somehow
+			// more principled.
+			curB := int64(6)
+			for curB < 100 {
+				curB++
+				increment(t, db, keyB, 1)
+				tc.WaitForValues(t, keyB, []int64{0, curB, curB})
 			}
-			return nil
+
+			// Restart store 0 so that it forgets about the newer replicaID.
+			tc.StopServer(0)
+			lhsPartition.deactivate()
+			require.NoError(t, tc.RestartServer(0))
+
+			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
+			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
+			require.Equal(t, uint64(0), hs.Commit)
+			testutils.SucceedsSoon(t, func() error {
+				_, err := tc.AddVoters(keyB, tc.Target(0))
+				return err
+			})
+			tc.WaitForValues(t, keyB, []int64{curB, curB, curB})
 		})
-		rhsPartition.deactivate()
-		testutils.SucceedsSoon(t, func() error {
-			_, err := tc.AddVoters(keyB, tc.Target(0))
-			return err
+
+		// In this case the RHS will be partitioned from hearing anything about
+		// the initial replica ID of the RHS after the split. It will learn about
+		// the higher replica ID and have that higher replica ID in memory when
+		// the split is processed. We partition the RHS's new replica ID before
+		// processing the split to ensure that the RHS doesn't get initialized.
+		t.Run("(3) initial replica RHS partition, no restart", func(t *testing.T) {
+			tc, db, keyA, keyB, _, lhsPartition := setup(t)
+			defer tc.Stopper().Stop(ctx)
+			var rhsPartition *testClusterPartitionedRange
+			partitionReplicaOnSplit(t, tc, keyB, lhsPartition, &rhsPartition)
+			tc.SplitRangeOrFatal(t, keyB)
+
+			// Write a value which we can observe to know when the split has been
+			// applied by the LHS.
+			increment(t, db, keyA, 1)
+			tc.WaitForValues(t, keyA, []int64{6, 8, 8})
+
+			increment(t, db, keyB, 6)
+			// Wait for all non-partitioned nodes to catch up.
+			tc.WaitForValues(t, keyB, []int64{0, 6, 6})
+
+			rhsInfo, err := getRangeInfo(ctx, db, keyB)
+			require.NoError(t, err)
+			rhsID := rhsInfo.Desc.RangeID
+			_, store0Exists := rhsInfo.Desc.GetReplicaDescriptor(1)
+			require.True(t, store0Exists)
+
+			// Remove and re-add the RHS to create a new uninitialized replica at
+			// a higher replica ID. This will lead to a tombstone being written.
+			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+			// Unsuccessful because the RHS will not accept the learner snapshot and
+			// will be rolled back. Nevertheless it will have learned that it has been
+			// removed at the old replica ID. We don't use tc.AddVoters because that
+			// will retry until it runs out of time, since we're creating a
+			// retriable-looking situation here that will persist.
+			_, err = tc.Servers[0].DB().AdminChangeReplicas(
+				ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
+				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+			)
+			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
+			// Ensure that the replica exists with the higher replica ID.
+			repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(rhsInfo.Desc.RangeID)
+			require.NoError(t, err)
+			require.Equal(t, repl.ReplicaID(), rhsInfo.Desc.NextReplicaID)
+			rhsPartition.addReplica(rhsInfo.Desc.NextReplicaID)
+			// Ensure that there's no tombstone.
+			// The RHS on store 0 never should have heard about its original ID.
+			ensureNoTombstone(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
+			lhsPartition.deactivate()
+			rhsPartition.deactivate()
+			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
+			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
+			require.Equal(t, uint64(0), hs.Commit)
+			// Now succeed in adding the RHS. Use SucceedsSoon because in rare cases
+			// the learner snapshot can fail due to a race with a raft snapshot from
+			// a raft leader on a different node.
+			testutils.SucceedsSoon(t, func() error {
+				_, err := tc.AddVoters(keyB, tc.Target(0))
+				return err
+			})
+			tc.WaitForValues(t, keyB, []int64{6, 6, 6})
 		})
-		tc.WaitForValues(t, keyB, []int64{curB, curB, curB})
+
+		// This case is set up like the previous one except after the RHS learns about
+		// its higher replica ID the store crashes and forgets. The RHS replica gets
+		// initialized by the split.
+		t.Run("(4) initial replica RHS partition, with restart", func(t *testing.T) {
+			tc, db, keyA, keyB, _, lhsPartition := setup(t)
+			defer tc.Stopper().Stop(ctx)
+			var rhsPartition *testClusterPartitionedRange
+
+			partitionReplicaOnSplit(t, tc, keyB, lhsPartition, &rhsPartition)
+			tc.SplitRangeOrFatal(t, keyB)
+
+			if leaseType == roachpb.LeaseLeader {
+				// Since both LHS and RHS use the same store, let's remove the store
+				// partition from `rhsPartition` and keep it only in `lhsPartition`.
+				// This will help us control the store partition using one object.
+				// TODO(ibrahim): Make the test pass when both LHS and RHS ranges are
+				// recovered at the same time.
+				store, err := tc.Servers[0].GetStores().(*kvserver.Stores).
+					GetStore(tc.Servers[0].GetFirstStoreID())
+				require.NoError(t, err)
+				rhsPartition.removeStore(store.StoreID())
+			}
+
+			// Write a value which we can observe to know when the split has been
+			// applied by the LHS.
+			increment(t, db, keyA, 1)
+			tc.WaitForValues(t, keyA, []int64{6, 8, 8})
+
+			increment(t, db, keyB, 6)
+			// Wait for all non-partitioned nodes to catch up.
+			tc.WaitForValues(t, keyB, []int64{0, 6, 6})
+
+			rhsInfo, err := getRangeInfo(ctx, db, keyB)
+			require.NoError(t, err)
+			rhsID := rhsInfo.Desc.RangeID
+			_, store0Exists := rhsInfo.Desc.GetReplicaDescriptor(1)
+			require.True(t, store0Exists)
+
+			// Remove and re-add the RHS to create a new uninitialized replica at
+			// a higher replica ID. This will lead to a tombstone being written.
+			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+			// Unsuccessfuly because the RHS will not accept the learner snapshot
+			// and will be rolled back. Nevertheless it will have learned that it
+			// has been removed at the old replica ID.
+			//
+			// Not using tc.AddVoters because we expect an error, but that error
+			// would be retried internally.
+			_, err = tc.Servers[0].DB().AdminChangeReplicas(
+				ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
+				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+			)
+			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
+			// Ensure that there's no tombstone.
+			// The RHS on store 0 never should have heard about its original ID.
+			ensureNoTombstone(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
+
+			// Now, before we deactivate the LHS partition, partition the newer replica
+			// on the RHS too.
+			rhsPartition.addReplica(rhsInfo.Desc.NextReplicaID)
+
+			// We do all of this incrementing to ensure that nobody will ever
+			// succeed in sending a message the new RHS replica after we restart
+			// the store. Previously there were races which could happen if we
+			// stopped the store immediately. Sleeps worked but this feels somehow
+			// more principled.
+			curB := int64(6)
+			for curB < 100 {
+				curB++
+				increment(t, db, keyB, 1)
+				tc.WaitForValues(t, keyB, []int64{0, curB, curB})
+			}
+
+			tc.StopServer(0)
+			lhsPartition.deactivate()
+			require.NoError(t, tc.RestartServer(0))
+
+			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
+			// In this case the store has forgotten that it knew the RHS of the split
+			// could not exist. We ensure that it has been initialized to the initial
+			// commit value, which is 10.
+			testutils.SucceedsSoon(t, func() error {
+				hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
+				if hs.Commit != uint64(10) {
+					return errors.Errorf("hard state not yet initialized: got %v, expected %v",
+						hs.Commit, uint64(10))
+				}
+				return nil
+			})
+			rhsPartition.deactivate()
+			testutils.SucceedsSoon(t, func() error {
+				_, err := tc.AddVoters(keyB, tc.Target(0))
+				return err
+			})
+			tc.WaitForValues(t, keyB, []int64{curB, curB, curB})
+		})
 	})
 }
 
