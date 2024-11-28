@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -73,7 +74,7 @@ type logEntry struct {
 	counter uint64
 
 	// The stack trace(s), when processing e.g. a fatal event.
-	stacks []byte
+	stacks debugutil.SafeStack
 
 	// Whether the entry is structured or not.
 	structured bool
