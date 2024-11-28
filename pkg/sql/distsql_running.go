@@ -1860,18 +1860,28 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	defer subqueryRecv.Release()
 	defer recv.stats.add(&subqueryRecv.stats)
 	var typs []*types.T
-	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
+	switch subqueryPlan.execMode {
+	case rowexec.SubqueryExecModeExists:
 		subqueryRecv.existsMode = true
 		typs = []*types.T{}
-	} else {
+	case rowexec.SubqueryExecModeDiscardAllRows:
+	default:
 		typs = subqueryPhysPlan.GetResultTypes()
 	}
 	var rows rowContainerHelper
-	rows.Init(ctx, typs, evalCtx, "subquery" /* opName */)
-	defer rows.Close(ctx)
+	if subqueryPlan.execMode != rowexec.SubqueryExecModeDiscardAllRows {
+		rows.Init(ctx, typs, evalCtx, "subquery" /* opName */)
+		defer rows.Close(ctx)
+	}
 
 	// TODO(yuzefovich): consider implementing batch receiving result writer.
-	subqueryRowReceiver := NewRowResultWriter(&rows)
+	var subqueryRowReceiver rowResultWriter
+	if subqueryPlan.execMode == rowexec.SubqueryExecModeDiscardAllRows {
+		// Use a row receiver that ignores all results except for errors.
+		subqueryRowReceiver = &droppingResultWriter{}
+	} else {
+		subqueryRowReceiver = NewRowResultWriter(&rows)
+	}
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
 	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
@@ -1954,6 +1964,8 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 			return pgerror.Newf(pgcode.CardinalityViolation,
 				"more than one row returned by a subquery used as an expression")
 		}
+	case rowexec.SubqueryExecModeDiscardAllRows:
+		subqueryPlans[planIdx].result = tree.DNull
 	default:
 		return fmt.Errorf("unexpected subqueryExecMode: %d", subqueryPlan.execMode)
 	}
