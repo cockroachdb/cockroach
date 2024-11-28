@@ -6,9 +6,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/backup",
         "//pkg/base",
         "//pkg/ccl/auditloggingccl",
-        "//pkg/ccl/backupccl",
         "//pkg/ccl/buildccl",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/cliccl",

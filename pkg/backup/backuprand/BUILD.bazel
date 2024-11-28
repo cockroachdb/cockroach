@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "backuprand_test",
+    srcs = [
+        "backup_rand_test.go",
+        "main_test.go",
+    ],
+    data = ["//c-deps:libgeos"],
+    deps = [
+        "//pkg/backup/backuptestutils",
+        "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/storageccl",
+        "//pkg/cloud/nodelocal",
+        "//pkg/internal/sqlsmith",
+        "//pkg/jobs/jobspb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils",
+        "//pkg/testutils/fingerprintutils",
+        "//pkg/testutils/jobutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

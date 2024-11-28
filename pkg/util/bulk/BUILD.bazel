@@ -30,7 +30,7 @@ go_test(
     srcs = ["tracing_aggregator_test.go"],
     deps = [
         ":bulk",
-        "//pkg/ccl/backupccl/backuppb",
+        "//pkg/backup/backuppb",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_gogo_protobuf//proto",

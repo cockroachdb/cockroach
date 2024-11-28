@@ -9,7 +9,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -61,7 +61,7 @@ type spanConfigIngestor struct {
 	stopperCh                chan struct{}
 	settings                 *cluster.Settings
 	client                   streamclient.SpanConfigClient
-	rekeyer                  *backupccl.KeyRewriter
+	rekeyer                  *backup.KeyRewriter
 	destinationTenantKeySpan roachpb.Span
 	db                       *kv.DB
 	testingKnobs             *sql.StreamingTestingKnobs
@@ -93,7 +93,7 @@ func makeSpanConfigIngestor(
 		OldID: sourceTenantID,
 		NewID: details.DestinationTenantID,
 	}
-	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.SystemSQLCodec,
+	rekeyer, err := backup.MakeKeyRewriterFromRekeys(keys.SystemSQLCodec,
 		nil /* tableRekeys */, []execinfrapb.TenantRekey{rekeyCfg},
 		true /* restoreTenantFromStream */)
 	if err != nil {
