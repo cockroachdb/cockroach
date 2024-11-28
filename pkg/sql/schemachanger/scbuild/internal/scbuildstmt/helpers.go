@@ -1771,7 +1771,7 @@ func mustRetrieveColumnName(
 }
 
 func mustRetrievePrimaryIndex(b BuildCtx, tableID catid.DescID) *scpb.PrimaryIndex {
-	return b.QueryByID(tableID).FilterPrimaryIndex().MustGetOneElement()
+	return b.QueryByID(tableID).Filter(publicTargetFilter).FilterPrimaryIndex().MustGetOneElement()
 }
 
 func retrieveColumnNotNull(
