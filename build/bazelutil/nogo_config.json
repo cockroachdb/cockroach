@@ -45,7 +45,7 @@
             "pkg/ccl/multitenantccl/tenantcostclient/tenant_side.go": "flagged by linter, should be evaluated",
             "pkg/ccl/sqlproxyccl/acl/watcher.go": "flagged by linter, should be evaluated",
             "pkg/ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go": "flagged by linter, should be evaluated",
-            "pkg/ccl/crosscluster/streamclient/random_stream_client.go": "flagged by linter, should be evaluated",
+            "pkg/crosscluster/streamclient/random_stream_client.go": "flagged by linter, should be evaluated",
             "pkg/cli/clisqlexec/format_csv_tsv.go": "flagged by linter, should be evaluated",
             "pkg/cli/clisqlshell/sql.go": "flagged by linter, should be evaluated",
             "pkg/cli/syncbench/syncbench.go": "flagged by linter, should be evaluated",
