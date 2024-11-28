@@ -22,6 +22,7 @@ import (
 var errOperationFatal = errors.New("o.Fatal() was called")
 
 type operationImpl struct {
+	workerId        int
 	spec            *registry.OperationSpec
 	clusterSettings install.ClusterSettings
 	startOpts       option.StartOpts
@@ -76,7 +77,7 @@ func (o *operationImpl) Status(args ...interface{}) {
 
 	o.mu.status = fmt.Sprint(args...)
 	if !o.L().Closed() {
-		o.L().PrintfCtxDepth(context.TODO(), 3, "operation status: %s", o.mu.status)
+		o.L().PrintfCtxDepth(context.TODO(), 3, "[%d] operation status: %s", o.workerId, o.mu.status)
 	}
 }
 
@@ -131,7 +132,7 @@ func (o *operationImpl) addFailure(depth int, format string, args ...interface{}
 	msg := reportFailure.Error()
 
 	failureNum := len(o.mu.failures)
-	o.L().Printf("operation failure #%d: %s", failureNum, msg)
+	o.L().Printf("[%d] operation failure #%d: %s", o.workerId, failureNum, msg)
 }
 
 func (o *operationImpl) Failed() bool {
