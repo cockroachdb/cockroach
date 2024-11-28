@@ -80,8 +80,10 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 			panic(err)
 		}
 		leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState)
+		metrics := MakeMetrics()
 		s := NewStreamer(
 			s.DistSenderI().(*kvcoord.DistSender),
+			&metrics,
 			s.AppStopper(),
 			leafTxn,
 			func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
