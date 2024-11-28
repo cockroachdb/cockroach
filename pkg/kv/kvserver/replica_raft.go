@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -2947,11 +2946,11 @@ func (r *Replica) acquireMergeLock(
 func handleTruncatedStateBelowRaftPreApply(
 	ctx context.Context,
 	currentTruncatedState, suggestedTruncatedState *kvserverpb.RaftTruncatedState,
-	loader stateloader.StateLoader,
+	loader logstore.StateLoader,
 	readWriter storage.ReadWriter,
 ) (_apply bool, _ error) {
 	return logstore.Compact(ctx, currentTruncatedState, suggestedTruncatedState,
-		loader.StateLoader, readWriter)
+		loader, readWriter)
 }
 
 // shouldCampaignAfterConfChange returns true if the current replica should

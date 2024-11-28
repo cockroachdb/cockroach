@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -38,7 +38,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "truncated_state"), func(t *testing.T, path string) {
 		const rangeID = 12
-		loader := stateloader.Make(rangeID)
+		loader := logstore.NewStateLoader(rangeID)
 		prefixBuf := &loader.RangeIDPrefixBuf
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
