@@ -920,7 +920,7 @@ explain(shape):
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO abc SELECT a, b, c FROM abc RETURNING a
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ label: buffer 1

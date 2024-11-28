@@ -33,7 +33,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT a FROM y
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: (a)
@@ -80,7 +80,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO x VALUES (1) RETURNING a
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: (a)
@@ -260,7 +260,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT 1 UNION ALL SELECT id + 1 FROM x WHERE id < 3
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ label: buffer 3 (x)

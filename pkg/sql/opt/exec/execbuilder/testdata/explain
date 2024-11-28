@@ -610,7 +610,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT * FROM (SELECT tp.table_catalog AS database_name, tp.table_schema AS schema_name, tp.table_name, tp.grantee, tp.privilege_type, tp.is_grantable::BOOL, CASE WHEN s.sequence_name IS NOT NULL THEN 'sequence' ELSE 'table' END AS object_type FROM "".information_schema.table_privileges AS tp LEFT JOIN "".information_schema.sequences AS s ON (((tp.table_catalog = s.sequence_catalog) AND (tp.table_schema = s.sequence_schema)) AND (tp.table_name = s.sequence_name))) WHERE (database_name, schema_name, table_name) IN (('test', 'public', 'foo'),)
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ label: buffer 1 (r)
