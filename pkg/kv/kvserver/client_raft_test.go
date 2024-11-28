@@ -5731,6 +5731,15 @@ func TestElectionAfterRestart(t *testing.T) {
 				RaftConfig: base.RaftConfig{
 					RaftElectionTimeoutTicks: electionTimeoutTicks,
 					RaftTickInterval:         raftTickInterval,
+					// Without this knob, elections triggered the first time around are
+					// guaranteed to fail as we won't have StoreLiveness support. This
+					// doesn't work with the expectation in this test to not see any
+					// timeout based elections for the ranges its tracking -- we are
+					// guaranteed to see timeout related elections for all ranges who
+					// failed the first time around when we didn't have StoreLiveness
+					// support. In some sense, leader leases is breaking the spirit of
+					// this test -- maybe we should get rid of it entirely?
+					TestingDisablePreCampaignStoreLivenessCheck: true,
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
