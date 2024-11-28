@@ -1155,6 +1155,13 @@ func (md *Metadata) WithBinding(id WithID) Expr {
 	return res
 }
 
+// HasWithBinding returns true if the given WithID is already bound to an
+// expression.
+func (md *Metadata) HasWithBinding(id WithID) bool {
+	_, ok := md.withBindings[id]
+	return ok
+}
+
 // ForEachWithBinding calls fn with each bound (WithID, Expr) pair in the
 // metadata.
 func (md *Metadata) ForEachWithBinding(fn func(WithID, Expr)) {

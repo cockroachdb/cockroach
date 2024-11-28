@@ -1185,7 +1185,6 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 
 		// Copy the right expression into a new memo, replacing each bound column
 		// with the corresponding value from the left row.
-		addedWithBindings := false
 		var replaceFn norm.ReplaceFunc
 		replaceFn = func(e opt.Expr) opt.Expr {
 			switch t := e.(type) {
@@ -1209,12 +1208,15 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 				// We lazily add these With expressions to the metadata here
 				// because the call to Factory.CopyAndReplace below clears With
 				// expressions in the metadata.
-				if !addedWithBindings {
-					b.mem.Metadata().ForEachWithBinding(func(id opt.WithID, expr opt.Expr) {
+				b.mem.Metadata().ForEachWithBinding(func(id opt.WithID, expr opt.Expr) {
+					// Make sure to check for an existing With binding, since we may
+					// have already rewritten the bound expression and added it to the
+					// new memo if the associated WithExpr is part of the right input of
+					// the apply-join.
+					if !f.Metadata().HasWithBinding(id) {
 						f.Metadata().AddWithBinding(id, expr)
-					})
-					addedWithBindings = true
-				}
+					}
+				})
 				// Fall through.
 			}
 			return f.CopyAndReplaceDefault(e, replaceFn)
