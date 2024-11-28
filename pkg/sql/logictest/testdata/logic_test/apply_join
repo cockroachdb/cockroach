@@ -456,7 +456,7 @@ NULL
 
 # Regression test for mixing subqueries in "inner" and "outer" contexts
 # (#66923).
-query error unimplemented: apply joins with subqueries in the \"inner\" and \"outer\" contexts are not supported
+query error more than one row returned by a subquery used as an expression
 VALUES
   (
     (
@@ -735,3 +735,75 @@ WHERE
   )
 ORDER BY tab378983._timestamptz ASC NULLS FIRST
 LIMIT 78:::INT8;
+
+# Test apply joins with subqueries/CTEs in the inner and outer plans.
+subtest inner_outer_subquery
+
+statement ok
+SET testing_optimizer_disable_rule_probability = 1.0;
+
+query ITI rowsort
+WITH foo (bar) AS MATERIALIZED (SELECT 100)
+SELECT * FROM t INNER JOIN LATERAL (
+  SELECT * FROM foo WHERE bar = k*100
+) ON TRUE;
+----
+1  one  100
+
+query ITITI rowsort
+WITH foo AS MATERIALIZED (SELECT 100)
+SELECT * FROM t INNER JOIN LATERAL (
+  SELECT *, (SELECT * FROM foo) FROM u WHERE l = k
+) ON TRUE;
+----
+1  one    1  one    100
+2  two    2  two    100
+3  three  3  three  100
+4  four   4  four   100
+5  five   5  five   100
+
+# Add a few additional subqueries.
+query ITITIII rowsort
+WITH foo AS MATERIALIZED (SELECT 100)
+SELECT *, (SELECT max(m) FROM v)
+FROM t INNER JOIN LATERAL (
+  SELECT *, (SELECT * FROM foo), (SELECT min(m) FROM v) FROM u WHERE l = k
+) ON TRUE;
+----
+1  one    1  one    100  1  5
+2  two    2  two    100  1  5
+3  three  3  three  100  1  5
+4  four   4  four   100  1  5
+5  five   5  five   100  1  5
+
+# Make the nested subquery correlated.
+query ITITIII rowsort
+WITH foo AS MATERIALIZED (SELECT 100)
+SELECT *, (SELECT max(m) FROM v)
+FROM t INNER JOIN LATERAL (
+  SELECT *, (SELECT * FROM foo), (SELECT min(m) + k FROM v) FROM u WHERE l = k
+) ON TRUE;
+----
+1  one    1  one    100  2  5
+2  two    2  two    100  3  5
+3  three  3  three  100  4  5
+4  four   4  four   100  5  5
+5  five   5  five   100  6  5
+
+# Add a CTE to the inner plan. The bound expression is correlated.
+query ITITII rowsort
+WITH foo AS MATERIALIZED (SELECT 100)
+SELECT * FROM t INNER JOIN LATERAL (
+  WITH bar AS (SELECT *, (SELECT * FROM foo) FROM u WHERE l = k) SELECT * FROM bar, foo
+) ON TRUE;
+----
+1  one    1  one    100  100
+2  two    2  two    100  100
+3  three  3  three  100  100
+4  four   4  four   100  100
+5  five   5  five   100  100
+
+statement ok
+RESET testing_optimizer_disable_rule_probability;
+
+subtest end
