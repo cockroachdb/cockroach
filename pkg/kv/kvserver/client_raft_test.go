@@ -1331,7 +1331,8 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	// This test is specifically designed for epoch based leases.
+	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 
 	manualClock := hlc.NewHybridManualClock()
 	clusterArgs := base.TestClusterArgs{
@@ -6817,10 +6818,11 @@ func TestRaftUnquiesceLeaderNoProposal(t *testing.T) {
 	t.Logf("n1 still leader with no new proposals at log index %d", status.Progress[1].Match)
 }
 
-// TestRaftPreVoteUnquiesceDeadLeader tests that if a quorum of replicas independently
-// consider the leader dead, they can successfully hold an election despite
-// having recently heard from a leader under the PreVote+CheckQuorum condition.
-// It also tests that it does not result in an election tie.
+// TestRaftPreVoteUnquiesceDeadLeader tests that if a quorum of replicas
+// independently consider the leader dead, they can successfully hold an
+// election despite having recently heard from a leader under the
+// PreVote+CheckQuorum condition. It also tests that it does not result in an
+// election tie.
 //
 // We quiesce the range and partition away the leader as such:
 //
@@ -6844,10 +6846,11 @@ func TestRaftPreVoteUnquiesceDeadLeader(t *testing.T) {
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
 
-	// Disable expiration-based leases, since these prevent quiescence.
+	// This test is specifically designed for epoch based leases, as they're the
+	// only lease type for which we have quiescence.
 	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, &st.SV, false)
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false)
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
