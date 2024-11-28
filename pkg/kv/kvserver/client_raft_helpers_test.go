@@ -237,6 +237,7 @@ type testClusterPartitionedRange struct {
 		partitionedNodeIdx  int
 		partitioned         bool
 		partitionedReplicas map[roachpb.ReplicaID]bool
+		partitionedStores   map[roachpb.StoreID]bool
 	}
 	handlers []kvserver.IncomingRaftMessageHandler
 }
@@ -316,6 +317,7 @@ func setupPartitionedRangeWithHandlers(
 	pr.mu.partitionedReplicas = map[roachpb.ReplicaID]bool{
 		replicaID: true,
 	}
+	pr.mu.partitionedStores = map[roachpb.StoreID]bool{}
 	for i := range tc.Servers {
 		s := i
 		h := &unreliableRaftHandler{
@@ -381,6 +383,40 @@ func setupPartitionedRangeWithHandlers(
 		}
 		pr.handlers = append(pr.handlers, h)
 		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
+
+		// Also partition the store in the storeliveness layer.
+		pr.addStore(tc.Servers[partitionedNodeIdx].GetFirstStoreID())
+
+		shouldDropStoreLivenessMessage := func(from roachpb.StoreID, to roachpb.StoreID) bool {
+			pr.mu.RLock()
+			defer pr.mu.RUnlock()
+			// Drop all messages from/to partitioned stores.
+			return pr.mu.partitioned && (pr.mu.partitionedStores[from] || pr.mu.partitionedStores[to])
+		}
+
+		store, err := tc.Servers[s].GetStores().(*kvserver.Stores).
+			GetStore(tc.Servers[s].GetFirstStoreID())
+		if err != nil {
+			return nil, err
+		}
+
+		tc.Servers[s].StoreLivenessTransport().(*storeliveness.Transport).
+			ListenMessages(store.StoreID(), &storeliveness.UnreliableHandler{
+				MessageHandler: store.TestingStoreLivenessSupportManager(),
+				UnreliableHandlerFuncs: storeliveness.UnreliableHandlerFuncs{
+					DropStoreLivenessMsg: func(msg *storelivenesspb.Message) bool {
+						drop := shouldDropStoreLivenessMessage(msg.From.StoreID, msg.To.StoreID)
+						if drop {
+							log.Infof(context.Background(), "dropping StoreLiveness msg %s from store %d: to %d",
+								msg.Type, msg.From.StoreID, msg.To.StoreID)
+						} else {
+							log.Infof(context.Background(), "allowing StoreLiveness msg %s from store %d: to %d",
+								msg.Type, msg.From.StoreID, msg.To.StoreID)
+						}
+						return drop
+					},
+				},
+			})
 	}
 	return pr, nil
 }
@@ -397,6 +433,19 @@ func (pr *testClusterPartitionedRange) addReplica(replicaID roachpb.ReplicaID) {
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
 	pr.mu.partitionedReplicas[replicaID] = true
+}
+
+func (pr *testClusterPartitionedRange) addStore(storeID roachpb.StoreID) {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+	pr.mu.partitionedStores[storeID] = true
+}
+
+func (pr *testClusterPartitionedRange) removeStore(storeID roachpb.StoreID) {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
+	pr.mu.partitionedStores[storeID] = false
 }
 
 func (pr *testClusterPartitionedRange) extend(
