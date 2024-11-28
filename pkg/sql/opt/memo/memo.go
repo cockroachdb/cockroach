@@ -546,6 +546,11 @@ func (m *Memo) CopyNextRankFrom(other *Memo) {
 	m.curRank = other.curRank
 }
 
+// CopyNextWithIDFrom copies the next WithID from the other memo.
+func (m *Memo) CopyNextWithIDFrom(other *Memo) {
+	m.curWithID = other.curWithID
+}
+
 // RequestColStat calculates and returns the column statistic calculated on the
 // relational expression.
 func (m *Memo) RequestColStat(

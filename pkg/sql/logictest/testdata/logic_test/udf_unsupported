@@ -113,18 +113,6 @@ CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'PREPARE p AS SELECT * FROM t
 subtest end
 
 
-subtest cte
-
-# CTEs are not currently supported in UDF bodies.
-statement error pgcode 0A000 unimplemented: CTE usage inside a function definition
-CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'WITH s AS (SELECT a FROM t) SELECT a FROM s'
-
-statement error pgcode 0A000 unimplemented: statement source \(square bracket syntax\) within user-defined function
-CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM [SELECT 1] a(a)'
-
-subtest end
-
-
 subtest recursion
 
 # Recursive UDFs are not currently supported.

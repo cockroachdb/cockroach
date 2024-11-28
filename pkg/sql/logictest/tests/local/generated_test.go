@@ -1599,6 +1599,13 @@ func TestLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
+func TestLogic_procedure_cte(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_cte")
+}
+
 func TestLogic_procedure_deps(
 	t *testing.T,
 ) {
@@ -2458,6 +2465,13 @@ func TestLogic_udf_calling_udf(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_calling_udf")
+}
+
+func TestLogic_udf_cte(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_cte")
 }
 
 func TestLogic_udf_delete(
