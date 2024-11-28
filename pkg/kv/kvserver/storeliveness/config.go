@@ -62,6 +62,9 @@ type SupportManagerKnobs struct {
 	// DisableHeartbeats denotes the ID of a store whose heartbeats should be
 	// stopped. Setting DisableHeartbeats to nil will re-enable heartbeats.
 	DisableHeartbeats *atomic.Value // slpb.StoreIdent
+	// DisableAllHeartbeats disables all store liveness heartbeats regardless of
+	// the store ID.
+	DisableAllHeartbeats *atomic.Bool
 }
 
 // TestingKnobs is a wrapper around TransportKnobs and SupportManagerKnobs.
