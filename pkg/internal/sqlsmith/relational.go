@@ -1095,17 +1095,12 @@ func (s *Smither) makeCreateFunc() (cf *tree.CreateRoutine, ok bool) {
 		}
 	}
 
-	// Disable CTEs temporarily, since they are not currently supported in UDFs.
-	// TODO(92961): Allow CTEs in generated statements in UDF bodies.
 	// TODO(93049): Allow UDFs to create other UDFs.
-	oldDisableWith := s.disableWith
 	oldDisableMutations := s.disableMutations
 	defer func() {
-		s.disableWith = oldDisableWith
 		s.disableUDFCreation = false
 		s.disableMutations = oldDisableMutations
 	}()
-	s.disableWith = true
 	s.disableUDFCreation = true
 	s.disableMutations = (funcVol != tree.RoutineVolatile) || s.disableMutations
 

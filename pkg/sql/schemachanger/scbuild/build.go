@@ -103,7 +103,11 @@ func Build(
 
 	// Generate redacted statement.
 	{
-		an.ValidateAnnotations()
+		if _, ok := n.(*tree.CreateRoutine); !ok {
+			// This validation fails for references to CTEs, which need not be
+			// qualified.
+			an.ValidateAnnotations()
+		}
 		currentStatementID := uint32(len(els.statements) - 1)
 		els.statements[currentStatementID].RedactedStatement = string(
 			dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation))

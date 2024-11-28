@@ -1588,14 +1588,6 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function definition
-CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
-  BEGIN
-    WITH foo AS MATERIALIZED (SELECT * FROM xy) SELECT * FROM foo;
-    RETURN 0;
-  END
-$$ LANGUAGE PLpgSQL;
-
 statement error pgcode 0A000 pq: unimplemented: SHOW DATABASES usage inside a function definition
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   BEGIN
@@ -1603,15 +1595,6 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
     RETURN 0;
   END
 $$ LANGUAGE PLpgSQL;
-
-statement error pgcode 0A000 pq: unimplemented: statement source \(square bracket syntax\) within user-defined function
-CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
-  BEGIN
-    SELECT * FROM [SHOW databases];
-    RETURN 0;
-  END
-$$ LANGUAGE PLpgSQL;
-
 
 statement error pgcode 0A000 pq: unimplemented: CREATE TABLE usage inside a function definition
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
@@ -1635,6 +1618,23 @@ statement error pgcode 0A000 pq: unimplemented: PREPARE usage inside a function 
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   BEGIN
     PREPARE foo AS SELECT * FROM xy WHERE x = $1;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+# CTEs are allowed in functions.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    WITH foo AS MATERIALIZED (SELECT * FROM xy) SELECT * FROM foo;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  BEGIN
+    SELECT * FROM [SELECT * FROM xy];
     RETURN 0;
   END
 $$ LANGUAGE PLpgSQL;
