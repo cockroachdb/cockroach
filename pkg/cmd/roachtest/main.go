@@ -194,7 +194,7 @@ this command does no setup/teardown of clusters.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("\nRunning operation %s on %s.\n\n", args[1], args[0])
 			cmd.SilenceUsage = true
-			return runOperation(operations.RegisterOperations, args[1], args[0])
+			return runOperations(operations.RegisterOperations, args[1], args[0])
 		},
 	}
 	roachtestflags.AddRunOpsFlags(runOperationCmd.Flags())

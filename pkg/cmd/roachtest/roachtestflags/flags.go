@@ -356,6 +356,25 @@ var (
 		Usage: "Specifies the name of the database table to run the operation against, using the database provided in the --db flag. " +
 			"If the table does not exist, the operation fails. If not provided, a random table is selected.",
 	})
+
+	OperationParallelism int = 1
+	_                        = registerRunOpsFlag(&OperationParallelism, FlagInfo{
+		Name:  "parallelism",
+		Usage: "Number of operations to run in parallel.",
+	})
+
+	WaitBeforeNextExecution time.Duration = 15 * time.Minute
+	_                                     = registerRunOpsFlag(&WaitBeforeNextExecution, FlagInfo{
+		Name:  "wait-before-next-execution",
+		Usage: "Interval to wait before the operation next execution after the previous run.",
+	})
+
+	RunForever bool = false
+	_               = registerRunOpsFlag(&RunForever, FlagInfo{
+		Name:  "run-forever",
+		Usage: "Execute operations indefinitely until the command is terminated, (default false).",
+	})
+
 	SideEyeApiToken string = ""
 	_                      = registerRunFlag(&SideEyeApiToken, FlagInfo{
 		Name: "side-eye-token",
