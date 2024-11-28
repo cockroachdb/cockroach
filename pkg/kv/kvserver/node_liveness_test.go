@@ -53,9 +53,10 @@ func verifyLiveness(t *testing.T, tc *testcluster.TestCluster) {
 		return nil
 	})
 }
+
 func verifyLivenessServer(s serverutils.TestServerInterface, numServers int64) error {
 	nl := s.NodeLiveness().(*liveness.NodeLiveness)
-	if !nl.GetNodeVitalityFromCache(s.NodeID()).IsLive(livenesspb.IsAliveNotification) {
+	if !nl.GetNodeVitalityFromCache(s.NodeID()).IsLive(livenesspb.TestingIsAliveAndHasHeartbeated) {
 		return errors.Errorf("node %d not live", s.NodeID())
 	}
 	if a, e := nl.Metrics().LiveNodes.Value(), numServers; a != e {
@@ -180,7 +181,7 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 	nl, ok := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetLiveness(tc.Servers[0].NodeID())
 	assert.True(t, ok)
 	if nl.Epoch != 1 {
-		t.Errorf("expected epoch to be set to 1 initially; got %d", nl.Epoch)
+		t.Fatalf("expected epoch to be set to 1 initially; got %d; liveness %s", nl.Epoch, nl)
 	}
 
 	// Restart the node and verify the epoch is incremented with initial heartbeat.
@@ -1119,13 +1120,17 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 	defer s.Stopper().Stop(ctx)
 	nl := s.NodeLiveness().(*liveness.NodeLiveness)
 
+	testutils.SucceedsSoon(t, func() error {
+		return verifyLivenessServer(s, 1)
+	})
+
 	// We want to control the heartbeats.
 	nl.PauseHeartbeatLoopForTest()
 
 	sem = make(chan struct{})
 
 	l, ok := nl.Self()
-	assert.True(t, ok)
+	require.True(t, ok)
 
 	hbCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
