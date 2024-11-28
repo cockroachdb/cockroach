@@ -264,6 +264,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/redact/internal/redact": {
 						"safeWrapper": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/util/debugutil": {
+						"SafeStack": {},
+					},
 				}
 				ty := recv[0].Type
 				reportFailure := func() {
