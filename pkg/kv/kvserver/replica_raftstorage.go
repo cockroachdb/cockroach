@@ -38,11 +38,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// invalidLastTerm is an out-of-band value for r.mu.lastTermNotDurable that
-// invalidates lastTermNotDurable caching and forces retrieval of
-// Term(lastIndexNotDurable) from the raftEntryCache/Pebble.
-const invalidLastTerm = 0
-
 var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.snapshot.ingest_as_write_threshold",

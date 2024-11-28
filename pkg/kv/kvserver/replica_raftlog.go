@@ -15,6 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 )
 
+// invalidLastTerm is an out-of-band value for r.mu.lastTermNotDurable that
+// invalidates lastTermNotDurable caching and forces retrieval of
+// Term(lastIndexNotDurable) from the raftEntryCache/Pebble.
+//
+// TODO(#136296): always know the last entry term to avoid this quirk.
+const invalidLastTerm = 0
+
 // raftLogState describes the current state of the raft log storage.
 //
 // TODO(pav-kv): rename the fields to be less verbose, and add methods
