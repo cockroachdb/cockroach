@@ -108,8 +108,8 @@ function upload_binaries {
 }
 
 function upload_all {
-  upload_stats
   upload_binaries
+  upload_stats
 }
 
 # Upload any ${stats_file_name} we can find, and some binaries, no matter what happens.
