@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -82,7 +83,7 @@ func init() {
 //
 // This is used to assert that configuration is performed
 // before logging has been used for the first time.
-func IsActive() (active bool, firstUse string) {
+func IsActive() (active bool, firstUse debugutil.SafeStack) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 	return logging.mu.active, logging.mu.firstUseStack

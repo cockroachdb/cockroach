@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -868,7 +868,7 @@ func panicAsError(l *logger.Logger, f func() error) (retErr error) {
 // logPanicToErr logs the panic stack trace and returns an error with the
 // panic message.
 func logPanicToErr(l *logger.Logger, r interface{}) error {
-	l.Printf("panic stack trace:\n%s", string(debug.Stack()))
+	l.Printf("panic stack trace:\n%s", debugutil.Stack())
 	return fmt.Errorf("panic (stack trace above): %v", r)
 }
 
