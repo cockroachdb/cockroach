@@ -509,6 +509,11 @@ func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
 	panic("unimplemented")
 }
 
+// SingleClearUnversioned implements the Writer interface.
+func (fw *SSTWriter) SingleClearUnversioned(key roachpb.Key) error {
+	panic("unimplemented")
+}
+
 // ClearMVCCIteratorRange implements the Writer interface.
 func (fw *SSTWriter) ClearMVCCIteratorRange(_, _ roachpb.Key, _, _ bool) error {
 	panic("not implemented")

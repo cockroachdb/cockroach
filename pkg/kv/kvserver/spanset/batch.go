@@ -574,6 +574,10 @@ func (s spanSetWriter) SingleClearEngineKey(key storage.EngineKey) error {
 	return s.w.SingleClearEngineKey(key)
 }
 
+func (s spanSetWriter) SingleClearUnversioned(key roachpb.Key) error {
+	return s.w.SingleClearUnversioned(key)
+}
+
 func (s spanSetWriter) checkAllowedRange(start, end roachpb.Key) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: start, EndKey: end}); err != nil {
