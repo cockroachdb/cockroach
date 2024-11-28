@@ -20,7 +20,7 @@ type TestingKnobs struct {
 
 	// BeforeWaitingForConcurrentSchemaChanges is called at the start of waiting
 	// for concurrent schema changes to finish.
-	BeforeWaitingForConcurrentSchemaChanges func(stmts []string)
+	BeforeWaitingForConcurrentSchemaChanges func(stmts []string) error
 
 	// WhileWaitingForConcurrentSchemaChanges is called while waiting
 	// for concurrent schema changes to finish.
