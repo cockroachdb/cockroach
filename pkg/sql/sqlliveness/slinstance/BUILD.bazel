@@ -12,6 +12,7 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/sqlliveness/slstorage",
+        "//pkg/util",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
