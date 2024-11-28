@@ -1457,6 +1457,13 @@ func TestTenantLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
+func TestTenantLogic_procedure_cte(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_cte")
+}
+
 func TestTenantLogic_procedure_deps(
 	t *testing.T,
 ) {
@@ -2255,6 +2262,13 @@ func TestTenantLogic_udf_calling_udf(
 	runLogicTest(t, "udf_calling_udf")
 }
 
+func TestTenantLogic_udf_cte(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_cte")
+}
+
 func TestTenantLogic_udf_delete(
 	t *testing.T,
 ) {
@@ -2715,6 +2729,13 @@ func TestTenantLogicCCL_plpgsql_call(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_call")
+}
+
+func TestTenantLogicCCL_plpgsql_cte(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_cte")
 }
 
 func TestTenantLogicCCL_plpgsql_cursor(

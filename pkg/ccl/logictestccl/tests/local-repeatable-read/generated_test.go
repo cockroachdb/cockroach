@@ -1455,6 +1455,13 @@ func TestRepeatableReadLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
+func TestRepeatableReadLogic_procedure_cte(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_cte")
+}
+
 func TestRepeatableReadLogic_procedure_deps(
 	t *testing.T,
 ) {
@@ -2232,6 +2239,13 @@ func TestRepeatableReadLogic_udf_calling_udf(
 	runLogicTest(t, "udf_calling_udf")
 }
 
+func TestRepeatableReadLogic_udf_cte(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_cte")
+}
+
 func TestRepeatableReadLogic_udf_delete(
 	t *testing.T,
 ) {
@@ -2657,6 +2671,13 @@ func TestRepeatableReadLogicCCL_plpgsql_call(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_call")
+}
+
+func TestRepeatableReadLogicCCL_plpgsql_cte(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_cte")
 }
 
 func TestRepeatableReadLogicCCL_plpgsql_cursor(

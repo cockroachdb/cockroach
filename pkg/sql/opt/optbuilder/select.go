@@ -204,11 +204,6 @@ func (b *Builder) buildDataSource(
 		// This is the special '[ ... ]' syntax. We treat this as syntactic sugar
 		// for a top-level CTE, so it cannot refer to anything in the input scope.
 		// See #41078.
-		if b.insideFuncDef {
-			panic(unimplemented.NewWithIssue(
-				92961, "statement source (square bracket syntax) within user-defined function",
-			))
-		}
 		emptyScope := b.allocScope()
 		innerScope := b.buildStmt(source.Statement, nil /* desiredTypes */, emptyScope)
 		if len(innerScope.cols) == 0 {
