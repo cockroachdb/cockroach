@@ -186,9 +186,9 @@ they're simply attributes defined over a keyspan.
 
 We'll store all span configs on the host tenant along with the spans they apply
 over. This will let us derive split points (keys with diverging configs on
-either side). Each active tenant's SQL pod(s) will asynchronously drive the
+either side). *Each active tenant's SQL pod(s) will asynchronously drive the
 convergence between its zone configs and the cluster's span configs pertaining
-to the tenant's keyspace, all through explicit KV APIs. The SQL pod, being SQL
+to the tenant's keyspace, all through explicit KV APIs.* The SQL pod, being SQL
 aware, will be responsible for translating its zone configs to span configs by
 spelling out the constituent keyspans and cascaded configs. When KV is told to
 apply a set of span configs, it will perform relevant safety checks and

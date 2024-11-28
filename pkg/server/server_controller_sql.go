@@ -23,7 +23,7 @@ import (
 
 // sqlMux redirects incoming SQL connections to the server selected
 // by the client-provided SQL parameters.
-// If no tenant is specifeid, the default tenant is used.
+// If no tenant is specified, the default tenant is used.
 func (c *serverController) sqlMux(
 	ctx context.Context, conn net.Conn, status pgwire.PreServeStatus,
 ) error {

@@ -791,6 +791,8 @@ func (s *Server) drainImpl(
 
 	select {
 	case <-time.After(cancelWait):
+		// TODO(Shubham): print all the stacks in a test build
+		// make cancelWait configurable
 		return errors.Errorf("some sessions did not respond to cancellation within %s", cancelWait)
 	case <-allConnsDone:
 	}
