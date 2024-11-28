@@ -2488,6 +2488,60 @@ func testDisruptiveFollowerPreVote(t *testing.T, storeLivenessEnabled bool) {
 	require.Equal(t, pb.StateLeader, n1.state)
 }
 
+// TestPreCandidateIgnoresDefortification tests that a pre-candidate ignores
+// MsgDefortifyLeader and doesn't become a follower again.
+func TestPreCandidateIgnoresDefortification(t *testing.T) {
+	var fabric *raftstoreliveness.LivenessFabric
+	var n1, n2 *raft
+
+	fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2)
+	n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
+		withStoreLiveness(fabric.GetStoreLiveness(1)))
+	n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
+		withStoreLiveness(fabric.GetStoreLiveness(2)))
+
+	n1.checkQuorum = true
+	n2.checkQuorum = true
+	n1.preVote = true
+	n2.preVote = true
+
+	n1.becomeFollower(1, None)
+	n2.becomeFollower(1, None)
+
+	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2)
+
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+
+	// Check raft states.
+	require.Equal(t, pb.StateLeader, n1.state)
+	require.Equal(t, pb.StateFollower, n2.state)
+
+	// The term is 2 for both nodes.
+	require.Equal(t, uint64(2), n1.Term)
+	require.Equal(t, uint64(2), n2.Term)
+
+	// Withdraw 2's support for 1. This allows 2 to pre-campaign since it's not
+	// supporting a fortified leader.
+	nt.livenessFabric.WithdrawSupportFor(2, 1)
+
+	// Isolate 1 so that it doesn't receive the MsgVoteRequest from 2, and
+	// therefore it doesn't vote for it.
+	nt.isolate(1)
+	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+
+	// 2 is now a pre-candidate.
+	require.Equal(t, pb.StatePreCandidate, n2.state)
+
+	// 2 should remain a PreCandidate even if it receives a MsgDefortifyLeader.
+	nt.send(pb.Message{From: 1, To: 2, Term: 2, Type: pb.MsgDeFortifyLeader})
+	require.Equal(t, pb.StatePreCandidate, n2.state)
+
+	// However, receiving another message from a leader would cause 2 to become
+	// follower again.
+	nt.send(pb.Message{From: 1, To: 2, Term: 2, Type: pb.MsgApp})
+	require.Equal(t, pb.StateFollower, n2.state)
+}
+
 func TestLeaderAppResp(t *testing.T) {
 	// initial progress: match = 0; next = 3
 	tests := []struct {
