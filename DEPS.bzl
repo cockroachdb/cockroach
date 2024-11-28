@@ -11479,10 +11479,10 @@ def go_deps():
         name = "org_golang_google_grpc",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/grpc",
-        sha256 = "02a23b873909d3a7f46b1ab5e822b698aeec0e79538924e5edb21838e7fda562",
-        strip_prefix = "google.golang.org/grpc@v1.68.0",
+        sha256 = "69298d07c23c6fd53d5a8e1fc30f9f697875aa8367074306bb57cf5487fbf927",
+        strip_prefix = "github.com/cockroachdb/grpc-go@v1.68.0-noalpncheck",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/grpc/org_golang_google_grpc-v1.68.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/grpc-go/com_github_cockroachdb_grpc_go-v1.68.0-noalpncheck.zip",
         ],
     )
     go_repository(
