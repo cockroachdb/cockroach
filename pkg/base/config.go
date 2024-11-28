@@ -640,6 +640,11 @@ type RaftConfig struct {
 	//
 	// -1 to disable.
 	RaftDelaySplitToSuppressSnapshot time.Duration
+
+	// TestingDisablePreCampaignStoreLivenessCheck may be used by tests to disable
+	// the check performed by a peer before campaigning to ensure it has
+	// StoreLiveness support from a majority quorum.
+	TestingDisablePreCampaignStoreLivenessCheck bool
 }
 
 // SetDefaults initializes unset fields.
