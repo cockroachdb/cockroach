@@ -32,6 +32,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/log",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/stop",

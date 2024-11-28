@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -35,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -43,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -53,30 +50,9 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-var (
-	// raftLogTruncationClearRangeThreshold is the number of entries at which Raft
-	// log truncation uses a Pebble range tombstone rather than point deletes. It
-	// is set high enough to avoid writing too many range tombstones to Pebble,
-	// but low enough that we don't do too many point deletes either (in
-	// particular, we don't want to overflow the Pebble write batch).
-	//
-	// In the steady state, Raft log truncation occurs when RaftLogQueueStaleSize
-	// (64 KB) or RaftLogQueueStaleThreshold (100 entries) is exceeded, so
-	// truncations are generally small. If followers are lagging, we let the log
-	// grow to RaftLogTruncationThreshold (16 MB) before truncating.
-	//
-	// 100k was chosen because it is unlikely to be hit in most common cases,
-	// keeping the number of range tombstones low, but will trigger when Raft logs
-	// have grown abnormally large. RaftLogTruncationThreshold will typically not
-	// trigger it, unless the average log entry is <= 160 bytes. The key size is
-	// ~16 bytes, so Pebble point deletion batches will be bounded at ~1.6MB.
-	raftLogTruncationClearRangeThreshold = kvpb.RaftIndex(metamorphic.ConstantWithTestRange(
-		"raft-log-truncation-clearrange-threshold", 100000 /* default */, 1 /* min */, 1e6 /* max */))
-
-	// raftDisableLeaderFollowsLeaseholder disables lease/leader colocation.
-	raftDisableLeaderFollowsLeaseholder = envutil.EnvOrDefaultBool(
-		"COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false)
-)
+// raftDisableLeaderFollowsLeaseholder disables lease/leader collocation.
+var raftDisableLeaderFollowsLeaseholder = envutil.EnvOrDefaultBool(
+	"COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER", false)
 
 // evalAndPropose prepares the necessary pending command struct and initializes
 // a client command ID if one hasn't been. A verified lease is supplied as a
@@ -2970,84 +2946,11 @@ func (r *Replica) acquireMergeLock(
 func handleTruncatedStateBelowRaftPreApply(
 	ctx context.Context,
 	currentTruncatedState, suggestedTruncatedState *kvserverpb.RaftTruncatedState,
-	loader stateloader.StateLoader,
+	loader logstore.StateLoader,
 	readWriter storage.ReadWriter,
 ) (_apply bool, _ error) {
-	if suggestedTruncatedState.Index <= currentTruncatedState.Index {
-		// The suggested truncated state moves us backwards; instruct the
-		// caller to not update the in-memory state.
-		return false, nil
-	}
-
-	// Truncate the Raft log from the entry after the previous
-	// truncation index to the new truncation index. This is performed
-	// atomically with the raft command application so that the
-	// TruncatedState index is always consistent with the state of the
-	// Raft log itself.
-	prefixBuf := &loader.RangeIDPrefixBuf
-	numTruncatedEntries := suggestedTruncatedState.Index - currentTruncatedState.Index
-	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
-		start := prefixBuf.RaftLogKey(currentTruncatedState.Index + 1).Clone()
-		end := prefixBuf.RaftLogKey(suggestedTruncatedState.Index + 1).Clone() // end is exclusive
-		if err := readWriter.ClearRawRange(start, end, true, false); err != nil {
-			return false, errors.Wrapf(err,
-				"unable to clear truncated Raft entries for %+v between indexes %d-%d",
-				suggestedTruncatedState, currentTruncatedState.Index+1, suggestedTruncatedState.Index+1)
-		}
-	} else {
-		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
-		// avoid allocating when constructing Raft log keys (16 bytes).
-		prefix := prefixBuf.RaftLogPrefix()
-		for idx := currentTruncatedState.Index + 1; idx <= suggestedTruncatedState.Index; idx++ {
-			if err := readWriter.ClearUnversioned(
-				keys.RaftLogKeyFromPrefix(prefix, idx),
-				storage.ClearOptions{},
-			); err != nil {
-				return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
-					suggestedTruncatedState, idx)
-			}
-		}
-	}
-
-	// The suggested truncated state moves us forward; apply it and tell
-	// the caller as much.
-	if err := storage.MVCCPutProto(
-		ctx,
-		readWriter,
-		prefixBuf.RaftTruncatedStateKey(),
-		hlc.Timestamp{},
-		suggestedTruncatedState,
-		storage.MVCCWriteOptions{Category: fs.ReplicationReadCategory},
-	); err != nil {
-		return false, errors.Wrap(err, "unable to write RaftTruncatedState")
-	}
-
-	return true, nil
-}
-
-// ComputeRaftLogSize computes the size (in bytes) of the Raft log from the
-// storage engine. This will iterate over the Raft log and sideloaded files, so
-// depending on the size of these it can be mildly to extremely expensive and
-// thus should not be called frequently.
-func ComputeRaftLogSize(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	reader storage.Reader,
-	sideloaded logstore.SideloadStorage,
-) (int64, error) {
-	prefix := keys.RaftLogPrefix(rangeID)
-	prefixEnd := prefix.PrefixEnd()
-	ms, err := storage.ComputeStats(ctx, reader, prefix, prefixEnd, 0 /* nowNanos */)
-	if err != nil {
-		return 0, err
-	}
-	// The remaining bytes if one were to truncate [0, 0) gives us the total
-	// number of bytes in sideloaded files.
-	_, totalSideloaded, err := sideloaded.BytesIfTruncatedFromTo(ctx, 0, 0)
-	if err != nil {
-		return 0, err
-	}
-	return ms.SysBytes + totalSideloaded, nil
+	return logstore.Compact(ctx, currentTruncatedState, suggestedTruncatedState,
+		loader, readWriter)
 }
 
 // shouldCampaignAfterConfChange returns true if the current replica should
