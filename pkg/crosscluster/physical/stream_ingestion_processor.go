@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -222,7 +222,7 @@ type streamIngestionProcessor struct {
 	execinfra.ProcessorBase
 
 	spec    execinfrapb.StreamIngestionDataSpec
-	rekeyer *backupccl.KeyRewriter
+	rekeyer *backup.KeyRewriter
 	// rewriteToDiffKey Indicates whether we are rekeying a key into a different key.
 	rewriteToDiffKey bool
 
@@ -306,7 +306,7 @@ func newStreamIngestionDataProcessor(
 	spec execinfrapb.StreamIngestionDataSpec,
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
-	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
+	rekeyer, err := backup.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
 		nil /* tableRekeys */, []execinfrapb.TenantRekey{spec.TenantRekey},
 		true /* restoreTenantFromStream */)
 	if err != nil {

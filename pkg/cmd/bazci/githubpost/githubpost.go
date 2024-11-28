@@ -687,7 +687,7 @@ func getOwner(ctx context.Context, packageName, testName string) (_teams []team.
 		}
 
 		// Workaround for #107885.
-		if strings.Contains(packageName, "backupccl") {
+		if strings.Contains(packageName, "backup") {
 			dr := co.GetTeamForAlias("cockroachdb/disaster-recovery")
 			if dr.Name() == "" {
 				log.Fatalf("disaster-recovery team could not be found in TEAMS.yaml")

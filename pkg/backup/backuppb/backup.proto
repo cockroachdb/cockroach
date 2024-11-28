@@ -1,0 +1,244 @@
+// Copyright 2016 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.ccl.backupccl;
+option go_package = "github.com/cockroachdb/cockroach/pkg/backup/backuppb";
+
+import "build/info.proto";
+import "cloud/cloudpb/external_storage.proto";
+import "roachpb/data.proto";
+import "roachpb/metadata.proto";
+import "sql/stats/table_statistic.proto";
+import "sql/catalog/descpb/structured.proto";
+import "multitenant/mtinfopb/info.proto";
+import "util/hlc/timestamp.proto";
+import "gogoproto/gogo.proto";
+
+enum MVCCFilter {
+  Latest = 0;
+  All = 1;
+}
+
+// BackupManifest represents a consistent snapshot of ranges.
+//
+// Each range snapshot includes a path to data that is a diff of the data in
+// that key range between a start and end timestamp. The end timestamp of all
+// ranges in a backup is the same, but the start may vary (to allow individual
+// tables to be backed up on different schedules).
+message BackupManifest {
+  // BackupManifest_File represents a diff for a key range between two
+  // timestamps. Note that many BackupManifest_File spans can get written to a
+  // single SST.
+  message File {
+    roachpb.Span span = 1 [(gogoproto.nullable) = false];
+    string path = 2;
+    reserved 3;
+    reserved 4;
+    reserved 5;
+    roachpb.RowCount entry_counts = 6 [(gogoproto.nullable) = false];
+
+    // StartTime 0 is sometimes legitimately used, so it is only meaningful if
+    // EndTime is non-zero, otherwise both just inherit from containing backup.
+    util.hlc.Timestamp start_time = 7 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp end_time = 8 [(gogoproto.nullable) = false];
+    string locality_kv = 9 [(gogoproto.customname) = "LocalityKV"];
+    // BackingFileSize is the actual size of the backing file, if known. This
+    // can be zero if unknown, in which case opening the file will need to find
+    // it via an additional stat/size call.
+    uint64 backing_file_size = 10;
+    // ApproximatePhysicalSize is the approximate size of the physical bytes in
+    // compressed SST form.
+    uint64 approximate_physical_size = 11;
+
+    bool has_range_keys = 12;
+  }
+
+  message DescriptorRevision {
+    util.hlc.Timestamp time = 1 [(gogoproto.nullable) = false];
+    uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+    sql.sqlbase.Descriptor desc = 3;
+  }
+
+  message Progress {
+    repeated File files = 1 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp rev_start_time = 2 [(gogoproto.nullable) = false];
+    int32 completed_spans = 3;
+  }
+
+  util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
+  MVCCFilter mvcc_filter = 13 [(gogoproto.customname) = "MVCCFilter"];
+  // Even if StartTime is zero, we only get revisions since gc threshold, so
+  // do not allow AS OF SYSTEM TIME before revision_start_time.
+  util.hlc.Timestamp revision_start_time = 17 [(gogoproto.nullable) = false];
+
+  // Spans contains the spans requested for backup. The keyranges covered by
+  // `files` may be a subset of this if there were ranges with no changes since
+  // the last backup. For all tables in the backup descriptor, these spans must
+  // completely cover each table's span. For example, if a table with ID 51 were
+  // being backed up, then the span `/Table/5{1-2}` must be completely covered.
+  repeated roachpb.Span spans = 3 [(gogoproto.nullable) = false];
+
+  // IntroducedSpans are a subset of spans, set only when creating incremental
+  // backups that cover spans not included in a previous backup. Spans contained
+  // here are covered in the interval (0, startTime], which, in conjunction with
+  // the coverage from (startTime, endTime] implied for all spans in Spans,
+  // results in coverage from [0, endTime] for these spans.
+  //
+  // The first set of spans in this field are new spans that did not
+  // exist in the previous backup (a new index, for example).
+  repeated roachpb.Span introduced_spans = 15 [(gogoproto.nullable) = false];
+
+  repeated DescriptorRevision descriptor_changes = 16  [(gogoproto.nullable) = false];
+
+  repeated File files = 4 [(gogoproto.nullable) = false];
+  repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
+  // Tenants holds metadata about any tenants contained in the
+  // backup. Callers who constructed a BackupManifest without using
+  // the backupinfo package should take care with the handling of
+  // deprecated fields in Tenants and the existence of
+  // TenantsDeprecated. See UpgradeTenantDescriptors for more
+  // information.
+  repeated cockroach.multitenant.TenantInfoWithUsage tenants = 26 [(gogoproto.nullable) = false];
+  // This field is deprecated; it is only retained to allow restoring older
+  // backups.
+  repeated cockroach.multitenant.ProtoInfo tenants_deprecated = 24 [(gogoproto.nullable) = false];
+  // databases in descriptors that have all tables also in descriptors.
+  repeated uint32 complete_dbs = 14 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+  reserved 6;
+  roachpb.RowCount entry_counts = 12 [(gogoproto.nullable) = false];
+
+  cloud.cloudpb.ExternalStorage dir = 7 [(gogoproto.nullable) = false];
+
+  uint32 format_version = 8;
+
+  bytes cluster_id = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "ClusterID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+
+  // node_id and build_info of the gateway node (which writes the descriptor).
+  int32 node_id = 10 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  build.Info build_info = 11 [(gogoproto.nullable) = false];
+  roachpb.Version cluster_version = 25 [(gogoproto.nullable) = false];
+
+  bytes id = 18 [(gogoproto.nullable) = false,
+                (gogoproto.customname) = "ID",
+                (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+  repeated string partition_descriptor_filenames = 19;
+  repeated string locality_kvs = 20 [(gogoproto.customname) = "LocalityKVs"];
+  // This field is used by backups in 19.2 and 20.1 where a backup manifest stores all the table
+  // statistics in the field, the later versions all write the statistics to a separate file
+  // indicated in the table_statistic_files field.
+  repeated sql.stats.TableStatisticProto deprecated_statistics = 21;
+  map<uint32, string> statistics_filenames = 23 [
+      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+    ];
+  int32 descriptor_coverage = 22 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];
+
+  // HasExternalManifestSSTs is set to true if the backup manifest has its
+  // `Files`, `Descriptors`, and DescriptorChanges fields nil'ed out and written
+  // as a supporting SST file instead.
+  //
+  // TODO(adityamaru): Delete when backwards compatibility with 22.2 is dropped
+  // since all backups in 23.1+ will write slim manifests.
+  bool has_external_manifest_ssts = 27 [(gogoproto.customname) = "HasExternalManifestSSTs"];
+
+  int32 elided_prefix = 28 [(gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb.ElidePrefix"];
+
+  // NEXT ID: 29.
+}
+
+message BackupPartitionDescriptor{
+  string locality_kv = 1 [(gogoproto.customname) = "LocalityKV"];
+  repeated BackupManifest.File files = 2 [(gogoproto.nullable) = false];
+  bytes backup_id = 3 [(gogoproto.nullable) = false,
+                      (gogoproto.customname) = "BackupID",
+                      (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
+}
+
+
+// In 20.2 and later, the Statistics object is stored separately from the backup manifest.
+// StatsTables is a struct containing an array of sql.stats.TableStatisticProto object so
+// that it can be easily marshaled into or unmarshaled from a file.
+message StatsTable {
+  repeated sql.stats.TableStatisticProto statistics = 1;
+}
+
+// ScheduledBackupExecutionArgs is the arguments to the scheduled backup executor.
+message ScheduledBackupExecutionArgs {
+  enum BackupType {
+    FULL = 0;
+    INCREMENTAL = 1;
+  }
+  BackupType backup_type = 1;
+  string backup_statement = 2;
+  int64 unpause_on_success = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.ScheduleID"];
+  bool updates_last_backup_metric = 4;
+  // If the schedule is one of the two  that were created when setting up a
+  // full+incremental schedule backup, then DependentScheduleID will be set to
+  // the schedule ID of the other "dependent" schedule.
+  // i.e. the full schedule will have the inc schedules ID and vice versa.
+  // A value of 0 indicates that there is no dependent schedule.
+  int64 dependent_schedule_id = 6 [(gogoproto.customname) = "DependentScheduleID", (gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/jobs/jobspb.ScheduleID"];
+
+  // ChainProtectedTimestampRecords indicates that chaining of protected
+  // timestamp records is enabled for this schedule. The chaining scheme works
+  // as described in `schedule_pts_chaining.go`.
+  bool chain_protected_timestamp_records = 7;
+
+  bytes protected_timestamp_record = 8 [
+   (gogoproto.customname) = "ProtectedTimestampRecord",
+   (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  reserved 5;
+}
+
+// RestoreProgress is the information that the RestoreData processor sends back
+// to the restore coordinator to update the job progress.
+message RestoreProgress {
+  roachpb.RowCount summary = 1 [(gogoproto.nullable) = false];
+  int64 progressIdx = 2;
+  roachpb.Span dataSpan = 3 [(gogoproto.nullable) = false];
+  // CompleteUpTo is the timestamp that the data in DataSpan has been processed
+  // up to so far. The entire span has been processed if this timestamp is equal
+  // to restore end time.
+  util.hlc.Timestamp complete_up_to = 4 [(gogoproto.nullable) = false];
+}
+
+message BackupProcessorPlanningTraceEvent {
+  map<int32, int64> node_to_num_spans = 1 [(gogoproto.nullable) = false];
+  int64 total_num_spans = 2;
+}
+
+message BackupProgressTraceEvent {
+  int64 total_num_files = 1;
+  roachpb.RowCount total_entry_counts = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp revision_start_time = 3 [(gogoproto.nullable) = false];
+}
+
+// ExportStats is a message containing information about each
+// Export{Request,Response}.
+message ExportStats {
+  option (gogoproto.goproto_stringer) = false;
+
+  // NumFiles is the number of SST files produced by the ExportRequest.
+  int64 num_files = 1;
+  // DataSize is the byte size of all the SST files produced by the
+  // ExportRequest.
+  int64 data_size = 2;
+  // Duration is the total time taken to send an ExportRequest, receive an
+  // ExportResponse and push the response on a channel.
+  int64 duration = 3 [(gogoproto.casttype) = "time.Duration"];
+  // StartTime is the timestamp at which the ExportRequest was sent.
+  util.hlc.Timestamp start_time = 4 [(gogoproto.nullable) = false];
+  // EndTime is the timestamp at which an ExportResponse was received and pushed
+  // onto a channel.
+  util.hlc.Timestamp end_time = 5 [(gogoproto.nullable) = false];
+}

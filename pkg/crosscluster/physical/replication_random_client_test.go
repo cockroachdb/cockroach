@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
@@ -71,7 +71,7 @@ func getTestRandomClientURI(tenantID roachpb.TenantID, tenantName roachpb.Tenant
 // used by stream ingestion to check for correctness.
 type streamClientValidator struct {
 	cdctest.StreamValidator
-	rekeyer *backupccl.KeyRewriter
+	rekeyer *backup.KeyRewriter
 
 	mu syncutil.Mutex
 }
@@ -82,7 +82,7 @@ type streamClientValidator struct {
 // to utilize other Validator's.
 // The wrapper also allows querying the orderValidator to retrieve streamed
 // events from an in-memory store.
-func newStreamClientValidator(rekeyer *backupccl.KeyRewriter) *streamClientValidator {
+func newStreamClientValidator(rekeyer *backup.KeyRewriter) *streamClientValidator {
 	ov := cdctest.NewStreamOrderValidator()
 	return &streamClientValidator{
 		StreamValidator: ov,
@@ -147,7 +147,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	// TODO(ssd,knz): This is a hack, we should really retrieve the tenant ID
 	// from beyond the point CREATE TENANT has run below.
 	const newTenantID = 2
-	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MustMakeTenantID(oldTenantID)),
+	rekeyer, err := backup.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MustMakeTenantID(oldTenantID)),
 		nil /* tableRekeys */, []execinfrapb.TenantRekey{{
 			OldID: roachpb.MustMakeTenantID(oldTenantID),
 			NewID: roachpb.MustMakeTenantID(newTenantID),

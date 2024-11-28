@@ -9,7 +9,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -392,7 +392,7 @@ func createDummySpanConfigIngestor(
 	destTenantStartKey := keys.MakeTenantPrefix(destTenantID)
 	destTenantSpan := roachpb.Span{Key: destTenantStartKey, EndKey: destTenantStartKey.PrefixEnd()}
 
-	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.SystemSQLCodec,
+	rekeyer, err := backup.MakeKeyRewriterFromRekeys(keys.SystemSQLCodec,
 		nil /* tableRekeys */, []execinfrapb.TenantRekey{rekeyCfg},
 		true /* restoreTenantFromStream */)
 	require.NoError(t, err)

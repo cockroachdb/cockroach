@@ -48,9 +48,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/backup/backupresolver",
         "//pkg/base",
         "//pkg/build",
-        "//pkg/ccl/backupccl/backupresolver",
         "//pkg/ccl/changefeedccl/cdceval",
         "//pkg/ccl/changefeedccl/cdcevent",
         "//pkg/ccl/changefeedccl/cdcutils",

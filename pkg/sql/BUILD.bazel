@@ -758,10 +758,10 @@ go_test(
     },
     shard_count = 16,
     deps = [
+        "//pkg/backup",
         "//pkg/base",
         "//pkg/build/bazel",
         "//pkg/ccl",
-        "//pkg/ccl/backupccl",
         "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
