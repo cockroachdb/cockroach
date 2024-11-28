@@ -422,7 +422,8 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
 		if apply {
 			if apply, err = handleTruncatedStateBelowRaftPreApply(
-				ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
+				ctx, b.state.TruncatedState, res.State.TruncatedState,
+				b.r.raftMu.stateLoader.StateLoader, b.batch,
 			); err != nil {
 				return errors.Wrap(err, "unable to handle truncated state")
 			}

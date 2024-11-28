@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -687,7 +688,8 @@ func (rlq *raftLogQueue) process(
 		// make sure concurrent Raft activity doesn't foul up our update to the
 		// cached in-memory values.
 		r.raftMu.Lock()
-		n, err := ComputeRaftLogSize(ctx, r.RangeID, r.store.TODOEngine(), r.raftMu.sideloaded)
+		n, err := logstore.ComputeRaftLogSize(
+			ctx, r.RangeID, r.store.TODOEngine(), r.raftMu.sideloaded)
 		if err == nil {
 			r.mu.Lock()
 			r.shMu.raftLogSize = n
