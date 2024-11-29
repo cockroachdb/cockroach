@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -58,7 +59,7 @@ const (
 func TestReplicaCircuitBreaker_NotTripped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Circuit breaker doesn't get in the way of anything unless
@@ -79,7 +80,7 @@ func TestReplicaCircuitBreaker_NotTripped(t *testing.T) {
 func TestReplicaCircuitBreaker_LeaseholderTripped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 	k := tc.ScratchRange(t)
 
@@ -146,7 +147,7 @@ func TestReplicaCircuitBreaker_LeaseholderTripped(t *testing.T) {
 func TestReplicaCircuitBreaker_FollowerTripped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Get lease on n1.
@@ -191,7 +192,7 @@ func TestReplicaCircuitBreaker_FollowerTripped(t *testing.T) {
 func TestReplicaCircuitBreaker_LeaselessTripped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Put the lease on n1 but then trip the breaker with the probe
@@ -253,7 +254,7 @@ func TestReplicaCircuitBreaker_LeaselessTripped(t *testing.T) {
 func TestReplicaCircuitBreaker_Leaseholder_QuorumLoss(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Get lease on n1.
@@ -299,7 +300,7 @@ func TestReplicaCircuitBreaker_Leaseholder_QuorumLoss(t *testing.T) {
 func TestReplicaCircuitBreaker_Follower_QuorumLoss(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Get lease to n2 so that we can lose it without taking down the system ranges.
@@ -354,7 +355,7 @@ func TestReplicaCircuitBreaker_Liveness_QuorumLoss(t *testing.T) {
 	skip.IgnoreLint(t, "See: https://github.com/cockroachdb/cockroach/issues/74616")
 
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Up-replicate liveness range and move lease to n2.
@@ -400,7 +401,7 @@ func TestReplicaCircuitBreaker_ResolveIntent_QuorumLoss(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(ctx)
 
 	// Get lease on n1.
@@ -509,7 +510,7 @@ func waitReplicaRangeFeed(
 func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
@@ -602,136 +603,163 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
-	defer tc.Stopper().Stop(context.Background())
+	testutils.RunValues(t, "lease-type", roachpb.EpochAndLeaderLeaseType(),
+		func(t *testing.T, leaseType roachpb.LeaseType) {
+			tc := setupCircuitBreakerTest(t, leaseType)
+			defer tc.Stopper().Stop(context.Background())
 
-	// Put the lease on n1 but then trip the breaker with the probe
-	// disabled, i.e. it will stay tripped.
-	require.NoError(t, tc.Write(n1))
-	tc.SetProbeEnabled(n1, false)
-	tc.TripBreaker(n1)
+			// Put the lease on n1 but then trip the breaker with the probe
+			// disabled, i.e. it will stay tripped.
+			require.NoError(t, tc.Write(n1))
+			tc.SetProbeEnabled(n1, false)
+			tc.TripBreaker(n1)
 
-	exemptRequests := []func() kvpb.Request{
-		func() kvpb.Request { return &kvpb.ExportRequest{} },
-		func() kvpb.Request {
-			sstFile := &storage.MemObject{}
-			sst := storage.MakeIngestionSSTWriter(context.Background(), cluster.MakeTestingClusterSettings(), sstFile)
-			defer sst.Close()
-			require.NoError(t, sst.LogData([]byte("hello")))
-			require.NoError(t, sst.Finish())
+			exemptRequests := []func() kvpb.Request{
+				func() kvpb.Request { return &kvpb.ExportRequest{} },
+				func() kvpb.Request {
+					sstFile := &storage.MemObject{}
+					sst := storage.MakeIngestionSSTWriter(context.Background(), cluster.MakeTestingClusterSettings(), sstFile)
+					defer sst.Close()
+					require.NoError(t, sst.LogData([]byte("hello")))
+					require.NoError(t, sst.Finish())
 
-			addReq := &kvpb.AddSSTableRequest{
-				Data:           sstFile.Data(),
-				IngestAsWrites: true,
-			}
-			return addReq
-		},
-		func() kvpb.Request {
-			return &kvpb.RevertRangeRequest{TargetTime: tc.Servers[0].Clock().Now()}
-		},
-		func() kvpb.Request {
-			return &kvpb.GCRequest{}
-		},
-		func() kvpb.Request {
-			return &kvpb.ClearRangeRequest{}
-		},
-		func() kvpb.Request {
-			return &kvpb.ProbeRequest{}
-		},
-	}
-
-	for _, reqFn := range exemptRequests {
-		req := reqFn()
-		tc.Run(t, fmt.Sprintf("with-existing-lease/%s", req.Method()), func(t *testing.T) {
-			require.NoError(t, tc.Send(n1, req))
-		})
-	}
-	for _, reqFn := range exemptRequests {
-		req := reqFn()
-		tc.Run(t, fmt.Sprintf("with-acquire-lease/%s", req.Method()), func(t *testing.T) {
-			resumeHeartbeats := tc.ExpireAllLeasesAndN1LivenessRecord(t, pauseHeartbeats)
-			resumeHeartbeats() // intentionally resume right now so that lease can be acquired
-			// NB: when looking into the traces here, we sometimes see - as expected -
-			// that when the request tries to acquire a lease, the breaker is still
-			// tripped. That's why there is a retry loop here.
-			testutils.SucceedsSoon(t, func() error {
-				err := tc.Send(n1, req)
-				if errors.HasType(err, (*kvpb.NotLeaseHolderError)(nil)) {
-					return err
-				}
-				require.NoError(t, err)
-				return nil
-			})
-		})
-	}
-
-	resumeHeartbeats := tc.ExpireAllLeasesAndN1LivenessRecord(t, pauseHeartbeats)
-
-	for _, reqFn := range exemptRequests {
-		req := reqFn()
-		tc.Run(t, fmt.Sprintf("with-unavailable-lease/%s", req.Method()), func(t *testing.T) {
-			if m := req.Method(); m == kvpb.Probe {
-				// Probe does not require the lease, and is the most-tested of the bunch
-				// already. We don't have to test it again here, which would require undue
-				// amounts of special-casing below.
-				skip.IgnoreLintf(t, "subtest does not apply to %s", m)
+					addReq := &kvpb.AddSSTableRequest{
+						Data:           sstFile.Data(),
+						IngestAsWrites: true,
+					}
+					return addReq
+				},
+				func() kvpb.Request {
+					return &kvpb.RevertRangeRequest{TargetTime: tc.Servers[0].Clock().Now()}
+				},
+				func() kvpb.Request {
+					return &kvpb.GCRequest{}
+				},
+				func() kvpb.Request {
+					return &kvpb.ClearRangeRequest{}
+				},
+				func() kvpb.Request {
+					return &kvpb.ProbeRequest{}
+				},
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Millisecond)
-			defer cancel()
-			const maxWait = 5 * time.Second
-			tBegin := timeutil.Now()
-			err := tc.SendCtx(ctx, n1, req)
-			t.Log(err) // usually: [NotLeaseHolderError] lease acquisition canceled because context canceled
-			require.Error(t, err)
-			require.Error(t, ctx.Err())
-			// Make sure we didn't run into the "long" timeout inside of SendCtx but
-			// actually terminated as a result of our ctx cancelling.
-			require.Less(t, timeutil.Since(tBegin), maxWait)
-		})
-	}
-
-	// Restore the breaker via the probe, and wait for any pending (re)proposals
-	// from previous tests to be flushed.
-	resumeHeartbeats()
-	tc.SetProbeEnabled(n1, true)
-	tc.UntripsSoon(t, tc.Write, n1)
-	tc.WaitForProposals(t, n1)
-
-	// Lose quorum (liveness stays intact).
-	tc.SetSlowThreshold(10 * time.Millisecond)
-	tc.StopServer(n2)
-	// Let the breaker trip. This leaves a poisoned latch behind that at least some of
-	// the requests will interact with.
-	tc.RequireIsBreakerOpen(t, tc.Write(n1))
-	tc.RequireIsBreakerOpen(t, tc.Read(n1))
-
-	for _, reqFn := range exemptRequests {
-		req := reqFn()
-		tc.Run(t, fmt.Sprintf("with-poisoned-latch/%s", req.Method()), func(t *testing.T) {
-			if m := req.Method(); m == kvpb.GC {
-				// GC without GCKeys acquires no latches and is a pure read. If we want
-				// to put a key in there, we need to pick the right timestamp (since you
-				// can't GC a live key); it's all rather annoying and not worth it. In
-				// the long run, we also completely want to avoid acquiring latches for
-				// this request (since it should only mutate keyspace that has since
-				// fallen under the GCThreshold), so avoid cooking up anything special
-				// here.
-				skip.IgnoreLintf(t, "subtest does not apply to %s", m)
+			for _, reqFn := range exemptRequests {
+				req := reqFn()
+				tc.Run(t, fmt.Sprintf("with-existing-lease/%s", req.Method()), func(t *testing.T) {
+					require.NoError(t, tc.Send(n1, req))
+				})
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Millisecond)
-			defer cancel()
-			const maxWait = 5 * time.Second
-			tBegin := timeutil.Now()
-			err := tc.SendCtx(ctx, n1, req)
-			t.Log(err)
-			require.Error(t, err)
-			require.Error(t, ctx.Err())
-			// Make sure we didn't run into the "long" timeout inside of SendCtx but
-			// actually terminated as a result of our ctx cancelling.
-			require.Less(t, timeutil.Since(tBegin), maxWait)
+			for _, reqFn := range exemptRequests {
+				req := reqFn()
+				tc.Run(t, fmt.Sprintf("with-acquire-lease/%s", req.Method()), func(t *testing.T) {
+					resumeHeartbeats := tc.ExpireAllLeasesAndN1LivenessRecord(t, pauseHeartbeats)
+					resumeHeartbeats() // intentionally resume right now so that lease can be acquired
+					// NB: when looking into the traces here, we sometimes see - as expected -
+					// that when the request tries to acquire a lease, the breaker is still
+					// tripped. That's why there is a retry loop here.
+					testutils.SucceedsSoon(t, func() error {
+						err := tc.Send(n1, req)
+						if errors.HasType(err, (*kvpb.NotLeaseHolderError)(nil)) {
+							return err
+						}
+						require.NoError(t, err)
+						return nil
+					})
+				})
+			}
+
+			var resumeNodeLivenessHeartbeats func()
+			if leaseType == roachpb.LeaseEpoch {
+				resumeNodeLivenessHeartbeats = tc.ExpireAllLeasesAndN1LivenessRecord(t, pauseHeartbeats)
+			} else if leaseType == roachpb.LeaseLeader {
+				tc.DisableAllStoreLivenessHeartbeats.Store(true)
+				tc.ManualClock.Increment(tc.Servers[0].RaftConfig().RangeLeaseDuration.Nanoseconds())
+			}
+
+			for _, reqFn := range exemptRequests {
+				req := reqFn()
+				tc.Run(t, fmt.Sprintf("with-unavailable-lease/%s", req.Method()), func(t *testing.T) {
+					if m := req.Method(); m == kvpb.Probe {
+						// Probe does not require the lease, and is the most-tested of the bunch
+						// already. We don't have to test it again here, which would require undue
+						// amounts of special-casing below.
+						skip.IgnoreLintf(t, "subtest does not apply to %s", m)
+					}
+
+					ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+					defer cancel()
+					const maxWait = 5 * time.Second
+					tBegin := timeutil.Now()
+					err := tc.SendCtx(ctx, n1, req)
+					// For epoch leases usually logs [NotLeaseHolderError] lease
+					// acquisition canceled because context canceled. While for leader
+					// leases, there should be no error since we propose a leader lease
+					// regardless of whether the LeadSupportUntil is in the future or not.
+					t.Log(err)
+					switch leaseType {
+					case roachpb.LeaseEpoch:
+						require.Error(t, err)
+						require.Error(t, ctx.Err())
+					case roachpb.LeaseLeader:
+						require.NoError(t, err)
+						require.NoError(t, ctx.Err())
+					default:
+						t.Fatalf("unexpected lease type: %v", leaseType)
+					}
+
+					// Make sure we didn't run into the "long" timeout inside of SendCtx but
+					// actually terminated as a result of our ctx cancelling.
+					require.Less(t, timeutil.Since(tBegin), maxWait)
+				})
+			}
+
+			// Restore the breaker via the probe, and wait for any pending (re)proposals
+			// from previous tests to be flushed.
+			if leaseType == roachpb.LeaseEpoch {
+				resumeNodeLivenessHeartbeats()
+			} else if leaseType == roachpb.LeaseLeader {
+				tc.DisableAllStoreLivenessHeartbeats.Store(false)
+			}
+
+			tc.SetProbeEnabled(n1, true)
+			tc.UntripsSoon(t, tc.Write, n1)
+			tc.WaitForProposals(t, n1)
+
+			// Lose quorum (liveness stays intact).
+			tc.SetSlowThreshold(10 * time.Millisecond)
+			tc.StopServer(n2)
+			// Let the breaker trip. This leaves a poisoned latch behind that at least some of
+			// the requests will interact with.
+			tc.RequireIsBreakerOpen(t, tc.Write(n1))
+			tc.RequireIsBreakerOpen(t, tc.Read(n1))
+
+			for _, reqFn := range exemptRequests {
+				req := reqFn()
+				tc.Run(t, fmt.Sprintf("with-poisoned-latch/%s", req.Method()), func(t *testing.T) {
+					if m := req.Method(); m == kvpb.GC {
+						// GC without GCKeys acquires no latches and is a pure read. If we want
+						// to put a key in there, we need to pick the right timestamp (since you
+						// can't GC a live key); it's all rather annoying and not worth it. In
+						// the long run, we also completely want to avoid acquiring latches for
+						// this request (since it should only mutate keyspace that has since
+						// fallen under the GCThreshold), so avoid cooking up anything special
+						// here.
+						skip.IgnoreLintf(t, "subtest does not apply to %s", m)
+					}
+					ctx, cancel := context.WithTimeout(context.Background(), 3*time.Millisecond)
+					defer cancel()
+					const maxWait = 5 * time.Second
+					tBegin := timeutil.Now()
+					err := tc.SendCtx(ctx, n1, req)
+					t.Log(err)
+					require.Error(t, err)
+					require.Error(t, ctx.Err())
+					// Make sure we didn't run into the "long" timeout inside of SendCtx but
+					// actually terminated as a result of our ctx cancelling.
+					require.Less(t, timeutil.Since(tBegin), maxWait)
+				})
+			}
 		})
-	}
 }
 
 // This tests that if the DistSender encounters individual replicas with
@@ -984,23 +1012,32 @@ func makeBreakerToggleable(b *circuit.Breaker) (setProbeEnabled func(bool)) {
 type circuitBreakerTest struct {
 	t decoT
 	*testcluster.TestCluster
-	slowThresh  *atomic.Value // time.Duration
-	ManualClock *hlc.HybridManualClock
-	repls       []replWithKnob // 0 -> repl on Servers[0], etc
-
-	seq int
+	slowThresh                        *atomic.Value // time.Duration
+	ManualClock                       *hlc.HybridManualClock
+	DisableAllStoreLivenessHeartbeats *atomic.Bool
+	repls                             []replWithKnob // 0 -> repl on Servers[0], etc
+	seq                               int
 }
 
-func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
+func setupCircuitBreakerTest(t *testing.T, leaseType roachpb.LeaseType) *circuitBreakerTest {
 	skip.UnderRace(t)
 	manualClock := hlc.NewHybridManualClock()
-	var rangeID int64             // atomic
+	var rangeID int64 // atomic
+	var disableAllStoreLivenessHeartbeats atomic.Bool
 	slowThresh := &atomic.Value{} // supports .SetSlowThreshold(x)
 	slowThresh.Store(time.Duration(0))
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	// TODO(erikgrinaker): We may not need this for all circuit breaker tests.
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
+	if leaseType == roachpb.LeaseNone {
+		// If no lease type was explicitly provided, let metamorphism choose between
+		// epoch-based leases and leader leases.
+		// TODO(erikgrinaker): We may not need this for all circuit breaker tests.
+		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	} else {
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
+	}
+
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		SlowReplicationThresholdOverride: func(ba *kvpb.BatchRequest) time.Duration {
 			t.Helper()
@@ -1035,6 +1072,11 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 			return 0, pErr
 		},
 		RangeLeaseAcquireTimeoutOverride: testutils.DefaultSucceedsSoonDuration,
+		StoreLivenessKnobs: &storeliveness.TestingKnobs{
+			SupportManagerKnobs: storeliveness.SupportManagerKnobs{
+				DisableAllHeartbeats: &disableAllStoreLivenessHeartbeats,
+			},
+		},
 	}
 	// In some tests we'll restart servers, which means that we will be waiting
 	// for raft elections. Speed this up by campaigning aggressively. This also
@@ -1077,11 +1119,12 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 		repls = append(repls, replWithKnob{repl, enableProbe})
 	}
 	return &circuitBreakerTest{
-		t:           decoT{t},
-		TestCluster: tc,
-		ManualClock: manualClock,
-		repls:       repls,
-		slowThresh:  slowThresh,
+		t:                                 decoT{t},
+		TestCluster:                       tc,
+		ManualClock:                       manualClock,
+		repls:                             repls,
+		slowThresh:                        slowThresh,
+		DisableAllStoreLivenessHeartbeats: &disableAllStoreLivenessHeartbeats,
 	}
 }
 
