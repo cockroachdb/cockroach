@@ -199,6 +199,10 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 			switch d.Cmd {
 			case "format-datadog":
 				debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+				debugTimeSeriesDumpOpts.clusterID = "test-cluster-id"
+				debugTimeSeriesDumpOpts.zendeskTicket = "zd-test"
+				debugTimeSeriesDumpOpts.organizationName = "test-org"
+				debugTimeSeriesDumpOpts.userName = "test-user"
 				var testReqs []*http.Request
 				var series int
 				d.ScanArgs(t, "series-threshold", &series)
