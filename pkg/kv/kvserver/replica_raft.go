@@ -892,11 +892,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var logSnapshot raft.LogSnapshot
 	r.mu.Lock()
 	rac2ModeForReady := r.mu.currentRACv2Mode
-	state := logstore.RaftState{ // used for append below
-		LastIndex: r.shMu.lastIndexNotDurable,
-		LastTerm:  r.shMu.lastTermNotDurable,
-		ByteSize:  r.shMu.raftLogSize,
-	}
+	// TODO(pav-kv): state can be retrieved without Replica.mu.
+	state := r.asLogStorage().stateRaftMuLocked() // used for append below
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
@@ -1132,14 +1129,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			stats.tSnapEnd = crtime.NowMono()
 			stats.snap.applied = true
 
-			// lastIndexNotDurable, lastTermNotDurable and raftLogSize were updated in
-			// applySnapshot, but we also want to make sure we reflect these changes
-			// in the local variables we're tracking here.
-			state = logstore.RaftState{
-				LastIndex: r.shMu.lastIndexNotDurable,
-				LastTerm:  r.shMu.lastTermNotDurable,
-				ByteSize:  r.shMu.raftLogSize,
-			}
+			// The raft log state was updated in applySnapshot, but we also want to
+			// reflect these changes in the state variable here.
+			// TODO(pav-kv): this is unnecessary. We only do it because there is an
+			// unconditional storing of this state below. Avoid doing it twice.
+			state = r.asLogStorage().stateRaftMuLocked()
 
 			// We refresh pending commands after applying a snapshot because this
 			// replica may have been temporarily partitioned from the Raft group and
@@ -1178,9 +1172,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 
 			r.mu.raftTracer.MaybeTrace(msgStorageAppend)
-			if state, err = r.raftMu.logStorage.StoreEntries(
-				ctx, state, app, cb, &stats.append,
-			); err != nil {
+			if state, err = r.asLogStorage().appendRaftMuLocked(ctx, app, &stats.append); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
 		}
@@ -1189,10 +1181,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update protected state - last index, last term, raft log size, and raft
 	// leader ID.
 	r.mu.Lock()
-	// TODO(pavelkalinnikov): put logstore.RaftState to r.mu directly.
-	r.shMu.lastIndexNotDurable = state.LastIndex
-	r.shMu.lastTermNotDurable = state.LastTerm
-	r.shMu.raftLogSize = state.ByteSize
+	r.asLogStorage().updateStateRaftMuLockedMuLocked(state)
 	var becameLeader bool
 	if r.mu.leaderID != leaderID {
 		r.mu.leaderID = leaderID
