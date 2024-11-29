@@ -58,7 +58,7 @@ const (
 func TestReplicaCircuitBreaker_NotTripped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Circuit breaker doesn't get in the way of anything unless
@@ -79,7 +79,7 @@ func TestReplicaCircuitBreaker_NotTripped(t *testing.T) {
 func TestReplicaCircuitBreaker_LeaseholderTripped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 	k := tc.ScratchRange(t)
 
@@ -146,7 +146,7 @@ func TestReplicaCircuitBreaker_LeaseholderTripped(t *testing.T) {
 func TestReplicaCircuitBreaker_FollowerTripped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Get lease on n1.
@@ -191,7 +191,7 @@ func TestReplicaCircuitBreaker_FollowerTripped(t *testing.T) {
 func TestReplicaCircuitBreaker_LeaselessTripped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Put the lease on n1 but then trip the breaker with the probe
@@ -253,7 +253,7 @@ func TestReplicaCircuitBreaker_LeaselessTripped(t *testing.T) {
 func TestReplicaCircuitBreaker_Leaseholder_QuorumLoss(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Get lease on n1.
@@ -299,7 +299,7 @@ func TestReplicaCircuitBreaker_Leaseholder_QuorumLoss(t *testing.T) {
 func TestReplicaCircuitBreaker_Follower_QuorumLoss(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Get lease to n2 so that we can lose it without taking down the system ranges.
@@ -354,7 +354,7 @@ func TestReplicaCircuitBreaker_Liveness_QuorumLoss(t *testing.T) {
 	skip.IgnoreLint(t, "See: https://github.com/cockroachdb/cockroach/issues/74616")
 
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Up-replicate liveness range and move lease to n2.
@@ -400,7 +400,7 @@ func TestReplicaCircuitBreaker_ResolveIntent_QuorumLoss(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(ctx)
 
 	// Get lease on n1.
@@ -509,7 +509,7 @@ func waitReplicaRangeFeed(
 func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
@@ -602,7 +602,7 @@ func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
 func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := setupCircuitBreakerTest(t)
+	tc := setupCircuitBreakerTest(t, roachpb.LeaseNone)
 	defer tc.Stopper().Stop(context.Background())
 
 	// Put the lease on n1 but then trip the breaker with the probe
@@ -991,7 +991,7 @@ type circuitBreakerTest struct {
 	seq int
 }
 
-func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
+func setupCircuitBreakerTest(t *testing.T, leaseType roachpb.LeaseType) *circuitBreakerTest {
 	skip.UnderRace(t)
 	manualClock := hlc.NewHybridManualClock()
 	var rangeID int64             // atomic
@@ -999,8 +999,16 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	slowThresh.Store(time.Duration(0))
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	// TODO(erikgrinaker): We may not need this for all circuit breaker tests.
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+
+	if leaseType == roachpb.LeaseNone {
+		// If no lease type was explicitly provided, let metamorphism choose between
+		// epoch-based leases and leader leases.
+		// TODO(erikgrinaker): We may not need this for all circuit breaker tests.
+		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	} else {
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
+	}
+
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		SlowReplicationThresholdOverride: func(ba *kvpb.BatchRequest) time.Duration {
 			t.Helper()
