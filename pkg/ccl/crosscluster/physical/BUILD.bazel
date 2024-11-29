@@ -111,6 +111,7 @@ go_test(
         "stream_ingestion_frontier_processor_test.go",
         "stream_ingestion_job_test.go",
         "stream_ingestion_manager_test.go",
+        "stream_ingestion_planning_test.go",
         "stream_ingestion_processor_test.go",
     ],
     data = glob(["testdata/**"]),
