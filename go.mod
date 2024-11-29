@@ -501,4 +501,5 @@ replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20
 //
 // See https://github.com/cockroachdb/cockroach/issues/136367 for `noalpncheck`.
 // See https://github.com/cockroachdb/cockroach/pull/136278#issuecomment-2506494078 for `decompsize`.
-replace google.golang.org/grpc v1.68.0 => github.com/cockroachdb/grpc-go v1.68.0-noalpncheck.0.20241129124825-5710e83f714e
+// replace google.golang.org/grpc v1.68.0 => github.com/cockroachdb/grpc-go v1.68.0-noalpncheck.0.20241129124825-5710e83f714e
+replace google.golang.org/grpc v1.68.0 => /Users/tbg/grpc-go
