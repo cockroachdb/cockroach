@@ -59,8 +59,16 @@ var useLowPriority = settings.RegisterBoolSetting(
 var flushBatchSize = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.batch_size",
-	"the number of row updates to attempt in a single KV transaction",
+	"the number of row updates to attempt in a single KV transaction in validated mode",
 	32,
+	settings.NonNegativeInt,
+)
+
+var immediateFlushBatchSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.immediate_batch_size",
+	"the number of row updates to attempt in a single KV transaction in immediate mode",
+	1,
 	settings.NonNegativeInt,
 )
 
@@ -138,6 +146,13 @@ type logicalReplicationWriterProcessor struct {
 	seenKeys  map[uint64]int64
 	dupeCount int64
 	seenEvery log.EveryN
+
+	// skipBatching is next number of flushes in which batching should be skipped.
+	skipBatching int
+	// skipBatchingStep is the amount by which skipBatching should be increased
+	// next time a flush is observed to fail when run as a larger batch but
+	// succeed when run with a single row per batch.
+	skipBatchingStep int
 }
 
 var (
@@ -200,13 +215,8 @@ func newLogicalReplicationWriterProcessor(
 		spec:          spec,
 		processorID:   processorID,
 		getBatchSize: func() int {
-			// TODO(ssd): We set this to 1 since putting more than 1
-			// row in a KV batch using the new ConditionalPut-based
-			// conflict resolution would require more complex error
-			// handling and tracking that we haven't implemented
-			// yet.
 			if spec.Mode == jobspb.LogicalReplicationDetails_Immediate {
-				return 1
+				return int(immediateFlushBatchSize.Get(&flowCtx.Cfg.Settings.SV))
 			}
 			// We want to decide whether to use implicit txns or not based on
 			// the schema of the dest table. Benchmarking has shown that
@@ -786,6 +796,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		lrw.seenKeys = make(map[uint64]int64, 2<<20)
 	}
 
+	initialDupes := lrw.dupeCount
 	h := fnv.New64a()
 	logged := false
 	for i := range kvs {
@@ -804,6 +815,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 			}
 		}
 	}
+	containsDupes := lrw.dupeCount > initialDupes
 
 	// Aim for a chunk size that gives each worker at least 4 chunks to do so that
 	// if it takes longer to process some keys in a chunk, the other 3/4 can be
@@ -826,18 +838,39 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	// TODO(dt): consider keeping these goroutines running for lifetime of proc
 	// rather than starting new ones for each flush.
 	chunks := make(chan []streampb.StreamEvent_KV)
+	batchSize := lrw.getBatchSize()
+
+	// If we've been instructed to skip batching, or if we know a key in what we
+	// are about to flush is likely a dupe of a key already seen, disable batching
+	// for this flush.
+	if lrw.skipBatching > 0 || containsDupes {
+		batchSize = 1
+		// We've skipped one batching in one of the flushes in which were instructed
+		// to do so; decrement the remaining flushes in which we'll do so.
+		if lrw.skipBatching > 0 {
+			lrw.skipBatching--
+		}
+	}
 
 	g := ctxgroup.WithContext(ctx)
 	for worker := range lrw.bh[:requiredWorkers] {
 		w := worker
 		lrw.bhStats[w] = flushStats{}
+		bs := batchSize
 		g.GoCtx(func(ctx context.Context) error {
 			for chunk := range chunks {
-				s, err := lrw.flushChunk(ctx, lrw.bh[w], chunk, canRetry)
+				s, err := lrw.flushChunk(ctx, lrw.bh[w], chunk, canRetry, bs)
 				if err != nil {
 					return err
 				}
 				lrw.bhStats[w].Add(s)
+				// If de-batching was required in this chunk, disable batching for all
+				// remaining chunks in this flush worker, since the outer goroutine will
+				// not be informed of this until the workers complete and it aggregates
+				// its stats.
+				if s.debatchResolvedErrs > 0 {
+					bs = 1
+				}
 			}
 			return nil
 		})
@@ -873,6 +906,25 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	var stats flushStats
 	for i := range lrw.bhStats[:requiredWorkers] {
 		stats.Add(lrw.bhStats[i])
+	}
+
+	// If any chunk flush failed when run as a batch but succeeded when re-run
+	// de-batched, we may be seeing keys/revision combinations that do not benefit
+	// from batching and where doing so, only to fail and need to try again, is
+	// indeed increasing our cost, so we may want to disable batching in future
+	// flushes, at least for some time. If the workload continues to emit flushes
+	// that encounter this, we may want to disable batching for a longer period,
+	// so we ratchet up the number of flushes we will skip per flush that hits a
+	// batching failure using skipBatchingStep. We do however cap this backoff so
+	// that we still eventually will try another batched flush in case the traffic
+	// has changed at a later point.
+	if stats.debatchResolvedErrs > 0 {
+		// de-batching helped -- up the backoff amount and then skip that many more.
+		lrw.skipBatchingStep = max(1, min(lrw.skipBatchingStep*2, 100))
+		lrw.skipBatching += lrw.skipBatchingStep
+	} else if batchSize > 1 && lrw.skipBatchingStep > 0 {
+		// Batching succeeded -- decay skipBatchingStep.
+		lrw.skipBatchingStep--
 	}
 
 	if stats.notProcessed.count > 0 {
@@ -950,10 +1002,12 @@ func (t replicationMutationType) String() string {
 
 // flushChunk is the per-thread body of flushBuffer; see flushBuffer's contract.
 func (lrw *logicalReplicationWriterProcessor) flushChunk(
-	ctx context.Context, bh BatchHandler, chunk []streampb.StreamEvent_KV, canRetry retryEligibility,
+	ctx context.Context,
+	bh BatchHandler,
+	chunk []streampb.StreamEvent_KV,
+	canRetry retryEligibility,
+	batchSize int,
 ) (flushStats, error) {
-	batchSize := lrw.getBatchSize()
-
 	lrw.debug.RecordChunkStart()
 	defer lrw.debug.RecordChunkComplete()
 
@@ -1025,6 +1079,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 						stats.processed.bytes += int64(batch[i].Size())
 					}
 				}
+				stats.debatchResolvedErrs++
 			}
 		} else {
 			stats.batchStats.Add(s)
@@ -1038,7 +1093,7 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 
 		batchTime := timeutil.Since(preBatchTime)
 		lrw.debug.RecordBatchApplied(batchTime, int64(len(batch)))
-		lrw.metrics.ApplyBatchNanosHist.RecordValue(batchTime.Nanoseconds())
+		lrw.metrics.ApplyBatchNanosHist.RecordValue(batchTime.Nanoseconds() / int64(len(batch)))
 	}
 	return stats, nil
 }
@@ -1120,6 +1175,8 @@ type flushStats struct {
 		count, bytes int64
 	}
 
+	debatchResolvedErrs int
+
 	batchStats
 }
 
@@ -1130,6 +1187,7 @@ func (b *flushStats) Add(o flushStats) {
 	b.notProcessed.count += o.notProcessed.count
 	b.notProcessed.bytes += o.notProcessed.bytes
 	b.batchStats.Add(o.batchStats)
+	b.debatchResolvedErrs += o.debatchResolvedErrs
 }
 
 type BatchHandler interface {
