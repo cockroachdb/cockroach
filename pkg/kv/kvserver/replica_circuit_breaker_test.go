@@ -33,9 +33,7 @@ func TestReplicaUnavailableError(t *testing.T) {
 	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 10, ReplicaID: 100})
 	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 20, ReplicaID: 200})
 	desc := roachpb.NewRangeDescriptor(10, roachpb.RKey("a"), roachpb.RKey("z"), repls)
-	lm := livenesspb.IsLiveMap{
-		1: livenesspb.IsLiveMapEntry{IsLive: true},
-	}
+	lm := livenesspb.TestCreateNodeVitality(1)
 	ts := hlc.Timestamp{WallTime: time.Date(2006, 1, 2, 15, 4, 5, 0, time.UTC).UnixNano()}
 	wrappedErr := errors.New("probe failed")
 	rs := raft.Status{}
