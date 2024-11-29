@@ -2641,135 +2641,147 @@ func TestWedgedReplicaDetection(t *testing.T) {
 
 	const numReplicas = 3
 
-	ctx := context.Background()
-	manual := hlc.NewHybridManualClock()
-	tc := testcluster.StartTestCluster(t, numReplicas,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				RaftConfig: base.RaftConfig{
-					// Suppress timeout-based elections to avoid leadership changes in ways
-					// this test doesn't expect.
-					RaftElectionTimeoutTicks: 100000,
-				},
-				Knobs: base.TestingKnobs{
-					Server: &server.TestingKnobs{
-						WallClock: manual,
+	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		ctx := context.Background()
+		manual := hlc.NewHybridManualClock()
+
+		settings := cluster.MakeTestingClusterSettings()
+		kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, leaseType)
+
+		// Suppress timeout-based elections to avoid leadership changes in ways this
+		// test doesn't expect. For leader leases, fortification itself provides us
+		// this guarantee.
+		var raftConfig base.RaftConfig
+		if leaseType != roachpb.LeaseLeader {
+			raftConfig = base.RaftConfig{
+				RaftElectionTimeoutTicks: 100000,
+			}
+		}
+
+		tc := testcluster.StartTestCluster(t, numReplicas,
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					RaftConfig: raftConfig,
+					Knobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							WallClock: manual,
+						},
 					},
 				},
-			},
-		})
-	defer tc.Stopper().Stop(ctx)
+			})
+		defer tc.Stopper().Stop(ctx)
 
-	// Pause the manual clock so that we can carefully control the perceived
-	// timing of the follower replica's activity.
-	manual.Pause()
-	t.Logf("paused clock at %s", manual.Now())
+		// Pause the manual clock so that we can carefully control the perceived
+		// timing of the follower replica's activity.
+		manual.Pause()
+		t.Logf("paused clock at %s", manual.Now())
 
-	key := []byte("a")
-	tc.SplitRangeOrFatal(t, key)
-	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+		key := []byte("a")
+		tc.SplitRangeOrFatal(t, key)
+		tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 
-	// Do a write; we'll use it to determine when the dust has settled.
-	_, err := tc.Servers[0].DB().Inc(ctx, key, 1)
-	require.Nil(t, err)
-	tc.WaitForValues(t, key, []int64{1, 1, 1})
+		// Do a write; we'll use it to determine when the dust has settled.
+		_, err := tc.Servers[0].DB().Inc(ctx, key, 1)
+		require.Nil(t, err)
+		tc.WaitForValues(t, key, []int64{1, 1, 1})
 
-	// Get a handle on the leader and the follower replicas.
-	leaderRepl := tc.GetRaftLeader(t, key)
-	leaderClock := leaderRepl.Clock()
-	followerRepl := func() *kvserver.Replica {
-		for i := range tc.Servers {
-			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
-			require.NotNil(t, repl)
-			if repl == leaderRepl {
-				continue
+		// Get a handle on the leader and the follower replicas.
+		leaderRepl := tc.GetRaftLeader(t, key)
+		leaderClock := leaderRepl.Clock()
+		followerRepl := func() *kvserver.Replica {
+			for i := range tc.Servers {
+				repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
+				require.NotNil(t, repl)
+				if repl == leaderRepl {
+					continue
+				}
+				return repl
 			}
-			return repl
-		}
-		return nil
-	}()
-	if followerRepl == nil {
-		t.Fatal("could not get a handle on a follower replica")
-	}
-
-	// Wait for the leader replica to have three entries in its lastUpdateTimes
-	// map. It should already by this time because it was able to replicate a log
-	// entry to its two followers, but we wait here to be sure and to avoid
-	// flakiness. It is possible that the WaitForValues call above returned as
-	// soon as one of the followers appended and applied a log entry, but before
-	// its response was delivered to the leader.
-	testutils.SucceedsSoon(t, func() error {
-		lastUpdateTimes := leaderRepl.LastUpdateTimes()
-		if len(lastUpdateTimes) == 3 {
 			return nil
+		}()
+		if followerRepl == nil {
+			t.Fatal("could not get a handle on a follower replica")
 		}
-		return errors.Errorf("expected leader replica to have 3 entries in lastUpdateTimes map, found %s", lastUpdateTimes)
-	})
 
-	// Lock the follower replica to prevent it from making progress from now
-	// on. NB: See TestRaftBlockedReplica/#9914 for why we use a separate
-	// goroutine.
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		followerRepl.RaftLock()
-		wg.Done()
-	}()
-	wg.Wait()
-	defer followerRepl.RaftUnlock()
+		// Wait for the leader replica to have three entries in its lastUpdateTimes
+		// map. It should already by this time because it was able to replicate a
+		// log entry to its two followers, but we wait here to be sure and to avoid
+		// flakiness. It is possible that the WaitForValues call above returned as
+		// soon as one of the followers appended and applied a log entry, but before
+		// its response was delivered to the leader.
+		testutils.SucceedsSoon(t, func() error {
+			lastUpdateTimes := leaderRepl.LastUpdateTimes()
+			if len(lastUpdateTimes) == 3 {
+				return nil
+			}
+			return errors.Errorf("expected leader replica to have 3 entries in lastUpdateTimes map, found %s", lastUpdateTimes)
+		})
 
-	// inactivityThreshold is the test's duration of inactivity after which the
-	// follower replica is considered inactive. In practice, this is set to the
-	// range lease duration.
-	inactivityThreshold := time.Second
+		// Lock the follower replica to prevent it from making progress from now
+		// on. NB: See TestRaftBlockedReplica/#9914 for why we use a separate
+		// goroutine.
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			followerRepl.RaftLock()
+			wg.Done()
+		}()
+		wg.Wait()
+		defer followerRepl.RaftUnlock()
 
-	// Increment the clock to be close to inactivityThreshold, but not past it.
-	manual.Increment(inactivityThreshold.Nanoseconds() - 1)
+		// inactivityThreshold is the test's duration of inactivity after which the
+		// follower replica is considered inactive. In practice, this is set to the
+		// range lease duration.
+		inactivityThreshold := time.Second
 
-	// Send a request to the leader replica. followerRepl is locked so it will
-	// not respond.
-	value := []byte("value")
-	ba := &kvpb.BatchRequest{}
-	ba.Add(putArgs(key, value))
-	if err := ba.SetActiveTimestamp(leaderClock); err != nil {
-		t.Fatal(err)
-	}
-	if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
-		t.Fatal(pErr)
-	}
+		// Increment the clock to be close to inactivityThreshold, but not past it.
+		manual.Increment(inactivityThreshold.Nanoseconds() - 1)
 
-	// The follower should still be active.
-	followerID := followerRepl.ReplicaID()
-	leaderNow := leaderClock.PhysicalTime()
-	if !leaderRepl.IsFollowerActiveSince(followerID, leaderNow, inactivityThreshold) {
-		t.Fatalf("expected follower to still be considered active; "+
-			"follower id: %d, last update times: %s, leader clock: %s",
-			followerID, leaderRepl.LastUpdateTimes(), leaderNow)
-	}
-
-	// It is possible that there are in-flight heartbeat responses from
-	// followerRepl from before it was locked. The receipt of one of these
-	// would bump the last active timestamp on the leader. Because of this,
-	// we check whether the follower is eventually considered inactive.
-	testutils.SucceedsSoon(t, func() error {
-		// Increment the clock to past inactivityThreshold.
-		manual.Increment(inactivityThreshold.Nanoseconds() + 1)
-
-		// Send another request to the leader replica. followerRepl is locked
-		// so it will not respond.
+		// Send a request to the leader replica. followerRepl is locked so it will
+		// not respond.
+		value := []byte("value")
+		ba := &kvpb.BatchRequest{}
+		ba.Add(putArgs(key, value))
+		if err := ba.SetActiveTimestamp(leaderClock); err != nil {
+			t.Fatal(err)
+		}
 		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 
-		// The follower should no longer be considered active.
-		leaderNow = leaderClock.PhysicalTime()
-		if leaderRepl.IsFollowerActiveSince(followerID, leaderNow, inactivityThreshold) {
-			return errors.Errorf("expected follower to be considered inactive; "+
+		// The follower should still be active.
+		followerID := followerRepl.ReplicaID()
+		leaderNow := leaderClock.PhysicalTime()
+		if !leaderRepl.IsFollowerActiveSince(followerID, leaderNow, inactivityThreshold) {
+			t.Fatalf("expected follower to still be considered active; "+
 				"follower id: %d, last update times: %s, leader clock: %s",
 				followerID, leaderRepl.LastUpdateTimes(), leaderNow)
 		}
-		return nil
+
+		// It is possible that there are in-flight heartbeat responses from
+		// followerRepl from before it was locked. The receipt of one of these
+		// would bump the last active timestamp on the leader. Because of this,
+		// we check whether the follower is eventually considered inactive.
+		testutils.SucceedsSoon(t, func() error {
+			// Increment the clock to past inactivityThreshold.
+			manual.Increment(inactivityThreshold.Nanoseconds() + 1)
+
+			// Send another request to the leader replica. followerRepl is locked
+			// so it will not respond.
+			if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
+				t.Fatal(pErr)
+			}
+
+			// The follower should no longer be considered active.
+			leaderNow = leaderClock.PhysicalTime()
+			if leaderRepl.IsFollowerActiveSince(followerID, leaderNow, inactivityThreshold) {
+				return errors.Errorf("expected follower to be considered inactive; "+
+					"follower id: %d, last update times: %s, leader clock: %s",
+					followerID, leaderRepl.LastUpdateTimes(), leaderNow)
+			}
+			return nil
+		})
 	})
 }
 
