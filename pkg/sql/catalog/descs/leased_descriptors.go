@@ -36,6 +36,8 @@ type LeaseManager interface {
 	IncGaugeAfterLeaseDuration(
 		gaugeType lease.AfterLeaseDurationGauge,
 	) (decrAfterWait func())
+
+	GetSafeReplicationTS() hlc.Timestamp
 }
 
 type deadlineHolder interface {
@@ -97,6 +99,10 @@ func newMismatchedExternalDataRowTimestampError(
 		existingDescID:   existingDesc.GetID(),
 		existingDescTS:   existingDesc.ExternalRowData().AsOf,
 	}
+}
+
+// ClientVisibleRetryError implements the ClientVisibleRetryError interface.
+func (e *mismatchedExternalDataRowTimestamp) ClientVisibleRetryError() {
 }
 
 func (e *mismatchedExternalDataRowTimestamp) SafeFormatError(p errors.Printer) (next error) {
