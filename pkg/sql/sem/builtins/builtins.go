@@ -6090,6 +6090,20 @@ SELECT
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Immutable,
 		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "raw_key", Typ: types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(catalogkeys.PrettyKey(
+					nil, /* valDirs */
+					roachpb.Key(tree.MustBeDBytes(args[0])),
+					-1)), nil
+			},
+			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility: volatility.Immutable,
+		},
 	),
 	// Return if a key belongs to a system table, which should make it to print
 	// within redacted output.

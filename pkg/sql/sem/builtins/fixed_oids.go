@@ -2606,6 +2606,7 @@ var builtinOidsArray = []string{
 	2643: `crdb_internal.type_is_indexable(oid: oid) -> bool`,
 	2644: `crdb_internal.range_stats_with_errors(key: bytes) -> jsonb`,
 	2645: `crdb_internal.lease_holder_with_errors(key: bytes) -> jsonb`,
+	2646: `crdb_internal.pretty_key(raw_key: bytes) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
