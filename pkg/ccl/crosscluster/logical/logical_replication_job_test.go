@@ -734,16 +734,19 @@ func TestRandomTables(t *testing.T) {
 
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
 
-	tableName := "rand_table"
+	var tableName, streamStartStmt string
 	rng, _ := randutil.NewPseudoRand()
 
-	streamStartStmt := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
 	dbAURL, cleanup := s.PGUrl(t, serverutils.DBName("a"))
 	defer cleanup()
 
 	// Keep retrying until the random table satisfies all the static checks
 	// we make when creating the replication stream.
+	var i int
 	for {
+		tableName = fmt.Sprintf("rand_table_%d", i)
+		streamStartStmt = fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLE %[1]s ON $1 INTO TABLE %[1]s", tableName)
+		i++
 		createStmt := randgen.RandCreateTableWithName(
 			ctx,
 			rng,
@@ -759,8 +762,6 @@ func TestRandomTables(t *testing.T) {
 		err := runnerB.DB.QueryRowContext(ctx, streamStartStmt, dbAURL.String()).Scan(&jobBID)
 		if err != nil {
 			t.Log(err)
-			runnerA.Exec(t, fmt.Sprintf("DROP TABLE %s", tableName))
-			runnerB.Exec(t, fmt.Sprintf("DROP TABLE %s", tableName))
 			continue
 		}
 
@@ -2030,8 +2031,17 @@ func TestUserDefinedTypes(t *testing.T) {
 			dbB.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
 			dbA.CheckQueryResults(t, "SELECT * FROM data", [][]string{{"1", "one", "(3,cat)"}, {"2", "two", "(4,dog)"}})
 
+			var jobBID jobspb.JobID
+			dbB.QueryRow(t,
+				"SELECT job_id FROM [SHOW JOBS]"+
+					"WHERE job_type = 'REPLICATION STREAM PRODUCER' "+
+					"AND status = 'running' "+
+					"AND description = 'History Retention for Logical Replication of data'",
+			).Scan(&jobBID)
+
 			dbA.Exec(t, "CANCEL JOB $1", jobAID)
 			jobutils.WaitForJobToCancel(t, dbA, jobAID)
+			jobutils.WaitForJobToFail(t, dbB, jobBID)
 
 			dbA.Exec(t, "DROP TABLE data")
 			dbB.Exec(t, "DROP TABLE data")
@@ -2284,6 +2294,12 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	dbA.ExpectErr(t,
 		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
 		"CREATE UNIQUE INDEX unique_idx ON tab(composite_col)",
+	)
+
+	// Dropping the table is blocked.
+	dbA.ExpectErr(t,
+		"this schema change is disallowed on table tab because it is referenced by one or more logical replication jobs",
+		"DROP TABLE tab",
 	)
 
 	// Creating triggers is also blocked.
