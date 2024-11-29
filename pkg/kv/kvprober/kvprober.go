@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 const putValue = "thekvproberwrotethis"
@@ -533,7 +534,7 @@ func (p *Prober) quarantineProbe(ctx context.Context, pl planner) {
 // log messages indicating leaseholder information, extracts leaseholder
 // node ID, and returns this information. Returns an empty string if
 // leaseholder information is not found.
-func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) string {
+func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) redact.SafeString {
 	// The leaseholder is determined by the kvclient in dist_sender.go,
 	// which decides the node to handle the request and sends it. The log
 	// entry with "node received request" shows the leaseholder acknowledging
@@ -551,7 +552,7 @@ func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) string {
 		leaseholder := leaseRegex.FindStringSubmatch(informationLog)
 		// Return leaseholder node ID if found.
 		if len(leaseholder) == 2 {
-			return leaseholder[1]
+			return redact.SafeString(leaseholder[1])
 		}
 	}
 	return ""
