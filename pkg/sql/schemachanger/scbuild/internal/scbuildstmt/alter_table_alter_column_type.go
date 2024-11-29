@@ -147,7 +147,7 @@ func validateAutomaticCastForNewType(
 	// We have a USING clause, but if we have DEFAULT or ON UPDATE expressions,
 	// then we raise an error because those expressions cannot be automatically
 	// cast to the new type.
-	columnElements(b, tableID, colID).ForEach(func(
+	columnElements(b, tableID, colID).Filter(publicTargetFilter).ForEach(func(
 		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
 	) {
 		var exprType string
@@ -306,7 +306,7 @@ func handleGeneralColumnConversion(
 	// We block any attempt to alter the type of a column that is a key column in
 	// the primary key. We can't use walkColumnDependencies here, as it doesn't
 	// differentiate between key columns and stored columns.
-	pk := mustRetrievePrimaryIndex(b, tbl.TableID)
+	pk := getLatestPrimaryIndex(b, tbl.TableID)
 	for _, keyCol := range getIndexColumns(b.QueryByID(tbl.TableID), pk.IndexID, scpb.IndexColumn_KEY) {
 		if keyCol.ColumnID == col.ColumnID {
 			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
