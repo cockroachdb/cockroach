@@ -208,20 +208,7 @@ func dump(kv *roachpb.KeyValue) (*DatadogSeries, error) {
 var printLock syncutil.Mutex
 
 func (d *datadogWriter) emitDataDogMetrics(data []DatadogSeries) error {
-	var tags []string
-	// Hardcoded values
-	tags = append(tags, "cluster_type:SELF_HOSTED")
-
-	if debugTimeSeriesDumpOpts.clusterLabel != "" {
-		tags = append(tags, makeDDTag("cluster_label", debugTimeSeriesDumpOpts.clusterLabel))
-	}
-
-	tags = append(tags, makeDDTag(uploadIDTag, d.uploadID))
-
-	year, month, day := d.uploadTime.Date()
-	tags = append(tags, makeDDTag("upload_year", strconv.Itoa(year)))
-	tags = append(tags, makeDDTag("upload_month", strconv.Itoa(int(month))))
-	tags = append(tags, makeDDTag("upload_day", strconv.Itoa(day)))
+	tags := getUploadTags(d)
 
 	for i := 0; i < len(data); i++ {
 		data[i].Tags = append(data[i].Tags, tags...)
@@ -256,6 +243,37 @@ func (d *datadogWriter) emitDataDogMetrics(data []DatadogSeries) error {
 	}()
 
 	return d.flush(data)
+}
+
+func getUploadTags(d *datadogWriter) []string {
+	var tags []string
+	// Hardcoded values
+	tags = append(tags, "cluster_type:SELF_HOSTED")
+
+	if debugTimeSeriesDumpOpts.clusterLabel != "" {
+		tags = append(tags, makeDDTag("cluster_label", debugTimeSeriesDumpOpts.clusterLabel))
+	}
+	if debugTimeSeriesDumpOpts.clusterID != "" {
+		tags = append(tags, makeDDTag("cluster_id", debugTimeSeriesDumpOpts.clusterID))
+	}
+	if debugTimeSeriesDumpOpts.zendeskTicket != "" {
+		tags = append(tags, makeDDTag("zendesk_ticket", debugTimeSeriesDumpOpts.zendeskTicket))
+	}
+	if debugTimeSeriesDumpOpts.organizationName != "" {
+		tags = append(tags, makeDDTag("org_name", debugTimeSeriesDumpOpts.organizationName))
+	}
+	if debugTimeSeriesDumpOpts.userName != "" {
+		tags = append(tags, makeDDTag("user_name", debugTimeSeriesDumpOpts.userName))
+	}
+
+	tags = append(tags, makeDDTag(uploadIDTag, d.uploadID))
+
+	year, month, day := d.uploadTime.Date()
+	tags = append(tags, makeDDTag("upload_timestamp", d.uploadTime.Format("2006-01-02 15:04:05")))
+	tags = append(tags, makeDDTag("upload_year", strconv.Itoa(year)))
+	tags = append(tags, makeDDTag("upload_month", strconv.Itoa(int(month))))
+	tags = append(tags, makeDDTag("upload_day", strconv.Itoa(day)))
+	return tags
 }
 
 func (d *datadogWriter) flush(data []DatadogSeries) error {

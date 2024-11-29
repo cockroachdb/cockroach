@@ -37,14 +37,18 @@ import (
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugTimeSeriesDumpOpts = struct {
-	format       tsDumpFormat
-	from, to     timestampValue
-	clusterLabel string
-	yaml         string
-	targetURL    string
-	ddApiKey     string
-	ddSite       string
-	httpToken    string
+	format           tsDumpFormat
+	from, to         timestampValue
+	clusterLabel     string
+	yaml             string
+	targetURL        string
+	ddApiKey         string
+	ddSite           string
+	httpToken        string
+	clusterID        string
+	zendeskTicket    string
+	organizationName string
+	userName         string
 }{
 	format:       tsDumpText,
 	from:         timestampValue{},
