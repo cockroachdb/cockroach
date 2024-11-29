@@ -1867,160 +1867,175 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	raftConfig := base.RaftConfig{
-		// Drop the raft tick interval so the Raft group is ticked more.
-		RaftTickInterval: 10 * time.Millisecond,
-		// Don't timeout raft leader. We don't want leadership moving.
-		RaftElectionTimeoutTicks: 1000000,
-		// Reduce the max uncommitted entry size.
-		RaftMaxUncommittedEntriesSize: 64 << 10, // 64 KB
-		// RaftProposalQuota cannot exceed RaftMaxUncommittedEntriesSize.
-		RaftProposalQuota: int64(64 << 10),
-		// RaftMaxInflightMsgs * RaftMaxSizePerMsg cannot exceed RaftProposalQuota.
-		RaftMaxInflightMsgs: 16,
-		RaftMaxSizePerMsg:   1 << 10, // 1 KB
-	}
+	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		ctx := context.Background()
+		settings := cluster.MakeTestingClusterSettings()
+		kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, leaseType)
 
-	const numServers int = 5
-	stickyServerArgs := make(map[int]base.TestServerArgs)
-	for i := 0; i < numServers; i++ {
-		stickyServerArgs[i] = base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
-			},
-			RaftConfig: raftConfig,
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					StickyVFSRegistry: fs.NewStickyRegistry(),
-				},
-				Store: &kvserver.StoreTestingKnobs{
-					// Disable leader transfers during leaseholder changes so that we
-					// can easily create leader-not-leaseholder scenarios.
-					DisableLeaderFollowsLeaseholder: true,
-					// Refresh pending commands on every Raft group tick instead of
-					// every RaftReproposalTimeoutTicks.
-					RefreshReasonTicksPeriod: 1,
-				},
-			},
+		raftConfig := base.RaftConfig{
+			// Drop the raft tick interval so the Raft group is ticked more.
+			RaftTickInterval: 10 * time.Millisecond,
+			// Reduce the max uncommitted entry size.
+			RaftMaxUncommittedEntriesSize: 64 << 10, // 64 KB
+			// RaftProposalQuota cannot exceed RaftMaxUncommittedEntriesSize.
+			RaftProposalQuota: int64(64 << 10),
+			// RaftMaxInflightMsgs * RaftMaxSizePerMsg cannot exceed RaftProposalQuota.
+			RaftMaxInflightMsgs: 16,
+			RaftMaxSizePerMsg:   1 << 10, // 1 KB
 		}
-	}
+		// Suppress timeout-based elections to avoid leadership changes in ways this
+		// test doesn't expect. For leader leases, fortification itself provides us
+		// this guarantee.
+		if leaseType != roachpb.LeaseLeader {
+			raftConfig.RaftElectionTimeoutTicks = 1000000
+		}
 
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, numServers,
-		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: stickyServerArgs,
-		})
-	defer tc.Stopper().Stop(ctx)
-	store := tc.GetFirstStoreFromServer(t, 0)
-
-	key := []byte("a")
-	tc.SplitRangeOrFatal(t, key)
-	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2, 3, 4)...)
-
-	// Raft leadership is kept on node 0.
-	leaderRepl := store.LookupReplica(key)
-	require.NotNil(t, leaderRepl)
-
-	// Put some data in the range so we'll have something to test for.
-	incArgs := incrementArgs(key, 5)
-	if _, err := kv.SendWrapped(ctx, store.TestSender(), incArgs); err != nil {
-		t.Fatal(err)
-	}
-
-	// Wait for all nodes to catch up.
-	tc.WaitForValues(t, key, []int64{5, 5, 5, 5, 5})
-
-	// Test proposing on leader and proposing on follower. Neither should result
-	// in unbounded raft log growth.
-	testutils.RunTrueAndFalse(t, "proposeOnFollower", func(t *testing.T, proposeOnFollower bool) {
-		// Restart any nodes that are down, we dont need to restart 2 since
-		// it started to finish the test case.
-		for _, s := range []int{3, 4} {
-			if tc.ServerStopped(s) {
-				require.NoError(t, tc.RestartServer(s))
+		const numServers int = 5
+		stickyServerArgs := make(map[int]base.TestServerArgs)
+		for i := 0; i < numServers; i++ {
+			stickyServerArgs[i] = base.TestServerArgs{
+				Settings: settings,
+				StoreSpecs: []base.StoreSpec{
+					{
+						InMemory:    true,
+						StickyVFSID: strconv.FormatInt(int64(i), 10),
+					},
+				},
+				RaftConfig: raftConfig,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyVFSRegistry: fs.NewStickyRegistry(),
+					},
+					Store: &kvserver.StoreTestingKnobs{
+						// Disable leader transfers during leaseholder changes so that we
+						// can easily create leader-not-leaseholder scenarios.
+						DisableLeaderFollowsLeaseholder: true,
+						// Refresh pending commands on every Raft group tick instead of
+						// every RaftReproposalTimeoutTicks.
+						RefreshReasonTicksPeriod: 1,
+					},
+				},
 			}
 		}
-		// Determine which node to propose on. Transfer lease to that node.
-		propIdx := 0
-		if proposeOnFollower {
-			propIdx = 1
-		}
-		propNode := tc.GetFirstStoreFromServer(t, propIdx).TestSender()
-		tc.TransferRangeLeaseOrFatal(t, *leaderRepl.Desc(), tc.Target(propIdx))
-		tc.MaybeWaitForLeaseUpgrade(ctx, t, *leaderRepl.Desc())
-		testutils.SucceedsSoon(t, func() error {
-			// Lease transfers may not be immediately observed by the new
-			// leaseholder. Wait until the new leaseholder is aware.
-			repl, err := tc.GetFirstStoreFromServer(t, propIdx).GetReplica(leaderRepl.RangeID)
-			require.NoError(t, err)
-			repDesc, err := repl.GetReplicaDescriptor()
-			require.NoError(t, err)
-			if lease, _ := repl.GetLease(); !lease.Replica.Equal(repDesc) {
-				return errors.Errorf("lease not transferred yet; found %v", lease)
-			}
-			return nil
-		})
 
-		// Stop enough nodes to prevent a quorum.
-		for i := 2; i < len(tc.Servers); i++ {
-			tc.StopServer(i)
+		tc := testcluster.StartTestCluster(t, numServers,
+			base.TestClusterArgs{
+				ReplicationMode:   base.ReplicationManual,
+				ServerArgsPerNode: stickyServerArgs,
+			})
+		defer tc.Stopper().Stop(ctx)
+		store := tc.GetFirstStoreFromServer(t, 0)
+
+		key := []byte("a")
+		tc.SplitRangeOrFatal(t, key)
+		tc.AddVotersOrFatal(t, key, tc.Targets(1, 2, 3, 4)...)
+
+		// Raft leadership is kept on node 0.
+		leaderRepl := store.LookupReplica(key)
+		require.NotNil(t, leaderRepl)
+
+		// Put some data in the range so we'll have something to test for.
+		incArgs := incrementArgs(key, 5)
+		if _, err := kv.SendWrapped(ctx, store.TestSender(), incArgs); err != nil {
+			t.Fatal(err)
 		}
 
-		// Determine the current raft log size.
-		initLogSize, _ := leaderRepl.GetRaftLogSize()
+		// Wait for all nodes to catch up.
+		tc.WaitForValues(t, key, []int64{5, 5, 5, 5, 5})
 
-		// While a majority nodes are down, write some data.
-		putRes := make(chan *kvpb.Error)
-		go func() {
-			putArgs := putArgs([]byte("b"), make([]byte, raftConfig.RaftMaxUncommittedEntriesSize/8))
-			_, err := kv.SendWrapped(ctx, propNode, putArgs)
-			putRes <- err
-		}()
+		// Test proposing on leader and proposing on follower. Neither should result
+		// in unbounded raft log growth.
+		testutils.RunTrueAndFalse(t, "proposeOnFollower", func(t *testing.T, proposeOnFollower bool) {
 
-		// Wait for a bit and watch for Raft log growth.
-		wait := time.After(500 * time.Millisecond)
-		ticker := time.Tick(50 * time.Millisecond)
-	Loop:
-		for {
-			select {
-			case <-wait:
-				break Loop
-			case <-ticker:
-				// Verify that the leader is node 0.
-				status := leaderRepl.RaftStatus()
-				if status == nil || status.RaftState != raftpb.StateLeader {
-					t.Fatalf("raft leader should be node 0, but got status %+v", status)
+			// Restart any nodes that are down, we dont need to restart 2 since
+			// it started to finish the test case.
+			for _, s := range []int{3, 4} {
+				if tc.ServerStopped(s) {
+					require.NoError(t, tc.RestartServer(s))
 				}
-
-				// Check the raft log size. We allow GetRaftLogSize to grow up
-				// to twice RaftMaxUncommittedEntriesSize because its total
-				// includes a little more state (the roachpb.Value checksum,
-				// etc.). The important thing here is that the log doesn't grow
-				// forever.
-				logSizeLimit := int64(2 * raftConfig.RaftMaxUncommittedEntriesSize)
-				curlogSize, _ := leaderRepl.GetRaftLogSize()
-				logSize := curlogSize - initLogSize
-				logSizeStr := humanizeutil.IBytes(logSize)
-				// Note that logSize could be negative if something got truncated.
-				if logSize > logSizeLimit {
-					t.Fatalf("raft log size grew to %s", logSizeStr)
-				}
-				t.Logf("raft log size grew to %s", logSizeStr)
-			case err := <-putRes:
-				t.Fatalf("write finished with quorum unavailable; err=%v", err)
 			}
-		}
+			// Determine which node to propose on. Transfer lease to that node.
+			propIdx := 0
+			if proposeOnFollower {
+				propIdx = 1
+			}
+			propNode := tc.GetFirstStoreFromServer(t, propIdx).TestSender()
+			tc.TransferRangeLeaseOrFatal(t, *leaderRepl.Desc(), tc.Target(propIdx))
+			// The test disables leader follows leaseholder, so we will never be able
+			// to upgrade to a leader lease.
+			if !(leaseType == roachpb.LeaseLeader && proposeOnFollower) {
+				tc.MaybeWaitForLeaseUpgrade(ctx, t, *leaderRepl.Desc())
+			}
+			testutils.SucceedsSoon(t, func() error {
+				// Lease transfers may not be immediately observed by the new
+				// leaseholder. Wait until the new leaseholder is aware.
+				repl, err := tc.GetFirstStoreFromServer(t, propIdx).GetReplica(leaderRepl.RangeID)
+				require.NoError(t, err)
+				repDesc, err := repl.GetReplicaDescriptor()
+				require.NoError(t, err)
+				if lease, _ := repl.GetLease(); !lease.Replica.Equal(repDesc) {
+					return errors.Errorf("lease not transferred yet; found %v", lease)
+				}
+				return nil
+			})
 
-		// Start enough nodes to establish a quorum.
-		require.NoError(t, tc.RestartServer(2))
+			// Stop enough nodes to prevent a quorum.
+			for i := 2; i < len(tc.Servers); i++ {
+				tc.StopServer(i)
+			}
 
-		// The write should now succeed.
-		err := <-putRes
-		require.NoError(t, err.GoError())
+			// Determine the current raft log size.
+			initLogSize, _ := leaderRepl.GetRaftLogSize()
+
+			// While a majority nodes are down, write some data.
+			putRes := make(chan *kvpb.Error)
+			go func() {
+				putArgs := putArgs([]byte("b"), make([]byte, raftConfig.RaftMaxUncommittedEntriesSize/8))
+				_, err := kv.SendWrapped(ctx, propNode, putArgs)
+				putRes <- err
+			}()
+
+			// Wait for a bit and watch for Raft log growth.
+			wait := time.After(500 * time.Millisecond)
+			ticker := time.Tick(50 * time.Millisecond)
+		Loop:
+			for {
+				select {
+				case <-wait:
+					break Loop
+				case <-ticker:
+					// Verify that the leader is node 0.
+					status := leaderRepl.RaftStatus()
+					if status == nil || status.RaftState != raftpb.StateLeader {
+						t.Fatalf("raft leader should be node 0, but got status %+v", status)
+					}
+
+					// Check the raft log size. We allow GetRaftLogSize to grow up
+					// to twice RaftMaxUncommittedEntriesSize because its total
+					// includes a little more state (the roachpb.Value checksum,
+					// etc.). The important thing here is that the log doesn't grow
+					// forever.
+					logSizeLimit := int64(2 * raftConfig.RaftMaxUncommittedEntriesSize)
+					curlogSize, _ := leaderRepl.GetRaftLogSize()
+					logSize := curlogSize - initLogSize
+					logSizeStr := humanizeutil.IBytes(logSize)
+					// Note that logSize could be negative if something got truncated.
+					if logSize > logSizeLimit {
+						t.Fatalf("raft log size grew to %s", logSizeStr)
+					}
+					t.Logf("raft log size grew to %s", logSizeStr)
+				case err := <-putRes:
+					t.Fatalf("write finished with quorum unavailable; err=%v", err)
+				}
+			}
+
+			// Start enough nodes to establish a quorum.
+			require.NoError(t, tc.RestartServer(2))
+
+			// The write should now succeed.
+			err := <-putRes
+			require.NoError(t, err.GoError())
+		})
 	})
 }
 
