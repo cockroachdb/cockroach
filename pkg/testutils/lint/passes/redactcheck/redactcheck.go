@@ -60,7 +60,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"SettingName": {},
 						"ValueOrigin": {},
 					},
-					"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/logical": {
+					"github.com/cockroachdb/cockroach/pkg/crosscluster/logical": {
 						"processorType": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/cli/exit": {
