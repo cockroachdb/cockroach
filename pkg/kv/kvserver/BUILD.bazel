@@ -66,6 +66,7 @@ go_library(
         "replica_raft_overload.go",
         "replica_raft_quiesce.go",
         "replica_raftlog.go",
+        "replica_raftlog_writes.go",
         "replica_raftstorage.go",
         "replica_range_lease.go",
         "replica_rangefeed.go",
