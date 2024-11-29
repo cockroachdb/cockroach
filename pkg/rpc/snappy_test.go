@@ -39,7 +39,7 @@ func TestSnappyCompressorCompressDecompress(t *testing.T) {
 			require.Equal(t, tt.expOut, out)
 
 			// Decompress.
-			n := c.DecompressedSize(out)
+			n := c.DecompressedSize(bytes.NewReader(out))
 			require.Equal(t, len(tt.in), n)
 
 			r, err := c.Decompress(bytes.NewReader(out))
@@ -65,7 +65,7 @@ func TestSnappyCompressorDecompressedSize(t *testing.T) {
 		{"corrupt length chunk", []byte{0xff, 0x6, 0x0, 0x0, 0x73, 0x4e, 0x61, 0x50, 0x70, 0x59, 0x1, 0x7, 0x0, 0x0, 0x4b, 0xfb, 0x81, 0xf5, 0x41, 0x42, 0x43, 0xb0, 0x2, 0x0, 0x0, 0x3}, -1},
 	} {
 		t.Run(fmt.Sprintf("input=%v", tt.in), func(t *testing.T) {
-			n := c.DecompressedSize(tt.in)
+			n := c.DecompressedSize(bytes.NewReader(tt.in))
 			require.Equal(t, tt.exp, n)
 		})
 	}
