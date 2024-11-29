@@ -482,22 +482,11 @@ func dropRaftMessagesFrom(
 	require.NoError(t, err)
 
 	dropFrom := map[roachpb.ReplicaID]bool{}
-	dropFromStore := map[roachpb.StoreID]bool{}
 	for _, id := range fromReplicaIDs {
 		dropFrom[id] = true
-		rep, ok := desc.GetReplicaDescriptorByID(id)
-		if !ok {
-			t.Fatalf("replica %d not found in range descriptor: %v", id, desc)
-		}
-		t.Logf("from store %d; adding replica %s to drop list", store.StoreID(), id)
-		t.Logf("from store %d; adding store %s to drop list", store.StoreID(), rep.StoreID)
-		dropFromStore[rep.StoreID] = true
 	}
 	shouldDrop := func(rID roachpb.RangeID, from roachpb.ReplicaID) bool {
 		return rID == desc.RangeID && (cond == nil || cond.Load()) && dropFrom[from]
-	}
-	shouldDropFromStore := func(from roachpb.StoreID) bool {
-		return (cond == nil || cond.Load()) && dropFromStore[from]
 	}
 
 	srv.RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
@@ -515,6 +504,39 @@ func dropRaftMessagesFrom(
 			},
 		},
 	})
+	dropStoreLivenessHeartbeatsFrom(t, srv, desc, fromReplicaIDs, cond)
+}
+
+// dropStoreLivenessHeartbeatsFrom sets up a StoreLiveness message handler
+// that drops inbound store liveness messages from the given range and replica's
+// store.
+//
+// If cond is given, messages are only dropped when the atomic bool is true.
+// Otherwise, messages are always dropped.
+func dropStoreLivenessHeartbeatsFrom(
+	t *testing.T,
+	srv serverutils.TestServerInterface,
+	desc roachpb.RangeDescriptor,
+	fromReplicaIDs []roachpb.ReplicaID,
+	cond *atomic.Bool,
+) {
+	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+	require.NoError(t, err)
+
+	dropFromStore := map[roachpb.StoreID]bool{}
+	for _, id := range fromReplicaIDs {
+		rep, ok := desc.GetReplicaDescriptorByID(id)
+		if !ok {
+			t.Fatalf("replica %d not found in range descriptor: %v", id, desc)
+		}
+		t.Logf("from store %d; adding store %s to drop list", store.StoreID(), rep.StoreID)
+		dropFromStore[rep.StoreID] = true
+	}
+
+	shouldDropFromStore := func(from roachpb.StoreID) bool {
+		return (cond == nil || cond.Load()) && dropFromStore[from]
+	}
+
 	srv.StoreLivenessTransport().(*storeliveness.Transport).ListenMessages(store.StoreID(), &storeliveness.UnreliableHandler{
 		MessageHandler: store.TestingStoreLivenessSupportManager(),
 		UnreliableHandlerFuncs: storeliveness.UnreliableHandlerFuncs{
