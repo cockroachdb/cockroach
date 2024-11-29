@@ -413,11 +413,12 @@ func newRaftConfig(
 		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
 		Storage:                     strg,
 		Logger:                      logger,
-		StoreLiveness:               storeLiveness,
-		PreVote:                     true,
-		CheckQuorum:                 storeCfg.RaftEnableCheckQuorum,
-		CRDBVersion:                 storeCfg.Settings.Version,
-		Metrics:                     metrics,
+		TestingDisablePreCampaignStoreLivenessCheck: storeCfg.TestingDisablePreCampaignStoreLivenessCheck,
+		StoreLiveness: storeLiveness,
+		PreVote:       true,
+		CheckQuorum:   storeCfg.RaftEnableCheckQuorum,
+		CRDBVersion:   storeCfg.Settings.Version,
+		Metrics:       metrics,
 	}
 }
 

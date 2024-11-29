@@ -251,6 +251,11 @@ type Config struct {
 	// See: https://github.com/etcd-io/raft/issues/80
 	DisableConfChangeValidation bool
 
+	// TestingDisablePreCampaignStoreLivenessCheck may be used by tests to disable
+	// the check performed by a peer before campaigning to ensure it has
+	// StoreLiveness support from a majority quorum.
+	TestingDisablePreCampaignStoreLivenessCheck bool
+
 	// StoreLiveness is a reference to the store liveness fabric.
 	StoreLiveness raftstoreliveness.StoreLiveness
 
@@ -424,6 +429,11 @@ type raft struct {
 	randomizedElectionTimeout int64
 	disableProposalForwarding bool
 
+	// testingDisablePreCampaignStoreLivenessCheck may be used by tests to disable
+	// the check performed by a peer before campaigning to ensure it has
+	// StoreLiveness support from a majority quorum.
+	testingDisablePreCampaignStoreLivenessCheck bool
+
 	tick func()
 	step stepFunc
 
@@ -459,9 +469,10 @@ func newRaft(c *Config) *raft {
 		preVote:                     c.PreVote,
 		disableProposalForwarding:   c.DisableProposalForwarding,
 		disableConfChangeValidation: c.DisableConfChangeValidation,
-		storeLiveness:               c.StoreLiveness,
-		crdbVersion:                 c.CRDBVersion,
-		metrics:                     c.Metrics,
+		testingDisablePreCampaignStoreLivenessCheck: c.TestingDisablePreCampaignStoreLivenessCheck,
+		storeLiveness: c.StoreLiveness,
+		crdbVersion:   c.CRDBVersion,
+		metrics:       c.Metrics,
 	}
 	lastID := r.raftLog.lastEntryID()
 
@@ -1412,7 +1423,7 @@ func (r *raft) hup(t CampaignType) {
 	// only make an exception if this is a leadership transfer, because otherwise
 	// the transfer might fail if the new leader doesn't already have support.
 	if t != campaignTransfer && r.fortificationTracker.RequireQuorumSupportOnCampaign() &&
-		!r.fortificationTracker.QuorumSupported() {
+		!r.fortificationTracker.QuorumSupported() && !r.testingDisablePreCampaignStoreLivenessCheck {
 		r.logger.Debugf("%x cannot campaign since it's not supported by a quorum in store liveness", r.id)
 		return
 	}
