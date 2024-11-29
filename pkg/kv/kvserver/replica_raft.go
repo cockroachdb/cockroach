@@ -890,10 +890,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	replicaStateInfoMap := r.raftMu.replicaStateScratchForFlowControl
 	var raftNodeBasicState replica_rac2.RaftNodeBasicState
 	var logSnapshot raft.LogSnapshot
+
 	r.mu.Lock()
 	rac2ModeForReady := r.mu.currentRACv2Mode
-	// TODO(pav-kv): state can be retrieved without Replica.mu.
-	state := r.asLogStorage().stateRaftMuLocked() // used for append below
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
@@ -1051,6 +1050,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Grab the known leaseholder before applying to the state machine.
 	startingLeaseholderID := r.shMu.state.Lease.Replica.ReplicaID
 	refreshReason := noReason
+
+	state := r.asLogStorage().stateRaftMuLocked()
 	if hasMsg(msgStorageAppend) {
 		app := logstore.MakeMsgStorageAppend(msgStorageAppend)
 		cb := (*replicaSyncCallback)(r)
