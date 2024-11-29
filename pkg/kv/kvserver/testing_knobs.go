@@ -489,8 +489,8 @@ type StoreTestingKnobs struct {
 	GlobalMVCCRangeTombstone bool
 
 	// LeaseUpgradeInterceptor intercepts leases that get upgraded to
-	// epoch-based ones.
-	LeaseUpgradeInterceptor func(*roachpb.Lease)
+	// leader leases or epoch-based leases.
+	LeaseUpgradeInterceptor func(roachpb.RangeID, *roachpb.Lease)
 
 	// MVCCGCQueueLeaseCheckInterceptor intercepts calls to Replica.LeaseStatusAt when
 	// making high priority replica scans.
