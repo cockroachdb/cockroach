@@ -2622,42 +2622,53 @@ func TestLeaderAfterSplit(t *testing.T) {
 	skip.UnderDeadlock(t)
 	skip.UnderRace(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // time out early
-	defer cancel()
+	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // time out early
+		defer cancel()
 
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			RaftConfig: base.RaftConfig{
-				RangeLeaseDuration:       time.Hour, // don't expire leases
-				RaftElectionTimeoutTicks: 1000000,   // disable elections
+		settings := cluster.MakeTestingClusterSettings()
+		kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, leaseType)
+		raftConfig := base.RaftConfig{
+			RangeLeaseDuration: time.Hour, // don't expire leases
+		}
+		// Suppress timeout-based elections to avoid leadership changes in ways this
+		// test doesn't expect. For leader leases, fortification itself provides us
+		// this guarantee.
+		if leaseType != roachpb.LeaseLeader {
+			raftConfig.RaftElectionTimeoutTicks = 1000000
+		}
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings:   settings,
+				RaftConfig: raftConfig,
 			},
-		},
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		store := tc.GetFirstStoreFromServer(t, 0)
+		sender := tc.Servers[0].DistSenderI().(kv.Sender)
+
+		leftKey := roachpb.Key("a")
+		splitKey := roachpb.Key("m")
+		rightKey := roachpb.Key("z")
+
+		repl := store.LookupReplica(roachpb.RKey(leftKey))
+		require.NotNil(t, repl)
+		tc.AddVotersOrFatal(t, repl.Desc().StartKey.AsRawKey(), tc.Targets(1, 2)...)
+
+		// Split the range.
+		_, pErr := kv.SendWrapped(ctx, sender, adminSplitArgs(splitKey))
+		require.NoError(t, pErr.GoError())
+
+		// Make sure both the LHS and RHS can replicate a write request. This will
+		// time out if the RHS can't elect a Raft leader.
+		_, pErr = kv.SendWrapped(ctx, sender, incrementArgs(leftKey, 1))
+		require.NoError(t, pErr.GoError())
+
+		_, pErr = kv.SendWrapped(ctx, sender, incrementArgs(rightKey, 1))
+		require.NoError(t, pErr.GoError())
 	})
-	defer tc.Stopper().Stop(ctx)
-
-	store := tc.GetFirstStoreFromServer(t, 0)
-	sender := tc.Servers[0].DistSenderI().(kv.Sender)
-
-	leftKey := roachpb.Key("a")
-	splitKey := roachpb.Key("m")
-	rightKey := roachpb.Key("z")
-
-	repl := store.LookupReplica(roachpb.RKey(leftKey))
-	require.NotNil(t, repl)
-	tc.AddVotersOrFatal(t, repl.Desc().StartKey.AsRawKey(), tc.Targets(1, 2)...)
-
-	// Split the range.
-	_, pErr := kv.SendWrapped(ctx, sender, adminSplitArgs(splitKey))
-	require.NoError(t, pErr.GoError())
-
-	// Make sure both the LHS and RHS can replicate a write request. This will
-	// time out if the RHS can't elect a Raft leader.
-	_, pErr = kv.SendWrapped(ctx, sender, incrementArgs(leftKey, 1))
-	require.NoError(t, pErr.GoError())
-
-	_, pErr = kv.SendWrapped(ctx, sender, incrementArgs(rightKey, 1))
-	require.NoError(t, pErr.GoError())
 }
 
 func BenchmarkStoreRangeSplit(b *testing.B) {
