@@ -1065,7 +1065,9 @@ func applyColumnMutation(
 		// it in the schema changer.
 		check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col,
 			descpb.ConstraintValidity_Dropping, tableDesc.GetNextConstraintID())
-		tableDesc.Checks = append(tableDesc.Checks, check)
+		if tableDesc.Adding() {
+			tableDesc.Checks = append(tableDesc.Checks, check)
+		}
 		tableDesc.NextConstraintID++
 		tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_DROP)
 
