@@ -81,6 +81,10 @@ type SyncedCluster struct {
 
 	// AuthorizedKeys is used by SetupSSH to add additional authorized keys.
 	AuthorizedKeys []byte
+
+	// sessionProvider is a function that returns a new session. It serves
+	// as a testing hook, and if null the default session provider is used.
+	sessionProvider func() session
 }
 
 // NewSyncedCluster creates a SyncedCluster, given the cluster metadata, node
@@ -385,6 +389,9 @@ func (c *SyncedCluster) validateHost(ctx context.Context, l *logger.Logger, node
 func (c *SyncedCluster) newSession(
 	l *logger.Logger, node Node, cmd string, options ...remoteSessionOption,
 ) session {
+	if c.sessionProvider != nil {
+		return c.sessionProvider()
+	}
 	if c.IsLocal() {
 		return newLocalSession(cmd)
 	}
