@@ -1770,10 +1770,6 @@ func mustRetrieveColumnName(
 		MustGetOneElement()
 }
 
-func mustRetrievePrimaryIndex(b BuildCtx, tableID catid.DescID) *scpb.PrimaryIndex {
-	return b.QueryByID(tableID).FilterPrimaryIndex().MustGetOneElement()
-}
-
 func retrieveColumnNotNull(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) *scpb.ColumnNotNull {
