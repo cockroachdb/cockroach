@@ -791,21 +791,21 @@ func iterateColNamesInExpr(
 func retrieveColumnDefaultExpressionElem(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) *scpb.ColumnDefaultExpression {
-	_, _, ret := scpb.FindColumnDefaultExpression(b.QueryByID(tableID).Filter(hasColumnIDAttrFilter(columnID)))
-	return ret
+	return b.QueryByID(tableID).Filter(publicTargetFilter).FilterColumnDefaultExpression().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnDefaultExpression) bool {
+			return e.ColumnID == columnID
+		}).
+		MustGetZeroOrOneElement()
 }
 
 func retrieveColumnOnUpdateExpressionElem(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) (columnOnUpdateExpression *scpb.ColumnOnUpdateExpression) {
-	scpb.ForEachColumnOnUpdateExpression(b.QueryByID(tableID), func(
-		current scpb.Status, target scpb.TargetStatus, e *scpb.ColumnOnUpdateExpression,
-	) {
-		if e.ColumnID == columnID {
-			columnOnUpdateExpression = e
-		}
-	})
-	return columnOnUpdateExpression
+	return b.QueryByID(tableID).Filter(publicTargetFilter).FilterColumnOnUpdateExpression().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnOnUpdateExpression) bool {
+			return e.ColumnID == columnID
+		}).
+		MustGetZeroOrOneElement()
 }
 
 // ensureColCanBeUsedInOutboundFK ensures the column can be used in an outbound
