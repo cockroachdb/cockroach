@@ -538,8 +538,8 @@ github.com/cockroachdb/gogoproto v1.3.3-0.20241118145159-46874edb1b83 h1:PVow08b
 github.com/cockroachdb/gogoproto v1.3.3-0.20241118145159-46874edb1b83/go.mod h1:wIrkfXJOUk95vmhcdlmaou6FpqbEExZWBM7EAtKDvYg=
 github.com/cockroachdb/gostdlib v1.19.0 h1:cSISxkVnTlWhTkyple/T6NXzOi5659FkhxvUgZv+Eb0=
 github.com/cockroachdb/gostdlib v1.19.0/go.mod h1:+dqqpARXbE/gRDEhCak6dm0l14AaTymPZUKMfURjBtY=
-github.com/cockroachdb/grpc-go v1.68.0-noalpncheck h1:odM3/chhjRTmDlD/3ndnBNsswAbbImC1RQCf+qrtO98=
-github.com/cockroachdb/grpc-go v1.68.0-noalpncheck/go.mod h1:fmSPC5AsjSBCK54MyHRx48kpOti1/jRfOlwEWywNjWA=
+github.com/cockroachdb/grpc-go v1.68.0-noalpncheck.0.20241129124825-5710e83f714e h1:GQwFV3zGH//OOqgUUhV2rL22w6SL9MAau0MlDRzFS6E=
+github.com/cockroachdb/grpc-go v1.68.0-noalpncheck.0.20241129124825-5710e83f714e/go.mod h1:fmSPC5AsjSBCK54MyHRx48kpOti1/jRfOlwEWywNjWA=
 github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b h1:r6VH0faHjZeQy818SGhaone5OnYfxFR/+AzdY3sf5aE=
 github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
