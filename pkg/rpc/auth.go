@@ -360,14 +360,21 @@ func (authzPrivilegedPeerToServer) rpcAuthzMethod()     {}
 func (a kvAuth) selectAuthzMethod(
 	ctx context.Context, ar authnResult,
 ) (requiredAuthzMethod, error) {
-	switch res := ar.(type) {
+	switch ar.(type) {
 	case authnSuccessPeerIsTenantServer:
 		// The client is a tenant server. We have two possible cases:
 		// - tenant server to KV node.
 		// - tenant server to another tenant server.
-		if a.tenant.tenantID == roachpb.SystemTenantID {
-			return authzTenantServerToKVServer(res), nil
-		}
+
+		// TODO(shubham): ideally we should be sending our world view, e.g. the
+		// system tenant id of the requester
+
+		log.Ops.Infof(ctx,
+			"a.tenant.tenantID: %d, roachpb.SystemTenantID: %d, authnResult: %+v",
+			a.tenant.tenantID, roachpb.SystemTenantID, ar)
+		// if a.tenant.tenantID == roachpb.SystemTenantID {
+		// 	return authzTenantServerToKVServer(res), nil
+		// }
 		return authzTenantServerToTenantServer{}, nil
 
 	case authnSuccessPeerIsPrivileged:

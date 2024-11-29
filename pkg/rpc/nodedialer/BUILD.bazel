@@ -26,6 +26,7 @@ go_test(
     srcs = ["nodedialer_test.go"],
     embed = [":nodedialer"],
     deps = [
+        "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
