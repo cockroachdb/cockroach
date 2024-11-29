@@ -8,6 +8,7 @@ package kvprober
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/redact"
 	"testing"
 	"time"
 
@@ -303,7 +304,7 @@ func TestReturnLeaseholderInfo(t *testing.T) {
 		m := &mock{t: t, read: true}
 		p := initTestProber(ctx, m)
 		// Expected leaseholder information is node 1.
-		require.Equal(t, "1", p.returnLeaseholderInfo(mockRecording))
+		require.Equal(t, redact.Sprint("1"), p.returnLeaseholderInfo(mockRecording))
 	})
 
 	t.Run("traces do not contain leaseholder information", func(t *testing.T) {
@@ -333,7 +334,7 @@ func TestReturnLeaseholderInfo(t *testing.T) {
 		m := &mock{t: t, read: true}
 		p := initTestProber(ctx, m)
 		// Since no leaseholder information is present, the function is expected to return an empty string.
-		require.Equal(t, "", p.returnLeaseholderInfo(mockRecording))
+		require.Equal(t, redact.Sprint(""), p.returnLeaseholderInfo(mockRecording))
 	})
 }
 
