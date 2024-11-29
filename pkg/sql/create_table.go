@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -90,7 +91,16 @@ func (p *planner) getNonTemporarySchemaForCreate(
 	case catalog.SchemaPublic:
 		return sc, nil
 	case catalog.SchemaUserDefined:
-		return p.Descriptors().MutableByID(p.txn).Schema(ctx, sc.GetID())
+		sc, err := p.Descriptors().MutableByID(p.txn).Schema(ctx, sc.GetID())
+		if err != nil {
+			return nil, err
+		}
+		// Exit early with an error if the schema is undergoing any legacy
+		// or declarative schema change.
+		if sc.HasConcurrentSchemaChanges() {
+			return nil, scerrors.ConcurrentSchemaChangeError(sc)
+		}
+		return sc, nil
 	case catalog.SchemaVirtual:
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:
