@@ -7,6 +7,7 @@ package rpc
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"net"
@@ -2229,4 +2230,59 @@ func TestInitialHeartbeatFailedError(t *testing.T) {
 		}
 		return err
 	})
+}
+
+type benchmarkHeartbeatService struct {
+	resp *PingResponse
+}
+
+func (b *benchmarkHeartbeatService) Ping(
+	ctx context.Context, request *PingRequest,
+) (*PingResponse, error) {
+	if b.resp == nil {
+		b.resp = &PingResponse{}
+	}
+	return b.resp, nil
+}
+
+func BenchmarkGRPCPing(b *testing.B) {
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	clock := &timeutil.DefaultTimeSource{}
+	maxOffset := 250 * time.Millisecond
+	srvRPCCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
+	const serverNodeID = 1
+	srvRPCCtx.NodeID.Set(ctx, serverNodeID)
+	s := newTestServer(b, srvRPCCtx)
+
+	randBytes := make([]byte, 200)
+	_, err := rand.Read(randBytes)
+	require.NoError(b, err)
+
+	req := &PingRequest{Ping: string(randBytes)}
+	resp := &PingResponse{Pong: string(randBytes)}
+	RegisterHeartbeatServer(s, &benchmarkHeartbeatService{resp: resp})
+	ln, err := netutil.ListenAndServeGRPC(srvRPCCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		b.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+
+	cliRPCCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
+	cliRPCCtx.NodeID.Set(ctx, 2)
+	cc, err := cliRPCCtx.grpcDialRaw(ctx, remoteAddr, DefaultClass)
+	require.NoError(b, err)
+	hb := NewHeartbeatClient(cc)
+	_, err = hb.Ping(ctx, req) // warm-up
+	require.NoError(b, err)
+
+	b.ResetTimer()
+	defer b.StopTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := hb.Ping(ctx, req); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
