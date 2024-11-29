@@ -1711,4 +1711,70 @@ DROP TABLE t_droppedcol;
 statement ok
 SET use_declarative_schema_changer = $schema_changer_state
 
+subtest multi_alter_txn
+
+# Force DSC always so that we use it within a transaction
+let $schema_changer_state
+SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
+
+statement ok
+set use_declarative_schema_changer = 'unsafe_always';
+
+statement ok
+CREATE TABLE t_multi_alter (c1 INT NOT NULL PRIMARY KEY, c2 TEXT NOT NULL, drop DATE, FAMILY F1 (c1, c2, drop));
+
+statement ok
+INSERT INTO t_multi_alter VALUES (10,'ten','1984-09-06'),(20,'twenty','2024-08-10');
+
+# The add column operation creates multiple primary keys, with all but one being
+# temporary. Previously, this caused the alter type to fail because it
+# encountered more primary keys than expected.
+skipif config local-mixed-24.2 local-mixed-24.3
+statement ok
+begin;
+ALTER TABLE t_multi_alter ADD COLUMN c3 TEXT DEFAULT '<default>', DROP COLUMN drop;
+ALTER TABLE t_multi_alter ALTER COLUMN c2 SET DATA TYPE BIGINT USING c1::BIGINT;
+commit;
+
+skipif config local-mixed-24.2 local-mixed-24.3
+query IIT
+select * from t_multi_alter order by c1;
+----
+10 10 <default>
+20 20 <default>
+
+skipif config local-mixed-24.2 local-mixed-24.3
+statement ok
+begin;
+ALTER TABLE t_multi_alter ALTER COLUMN c3 SET DEFAULT NULL;
+ALTER TABLE t_multi_alter ALTER COLUMN c3 SET DATA TYPE DATE USING '2024-04-22'::DATE;
+commit;
+
+skipif config local-mixed-24.2 local-mixed-24.3
+query IIT
+select * from t_multi_alter order by c1;
+----
+10 10 2024-04-22 00:00:00 +0000 +0000
+20 20 2024-04-22 00:00:00 +0000 +0000
+
+skipif config local-mixed-24.2 local-mixed-24.3
+query TT colnames
+show create table t_multi_alter
+----
+table_name  create_statement
+t_multi_alter   CREATE TABLE public.t_multi_alter (
+              c1 INT8 NOT NULL,
+              c2 INT8 NOT NULL,
+              c3 DATE NULL,
+              CONSTRAINT t_multi_alter_pkey PRIMARY KEY (c1 ASC),
+              FAMILY f1 (c1, c2, c3)
+            )
+
+statement ok
+drop table t_multi_alter;
+
+# Restore the schema changer state back.
+statement ok
+SET use_declarative_schema_changer = $schema_changer_state
+
 subtest end
