@@ -506,36 +506,44 @@ func (r *Replica) handleTruncatedStateResult(
 	r.raftMu.AssertHeld()
 	expectedFirstIndexWasAccurate =
 		r.shMu.raftTruncState.Index+1 == expectedFirstIndexPreTruncation
+
+	// TODO(pav-kv): we are updating the truncation state, but leaving the raft
+	// log size at the previous value and update it in a different Replica.mu
+	// section in handleRaftLogDeltaResult. This can confuse the truncations queue
+	// to make decisions based on incorrect stats. We should fix this and other
+	// log stats inconsistencies.
+	// TODO(#132114, #131063): updating the truncated state after the storage
+	// writes leads to a necessity of the ErrCompacted handling in raft, when
+	// reads are made under Replica.mu. This error API can be removed entirely if
+	// the truncated state is updated first. The semantics would be that the log
+	// is truncated "logically" first, and then physically under raftMu.
 	r.mu.Lock()
 	r.shMu.raftTruncState = *t
 	r.mu.Unlock()
 
-	// Clear any entries in the Raft log entry cache for this range up to and
-	// including the most recently truncated index.
+	// Clear any entries in the Raft log entry cache for this range up
+	// to and including the most recently truncated index.
+	//
+	// It is safe to do this here, after the storage write. Before this line, raft
+	// log reads under Replica.mu (from within RawNode) may temporarily return
+	// cached entries that are already removed from storage. It appears as if the
+	// read is performed right before the truncation batch was written.
 	r.store.raftEntryCache.Clear(r.RangeID, t.Index)
 
-	// Truncate the sideloaded storage. This is safe only if the new truncated
-	// state is durably stored on disk, i.e. synced.
-	// TODO(#38566, #113135): this is unfortunately not true, need to fix this.
-	//
-	// TODO(sumeer): once we remove the legacy caller of
-	// handleTruncatedStateResult, stop calculating the size of the removed
-	// files and the remaining files.
+	// Truncate the sideloaded storage. This is safe because the new truncated
+	// state is already synced. If it wasn't, a crash right after removing the
+	// sideloaded entries could result in missing entries in the log.
 	log.Eventf(ctx, "truncating sideloaded storage up to (and including) index %d", t.Index)
 	size, err := r.raftMu.sideloaded.TruncateTo(ctx, t.Index)
 	if err != nil {
-		// We don't *have* to remove these entries for correctness. Log a
-		// loud error, but keep humming along.
+		// We don't *have* to remove these entries for correctness. Log a loud
+		// error, but keep humming along.
 		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
 	}
 	// NB: we don't sync the sideloaded entry files removal here for performance
-	// reasons. If a crash occurs, and these files get recovered after a restart,
-	// we should clean them up on the server startup.
-	//
-	// TODO(#113135): this removal survives process crashes though, and system
-	// crashes if the filesystem is quick enough to sync it for us. Add a test
-	// that syncs the files removal here, and "crashes" right after, to help
-	// reproduce and fix #113135.
+	// reasons.
+	// TODO(#136416): If a crash occurs before the files are durably removed,
+	// there will be dangling files at the next start. Clean them up at startup.
 	return -size, expectedFirstIndexWasAccurate
 }
 
