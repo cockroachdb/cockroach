@@ -13,7 +13,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -244,10 +246,17 @@ func TestShowRangesUnavailableReplicas(t *testing.T) {
 
 	const numNodes = 3
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 	tc := testcluster.StartTestCluster(
 		// Manual replication will prevent the leaseholder for the unavailable range
 		// from moving a different node.
-		t, numNodes, base.TestClusterArgs{ReplicationMode: base.ReplicationManual},
+		t, numNodes, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+			},
+		},
 	)
 	defer tc.Stopper().Stop(ctx)
 
