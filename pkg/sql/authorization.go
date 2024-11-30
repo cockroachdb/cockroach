@@ -564,9 +564,7 @@ func MemberOfWithAdminOption(
 	roleMembersCache := execCfg.RoleMemberCache
 
 	// Lookup table version.
-	_, tableDesc, err := descs.PrefixAndTable(
-		ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), &roleMembersTableName,
-	)
+	tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleMembersTableID)
 	if err != nil {
 		return nil, err
 	}
