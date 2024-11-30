@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessioninit",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
         "//pkg/security/password",
         "//pkg/security/username",
         "//pkg/settings",
@@ -16,7 +17,6 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
-        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/util/log",
         "//pkg/util/mon",

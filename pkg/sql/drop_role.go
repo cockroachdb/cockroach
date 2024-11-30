@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -447,8 +448,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			params.p.txn,
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
-				`DELETE FROM %s WHERE username=$1`,
-				sessioninit.RoleOptionsTableName,
+				`DELETE FROM system.public.%s WHERE username=$1`,
+				catconstants.RoleOptionsTableName,
 			),
 			normalizedUsername,
 		)
@@ -462,8 +463,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			params.p.txn,
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
-				`DELETE FROM %s WHERE role_name = $1`,
-				sessioninit.DatabaseRoleSettingsTableName,
+				`DELETE FROM system.public.%s WHERE role_name = $1`,
+				catconstants.DatabaseRoleSettingsTableName,
 			),
 			normalizedUsername,
 		); err != nil {
