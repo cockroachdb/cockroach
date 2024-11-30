@@ -1743,3 +1743,42 @@ foo    false
 bar    true
 
 subtest end
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/136230.
+# Reading from inherited_role_members should never read any data that is not in
+# the role membership cache. We simulate a stale cache by inserting a user
+# directly into system tables.
+subtest inherited_role_members_reads_at_cache_timestamp
+
+statement ok
+CREATE USER real_user;
+GRANT admin TO real_user;
+
+query TTBB
+SELECT role, inheriting_member, member_is_explicit, member_is_admin
+FROM crdb_internal.kv_inherited_role_members
+ORDER BY role, inheriting_member
+----
+admin  real_user  true  false
+admin  root       true  true
+
+statement ok
+INSERT INTO system.users (username, user_id) VALUES ('non_cached_user', 12345);
+INSERT INTO system.role_members (role, member, role_id, member_id, "isAdmin") VALUES ('admin', 'non_cached_user', 2, 12345, true);
+
+query TTBB
+SELECT role, inheriting_member, member_is_explicit, member_is_admin
+FROM crdb_internal.kv_inherited_role_members
+ORDER BY role, inheriting_member
+----
+admin  real_user  true  false
+admin  root       true  true
+
+statement ok
+DELETE FROM system.users WHERE username = 'non_cached_user';
+DELETE FROM system.role_members WHERE member = 'non_cached_user';
+
+statement ok
+DROP USER real_user;
+
+subtest end
