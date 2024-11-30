@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"slices"
 	"strings"
 
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
@@ -649,8 +649,8 @@ func (p *planner) UserHasRoleOption(
 		ctx, "has-role-option", p.Txn(),
 		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(
-			`SELECT 1 from %s WHERE option = '%s' AND username = $1 LIMIT 1`,
-			sessioninit.RoleOptionsTableName, roleOption.String()), user.Normalized())
+			`SELECT 1 from system.public.%s WHERE option = '%s' AND username = $1 LIMIT 1`,
+			catconstants.RoleOptionsTableName, roleOption.String()), user.Normalized())
 	if err != nil {
 		return false, err
 	}
