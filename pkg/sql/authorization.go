@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -54,7 +55,9 @@ type MembershipCache struct {
 	// populateCacheGroup ensures that there is at most one request in-flight
 	// for each key.
 	populateCacheGroup *singleflight.Group
-	stopper            *stop.Stopper
+	// readTS is the timestamp that was used to populate the cache.
+	readTS  hlc.Timestamp
+	stopper *stop.Stopper
 }
 
 // NewMembershipCache initializes a new MembershipCache.
@@ -64,6 +67,51 @@ func NewMembershipCache(account mon.BoundAccount, stopper *stop.Stopper) *Member
 		populateCacheGroup: singleflight.NewGroup("lookup role membership", "key"),
 		stopper:            stopper,
 	}
+}
+
+// RunAtCacheReadTS runs an operations at a timestamp that is guaranteed to
+// be consistent with the data in the cache. txn is used to check if the
+// table version matches the cached table version, and if it does, db is
+// used to start a separate transaction at the cached timestamp.
+func (m *MembershipCache) RunAtCacheReadTS(
+	ctx context.Context, db descs.DB, txn descs.Txn, f func(context.Context, descs.Txn) error,
+) error {
+	tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleMembersTableID)
+	if err != nil {
+		return err
+	}
+
+	var readTS hlc.Timestamp
+	func() {
+		m.Lock()
+		defer m.Unlock()
+		if tableDesc.IsUncommittedVersion() {
+			return
+		}
+		if tableDesc.GetVersion() != m.tableVersion {
+			return
+		}
+		// The cached ts could be from long ago, so use the table modification
+		// if it's more recent.
+		if m.readTS.Less(tableDesc.GetModificationTime()) {
+			readTS = tableDesc.GetModificationTime()
+			return
+		}
+		readTS = m.readTS
+	}()
+
+	// If there's no cached read timestamp, then use the existing transaction.
+	if readTS.IsEmpty() {
+		return f(ctx, txn)
+	}
+
+	// If we found a historical timestamp to use, run in a different transaction.
+	return db.DescsTxn(ctx, func(ctx context.Context, newTxn descs.Txn) error {
+		if err := newTxn.KV().SetFixedTimestamp(ctx, readTS); err != nil {
+			return err
+		}
+		return f(ctx, newTxn)
+	})
 }
 
 // userRoleMembership is a mapping of "rolename" -> "with admin option".
@@ -699,6 +747,7 @@ func MemberOfWithAdminOption(
 					log.Ops.Warningf(ctx, "no memory available to cache role membership info: %v", err)
 				} else {
 					roleMembersCache.userCache = allMemberships
+					roleMembersCache.readTS = newTxnTimestamp
 				}
 			}()
 			return allMemberships, nil
@@ -926,6 +975,7 @@ GROUP BY u.username;`
 				// A null element means this role has no parents.
 				continue
 			}
+			// The names in the system tables are already normalized.
 			parent := tree.MustBeDString(parentNames.Array[i])
 			parentName := username.MakeSQLUsernameFromPreNormalizedString(string(parent))
 			isAdmin := tree.MustBeDBool(isAdmins.Array[i])
@@ -936,7 +986,6 @@ GROUP BY u.username;`
 			})
 		}
 
-		// The names in the system tables are already normalized.
 		if err := fn(
 			ctx,
 			childName,
