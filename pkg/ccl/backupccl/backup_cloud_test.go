@@ -314,3 +314,58 @@ func TestCloudBackupRestoreKMSInaccessibleMetric(t *testing.T) {
 		})
 	}
 }
+
+func TestAssumeRoleS3(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	creds, bucket := requiredS3CredsAndBucket(t)
+	prefix := fmt.Sprintf("TestAssumeRoleS3-%d", timeutil.Now().UnixNano())
+	uri := setupS3URI(t, sqlDB, bucket, prefix, creds)
+	externalStorage := uri.String()
+
+	q := make(url.Values)
+	envs := []string{
+		"AWS_ACCESS_KEY_ID",
+		"AWS_SECRET_ACCESS_KEY",
+		"AWS_KMS_REGION",
+	}
+
+	for _, env := range envs {
+		v := os.Getenv(env)
+		if v == "" {
+			skip.IgnoreLintf(t, "%s env var must be set", env)
+		}
+		q.Add(env, v)
+	}
+
+	q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
+
+	// Get AWS Key identifier from env variable.
+	keyID := os.Getenv("AWS_KMS_KEY_ARN")
+	if keyID == "" {
+		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
+	}
+
+	kmsURI := fmt.Sprintf("%s:///%s?%s", "aws-kms", keyID, q.Encode())
+
+	params := base.TestClusterArgs{}
+	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, "", InitManualReplication, params)
+	defer cleanupFnRestored()
+
+	rSQLDB.Exec(t, "BACKUP bank.bank INTO $1 WITH KMS=$2",
+		externalStorage, kmsURI)
+
+	rSQLDB.Exec(t, "CREATE DATABASE restoreDB")
+
+	rSQLDB.Exec(t, `RESTORE bank.bank FROM LATEST IN $1 WITH into_db=restoreDB, kms=$2`,
+		externalStorage, kmsURI)
+
+	var restoreRowCount int
+	sqlDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
+	require.Equal(t, numAccounts, restoreRowCount)
+}
