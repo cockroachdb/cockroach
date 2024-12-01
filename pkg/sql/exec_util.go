@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
@@ -1335,7 +1336,7 @@ type ExecutorConfig struct {
 	RangeDescriptorCache *rangecache.RangeCache
 
 	// Role membership cache.
-	RoleMemberCache *MembershipCache
+	RoleMemberCache *rolemembershipcache.MembershipCache
 
 	// Node-level sequence cache
 	SequenceCacheNode *sessiondatapb.SequenceCacheNode
