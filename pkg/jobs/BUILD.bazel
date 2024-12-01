@@ -122,8 +122,8 @@ go_test(
     }),
     shard_count = 16,
     deps = [
+        "//pkg/backup",
         "//pkg/base",
-        "//pkg/ccl/backupccl",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
         "//pkg/jobs/jobspb",

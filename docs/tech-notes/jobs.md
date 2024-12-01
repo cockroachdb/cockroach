@@ -369,7 +369,7 @@ a row in the table to commit them. Next, we'll discuss when a CRDB node would wr
 A [`ScheduledJob`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/jobs/scheduled_job.go#L55) struct is first created via
 [`NewScheduledJob`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/jobs/scheduled_job.go#L72)
 (ex: in
-[`makeBackupSchedule`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/ccl/backupccl/create_scheduled_backup.go#L595)),
+[`makeBackupSchedule`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/backup/create_scheduled_backup.go#L595)),
 initializing the struct which can then have its properties be set using the
 setter functions.  Finally, the data in the struct is persisted into the
 `scheduled_jobs` table via
@@ -397,7 +397,7 @@ schedules (default 10) with a `next_run` timestamp earlier than the current time
 If no jobs have successfully started for this current execution of the schedule,
 a type-specific executor will be called to queue the appropriate jobs to be
 executed (ex:
-[`executeBackup`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/ccl/backupccl/schedule_exec.go#L63)).
+[`executeBackup`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/backup/schedule_exec.go#L63)).
 
 Once jobs created by this schedule are observed, the `next_run` of the schedule
 will be advanced by
@@ -408,7 +408,7 @@ transactions.
 The executor for a given type of Job Schedule is registered via the
 [`RegisterScheduledJobExecutorFactory`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/jobs/scheduled_job_executor.go#L81)
 function (ex: [registering
-ScheduledBackupExecutor](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/ccl/backupccl/schedule_exec.go#L470)).
+ScheduledBackupExecutor](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/backup/schedule_exec.go#L470)).
 The factory must return a struct that implements the
 [ScheduledJobsExecutor](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/jobs/scheduled_job_executor.go#L26)
 interface.
@@ -485,25 +485,25 @@ the jobs table (i.e. creating the job).
 There are some common themes to note in a `planHookRowFn`.
 We’ll hyperlink to `backup_planning.go` to illustrate.
 - Throughout job planning, several (but not all) read and write requests get sent to the kv layer 
-using [`p.ExtendedEvalContext().Txn`](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/ccl/backupccl/backup_planning.go#L1134)
+using [`p.ExtendedEvalContext().Txn`](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/backup/backup_planning.go#L1134)
 a transaction handler scoped for the entire execution of the SQL statement, accessed via the 
 [planHookState](https://github.com/cockroachdb/cockroach/blob/master/pkg/sql/planhook.go#L70) 
-interface. **Most notably, we [write](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/ccl/backupccl/backup_planning.go#L1108)
-the [job record](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/ccl/backupccl/backup_planning.go#L1088)
+interface. **Most notably, we [write](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/backup/backup_planning.go#L1108)
+the [job record](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/backup/backup_planning.go#L1088)
 to the jobs table using this txn**. When we commit this transaction, all operations will commit; 
 else, all operations rollback. To read something quickly and transactionally during planning,
-`planHookRowFn` often invokes a new transaction (eg [1](https://github.com/cockroachdb/cockroach/blob/master/pkg/ccl/backupccl/backup_planning.go#L880)
-, [2](https://github.com/cockroachdb/cockroach/blob/master/pkg/ccl/backupccl/backup_planning.go#L815))
+`planHookRowFn` often invokes a new transaction (eg [1](https://github.com/cockroachdb/cockroach/blob/master/pkg/backup/backup_planning.go#L880)
+, [2](https://github.com/cockroachdb/cockroach/blob/master/pkg/backup/backup_planning.go#L815))
 using `p.ExecutorConfig.DB`. If you’re unfamiliar with transactions in CRDB, read the 
 [KV Client Interface](https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/life_of_a_query.md#the-kv-client-interface)
 section of Life of a Query.
-- By default, bulk jobs (IMPORT, BACKUP, and RESTORE) [commit](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/ccl/backupccl/backup_planning.go#L1163)
-the transaction, [start](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/ccl/backupccl/backup_planning.go#L1169) 
+- By default, bulk jobs (IMPORT, BACKUP, and RESTORE) [commit](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/backup/backup_planning.go#L1163)
+the transaction, [start](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/backup/backup_planning.go#L1169) 
 and wait for the job to complete, all within the `planHookRowFn`! 
 Indeed, the SQL shell will not return until after the job completes! 
-  - Advanced Note: These jobs use an implicit transaction to [control](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/ccl/backupccl/backup_planning.go#L1139)
+  - Advanced Note: These jobs use an implicit transaction to [control](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/backup/backup_planning.go#L1139)
 when the transaction commits / rolls back outside the Txn API. When bulk jobs run with the
-[`detached` parameter](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/ccl/backupccl/backup_planning.go#L1104)
+[`detached` parameter](https://github.com/cockroachdb/cockroach/blob/28bb1ea049da5bfb6e15a7003cd7b678cbc4b67f/pkg/backup/backup_planning.go#L1104)
 instead, the `planHookRowFn` returns right after writing the job record to the jobs table. 
 By contrast, `p.ExtendedEvalContext().Txn` uses an _explicit_ transaction and
 [commits](https://github.com/cockroachdb/cockroach/blob/fc67a0c9202af348e919afc1e1f70acc9a83b300/pkg/sql/conn_executor_exec.go#L776)
@@ -527,27 +527,27 @@ on restore. This walkthrough doesn't consider the distinct code paths each type
 of RESTORE may take.
 
 #### Planning
-In addition to general CCL job planning, [planning a restore](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1771) 
+In addition to general CCL job planning, [planning a restore](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_planning.go#L1771) 
 has the following main components.
-- [Resolve](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1826)
+- [Resolve](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_planning.go#L1826)
 the location of the backup files we seek to restore.
-- [Figure out](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L1910)
+- [Figure out](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_planning.go#L1910)
 which descriptors the user wants to restore. Descriptors are objects that hold metadata about 
   various
   SQL objects, like [columns](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/sql/catalog/descpb/structured.proto#L123)
 or [databases](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/sql/catalog/descpb/structured.proto#L1275).
-- [Allocate](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_planning.go#L2028) new descriptor IDs for the descriptors we're restoring from the backup files. Why do 
+- [Allocate](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_planning.go#L2028) new descriptor IDs for the descriptors we're restoring from the backup files. Why do 
   this? Every descriptor on disk has a unique id, so RESTORE must resolve ID collisions between the 
 stale ID's in the back up and any IDs in the target cluster.
 
 #### Execution
-When a gateway node [resumes](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_job.go#L1371)
+When a gateway node [resumes](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_job.go#L1371)
 a restore job, the following occurs before any processors spin up. For more on processors, check 
 out the related section in [Life of a Query](https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/life_of_a_query.md#physical-planning-and-execution).
-- [Write](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_job.go#L1441)
+- [Write](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_job.go#L1441)
 the new descriptors to disk in an offline state so no users can interact with the 
   descriptors during the restore. 
-- [Derive](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_job.go#L426)
+- [Derive](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_job.go#L426)
 a list of key spans we need to restore from the restoring descriptors. A key span is just an 
   interval in the *backup's* key space.
 
@@ -562,32 +562,32 @@ key span, that is replicated across nodes.
 
 Our first task is to split this massive empty range up into smaller ranges that we will restore 
 data into, and randomly assign nodes to be leaseholders for these new ranges. More concretely, 
-the restore job's gateway node will [iterate through](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_processor_planning.go#L84) 
+the restore job's gateway node will [iterate through](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_processor_planning.go#L84) 
 the list of key spans we seek to restore, and round robin assign them to nodes in the cluster which
 will then each start up a split and scatter processor. 
 
 Each split and scatter processor will then do the following, for each key span it processes:
-- Issue a [split key request](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L94) 
+- Issue a [split key request](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/split_and_scatter_processor.go#L94) 
   to the kv layer at the beginning key of the next span it will 
   process, which splits that big empty range at that given key, creating a new range to import data 
-  into. I recommend reading the [code and comments here](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L352) 
+  into. I recommend reading the [code and comments here](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/split_and_scatter_processor.go#L352) 
 because the indexing is a little confusing. 
-  - Note:  before the split request, we [remap](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L84) 
+  - Note:  before the split request, we [remap](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/split_and_scatter_processor.go#L84) 
     this key (currently in the backup's key space) so it maps nicely to the restore cluster's key 
     space.
     E.g. suppose we want to restore a table with a key span in the backup from 57/1 to 57/2; but the
     restore cluster already has data in that span. To avoid collisions, we have to remap this 
     key span into the key span of that empty range.
-- Issue a [scatter request](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L123) 
+- Issue a [scatter request](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/split_and_scatter_processor.go#L123) 
   to the kv layer on the span's first key. This asks kv to randomly reassign 
   the lease of this key's range. KV may not obey the request. 
 - Route info to this new range's new leaseholder, so the leaseholder can restore data into that 
   range.
 
 In addition to running a split and scatter processor, each node will run a restore data processor. 
-For each empty range the restore data processor receives, it will [read](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_data_processor.go#L167) 
-the relevant Backup SSTables in external storage, [remap](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_data_processor.go#L433) 
-each key to the restore's key space, and [flush](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_data_processor.go#L458) 
+For each empty range the restore data processor receives, it will [read](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_data_processor.go#L167) 
+the relevant Backup SSTables in external storage, [remap](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_data_processor.go#L433) 
+each key to the restore's key space, and [flush](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/backup/restore_data_processor.go#L458) 
 SSTable(s) to disk, using the [kv client](https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/life_of_a_query.md#the-kv-client-interface)
 interface's [AddSStable](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/kv/bulk/sst_batcher.go#L490)
 method, which bypasses much of the infrastructure related to writing data to disk from conventional queries. Note: all the kv shenanigans (e.g. range data replication, range splitting/merging, 

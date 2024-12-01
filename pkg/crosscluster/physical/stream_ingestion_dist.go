@@ -11,8 +11,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
@@ -279,7 +279,7 @@ func sortSpans(partitions []streamclient.PartitionInfo) roachpb.Spans {
 }
 
 // TODO(ssd): This is a duplicative with the split_and_scatter processor in
-// backupccl.
+// backup.
 type splitAndScatterer interface {
 	split(
 		ctx context.Context,
@@ -340,7 +340,7 @@ func createInitialSplits(
 	ctx, sp := tracing.ChildSpan(ctx, "physical.createInitialSplits")
 	defer sp.Finish()
 
-	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(codec,
+	rekeyer, err := backup.MakeKeyRewriterFromRekeys(codec,
 		nil /* tableRekeys */, []execinfrapb.TenantRekey{
 			{
 				OldID: topology.SourceTenantID,
@@ -379,7 +379,7 @@ const extraExpirationPerSpan = time.Minute * 10
 const maxSplitExpiration = time.Hour * 24 * 7
 
 func splitAndScatterWorker(
-	spans []roachpb.Span, rekeyer *backupccl.KeyRewriter, splitter splitAndScatterer,
+	spans []roachpb.Span, rekeyer *backup.KeyRewriter, splitter splitAndScatterer,
 ) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		for spanNum, span := range spans {

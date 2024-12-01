@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "backupencryption",
+    srcs = ["encryption.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/backup/backupencryption",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/backup/backupbase",
+        "//pkg/base",
+        "//pkg/ccl/storageccl",
+        "//pkg/cloud",
+        "//pkg/jobs/jobspb",
+        "//pkg/security/username",
+        "//pkg/settings/cluster",
+        "//pkg/sql/isql",
+        "//pkg/util/ioctx",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

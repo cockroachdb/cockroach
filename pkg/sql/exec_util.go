@@ -1781,7 +1781,7 @@ func (*SchemaTelemetryTestingKnobs) ModuleTestingKnobs() {}
 
 // BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
 //
-// TODO (msbutler): move these to backupccl
+// TODO (msbutler): move these to backup
 type BackupRestoreTestingKnobs struct {
 	// AfterBackupChunk is called after each chunk of a backup is completed.
 	AfterBackupChunk func()
