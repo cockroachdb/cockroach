@@ -70,7 +70,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
     || exit_status=$?
 
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
-    //pkg/ccl/backupccl:backupccl_test --test_filter='^TestCloudBackupRestore' \
+    //pkg/backup:backup_test --test_filter='^TestCloudBackupRestore' \
     "${bazel_test_env[@]}" \
     --test_timeout=900 \
     || exit_status=$?

@@ -21,8 +21,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/physical",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/backup",
         "//pkg/base",
-        "//pkg/ccl/backupccl",
         "//pkg/ccl/revertccl",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
@@ -121,9 +121,9 @@ go_test(
     }),
     shard_count = 16,
     deps = [
+        "//pkg/backup",
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/backupccl",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/changefeedccl/cdctest",
         "//pkg/ccl/kvccl/kvtenantccl",

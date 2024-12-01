@@ -252,8 +252,8 @@
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 
 /pkg/crosscluster/       @cockroachdb/disaster-recovery
-/pkg/ccl/backupccl/          @cockroachdb/disaster-recovery
-/pkg/ccl/backupccl/*_job.go  @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
+/pkg/backup/          @cockroachdb/disaster-recovery
+/pkg//backup/*_job.go  @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
 /pkg/ccl/revertccl/          @cockroachdb/disaster-recovery
 /pkg/ccl/storageccl/         @cockroachdb/disaster-recovery
 /pkg/ccl/cloudccl/           @cockroachdb/disaster-recovery

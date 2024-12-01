@@ -2,6 +2,7 @@
 
 PROTOBUF_SRCS = [
     "//pkg/acceptance/cluster:cluster_go_proto",
+    "//pkg/backup/backuppb:backuppb_go_proto",
     "//pkg/blobs/blobspb:blobspb_go_proto",
     "//pkg/build/bazel/bes/command_line:command_line_go_proto",
     "//pkg/build/bazel/bes/failure_details:failure_details_go_proto",
@@ -9,7 +10,6 @@ PROTOBUF_SRCS = [
     "//pkg/build/bazel/bes/option_filters:options_go_proto",
     "//pkg/build/bazel/bes:build_event_stream_go_proto",
     "//pkg/build:build_go_proto",
-    "//pkg/ccl/backupccl/backuppb:backuppb_go_proto",
     "//pkg/ccl/baseccl:baseccl_go_proto",
     "//pkg/ccl/changefeedccl/changefeedpb:changefeedpb_go_proto",
     "//pkg/ccl/sqlproxyccl/tenant:tenant_go_proto",
