@@ -799,6 +799,30 @@ func (r *fkSelfResolver) LookupObject(
 	return r.SchemaResolver.LookupObject(ctx, flags, dbName, scName, obName)
 }
 
+// LookupObjectInDatabase implements the tree.ObjectNameResolver interface.
+func (r *fkSelfResolver) LookupObjectInDatabase(
+	ctx context.Context,
+	flags tree.ObjectLookupFlags,
+	db catalog.DatabaseDescriptor,
+	scName, obName string,
+) (found bool, prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
+	dbName := ""
+	if db != nil {
+		dbName = db.GetName()
+	}
+	if dbName == r.prefix.Database.GetName() &&
+		scName == r.prefix.Schema.GetName() &&
+		obName == r.newTableName.Table() {
+		table := r.newTableDesc
+		if flags.RequireMutable {
+			return true, r.prefix, table, nil
+		}
+		return true, r.prefix, table.ImmutableCopy(), nil
+	}
+	flags.IncludeOffline = false
+	return r.SchemaResolver.LookupObjectInDatabase(ctx, flags, db, scName, obName)
+}
+
 // internalLookupCtx can be used in contexts where all descriptors
 // have been recently read, to accelerate the lookup of
 // inter-descriptor relationships.
