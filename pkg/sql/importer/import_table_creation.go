@@ -210,6 +210,7 @@ var (
 	errSequenceOperators = errors.New("sequence operations unsupported")
 	errRegionOperator    = errors.New("region operations unsupported")
 	errSchemaResolver    = errors.New("schema resolver unsupported")
+	errDatabaseResolver  = errors.New("database resolver unsupported")
 )
 
 // Implements the tree.RegionOperator interface.
@@ -363,7 +364,7 @@ func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 	return sessiondata.SearchPath{}
 }
 
-// LookupObject implements the tree.ObjectNameResolver interface.
+// LookupObject implements the resolver.ObjectNameResolver interface.
 func (r *fkResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
@@ -393,11 +394,18 @@ func (r *fkResolver) LookupObject(
 		lookupName, suggestions)
 }
 
-// LookupSchema implements the resolver.ObjectNameTargetResolver interface.
+// LookupSchema implements the resolver.ObjectNameResolver interface.
 func (r fkResolver) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
 	return false, scMeta, errSchemaResolver
+}
+
+// LookupDatabase implements the resolver.ObjectNameResolver interface.
+func (r fkResolver) LookupDatabase(
+	ctx context.Context, dbName string,
+) (catalog.DatabaseDescriptor, error) {
+	return nil, errDatabaseResolver
 }
 
 // ResolveTypeByOID implements the resolver.SchemaResolver interface.
