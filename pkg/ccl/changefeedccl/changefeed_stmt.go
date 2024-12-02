@@ -226,7 +226,7 @@ func changefeedPlanHook(
 			telemetry.Count(`changefeed.create.core`)
 			logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
 
-			err := coreChangefeed(ctx, p, details, progress, resultsCh)
+			err := coreChangefeed(ctx, p, details, description, progress, resultsCh)
 			// TODO(yevgeniy): This seems wrong -- core changefeeds always terminate
 			// with an error.  Perhaps rename this telemetry to indicate number of
 			// completed feeds.
@@ -336,6 +336,7 @@ func coreChangefeed(
 	ctx context.Context,
 	p sql.PlanHookState,
 	details jobspb.ChangefeedDetails,
+	description string,
 	progress jobspb.Progress,
 	resultsCh chan<- tree.Datums,
 ) error {
@@ -354,7 +355,7 @@ func coreChangefeed(
 			knobs.BeforeDistChangefeed()
 		}
 
-		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, localState, resultsCh)
+		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh)
 		if err == nil {
 			log.Infof(ctx, "core changefeed completed with no error")
 			return nil
@@ -1118,12 +1119,13 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	jobID := b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
+	description := b.job.Payload().Description
 
 	if err := b.ensureClusterIDMatches(ctx, jobExec.ExtendedEvalContext().ClusterID); err != nil {
 		return err
 	}
 
-	err := b.resumeWithRetries(ctx, jobExec, jobID, details, progress, execCfg)
+	err := b.resumeWithRetries(ctx, jobExec, jobID, details, description, progress, execCfg)
 	if err != nil {
 		return b.handleChangefeedError(ctx, err, details, jobExec)
 	}
@@ -1243,6 +1245,7 @@ func (b *changefeedResumer) resumeWithRetries(
 	jobExec sql.JobExecContext,
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
+	description string,
 	initialProgress jobspb.Progress,
 	execCfg *sql.ExecutorConfig,
 ) error {
@@ -1292,7 +1295,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				knobs.BeforeDistChangefeed()
 			}
 
-			flowErr = distChangefeedFlow(ctx, jobExec, jobID, details, localState, startedCh)
+			flowErr = distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh)
 			if flowErr == nil {
 				return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
 			}
