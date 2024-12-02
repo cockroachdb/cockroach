@@ -6,9 +6,9 @@
 //go:build bazel_code_cover
 // +build bazel_code_cover
 
-// Package bazelcodecover allows instrumented binaries to output code coverage
+// Allows instrumented binaries to output code coverage
 // data.
-package bazelcodecover
+package buildutil 
 
 import (
 	"fmt"
@@ -21,6 +21,9 @@ import (
 
 	"github.com/bazelbuild/rules_go/go/tools/coverdata"
 )
+
+// Indicates that the binary was instrumented with coverage.
+const CrdbCoverageBuild = true
 
 // MaybeInitCodeCoverage sets up dumping of coverage counters on exit.
 //
