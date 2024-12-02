@@ -180,7 +180,7 @@ type LogStore struct {
 	RangeID     roachpb.RangeID
 	Engine      storage.Engine
 	Sideload    SideloadStorage
-	StateLoader StateLoader
+	StateLoader StateLoader // used only for writes under raftMu
 	SyncWaiter  *SyncWaiterLoop
 	EntryCache  *raftentry.Cache
 	Settings    *cluster.Settings

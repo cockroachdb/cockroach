@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -205,6 +206,22 @@ func newUninitializedReplicaWithoutRaftGroup(
 		store.limiters.BulkIOWriteRate,
 		store.TODOEngine(),
 	)
+	r.raftMu.logStorage = &logstore.LogStore{
+		RangeID:     rangeID,
+		Engine:      store.TODOEngine(),
+		Sideload:    r.raftMu.sideloaded,
+		StateLoader: r.raftMu.stateLoader.StateLoader,
+		// NOTE: use the same SyncWaiter loop for all raft log writes performed by a
+		// given range ID, to ensure that callbacks are processed in order.
+		SyncWaiter: store.syncWaiters[int(rangeID)%len(store.syncWaiters)],
+		EntryCache: store.raftEntryCache,
+		Settings:   store.cfg.Settings,
+		Metrics: logstore.Metrics{
+			RaftLogCommitLatency: store.metrics.RaftLogCommitLatency,
+		},
+		DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
+			store.TestingKnobs().DisableSyncLogWriteToss,
+	}
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
 	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)

@@ -890,13 +890,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	replicaStateInfoMap := r.raftMu.replicaStateScratchForFlowControl
 	var raftNodeBasicState replica_rac2.RaftNodeBasicState
 	var logSnapshot raft.LogSnapshot
+
 	r.mu.Lock()
 	rac2ModeForReady := r.mu.currentRACv2Mode
-	state := logstore.RaftState{ // used for append below
-		LastIndex: r.shMu.lastIndexNotDurable,
-		LastTerm:  r.shMu.lastTermNotDurable,
-		ByteSize:  r.shMu.raftLogSize,
-	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
 	err := r.withRaftGroupLocked(func(raftGroup *raft.RawNode) (bool, error) {
@@ -1054,6 +1050,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Grab the known leaseholder before applying to the state machine.
 	startingLeaseholderID := r.shMu.state.Lease.Replica.ReplicaID
 	refreshReason := noReason
+
+	state := r.asLogStorage().stateRaftMuLocked()
 	if hasMsg(msgStorageAppend) {
 		app := logstore.MakeMsgStorageAppend(msgStorageAppend)
 		cb := (*replicaSyncCallback)(r)
@@ -1132,14 +1130,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			stats.tSnapEnd = crtime.NowMono()
 			stats.snap.applied = true
 
-			// lastIndexNotDurable, lastTermNotDurable and raftLogSize were updated in
-			// applySnapshot, but we also want to make sure we reflect these changes
-			// in the local variables we're tracking here.
-			state = logstore.RaftState{
-				LastIndex: r.shMu.lastIndexNotDurable,
-				LastTerm:  r.shMu.lastTermNotDurable,
-				ByteSize:  r.shMu.raftLogSize,
-			}
+			// The raft log state was updated in applySnapshot, but we also want to
+			// reflect these changes in the state variable here.
+			// TODO(pav-kv): this is unnecessary. We only do it because there is an
+			// unconditional storing of this state below. Avoid doing it twice.
+			state = r.asLogStorage().stateRaftMuLocked()
 
 			// We refresh pending commands after applying a snapshot because this
 			// replica may have been temporarily partitioned from the Raft group and
@@ -1157,26 +1152,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// TODO(pavelkalinnikov): find a way to move it to storeEntries.
 			if app.Commit != 0 && !r.IsInitialized() {
 				log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s", r)
-			}
-			// TODO(pavelkalinnikov): construct and store this in Replica.
-			// TODO(pavelkalinnikov): fields like raftEntryCache are the same across all
-			// ranges, so can be passed to LogStore methods instead of being stored in it.
-			s := logstore.LogStore{
-				RangeID:     r.RangeID,
-				Engine:      r.store.TODOEngine(),
-				Sideload:    r.raftMu.sideloaded,
-				StateLoader: r.raftMu.stateLoader.StateLoader,
-				// NOTE: we use the same SyncWaiter callback loop for all raft log
-				// writes performed by a given range. This ensures that callbacks are
-				// processed in order.
-				SyncWaiter: r.store.syncWaiters[int(r.RangeID)%len(r.store.syncWaiters)],
-				EntryCache: r.store.raftEntryCache,
-				Settings:   r.store.cfg.Settings,
-				Metrics: logstore.Metrics{
-					RaftLogCommitLatency: r.store.metrics.RaftLogCommitLatency,
-				},
-				DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
-					r.store.TestingKnobs().DisableSyncLogWriteToss,
 			}
 			// TODO(pav-kv): make this branch unconditional.
 			if r.IsInitialized() && r.store.cfg.KVAdmissionController != nil {
@@ -1198,7 +1173,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 
 			r.mu.raftTracer.MaybeTrace(msgStorageAppend)
-			if state, err = s.StoreEntries(ctx, state, app, cb, &stats.append); err != nil {
+			if state, err = r.asLogStorage().appendRaftMuLocked(ctx, app, &stats.append); err != nil {
 				return stats, errors.Wrap(err, "while storing log entries")
 			}
 		}
@@ -1207,10 +1182,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update protected state - last index, last term, raft log size, and raft
 	// leader ID.
 	r.mu.Lock()
-	// TODO(pavelkalinnikov): put logstore.RaftState to r.mu directly.
-	r.shMu.lastIndexNotDurable = state.LastIndex
-	r.shMu.lastTermNotDurable = state.LastTerm
-	r.shMu.raftLogSize = state.ByteSize
+	r.asLogStorage().updateStateRaftMuLockedMuLocked(state)
 	var becameLeader bool
 	if r.mu.leaderID != leaderID {
 		r.mu.leaderID = leaderID
