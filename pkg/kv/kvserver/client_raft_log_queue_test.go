@@ -48,7 +48,7 @@ func TestRaftLogQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		// Set maxBytes to something small so we can trigger the raft log truncation
 		// without adding 64MB of logs.
 		const maxBytes = 1 << 16
@@ -149,7 +149,7 @@ func TestRaftTracing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		// TODO(baptist): Remove this once we change the default to be enabled.
 		st := cluster.MakeTestingClusterSettings()
 		rafttrace.MaxConcurrentRaftTraces.Override(context.Background(), &st.SV, 10)
@@ -245,7 +245,7 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		// Use sticky engine registry to "survive" a node restart. Use the strict
 		// in-memory engine to be able to stop flushes and emulate data loss.
 		vfsReg := fs.NewStickyRegistry(fs.UseStrictMemFS)

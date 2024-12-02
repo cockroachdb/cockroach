@@ -779,7 +779,7 @@ func validateNonZero[T comparable](field T, name string) error {
 
 // RunEachLeaseType calls f in a subtest for each lease type.
 func RunEachLeaseType[T testingTB[T]](t T, f func(T, roachpb.LeaseType)) {
-	for _, l := range roachpb.LeaseTypes() {
+	for _, l := range roachpb.TestingAllLeaseTypes() {
 		t.Run(l.String(), func(t T) { f(t, l) })
 	}
 }
