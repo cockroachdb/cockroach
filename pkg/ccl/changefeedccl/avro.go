@@ -166,6 +166,7 @@ type avroMetadata map[string]interface{}
 type avroEnvelopeOpts struct {
 	beforeField, afterField, recordField bool
 	updatedField, resolvedField          bool
+	mvccTimestampField                   bool
 }
 
 // avroEnvelopeRecord is an `avroRecord` that wraps a changed SQL row and some
@@ -945,6 +946,14 @@ func envelopeToAvroSchema(
 		}
 		schema.Fields = append(schema.Fields, updatedField)
 	}
+	if opts.mvccTimestampField {
+		mvccTimestampField := &avroSchemaField{
+			SchemaType: []avroSchemaType{avroSchemaNull, avroSchemaString},
+			Name:       `mvcc_timestamp`,
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, mvccTimestampField)
+	}
 	if opts.resolvedField {
 		resolvedField := &avroSchemaField{
 			SchemaType: []avroSchemaType{avroSchemaNull, avroSchemaString},
@@ -1028,6 +1037,20 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 			native[`updated`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
 		}
 	}
+
+	if r.opts.mvccTimestampField {
+		native[`mvcc_timestamp`] = nil
+		if u, ok := meta[`mvcc_timestamp`]; ok {
+			delete(meta, `mvcc_timestamp`)
+			ts, ok := u.(hlc.Timestamp)
+			if !ok {
+				return nil, changefeedbase.WithTerminalError(
+					errors.Errorf(`unknown metadata timestamp type: %T`, u))
+			}
+			native[`mvcc_timestamp`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
+		}
+	}
+
 	if r.opts.resolvedField {
 		native[`resolved`] = nil
 		if u, ok := meta[`resolved`]; ok {
