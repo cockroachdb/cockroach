@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,7 +64,14 @@ func makeResolvedObjectPrefix(dbName, scName string) catalog.ResolvedObjectPrefi
 	}
 }
 
-// LookupSchema implements the TableNameResolver interface.
+// LookupDatabase implements the ObjectNameResolver interface.
+func (f *fakeMetadata) LookupDatabase(
+	ctx context.Context, dbName string,
+) (catalog.DatabaseDescriptor, error) {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+// LookupSchema implements the ObjectNameResolver interface.
 func (f *fakeMetadata) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
@@ -107,7 +115,7 @@ func (f *fakeMetadata) LookupSchema(
 	return false, catalog.ResolvedObjectPrefix{}, nil
 }
 
-// LookupObject implements the TableNameResolver interface.
+// LookupObject implements the ObjectNameResolver interface.
 func (f *fakeMetadata) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {

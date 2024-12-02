@@ -54,6 +54,11 @@ type SchemaResolver interface {
 // to allows us to generate errors at higher level layers, since it allows us to
 // know if the schema and database were found.
 type ObjectNameResolver interface {
+	// LookupDatabase looks up a database.
+	LookupDatabase(
+		ctx context.Context, dbName string,
+	) (db catalog.DatabaseDescriptor, err error)
+
 	// LookupSchema looks up a schema.
 	LookupSchema(
 		ctx context.Context, dbName, scName string,
