@@ -131,7 +131,7 @@ func (r *DescriptorResolver) LookupSchema(
 	return false, catalog.ResolvedObjectPrefix{}, nil
 }
 
-// LookupObject implements the tree.ObjectNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameResolver interface.
 func (r *DescriptorResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (bool, catalog.ResolvedObjectPrefix, catalog.Descriptor, error) {
