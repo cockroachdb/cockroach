@@ -9001,6 +9001,7 @@ CREATE TABLE crdb_internal.kv_flow_control_handles_v2 (
   total_tracked_tokens       INT NOT NULL,
   total_eval_deducted_tokens INT NOT NULL,
   total_send_deducted_tokens INT NOT NULL,
+  force_flush_index          INT NOT NULL,
   INDEX(range_id)
 );`,
 
@@ -9082,6 +9083,7 @@ func populateFlowHandlesResponseV2(
 				tree.NewDInt(tree.DInt(totalTrackedTokens)),
 				tree.NewDInt(tree.DInt(connected.TotalEvalDeductedTokens)),
 				tree.NewDInt(tree.DInt(connected.TotalSendDeductedTokens)),
+				tree.NewDInt(tree.DInt(handle.ForceFlushIndex.Index)),
 			); err != nil {
 				return err
 			}
