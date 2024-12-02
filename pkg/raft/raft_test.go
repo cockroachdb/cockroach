@@ -2226,31 +2226,36 @@ func testFreeStuckCandidateWithCheckQuorum(t *testing.T, storeLivenessEnabled bo
 		hbType = pb.MsgFortifyLeader
 	}
 	nt.send(pb.Message{From: 1, To: 3, Type: hbType, Term: a.Term})
-	assert.Equal(t, pb.StateFollower, a.state)
-	if storeLivenessEnabled {
-		// Node 1 still remembers that it was the leader.
-		assert.Equal(t, c.Term-2, a.Term)
-		assert.Equal(t, a.id, a.lead)
 
-		// The ex-leader still hasn't defortified, so the stranded peer still can't
-		// win an election.
+	if storeLivenessEnabled {
+		// Expect that we are still the leader since it's still not safe to step
+		// down, however, the step-down intent is recorded.
+		assert.Equal(t, pb.StateLeader, a.state)
+		assert.Equal(t, true, a.fortificationTracker.SteppingDown())
+		assert.Equal(t, c.Term, a.fortificationTracker.SteppingDownTerm())
+
+		// The leader hasn't defortified yet, so 3 can't win an election.
 		nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 		assert.Equal(t, pb.StateCandidate, c.state)
-		assert.Equal(t, pb.StateFollower, a.state)
+		assert.Equal(t, pb.StateLeader, a.state)
 		assert.Equal(t, c.Term-3, a.Term)
 		assert.Equal(t, a.id, a.lead)
 
-		// The ex-leader defortifies itself and its followers once its remaining
-		// support has expired.
-		require.False(t, a.shouldBcastDeFortify())
-		fabric.SetSupportExpired(1, true)
-		require.True(t, a.shouldBcastDeFortify())
-		for range a.heartbeatTimeout {
-			nt.tick(a)
-		}
+		// Expire the support, and tick it once. It should step down.
+		nt.livenessFabric.SetSupportExpired(1, true)
+		a.tick()
+	}
+	assert.Equal(t, pb.StateFollower, a.state)
+
+	// Node 1 doesn't remember that it was the leader.
+	assert.Equal(t, None, a.lead)
+
+	if storeLivenessEnabled {
+		// Since node 3 campaigned one extra time above, it will have a term that is
+		// higher than node 1 by one.
+		assert.Equal(t, c.Term-1, a.Term)
 	} else {
 		assert.Equal(t, c.Term, a.Term)
-		assert.Equal(t, None, a.lead)
 	}
 
 	// Vote again, should become leader this time.
@@ -4559,45 +4564,43 @@ func testPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T, storeLivenessEn
 	}
 
 	// Disrupt the leader so that the stuck peer is freed. The leader steps down
-	// immediately, but only changes its term if it was not fortified. If it was,
-	// it waits for defortification.
+	// immediately if it's not fortified. However, if it was fortified, it will
+	// only step down when a quorum stops supporting it.
 	hbType := pb.MsgHeartbeat
 	if storeLivenessEnabled {
 		hbType = pb.MsgFortifyLeader
 	}
 	nt.send(pb.Message{From: 1, To: 3, Type: hbType, Term: n1.Term})
-	assert.Equal(t, pb.StateFollower, n1.state)
-	if storeLivenessEnabled {
-		// Node 1 still remembers that it was the leader.
-		assert.Equal(t, n3.Term-2, n1.Term)
-		assert.Equal(t, n1.id, n1.lead)
 
-		// The ex-leader still hasn't defortified, so the stranded peer still can't
+	if storeLivenessEnabled {
+		// Expect that we are still the leader since it's still not safe to step
+		// down, however, the step-down intent is recorded.
+		assert.Equal(t, pb.StateLeader, n1.state)
+		assert.Equal(t, true, n1.fortificationTracker.SteppingDown())
+
+		// The leader still hasn't defortified, so the stranded peer still can't
 		// win an election.
 		nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 		assert.Equal(t, pb.StatePreCandidate, n3.state)
-		assert.Equal(t, pb.StateFollower, n1.state)
+		assert.Equal(t, pb.StateLeader, n1.state)
 		assert.Equal(t, n3.Term-2, n1.Term)
 		assert.Equal(t, n1.id, n1.lead)
 
-		// The ex-leader defortifies itself and its followers once its remaining
-		// support has expired.
-		require.False(t, n1.shouldBcastDeFortify())
-		fabric.SetSupportExpired(1, true)
-		require.True(t, n1.shouldBcastDeFortify())
-		for range n1.heartbeatTimeout {
-			nt.tick(n1)
-		}
-
-		// The ex-leader calls an election, which it loses and through which it
-		// learns about the larger term.
-		fabric.SetSupportExpired(1, false)
-		nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-		assert.Equal(t, pb.StateFollower, n1.state)
+		// Expire the support, and tick it once. It should step down.
+		nt.livenessFabric.SetSupportExpired(1, true)
+		n1.tick()
 	}
 
-	assert.Equal(t, n1.Term, n3.Term)
+	assert.Equal(t, pb.StateFollower, n1.state)
+
+	// Node 1 doesn't remember that it was the leader.
 	assert.Equal(t, None, n1.lead)
+	assert.Equal(t, n3.Term, n1.Term)
+
+	// Return the support back to node 1 so that it can call an election.
+	if storeLivenessEnabled {
+		fabric.SetSupportExpired(1, false)
+	}
 
 	// The ex-leader calls an election, which it wins.
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
