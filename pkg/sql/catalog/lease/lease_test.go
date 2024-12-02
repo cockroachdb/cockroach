@@ -2419,6 +2419,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			log.Infof(ctx, "received descriptor update event: id=%d, version=%d", id, version)
 			if id == interestingTable.Load().(descpb.ID) && version >= 2 {
 				select {
 				case descUpdateChan <- descriptor:
@@ -2460,6 +2461,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	tdb1.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name = $1 AND database_name = current_database()",
 		"foo").Scan(&tableID)
 	interestingTable.Store(tableID)
+	log.Infof(ctx, "tableID of interesting table is %d", tableID)
 
 	// Launch a goroutine to query foo. It will be blocked in lease acquisition.
 	selectDone := make(chan error, 1)
