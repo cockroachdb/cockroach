@@ -24,12 +24,11 @@ import (
 )
 
 const (
-	crossFlag          = "cross"
-	cockroachTargetOss = "//pkg/cmd/cockroach-oss:cockroach-oss"
-	cockroachTarget    = "//pkg/cmd/cockroach:cockroach"
-	nogoDisableFlag    = "--norun_validations"
-	geosTarget         = "//c-deps:libgeos"
-	devTarget          = "//pkg/cmd/dev:dev"
+	crossFlag       = "cross"
+	cockroachTarget = "//pkg/cmd/cockroach:cockroach"
+	nogoDisableFlag = "--norun_validations"
+	geosTarget      = "//c-deps:libgeos"
+	devTarget       = "//pkg/cmd/dev:dev"
 )
 
 type buildTarget struct {
@@ -77,7 +76,6 @@ var buildTargetMapping = map[string]string{
 	"cloudupload":          "//pkg/cmd/cloudupload:cloudupload",
 	"cockroach":            cockroachTarget,
 	"cockroach-sql":        "//pkg/cmd/cockroach-sql:cockroach-sql",
-	"cockroach-oss":        cockroachTargetOss,
 	"cockroach-short":      "//pkg/cmd/cockroach-short:cockroach-short",
 	"crlfmt":               "@com_github_cockroachdb_crlfmt//:crlfmt",
 	"dev":                  devTarget,
@@ -93,7 +91,6 @@ var buildTargetMapping = map[string]string{
 	"libgeos":              geosTarget,
 	"optgen":               "//pkg/sql/opt/optgen/cmd/optgen:optgen",
 	"optfmt":               "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
-	"oss":                  cockroachTargetOss,
 	"reduce":               "//pkg/cmd/reduce:reduce",
 	"drtprod":              "//pkg/cmd/drtprod:drtprod",
 	"roachprod":            "//pkg/cmd/roachprod:roachprod",

@@ -2,5 +2,4 @@
 
 UI_SRCS = [
     "//pkg/ui/distccl:genassets",
-    "//pkg/ui/distoss:genassets",
 ]

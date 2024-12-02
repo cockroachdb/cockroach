@@ -98,11 +98,7 @@ func getUIDirs(d *dev) (*UIDirectories, error) {
 func (d *dev) assertNoLinkedNpmDeps(targets []buildTarget) error {
 	uiWillBeBuilt := false
 	for _, target := range targets {
-		// TODO: This could potentially be a bazel query, e.g.
-		// 'somepath(${target.fullName}, //pkg/ui/workspaces/db-console:*)' or
-		// similar, but with only two eligible targets it doesn't seem quite
-		// worth it.
-		if target.fullName == cockroachTarget || target.fullName == cockroachTargetOss {
+		if target.fullName == cockroachTarget {
 			uiWillBeBuilt = true
 			break
 		}
