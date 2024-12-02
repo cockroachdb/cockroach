@@ -100,7 +100,7 @@ SELECT
 	)
 $$;
 
-skipif config local-mixed-24.2 local-mixed-24.3
+skipif config local-mixed-24.3
 query IT
 SELECT id, strip_volatile(descriptor) FROM crdb_internal.kv_catalog_descriptor ORDER BY id
 ----

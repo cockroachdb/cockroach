@@ -295,19 +295,19 @@ CREATE VIEW v (x, y) AS SELECT a, b FROM zc; ALTER TABLE v CONFIGURE ZONE USING 
 
 user root
 
-onlyif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
+onlyif config local-legacy-schema-changer local-mixed-24.3
 statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation pg_type
 ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-onlyif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
+onlyif config local-legacy-schema-changer local-mixed-24.3
 statement error pq: user root does not have CREATE or ZONECONFIG privilege on relation columns
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
+skipif config local-legacy-schema-changer local-mixed-24.3
 statement error pq: pg_type is a system catalog
 ALTER TABLE pg_catalog.pg_type CONFIGURE ZONE USING gc.ttlseconds = 100000
 
-skipif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
+skipif config local-legacy-schema-changer local-mixed-24.3
 statement error pq: columns is a virtual object and cannot be modified
 ALTER TABLE information_schema.columns CONFIGURE ZONE USING gc.ttlseconds = 100000
 
@@ -417,7 +417,7 @@ subtest end
 
 subtest txn_zone_config
 
-skipif config local-mixed-24.2 local-mixed-24.3
+skipif config local-mixed-24.3
 statement ok
 SET use_declarative_schema_changer = unsafe_always;
 

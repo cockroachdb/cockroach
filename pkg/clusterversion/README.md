@@ -295,7 +295,14 @@ in two PRs.
   </details>
 
 - [ ] Remove logictest configs that involve now-unsupported versions (and run
-  `./dev gen testlogic`).
+  `./dev gen testlogic bazel`).
+
+- [ ] Remove `pkg/sql/catalog/bootstrap` data for now-unsupported versions.
+
+- [ ] Update `pkg/storage.MinimumSupportedFormatVersion` and `storage.pebbleVersionMap`
+
+- [ ] Update `pkg/sql/schemachanger/scplan.rulesForReleases` and remove the
+  defunct package(s) inside `rules`.
 
 - [ ] File issue(s) to remove `TODO_Delete_` uses and simplify related code; assign
   to relevant teams (depending on which top-level packages use such gates).

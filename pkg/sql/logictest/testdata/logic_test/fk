@@ -4233,7 +4233,7 @@ NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 NOTICE: type of foreign key column "t1_fk_col1" (CHAR(8)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
 
 # Test trivial data type change
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-legacy-schema-changer
 skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col2 SET DATA TYPE INT8
@@ -4248,7 +4248,7 @@ NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 NOTICE: type of foreign key column "t1_fk_col2" (INT8) is not identical to referenced column "t1_fk"."col2" (INT4)
 
 # Test validation data type change
-skipif config local-legacy-schema-changer weak-iso-level-configs local-mixed-24.2
+skipif config local-legacy-schema-changer weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col1 SET DATA TYPE CHAR(5)
 ----
@@ -4262,7 +4262,7 @@ NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 NOTICE: type of foreign key column "t1_fk_col1" (CHAR(5)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
 
 
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE TABLE t2_fk
 ----
