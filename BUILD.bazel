@@ -130,7 +130,6 @@ exports_files([
 # gazelle:exclude pkg/roachprod/vm/aws/embedded.go
 # gazelle:exclude pkg/**/*_string.go
 # gazelle:exclude pkg/ui/distccl/distccl_no_bazel.go
-# gazelle:exclude pkg/ui/distoss/distoss_no_bazel.go
 # gazelle:exclude pkg/util/buildutil/crdb_test_off.go
 # gazelle:exclude pkg/util/buildutil/crdb_test_on.go
 # gazelle:exclude pkg/testutils/bazelcodecover/crdb_test_off.go
