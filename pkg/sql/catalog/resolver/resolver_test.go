@@ -184,6 +184,16 @@ func (f *fakeMetadata) LookupObject(
 	return false, prefix, nil, nil
 }
 
+// LookupObjectInDatabase implements the ObjectNameResolver interface.
+func (f *fakeMetadata) LookupObjectInDatabase(
+	ctx context.Context,
+	flags tree.ObjectLookupFlags,
+	db catalog.DatabaseDescriptor,
+	scName, obName string,
+) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
+	return f.LookupObject(ctx, flags, db.GetName(), scName, obName)
+}
+
 // makeFakeDescriptor makes an empty table descriptor with the given ID.
 // Only the ID is accessed during testing.
 func makeFakeDescriptor(tbIdx int) catalog.Descriptor {
