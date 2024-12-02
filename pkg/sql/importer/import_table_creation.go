@@ -368,12 +368,35 @@ func (r *fkResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
 	// PGDUMP supports non-public schemas so respect the schema name.
-	var lookupName string
 	if r.format.Format == roachpb.IOFileFormat_PgDump {
 		if scName == "" || dbName == "" {
 			return false, prefix, nil, errors.Errorf("expected catalog and schema name to be set when resolving"+
 				" table %q in PGDUMP", obName)
 		}
+	}
+	return r.lookupObjectImpl(ctx, flags, scName, obName)
+}
+
+// LookupObjectInDatabase implements the resolver.ObjectNameResolver interface.
+func (r fkResolver) LookupObjectInDatabase(
+	ctx context.Context,
+	flags tree.ObjectLookupFlags,
+	db catalog.DatabaseDescriptor,
+	scName, obName string,
+) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
+	if r.format.Format == roachpb.IOFileFormat_PgDump && scName == "" {
+		return false, prefix, nil, errors.Errorf("expected schema name to be set when resolving"+
+			" table %q in PGDUMP", obName)
+	}
+	return r.lookupObjectImpl(ctx, flags, scName, obName)
+}
+
+func (r *fkResolver) lookupObjectImpl(
+	ctx context.Context, flags tree.ObjectLookupFlags, scName, obName string,
+) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
+	// PGDUMP supports non-public schemas so respect the schema name.
+	var lookupName string
+	if r.format.Format == roachpb.IOFileFormat_PgDump {
 		lookupName = fmt.Sprintf("%s.%s", scName, obName)
 	} else {
 		if scName != "" {
