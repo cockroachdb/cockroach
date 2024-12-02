@@ -156,13 +156,7 @@ func (ex *connExecutor) execStmt(
 		panic(errors.AssertionFailedf("unexpected txn state: %#v", ex.machine.CurState()))
 	}
 
-	if ex.sessionData().IdleInSessionTimeout > 0 {
-		// Cancel the session if the idle time exceeds the idle in session timeout.
-		ex.mu.IdleInSessionTimeout = timeout{time.AfterFunc(
-			ex.sessionData().IdleInSessionTimeout,
-			ex.CancelSession,
-		)}
-	}
+	ex.startIdleInSessionTimeout()
 
 	if ex.sessionData().IdleInTransactionSessionTimeout > 0 {
 		startIdleInTransactionSessionTimeout := func() {
@@ -190,6 +184,17 @@ func (ex *connExecutor) execStmt(
 	}
 
 	return ev, payload, err
+}
+
+// startIdleInSessionTimeout will start the timer for the idle in session timeout.
+func (ex *connExecutor) startIdleInSessionTimeout() {
+	if ex.sessionData().IdleInSessionTimeout > 0 {
+		// Cancel the session if the idle time exceeds the idle in session timeout.
+		ex.mu.IdleInSessionTimeout = timeout{time.AfterFunc(
+			ex.sessionData().IdleInSessionTimeout,
+			ex.CancelSession,
+		)}
+	}
 }
 
 func (ex *connExecutor) recordFailure() {
