@@ -282,15 +282,9 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
-	isRaftLogTruncationDeltaTrusted := true
-	handleTruncatedState := func(state *kvserverpb.RaftTruncatedState) {
-		raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
-			ctx, state, rResult.RaftExpectedFirstIndex)
-		if !expectedFirstIndexWasAccurate {
-			isRaftLogTruncationDeltaTrusted = false
-		}
-		rResult.RaftLogDelta += raftLogDelta
-		rResult.RaftExpectedFirstIndex = 0
+	truncState := rResult.RaftTruncatedState
+	if truncState != nil {
+		rResult.RaftTruncatedState = nil
 	}
 
 	if rResult.State != nil {
@@ -300,13 +294,11 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.PriorReadSummary = nil
 		}
 
-		// TODO(#93248): the strongly coupled truncation code will be removed once
-		// the loosely coupled truncations are the default.
 		if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
-			if rResult.RaftTruncatedState != nil {
+			if truncState != nil {
 				log.Fatalf(ctx, "double RaftTruncatedState in ReplicatedEvalResult")
 			}
-			handleTruncatedState(newTruncState)
+			truncState = newTruncState
 			rResult.State.TruncatedState = nil
 		}
 
@@ -324,17 +316,18 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.State = nil
 		}
 	}
-	if newTruncState := rResult.RaftTruncatedState; newTruncState != nil {
-		handleTruncatedState(newTruncState)
-		rResult.RaftTruncatedState = nil
-	}
 
-	if rResult.RaftLogDelta != 0 {
-		// This code path will be taken exactly when one of the preceding blocks has
-		// invoked handleTruncatedState. It is needlessly confusing that these two
-		// are not in the same place.
-		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta, isRaftLogTruncationDeltaTrusted)
+	// TODO(#93248): the strongly coupled truncation code will be removed once the
+	// loosely coupled truncations are the default.
+	if truncState != nil {
+		raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
+			ctx, truncState, rResult.RaftExpectedFirstIndex)
+
+		raftLogDelta += rResult.RaftLogDelta
+		sm.r.handleRaftLogDeltaResult(ctx, raftLogDelta, expectedFirstIndexWasAccurate)
+
 		rResult.RaftLogDelta = 0
+		rResult.RaftExpectedFirstIndex = 0
 	}
 
 	// The rest of the actions are "nontrivial" and may have large effects on the
