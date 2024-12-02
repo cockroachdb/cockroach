@@ -1405,3 +1405,28 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 subtest end
+
+subtest internal_error_special_stmts
+
+send
+Query {"String": "CREATE TABLE IF NOT EXISTS t (k INT PRIMARY KEY);"}
+Parse {"Name": "q4", "Query": "ALTER TABLE t SCATTER;"}
+Bind {"DestinationPortal": "p4", "PreparedStatement": "q4"}
+Execute {"Portal": "p4", "MaxRows": 1}
+Execute {"Portal": "p4", "MaxRows": 1}
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SCATTER 1"}
+{"Type":"CommandComplete","CommandTag":"SCATTER 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
