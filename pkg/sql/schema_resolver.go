@@ -118,7 +118,7 @@ func (sr *schemaResolver) byNameGetterBuilder() descs.ByNameGetterBuilder {
 	return sr.descCollection.ByNameWithLeased(sr.txn)
 }
 
-// LookupObject implements the tree.ObjectNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameResolver interface.
 func (sr *schemaResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {

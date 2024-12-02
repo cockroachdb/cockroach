@@ -30,8 +30,7 @@ import (
 // use a different plan builder.
 // TODO(rytaft,andyk): study and reuse this.
 type SchemaResolver interface {
-	ObjectNameExistingResolver
-	ObjectNameTargetResolver
+	ObjectNameResolver
 	tree.QualifiedNameResolver
 	tree.TypeReferenceResolver
 	tree.FunctionReferenceResolver
@@ -50,13 +49,17 @@ type SchemaResolver interface {
 	CurrentSearchPath() sessiondata.SearchPath
 }
 
-// ObjectNameExistingResolver is the helper interface to resolve table
-// names when the object is expected to exist already. The boolean passed
-// is used to specify if a MutableTableDescriptor is to be returned in the
-// result. ResolvedObjectPrefix should always be populated by implementors
-// to allows us to generate errors at higher level layers, since it allows
-// us to know if the schema and database were found.
-type ObjectNameExistingResolver interface {
+// ObjectNameResolver is the helper interface to resolve schema and
+// table names. ResolvedObjectPrefix should always be populated by implementors
+// to allows us to generate errors at higher level layers, since it allows us to
+// know if the schema and database were found.
+type ObjectNameResolver interface {
+	// LookupSchema looks up a schema.
+	LookupSchema(
+		ctx context.Context, dbName, scName string,
+	) (found bool, scMeta catalog.ResolvedObjectPrefix, err error)
+
+	// LookupObject looks up an object, e.g., a table or a type.
 	LookupObject(
 		ctx context.Context, flags tree.ObjectLookupFlags,
 		dbName, scName, obName string,
@@ -66,16 +69,6 @@ type ObjectNameExistingResolver interface {
 		objMeta catalog.Descriptor,
 		err error,
 	)
-}
-
-// ObjectNameTargetResolver is the helper interface to resolve object
-// names when the object is not expected to exist. The planner implements
-// LookupSchema to return an object consisting of the parent database and
-// resolved target schema.
-type ObjectNameTargetResolver interface {
-	LookupSchema(
-		ctx context.Context, dbName, scName string,
-	) (found bool, scMeta catalog.ResolvedObjectPrefix, err error)
 }
 
 // ErrNoPrimaryKey is returned when resolving a table object and the
@@ -314,7 +307,7 @@ type SchemaEntryForDB struct {
 func ResolveExisting(
 	ctx context.Context,
 	u *tree.UnresolvedObjectName,
-	r ObjectNameExistingResolver,
+	r ObjectNameResolver,
 	lookupFlags tree.ObjectLookupFlags,
 	curDb string,
 	searchPath sessiondata.SearchPath,
@@ -400,7 +393,7 @@ func ResolveExisting(
 func ResolveTarget(
 	ctx context.Context,
 	u *tree.UnresolvedObjectName,
-	r ObjectNameTargetResolver,
+	r ObjectNameResolver,
 	curDb string,
 	searchPath sessiondata.SearchPath,
 ) (found bool, _ tree.ObjectNamePrefix, scMeta catalog.ResolvedObjectPrefix, err error) {
@@ -448,7 +441,7 @@ func ResolveTarget(
 // patterns with stars, e.g. AllTablesSelector.
 func ResolveObjectNamePrefix(
 	ctx context.Context,
-	r ObjectNameTargetResolver,
+	r ObjectNameResolver,
 	curDb string,
 	searchPath sessiondata.SearchPath,
 	tp *tree.ObjectNamePrefix,
@@ -640,7 +633,7 @@ func ResolveIndex(
 // database with the same name, public schema under this db is returned.
 func resolvePrefixWithExplicitSchema(
 	ctx context.Context,
-	r ObjectNameTargetResolver,
+	r ObjectNameResolver,
 	curDb string,
 	searchPath sessiondata.SearchPath,
 	tp *tree.ObjectNamePrefix,
