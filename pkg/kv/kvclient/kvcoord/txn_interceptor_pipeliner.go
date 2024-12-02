@@ -715,7 +715,7 @@ func (tp *txnPipeliner) updateLockTracking(
 
 	// After adding new writes to the lock footprint, check whether we need to
 	// condense the set to stay below memory limits.
-	alreadyCondensed := tp.lockFootprint.condensed
+	alreadyCondensed := tp.lockFootprint.condensed()
 	condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, locksBudget)
 	if condensed && !alreadyCondensed {
 		if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
@@ -962,7 +962,7 @@ func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoi
 
 // closeLocked implements the txnInterceptor interface.
 func (tp *txnPipeliner) closeLocked() {
-	if tp.lockFootprint.condensed {
+	if tp.lockFootprint.condensed() {
 		tp.txnMetrics.TxnsWithCondensedIntentsGauge.Dec(1)
 	}
 }

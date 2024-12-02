@@ -33,12 +33,10 @@ type condensableSpanSet struct {
 	s     []roachpb.Span
 	bytes int64
 
-	// condensed is set if we ever condensed the spans. Meaning, if the set of
-	// spans currently tracked has lost fidelity compared to the spans inserted.
-	// Note that we might have otherwise mucked with the inserted spans to save
-	// memory without losing fidelity, in which case this flag would not be set
-	// (e.g. merging overlapping or adjacent spans).
-	condensed bool
+	// condensedBytes is the size of point inserts that have been condensed into
+	// larger spans. This is used to decide whether to reject transactions that
+	// are larger than kv.transaction.reject_intents_bytes.
+	condensedBytes int64
 
 	// Avoid heap allocations for transactions with a small number of spans.
 	sAlloc [2]roachpb.Span
@@ -148,6 +146,7 @@ func (s *condensableSpanSet) maybeCondense(
 			continue
 		}
 		s.bytes -= bucket.bytes
+		s.condensedBytes += bucket.bytes
 		// TODO(spencer): consider further optimizations here to create
 		// more than one span out of a bucket to avoid overly broad span
 		// combinations.
@@ -162,10 +161,11 @@ func (s *condensableSpanSet) maybeCondense(
 					"combining span %s yielded invalid result", s)
 			}
 		}
-		s.bytes += spanSize(cs)
+		ss := spanSize(cs)
+		s.bytes += ss
+		s.condensedBytes -= ss
 		s.s = append(s.s, cs)
 	}
-	s.condensed = true
 	return true
 }
 
@@ -182,6 +182,10 @@ func (s *condensableSpanSet) empty() bool {
 
 func (s *condensableSpanSet) clear() {
 	*s = condensableSpanSet{}
+}
+
+func (s *condensableSpanSet) condensed() bool {
+	return s.condensedBytes > 0
 }
 
 // estimateSize returns the size that the spanSet would grow to if spans were

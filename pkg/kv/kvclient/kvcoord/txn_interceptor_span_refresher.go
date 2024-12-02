@@ -195,7 +195,7 @@ func (sr *txnSpanRefresher) maybeCondenseRefreshSpans(
 ) {
 	maxBytes := MaxTxnRefreshSpansBytes.Get(&sr.st.SV)
 	if sr.refreshFootprint.bytes >= maxBytes {
-		condensedBefore := sr.refreshFootprint.condensed
+		condensedBefore := sr.refreshFootprint.condensed()
 		var condensedSufficient bool
 		if sr.knobs.CondenseRefreshSpansFilter == nil || sr.knobs.CondenseRefreshSpansFilter() {
 			sr.refreshFootprint.maybeCondense(ctx, sr.riGen, maxBytes)
@@ -213,7 +213,7 @@ func (sr *txnSpanRefresher) maybeCondenseRefreshSpans(
 			sr.refreshInvalid = true
 			sr.refreshFootprint.clear()
 		}
-		if sr.refreshFootprint.condensed && !condensedBefore {
+		if sr.refreshFootprint.condensed() && !condensedBefore {
 			sr.metrics.ClientRefreshMemoryLimitExceeded.Inc(1)
 		}
 	}
@@ -578,7 +578,7 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 			sr.metrics.ClientRefreshSuccess.Inc(1)
 		} else {
 			sr.metrics.ClientRefreshFail.Inc(1)
-			if sr.refreshFootprint.condensed {
+			if sr.refreshFootprint.condensed() {
 				sr.metrics.ClientRefreshFailWithCondensedSpans.Inc(1)
 			}
 		}
