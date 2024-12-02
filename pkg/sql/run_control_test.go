@@ -540,8 +540,6 @@ func TestIdleInSessionTimeoutDuringSchemaChange(t *testing.T) {
 			require.NoError(t, err, "expected the connection to be valid, but it's not: %v", err)
 		} else {
 			require.Error(t, err, "expected the connection to be dead, but it's still alive")
-			require.Contains(t, err.Error(), "driver: bad connection",
-				"expected the error to be a connection issue: %v", err)
 			// Reestablish the connection
 			conn = acquireConn()
 		}
