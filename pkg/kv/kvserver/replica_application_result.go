@@ -58,6 +58,10 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	r.Delta = enginepb.MVCCStatsDelta{}
 	// Rangefeeds have been disconnected prior to application.
 	r.MVCCHistoryMutation = nil
+	// See detailed comment in ReplicatedEvalResult.IsTrivial on why
+	// DoTimelyApplicationToAllReplicas is trivial. It has been consumed in
+	// apply.Batch.Stage.
+	r.DoTimelyApplicationToAllReplicas = false
 }
 
 // prepareLocalResult is performed after the command has been committed to the
