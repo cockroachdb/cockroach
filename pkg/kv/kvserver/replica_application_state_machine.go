@@ -320,20 +320,13 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	// TODO(#93248): the strongly coupled truncation code will be removed once the
 	// loosely coupled truncations are the default.
 	if truncState != nil {
-		// NB: raftLogDelta reflects removals of any sideloaded entries.
-		raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
-			ctx, truncState, rResult.RaftExpectedFirstIndex)
 		// NB: The RaftExpectedFirstIndex field is zero if this proposal is from
 		// before v22.1 that added it, when all truncations were strongly coupled.
-		// The delta in these historical proposals is thus accurate.
-		// TODO(pav-kv): remove the zero check after any below-raft migration.
-		isRaftLogTruncationDeltaTrusted := expectedFirstIndexWasAccurate ||
-			rResult.RaftExpectedFirstIndex == 0
-		// The proposer hasn't included the sideloaded entries into the delta. We
-		// counted these above, and combine the deltas.
-		raftLogDelta += rResult.RaftLogDelta
-		sm.r.handleRaftLogDeltaResult(raftLogDelta, isRaftLogTruncationDeltaTrusted)
-
+		// The delta in these historical proposals is accurate, but does not account
+		// for the sideloaded entries.
+		// TODO(pav-kv): remove the zero clause after any below-raft migration.
+		sm.r.handleTruncatedStateResult(ctx, truncState, rResult.RaftExpectedFirstIndex,
+			rResult.RaftLogDelta, true /* isDeltaTrusted */, false /* sideloadIncluded */)
 		rResult.RaftLogDelta = 0
 		rResult.RaftExpectedFirstIndex = 0
 	}

@@ -29,18 +29,9 @@ func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState
 	return r.shMu.raftTruncState
 }
 
-func (r *raftTruncatorReplica) setTruncatedStateAndSideEffects(
-	ctx context.Context,
-	trunc *kvserverpb.RaftTruncatedState,
-	expectedFirstIndexPreTruncation kvpb.RaftIndex,
-) (expectedFirstIndexWasAccurate bool) {
-	_, expectedFirstIndexAccurate := (*Replica)(r).handleTruncatedStateResult(
-		ctx, trunc, expectedFirstIndexPreTruncation)
-	return expectedFirstIndexAccurate
-}
-
-func (r *raftTruncatorReplica) setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool) {
-	(*Replica)(r).handleRaftLogDeltaResult(deltaBytes, isDeltaTrusted)
+func (r *raftTruncatorReplica) handleTruncationResult(ctx context.Context, pt pendingTruncation) {
+	(*Replica)(r).handleTruncatedStateResult(ctx, &pt.RaftTruncatedState,
+		pt.expectedFirstIndex, pt.logDeltaBytes, pt.isDeltaTrusted, true /* sideloadIncluded */)
 }
 
 func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {
