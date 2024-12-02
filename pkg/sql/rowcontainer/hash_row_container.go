@@ -515,7 +515,8 @@ type HashDiskRowContainer struct {
 	DiskRowContainer
 	columnEncoder
 
-	diskMonitor *mon.BytesMonitor
+	unlimitedMemMonitor *mon.BytesMonitor
+	diskMonitor         *mon.BytesMonitor
 	// shouldMark specifies whether the caller cares about marking rows. If not,
 	// rows are stored with one less column (which usually specifies that row's
 	// mark).
@@ -528,15 +529,16 @@ var _ HashRowContainer = &HashDiskRowContainer{}
 
 var encodedTrue = encoding.EncodeBoolValue(nil, encoding.NoColumnID, true)
 
-// MakeHashDiskRowContainer creates a HashDiskRowContainer with the given engine
+// makeHashDiskRowContainer creates a HashDiskRowContainer with the given engine
 // as the underlying store that rows are stored on. shouldMark specifies whether
 // the HashDiskRowContainer should set itself up to mark rows.
-func MakeHashDiskRowContainer(
-	diskMonitor *mon.BytesMonitor, e diskmap.Factory,
+func makeHashDiskRowContainer(
+	unlimitedMemMonitor, diskMonitor *mon.BytesMonitor, e diskmap.Factory,
 ) HashDiskRowContainer {
 	return HashDiskRowContainer{
-		diskMonitor: diskMonitor,
-		engine:      e,
+		unlimitedMemMonitor: unlimitedMemMonitor,
+		diskMonitor:         diskMonitor,
+		engine:              e,
 	}
 }
 
@@ -563,7 +565,8 @@ func (h *HashDiskRowContainer) Init(
 	}
 
 	var err error
-	h.DiskRowContainer, err = MakeDiskRowContainer(ctx, h.diskMonitor, storedTypes, storedEqColsToOrdering(storedEqCols), h.engine)
+	memAcc := h.unlimitedMemMonitor.MakeBoundAccount()
+	h.DiskRowContainer, err = MakeDiskRowContainer(ctx, memAcc, h.diskMonitor, storedTypes, storedEqColsToOrdering(storedEqCols), h.engine)
 	return err
 }
 
@@ -817,11 +820,12 @@ type HashDiskBackedRowContainer struct {
 	storedEqCols columns
 	encodeNull   bool
 
-	evalCtx       *eval.Context
-	memoryMonitor *mon.BytesMonitor
-	diskMonitor   *mon.BytesMonitor
-	engine        diskmap.Factory
-	scratchEncRow rowenc.EncDatumRow
+	evalCtx             *eval.Context
+	memoryMonitor       *mon.BytesMonitor
+	unlimitedMemMonitor *mon.BytesMonitor
+	diskMonitor         *mon.BytesMonitor
+	engine              diskmap.Factory
+	scratchEncRow       rowenc.EncDatumRow
 
 	// allRowsIterators keeps track of all iterators created via
 	// NewAllRowsIterator(). If the container spills to disk, these become
@@ -838,15 +842,17 @@ var _ HashRowContainer = &HashDiskBackedRowContainer{}
 func NewHashDiskBackedRowContainer(
 	evalCtx *eval.Context,
 	memoryMonitor *mon.BytesMonitor,
+	unlimitedMemMonitor *mon.BytesMonitor,
 	diskMonitor *mon.BytesMonitor,
 	engine diskmap.Factory,
 ) *HashDiskBackedRowContainer {
 	return &HashDiskBackedRowContainer{
-		evalCtx:          evalCtx,
-		memoryMonitor:    memoryMonitor,
-		diskMonitor:      diskMonitor,
-		engine:           engine,
-		allRowsIterators: make([]*AllRowsIterator, 0, 1),
+		evalCtx:             evalCtx,
+		memoryMonitor:       memoryMonitor,
+		unlimitedMemMonitor: unlimitedMemMonitor,
+		diskMonitor:         diskMonitor,
+		engine:              engine,
+		allRowsIterators:    make([]*AllRowsIterator, 0, 1),
 	}
 }
 
@@ -949,7 +955,7 @@ func (h *HashDiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 	if h.UsingDisk() {
 		return errors.New("already using disk")
 	}
-	hdrc := MakeHashDiskRowContainer(h.diskMonitor, h.engine)
+	hdrc := makeHashDiskRowContainer(h.unlimitedMemMonitor, h.diskMonitor, h.engine)
 	defer func() {
 		if h.src != &hdrc {
 			// For whatever reason, we weren't able to spill, so in order to not

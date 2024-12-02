@@ -43,6 +43,14 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	)
 	require.NoError(t, err)
 	defer tempEngine.Close()
+	memMonitor := mon.NewMonitor(mon.Options{
+		Name:     "test-mem",
+		Res:      mon.MemoryResource,
+		Settings: st,
+	})
+	memMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
+	defer memMonitor.Stop(ctx)
+	memAcc := memMonitor.MakeBoundAccount()
 	diskMonitor := mon.NewMonitor(mon.Options{
 		Name:     "test-disk",
 		Res:      mon.DiskResource,
@@ -52,7 +60,7 @@ func TestInOrderResultsBuffer(t *testing.T) {
 	defer diskMonitor.Stop(ctx)
 
 	budget := newBudget(mon.NewStandaloneUnlimitedAccount(), math.MaxInt /* limitBytes */)
-	diskBuffer := TestResultDiskBufferConstructor(tempEngine, diskMonitor)
+	diskBuffer := TestResultDiskBufferConstructor(tempEngine, memAcc, diskMonitor)
 	b := newInOrderResultsBuffer(budget, diskBuffer)
 	defer b.close(ctx)
 
