@@ -45,10 +45,10 @@ BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 		       --config "$CONFIG" --config ci $EXTRA_ARGS \
 		       //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
 		       //pkg/cmd/cockroach-sql \
-		       //pkg/cmd/cockroach-oss //c-deps:libgeos $EXTRA_TARGETS
+		       //c-deps:libgeos $EXTRA_TARGETS
 
 if [[ $CONFIG == "crosslinuxfips" ]]; then
-    for bin in cockroach cockroach-short cockroach-sql cockroach-oss; do
+    for bin in cockroach cockroach-short cockroach-sql; do
         if ! bazel run @go_sdk//:bin/go -- tool nm "artifacts/bazel-bin/pkg/cmd/$bin/${bin}_/$bin" | grep golang-fips; then
             echo "cannot find golang-fips in $bin, exiting"
             exit 1
@@ -56,7 +56,7 @@ if [[ $CONFIG == "crosslinuxfips" ]]; then
     done
 fi
 if [[ $CONFIG == "crosslinux" ]]; then
-    for bin in cockroach cockroach-short cockroach-sql cockroach-oss; do
+    for bin in cockroach cockroach-short cockroach-sql; do
         if bazel run @go_sdk//:bin/go -- tool nm "artifacts/bazel-bin/pkg/cmd/$bin/${bin}_/$bin" | grep golang-fips; then
             echo "found golang-fips in $bin, exiting"
             exit 1
