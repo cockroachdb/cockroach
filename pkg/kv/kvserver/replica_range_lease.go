@@ -180,9 +180,9 @@ func OverrideDefaultLeaseType(ctx context.Context, sv *settings.Values, typ roac
 
 // OverrideLeaderLeaseMetamorphism overrides the default lease type to be
 // epoch based leases, regardless of whether leader leases were metamorphically
-// enabled or not. Any
+// enabled or not.
 func OverrideLeaderLeaseMetamorphism(ctx context.Context, sv *settings.Values) {
-	OverrideDefaultLeaseType(ctx, sv, roachpb.LeaseEpoch)
+	RaftLeaderFortificationFractionEnabled.Override(ctx, sv, 0.0)
 }
 
 // leaseRequestHandle is a handle to an asynchronous lease request.
