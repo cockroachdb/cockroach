@@ -1358,21 +1358,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		waitForInstanceReaderStarted,
 	)
 
-	reporter := &diagnostics.Reporter{
-		StartTime:        timeutil.Now(),
-		AmbientCtx:       &cfg.AmbientCtx,
-		Config:           cfg.BaseConfig.Config,
-		Settings:         cfg.Settings,
-		StorageClusterID: cfg.rpcContext.StorageClusterID.Get,
-		LogicalClusterID: clusterIDForSQL.Get,
-		TenantID:         cfg.rpcContext.TenantID,
-		SQLInstanceID:    cfg.nodeIDContainer.SQLInstanceID,
-		SQLServer:        pgServer.SQLServer,
-		InternalExec:     cfg.circularInternalExecutor,
-		DB:               cfg.db,
-		Recorder:         cfg.recorder,
-		Locality:         cfg.Locality,
-	}
+	reporter := diagnostics.NewDiagnosticReporter(
+		timeutil.Now(),
+		&cfg.AmbientCtx,
+		cfg.BaseConfig.Config,
+		cfg.Settings,
+		cfg.rpcContext.StorageClusterID.Get,
+		clusterIDForSQL.Get,
+		cfg.rpcContext.TenantID,
+		cfg.nodeIDContainer.SQLInstanceID,
+		pgServer.SQLServer,
+		cfg.circularInternalExecutor,
+		cfg.db,
+		cfg.recorder,
+		cfg.Locality,
+	)
 
 	if cfg.TestingKnobs.Server != nil {
 		reporter.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs

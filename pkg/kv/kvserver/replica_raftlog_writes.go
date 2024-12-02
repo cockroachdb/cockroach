@@ -72,3 +72,26 @@ func (r *replicaLogStorage) updateStateRaftMuLockedMuLocked(state logstore.RaftS
 	r.shMu.lastTermNotDurable = state.LastTerm
 	r.shMu.raftLogSize = state.ByteSize
 }
+
+// updateLogSize recomputes the raft log size, and updates Replica's in-memory
+// knowledge about this size. Returns the computed log size.
+//
+// Replica.{raftMu,mu} must not be held.
+func (r *replicaLogStorage) updateLogSize(ctx context.Context) (int64, error) {
+	// We need to hold raftMu both to access the sideloaded storage and to make
+	// sure concurrent raft activity doesn't foul up our update to the cached
+	// in-memory values.
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+
+	size, err := r.raftMu.logStorage.ComputeSize(ctx)
+	if err != nil {
+		return 0, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.shMu.raftLogSize = size
+	r.shMu.raftLogLastCheckSize = size
+	r.shMu.raftLogSizeTrusted = true
+	return size, nil
+}
