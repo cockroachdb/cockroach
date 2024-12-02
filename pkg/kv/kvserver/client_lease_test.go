@@ -897,6 +897,7 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 func TestLeaseholderRelocate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	stickyRegistry := fs.NewStickyRegistry()
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
@@ -916,10 +917,8 @@ func TestLeaseholderRelocate(t *testing.T) {
 		locality("us"),
 	}
 
-	// TODO(arul): figure out why this test is flaky under leader leases.
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 	const numNodes = 4
+	st := cluster.MakeTestingClusterSettings()
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
 			Settings: st,
@@ -953,10 +952,21 @@ func TestLeaseholderRelocate(t *testing.T) {
 	// Make sure the lease is on 3 and is fully upgraded.
 	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(2))
 
-	// Check that the lease moved to 3.
-	leaseHolder, err := tc.FindRangeLeaseHolder(rhsDesc, nil)
-	require.NoError(t, err)
-	require.Equal(t, tc.Target(2), leaseHolder)
+	var err error
+	var leaseHolder roachpb.ReplicationTarget
+	testutils.SucceedsSoon(t, func() error {
+		leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
+		if err != nil {
+			return err
+		}
+
+		// Check that the lease moved to 3.
+		if !leaseHolder.Equal(tc.Target(2)) {
+			return errors.Errorf("Leaseholder didn't move.")
+		}
+
+		return nil
+	})
 
 	gossipLiveness(t, tc)
 
@@ -980,9 +990,16 @@ func TestLeaseholderRelocate(t *testing.T) {
 	})
 
 	// Make sure lease moved to the preferred region.
-	leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
-	require.NoError(t, err)
-	require.Equal(t, tc.Target(3), leaseHolder)
+	testutils.SucceedsSoon(t, func() error {
+		leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
+		if err != nil {
+			return err
+		}
+		if !leaseHolder.Equal(tc.Target(3)) {
+			return errors.Errorf("Leaseholder didn't move.")
+		}
+		return nil
+	})
 
 	// Double check that lease moved directly. The tail of the lease history
 	// should all be on leaseHolder.NodeID. We may metamorphically enable
