@@ -33,12 +33,18 @@ type condensableSpanSet struct {
 	s     []roachpb.Span
 	bytes int64
 
-	// condensed is set if we ever condensed the spans. Meaning, if the set of
-	// spans currently tracked has lost fidelity compared to the spans inserted.
-	// Note that we might have otherwise mucked with the inserted spans to save
-	// memory without losing fidelity, in which case this flag would not be set
-	// (e.g. merging overlapping or adjacent spans).
+	// condensed is set if we ever condensed the spans due to exceeding a max
+	// size. Meaning, if the set of spans currently tracked has lost fidelity
+	// compared to the spans inserted. Note that we might have otherwise mucked
+	// with the inserted spans to save memory without losing fidelity, in which
+	// case this flag would not be set (e.g. merging overlapping or adjacent
+	// spans).
 	condensed bool
+
+	// insertCount is the number of bytes that are inserted into this span set.
+	// This may be higher if there are duplicate spans inserted. It can be used
+	// to track the impact of the intents on the server side.
+	insertCount int64
 
 	// Avoid heap allocations for transactions with a small number of spans.
 	sAlloc [2]roachpb.Span
@@ -53,6 +59,7 @@ func (s *condensableSpanSet) insert(spans ...roachpb.Span) {
 	s.s = append(s.s, spans...)
 	for _, sp := range spans {
 		s.bytes += spanSize(sp)
+		s.insertCount++
 	}
 }
 
