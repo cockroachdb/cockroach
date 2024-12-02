@@ -185,6 +185,20 @@ func (r *DescriptorResolver) LookupObject(
 	return false, catalog.ResolvedObjectPrefix{}, nil, nil
 }
 
+// LookupObjectInDatabase implements the tree.ObjectNameResolver interface.
+func (r *DescriptorResolver) LookupObjectInDatabase(
+	ctx context.Context,
+	flags tree.ObjectLookupFlags,
+	db catalog.DatabaseDescriptor,
+	scName, obName string,
+) (bool, catalog.ResolvedObjectPrefix, catalog.Descriptor, error) {
+	dbName := ""
+	if db != nil {
+		dbName = db.GetName()
+	}
+	return r.LookupObject(ctx, flags, dbName, scName, obName)
+}
+
 // NewDescriptorResolver prepares a DescriptorResolver for the given
 // known set of descriptors.
 func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, error) {
