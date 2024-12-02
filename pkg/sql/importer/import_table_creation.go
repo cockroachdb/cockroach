@@ -394,6 +394,16 @@ func (r *fkResolver) LookupObject(
 		lookupName, suggestions)
 }
 
+// LookupObjectInDatabase implements the resolver.ObjectNameResolver interface.
+func (r fkResolver) LookupObjectInDatabase(
+	ctx context.Context,
+	flags tree.ObjectLookupFlags,
+	db catalog.DatabaseDescriptor,
+	scName, obName string,
+) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
+	return r.LookupObject(ctx, flags, db.GetName(), scName, obName)
+}
+
 // LookupSchema implements the resolver.ObjectNameResolver interface.
 func (r fkResolver) LookupSchema(
 	ctx context.Context, dbName, scName string,
