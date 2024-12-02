@@ -122,6 +122,7 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
+		kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, expOnly)
 
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{

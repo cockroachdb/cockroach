@@ -341,6 +341,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 
 	// Disable closed timestamps for control over when transaction gets bumped.
 	closedts.TargetDuration.Override(ctx, &st.SV, 1*time.Hour)
