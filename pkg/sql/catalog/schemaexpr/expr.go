@@ -50,7 +50,7 @@ func DequalifyAndValidateExprImpl(
 	tn *tree.TableName,
 	version clusterversion.ClusterVersion,
 	getAllNonDropColumnsFn func() colinfo.ResultColumns,
-	columnLookupByNameFn func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T),
+	columnLookupByNameFn ColumnLookupFn,
 ) (string, *types.T, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(*tn, getAllNonDropColumnsFn())
@@ -214,7 +214,7 @@ func FormatExprForDisplay(
 ) (string, error) {
 	return formatExprForDisplayImpl(
 		ctx,
-		desc,
+		makeColumnLookupFnForTableDesc(desc),
 		exprStr,
 		evalCtx,
 		semaCtx,
@@ -239,7 +239,7 @@ func FormatExprForExpressionIndexDisplay(
 ) (string, error) {
 	return formatExprForDisplayImpl(
 		ctx,
-		desc,
+		makeColumnLookupFnForTableDesc(desc),
 		exprStr,
 		evalCtx,
 		semaCtx,
@@ -249,9 +249,49 @@ func FormatExprForExpressionIndexDisplay(
 	)
 }
 
+func makeColumnLookupFnForTableDesc(desc catalog.TableDescriptor) ColumnLookupFn {
+	return func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		col, err := catalog.MustFindColumnByTreeName(desc, columnName)
+		if err != nil || col.Dropped() {
+			return false, false, 0, nil
+		}
+		return true, !col.IsInaccessible(), col.GetID(), col.GetType()
+	}
+}
+
+// ParseTriggerWhenExprForDisplay parses a trigger WHEN expression and rewrites
+// the resulting expression to be suitable for display. It allows references to
+// the OLD and NEW columns only.
+func ParseTriggerWhenExprForDisplay(
+	ctx context.Context,
+	tableTyp *types.T,
+	exprStr string,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	fmtFlags tree.FmtFlags,
+) (tree.Expr, error) {
+	lookupFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		// Trigger WHEN expressions can reference only the special OLD and NEW
+		// columns.
+		switch columnName {
+		case "old", "new":
+			return true, true, 0, tableTyp
+		}
+		return false, false, 0, nil
+	}
+	return parseExprForDisplayImpl(
+		ctx,
+		lookupFn,
+		exprStr,
+		evalCtx,
+		semaCtx,
+		fmtFlags,
+	)
+}
+
 func formatExprForDisplayImpl(
 	ctx context.Context,
-	desc catalog.TableDescriptor,
+	lookupFn ColumnLookupFn,
 	exprStr string,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
@@ -259,12 +299,7 @@ func formatExprForDisplayImpl(
 	fmtFlags tree.FmtFlags,
 	wrapNonFuncExprs bool,
 ) (string, error) {
-	expr, err := deserializeExprForFormatting(ctx, desc, exprStr, evalCtx, semaCtx, fmtFlags)
-	if err != nil {
-		return "", err
-	}
-	// Replace any IDs in the expr with their fully qualified names.
-	replacedExpr, err := ReplaceSequenceIDsWithFQNames(ctx, expr, semaCtx)
+	replacedExpr, err := parseExprForDisplayImpl(ctx, lookupFn, exprStr, evalCtx, semaCtx, fmtFlags)
 	if err != nil {
 		return "", err
 	}
@@ -273,7 +308,7 @@ func formatExprForDisplayImpl(
 		tree.FmtDataConversionConfig(sessionData.DataConversionConfig),
 		tree.FmtLocation(sessionData.Location),
 	)
-	_, isFunc := expr.(*tree.FuncExpr)
+	_, isFunc := replacedExpr.(*tree.FuncExpr)
 	if wrapNonFuncExprs && !isFunc {
 		f.WriteByte('(')
 	}
@@ -284,9 +319,25 @@ func formatExprForDisplayImpl(
 	return f.CloseAndGetString(), nil
 }
 
+func parseExprForDisplayImpl(
+	ctx context.Context,
+	lookupFn ColumnLookupFn,
+	exprStr string,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	fmtFlags tree.FmtFlags,
+) (tree.Expr, error) {
+	expr, err := deserializeExprForFormatting(ctx, lookupFn, exprStr, evalCtx, semaCtx, fmtFlags)
+	if err != nil {
+		return nil, err
+	}
+	// Replace any IDs in the expr with their fully qualified names.
+	return ReplaceSequenceIDsWithFQNames(ctx, expr, semaCtx)
+}
+
 func deserializeExprForFormatting(
 	ctx context.Context,
-	desc catalog.TableDescriptor,
+	lookupFn ColumnLookupFn,
 	exprStr string,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
@@ -299,7 +350,7 @@ func deserializeExprForFormatting(
 
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, _, err := replaceColumnVars(desc, expr)
+	replacedExpr, _, err := ReplaceColumnVars(expr, lookupFn)
 	if err != nil {
 		return nil, err
 	}

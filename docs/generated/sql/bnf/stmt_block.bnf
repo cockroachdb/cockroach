@@ -275,6 +275,7 @@ show_stmt ::=
 	show_backup_stmt
 	| show_columns_stmt
 	| show_constraints_stmt
+	| show_triggers_stmt
 	| show_create_stmt
 	| show_create_schedules_stmt
 	| show_create_external_connections_stmt
@@ -814,6 +815,9 @@ show_columns_stmt ::=
 show_constraints_stmt ::=
 	'SHOW' 'CONSTRAINT' 'FROM' table_name with_comment
 	| 'SHOW' 'CONSTRAINTS' 'FROM' table_name with_comment
+
+show_triggers_stmt ::=
+	'SHOW' 'TRIGGERS' 'FROM' table_name
 
 show_create_stmt ::=
 	'SHOW' 'CREATE' table_name opt_show_create_format_options
@@ -1480,6 +1484,7 @@ unreserved_keyword ::=
 	| 'TRANSFER'
 	| 'TRANSFORM'
 	| 'TRIGGER'
+	| 'TRIGGERS'
 	| 'TRUNCATE'
 	| 'TRUSTED'
 	| 'TYPE'
@@ -4213,6 +4218,7 @@ bare_label_keywords ::=
 	| 'TRANSFORM'
 	| 'TREAT'
 	| 'TRIGGER'
+	| 'TRIGGERS'
 	| 'TRIM'
 	| 'TRUE'
 	| 'TRUNCATE'

@@ -2182,3 +2182,97 @@ SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL
 SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL -- fully parenthesized
 SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL -- literals removed
 SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL -- identifiers removed
+
+parse
+SHOW TRIGGERS FROM foo;
+----
+SHOW TRIGGERS FROM foo -- normalized!
+SHOW TRIGGERS FROM foo -- fully parenthesized
+SHOW TRIGGERS FROM foo -- literals removed
+SHOW TRIGGERS FROM _ -- identifiers removed
+
+parse
+SHOW TRIGGERS FROM foo.bar;
+----
+SHOW TRIGGERS FROM foo.bar -- normalized!
+SHOW TRIGGERS FROM foo.bar -- fully parenthesized
+SHOW TRIGGERS FROM foo.bar -- literals removed
+SHOW TRIGGERS FROM _._ -- identifiers removed
+
+error
+SHOW TRIGGER FROM foo;
+----
+at or near "from": syntax error
+DETAIL: source SQL:
+SHOW TRIGGER FROM foo
+             ^
+HINT: try \h SHOW TRIGGERS
+
+error
+SHOW TRIGGERS ON foo;
+----
+at or near "on": syntax error
+DETAIL: source SQL:
+SHOW TRIGGERS ON foo
+              ^
+HINT: try \h SHOW TRIGGERS
+
+error
+SHOW TRIGGERS FOR foo;
+----
+at or near "for": syntax error
+DETAIL: source SQL:
+SHOW TRIGGERS FOR foo
+              ^
+HINT: try \h SHOW TRIGGERS
+
+parse
+SHOW CREATE TRIGGER foo ON bar;
+----
+SHOW CREATE TRIGGER foo ON bar -- normalized!
+SHOW CREATE TRIGGER foo ON bar -- fully parenthesized
+SHOW CREATE TRIGGER foo ON bar -- literals removed
+SHOW CREATE TRIGGER _ ON _ -- identifiers removed
+
+parse
+SHOW CREATE TRIGGER foo ON bar.baz;
+----
+SHOW CREATE TRIGGER foo ON bar.baz -- normalized!
+SHOW CREATE TRIGGER foo ON bar.baz -- fully parenthesized
+SHOW CREATE TRIGGER foo ON bar.baz -- literals removed
+SHOW CREATE TRIGGER _ ON _._ -- identifiers removed
+
+error
+SHOW CREATE TRIGGER foo ON TABLE bar;
+----
+at or near "table": syntax error
+DETAIL: source SQL:
+SHOW CREATE TRIGGER foo ON TABLE bar
+                           ^
+HINT: try \h SHOW CREATE
+
+error
+SHOW CREATE TRIGGER foo FROM bar;
+----
+at or near "from": syntax error
+DETAIL: source SQL:
+SHOW CREATE TRIGGER foo FROM bar
+                        ^
+HINT: try \h SHOW CREATE
+
+error
+SHOW CREATE TRIGGER foo;
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW CREATE TRIGGER foo
+                       ^
+HINT: try \h SHOW CREATE
+
+error
+SHOW CREATE TRIGGERS ON foo;
+----
+at or near "on": syntax error
+DETAIL: source SQL:
+SHOW CREATE TRIGGERS ON foo
+                     ^

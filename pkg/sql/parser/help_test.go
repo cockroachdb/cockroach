@@ -411,6 +411,7 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW CREATE TABLE blah ??`, `SHOW CREATE`},
 		{`SHOW CREATE VIEW blah ??`, `SHOW CREATE`},
 		{`SHOW CREATE SEQUENCE blah ??`, `SHOW CREATE`},
+		{`SHOW CREATE TRIGGER blah ??`, `SHOW CREATE`},
 
 		{`SHOW CREATE SCHEDULE blah ??`, `SHOW CREATE SCHEDULES`},
 		{`SHOW CREATE ALL SCHEDULES ??`, `SHOW CREATE SCHEDULES`},
@@ -497,6 +498,10 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW USERS ??`, `SHOW USERS`},
 
 		{`SHOW ZONE CONFIGURATION FROM ??`, `SHOW ZONE CONFIGURATION`},
+
+		{`SHOW TRIGGERS ??`, `SHOW TRIGGERS`},
+		{`SHOW TRIGGERS FROM ??`, `SHOW TRIGGERS`},
+		{`SHOW TRIGGERS FROM blah ??`, `SHOW TRIGGERS`},
 
 		{`TRUNCATE foo ??`, `TRUNCATE`},
 		{`TRUNCATE foo, ??`, `TRUNCATE`},
