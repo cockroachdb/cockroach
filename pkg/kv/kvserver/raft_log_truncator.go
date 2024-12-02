@@ -241,12 +241,7 @@ type replicaForTruncator interface {
 	// Returns the current truncated state.
 	getTruncatedState() kvserverpb.RaftTruncatedState
 	// Updates the replica state after the truncation is enacted.
-	setTruncatedStateAndSideEffects(
-		_ context.Context, _ *kvserverpb.RaftTruncatedState, expectedFirstIndexPreTruncation kvpb.RaftIndex,
-	) (expectedFirstIndexWasAccurate bool)
-	// Updates the stats related to the raft log size after the truncation is
-	// enacted.
-	setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool)
+	handleTruncationResult(_ context.Context, _ pendingTruncation)
 	// Returns the pending truncations queue. The caller is allowed to mutate
 	// the return value by additionally acquiring pendingLogTruncations.mu.
 	getPendingTruncs() *pendingLogTruncations
@@ -579,13 +574,7 @@ func (t *raftLogTruncator) tryEnactTruncations(
 		if index > enactIndex {
 			return
 		}
-		isDeltaTrusted := true
-		expectedFirstIndexWasAccurate := r.setTruncatedStateAndSideEffects(
-			ctx, &trunc.RaftTruncatedState, trunc.expectedFirstIndex)
-		if !expectedFirstIndexWasAccurate || !trunc.isDeltaTrusted {
-			isDeltaTrusted = false
-		}
-		r.setTruncationDeltaAndTrusted(trunc.logDeltaBytes, isDeltaTrusted)
+		r.handleTruncationResult(ctx, trunc)
 	})
 	// Now remove the enacted truncations. It is the same iteration as the
 	// previous one, but we do it while holding pendingTruncs.mu. Note that
