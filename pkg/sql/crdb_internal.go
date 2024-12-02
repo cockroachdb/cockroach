@@ -6731,7 +6731,7 @@ CREATE TABLE crdb_internal.default_privileges (
 
 		// Cache roles ahead of time to avoid role lookup inside loop.
 		var roles []catpb.DefaultPrivilegesRole
-		if err := forEachRole(ctx, p, func(ctx context.Context, userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+		if err := forEachRoleAtCacheReadTS(ctx, p, func(ctx context.Context, userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
 			// Skip the internal node user, since it can't be modified and just adds noise.
 			if userName.IsNodeUser() {
 				return nil
@@ -8797,7 +8797,7 @@ CREATE TABLE crdb_internal.kv_inherited_role_members (
 		// explicitly a member of `b`. The role `c` is also a member of `a`,
 		// but not explicitly, because it inherits the membership through `b`.
 		explicitMemberships := make(map[username.SQLUsername]map[username.SQLUsername]bool)
-		if err := forEachRoleMembership(ctx, p.InternalSQLTxn(), func(ctx context.Context, role, member username.SQLUsername, isAdmin bool) error {
+		if err := forEachRoleMembershipAtCacheReadTS(ctx, p, func(ctx context.Context, role, member username.SQLUsername, isAdmin bool) error {
 			if _, found := explicitMemberships[member]; !found {
 				explicitMemberships[member] = make(map[username.SQLUsername]bool)
 			}

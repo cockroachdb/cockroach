@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -250,7 +250,7 @@ func populateRoleHierarchy(
 	if err != nil {
 		return err
 	}
-	return forEachRoleMembership(ctx, p.InternalSQLTxn(), func(
+	return forEachRoleMembershipAtCacheReadTS(ctx, p, func(
 		ctx context.Context, role, member username.SQLUsername, isAdmin bool,
 	) error {
 		// The ADMIN OPTION is inherited through the role hierarchy, and grantee
@@ -2837,8 +2837,14 @@ func (r roleOptions) createRole() (tree.DBool, error) {
 	return tree.DBool(createRole), err
 }
 
-func forEachRoleQuery(ctx context.Context, p *planner) string {
-	return `
+// forEachRoleAtCacheReadTS reads from system.users and related tables using a
+// timestamp based on when the role membership cache was refreshed.
+func forEachRoleAtCacheReadTS(
+	ctx context.Context,
+	p *planner,
+	fn func(ctx context.Context, userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error,
+) error {
+	const query = `
 SELECT
 	u.username,
 	"isRole",
@@ -2851,27 +2857,28 @@ FROM
   LEFT JOIN system.database_role_settings AS drs ON
 			drs.role_name = u.username AND drs.database_id = 0
 GROUP BY
-	u.username, "isRole", drs.settings;
-`
-}
+	u.username, "isRole", drs.settings;`
 
-func forEachRole(
-	ctx context.Context,
-	p *planner,
-	fn func(ctx context.Context, userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error,
-) error {
-	query := forEachRoleQuery(ctx, p)
-
-	// For some reason, using the iterator API here causes privilege_builtins
-	// logic test fail in 3node-tenant config with 'txn already encountered an
-	// error' (because of the context cancellation), so we buffer all roles
-	// first.
-	rows, err := p.InternalSQLTxn().QueryBufferedEx(
-		ctx, "read-roles", p.txn,
-		sessiondata.NodeUserSessionDataOverride,
-		query,
-	)
-	if err != nil {
+	var rows []tree.Datums
+	if err := p.ExecCfg().RoleMemberCache.RunAtCacheReadTS(
+		ctx, p.ExecCfg().InternalDB, p.InternalSQLTxn(),
+		func(ctx context.Context, txn descs.Txn) error {
+			// For some reason, using the iterator API here causes privilege_builtins
+			// logic test fail in 3node-tenant config with 'txn already encountered an
+			// error' (because of the context cancellation), so we buffer all roles
+			// first.
+			var err error
+			rows, err = txn.QueryBufferedEx(
+				ctx, "read-roles", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				query,
+			)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	); err != nil {
 		return err
 	}
 
@@ -2911,38 +2918,53 @@ func forEachRole(
 	return nil
 }
 
-func forEachRoleMembership(
+// forEachRoleMembershipAtCacheReadTS reads from system.role_members using a
+// timestamp based on when the role membership cache was refreshed.
+func forEachRoleMembershipAtCacheReadTS(
 	ctx context.Context,
-	txn isql.Txn,
+	p *planner,
 	fn func(ctx context.Context, role, member username.SQLUsername, isAdmin bool) error,
-) (retErr error) {
+) error {
 	const query = `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	it, err := txn.QueryIteratorEx(ctx, "read-members", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride, query)
-	if err != nil {
+
+	if err := p.ExecCfg().RoleMemberCache.RunAtCacheReadTS(
+		ctx, p.ExecCfg().InternalDB, p.InternalSQLTxn(),
+		func(ctx context.Context, txn descs.Txn) (retErr error) {
+			it, err := txn.QueryIteratorEx(ctx, "read-members", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride, query)
+			if err != nil {
+				return err
+			}
+			// We have to make sure to close the iterator since we might return from the
+			// for loop early (before Next() returns false).
+			defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+			var ok bool
+			var loopErr error
+			for ok, loopErr = it.Next(ctx); ok; ok, loopErr = it.Next(ctx) {
+				row := it.Cur()
+				roleName := tree.MustBeDString(row[0])
+				memberName := tree.MustBeDString(row[1])
+				isAdmin := row[2].(*tree.DBool)
+
+				// The names in the system tables are already normalized.
+				if err := fn(
+					ctx,
+					username.MakeSQLUsernameFromPreNormalizedString(string(roleName)),
+					username.MakeSQLUsernameFromPreNormalizedString(string(memberName)),
+					bool(*isAdmin)); err != nil {
+					return err
+				}
+			}
+			if loopErr != nil {
+				return loopErr
+			}
+			return nil
+		},
+	); err != nil {
 		return err
 	}
-	// We have to make sure to close the iterator since we might return from the
-	// for loop early (before Next() returns false).
-	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
-
-	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		row := it.Cur()
-		roleName := tree.MustBeDString(row[0])
-		memberName := tree.MustBeDString(row[1])
-		isAdmin := row[2].(*tree.DBool)
-
-		// The names in the system tables are already normalized.
-		if err := fn(
-			ctx,
-			username.MakeSQLUsernameFromPreNormalizedString(string(roleName)),
-			username.MakeSQLUsernameFromPreNormalizedString(string(memberName)),
-			bool(*isAdmin)); err != nil {
-			return err
-		}
-	}
-	return err
+	return nil
 }
 
 func userCanSeeDescriptor(

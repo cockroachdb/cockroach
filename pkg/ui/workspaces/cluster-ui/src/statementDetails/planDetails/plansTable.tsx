@@ -25,7 +25,6 @@ import {
   Count,
   intersperse,
   EncodeDatabaseTableIndexUri,
-  EncodeDatabaseTableUri,
 } from "../../util";
 
 import styles from "./plansTable.module.scss";
@@ -304,13 +303,7 @@ export function formatIndexes(indexes: string[], database: string): ReactNode {
     return (
       <span key={table}>
         {newLine}
-        <Link
-          className={cx("bold-link")}
-          to={EncodeDatabaseTableUri(database, table)}
-        >
-          {table}
-        </Link>
-        : {indexesList}
+        {table}: {indexesList}
       </span>
     );
   });
