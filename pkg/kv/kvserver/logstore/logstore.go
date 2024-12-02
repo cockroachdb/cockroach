@@ -576,25 +576,23 @@ func Compact(
 	return true, nil
 }
 
-// ComputeRaftLogSize computes the size (in bytes) of the Raft log from the
-// storage engine. This will iterate over the Raft log and sideloaded files, so
+// ComputeSize computes the size (in bytes) of the raft log from the storage
+// engine. This will iterate over the raft log and sideloaded files, so
 // depending on the size of these it can be mildly to extremely expensive and
 // thus should not be called frequently.
 //
 // TODO(#136358): we should be able to maintain this size incrementally, and not
 // need scanning the log to re-compute it.
-func ComputeRaftLogSize(
-	ctx context.Context, rangeID roachpb.RangeID, reader storage.Reader, sideloaded SideloadStorage,
-) (int64, error) {
-	prefix := keys.RaftLogPrefix(rangeID)
+func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
+	prefix := keys.RaftLogPrefix(s.RangeID)
 	prefixEnd := prefix.PrefixEnd()
-	ms, err := storage.ComputeStats(ctx, reader, prefix, prefixEnd, 0 /* nowNanos */)
+	ms, err := storage.ComputeStats(ctx, s.Engine, prefix, prefixEnd, 0 /* nowNanos */)
 	if err != nil {
 		return 0, err
 	}
 	// The remaining bytes if one were to truncate [0, 0) gives us the total
 	// number of bytes in sideloaded files.
-	_, totalSideloaded, err := sideloaded.BytesIfTruncatedFromTo(ctx, 0, 0)
+	_, totalSideloaded, err := s.Sideload.BytesIfTruncatedFromTo(ctx, 0, 0)
 	if err != nil {
 		return 0, err
 	}

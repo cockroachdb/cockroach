@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -331,14 +330,9 @@ func verifyLogSizeInSync(t *testing.T, r *Replica) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	raftLogSize := r.shMu.raftLogSize
-	actualRaftLogSize, err := logstore.ComputeRaftLogSize(
-		context.Background(), r.RangeID, r.store.TODOEngine(), r.SideloadedRaftMuLocked())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if actualRaftLogSize != raftLogSize {
-		t.Fatalf("replica claims raft log size %d, but computed %d", raftLogSize, actualRaftLogSize)
-	}
+	actualRaftLogSize, err := r.raftMu.logStorage.ComputeSize(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, actualRaftLogSize, raftLogSize)
 }
 
 func TestUpdateRaftStatusActivity(t *testing.T) {

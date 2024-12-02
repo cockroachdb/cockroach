@@ -1016,6 +1016,12 @@ func (r *Replica) ID() storage.FullReplicaID {
 	return storage.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID}
 }
 
+// LogStorageRaftMuLocked returns the Replica's log storage.
+// raftMu must be held when using the returned object.
+func (r *Replica) LogStorageRaftMuLocked() *logstore.LogStore {
+	return r.raftMu.logStorage
+}
+
 // cleanupFailedProposal cleans up after a proposal that has failed. It
 // clears any references to the proposal and releases associated quota.
 // It requires that Replica.mu is exclusively held.
