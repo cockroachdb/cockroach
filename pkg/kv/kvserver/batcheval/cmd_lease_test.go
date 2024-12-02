@@ -85,7 +85,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		testutils.RunTrueAndFalse(t, "served-future-reads", func(t *testing.T, servedFutureReads bool) {
 			ctx := context.Background()
 			db := storage.NewDefaultInMemForTesting()
@@ -197,7 +197,7 @@ func TestLeaseRequestTypeSwitchForwardsExpiration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		testutils.RunTrueAndFalse(t, "revoke", func(t *testing.T, revoke bool) {
 			ctx := context.Background()
 			db := storage.NewDefaultInMemForTesting()

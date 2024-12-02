@@ -2622,7 +2622,7 @@ func TestLeaderAfterSplit(t *testing.T) {
 	skip.UnderDeadlock(t)
 	skip.UnderRace(t)
 
-	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // time out early
 		defer cancel()
 
