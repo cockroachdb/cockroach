@@ -171,9 +171,15 @@ message ReplicatedEvalResult {
   // Sideloaded entries are not expected to be common enough that it is worth
   // the optimization to calculate the delta once (at the leaseholder).
   int64 raft_log_delta = 13;
-  // RaftExpectedFirstIndex is populated starting at cluster version
-  // LooselyCoupledRaftLogTruncation. When this is not populated, the replica
-  // should not delay enacting the truncation.
+  // RaftExpectedFirstIndex is the first index of the raft log used for
+  // computing the RaftLogDelta. It is populated only when evaluating a
+  // TruncateLogRequest.
+  //
+  // Introduced in v22.1. There can be historical truncation proposals with this
+  // field being zero.
+  // TODO(pav-kv): the likelihood of this is low, but to err on the safe side we
+  // should wait for the next below-raft migration, at which point we'll be able
+  // to say that this field is always populated.
   uint64 raft_expected_first_index = 25  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
 
   // MVCCHistoryMutation describes mutations of MVCC history that may violate
