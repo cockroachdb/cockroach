@@ -79,6 +79,7 @@ go_library(
         "hibernate.go",
         "hibernate_blocklist.go",
         "hotspotsplits.go",
+        "idempotent_permanent_upgrades.go",
         "import.go",
         "import_cancellation.go",
         "inconsistency.go",
