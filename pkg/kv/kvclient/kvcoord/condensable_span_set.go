@@ -33,12 +33,19 @@ type condensableSpanSet struct {
 	s     []roachpb.Span
 	bytes int64
 
-	// condensed is set if we ever condensed the spans. Meaning, if the set of
-	// spans currently tracked has lost fidelity compared to the spans inserted.
-	// Note that we might have otherwise mucked with the inserted spans to save
-	// memory without losing fidelity, in which case this flag would not be set
-	// (e.g. merging overlapping or adjacent spans).
+	// condensed is set if we ever condensed the spans due to exceeding a max
+	// size. Meaning, if the set of spans currently tracked has lost fidelity
+	// compared to the spans inserted. Note that we might have otherwise mucked
+	// with the inserted spans to save memory without losing fidelity, in which
+	// case this flag would not be set (e.g. merging overlapping or adjacent
+	// spans).
 	condensed bool
+
+	// condensedBytes is the number of bytes saved from spans that have been
+	// condensed into larger spans for any reason. This is used to decide
+	// whether to reject transactions based on the total size of the transaction
+	// spans.
+	condensedBytes int64
 
 	// Avoid heap allocations for transactions with a small number of spans.
 	sAlloc [2]roachpb.Span
@@ -66,10 +73,12 @@ func (s *condensableSpanSet) mergeAndSort() {
 	s.s, _ = roachpb.MergeSpans(&s.s)
 	// Recompute the size if anything has changed.
 	if oldLen != len(s.s) {
+		prevSize := s.bytes
 		s.bytes = 0
 		for _, sp := range s.s {
 			s.bytes += spanSize(sp)
 		}
+		s.condensedBytes += prevSize - s.bytes
 	}
 }
 
@@ -148,6 +157,7 @@ func (s *condensableSpanSet) maybeCondense(
 			continue
 		}
 		s.bytes -= bucket.bytes
+		s.condensedBytes += bucket.bytes
 		// TODO(spencer): consider further optimizations here to create
 		// more than one span out of a bucket to avoid overly broad span
 		// combinations.
@@ -162,7 +172,9 @@ func (s *condensableSpanSet) maybeCondense(
 					"combining span %s yielded invalid result", s)
 			}
 		}
-		s.bytes += spanSize(cs)
+		ss := spanSize(cs)
+		s.bytes += ss
+		s.condensedBytes -= ss
 		s.s = append(s.s, cs)
 	}
 	s.condensed = true
