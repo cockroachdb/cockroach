@@ -378,26 +378,29 @@ func ResolveExisting(
 		return found, prefix, result, err
 	}
 
+	db, err := r.LookupDatabase(ctx, curDb)
+	if err != nil {
+		return false, prefix, nil, err
+	}
+	if curDb != "" && db == nil {
+		// If we have a database, and we didn't find it, then we're never going
+		// to find it because it must not exist. This error return path is a bit
+		// of a rough edge, but it preserves backwards compatibility and makes
+		// sure we return a database does not exist error in cases where the
+		// current database definitely does not exist.
+		return false, prefix, nil, sqlerrors.NewUndefinedDatabaseError(curDb)
+	}
+
 	// This is a naked object name. Use the search path.
 	iter := searchPath.Iter()
-	foundDatabase := false
 	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
-		if found, prefix, result, err = r.LookupObject(
-			ctx, lookupFlags, curDb, next, u.Object(),
+		if found, prefix, result, err = r.LookupObjectInDatabase(
+			ctx, lookupFlags, db, next, u.Object(),
 		); found || err != nil {
 			return found, prefix, result, err
 		}
-		foundDatabase = foundDatabase || prefix.Database != nil
 	}
 
-	// If we have a database, and we didn't find it, then we're never going to
-	// find it because it must not exist. This error return path is a bit of
-	// a rough edge, but it preserves backwards compatibility and makes sure
-	// we return a database does not exist error in cases where the current
-	// database definitely does not exist.
-	if curDb != "" && !foundDatabase {
-		return false, prefix, nil, sqlerrors.NewUndefinedDatabaseError(curDb)
-	}
 	return false, prefix, nil, nil
 }
 
