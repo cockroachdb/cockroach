@@ -62,93 +62,154 @@ func TestLeadSupportUntil(t *testing.T) {
 	)
 
 	testCases := []struct {
-		ids           []pb.PeerID
-		storeLiveness raftstoreliveness.StoreLiveness
-		setup         func(tracker *FortificationTracker)
-		expTS         hlc.Timestamp
+		ids                    []pb.PeerID
+		storeLiveness          raftstoreliveness.StoreLiveness
+		setup                  func(tracker *FortificationTracker)
+		state                  pb.StateType
+		initLeadSupportedUntil hlc.Timestamp
+		expTS                  hlc.Timestamp
 	}{
 		{
 			ids:           []pb.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// No fortification recorded.
 			},
-			expTS: hlc.Timestamp{},
+			state:                  pb.StateLeader,
+			initLeadSupportedUntil: hlc.Timestamp{},
+			expTS:                  hlc.Timestamp{},
 		},
 		{
 			ids:           []pb.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
-			setup: func(supportTracker *FortificationTracker) {
-				supportTracker.RecordFortification(1, 10)
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.RecordFortification(1, 10)
 			},
-			expTS: hlc.Timestamp{},
+			state:                  pb.StateLeader,
+			initLeadSupportedUntil: hlc.Timestamp{},
+			expTS:                  hlc.Timestamp{},
 		},
 		{
 			ids:           []pb.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
-			setup: func(supportTracker *FortificationTracker) {
-				supportTracker.RecordFortification(1, 10)
-				supportTracker.RecordFortification(3, 30)
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 30)
 			},
-			expTS: ts(10),
+			state:                  pb.StateLeader,
+			initLeadSupportedUntil: hlc.Timestamp{},
+			expTS:                  ts(10),
 		},
 		{
 			ids:           []pb.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
-			setup: func(supportTracker *FortificationTracker) {
-				supportTracker.RecordFortification(1, 10)
-				supportTracker.RecordFortification(3, 30)
-				supportTracker.RecordFortification(2, 20)
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 30)
+				fortificationTracker.RecordFortification(2, 20)
 			},
-			expTS: ts(15),
+			state:                  pb.StateLeader,
+			initLeadSupportedUntil: hlc.Timestamp{},
+			expTS:                  ts(15),
 		},
 		{
 			ids:           []pb.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// Record fortification at epochs at expired epochs.
-				supportTracker.RecordFortification(1, 9)
-				supportTracker.RecordFortification(3, 29)
-				supportTracker.RecordFortification(2, 19)
+				fortificationTracker.RecordFortification(1, 9)
+				fortificationTracker.RecordFortification(3, 29)
+				fortificationTracker.RecordFortification(2, 19)
 			},
-			expTS: hlc.Timestamp{},
+			state:                  pb.StateLeader,
+			initLeadSupportedUntil: hlc.Timestamp{},
+			expTS:                  hlc.Timestamp{},
 		},
 		{
 			ids:           []pb.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// Record fortification at newer epochs than what are present in
 				// StoreLiveness.
 				//
 				// NB: This is possible if there is a race between store liveness
 				// heartbeats updates and fortification responses.
-				supportTracker.RecordFortification(1, 11)
-				supportTracker.RecordFortification(3, 31)
-				supportTracker.RecordFortification(2, 21)
+				fortificationTracker.RecordFortification(1, 11)
+				fortificationTracker.RecordFortification(3, 31)
+				fortificationTracker.RecordFortification(2, 21)
 			},
-			expTS: hlc.Timestamp{},
+			state:                  pb.StateLeader,
+			initLeadSupportedUntil: hlc.Timestamp{},
+			expTS:                  hlc.Timestamp{},
 		},
 		{
 			ids:           []pb.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// One of the epochs being supported is expired.
-				supportTracker.RecordFortification(1, 10)
-				supportTracker.RecordFortification(3, 29) // expired
-				supportTracker.RecordFortification(2, 20)
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 29) // expired
+				fortificationTracker.RecordFortification(2, 20)
 			},
-			expTS: ts(10),
+			state:                  pb.StateLeader,
+			initLeadSupportedUntil: hlc.Timestamp{},
+			expTS:                  ts(10),
 		},
 		{
 			ids:           []pb.PeerID{1, 2, 3},
 			storeLiveness: mockLiveness3Peers,
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// Two of the epochs being supported is expired.
-				supportTracker.RecordFortification(1, 10)
-				supportTracker.RecordFortification(3, 29) // expired
-				supportTracker.RecordFortification(2, 19) // expired
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 29) // expired
+				fortificationTracker.RecordFortification(2, 19) // expired
 			},
-			expTS: hlc.Timestamp{},
+			state:                  pb.StateLeader,
+			initLeadSupportedUntil: hlc.Timestamp{},
+			expTS:                  hlc.Timestamp{},
+		},
+		{
+			ids:           []pb.PeerID{1, 2, 3},
+			storeLiveness: mockLiveness3Peers,
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 30)
+				fortificationTracker.RecordFortification(2, 20)
+			},
+			// If the state isn't StateLeader, we expect the LeadSupportUntil won't
+			// be computed, and the previous value will be returned.
+			state:                  pb.StateFollower,
+			initLeadSupportedUntil: ts(1),
+			expTS:                  ts(1),
+		},
+		{
+			ids:           []pb.PeerID{1, 2, 3},
+			storeLiveness: mockLiveness3Peers,
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 30)
+				fortificationTracker.RecordFortification(2, 20)
+			},
+			// If the state isn't StateLeader, we expect that LeadSupportUntil won't
+			// be computed, and the previous value will be returned.
+			state:                  pb.StateCandidate,
+			initLeadSupportedUntil: ts(1),
+			expTS:                  ts(1),
+		},
+		{
+			ids:           []pb.PeerID{1, 2, 3},
+			storeLiveness: mockLiveness3Peers,
+			setup: func(fortificationTracker *FortificationTracker) {
+				// If we are stepping down, expect that LeadSupportUntil won't be
+				// computed, and the previous value will be returned.
+				fortificationTracker.BeginSteppingDown(1)
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 30)
+				fortificationTracker.RecordFortification(2, 20)
+			},
+			state:                  pb.StateLeader,
+			initLeadSupportedUntil: ts(1),
+			expTS:                  ts(1),
 		},
 	}
 
@@ -160,7 +221,64 @@ func TestLeadSupportUntil(t *testing.T) {
 		fortificationTracker := NewFortificationTracker(&cfg, tc.storeLiveness, raftlogger.DiscardLogger)
 
 		tc.setup(fortificationTracker)
-		require.Equal(t, tc.expTS, fortificationTracker.LeadSupportUntil(pb.StateLeader))
+		fortificationTracker.leaderMaxSupported.Forward(tc.initLeadSupportedUntil)
+		require.Equal(t, tc.expTS, fortificationTracker.LeadSupportUntil(tc.state))
+	}
+}
+
+// TestBeginSteppingDownUsesMaxTerm ensures that the max term is used when
+// stepping down. This helps to simulate the situation where the leader receives
+// multiple messages with different terms that indicate that it should step
+// down.
+func TestBeginSteppingDownUsesMaxTerm(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		setup               func(tracker *FortificationTracker)
+		expSteppingDown     bool
+		expSteppingDownTerm uint64
+	}{
+		{
+			setup: func(fortificationTracker *FortificationTracker) {
+				// Not stepping down.
+			},
+			expSteppingDown:     false,
+			expSteppingDownTerm: 0,
+		},
+		{
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.BeginSteppingDown(1)
+			},
+			expSteppingDown:     true,
+			expSteppingDownTerm: 1,
+		},
+		{
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.BeginSteppingDown(5)
+			},
+			expSteppingDown:     true,
+			expSteppingDownTerm: 5,
+		},
+		{
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.BeginSteppingDown(5)
+				// The max steppingDown term should be used.
+				fortificationTracker.BeginSteppingDown(7)
+				fortificationTracker.BeginSteppingDown(4)
+			},
+			expSteppingDown:     true,
+			expSteppingDownTerm: 7,
+		},
+	}
+
+	for _, tc := range testCases {
+		cfg := quorum.MakeEmptyConfig()
+		fortificationTracker := NewFortificationTracker(&cfg, raftstoreliveness.AlwaysLive{},
+			raftlogger.DiscardLogger)
+		tc.setup(fortificationTracker)
+		require.Equal(t, tc.expSteppingDown, fortificationTracker.SteppingDown())
+		require.Equal(t, tc.expSteppingDownTerm, fortificationTracker.SteppingDownTerm())
 	}
 }
 
@@ -292,92 +410,92 @@ func TestQuorumActive(t *testing.T) {
 		expQuorumActive bool
 	}{
 		{
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// No fortification recorded.
 			},
 			curTS:           ts(10),
 			expQuorumActive: false,
 		},
 		{
-			setup: func(supportTracker *FortificationTracker) {
-				supportTracker.RecordFortification(1, 10)
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.RecordFortification(1, 10)
 			},
 			curTS:           ts(10),
 			expQuorumActive: false,
 		},
 		{
-			setup: func(supportTracker *FortificationTracker) {
-				supportTracker.RecordFortification(1, 10)
-				supportTracker.RecordFortification(3, 30)
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 30)
 			},
 			curTS:           ts(9),
 			expQuorumActive: true,
 		},
 		{
-			setup: func(supportTracker *FortificationTracker) {
-				supportTracker.RecordFortification(1, 10)
-				supportTracker.RecordFortification(3, 30)
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 30)
 			},
 			curTS:           ts(14),
 			expQuorumActive: false,
 		},
 		{
-			setup: func(supportTracker *FortificationTracker) {
-				supportTracker.RecordFortification(1, 10)
-				supportTracker.RecordFortification(3, 30)
-				supportTracker.RecordFortification(2, 20)
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 30)
+				fortificationTracker.RecordFortification(2, 20)
 			},
 			curTS:           ts(14),
 			expQuorumActive: true,
 		},
 		{
-			setup: func(supportTracker *FortificationTracker) {
-				supportTracker.RecordFortification(1, 10)
-				supportTracker.RecordFortification(3, 30)
-				supportTracker.RecordFortification(2, 20)
+			setup: func(fortificationTracker *FortificationTracker) {
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 30)
+				fortificationTracker.RecordFortification(2, 20)
 			},
 			curTS:           ts(16),
 			expQuorumActive: false,
 		},
 		{
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// Record fortification at epochs at expired epochs.
-				supportTracker.RecordFortification(1, 9)
-				supportTracker.RecordFortification(3, 29)
-				supportTracker.RecordFortification(2, 19)
+				fortificationTracker.RecordFortification(1, 9)
+				fortificationTracker.RecordFortification(3, 29)
+				fortificationTracker.RecordFortification(2, 19)
 			},
 			curTS:           ts(10),
 			expQuorumActive: false,
 		},
 		{
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// Record fortification at newer epochs than what are present in
 				// StoreLiveness.
 				//
 				// NB: This is possible if there is a race between store liveness
 				// heartbeats updates and fortification responses.
-				supportTracker.RecordFortification(1, 11)
-				supportTracker.RecordFortification(3, 31)
-				supportTracker.RecordFortification(2, 21)
+				fortificationTracker.RecordFortification(1, 11)
+				fortificationTracker.RecordFortification(3, 31)
+				fortificationTracker.RecordFortification(2, 21)
 			},
 			expQuorumActive: false,
 		},
 		{
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// One of the epochs being supported is expired.
-				supportTracker.RecordFortification(1, 10)
-				supportTracker.RecordFortification(3, 29) // expired
-				supportTracker.RecordFortification(2, 20)
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 29) // expired
+				fortificationTracker.RecordFortification(2, 20)
 			},
 			curTS:           ts(5),
 			expQuorumActive: true,
 		},
 		{
-			setup: func(supportTracker *FortificationTracker) {
+			setup: func(fortificationTracker *FortificationTracker) {
 				// Two of the epochs being supported is expired.
-				supportTracker.RecordFortification(1, 10)
-				supportTracker.RecordFortification(3, 29) // expired
-				supportTracker.RecordFortification(2, 19) // expired
+				fortificationTracker.RecordFortification(1, 10)
+				fortificationTracker.RecordFortification(3, 29) // expired
+				fortificationTracker.RecordFortification(2, 19) // expired
 			},
 			curTS:           ts(10),
 			expQuorumActive: false,
