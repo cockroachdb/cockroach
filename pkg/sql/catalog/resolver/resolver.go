@@ -74,6 +74,18 @@ type ObjectNameResolver interface {
 		objMeta catalog.Descriptor,
 		err error,
 	)
+
+	// LookupObjectInDatabase looks up an object, e.g., a table or a type,
+	// within a database descriptor.
+	LookupObjectInDatabase(
+		ctx context.Context, flags tree.ObjectLookupFlags,
+		db catalog.DatabaseDescriptor, scName, obName string,
+	) (
+		found bool,
+		prefix catalog.ResolvedObjectPrefix,
+		objMeta catalog.Descriptor,
+		err error,
+	)
 }
 
 // ErrNoPrimaryKey is returned when resolving a table object and the
