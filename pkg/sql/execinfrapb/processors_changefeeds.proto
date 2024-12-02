@@ -54,6 +54,9 @@ message ChangeAggregatorSpec {
 
   // select is the "select clause" for predicate changefeed.
   optional Expression select = 6 [(gogoproto.nullable) = false];
+
+  // Description is the description of the changefeed. Used for structured logging.
+  optional string description = 7 [(gogoproto.nullable) = false];
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
@@ -78,4 +81,7 @@ message ChangeFrontierSpec {
   // User who initiated the changefeed. This is used to check access privileges
   // when using FileTable ExternalStorage.
   optional string user_proto = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+
+  // Description is the description of the changefeed. Used for structured logging.
+  optional string description = 5 [(gogoproto.nullable) = false];
 }
