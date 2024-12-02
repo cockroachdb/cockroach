@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -189,40 +188,9 @@ func (p *planner) generateSerialInColumnDef(
 	}
 
 	seqType := ""
-	seqOpts := realSequenceOpts
-	if serialNormalizationMode == sessiondatapb.SerialUsesVirtualSequences {
-		seqType = "virtual "
-		seqOpts = virtualSequenceOpts
-	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedSQLSequences {
-		seqType = "cached "
-
-		value := sqlclustersettings.CachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
-		seqOpts = tree.SequenceOptions{
-			tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &value},
-		}
-	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedNodeSQLSequences {
-		seqType = "cached node "
-
-		value := sqlclustersettings.CachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
-		seqOpts = tree.SequenceOptions{
-			tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &value},
-		}
-	}
-
-	// Setup the type of the sequence based on the type observed within
-	// the column.
-	switch asIntType {
-	case types.Int2, types.Int4:
-		// Valid types, nothing to do.
-	case types.Int:
-		// Int is the default, so no cast necessary.
-		fallthrough
-	default:
-		// Types is not an integer so nothing to set.
-		asIntType = nil
-	}
-	if asIntType != nil {
-		seqOpts = append(seqOpts, tree.SequenceOption{Name: tree.SeqOptAs, AsIntegerType: asIntType})
+	seqOpts, err := catalog.SequenceOptionsFromNormalizationMode(serialNormalizationMode, p.ExecCfg().Settings, d, asIntType)
+	if err != nil {
+		return nil, nil, nil, nil, err
 	}
 
 	log.VEventf(ctx, 2, "new column %q of %q will have %s sequence name %q and default %q",
