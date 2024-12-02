@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -350,18 +349,6 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 		if useAOST {
 			closeWaitForRefresh()
 		}
-		// When AOST is enabled then a fixed number of iterations sufficient. When
-		// the AOST is disabled, then we will iterate until a reader timestamp error
-		// is generated.
-		errorDetected := false
-		checkAOSTError := func(err error) {
-			if useAOST || err == nil {
-				require.NoError(t, err)
-				return
-			}
-			errorDetected = errorDetected ||
-				strings.Contains(err.Error(), "PCR reader timestamp has moved forward, existing descriptor")
-		}
 		// Validate multiple advances of the timestamp work concurrently with queries.
 		// The tight loop below should relatively easily hit errors if all the timestamps
 		// are not line up on the reader catalog.
@@ -415,25 +402,31 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 			case <-iterationsDoneCh:
 				iterationsDone = true
 			default:
-				// Prepare on an existing connection.
-				rows, err := existingPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
-				require.NoError(t, err)
-				rows.Close()
-				uniqueQuery := fmt.Sprintf("SELECT a.j + %d FROM t1 as a, v1 as b, t2 as c ", uniqueIdx)
-				_, err = existingPgxConn.Prepare(ctx, fmt.Sprintf("q%d", uniqueIdx), uniqueQuery)
-				require.NoError(t, err)
-				rows, err = existingPgxConn.Query(ctx, uniqueQuery)
-				require.NoError(t, err)
-				rows.Close()
-				// Open new connections.
-				newPgxConn, err := pgx.Connect(ctx, r.destURL.String())
-				require.NoError(t, err)
-				_, err = newPgxConn.Prepare(ctx, "basic select", "SELECT * FROM t1, v1, t2")
-				require.NoError(t, err)
-				rows, err = newPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
-				require.NoError(t, err)
-				rows.Close()
-				require.NoError(t, newPgxConn.Close(ctx))
+				// Validate both prepares and opening connections while the timestamp
+				// advances.
+				validateNewConnsAndPrepare := func() {
+					rows, err := existingPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
+					require.NoError(t, err)
+					rows.Close()
+					uniqueQuery := fmt.Sprintf("SELECT a.j + %d FROM t1 as a, v1 as b, t2 as c ", uniqueIdx)
+					_, err = existingPgxConn.Prepare(ctx, fmt.Sprintf("q%d", uniqueIdx), uniqueQuery)
+					require.NoError(t, err)
+					rows, err = existingPgxConn.Query(ctx, uniqueQuery)
+					require.NoError(t, err)
+					rows.Close()
+					// Open new connections.
+					newPgxConn, err := pgx.Connect(ctx, r.destURL.String())
+					require.NoError(t, err)
+					defer func() {
+						require.NoError(t, newPgxConn.Close(ctx))
+					}()
+					_, err = newPgxConn.Prepare(ctx, "basic select", "SELECT * FROM t1, v1, t2")
+					require.NoError(t, err)
+					rows, err = newPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
+					require.NoError(t, err)
+					rows.Close()
+				}
+				validateNewConnsAndPrepare()
 
 				// Only use txn's with AOST, which should never hit retryable errors.
 				// Automatic retries are enabled for PCR errors, but they can still
@@ -441,27 +434,21 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 				if useAOST {
 					tx := r.destRunner.Begin(t)
 					_, err = tx.Exec("SELECT * FROM t1")
-					checkAOSTError(err)
+					require.NoError(t, err)
 					_, err = tx.Exec("SELECT * FROM v1")
-					checkAOSTError(err)
+					require.NoError(t, err)
 					_, err = tx.Exec("SELECT * FROM t2")
-					checkAOSTError(err)
-					checkAOSTError(tx.Commit())
+					require.NoError(t, err)
+					require.NoError(t, tx.Commit())
 				}
 
-				_, err = r.destRunner.DB.ExecContext(ctx, "SELECT * FROM t1,v1, t2")
-				checkAOSTError(err)
-				_, err = r.destRunner.DB.ExecContext(ctx, "SELECT * FROM v1 ORDER BY 1")
-				checkAOSTError(err)
-				_, err = r.destRunner.DB.ExecContext(ctx, "SELECT * FROM t2 ORDER BY 1")
-				checkAOSTError(err)
+				// Validate implicit txn's never hit any error.
+				_, err = r.destRunner.DB.ExecContext(ctx, "SELECT * FROM t1,v1,t2")
+				require.NoError(t, err)
 			}
 		}
 		// Finally ensure the queries actually match.
 		require.NoError(t, grp.Wait())
-		// When the AOST is shut off we retry, so no errors should occur.
-		require.Equalf(t, false, errorDetected,
-			"error was detected unexpectedly (AOST = %t on connection)", useAOST)
 	}
 	require.NoError(t, existingPgxConn.Close(ctx))
 	r.updateSrcAOST(newTS)
