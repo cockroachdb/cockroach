@@ -231,6 +231,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 			&evalCtx,
 			tempEngine,
 			memoryMonitor,
+			evalCtx.TestingMon,
 			diskMonitor,
 		)
 		cleanup = func(ctx context.Context) {
@@ -439,6 +440,7 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 		&evalCtx,
 		tempEngine,
 		memoryMonitor,
+		evalCtx.TestingMon,
 		diskMonitor,
 	)
 	defer rc.Close(ctx)
@@ -463,7 +465,7 @@ func TestDiskBackedRowContainerDeDuping(t *testing.T) {
 			require.Equal(t, i, idx)
 		}
 		// Reset and reorder the rows for the next run.
-		rand.Shuffle(numRows, func(i, j int) {
+		rng.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		require.NoError(t, rc.UnsafeReset(ctx))
@@ -527,7 +529,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	}
 	defer tempEngine.Close()
 
-	memoryMonitor := getMemoryMonitor(st)
+	unlimitedMemMonitor := getMemoryMonitor(st)
 	diskMonitor := getDiskMonitor(st)
 
 	const numTestRuns = 10
@@ -537,8 +539,8 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	newOrdering := colinfo.ColumnOrdering{{ColIdx: 1, Direction: encoding.Ascending}}
 
 	rng, _ := randutil.NewTestRand()
-	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-	defer memoryMonitor.Stop(ctx)
+	unlimitedMemMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
+	defer unlimitedMemMonitor.Stop(ctx)
 	diskMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
@@ -555,7 +557,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			}
 
 			func() {
-				rc := NewDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+				rc := NewDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, unlimitedMemMonitor, unlimitedMemMonitor, diskMonitor)
 				defer rc.Close(ctx)
 				mid := numRows / 2
 				for i := 0; i < mid; i++ {
@@ -621,7 +623,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			}
 
 			func() {
-				rc := NewDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+				rc := NewDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, unlimitedMemMonitor, unlimitedMemMonitor, diskMonitor)
 				defer rc.Close(ctx)
 				for _, row := range rows {
 					if err := rc.AddRow(ctx, row); err != nil {
@@ -733,7 +735,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			}
 
 			func() {
-				rc := NewDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, memMonitor, diskMonitor)
+				rc := NewDiskBackedIndexedRowContainer(ordering, types, &evalCtx, tempEngine, memMonitor, unlimitedMemMonitor, diskMonitor)
 				defer rc.Close(ctx)
 				if err := rc.SpillToDisk(ctx); err != nil {
 					t.Fatal(err)
@@ -803,7 +805,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			storedTypes[len(typs)] = types.OneIntCol[0]
 
 			func() {
-				rc := NewDiskBackedIndexedRowContainer(ordering, typs, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+				rc := NewDiskBackedIndexedRowContainer(ordering, typs, &evalCtx, tempEngine, unlimitedMemMonitor, unlimitedMemMonitor, diskMonitor)
 				defer rc.Close(ctx)
 				for i := 0; i < numRows; i++ {
 					if err := rc.AddRow(ctx, rows[i]); err != nil {
@@ -844,7 +846,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			storedTypes[len(typs)] = types.OneIntCol[0]
 
 			func() {
-				d := NewDiskBackedIndexedRowContainer(ordering, typs, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+				d := NewDiskBackedIndexedRowContainer(ordering, typs, &evalCtx, tempEngine, unlimitedMemMonitor, unlimitedMemMonitor, diskMonitor)
 				defer d.Close(ctx)
 				if err := d.SpillToDisk(ctx); err != nil {
 					t.Fatal(err)
@@ -1007,7 +1009,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 	accessPattern := generateAccessPattern(numRows)
 
 	b.Run("InMemory", func(b *testing.B) {
-		rc := NewDiskBackedIndexedRowContainer(nil, types.OneIntCol, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+		rc := NewDiskBackedIndexedRowContainer(nil, types.OneIntCol, &evalCtx, tempEngine, memoryMonitor, memoryMonitor, diskMonitor)
 		defer rc.Close(ctx)
 		for i := 0; i < len(rows); i++ {
 			if err := rc.AddRow(ctx, rows[i]); err != nil {
@@ -1029,7 +1031,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 	})
 
 	b.Run("OnDiskWithCache", func(b *testing.B) {
-		rc := NewDiskBackedIndexedRowContainer(nil, types.OneIntCol, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+		rc := NewDiskBackedIndexedRowContainer(nil, types.OneIntCol, &evalCtx, tempEngine, memoryMonitor, memoryMonitor, diskMonitor)
 		defer rc.Close(ctx)
 		if err := rc.SpillToDisk(ctx); err != nil {
 			b.Fatal(err)
@@ -1054,7 +1056,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 	})
 
 	b.Run("OnDiskWithoutCache", func(b *testing.B) {
-		rc := NewDiskBackedIndexedRowContainer(nil, types.OneIntCol, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+		rc := NewDiskBackedIndexedRowContainer(nil, types.OneIntCol, &evalCtx, tempEngine, memoryMonitor, memoryMonitor, diskMonitor)
 		defer rc.Close(ctx)
 		if err := rc.SpillToDisk(ctx); err != nil {
 			b.Fatal(err)

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -539,8 +540,18 @@ func NewColIndexJoin(
 		if flowCtx.EvalCtx.SessionData().StreamerAlwaysMaintainOrdering {
 			maintainOrdering = true
 		}
-		if maintainOrdering && diskMonitor == nil {
-			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
+		var diskBuffer kvstreamer.ResultDiskBuffer
+		if maintainOrdering {
+			if diskMonitor == nil {
+				return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
+			}
+			// Explicitly create a separate memory account bound to the
+			// unlimited monitor here - this passes ownership to the disk buffer
+			// which will close the acc.
+			diskBufferMemAcc := streamerBudgetAcc.Monitor().MakeBoundAccount()
+			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
+				flowCtx.Cfg.TempStorage, diskBufferMemAcc, diskMonitor,
+			)
 		}
 		kvFetcher = row.NewStreamingKVFetcher(
 			flowCtx.Cfg.DistSender,
@@ -556,9 +567,7 @@ func NewColIndexJoin(
 			maintainOrdering,
 			true, /* singleRowLookup */
 			int(spec.FetchSpec.MaxKeysPerRow),
-			rowcontainer.NewKVStreamerResultDiskBuffer(
-				flowCtx.Cfg.TempStorage, diskMonitor,
-			),
+			diskBuffer,
 			kvFetcherMemAcc,
 			spec.FetchSpec.External,
 			tableArgs.RequiresRawMVCCValues(),
