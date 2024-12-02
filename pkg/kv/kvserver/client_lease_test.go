@@ -897,111 +897,132 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 func TestLeaseholderRelocate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	stickyRegistry := fs.NewStickyRegistry()
-	ctx := context.Background()
-	manualClock := hlc.NewHybridManualClock()
 
-	serverArgs := make(map[int]base.TestServerArgs)
-	locality := func(region string) roachpb.Locality {
-		return roachpb.Locality{
-			Tiers: []roachpb.Tier{
-				{Key: "region", Value: region},
-			},
-		}
-	}
-	localities := []roachpb.Locality{
-		locality("eu"),
-		locality("eu"),
-		locality("us"),
-		locality("us"),
-	}
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(),
+		func(t *testing.T, leaseType roachpb.LeaseType) {
+			stickyRegistry := fs.NewStickyRegistry()
+			ctx := context.Background()
+			manualClock := hlc.NewHybridManualClock()
 
-	// TODO(arul): figure out why this test is flaky under leader leases.
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
-	const numNodes = 4
-	for i := 0; i < numNodes; i++ {
-		serverArgs[i] = base.TestServerArgs{
-			Settings: st,
-			Locality: localities[i],
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					WallClock:         manualClock,
-					StickyVFSRegistry: stickyRegistry,
-				},
-			},
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: strconv.FormatInt(int64(i), 10),
-				},
-			},
-		}
-	}
-	tc := testcluster.StartTestCluster(t, numNodes,
-		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: serverArgs,
+			serverArgs := make(map[int]base.TestServerArgs)
+			locality := func(region string) roachpb.Locality {
+				return roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: region},
+					},
+				}
+			}
+			localities := []roachpb.Locality{
+				locality("eu"),
+				locality("eu"),
+				locality("us"),
+				locality("us"),
+			}
+
+			const numNodes = 4
+			st := cluster.MakeTestingClusterSettings()
+			kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
+			for i := 0; i < numNodes; i++ {
+				serverArgs[i] = base.TestServerArgs{
+					Settings: st,
+					Locality: localities[i],
+					Knobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							WallClock:         manualClock,
+							StickyVFSRegistry: stickyRegistry,
+						},
+					},
+					StoreSpecs: []base.StoreSpec{
+						{
+							InMemory:    true,
+							StickyVFSID: strconv.FormatInt(int64(i), 10),
+						},
+					},
+				}
+			}
+			tc := testcluster.StartTestCluster(t, numNodes,
+				base.TestClusterArgs{
+					ReplicationMode:   base.ReplicationManual,
+					ServerArgsPerNode: serverArgs,
+				})
+			defer tc.Stopper().Stop(ctx)
+
+			_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
+
+			// We start with having the range under test on (1,2,3).
+			tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+
+			// Make sure the lease is on 3 and is fully upgraded.
+			tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(2))
+
+			var err error
+			var leaseHolder roachpb.ReplicationTarget
+			testutils.SucceedsSoon(t, func() error {
+				leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
+				if err != nil {
+					return err
+				}
+
+				// Check that the lease moved to 3.
+				if !leaseHolder.Equal(tc.Target(2)) {
+					return errors.Errorf("Leaseholder didn't move.")
+				}
+
+				return nil
+			})
+
+			gossipLiveness(t, tc)
+
+			testutils.SucceedsSoon(t, func() error {
+				// Relocate range 3 -> 4.
+				err = tc.Servers[2].DB().
+					AdminRelocateRange(
+						context.Background(), rhsDesc.StartKey.AsRawKey(),
+						tc.Targets(0, 1, 3), nil, false)
+				if err != nil {
+					return err
+				}
+				leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
+				if err != nil {
+					return err
+				}
+				if leaseHolder.Equal(tc.Target(2)) {
+					return errors.Errorf("Leaseholder didn't move.")
+				}
+				return nil
+			})
+
+			// Make sure lease moved to the preferred region.
+			testutils.SucceedsSoon(t, func() error {
+				leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
+				if err != nil {
+					return err
+				}
+				if !leaseHolder.Equal(tc.Target(3)) {
+					return errors.Errorf("Leaseholder didn't move.")
+				}
+				return nil
+			})
+
+			// Double check that lease moved directly. The tail of the lease history
+			// should all be on leaseHolder.NodeID. We may metamorphically enable
+			// kv.expiration_leases_only.enabled, in which case there will be a single
+			// expiration lease, but otherwise we'll have transferred an expiration lease
+			// and then upgraded to an epoch lease.
+			repl := tc.GetFirstStoreFromServer(t, 3).
+				LookupReplica(roachpb.RKey(rhsDesc.StartKey.AsRawKey()))
+			history := repl.GetLeaseHistory()
+
+			require.Equal(t, leaseHolder.NodeID, history[len(history)-1].Replica.NodeID)
+			var prevLeaseHolder roachpb.NodeID
+			for i := len(history) - 1; i >= 0; i-- {
+				if id := history[i].Replica.NodeID; id != leaseHolder.NodeID {
+					prevLeaseHolder = id
+					break
+				}
+			}
+			require.Equal(t, tc.Target(2).NodeID, prevLeaseHolder)
 		})
-	defer tc.Stopper().Stop(ctx)
-
-	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
-
-	// We start with having the range under test on (1,2,3).
-	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
-
-	// Make sure the lease is on 3 and is fully upgraded.
-	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(2))
-
-	// Check that the lease moved to 3.
-	leaseHolder, err := tc.FindRangeLeaseHolder(rhsDesc, nil)
-	require.NoError(t, err)
-	require.Equal(t, tc.Target(2), leaseHolder)
-
-	gossipLiveness(t, tc)
-
-	testutils.SucceedsSoon(t, func() error {
-		// Relocate range 3 -> 4.
-		err = tc.Servers[2].DB().
-			AdminRelocateRange(
-				context.Background(), rhsDesc.StartKey.AsRawKey(),
-				tc.Targets(0, 1, 3), nil, false)
-		if err != nil {
-			return err
-		}
-		leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
-		if err != nil {
-			return err
-		}
-		if leaseHolder.Equal(tc.Target(2)) {
-			return errors.Errorf("Leaseholder didn't move.")
-		}
-		return nil
-	})
-
-	// Make sure lease moved to the preferred region.
-	leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
-	require.NoError(t, err)
-	require.Equal(t, tc.Target(3), leaseHolder)
-
-	// Double check that lease moved directly. The tail of the lease history
-	// should all be on leaseHolder.NodeID. We may metamorphically enable
-	// kv.expiration_leases_only.enabled, in which case there will be a single
-	// expiration lease, but otherwise we'll have transferred an expiration lease
-	// and then upgraded to an epoch lease.
-	repl := tc.GetFirstStoreFromServer(t, 3).
-		LookupReplica(roachpb.RKey(rhsDesc.StartKey.AsRawKey()))
-	history := repl.GetLeaseHistory()
-
-	require.Equal(t, leaseHolder.NodeID, history[len(history)-1].Replica.NodeID)
-	var prevLeaseHolder roachpb.NodeID
-	for i := len(history) - 1; i >= 0; i-- {
-		if id := history[i].Replica.NodeID; id != leaseHolder.NodeID {
-			prevLeaseHolder = id
-			break
-		}
-	}
-	require.Equal(t, tc.Target(2).NodeID, prevLeaseHolder)
 }
 
 func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
