@@ -83,10 +83,8 @@ func (r *replicaLogStorage) updateLogSize(ctx context.Context) (int64, error) {
 	// in-memory values.
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	ls := r.raftMu.logStorage
 
-	// TODO(pav-kv): make this a method of LogStore.
-	size, err := logstore.ComputeRaftLogSize(ctx, ls.RangeID, ls.Engine, ls.Sideload)
+	size, err := r.raftMu.logStorage.ComputeSize(ctx)
 	if err != nil {
 		return 0, err
 	}
