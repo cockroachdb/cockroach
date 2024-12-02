@@ -1145,6 +1145,7 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 	require.Equal(t, []roachpb.Span{{Key: keyA, EndKey: keyC}}, tsr.refreshFootprint.asSlice())
 	require.False(t, tsr.refreshInvalid)
 	require.Equal(t, 2+roachpb.SpanOverhead, tsr.refreshFootprint.bytes)
+	require.Equal(t, 2*(2+roachpb.SpanOverhead), tsr.refreshFootprint.totalUncondensedBytes)
 	require.False(t, tsr.refreshFootprint.condensed)
 	require.Equal(t, int64(0), tsr.metrics.ClientRefreshMemoryLimitExceeded.Count())
 	require.Zero(t, tsr.refreshedTimestamp)
@@ -1161,6 +1162,8 @@ func TestTxnSpanRefresherMaxTxnRefreshSpansBytes(t *testing.T) {
 
 	require.Equal(t, []roachpb.Span{{Key: keyA, EndKey: keyE}}, tsr.refreshFootprint.asSlice())
 	require.True(t, tsr.refreshFootprint.condensed)
+	require.Equal(t, 2+roachpb.SpanOverhead, tsr.refreshFootprint.bytes)
+	require.Equal(t, 3*(2+roachpb.SpanOverhead), tsr.refreshFootprint.totalUncondensedBytes)
 	require.False(t, tsr.refreshInvalid)
 	require.Zero(t, tsr.refreshedTimestamp)
 	require.Equal(t, int64(1), tsr.metrics.ClientRefreshMemoryLimitExceeded.Count())
