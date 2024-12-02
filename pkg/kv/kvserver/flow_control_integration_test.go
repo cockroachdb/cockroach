@@ -5806,6 +5806,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 	h.comment(`
 -- Send queue metrics from n1, n3's send queue should have 1 MiB for s3.`)
 	h.query(n1, flowSendQueueQueryStr)
+	h.query(n1, flowSendQueueFFQueryStr, flowSendQueueFFQueryHeaderStrs...)
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1, s3's entries will still
 -- be tracked here.`)
@@ -5844,6 +5845,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 -- have triggered a force flush of the send queue.`)
 	h.query(n1, flowSendQueueQueryStr)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+	h.query(n1, flowSendQueueFFQueryStr, flowSendQueueFFQueryHeaderStrs...)
 
 	h.comment(`(Sending 1 MiB put request to the migrated range)`)
 	h.put(ctx, roachpb.Key(desc.StartKey), 1, admissionpb.NormalPri)
@@ -5857,6 +5859,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 -- We expect to see the send queue develop for s3 again.`)
 	h.query(n1, flowSendQueueQueryStr)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+	h.query(n1, flowSendQueueFFQueryStr, flowSendQueueFFQueryHeaderStrs...)
 
 	h.comment(`-- (Allowing below-raft admission to proceed on n3.)`)
 	setTokenReturnEnabled(true /* enabled */, 2)
