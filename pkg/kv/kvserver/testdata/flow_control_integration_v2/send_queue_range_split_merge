@@ -33,6 +33,15 @@ ORDER BY name ASC;
   kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+SELECT range_id, store_id, force_flush_index 
+  FROM crdb_internal.kv_flow_control_handles_v2
+  ORDER BY range_id ASC, store_id ASC;
+
+  range_id | store_id | force_flush_index  
+-----------+----------+--------------------
+  74       | 1        | 0                  
+  74       | 2        | 0                  
+  74       | 3        | 0                  
 
 
 -- Observe the total tracked tokens per-stream on n1, s3's entries will still
@@ -107,6 +116,18 @@ SELECT store_id,
   1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
   2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
   3        | 0 B                    | -3.0 MiB               | 0 B                    | -3.0 MiB                
+SELECT range_id, store_id, force_flush_index 
+  FROM crdb_internal.kv_flow_control_handles_v2
+  ORDER BY range_id ASC, store_id ASC;
+
+  range_id | store_id | force_flush_index  
+-----------+----------+--------------------
+  74       | 1        | 29                 
+  74       | 2        | 29                 
+  74       | 3        | 29                 
+  75       | 1        | 0                  
+  75       | 2        | 0                  
+  75       | 3        | 0                  
 
 
 (Sending 1 MiB put request to post-split RHS range)
@@ -175,6 +196,15 @@ SELECT store_id,
   1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
   2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
   3        | 0 B                    | -4.0 MiB               | 0 B                    | -4.0 MiB                
+SELECT range_id, store_id, force_flush_index 
+  FROM crdb_internal.kv_flow_control_handles_v2
+  ORDER BY range_id ASC, store_id ASC;
+
+  range_id | store_id | force_flush_index  
+-----------+----------+--------------------
+  74       | 1        | 32                 
+  74       | 2        | 32                 
+  74       | 3        | 32                 
 
 
 (Sending 1 MiB put request to post-split-merge range)

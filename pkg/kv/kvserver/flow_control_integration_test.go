@@ -5576,6 +5576,7 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 	h.comment(`
 -- Send queue metrics from n1, n3's send queue should have 1 MiB for s3.`)
 	h.query(n1, flowSendQueueQueryStr)
+	h.query(n1, flowSendQueueFFQueryStr, flowSendQueueFFQueryHeaderStrs...)
 	h.comment(`
 -- Observe the total tracked tokens per-stream on n1, s3's entries will still
 -- be tracked here.`)
@@ -5605,6 +5606,7 @@ ORDER BY streams DESC;
 -- We expect to see a force flush of the send queue for s3.`)
 	h.query(n1, flowSendQueueQueryStr)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+	h.query(n1, flowSendQueueFFQueryStr, flowSendQueueFFQueryHeaderStrs...)
 
 	h.comment(`(Sending 1 MiB put request to post-split RHS range)`)
 	h.put(ctx, k, 1, admissionpb.NormalPri)
@@ -5627,6 +5629,7 @@ ORDER BY streams DESC;
 -- We expect to see a force flush of the send queue for s3 again.`)
 	h.query(n1, flowSendQueueQueryStr)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+	h.query(n1, flowSendQueueFFQueryStr, flowSendQueueFFQueryHeaderStrs...)
 
 	h.comment(`(Sending 1 MiB put request to post-split-merge range)`)
 	h.put(ctx, k, 1, admissionpb.NormalPri)
@@ -6290,6 +6293,20 @@ var flowPerStoreTokenQueryHeaderStrs = []string{
 	"store_id",
 	"eval_regular_available", "eval_elastic_available",
 	"send_regular_available", "send_elastic_available",
+}
+
+// flowSendQueueFFQueryStr is the query string to fetch flow control send queue
+// force flush metrics from the kv_flow_controller_v2 table.
+const flowSendQueueFFQueryStr = `
+  SELECT range_id, store_id, force_flush_index 
+  FROM crdb_internal.kv_flow_control_handles_v2
+  ORDER BY range_id ASC, store_id ASC;
+`
+
+// v2FlowSendQueueFFQueryHeaderStrs are the headers for the v2 flow control
+// send queue force flush query.
+var flowSendQueueFFQueryHeaderStrs = []string{
+	"range_id", "store_id", "force_flush_index",
 }
 
 // query runs the given SQL query against the given SQLRunner, and appends the
