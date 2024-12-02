@@ -363,7 +363,7 @@ func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 	return sessiondata.SearchPath{}
 }
 
-// LookupObject implements the tree.ObjectNameResolver interface.
+// LookupObject implements the resolver.ObjectNameResolver interface.
 func (r *fkResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
@@ -393,11 +393,21 @@ func (r *fkResolver) LookupObject(
 		lookupName, suggestions)
 }
 
-// LookupSchema implements the resolver.ObjectNameTargetResolver interface.
+// LookupSchema implements the resolver.ObjectNameResolver interface.
 func (r fkResolver) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
 	return false, scMeta, errSchemaResolver
+}
+
+// LookupDatabase implements the resolver.ObjectNameResolver interface.
+func (r fkResolver) LookupDatabase(
+	ctx context.Context, dbName string,
+) (catalog.DatabaseDescriptor, error) {
+	if r.format.Format == roachpb.IOFileFormat_PgDump && dbName == "" {
+		return nil, errors.Errorf("expected catalog to be set when resolving table in PGDUMP")
+	}
+	return nil, nil
 }
 
 // ResolveTypeByOID implements the resolver.SchemaResolver interface.

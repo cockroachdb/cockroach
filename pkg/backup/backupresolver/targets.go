@@ -102,6 +102,18 @@ type DescriptorResolver struct {
 	ObjIDsBySchema map[descpb.ID]map[string]*catalog.DescriptorIDSet
 }
 
+// LookupDatabase implements the resolver.ObjectNameResolver interface.
+func (r *DescriptorResolver) LookupDatabase(
+	ctx context.Context, dbName string,
+) (catalog.DatabaseDescriptor, error) {
+	dbID, ok := r.DbsByName[dbName]
+	if !ok {
+		return nil, nil
+	}
+	dbDesc, _ := r.DescByID[dbID].(catalog.DatabaseDescriptor)
+	return dbDesc, nil
+}
+
 // LookupSchema implements the resolver.ObjectNameTargetResolver interface.
 func (r *DescriptorResolver) LookupSchema(
 	ctx context.Context, dbName, scName string,
