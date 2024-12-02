@@ -1086,8 +1086,6 @@ GO_TARGETS = [
     "//pkg/cmd/cmp-sql:cmp-sql_lib",
     "//pkg/cmd/cmpconn:cmpconn",
     "//pkg/cmd/cmpconn:cmpconn_test",
-    "//pkg/cmd/cockroach-oss:cockroach-oss",
-    "//pkg/cmd/cockroach-oss:cockroach-oss_lib",
     "//pkg/cmd/cockroach-short:cockroach-short",
     "//pkg/cmd/cockroach-short:cockroach-short_lib",
     "//pkg/cmd/cockroach-sql:cockroach-sql",
