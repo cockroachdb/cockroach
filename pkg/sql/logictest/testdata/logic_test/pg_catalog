@@ -2746,6 +2746,26 @@ oid         rolname   rolconnlimit  rolpassword  rolvaliduntil  rolbypassrls  ro
 1546506610  root      -1            ********     NULL           false         NULL
 2264919399  testuser  -1            ********     NULL           false         NULL
 
+# Regression test for https://github.com/cockroachdb/cockroach/issues/136230.
+# Reading from pg_roles should never read any data that is not in the role
+# membership cache. We simulate a stale cache by inserting a user directly into
+# system.users.
+statement ok
+INSERT INTO system.users (username, user_id) VALUES ('non_cached_user', 12345)
+
+query T
+SELECT rolname
+FROM pg_catalog.pg_roles
+ORDER BY rolname
+----
+admin
+node
+root
+testuser
+
+statement ok
+DELETE FROM system.users WHERE username = 'non_cached_user'
+
 ## pg_catalog.pg_auth_members
 
 query OOOB colnames
