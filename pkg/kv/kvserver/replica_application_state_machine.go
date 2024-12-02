@@ -286,7 +286,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	handleTruncatedState := func(state *kvserverpb.RaftTruncatedState) {
 		raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
 			ctx, state, rResult.RaftExpectedFirstIndex)
-		if !expectedFirstIndexWasAccurate && rResult.RaftExpectedFirstIndex != 0 {
+		if !expectedFirstIndexWasAccurate {
 			isRaftLogTruncationDeltaTrusted = false
 		}
 		rResult.RaftLogDelta += raftLogDelta

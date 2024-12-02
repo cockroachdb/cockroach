@@ -171,9 +171,9 @@ message ReplicatedEvalResult {
   // Sideloaded entries are not expected to be common enough that it is worth
   // the optimization to calculate the delta once (at the leaseholder).
   int64 raft_log_delta = 13;
-  // RaftExpectedFirstIndex is populated starting at cluster version
-  // LooselyCoupledRaftLogTruncation. When this is not populated, the replica
-  // should not delay enacting the truncation.
+  // RaftExpectedFirstIndex is populated if this evaluation result contains a
+  // new RaftTruncatedState, and communicates the first index of the raft log
+  // which was used to compute the RaftLogDelta.
   uint64 raft_expected_first_index = 25  [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
 
   // MVCCHistoryMutation describes mutations of MVCC history that may violate
