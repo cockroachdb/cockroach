@@ -363,7 +363,7 @@ func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 	return sessiondata.SearchPath{}
 }
 
-// LookupObject implements the tree.ObjectNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameResolver interface.
 func (r *fkResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
