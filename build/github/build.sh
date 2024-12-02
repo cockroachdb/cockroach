@@ -46,6 +46,5 @@ bazel build \
     --bes_keywords ci-build \
     $(./build/github/engflow-args.sh) \
     //pkg/cmd/cockroach-short //pkg/cmd/cockroach \
-    //pkg/cmd/cockroach-sql \
-    //pkg/cmd/cockroach-oss $GEOS_TARGET $EXTRA_TARGETS
+    //pkg/cmd/cockroach-sql $GEOS_TARGET $EXTRA_TARGETS
 
