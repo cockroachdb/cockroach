@@ -492,8 +492,8 @@ func mergeCheckingTimestampCaches(
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	// This test explicitly sets up a leader/leaseholder partition, which doesn't
-	// work with expiration leases (the lease expires).
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	// work with expiration leases or leader leases (the lease expires).
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -2995,9 +2995,12 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      base.TestServerArgs{},
 		})
 	defer tc.Stopper().Stop(ctx)
 	scratch := tc.ScratchRange(t)
