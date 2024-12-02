@@ -9,6 +9,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcont
 
 import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
 import "kv/kvserver/kvflowcontrol/kvflowcontrolpb/kvflowcontrol.proto";
 
 // ControllerRequest is used to inspect the state of the node-level
@@ -65,6 +66,9 @@ message Handle {
     (gogoproto.customname) = "RangeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
   repeated ConnectedStream connected_streams = 2 [(gogoproto.nullable) = false];
+  // ForceFlushIndex is an index up to (and including) which the
+  // rangeController running in pull mode must force-flush all send streams.
+  roachpb.ForceFlushIndex force_flush_index = 3 [(gogoproto.nullable) = false];
 }
 
 // ConnectedStream represents the in-memory state of a connected stream,
