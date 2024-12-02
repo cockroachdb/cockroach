@@ -118,28 +118,57 @@ func (sr *schemaResolver) byNameGetterBuilder() descs.ByNameGetterBuilder {
 	return sr.descCollection.ByNameWithLeased(sr.txn)
 }
 
-// LookupObject implements the tree.ObjectNameResolver interface.
+// LookupObject implements the ObjectNameResolver interface.
 func (sr *schemaResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
+	return sr.lookupObject(ctx, flags, nil /* db */, dbName, scName, obName)
+}
+
+// LookupObjectInDatabase implements the ObjectNameResolver interface.
+func (sr *schemaResolver) LookupObjectInDatabase(
+	ctx context.Context,
+	flags tree.ObjectLookupFlags,
+	db catalog.DatabaseDescriptor,
+	scName, obName string,
+) (found bool, prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
+	return sr.lookupObject(ctx, flags, db, "" /* dbName */, scName, obName)
+}
+
+// lookupObject is the shared implementation for LookupObject and
+// LookupObjectInDatabase. If db is non-nil, then dbName is ignored and looking
+// up the database is skipped.
+func (sr *schemaResolver) lookupObject(
+	ctx context.Context,
+	flags tree.ObjectLookupFlags,
+	db catalog.DatabaseDescriptor,
+	dbName, scName, obName string,
+) (found bool, prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
+	prefix.Database = db
+
 	// Check if we are looking up a type which matches a built-in type in
-	// CockroachDB but is an extension type on the public schema in PostgreSQL.
+	// CockroachDB but is an extension type on the public schema in Postgres.
 	if flags.DesiredObjectKind == tree.TypeObject && scName == catconstants.PublicSchemaName {
 		if alias, ok := types.PublicSchemaAliases[obName]; ok {
 			if flags.RequireMutable {
 				return true, catalog.ResolvedObjectPrefix{}, nil, pgerror.Newf(pgcode.WrongObjectType, "type %q is a built-in type", obName)
 			}
 
-			found, prefix, err = sr.LookupSchema(ctx, dbName, scName)
-			if err != nil || !found {
-				return found, prefix, nil, err
+			g := sr.byNameGetterBuilder().MaybeGet()
+			if prefix.Database == nil {
+				prefix.Database, err = g.Database(ctx, dbName)
+				if err != nil {
+					return false, prefix, nil, err
+				}
 			}
-			dbDesc, err := sr.byNameGetterBuilder().MaybeGet().Database(ctx, dbName)
-			if err != nil {
-				return found, prefix, nil, err
+
+			prefix.Schema, err = g.Schema(ctx, prefix.Database, scName)
+			if err != nil || prefix.Schema == nil {
+				return false, catalog.ResolvedObjectPrefix{}, nil, err
 			}
-			if dbDesc.HasPublicSchemaWithDescriptor() {
-				publicSchemaID := dbDesc.GetSchemaID(catconstants.PublicSchemaName)
+
+			if prefix.Database.HasPublicSchemaWithDescriptor() {
+				publicSchemaID := prefix.Database.GetSchemaID(catconstants.PublicSchemaName)
 				return true, prefix, typedesc.MakeSimpleAlias(alias, publicSchemaID), nil
 			}
 			return true, prefix, typedesc.MakeSimpleAlias(alias, keys.PublicSchemaID), nil
@@ -148,10 +177,9 @@ func (sr *schemaResolver) LookupObject(
 
 	b := sr.descCollection.ByName(sr.txn)
 	if !sr.skipDescriptorCache && !flags.RequireMutable {
-		// The caller requires this descriptor to *not* be leased,
-		// so lets assert this here. Normally the planner / resolver
-		// will propagate flags so we don' need to check on a
-		// look up level.
+		// The caller requires this descriptor to *not* be leased, so let's
+		// assert this here. Normally the planner / resolver will propagate
+		// flags so we don't need to check on a lookup level.
 		if flags.AssertNotLeased {
 			return false, prefix, nil,
 				errors.AssertionFailedf("unable to get leased descriptor for (%q), resolver was not configured properly", obName)
@@ -161,21 +189,31 @@ func (sr *schemaResolver) LookupObject(
 	if flags.IncludeOffline {
 		b = b.WithOffline()
 	}
+
 	g := b.MaybeGet()
+
+	if prefix.Database == nil && dbName != "" {
+		prefix.Database, err = g.Database(ctx, dbName)
+		if err != nil {
+			return found, prefix, nil, err
+		}
+	}
+
+	prefix.Schema, err = g.Schema(ctx, prefix.Database, scName)
+	if err != nil || prefix.Schema == nil {
+		return false, catalog.ResolvedObjectPrefix{}, nil, err
+	}
+
 	switch flags.DesiredObjectKind {
 	case tree.TableObject:
-		tn := tree.NewTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(obName))
-		prefix, desc, err = descs.PrefixAndTable(ctx, g, tn)
+		desc, err = g.Table(ctx, prefix.Database, prefix.Schema, obName)
 	case tree.TypeObject:
-		tn := tree.NewQualifiedTypeName(dbName, scName, obName)
-		prefix, desc, err = descs.PrefixAndType(ctx, g, tn)
+		desc, err = g.Type(ctx, prefix.Database, prefix.Schema, obName)
 	case tree.AnyObject:
-		tn := tree.NewTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(obName))
-		prefix, desc, err = descs.PrefixAndTable(ctx, g, tn)
+		desc, err = g.Table(ctx, prefix.Database, prefix.Schema, obName)
 		if err != nil {
 			if sqlerrors.IsUndefinedRelationError(err) || errors.Is(err, catalog.ErrDescriptorWrongType) {
-				tn := tree.NewQualifiedTypeName(dbName, scName, obName)
-				prefix, desc, err = descs.PrefixAndType(ctx, g, tn)
+				desc, err = g.Type(ctx, prefix.Database, prefix.Schema, obName)
 			}
 		}
 	default:
