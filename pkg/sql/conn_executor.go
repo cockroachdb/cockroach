@@ -4069,6 +4069,8 @@ func (ex *connExecutor) waitForTxnJobs() error {
 	if len(ex.extraTxnState.jobs.created) == 0 {
 		return nil
 	}
+	ex.mu.IdleInSessionTimeout.Stop()
+	defer ex.startIdleInSessionTimeout()
 	ex.server.cfg.JobRegistry.NotifyToResume(
 		ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created...,
 	)
