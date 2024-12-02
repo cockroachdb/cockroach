@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1985,8 +1986,13 @@ const (
 	LeaseLeader
 )
 
-// LeaseTypes returns a list of all lease types.
-func LeaseTypes() []LeaseType {
+// TestingAllLeaseTypes returns a list of all lease types to test against.
+func TestingAllLeaseTypes() []LeaseType {
+	if syncutil.DeadlockEnabled {
+		// Skip expiration-based leases under deadlock since it could overload the
+		// testing cluster.
+		return []LeaseType{LeaseEpoch, LeaseLeader}
+	}
 	return []LeaseType{LeaseExpiration, LeaseEpoch, LeaseLeader}
 }
 

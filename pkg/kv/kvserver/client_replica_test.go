@@ -3307,11 +3307,8 @@ func TestChangeReplicasSwapVoterWithNonVoter(t *testing.T) {
 // written at sane values.
 func TestReplicaTombstone(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(),
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(),
 		func(t *testing.T, leaseType roachpb.LeaseType) {
-			if leaseType == roachpb.LeaseExpiration {
-				skip.UnderDeadlock(t, "times out")
-			}
 			t.Run("(1) ChangeReplicasTrigger", func(t *testing.T) {
 				defer leaktest.AfterTest(t)()
 				defer log.Scope(t).Close(t)
