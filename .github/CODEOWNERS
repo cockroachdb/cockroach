@@ -346,7 +346,6 @@
 /pkg/cmd/cmp-sql/            @cockroachdb/sql-foundations
 /pkg/cmd/cmpconn/            @cockroachdb/sql-foundations
 /pkg/cmd/cockroach/          @cockroachdb/cli-prs
-/pkg/cmd/cockroach-oss/      @cockroachdb/cli-prs
 /pkg/cmd/cockroach-short/    @cockroachdb/cli-prs
 /pkg/cmd/cockroach-sql/      @cockroachdb/sql-foundations @cockroachdb/cli-prs
 /pkg/cmd/compile-build/      @cockroachdb/dev-inf
