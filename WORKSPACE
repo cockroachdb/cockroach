@@ -4,6 +4,7 @@ workspace(name = "com_github_cockroachdb_cockroach")
 
 # Load the things that let us load other things.
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
@@ -152,6 +153,7 @@ switched_rules_by_language(
 # com_github_golang_mock handled in DEPS.bzl.
 
 # Load the go dependencies and invoke them.
+load("@io_bazel_rules_go//go:def.bzl", "go_wrap_sdk")
 load(
     "@io_bazel_rules_go//go:deps.bzl",
     "go_download_sdk",
@@ -183,9 +185,15 @@ load(
 #
 # [1]: https://go.dev/doc/contribute#testing
 #
-go_local_sdk(
-    name = "go_sdk",
-    path = "/Users/tbg/go-sdk",
+# go_local_sdk(
+#     name = "go_sdk",
+#     path = "/Users/tbg/go-sdk",
+# )
+
+git_repository(
+    name = "custom_go_sdk",
+    remote = "https://github.com/tbg/go.git",
+    branch = "go1.22.9-fork-32kbstack"
 )
 
 # To use your whatever your local SDK is, use the following instead:
