@@ -775,6 +775,17 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 						} else if status.Term != term {
 							return errors.Errorf("terms do not agree: %d vs %d", status.Term, term)
 						}
+						if !hasLeader {
+							// If we haven't been able to establish a  leader yet, send a get
+							// request to force the issue.
+							getReq := getArgs(key)
+							_, err := kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, i).TestSender(), getReq)
+							// It should be fine if we get a NLHE for some reason.
+							nlhe := &kvpb.NotLeaseHolderError{}
+							if !errors.As(err.GetDetail(), &nlhe) {
+								return err.GetDetail()
+							}
+						}
 					}
 					if !hasLeader {
 						return errors.New("no leader")
