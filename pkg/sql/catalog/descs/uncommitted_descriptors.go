@@ -148,17 +148,17 @@ func (ud *uncommittedDescriptors) upsert(
 	// Perform some sanity checks to ensure the version counters are correct.
 	if original == nil {
 		if !mut.IsNew() {
-			return errors.New("non-new descriptor does not exist in storage yet")
+			return errors.AssertionFailedf("non-new descriptor does not exist in storage yet")
 		}
 		if mut.GetVersion() != 1 {
 			return errors.New("new descriptor version should be 1")
 		}
 	} else {
 		if mut.IsNew() {
-			return errors.New("new descriptor already exists in storage")
+			return errors.AssertionFailedf("new descriptor already exists in storage")
 		}
 		if mut.GetVersion() != original.GetVersion()+1 {
-			return errors.Newf("expected uncommitted version %d, instead got %d",
+			return errors.AssertionFailedf("expected uncommitted version %d, instead got %d",
 				original.GetVersion()+1, mut.GetVersion())
 		}
 	}
