@@ -597,3 +597,22 @@ func TestAlterTenantStartReplicationAfterRestore(t *testing.T) {
 	srcTime := srv.Clock().Now()
 	replicationtestutils.WaitUntilReplicatedTime(t, srcTime, db, catpb.JobID(ingestionJobID))
 }
+
+func TestAlterReplicationJobErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly})
+	defer srv.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	t.Run("alter tenant subqueries", func(t *testing.T) {
+		// Regression test for #136339
+		db.ExpectErr(t, "subqueries are not allowed", "ALTER TENANT (select 't2') START REPLICATION OF t1 ON 'foo'")
+	})
+
+}
