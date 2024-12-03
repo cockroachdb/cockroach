@@ -162,7 +162,6 @@ load(
     "go_register_toolchains",
     "go_rules_dependencies",
 )
-load("@io_bazel_rules_go//go:def.bzl", "go_wrap_sdk")
 
 # To point to a mirrored artifact, use:
 #
@@ -193,7 +192,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_wrap_sdk")
 git_repository(
     name = "custom_go_sdk",
     remote = "https://github.com/tbg/go.git",
-    branch = "go1.22.9-fork-32kbstack"
+    #branch = "go1.22.9-fork-32kbstack"
+    commit = "be41975aafe8868371973e298a1b825ad17cbe50"
 )
 
 # To use your whatever your local SDK is, use the following instead:
@@ -202,8 +202,13 @@ git_repository(
 
 go_rules_dependencies()
 
-go_register_toolchains()
 go_register_nogo(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
+load("@io_bazel_rules_go//go:deps.bzl", "go_wrap_sdk")
+go_wrap_sdk(
+    name = "go_sdk",
+    root_file = "@custom_go_sdk//:VERSION",
+)
+go_register_toolchains()
 
 ###############################
 # end rules_go dependencies #
