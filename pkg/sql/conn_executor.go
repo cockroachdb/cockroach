@@ -3971,64 +3971,71 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			return advanceInfo{}, err
 		}
 
-		handleErr := func(err error) {
-			if implicitTxn {
-				// The schema change/job failed but it was also the only
-				// operation in the transaction. In this case, the transaction's
-				// error is the schema change error.
-				// TODO (lucy): I'm not sure the above is true. What about DROP TABLE
-				// with multiple tables?
-				res.SetError(err)
-			} else {
-				// The schema change/job failed but everything else in the
-				// transaction was actually committed successfully already. At
-				// this point, it is too late to cancel the transaction. In
-				// effect, we have violated the "A" of ACID.
-				//
-				// This situation is sufficiently serious that we cannot let the
-				// error that caused the schema change to fail flow back to the
-				// client as-is. We replace it by a custom code dedicated to
-				// this situation. Replacement occurs because this error code is
-				// a "serious error" and the code computation logic will give it
-				// a higher priority.
-				//
-				// We also print out the original error code as prefix of the
-				// error message, in case it was a serious error.
-				newErr := pgerror.Wrapf(err,
-					pgcode.TransactionCommittedWithSchemaChangeFailure,
-					"transaction committed but schema change aborted with error: (%s)",
-					pgerror.GetPGCode(err))
-				newErr = errors.WithHint(newErr,
-					"Some of the non-DDL statements may have committed successfully, "+
-						"but some of the DDL statement(s) failed.\nManual inspection may be "+
-						"required to determine the actual state of the database.")
-				newErr = errors.WithIssueLink(newErr,
-					errors.IssueLink{IssueURL: build.MakeIssueURL(42061)})
-				res.SetError(newErr)
+		if ai, err := func() (advanceInfo, error) {
+			ex.mu.IdleInSessionTimeout.Stop()
+			defer ex.startIdleInSessionTimeout()
+			handleErr := func(err error) {
+				if implicitTxn {
+					// The schema change/job failed but it was also the only
+					// operation in the transaction. In this case, the transaction's
+					// error is the schema change error.
+					// TODO (lucy): I'm not sure the above is true. What about DROP TABLE
+					// with multiple tables?
+					res.SetError(err)
+				} else {
+					// The schema change/job failed but everything else in the
+					// transaction was actually committed successfully already. At
+					// this point, it is too late to cancel the transaction. In
+					// effect, we have violated the "A" of ACID.
+					//
+					// This situation is sufficiently serious that we cannot let the
+					// error that caused the schema change to fail flow back to the
+					// client as-is. We replace it by a custom code dedicated to
+					// this situation. Replacement occurs because this error code is
+					// a "serious error" and the code computation logic will give it
+					// a higher priority.
+					//
+					// We also print out the original error code as prefix of the
+					// error message, in case it was a serious error.
+					newErr := pgerror.Wrapf(err,
+						pgcode.TransactionCommittedWithSchemaChangeFailure,
+						"transaction committed but schema change aborted with error: (%s)",
+						pgerror.GetPGCode(err))
+					newErr = errors.WithHint(newErr,
+						"Some of the non-DDL statements may have committed successfully, "+
+							"but some of the DDL statement(s) failed.\nManual inspection may be "+
+							"required to determine the actual state of the database.")
+					newErr = errors.WithIssueLink(newErr,
+						errors.IssueLink{IssueURL: build.MakeIssueURL(42061)})
+					res.SetError(newErr)
+				}
 			}
-		}
-		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
+			ex.notifyStatsRefresherOfNewTables(ex.Ctx())
 
-		// If there is any descriptor has new version. We want to make sure there is
-		// only one version of the descriptor in all nodes. In schema changer jobs,
-		// `WaitForOneVersion` has been called for the descriptors included in jobs.
-		// So we just need to do this for descriptors not in jobs.
-		// We need to get descriptor IDs in jobs before jobs are run because we have
-		// operations in declarative schema changer removing descriptor IDs from job
-		// payload as it's done with the descriptors.
-		descIDsInJobs, err := ex.descIDsInSchemaChangeJobs()
-		if err != nil {
-			return advanceInfo{}, err
-		}
-		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
-		if err := ex.server.cfg.JobRegistry.Run(
-			ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created,
-		); err != nil {
-			handleErr(err)
-		}
-		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
-		if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs); err != nil {
-			return advanceInfo{}, err
+			// If there is any descriptor has new version. We want to make sure there is
+			// only one version of the descriptor in all nodes. In schema changer jobs,
+			// `WaitForOneVersion` has been called for the descriptors included in jobs.
+			// So we just need to do this for descriptors not in jobs.
+			// We need to get descriptor IDs in jobs before jobs are run because we have
+			// operations in declarative schema changer removing descriptor IDs from job
+			// payload as it's done with the descriptors.
+			descIDsInJobs, err := ex.descIDsInSchemaChangeJobs()
+			if err != nil {
+				return advanceInfo{}, err
+			}
+			ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
+			if err := ex.server.cfg.JobRegistry.Run(
+				ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created,
+			); err != nil {
+				handleErr(err)
+			}
+			ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
+			if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs); err != nil {
+				return advanceInfo{}, err
+			}
+			return advanceInfo{}, nil
+		}(); err != nil {
+			return ai, err
 		}
 
 		fallthrough
