@@ -304,8 +304,8 @@ func runTPCC(
 				MaybeFlag(opts.DB != "", "db", opts.DB).
 				Flag("warehouses", opts.Warehouses).
 				MaybeFlag(!opts.DisableHistogram, "histograms", histogramsPath).
-				MaybeFlag(t.ExportOpenmetrics(), "histogram-export-format", "openmetrics").
-				MaybeFlag(t.ExportOpenmetrics(), "openmetrics-labels", clusterstats.GetOpenmetricsLabelString(t, c, labelsMap)).
+				MaybeFlag(!opts.DisableHistogram && t.ExportOpenmetrics(), "histogram-export-format", "openmetrics").
+				MaybeFlag(!opts.DisableHistogram && t.ExportOpenmetrics(), "openmetrics-labels", clusterstats.GetOpenmetricsLabelString(t, c, labelsMap)).
 				Flag("ramp", rampDur).
 				Flag("duration", opts.Duration).
 				Flag("prometheus-port", workloadInstances[i].prometheusPort).

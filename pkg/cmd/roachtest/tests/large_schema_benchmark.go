@@ -197,10 +197,15 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				mon.Go(func(ctx context.Context) error {
 					waitEnabled := "--wait 0.0"
 					var wlInstance []workloadInstance
+					disableHistogram := false
 					// Inactive databases will intentionally have wait time on
 					// them and not include them in our histograms.
 					if dbListType == inactiveDbListType {
 						waitEnabled = "--wait 1.0"
+
+						// disable histogram since they shouldn't be included
+						disableHistogram = true
+
 						// Use a different prometheus port for the inactive databases,
 						// this will not be measured.
 						wlInstance = append(
@@ -217,7 +222,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						Warehouses:        len(c.All()) - 1,
 						SkipSetup:         true,
 						DisablePrometheus: true,
-						DisableHistogram:  true, // We setup the flag above.
+						DisableHistogram:  disableHistogram, // We setup the flag above.
 						WorkloadInstances: wlInstance,
 						Duration:          time.Minute * 60,
 						ExtraRunArgs: fmt.Sprintf("--db-list-file=%s --txn-preamble-file=%s --admin-urls=%q "+
