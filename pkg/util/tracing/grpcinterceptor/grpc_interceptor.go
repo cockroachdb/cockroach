@@ -46,6 +46,9 @@ func setGRPCErrorTag(sp *tracing.Span, err error) {
 // BatchMethodName is the method name of Internal.Batch RPC.
 const BatchMethodName = "/cockroach.roachpb.Internal/Batch"
 
+// BatchStreamMethodName is the method name of the Internal.BatchStream RPC.
+const BatchStreamMethodName = "/cockroach.roachpb.Internal/BatchStream"
+
 // sendKVBatchMethodName is the method name for adminServer.SendKVBatch.
 const sendKVBatchMethodName = "/cockroach.server.serverpb.Admin/SendKVBatch"
 
@@ -61,6 +64,7 @@ const flowStreamMethodName = "/cockroach.sql.distsqlrun.DistSQL/FlowStream"
 // tracing because it's not worth it.
 func methodExcludedFromTracing(method string) bool {
 	return method == BatchMethodName ||
+		method == BatchStreamMethodName ||
 		method == sendKVBatchMethodName ||
 		method == SetupFlowMethodName ||
 		method == flowStreamMethodName
