@@ -129,11 +129,6 @@ func (s *testState) NewIndex(d *datadriven.TestData) string {
 	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, &s.Options, stopper)
 	require.NoError(s.T, err)
 
-	// Insert empty root partition.
-	txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-	require.NoError(s.T, s.Index.CreateRoot(s.Ctx, txn))
-	commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
-
 	// Insert initial vectors.
 	return s.Insert(d)
 }

@@ -199,18 +199,6 @@ func (vi *VectorIndex) ProcessFixups() {
 	vi.fixups.Wait()
 }
 
-// CreateRoot creates an empty root partition in the store. This should only be
-// called once when the index is first created.
-func (vi *VectorIndex) CreateRoot(ctx context.Context, txn vecstore.Txn) error {
-	// Use the UnQuantizer because vectors in the root are not quantized.
-	dims := vi.rootQuantizer.GetRandomDims()
-	vectors := vector.MakeSet(dims)
-	rootQuantizedSet := vi.rootQuantizer.Quantize(ctx, &vectors)
-	rootPartition := vecstore.NewPartition(
-		vi.rootQuantizer, rootQuantizedSet, []vecstore.ChildKey{}, vecstore.LeafLevel)
-	return vi.store.SetRootPartition(ctx, txn, rootPartition)
-}
-
 // Insert adds a new vector with the given primary key to the index. This is
 // called within the scope of a transaction so that the index does not appear to
 // change during the insert.

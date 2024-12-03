@@ -89,6 +89,9 @@ type fixupProcessor struct {
 
 		// pendingVectors tracks pending fixups for deleting vectors.
 		pendingVectors map[string]bool
+
+		// waitForFixups broadcasts to any waiters when all fixups are processed.
+		waitForFixups sync.Cond
 	}
 
 	// --------------------------------------------------
@@ -100,10 +103,6 @@ type fixupProcessor struct {
 	// fixupsLimitHit prevents flooding the log with warning messages when the
 	// maxFixups limit has been reached.
 	fixupsLimitHit log.EveryN
-
-	// pendingCount tracks the number of pending fixups that still need to be
-	// processed.
-	pendingCount sync.WaitGroup
 
 	// --------------------------------------------------
 	// The following fields should only be accessed on a single background
@@ -135,6 +134,7 @@ func (fp *fixupProcessor) Init(index *VectorIndex, seed int64) {
 	}
 	fp.mu.pendingPartitions = make(map[partitionFixupKey]bool, maxFixups)
 	fp.mu.pendingVectors = make(map[string]bool, maxFixups)
+	fp.mu.waitForFixups.L = &fp.mu
 	fp.fixups = make(chan fixup, maxFixups)
 	fp.fixupsLimitHit = log.Every(time.Second)
 }
@@ -197,7 +197,11 @@ func (fp *fixupProcessor) Start(ctx context.Context) {
 // Wait blocks until all pending fixups have been processed by the background
 // goroutine. This is useful in testing.
 func (fp *fixupProcessor) Wait() {
-	fp.pendingCount.Wait()
+	fp.mu.Lock()
+	defer fp.mu.Unlock()
+	for len(fp.mu.pendingVectors) > 0 || len(fp.mu.pendingPartitions) > 0 {
+		fp.mu.waitForFixups.Wait()
+	}
 }
 
 // runAll processes all fixups in the queue. This should only be called by tests
@@ -270,9 +274,6 @@ func (fp *fixupProcessor) run(ctx context.Context, wait bool) (ok bool, err erro
 	fp.mu.Lock()
 	defer fp.mu.Unlock()
 
-	// Decrement the number of pending fixups.
-	fp.pendingCount.Done()
-
 	switch next.Type {
 	case splitFixup, mergeFixup:
 		key := partitionFixupKey{Type: next.Type, PartitionKey: next.PartitionKey}
@@ -280,6 +281,11 @@ func (fp *fixupProcessor) run(ctx context.Context, wait bool) (ok bool, err erro
 
 	case vectorDeleteFixup:
 		delete(fp.mu.pendingVectors, string(next.VectorKey))
+	}
+
+	// If there are no more pending fixups, notify any waiters.
+	if len(fp.mu.pendingPartitions) == 0 && len(fp.mu.pendingVectors) == 0 {
+		fp.mu.waitForFixups.Broadcast()
 	}
 
 	return true, err
@@ -318,9 +324,6 @@ func (fp *fixupProcessor) addFixup(ctx context.Context, fixup fixup) {
 	default:
 		panic(errors.AssertionFailedf("unknown fixup %d", fixup.Type))
 	}
-
-	// Increment the number of pending fixups.
-	fp.pendingCount.Add(1)
 
 	// Note that the channel send operation should never block, since it has
 	// maxFixups capacity.
