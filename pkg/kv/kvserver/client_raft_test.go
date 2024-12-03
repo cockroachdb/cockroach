@@ -1319,7 +1319,7 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	// This test is specifically designed for epoch based leases.
-	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
 
 	manualClock := hlc.NewHybridManualClock()
 	clusterArgs := base.TestClusterArgs{
@@ -6890,7 +6890,7 @@ func TestRaftPreVoteUnquiesceDeadLeader(t *testing.T) {
 	// This test is specifically designed for epoch based leases, as they're the
 	// only lease type for which we have quiescence.
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseEpoch)
 	kvserver.TransferExpirationLeasesFirstEnabled.Override(ctx, &st.SV, false)
 
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
