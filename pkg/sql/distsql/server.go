@@ -75,7 +75,7 @@ func NewServer(
 		flowRegistry:      flowinfra.NewFlowRegistry(),
 		remoteFlowRunner:  remoteFlowRunner,
 		memMonitor: mon.NewMonitor(mon.Options{
-			Name: "distsql",
+			Name: mon.MakeMonitorName("distsql"),
 			// Note that we don't use 'sql.mem.distsql.*' metrics here since
 			// that would double count them with the 'flow' monitor in
 			// setupFlow.
@@ -236,7 +236,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	monitor = mon.NewMonitor(mon.Options{
-		Name:     "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
+		Name:     mon.MakeMonitorNameWithSuffix("flow ", req.Flow.FlowID.ShortBytes()),
 		CurCount: ds.Metrics.CurBytesCount,
 		MaxHist:  ds.Metrics.MaxBytesHist,
 		Settings: ds.Settings,

@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,7 +26,7 @@ func addMonitor(
 	reservedBytes int64,
 ) *mon.BytesMonitor {
 	m := mon.NewMonitor(mon.Options{
-		Name:      redact.RedactableString(name),
+		Name:      mon.MakeMonitorName(name),
 		Increment: 1,
 		Settings:  st,
 	})

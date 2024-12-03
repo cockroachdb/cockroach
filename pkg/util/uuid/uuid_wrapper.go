@@ -7,6 +7,7 @@ package uuid
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -17,6 +18,14 @@ import (
 // Short returns the first eight characters of the output of String().
 func (u UUID) Short() string {
 	return u.String()[:8]
+}
+
+// ShortBytes returns the first eight characters of the output of String() as a
+// byte array.
+func (u UUID) ShortBytes() [8]byte {
+	var b [8]byte
+	hex.Encode(b[:], u[0:4])
+	return b
 }
 
 // ShortStringer implements fmt.Stringer to output Short() on String().

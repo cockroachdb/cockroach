@@ -21,7 +21,7 @@ import (
 
 func getMemoryMonitor(limit int64) *mon.BytesMonitor {
 	return mon.NewMonitor(mon.Options{
-		Name:      "test-mon",
+		Name:      mon.MakeMonitorName("test-mon"),
 		Limit:     limit,
 		Increment: 1,
 		Settings:  cluster.MakeTestingClusterSettings(),
@@ -85,7 +85,7 @@ func TestMemoryBackedQuotaPool(t *testing.T) {
 		mm.Start(ctx, nil, mon.NewStandaloneBudget(limit))
 		defer mm.Stop(ctx)
 
-		qp := NewMemoryBackedQuotaPool(ctx, mm, "test-qp", limit)
+		qp := NewMemoryBackedQuotaPool(ctx, mm, mon.MakeMonitorName("test-qp"), limit)
 		defer qp.Close(ctx)
 
 		// Create another bound account of the parent monitor and
@@ -136,7 +136,7 @@ func TestMemoryBackedQuotaPoolConcurrent(t *testing.T) {
 			mm.Start(ctx, nil, mon.NewStandaloneBudget(quota))
 			mem := mm.MakeConcurrentBoundAccount()
 
-			qp := NewMemoryBackedQuotaPool(ctx, mm, "test-qp", quota)
+			qp := NewMemoryBackedQuotaPool(ctx, mm, mon.MakeMonitorName("test-qp"), quota)
 			res := make(chan error, numGoroutines)
 			require.NoError(t, qp.IncreaseCapacity(ctx, 1))
 
@@ -190,7 +190,7 @@ func makeTestingQuotaPool(
 	mm := getMemoryMonitor(limit)
 	mm.Start(ctx, nil, mon.NewStandaloneBudget(limit))
 
-	qp = NewMemoryBackedQuotaPool(ctx, mm, "test-qp", limit)
+	qp = NewMemoryBackedQuotaPool(ctx, mm, mon.MakeMonitorName("test-qp"), limit)
 	cleanup = func() {
 		qp.Close(ctx)
 		mm.Stop(ctx)

@@ -47,7 +47,7 @@ func TestMemoryAllocations(t *testing.T) {
 	var paramHeader func()
 
 	m := NewMonitor(Options{
-		Name:     "test",
+		Name:     MakeMonitorName("test"),
 		Settings: st,
 	})
 	m.StartNoReserved(ctx, nil /* pool */)

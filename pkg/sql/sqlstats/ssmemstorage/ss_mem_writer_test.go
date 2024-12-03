@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,7 +86,7 @@ func TestRecordTransaction(t *testing.T) {
 
 func testMonitor(ctx context.Context, name string, settings *cluster.Settings) *mon.BytesMonitor {
 	return mon.NewUnlimitedMonitor(ctx, mon.Options{
-		Name:     redact.RedactableString(name),
+		Name:     mon.MakeMonitorName(name),
 		Settings: settings,
 	})
 }
