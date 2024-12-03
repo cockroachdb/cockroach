@@ -28,6 +28,7 @@ func TestUUID(t *testing.T) {
 	t.Run("Variant", testUUIDVariant)
 	t.Run("SetVersion", testUUIDSetVersion)
 	t.Run("SetVariant", testUUIDSetVariant)
+	t.Run("WriteShort", testUUIDShort)
 	t.Run("WriteShort", testUUIDShortBytes)
 }
 
@@ -44,6 +45,14 @@ func testUUIDString(t *testing.T) {
 	want := "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 	if got != want {
 		t.Errorf("%v.String() = %q, want %q", NamespaceDNS, got, want)
+	}
+}
+
+func testUUIDShort(t *testing.T) {
+	got := NamespaceDNS.Short()
+	want := "6ba7b810"
+	if got != want {
+		t.Errorf("%v.Short() = %q, want %q", NamespaceDNS, got, want)
 	}
 }
 

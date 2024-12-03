@@ -17,7 +17,9 @@ import (
 
 // Short returns the first eight characters of the output of String().
 func (u UUID) Short() string {
-	return u.String()[:8]
+	var b [8]byte
+	hex.Encode(b[:], u[0:4])
+	return string(b[:])
 }
 
 // ShortBytes returns the first eight characters of the output of String() as a
