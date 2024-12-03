@@ -92,7 +92,7 @@ SELECT * FROM t
 
 # LSC and DSC would return slightly different error message when attempting to create a
 # database as of system time follower_read_timestamp() soon after a node has started.
-statement error pq: (cannot execute CREATE DATABASE in a read-only transaction|referenced descriptor ID 1: looking up ID 1: descriptor not found|database \"\[1\]\" does not exist)
+statement error pq: (cannot execute CREATE DATABASE in a read-only transaction|referenced descriptor ID 1: looking up ID 1: descriptor not found|database \"\[1\]\" does not exist|role/user \"root\" does not exist)
 CREATE DATABASE IF NOT EXISTS d2
 
 statement error pgcode 3D000 pq: database "test" does not exist
