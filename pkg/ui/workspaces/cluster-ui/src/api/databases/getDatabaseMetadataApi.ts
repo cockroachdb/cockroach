@@ -4,11 +4,11 @@
 // included in the /LICENSE file.
 
 import moment from "moment-timezone";
-import useSWR from "swr";
 
 import { fetchDataJSON } from "src/api/fetchData";
 
 import { StoreID } from "../../types/clusterTypes";
+import { useSwrWithClusterId } from "../../util";
 import { PaginationRequest, ResultsWithPagination } from "../types";
 
 import {
@@ -91,20 +91,26 @@ export const getDatabaseMetadata = async (
 };
 
 const createKey = (req: DatabaseMetadataRequest) => {
-  const { name, sortBy, sortOrder, pagination, storeIds } = req;
-  return [
-    "databaseMetadata",
+  const {
     name,
     sortBy,
     sortOrder,
-    pagination.pageSize,
-    pagination.pageNum,
-    storeIds.map(sid => sid.toString()).join(","),
-  ].join("|");
+    pagination: { pageSize, pageNum },
+    storeIds,
+  } = req;
+  return {
+    name: "databaseMetadata",
+    dbName: name,
+    sortBy,
+    sortOrder,
+    pageSize,
+    pageNum,
+    storeIds: storeIds,
+  };
 };
 
 export const useDatabaseMetadata = (req: DatabaseMetadataRequest) => {
-  const { data, error, isLoading, mutate } = useSWR<PaginatedDatabaseMetadata>(
+  const { data, error, isLoading, mutate } = useSwrWithClusterId(
     createKey(req),
     () => getDatabaseMetadata(req),
     {
@@ -140,14 +146,15 @@ const getDatabaseMetadataByID = async (
 };
 
 export const useDatabaseMetadataByID = (dbID: number) => {
-  const { data, error, isLoading } = useSWR<DatabaseMetadataByIDResponse>(
-    ["databaseMetadataByID", dbID],
-    () => getDatabaseMetadataByID(dbID),
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-    },
-  );
+  const { data, error, isLoading } =
+    useSwrWithClusterId<DatabaseMetadataByIDResponse>(
+      { name: "databaseMetadataByID", dbId: dbID },
+      () => getDatabaseMetadataByID(dbID),
+      {
+        revalidateOnFocus: false,
+        revalidateOnReconnect: false,
+      },
+    );
 
   return {
     data,

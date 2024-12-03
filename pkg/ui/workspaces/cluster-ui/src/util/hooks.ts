@@ -4,7 +4,12 @@
 // included in the /LICENSE file.
 
 import moment from "moment/moment";
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useContext } from "react";
+import useSWR, { SWRConfiguration, SWRResponse } from "swr";
+import { Arguments, Fetcher } from "swr/_internal";
+import useSWRImmutable from "swr/immutable";
+
+import { ClusterDetailsContext } from "../contexts";
 
 export const usePrevious = <T>(value: T): T | undefined => {
   const ref = useRef<T>();
@@ -93,4 +98,74 @@ export const useScheduleFunction = (
   }, [schedule, clearSchedule]);
 
   return [scheduleNow, clearSchedule];
+};
+
+const useSwrKeyWithClusterId = (key: Arguments): Arguments => {
+  const { clusterId } = useContext(ClusterDetailsContext);
+  let keyWithClusterId: Arguments;
+  if (key) {
+    if (Array.isArray(key)) {
+      keyWithClusterId = [clusterId, ...key] as Arguments;
+    } else if (typeof key === "object") {
+      keyWithClusterId = {
+        clusterId,
+        ...key,
+      };
+    } else {
+      keyWithClusterId = [clusterId, key] as Arguments;
+    }
+    return keyWithClusterId;
+  }
+
+  return key;
+};
+
+/**
+ * useSwrWithClusterId is a wrapper around useSWR that adds the cluster id to the key.
+ *
+ * @param key The key, in combination with the clusterId, that will be used for useSWR.
+ * @param fetcher The fetcher to be called by useSWR.
+ * @param config the config to be provided to useSWR.
+ */
+export const useSwrWithClusterId = <
+  Data = any,
+  Error = any,
+  SWRKey = Arguments,
+  SWROptions extends
+    | SWRConfiguration<Data, Error, Fetcher<Data, SWRKey>>
+    | undefined =
+    | SWRConfiguration<Data, Error, Fetcher<Data, SWRKey>>
+    | undefined,
+>(
+  key: SWRKey,
+  fetcher: Fetcher<Data, SWRKey> | null,
+  config?: SWROptions,
+): SWRResponse<Data, Error, SWROptions> => {
+  const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
+  return useSWR(keyWithClusterId, fetcher, config);
+};
+
+/**
+ * useSwrImmutableWithClusterId is a wrapper around useSWRImmutable that adds the cluster id to the key.
+ *
+ * @param key The key, in combination with the clusterId, that will be used for useSWRImmutable.
+ * @param fetcher The fetcher to be called by useSWRImmutable.
+ * @param config the config to be provided to useSWRImmutable.
+ */
+export const useSwrImmutableWithClusterId = <
+  Data = any,
+  Error = any,
+  SWRKey = Arguments,
+  SWROptions extends
+    | SWRConfiguration<Data, Error, Fetcher<Data, SWRKey>>
+    | undefined =
+    | SWRConfiguration<Data, Error, Fetcher<Data, SWRKey>>
+    | undefined,
+>(
+  key: SWRKey,
+  fetcher: Fetcher<Data, SWRKey> | null,
+  config?: SWROptions,
+): SWRResponse<Data, Error, SWROptions> => {
+  const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
+  return useSWRImmutable(keyWithClusterId, fetcher, config);
 };
