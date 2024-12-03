@@ -1,0 +1,82 @@
+source:
+  type: gcp
+  directory: artifacts/202501
+  bucket: cockroach-nightly
+  project: cockroach-ephemeral
+
+sink:
+  type: gcp
+  directory: converter
+  bucket: cockroach-testeng-metrics
+  project: cockroach-testeng-infra
+
+metrics:
+  - name: restore/online
+    type: statsexporter
+    labels:
+      - name: unit
+        value: "minutes"
+      - name: is_higher_better
+        value: "false"
+  - name: cdc/initial-scan-only
+    type: statsexporter
+    labels:
+      - name: unit
+        value: "minutes"
+      - name: is_higher_better
+        value: "false"
+  - name: cdc/scan
+    type: histogram
+  - name: replicate/up
+    type: statsexporter
+    labels:
+      - name: unit
+        value: "seconds"
+      - name: is_higher_better
+        value: "false"
+  - name: replicate/rebalance
+    type: statsexporter
+    labels:
+      - name: unit
+        value: "seconds"
+      - name: is_higher_better
+        value: "false"
+  - name: allocbench
+    type: statsexporter
+    labels:
+      - name: unit
+        value: "percent"
+      - name: is_higher_better
+        value: "false"
+    metric-labels:
+      - name: cost(gb)
+        labels:
+          - name: unit
+            value: "gb"
+          - name: is_higher_better
+            value: "false"
+      - name: std_cost(gb)
+        labels:
+          - name: unit
+            value: "gb"
+          - name: is_higher_better
+            value: "false"
+  - name: sysbench
+    type: sysbench
+  - name: tpccbench
+    type: histogram
+    labels-from-path:
+      - warehouses
+  - name: tpce
+    type: tpce
+global-labels:
+  - name: goarch
+    value: amd64
+  - name: goos
+    value: linux
+  - name: cloud
+    value: gce
+  - name: suite
+    value: nightly
+  - name: branch
+    value: master

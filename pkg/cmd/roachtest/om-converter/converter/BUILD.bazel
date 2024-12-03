@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "converter",
+    testonly = 1,
+    srcs = [
+        "buffer_pool.go",
+        "converter.go",
+        "histogram.go",
+        "statsexporter.go",
+        "sysbench.go",
+        "tpce.go",
+        "utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/om-converter/converter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-microbench/util",
+        "//pkg/cmd/roachtest/clusterstats",
+        "//pkg/cmd/roachtest/om-converter/model",
+        "//pkg/cmd/roachtest/om-converter/sink",
+        "//pkg/cmd/roachtest/registry",
+        "//pkg/cmd/roachtest/roachtestutil",
+        "//pkg/cmd/roachtest/tests",
+        "//pkg/workload/histogram/exporter",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
+    ],
+)
