@@ -74,7 +74,7 @@ func DefaultFormatter(ctx context.Context, f Failure) (issues.IssueFormatter, is
 				for al, purp := range tm.Aliases {
 					if purp == team.PurposeUnittest {
 						hasAliases = true
-						mentions = append(mentions, "@"+string(al))
+						mentions = append(mentions, "@"+strings.TrimSpace(string(al)))
 					}
 				}
 				if !hasAliases {
