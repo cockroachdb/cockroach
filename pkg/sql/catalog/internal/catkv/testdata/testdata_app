@@ -766,3 +766,17 @@ catalog:
 trace:
 - Scan Range /Table/3/1/110/2/1 /Table/3/1/111/2/1
 - Scan Range /Table/3/1/111/2/1 /Table/3/1/112/2/1
+
+# verify that passing a zero length span returns nothing
+scan_descriptors_in_span start=111/1 end=111/1
+----
+catalog: {}
+trace: []
+
+# verify that passing a negative length span throws an error
+scan_descriptors_in_span start=112/1 end=111/1
+----
+catalog: {}
+error: 'failed to verify keys for Scan: end key /Tenant/10/Table/3/1/111/2/1 must be greater than start /Tenant/10/Table/3/1/112/2/1'
+trace:
+- Scan Range /Table/3/1/112/2/1 /Table/3/1/111/2/1

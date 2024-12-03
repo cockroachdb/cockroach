@@ -317,8 +317,8 @@ type queryFunc func(ctx context.Context, txn *kv.Txn, cr catkv.CatalogReader) (n
 
 func (h testHelper) wrappedQuery(
 	ctx context.Context, label string, cr catkv.CatalogReader, unwrapped queryFunc,
-) (c nstree.Catalog, rs tracingpb.RecordedSpan) {
-	err := h.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+) (c nstree.Catalog, rs tracingpb.RecordedSpan, err error) {
+	err = h.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		tracer := h.execCfg.AmbientCtx.Tracer
 		vCtx, vSpan := tracer.StartSpanCtx(
 			ctx, catkv.TestingSpanOperationName, tracing.WithRecording(tracingpb.RecordingVerbose),
@@ -330,8 +330,7 @@ func (h testHelper) wrappedQuery(
 		require.True(h.t, found)
 		return err
 	})
-	require.NoErrorf(h.t, err, "%s: error running query with %s CatalogReader", h.d.Pos, label)
-	return c, rs
+	return c, rs, err
 }
 
 func (h testHelper) doCatalogQuery(ctx context.Context, fn queryFunc) string {
@@ -366,10 +365,15 @@ func (h testHelper) doCatalogQuery(ctx context.Context, fn queryFunc) string {
 	return fmt.Sprintf("%scached:\n%s", u, d)
 }
 
-func (h testHelper) marshalResult(c nstree.Catalog, rs tracingpb.RecordedSpan) string {
+func (h testHelper) marshalResult(
+	c nstree.Catalog, rs tracingpb.RecordedSpan, queryErr error,
+) string {
 	m := map[string]interface{}{
 		"catalog": h.catalogToYaml(c),
 		"trace":   h.traceToYaml(rs),
+	}
+	if queryErr != nil {
+		m["error"] = queryErr.Error()
 	}
 	bytes, err := yaml.Marshal(m)
 	require.NoError(h.t, err)
