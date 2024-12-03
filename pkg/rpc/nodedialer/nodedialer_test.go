@@ -415,6 +415,10 @@ func (*internalServer) Batch(context.Context, *kvpb.BatchRequest) (*kvpb.BatchRe
 	return nil, nil
 }
 
+func (*internalServer) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
+	return nil
+}
+
 func (*internalServer) RangeLookup(
 	context.Context, *kvpb.RangeLookupRequest,
 ) (*kvpb.RangeLookupResponse, error) {

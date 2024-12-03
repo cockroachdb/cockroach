@@ -8,7 +8,9 @@ package rpc
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 )
@@ -34,6 +36,9 @@ type Connection struct {
 	// It always has to be signaled eventually, regardless of the stopper
 	// draining, etc, since callers might be blocking on it.
 	connFuture connFuture
+	// BatchStreamPool holds a pool of BatchStreamClient streams established on
+	// the connection.
+	BatchStreamPool BatchStreamPool
 }
 
 // newConnectionToNodeID makes a Connection for the given node, class, and nontrivial Signal
@@ -204,4 +209,28 @@ func (s *connFuture) Resolve(cc *grpc.ClientConn, err error) {
 		s.cc, s.err = cc, err
 		close(s.ready)
 	}
+}
+
+// BatchStreamPool is a pool of inactive BatchStreamClient streams.
+type BatchStreamPool struct {
+	mu      syncutil.Mutex
+	streams []kvpb.Internal_BatchStreamClient
+}
+
+func (p *BatchStreamPool) Get() kvpb.Internal_BatchStreamClient {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.streams) == 0 {
+		return nil
+	}
+	sc := p.streams[len(p.streams)-1]
+	p.streams[len(p.streams)-1] = nil
+	p.streams = p.streams[:len(p.streams)-1]
+	return sc
+}
+
+func (p *BatchStreamPool) Put(sc kvpb.Internal_BatchStreamClient) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.streams = append(p.streams, sc)
 }

@@ -41,6 +41,10 @@ func (n Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchRe
 	return &kvpb.BatchResponse{}, nil
 }
 
+func (n Node) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
+	panic("unimplemented")
+}
+
 func (n Node) RangeLookup(
 	_ context.Context, _ *kvpb.RangeLookupRequest,
 ) (*kvpb.RangeLookupResponse, error) {
