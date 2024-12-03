@@ -29,6 +29,9 @@ const RerankMultiplier = 10
 // order to account for vectors that may have been deleted in the primary index.
 const DeletedMultiplier = 1.2
 
+// MaxQualitySamples specifies the max value of the QualitySamples index option.
+const MaxQualitySamples = 32
+
 // VectorIndexOptions specifies options that control how the index will be
 // built, as well as default options for how it will be searched. A given search
 // operation can specify SearchOptions to override the default behavior.
@@ -76,6 +79,9 @@ type SearchOptions struct {
 	// in search results. If this is a leaf-level search then the returned
 	// vectors have not been randomized.
 	ReturnVectors bool
+	// UpdateStats specifies whether index statistics will be modified by this
+	// search. These stats are used for adaptive search.
+	UpdateStats bool
 }
 
 // searchContext contains per-thread state needed during index search
@@ -102,6 +108,7 @@ type searchContext struct {
 	Randomized vector.T
 
 	tempResults         [1]vecstore.SearchResult
+	tempQualitySamples  [MaxQualitySamples]float64
 	tempKeys            []vecstore.PartitionKey
 	tempCounts          []int
 	tempVectorsWithKeys []vecstore.VectorWithKey
@@ -132,6 +139,9 @@ type VectorIndex struct {
 	fixups fixupProcessor
 	// cancel stops the background fixup processing goroutine.
 	cancel func()
+	// stats maintains locally-cached statistics about the vector index that are
+	// used by adaptive search to improve search accuracy.
+	stats statsManager
 }
 
 // NewVectorIndex constructs a new vector index instance. Typically, only one
@@ -164,11 +174,20 @@ func NewVectorIndex(
 	if vi.options.QualitySamples == 0 {
 		vi.options.QualitySamples = 16
 	}
+
 	if vi.options.MaxPartitionSize < 2 {
 		return nil, errors.AssertionFailedf("MaxPartitionSize cannot be less than 2")
 	}
+	if vi.options.QualitySamples > MaxQualitySamples {
+		return nil, errors.Errorf(
+			"QualitySamples option %d exceeds max allowed value", vi.options.QualitySamples)
+	}
 
 	vi.fixups.Init(vi, options.Seed)
+
+	if err := vi.stats.Init(ctx, store); err != nil {
+		return nil, err
+	}
 
 	if stopper != nil {
 		// Start the background goroutine.
@@ -180,6 +199,17 @@ func NewVectorIndex(
 	}
 
 	return vi, nil
+}
+
+// Options returns the options that specify how the index should be built and
+// searched.
+func (vi *VectorIndex) Options() VectorIndexOptions {
+	return vi.options
+}
+
+// FormatStats returns index statistics as a formatted string.
+func (vi *VectorIndex) FormatStats() string {
+	return vi.stats.Format()
 }
 
 // Close cancels the background goroutine, if it's running.
@@ -220,6 +250,7 @@ func (vi *VectorIndex) Insert(
 		Options: SearchOptions{
 			BaseBeamSize: vi.options.BaseBeamSize,
 			SkipRerank:   vi.options.DisableErrorBounds,
+			UpdateStats:  true,
 		},
 	}
 	parentSearchCtx.Ctx = internal.WithWorkspace(ctx, &parentSearchCtx.Workspace)
@@ -252,7 +283,8 @@ func (vi *VectorIndex) Delete(
 		Original: vector,
 		Level:    vecstore.LeafLevel,
 		Options: SearchOptions{
-			SkipRerank: vi.options.DisableErrorBounds,
+			SkipRerank:  vi.options.DisableErrorBounds,
+			UpdateStats: true,
 		},
 	}
 	searchCtx.Ctx = internal.WithWorkspace(ctx, &searchCtx.Workspace)
@@ -367,12 +399,14 @@ func (vi *VectorIndex) addToPartition(
 ) (int, error) {
 	count, err := vi.store.AddToPartition(ctx, txn, partitionKey, vector, childKey)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
 	if count > vi.options.MaxPartitionSize {
 		vi.fixups.AddSplit(ctx, parentPartitionKey, partitionKey)
 	}
-	return count, nil
+
+	err = vi.stats.OnAddOrRemoveVector(ctx)
+	return count, err
 }
 
 // removeFromPartition calls the store to remove a vector, by its key, from an
@@ -383,7 +417,13 @@ func (vi *VectorIndex) removeFromPartition(
 	partitionKey vecstore.PartitionKey,
 	childKey vecstore.ChildKey,
 ) (int, error) {
-	return vi.store.RemoveFromPartition(ctx, txn, partitionKey, childKey)
+	count, err := vi.store.RemoveFromPartition(ctx, txn, partitionKey, childKey)
+	if err != nil {
+		return 0, errors.Wrapf(err, "removing vector from partition %d", partitionKey)
+	}
+
+	err = vi.stats.OnAddOrRemoveVector(ctx)
+	return count, err
 }
 
 // searchHelper contains the core search logic for the K-means tree. It begins
@@ -439,9 +479,19 @@ func (vi *VectorIndex) searchHelper(
 
 		var zscore float64
 		if searchLevel > vecstore.LeafLevel {
-			// Compute the z-score of the candidate results list.
-			// TODO(andyk): Track z-score stats.
-			zscore = 0
+			// Results need to be sorted in order to calculate their "spread". This
+			// also sorts them for determining which partitions to search next.
+			results.Sort()
+
+			// Compute the Z-score of the candidate list if there are enough
+			// samples. Otherwise, use the default Z-score of 0.
+			if len(results) >= vi.options.QualitySamples {
+				for i := 0; i < vi.options.QualitySamples; i++ {
+					searchCtx.tempQualitySamples[i] = float64(results[i].QuerySquaredDistance)
+				}
+				samples := searchCtx.tempQualitySamples[:vi.options.QualitySamples]
+				zscore = vi.stats.ReportSearch(searchLevel, samples, searchCtx.Options.UpdateStats)
+			}
 		}
 
 		if searchLevel <= searchCtx.Level {
@@ -481,7 +531,7 @@ func (vi *VectorIndex) searchHelper(
 			// more densely packed are the vectors, and the more partitions they're
 			// likely to be spread across.
 			tempBeamSize := float64(beamSize) * math.Pow(2, -zscore)
-			tempBeamSize = max(min(tempBeamSize, float64(beamSize)*4), float64(beamSize)/2)
+			tempBeamSize = max(min(tempBeamSize, float64(beamSize)*2), float64(beamSize)/2)
 
 			if searchLevel > vecstore.LeafLevel+1 {
 				// Use progressively smaller beam size for higher levels, since
@@ -507,10 +557,16 @@ func (vi *VectorIndex) searchHelper(
 				subSearchSet.MaxResults = searchSet.MaxResults * RerankMultiplier / 2
 				subSearchSet.MaxExtraResults = 0
 			}
+
+			if searchLevel > vecstore.LeafLevel {
+				// Ensure there are enough results for calculating stats.
+				subSearchSet.MaxResults = max(subSearchSet.MaxResults, vi.options.QualitySamples)
+			}
 		}
 
-		// Search up to beamSize child partitions.
-		results.Sort()
+		// Search up to beamSize child partitions. The results are in sorted order,
+		// since we always sort non-leaf levels above, and this must be a non-leaf
+		// level (leaf-level partitions do not have children).
 		results = results[:min(beamSize, len(results))]
 		_, err = vi.searchChildPartitions(searchCtx, &subSearchSet, results)
 		if errors.Is(err, vecstore.ErrPartitionNotFound) {
