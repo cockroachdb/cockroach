@@ -47,6 +47,8 @@ var (
 	}()
 	flags             = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	binary            = flags.String("binary", "./cockroach", "path to cockroach binary")
+	httpPort          = flags.Int("http-port", 8080, "first port number for HTTP servers in demo")
+	sqlPort           = flags.Int("sql-port", 26257, "first port number for SQL servers in demo")
 	file              = flags.String("file", "", "the path to a file containing SQL queries to reduce; required")
 	outFlag           = flags.String("out", "", "if set, the path to a new file where reduced result will be written to")
 	verbose           = flags.Bool("v", false, "print progress to standard output and the original test case output if it is not interesting")
@@ -117,8 +119,8 @@ func main() {
 	}
 	reducesql.LogUnknown = *unknown
 	out, err := reduceSQL(
-		*binary, *contains, file, *workers, *verbose, *chunkReductions, *multiRegion,
-		*tlp, *costfuzz, *unoptimizedOracle,
+		*binary, *httpPort, *sqlPort, *contains, file, *workers, *verbose,
+		*chunkReductions, *multiRegion, *tlp, *costfuzz, *unoptimizedOracle,
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -136,7 +138,9 @@ func main() {
 }
 
 func reduceSQL(
-	binary, contains string,
+	binary string,
+	httpPort, sqlPort int,
+	contains string,
 	file *string,
 	workers int,
 	verbose bool,
@@ -304,6 +308,8 @@ SELECT '%[1]s';
 				"--multitenant=false",
 				"--set=errexit=false",
 				"--format=tsv",
+				fmt.Sprintf("--http-port=%d", httpPort),
+				fmt.Sprintf("--sql-port=%d", sqlPort),
 			)
 		} else {
 			cmd = exec.CommandContext(ctx, binary,
@@ -312,6 +318,8 @@ SELECT '%[1]s';
 				"--empty",
 				"--set=errexit=false",
 				"--format=tsv",
+				fmt.Sprintf("--http-port=%d", httpPort),
+				fmt.Sprintf("--sql-port=%d", sqlPort),
 			)
 		}
 		// Disable telemetry.
