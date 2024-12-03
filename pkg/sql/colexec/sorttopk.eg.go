@@ -114,6 +114,7 @@ func spool_true(t *topKSorter) {
 	// or more distinct and complete groups, and then use a K-N size heap to find
 	// the remaining top K-N rows.
 	{
+		t.cancelChecker.CheckEveryCall()
 		t.inputBatch = t.Input.Next()
 		t.orderState.distincterInput.SetBatch(t.inputBatch)
 		t.orderState.distincter.Next()
@@ -176,6 +177,7 @@ func spool_true(t *topKSorter) {
 		remainingRows -= uint64(fromLength)
 		if fromLength == t.inputBatch.Length() {
 			{
+				t.cancelChecker.CheckEveryCall()
 				t.inputBatch = t.Input.Next()
 				t.orderState.distincterInput.SetBatch(t.inputBatch)
 				t.orderState.distincter.Next()
@@ -276,6 +278,7 @@ func spool_true(t *topKSorter) {
 			break
 		}
 		{
+			t.cancelChecker.CheckEveryCall()
 			t.inputBatch = t.Input.Next()
 			t.orderState.distincterInput.SetBatch(t.inputBatch)
 			t.orderState.distincter.Next()
@@ -313,6 +316,7 @@ func spool_false(t *topKSorter) {
 	// or more distinct and complete groups, and then use a K-N size heap to find
 	// the remaining top K-N rows.
 	{
+		t.cancelChecker.CheckEveryCall()
 		t.inputBatch = t.Input.Next()
 		t.firstUnprocessedTupleIdx = 0
 	}
@@ -332,6 +336,7 @@ func spool_false(t *topKSorter) {
 		remainingRows -= uint64(fromLength)
 		if fromLength == t.inputBatch.Length() {
 			{
+				t.cancelChecker.CheckEveryCall()
 				t.inputBatch = t.Input.Next()
 				t.firstUnprocessedTupleIdx = 0
 			}
@@ -390,6 +395,7 @@ func spool_false(t *topKSorter) {
 			},
 		)
 		{
+			t.cancelChecker.CheckEveryCall()
 			t.inputBatch = t.Input.Next()
 			t.firstUnprocessedTupleIdx = 0
 		}
