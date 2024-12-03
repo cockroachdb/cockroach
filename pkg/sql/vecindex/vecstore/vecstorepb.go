@@ -9,9 +9,20 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"slices"
 
 	_ "github.com/gogo/protobuf/gogoproto"
 )
+
+// Clone returns a deep copy of the stats. Changes to the original or clone do
+// not affect the other.
+func (s *IndexStats) Clone() IndexStats {
+	return IndexStats{
+		NumPartitions:       s.NumPartitions,
+		VectorsPerPartition: s.VectorsPerPartition,
+		CVStats:             slices.Clone(s.CVStats),
+	}
+}
 
 // String returns a human-readable representation of the index stats.
 func (s *IndexStats) String() string {

@@ -6,10 +6,57 @@
 package vecstore
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestIndexStats(t *testing.T) {
+	// Empty stats.
+	stats := IndexStats{}
+	require.Equal(t, strings.TrimSpace(`
+1 levels, 0 partitions, 0.00 vectors/partition.
+CV stats:
+`), strings.TrimSpace(stats.String()))
+
+	stats = IndexStats{
+		NumPartitions:       100,
+		VectorsPerPartition: 32.59,
+		CVStats: []CVStats{
+			{Mean: 10.12, Variance: 2.13},
+			{Mean: 18.42, Variance: 3.87},
+		},
+	}
+	require.Equal(t, strings.TrimSpace(`
+3 levels, 100 partitions, 32.59 vectors/partition.
+CV stats:
+  level 2 - mean: 10.1200, stdev: 1.4595
+  level 3 - mean: 18.4200, stdev: 1.9672
+`), strings.TrimSpace(stats.String()))
+
+	// Clone method.
+	cloned := stats.Clone()
+	stats.NumPartitions = 50
+	stats.VectorsPerPartition = 16
+	stats.CVStats[0].Mean = 100
+	stats.CVStats[1].Variance = 100
+
+	// Ensure that original and clone can be updated independently.
+	require.Equal(t, strings.TrimSpace(`
+3 levels, 50 partitions, 16.00 vectors/partition.
+CV stats:
+  level 2 - mean: 100.0000, stdev: 1.4595
+  level 3 - mean: 18.4200, stdev: 10.0000
+`), strings.TrimSpace(stats.String()))
+
+	require.Equal(t, strings.TrimSpace(`
+3 levels, 100 partitions, 32.59 vectors/partition.
+CV stats:
+  level 2 - mean: 10.1200, stdev: 1.4595
+  level 3 - mean: 18.4200, stdev: 1.9672
+`), strings.TrimSpace(cloned.String()))
+}
 
 func TestChildKey(t *testing.T) {
 	childKey1 := ChildKey{PartitionKey: 10}

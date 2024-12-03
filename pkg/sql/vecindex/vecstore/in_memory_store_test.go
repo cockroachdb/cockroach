@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
+	"gonum.org/v1/gonum/floats/scalar"
 )
 
 func TestInMemoryStore(t *testing.T) {
@@ -94,10 +95,10 @@ func TestInMemoryStore(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 3, count)
 
-		// Try to add duplicate.
+		// Add duplicate and expect value to be overwritten
 		count, err = store.AddToPartition(ctx, txn, RootKey, vector.T{5, 5}, childKey30)
 		require.NoError(t, err)
-		require.Equal(t, -1, count)
+		require.Equal(t, 3, count)
 
 		// Search root partition.
 		searchSet := SearchSet{MaxResults: 2}
@@ -107,7 +108,7 @@ func TestInMemoryStore(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, Level(1), level)
 		result1 := SearchResult{QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: 1, ChildKey: childKey10}
-		result2 := SearchResult{QuerySquaredDistance: 13, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: 1, ChildKey: childKey30}
+		result2 := SearchResult{QuerySquaredDistance: 32, ErrorBound: 0, CentroidDistance: 7.0711, ParentPartitionKey: 1, ChildKey: childKey30}
 		results := searchSet.PopResults()
 		roundResults(results, 4)
 		require.Equal(t, SearchResults{result1, result2}, results)
@@ -177,17 +178,19 @@ func TestInMemoryStore(t *testing.T) {
 		count, err := store.RemoveFromPartition(ctx, txn, partitionKey1, childKey20)
 		require.NoError(t, err)
 		require.Equal(t, 2, count)
+
+		// Try to remove the same key again.
 		count, err = store.RemoveFromPartition(ctx, txn, partitionKey1, childKey20)
 		require.NoError(t, err)
-		require.Equal(t, -1, count)
+		require.Equal(t, 2, count)
 
-		// Add an alternate element and try to add duplicate.
+		// Add an alternate element and add duplicate, expecting value to be overwritten.
 		count, err = store.AddToPartition(ctx, txn, partitionKey1, vector.T{-1, 0}, childKey40)
 		require.NoError(t, err)
 		require.Equal(t, 3, count)
 		count, err = store.AddToPartition(ctx, txn, partitionKey1, vector.T{1, 1}, childKey40)
 		require.NoError(t, err)
-		require.Equal(t, -1, count)
+		require.Equal(t, 3, count)
 
 		searchSet := SearchSet{MaxResults: 2}
 		partitionCounts := []int{0}
@@ -195,9 +198,9 @@ func TestInMemoryStore(t *testing.T) {
 			ctx, txn, []PartitionKey{partitionKey1}, vector.T{1, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(1), level)
-		result4 := SearchResult{QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.23606797749979, ParentPartitionKey: 2, ChildKey: childKey10}
-		result5 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 1, ParentPartitionKey: 2, ChildKey: childKey40}
-		require.Equal(t, SearchResults{result4, result5}, searchSet.PopResults())
+		result4 := SearchResult{QuerySquaredDistance: 0, ErrorBound: 0, CentroidDistance: 1.4142, ParentPartitionKey: 2, ChildKey: childKey40}
+		result5 := SearchResult{QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: 2, ChildKey: childKey10}
+		require.Equal(t, SearchResults{result4, result5}, roundResults(searchSet.PopResults(), 4))
 		require.Equal(t, 3, partitionCounts[0])
 	})
 
@@ -220,8 +223,8 @@ func TestInMemoryStore(t *testing.T) {
 			ctx, txn, []PartitionKey{partitionKey1, partitionKey2}, vector.T{3, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(1), level)
-		result4 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 2.24, ParentPartitionKey: 2, ChildKey: childKey10}
-		result5 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: 2, ChildKey: childKey30}
+		result4 := SearchResult{QuerySquaredDistance: 4, ErrorBound: 0, CentroidDistance: 1.41, ParentPartitionKey: 2, ChildKey: childKey40}
+		result5 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 2.24, ParentPartitionKey: 2, ChildKey: childKey10}
 		require.Equal(t, SearchResults{result4, result5}, roundResults(searchSet.PopResults(), 2))
 		require.Equal(t, []int{3, 2}, partitionCounts)
 	})
@@ -313,52 +316,77 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	txn := beginTransaction(ctx, t, store)
 	defer commitTransaction(ctx, t, store, txn)
 
-	vectors := vector.MakeSet(2)
+	childKey10 := ChildKey{PartitionKey: 10}
+	childKey20 := ChildKey{PartitionKey: 20}
+	childKey30 := ChildKey{PartitionKey: 30}
+	childKey40 := ChildKey{PartitionKey: 40}
+
+	vectors := vector.MakeSetFromRawData([]float32{1, 2, 3, 4}, 2)
 	quantizedSet := quantizer.Quantize(ctx, &vectors)
-	root := NewPartition(quantizer, quantizedSet, []ChildKey{}, LeafLevel)
+	root := NewPartition(quantizer, quantizedSet, []ChildKey{childKey10, childKey20}, LeafLevel)
 	require.NoError(t, store.SetRootPartition(ctx, txn, root))
 
 	// Update stats.
-	stats := IndexStats{
-		VectorsPerPartition: 5,
-		CVStats:             []CVStats{{Mean: 1.5, Variance: 0.5}, {Mean: 1, Variance: 0.25}},
-	}
+	stats := IndexStats{CVStats: []CVStats{{Mean: 1.5, Variance: 0.5}, {Mean: 1, Variance: 0.25}}}
 	err := store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stats.NumPartitions)
-	require.Equal(t, float64(5), stats.VectorsPerPartition)
+	require.Equal(t, float64(2), stats.VectorsPerPartition)
 	require.Equal(t, []CVStats{}, stats.CVStats)
 
 	// Upsert new root partition with higher level and check stats.
 	root.level = 3
 	require.NoError(t, store.SetRootPartition(ctx, txn, root))
-	stats.VectorsPerPartition = 10
 	stats.CVStats = []CVStats{{Mean: 2.5, Variance: 0.5}, {Mean: 1, Variance: 0.25}}
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stats.NumPartitions)
-	require.Equal(t, float64(5.5), stats.VectorsPerPartition)
-	require.Equal(t, []CVStats{{Mean: 2.5, Variance: 0}, {Mean: 1, Variance: 0}}, stats.CVStats)
+	require.Equal(t, float64(2), stats.VectorsPerPartition)
+	require.Equal(t, []CVStats{{Mean: 2.5, Variance: 0}, {Mean: 1, Variance: 0}}, roundCVStats(stats.CVStats))
 
-	// Upsert new root partition with lower level and check stats.
-	root.level = 2
-	require.NoError(t, store.SetRootPartition(ctx, txn, root))
-	stats.VectorsPerPartition = 20
-	stats.CVStats = []CVStats{{Mean: 2.5, Variance: 0.5}, {Mean: 1, Variance: 0.25}}
+	// Insert new partition with lower level and check stats.
+	vectors = vector.MakeSetFromRawData([]float32{5, 6}, 2)
+	quantizedSet = quantizer.Quantize(ctx, &vectors)
+	partition := NewPartition(quantizer, quantizedSet, []ChildKey{childKey30}, 2)
+	partitionKey, err := store.InsertPartition(ctx, txn, partition)
+	require.NoError(t, err)
+
+	stats.CVStats = []CVStats{{Mean: 8, Variance: 2}, {Mean: 6, Variance: 1}}
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), stats.NumPartitions)
-	require.Equal(t, float64(6.95), stats.VectorsPerPartition)
-	require.Equal(t, []CVStats{{Mean: 2.5, Variance: 0.05}}, stats.CVStats)
+	require.Equal(t, int64(2), stats.NumPartitions)
+	require.Equal(t, float64(1.95), stats.VectorsPerPartition)
+	require.Equal(t, []CVStats{{Mean: 2.775, Variance: 0.1}, {Mean: 1.25, Variance: 0.05}}, roundCVStats(stats.CVStats))
+
+	// Add vector to partition and check stats.
+	_, err = store.AddToPartition(ctx, txn, partitionKey, vector.T{7, 8}, childKey40)
+	require.NoError(t, err)
+
+	stats.CVStats = []CVStats{{Mean: 3, Variance: 1}, {Mean: 1.5, Variance: 0.5}}
+	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), stats.NumPartitions)
+	require.Equal(t, float64(1.9525), stats.VectorsPerPartition)
+	require.Equal(t, []CVStats{{Mean: 2.7863, Variance: 0.145}, {Mean: 1.2625, Variance: 0.0725}}, roundCVStats(stats.CVStats))
+
+	// Remove vector from partition and check stats.
+	_, err = store.RemoveFromPartition(ctx, txn, partitionKey, childKey30)
+	require.NoError(t, err)
+
+	stats.CVStats = []CVStats{{Mean: 5, Variance: 2}, {Mean: 3, Variance: 1.5}}
+	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), stats.NumPartitions)
+	require.Equal(t, float64(1.9049), scalar.Round(stats.VectorsPerPartition, 4))
+	require.Equal(t, []CVStats{{Mean: 2.8969, Variance: 0.2378}, {Mean: 1.3494, Variance: 0.1439}}, roundCVStats(stats.CVStats))
 
 	// skipMerge = true.
-	stats.VectorsPerPartition = 100
 	stats.CVStats = []CVStats{{Mean: 10, Variance: 2}}
 	err = store.MergeStats(ctx, &stats, true /* skipMerge */)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), stats.NumPartitions)
-	require.Equal(t, float64(6.95), stats.VectorsPerPartition)
-	require.Equal(t, []CVStats{{Mean: 2.5, Variance: 0.05}}, stats.CVStats)
+	require.Equal(t, int64(2), stats.NumPartitions)
+	require.Equal(t, float64(1.9049), scalar.Round(stats.VectorsPerPartition, 4))
+	require.Equal(t, []CVStats{{Mean: 2.8969, Variance: 0.2378}, {Mean: 1.3494, Variance: 0.1439}}, roundCVStats(stats.CVStats))
 }
 
 func TestInMemoryStoreMarshalling(t *testing.T) {
@@ -442,4 +470,12 @@ func commitTransaction(ctx context.Context, t *testing.T, store Store, txn Txn) 
 func abortTransaction(ctx context.Context, t *testing.T, store Store, txn Txn) {
 	err := store.AbortTransaction(ctx, txn)
 	require.NoError(t, err)
+}
+
+func roundCVStats(cvstats []CVStats) []CVStats {
+	for i := range cvstats {
+		cvstats[i].Mean = scalar.Round(cvstats[i].Mean, 4)
+		cvstats[i].Variance = scalar.Round(cvstats[i].Variance, 4)
+	}
+	return cvstats
 }
