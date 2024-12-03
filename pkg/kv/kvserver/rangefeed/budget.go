@@ -228,7 +228,7 @@ func (f *FeedBudget) Close(ctx context.Context) {
 	f.closed.Do(func() {
 		f.mu.Lock()
 		f.mu.closed = true
-		f.mu.memBudget.Close(ctx)
+		f.mu.memBudget.Clear(ctx)
 		close(f.stopC)
 		f.mu.Unlock()
 	})
