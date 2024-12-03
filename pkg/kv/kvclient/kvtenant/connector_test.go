@@ -121,6 +121,10 @@ func (*mockServer) Batch(context.Context, *kvpb.BatchRequest) (*kvpb.BatchRespon
 	panic("unimplemented")
 }
 
+func (m *mockServer) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
+	panic("implement me")
+}
+
 func (m *mockServer) MuxRangeFeed(server kvpb.Internal_MuxRangeFeedServer) error {
 	panic("implement me")
 }
