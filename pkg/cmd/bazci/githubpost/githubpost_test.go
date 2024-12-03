@@ -414,7 +414,6 @@ func TestListFailuresFromTestXML(t *testing.T) {
 		fileName  string
 		expPkg    string
 		expIssues []issue
-		formatter Formatter
 	}{
 		{
 			fileName: "basic.xml",
@@ -429,7 +428,6 @@ func TestListFailuresFromTestXML(t *testing.T) {
     --- FAIL: TestJSONErrors/frues (0.00s)`,
 				mention: []string{"@cockroachdb/unowned"},
 			}},
-			formatter: DefaultFormatter,
 		},
 	}
 
@@ -481,7 +479,6 @@ func TestPostGeneralFailure(t *testing.T) {
 	testCases := []struct {
 		fileName  string
 		expIssues []issue
-		formatter Formatter
 	}{
 		{
 			fileName: "failed-build-output.txt",
@@ -490,7 +487,6 @@ func TestPostGeneralFailure(t *testing.T) {
 				mention: []string{"@cockroachdb/unowned"},
 				labels:  []string{"C-test-failure", "release-blocker", "T-testeng"},
 			}},
-			formatter: DefaultFormatter,
 		},
 	}
 
