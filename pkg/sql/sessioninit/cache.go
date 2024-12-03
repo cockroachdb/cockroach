@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -132,11 +133,11 @@ func (a *Cache) GetAuthInfo(
 		if err := txn.Descriptors().MaybeSetReplicationSafeTS(ctx, txn.KV()); err != nil {
 			return err
 		}
-		_, usersTableDesc, err = descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), UsersTableName)
+		usersTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.UsersTableID)
 		if err != nil {
 			return err
 		}
-		_, roleOptionsTableDesc, err = descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), RoleOptionsTableName)
+		roleOptionsTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleOptionsTableID)
 		return err
 	})
 	if err != nil {
@@ -296,7 +297,7 @@ func (a *Cache) GetDefaultSettings(
 	err = db.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		_, dbRoleSettingsTableDesc, err = descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), DatabaseRoleSettingsTableName)
+		dbRoleSettingsTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.DatabaseRoleSettingsTableID)
 		if err != nil {
 			return err
 		}

@@ -2101,6 +2101,7 @@ GO_TARGETS = [
     "//pkg/sql/regionliveness:regionliveness",
     "//pkg/sql/regions:regions",
     "//pkg/sql/regions:regions_test",
+    "//pkg/sql/rolemembershipcache:rolemembershipcache",
     "//pkg/sql/roleoption:roleoption",
     "//pkg/sql/row:row",
     "//pkg/sql/row:row_test",

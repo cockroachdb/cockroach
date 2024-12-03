@@ -70,7 +70,6 @@ func TestProcessorBasic(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r1Stream,
-			func() {},
 		)
 		require.True(t, r1OK)
 		h.syncEventAndRegistrations()
@@ -205,7 +204,6 @@ func TestProcessorBasic(t *testing.T) {
 			true,  /* withFiltering */
 			false, /* withOmitRemote */
 			r2Stream,
-			func() {},
 		)
 		require.True(t, r2OK)
 		h.syncEventAndRegistrations()
@@ -314,7 +312,6 @@ func TestProcessorBasic(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r3Stream,
-			func() {},
 		)
 		require.True(t, r30K)
 		r3Stream.SendError(kvpb.NewError(fmt.Errorf("disconnection error")))
@@ -336,7 +333,6 @@ func TestProcessorBasic(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r4Stream,
-			func() {},
 		)
 		require.False(t, r4OK)
 	})
@@ -362,7 +358,6 @@ func TestProcessorOmitRemote(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r1Stream,
-			func() {},
 		)
 		require.True(t, r1OK)
 		h.syncEventAndRegistrations()
@@ -388,7 +383,6 @@ func TestProcessorOmitRemote(t *testing.T) {
 			false, /* withFiltering */
 			true,  /* withOmitRemote */
 			r2Stream,
-			func() {},
 		)
 		require.True(t, r2OK)
 		h.syncEventAndRegistrations()
@@ -442,7 +436,6 @@ func TestProcessorSlowConsumer(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r1Stream,
-			func() {},
 		)
 		r2Stream := newTestStream()
 		p.Register(
@@ -454,7 +447,6 @@ func TestProcessorSlowConsumer(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r2Stream,
-			func() {},
 		)
 		h.syncEventAndRegistrations()
 		require.Equal(t, 2, p.Len())
@@ -551,7 +543,6 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r1Stream,
-			func() {},
 		)
 		h.syncEventAndRegistrations()
 
@@ -607,7 +598,6 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r1Stream,
-			func() {},
 		)
 		h.syncEventAndRegistrations()
 
@@ -689,7 +679,6 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r1Stream,
-			func() {},
 		)
 		h.syncEventAndRegistrations()
 		require.Equal(t, 1, p.Len())
@@ -996,7 +985,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 				runtime.Gosched()
 				s := newTestStream()
 				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, s, func() {})
+					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, s)
 			}()
 			go func() {
 				defer wg.Done()
@@ -1068,7 +1057,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 				s := newTestStream()
 				regs[s] = firstIdx
 				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, s, func() {})
+					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, s)
 				regDone <- struct{}{}
 			}
 		}()
@@ -1129,7 +1118,6 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			rStream,
-			func() {},
 		)
 		h.syncEventAndRegistrations()
 
@@ -1210,7 +1198,6 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			rStream,
-			func() {},
 		)
 		h.syncEventAndRegistrations()
 
@@ -1281,7 +1268,6 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r1Stream,
-			func() {},
 		)
 
 		// Non-blocking registration that would consume all events.
@@ -1295,7 +1281,6 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			r2Stream,
-			func() {},
 		)
 		h.syncEventAndRegistrations()
 
@@ -1463,7 +1448,7 @@ func TestProcessorBackpressure(t *testing.T) {
 		// Add a registration.
 		stream := newTestStream()
 		ok, _, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpIter */
-			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, stream, nil)
+			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, stream)
 		require.True(t, ok)
 
 		// Wait for the initial checkpoint.

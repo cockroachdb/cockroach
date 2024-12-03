@@ -555,6 +555,7 @@ func NewColIndexJoin(
 		}
 		kvFetcher = row.NewStreamingKVFetcher(
 			flowCtx.Cfg.DistSender,
+			flowCtx.Cfg.KVStreamerMetrics,
 			flowCtx.Stopper(),
 			txn,
 			flowCtx.Cfg.Settings,

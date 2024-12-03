@@ -215,6 +215,7 @@ go_library(
         "//pkg/cloud/amazon",
         "//pkg/cloud/gcp",
         "//pkg/cmd/cmpconn",
+        "//pkg/cmd/roachprod-microbench/util",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/clusterstats",
         "//pkg/cmd/roachtest/grafana",

@@ -557,6 +557,7 @@ func newJoinReader(
 		singleRowLookup := readerType == indexJoinReaderType || spec.LookupColumnsAreKey
 		streamingKVFetcher = row.NewStreamingKVFetcher(
 			flowCtx.Cfg.DistSender,
+			flowCtx.Cfg.KVStreamerMetrics,
 			flowCtx.Stopper(),
 			jr.txn,
 			flowCtx.Cfg.Settings,

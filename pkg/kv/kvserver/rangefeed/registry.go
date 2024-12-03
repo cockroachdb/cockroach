@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -66,23 +67,35 @@ type registration interface {
 	Range() interval.Range
 	// ID returns the id field of the registration as a uintptr.
 	ID() uintptr
-	// getUnreg returns the unregisterFn call back of the registration. It should
-	// be called when being unregistered from processor.
-	getUnreg() func()
+
+	// shouldUnregister returns true if this registration should be unregistered
+	// by unregisterMarkedRegistrations. UnregisterMarkedRegistrations is called
+	// by the rangefeed scheduler when it has been informed of an unregister
+	// request.
+	shouldUnregister() bool
+	// setShouldUnregister sets shouldUnregister to true. Used by the rangefeed
+	// processor in response to an unregister request.
+	setShouldUnregister()
 }
 
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
-	streamCtx        context.Context
-	span             roachpb.Span
-	withDiff         bool
-	withFiltering    bool
-	withOmitRemote   bool
-	unreg            func()
+	streamCtx      context.Context
+	span           roachpb.Span
+	withDiff       bool
+	withFiltering  bool
+	withOmitRemote bool
+	// removeRegFromProcessor is called to remove the registration from its
+	// processor. This is provided by the creator of the registration and called
+	// during disconnect(). Since it is called during disconnect it must be
+	// non-blocking.
+	removeRegFromProcessor func(registration)
+
 	catchUpTimestamp hlc.Timestamp // exclusive
 	id               int64         // internal
 	keys             interval.Range
+	shouldUnreg      atomic.Bool
 }
 
 // ID implements interval.Interface.
@@ -123,8 +136,12 @@ func (r *baseRegistration) getWithOmitRemote() bool {
 	return r.withOmitRemote
 }
 
-func (r *baseRegistration) getUnreg() func() {
-	return r.unreg
+func (r *baseRegistration) shouldUnregister() bool {
+	return r.shouldUnreg.Load()
+}
+
+func (r *baseRegistration) setShouldUnregister() {
+	r.shouldUnreg.Store(true)
 }
 
 func (r *baseRegistration) getWithDiff() bool {
@@ -337,16 +354,6 @@ func (reg *registry) PublishToOverlapping(
 	})
 }
 
-// Unregister removes a registration from the registry. It is assumed that the
-// registration has already been disconnected, this is intended only to clean
-// up the registry.
-func (reg *registry) Unregister(ctx context.Context, r registration) {
-	reg.metrics.RangeFeedRegistrations.Dec(1)
-	if err := reg.tree.Delete(r, false /* fast */); err != nil {
-		log.Fatalf(ctx, "%v", err)
-	}
-}
-
 // DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.
 // This is different from normal disconnect as registrations won't be able to
 // perform Unregister when processor's work loop is already terminated.
@@ -355,14 +362,7 @@ func (reg *registry) Unregister(ctx context.Context, r registration) {
 // TODO: this should be revisited as part of
 // https://github.com/cockroachdb/cockroach/issues/110634
 func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Error) {
-	reg.metrics.RangeFeedRegistrations.Dec(int64(reg.tree.Len()))
 	reg.DisconnectWithErr(ctx, all, pErr)
-}
-
-// Disconnect disconnects all registrations that overlap the specified span with
-// a nil error.
-func (reg *registry) Disconnect(ctx context.Context, span roachpb.Span) {
-	reg.DisconnectWithErr(ctx, span, nil /* pErr */)
 }
 
 // DisconnectWithErr disconnects all registrations that overlap the specified
@@ -398,7 +398,14 @@ func (reg *registry) forOverlappingRegs(
 	} else {
 		reg.tree.DoMatching(matchFn, span.AsRange())
 	}
+	reg.remove(ctx, toDelete)
+}
 
+func (reg *registry) remove(ctx context.Context, toDelete []interval.Interface) {
+	// We only ever call remote on values we know exist in the
+	// registry, so we can assume we can decrement this by the
+	// lenght of the input.
+	reg.metrics.RangeFeedRegistrations.Dec(int64(len(toDelete)))
 	if len(toDelete) == reg.tree.Len() {
 		reg.tree.Clear()
 	} else if len(toDelete) == 1 {
@@ -413,6 +420,24 @@ func (reg *registry) forOverlappingRegs(
 		}
 		reg.tree.AdjustRanges()
 	}
+}
+
+// unregisterMarkedRegistrations iterates the registery and removes any
+// registrations where shouldUnregister() returns true. This is called by the
+// rangefeed processor in response to an async unregistration request.
+//
+// See the comment on (*ScheduledProcessor).unregisterClientAsync for more
+// details.
+func (reg *registry) unregisterMarkedRegistrations(ctx context.Context) {
+	var toDelete []interval.Interface
+	reg.tree.Do(func(i interval.Interface) (done bool) {
+		r := i.(registration)
+		if r.shouldUnregister() {
+			toDelete = append(toDelete, i)
+		}
+		return false
+	})
+	reg.remove(ctx, toDelete)
 }
 
 // waitForCaughtUp waits for all registrations overlapping the given span to
