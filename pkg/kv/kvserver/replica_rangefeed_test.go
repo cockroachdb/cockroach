@@ -1467,8 +1467,6 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
-	// TODO(arul): Dig into why this isn't passing.
-	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
 
 	var storeLivenessHeartbeatsOff atomic.Value
 	cargs := aggressiveResolvedTimestampManuallyReplicatedClusterArgs
