@@ -3612,3 +3612,43 @@ ORDER BY stat->>'name' DESC
 ----
 __merged__    {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "0"}
 __forecast__  {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "0"}
+
+# Regression test for #67050: make sure we skip over enum values that have been
+# dropped when decoding histograms.
+
+statement ok
+CREATE TYPE e67050 AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE TABLE t67050 (x e67050 PRIMARY KEY)
+
+statement ok
+INSERT INTO t67050 VALUES ('a'), ('b'), ('c')
+
+statement ok
+ANALYZE t67050
+
+statement ok
+DELETE FROM t67050 WHERE x = 'a'
+
+statement ok
+ALTER TYPE e67050 DROP VALUE 'a'
+
+query T
+SELECT jsonb_pretty(statistics->0->'histo_buckets') FROM
+[SHOW STATISTICS USING JSON FOR TABLE t67050]
+----
+[
+    {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "b"
+    },
+    {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "c"
+    }
+]
