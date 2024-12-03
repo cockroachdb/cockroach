@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -488,6 +489,89 @@ func TestIdleInSessionTimeout(t *testing.T) {
 		t.Fatal("expected the connection to be killed " +
 			"but the connection is still alive")
 	}
+}
+
+func TestIdleInSessionTimeoutDuringSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "slow test")
+	ctx := context.Background()
+
+	var blockSchemaChange atomic.Bool
+	startWaitOfSchemaChange := make(chan any)
+	endWaitOfSchemaChange := make(chan any)
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, stageIdx int) error {
+					// We only block in the first stage of the PostCommitPhase.
+					if !blockSchemaChange.Load() || p.Params.ExecutionPhase != scop.PostCommitPhase || stageIdx != 0 {
+						return nil
+					}
+					// Notify foreground thread that we are now waiting
+					startWaitOfSchemaChange <- true
+					// Wait for the foreground thread to release us
+					<-endWaitOfSchemaChange
+					return nil
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE TABLE t1()")
+
+	const sessionTimeoutInSeconds = 1
+	acquireConn := func() *gosql.Conn {
+		conn, err := sqlDB.Conn(ctx)
+		require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("SET idle_in_session_timeout = '%ds'", sessionTimeoutInSeconds))
+		require.NoError(t, err)
+		return conn
+	}
+	conn := acquireConn()
+
+	checkConnectionAndReconnect := func(expectConnection bool) {
+		// Test the connection
+		_, err := conn.ExecContext(ctx, `SELECT 1`)
+		if expectConnection {
+			require.NoError(t, err, "expected the connection to be valid, but it's not: %v", err)
+		} else {
+			require.Error(t, err, "expected the connection to be dead, but it's still alive")
+			// Reestablish the connection
+			conn = acquireConn()
+		}
+	}
+	time.Sleep(2 * sessionTimeoutInSeconds * time.Second)
+	checkConnectionAndReconnect(false)
+
+	// Kick off a background thread that will block doing a schema change. It
+	// should be immune to the idle session timeout.
+	defer close(endWaitOfSchemaChange) // Close channel to unblock background thread if foreground fails
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(func(ctx context.Context) error {
+		defer close(startWaitOfSchemaChange) // In case we fail before adding to this channel
+		blockSchemaChange.Swap(true)
+		_, err := conn.ExecContext(ctx, `ALTER TABLE t1 ADD COLUMN C2 BIGINT`)
+		return err
+	})
+
+	<-startWaitOfSchemaChange
+	blockSchemaChange.Swap(false) // Disable so that we don't block for another stage
+	// We are now waiting for the schema change to complete. Waiting for twice the
+	// session timeout ensures that the schema change is not affected by the idle
+	// session timeout.
+	time.Sleep(2 * sessionTimeoutInSeconds * time.Second)
+	// Tell the background thread to continue
+	endWaitOfSchemaChange <- true
+	require.NoError(t, grp.Wait())
+
+	// Test that the idle session timer is reset after the schema change.
+	checkConnectionAndReconnect(true)
+	time.Sleep(2 * sessionTimeoutInSeconds * time.Second)
+	checkConnectionAndReconnect(false)
 }
 
 func TestIdleInTransactionSessionTimeout(t *testing.T) {
