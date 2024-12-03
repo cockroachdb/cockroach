@@ -57,6 +57,24 @@ var BatchProcessLatencyBuckets = staticBucketConfig{
 	distribution: Exponential,
 }
 
+var ChangefeedBatchLatencyBuckets = staticBucketConfig{
+	category:     "ChangefeedBatchLatencyBuckets",
+	min:          5e6,   // 5ms
+	max:          600e9, // 10m
+	count:        60,
+	units:        LATENCY,
+	distribution: Exponential,
+}
+
+var ChangefeedPipelineLatencyBuckets = staticBucketConfig{
+	category:     "ChangefeedPipelineLatencyBuckets",
+	min:          5e6,    // 5ms
+	max:          3600e9, // 1h
+	count:        60,
+	units:        LATENCY,
+	distribution: Exponential,
+}
+
 var LongRunning60mLatencyBuckets = staticBucketConfig{
 	category:     "LongRunning60mLatencyBuckets",
 	min:          500e6,  // 500ms
