@@ -153,7 +153,6 @@ switched_rules_by_language(
 # com_github_golang_mock handled in DEPS.bzl.
 
 # Load the go dependencies and invoke them.
-load("@io_bazel_rules_go//go:def.bzl", "go_wrap_sdk")
 load(
     "@io_bazel_rules_go//go:deps.bzl",
     "go_download_sdk",
@@ -163,6 +162,7 @@ load(
     "go_register_toolchains",
     "go_rules_dependencies",
 )
+load("@io_bazel_rules_go//go:def.bzl", "go_wrap_sdk")
 
 # To point to a mirrored artifact, use:
 #
