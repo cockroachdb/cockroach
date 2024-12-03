@@ -68,18 +68,19 @@ func newKafkaSinkClientV2(
 	ctx context.Context,
 	clientOpts []kgo.Opt,
 	batchCfg sinkBatchConfig,
-	bootstrapAddrs string,
+	bootstrapAddrsStr string,
 	settings *cluster.Settings,
 	knobs kafkaSinkV2Knobs,
 	mb metricsRecorderBuilder,
 	topicsForConnectionCheck []string,
 ) (*kafkaSinkClientV2, error) {
+	bootstrapBrokers := strings.Split(bootstrapAddrsStr, `,`)
 
 	baseOpts := []kgo.Opt{
 		// Disable idempotency to maintain parity with the v1 sink and not add surface area for unknowns.
 		kgo.DisableIdempotentWrite(),
 
-		kgo.SeedBrokers(bootstrapAddrs),
+		kgo.SeedBrokers(bootstrapBrokers...),
 		kgo.WithLogger(kgoLogAdapter{ctx: ctx}),
 		kgo.RecordPartitioner(newKgoChangefeedPartitioner()),
 		// 256MiB. This is the max this library allows. Note that v1 sets the sarama equivalent to math.MaxInt32.
