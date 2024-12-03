@@ -3000,7 +3000,9 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
-			ServerArgs:      base.TestServerArgs{},
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+			},
 		})
 	defer tc.Stopper().Stop(ctx)
 	scratch := tc.ScratchRange(t)
