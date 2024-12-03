@@ -27,6 +27,7 @@ import (
 // execgen:template<partialOrder>
 // execgen:inline
 func nextBatch(t *topKSorter, partialOrder bool) {
+	t.cancelChecker.CheckEveryCall()
 	t.inputBatch = t.Input.Next()
 	if partialOrder {
 		t.orderState.distincterInput.SetBatch(t.inputBatch)
