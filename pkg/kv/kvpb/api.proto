@@ -3668,23 +3668,30 @@ message JoinNodeResponse {
 
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
-  rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
+  rpc Batch (BatchRequest) returns (BatchResponse) {}
+
+  // BatchStream is a streaming variant of Batch. There is a 1:1 correspondence
+  // between requests and responses. The method is used to facilitate pooling of
+  // gRPC streams to avoid the overhead of creating and discarding a new stream
+  // for each unary Batch RPC invocation. See rpc.BatchStreamPool.
+  rpc BatchStream (stream BatchRequest) returns (stream BatchResponse) {}
+
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
-  rpc MuxRangeFeed       (stream RangeFeedRequest)   returns (stream MuxRangeFeedEvent) {}
+  rpc MuxRangeFeed       (stream RangeFeedRequest)   returns (stream MuxRangeFeedEvent)       {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
   rpc ResetQuorum        (ResetQuorumRequest)        returns (ResetQuorumResponse)            {}
 
   // TokenBucket is used by tenants to obtain Request Units and report
   // consumption.
-  rpc TokenBucket        (TokenBucketRequest)        returns (TokenBucketResponse)            {}
+  rpc TokenBucket (TokenBucketRequest) returns (TokenBucketResponse) {}
 
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.
-  rpc Join(JoinNodeRequest) returns (JoinNodeResponse) { }
+  rpc Join (JoinNodeRequest) returns (JoinNodeResponse) {}
 
   // GetSpanConfigs is used to fetch the span configurations over a given
   // keyspan.
-  rpc GetSpanConfigs (GetSpanConfigsRequest) returns (GetSpanConfigsResponse) { }
+  rpc GetSpanConfigs (GetSpanConfigsRequest) returns (GetSpanConfigsResponse) {}
 
   // GetAllSystemSpanConfigsThatApply is used to fetch all system span
   // configurations that apply over a tenant's ranges.
@@ -3692,20 +3699,19 @@ service Internal {
 
   // UpdateSpanConfigs is used to update the span configurations over given
   // keyspans.
-  rpc UpdateSpanConfigs (UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) { }
+  rpc UpdateSpanConfigs (UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) {}
 
   // SpanConfigConformance is used to determine whether ranges backing the given
   // keyspans conform to span configs that apply over them.
-  rpc SpanConfigConformance (SpanConfigConformanceRequest) returns (SpanConfigConformanceResponse) { }
+  rpc SpanConfigConformance (SpanConfigConformanceRequest) returns (SpanConfigConformanceResponse) {}
 
   // TenantSettings is used by tenants to obtain and stay up to date with tenant
   // setting overrides.
-  rpc TenantSettings (TenantSettingsRequest) returns (stream TenantSettingsEvent) { }
-
+  rpc TenantSettings (TenantSettingsRequest) returns (stream TenantSettingsEvent) {}
 
   // GetRangeDescriptors is used by tenants to get range descriptors for their
   // own ranges.
- rpc GetRangeDescriptors (GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) { }
+ rpc GetRangeDescriptors (GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
 }
 
 // GetRangeDescriptorsRequest is used to fetch range descriptors.

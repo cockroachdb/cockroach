@@ -55,7 +55,7 @@ func (a tenantAuthorizer) authorize(
 	req interface{},
 ) error {
 	switch fullMethod {
-	case "/cockroach.roachpb.Internal/Batch":
+	case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream":
 		return a.authBatch(ctx, sv, tenID, req.(*kvpb.BatchRequest))
 
 	case "/cockroach.roachpb.Internal/RangeLookup":
@@ -63,6 +63,7 @@ func (a tenantAuthorizer) authorize(
 
 	case "/cockroach.roachpb.Internal/RangeFeed", "/cockroach.roachpb.Internal/MuxRangeFeed":
 		return a.authRangeFeed(tenID, req.(*kvpb.RangeFeedRequest))
+
 	case "/cockroach.roachpb.Internal/GossipSubscription":
 		return a.authGossipSubscription(tenID, req.(*kvpb.GossipSubscriptionRequest))
 

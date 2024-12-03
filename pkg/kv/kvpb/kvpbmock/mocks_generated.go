@@ -58,6 +58,26 @@ func (mr *MockInternalClientMockRecorder) Batch(arg0, arg1 interface{}, arg2 ...
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Batch", reflect.TypeOf((*MockInternalClient)(nil).Batch), varargs...)
 }
 
+// BatchStream mocks base method.
+func (m *MockInternalClient) BatchStream(arg0 context.Context, arg1 ...grpc.CallOption) (kvpb.Internal_BatchStreamClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "BatchStream", varargs...)
+	ret0, _ := ret[0].(kvpb.Internal_BatchStreamClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BatchStream indicates an expected call of BatchStream.
+func (mr *MockInternalClientMockRecorder) BatchStream(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchStream", reflect.TypeOf((*MockInternalClient)(nil).BatchStream), varargs...)
+}
+
 // GetAllSystemSpanConfigsThatApply mocks base method.
 func (m *MockInternalClient) GetAllSystemSpanConfigsThatApply(arg0 context.Context, arg1 *roachpb.GetAllSystemSpanConfigsThatApplyRequest, arg2 ...grpc.CallOption) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
 	m.ctrl.T.Helper()
