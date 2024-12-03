@@ -708,11 +708,11 @@ func (rlq *raftLogQueue) process(
 	}
 	b := &kv.Batch{}
 	truncRequest := &kvpb.TruncateLogRequest{
-		RequestHeader: kvpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
-		Index:         decision.NewFirstIndex,
-		RangeID:       r.RangeID,
+		RequestHeader:      kvpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
+		Index:              decision.NewFirstIndex,
+		RangeID:            r.RangeID,
+		ExpectedFirstIndex: decision.Input.FirstIndex,
 	}
-	truncRequest.ExpectedFirstIndex = decision.Input.FirstIndex
 	b.AddRawRequest(truncRequest)
 	if err := rlq.db.Run(ctx, b); err != nil {
 		return false, err
