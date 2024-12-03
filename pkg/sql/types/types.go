@@ -2823,6 +2823,8 @@ func (t *T) IsNumeric() bool {
 	}
 }
 
+var EnumValueNotFound = errors.New("could not find enum value")
+
 // EnumGetIdxOfPhysical returns the index within the TypeMeta's slice of
 // enum physical representations that matches the input byte slice.
 func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
@@ -2835,7 +2837,7 @@ func (t *T) EnumGetIdxOfPhysical(phys []byte) (int, error) {
 			return i, nil
 		}
 	}
-	err := errors.Newf(
+	err := errors.Wrapf(EnumValueNotFound,
 		"could not find %v in enum %q representation %s %s",
 		phys,
 		t.TypeMeta.Name.FQName(true /* explicitCatalog */),
