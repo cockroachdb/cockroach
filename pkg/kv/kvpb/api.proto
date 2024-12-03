@@ -1643,8 +1643,6 @@ message TruncateLogRequest {
   // that is not equal to ExpectedFirstIndex. This is an optimization that
   // typically allows the potentially expensive computation of the bytes being
   // discarded from the raft log to be performed once, at the leaseholder.
-  //
-  // Populated starting at cluster version LooselyCoupledRaftLogTruncation.
   uint64 expected_first_index = 4  [(gogoproto.casttype) = "RaftIndex"];
 }
 

@@ -125,7 +125,7 @@ func registerNodeKill(r registry.Registry) {
 		Owner:              registry.OwnerServer,
 		Timeout:            10 * time.Minute,
 		CompatibleClouds:   registry.AllClouds,
-		CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
+		CanRunConcurrently: registry.OperationCannotRunConcurrently,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresZeroUnderreplicatedRanges},
 		Run:                nodeKillRunner(15 /* signal */, false /* drain */),
 	})

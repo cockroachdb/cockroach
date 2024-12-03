@@ -282,15 +282,9 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
-	isRaftLogTruncationDeltaTrusted := true
-	handleTruncatedState := func(state *kvserverpb.RaftTruncatedState) {
-		raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
-			ctx, state, rResult.RaftExpectedFirstIndex)
-		if !expectedFirstIndexWasAccurate && rResult.RaftExpectedFirstIndex != 0 {
-			isRaftLogTruncationDeltaTrusted = false
-		}
-		rResult.RaftLogDelta += raftLogDelta
-		rResult.RaftExpectedFirstIndex = 0
+	truncState := rResult.RaftTruncatedState
+	if truncState != nil {
+		rResult.RaftTruncatedState = nil
 	}
 
 	if rResult.State != nil {
@@ -300,13 +294,11 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.PriorReadSummary = nil
 		}
 
-		// TODO(#93248): the strongly coupled truncation code will be removed once
-		// the loosely coupled truncations are the default.
 		if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
-			if rResult.RaftTruncatedState != nil {
+			if truncState != nil {
 				log.Fatalf(ctx, "double RaftTruncatedState in ReplicatedEvalResult")
 			}
-			handleTruncatedState(newTruncState)
+			truncState = newTruncState
 			rResult.State.TruncatedState = nil
 		}
 
@@ -324,17 +316,26 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.State = nil
 		}
 	}
-	if newTruncState := rResult.RaftTruncatedState; newTruncState != nil {
-		handleTruncatedState(newTruncState)
-		rResult.RaftTruncatedState = nil
-	}
 
-	if rResult.RaftLogDelta != 0 {
-		// This code path will be taken exactly when one of the preceding blocks has
-		// invoked handleTruncatedState. It is needlessly confusing that these two
-		// are not in the same place.
-		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta, isRaftLogTruncationDeltaTrusted)
+	// TODO(#93248): the strongly coupled truncation code will be removed once the
+	// loosely coupled truncations are the default.
+	if truncState != nil {
+		// NB: raftLogDelta reflects removals of any sideloaded entries.
+		raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
+			ctx, truncState, rResult.RaftExpectedFirstIndex)
+		// NB: The RaftExpectedFirstIndex field is zero if this proposal is from
+		// before v22.1 that added it, when all truncations were strongly coupled.
+		// The delta in these historical proposals is thus accurate.
+		// TODO(pav-kv): remove the zero check after any below-raft migration.
+		isRaftLogTruncationDeltaTrusted := expectedFirstIndexWasAccurate ||
+			rResult.RaftExpectedFirstIndex == 0
+		// The proposer hasn't included the sideloaded entries into the delta. We
+		// counted these above, and combine the deltas.
+		raftLogDelta += rResult.RaftLogDelta
+		sm.r.handleRaftLogDeltaResult(ctx, raftLogDelta, isRaftLogTruncationDeltaTrusted)
+
 		rResult.RaftLogDelta = 0
+		rResult.RaftExpectedFirstIndex = 0
 	}
 
 	// The rest of the actions are "nontrivial" and may have large effects on the
