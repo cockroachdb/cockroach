@@ -365,6 +365,14 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	if config.NumReplicas > cfg.numNodes {
 		config.NumReplicas = cfg.numNodes
 	}
+	if cfg.invalidLeaseAppliedIndexProb > 0 {
+		// Merge requests issue a subsume request, which uses the lease applied
+		// index to freeze the range and force flush to the frozen index. Injecting
+		// invalid lease applied indices will cause the merge to fail on the
+		// subsume.
+		config.Ops.Merge.MergeIsSplit = 0
+		config.Ops.Merge.MergeNotSplit = 0
+	}
 	logger := newTBridge(t)
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, dbs...)
