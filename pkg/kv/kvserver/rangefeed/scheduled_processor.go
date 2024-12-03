@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -64,6 +65,11 @@ type ScheduledProcessor struct {
 	// stopper passed by start that is used for firing up async work from scheduler.
 	stopper       *stop.Stopper
 	txnPushActive bool
+
+	// pendingUnregistrations indicates that the registry may have registrations
+	// that can be unregistered. This is handled outside of the requestQueue to
+	// avoid blocking clients who only need to signal unregistration.
+	pendingUnregistrations atomic.Bool
 }
 
 // NewScheduledProcessor creates a new scheduler based rangefeed Processor.
@@ -157,6 +163,16 @@ func (p *ScheduledProcessor) processRequests(ctx context.Context) {
 		case e := <-p.requestQueue:
 			e(ctx)
 		default:
+			if p.pendingUnregistrations.Swap(false) {
+				p.reg.unregisterMarkedRegistrations(ctx)
+				// If we have no more registrations, we can stop this processor. Note
+				// that stopInternal sets p.stopping to true so any register requests
+				// being concurrenly enqueued will fail-fast before being added to the
+				// registry.
+				if p.reg.Len() == 0 {
+					p.stopInternal(ctx, nil)
+				}
+			}
 			return
 		}
 	}
@@ -239,6 +255,10 @@ func (p *ScheduledProcessor) cleanup() {
 	p.taskCancel()
 	close(p.stoppedC)
 	p.MemBudget.Close(ctx)
+	if p.UnregisterFromReplica != nil {
+		p.UnregisterFromReplica(p)
+	}
+
 }
 
 // Stop shuts down the processor and closes all registrations. Safe to call on
@@ -271,12 +291,16 @@ func (p *ScheduledProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb
 
 func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 	p.enqueueRequest(func(ctx context.Context) {
-		p.reg.DisconnectWithErr(ctx, all, pErr)
-		// First set stopping flag to ensure that once all registrations are removed
-		// processor should stop.
-		p.stopping = true
-		p.scheduler.StopProcessor()
+		p.stopInternal(ctx, pErr)
 	})
+}
+
+func (p *ScheduledProcessor) stopInternal(ctx context.Context, pErr *kvpb.Error) {
+	p.reg.DisconnectAllOnShutdown(ctx, pErr)
+	// First set stopping flag to ensure that once all registrations are removed
+	// processor should stop.
+	p.stopping = true
+	p.scheduler.StopProcessor()
 }
 
 // Register registers the stream over the specified span of keys.
@@ -304,7 +328,6 @@ func (p *ScheduledProcessor) Register(
 	withFiltering bool,
 	withOmitRemote bool,
 	stream Stream,
-	disconnectFn func(),
 ) (bool, Disconnector, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -319,8 +342,7 @@ func (p *ScheduledProcessor) Register(
 	} else {
 		r = newBufferedRegistration(
 			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-		)
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, p.unregisterClientAsync)
 	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
@@ -345,16 +367,7 @@ func (p *ScheduledProcessor) Register(
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
 		// Run an output loop for the registry.
-		runOutputLoop := func(ctx context.Context) {
-			r.runOutputLoop(ctx, p.RangeID)
-			if p.unregisterClient(r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if f := r.getUnreg(); f != nil {
-					f()
-				}
-			}
-		}
+		runOutputLoop := func(ctx context.Context) { r.runOutputLoop(ctx, p.RangeID) }
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
 			// If we can't schedule internally, processor is already stopped which
@@ -362,7 +375,6 @@ func (p *ScheduledProcessor) Register(
 			// registration.
 			r.Disconnect(kvpb.NewError(err))
 			r.drainAllocations(ctx)
-			p.reg.Unregister(ctx, r)
 		}
 		return f
 	})
@@ -370,13 +382,6 @@ func (p *ScheduledProcessor) Register(
 		return true, r, filter
 	}
 	return false, nil, nil
-}
-
-func (p *ScheduledProcessor) unregisterClient(r registration) bool {
-	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) bool {
-		p.reg.Unregister(ctx, r)
-		return true
-	})
 }
 
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
@@ -635,6 +640,29 @@ func (p *ScheduledProcessor) enqueueRequest(req request) {
 		p.scheduler.Enqueue(RequestQueued)
 	case <-p.stoppedC:
 	}
+}
+
+// unregisterClientAsync instructs the processor to unregister the given
+// registration. This doesn't send an actual request to the request queue to
+// ensure that it is non-blocking.
+//
+// Rather, the registration has its shouldUnregister flag set and the
+// processor's pendingUnregistrations flag is set. During processRequests, if
+// pendingUnregistrations is true, we remove any marked registrations from the
+// registry.
+//
+// We are OK with these being processed out of order since these requests
+// originate from a registration cleanup, so the registration in question is no
+// longer processing events.
+func (p *ScheduledProcessor) unregisterClientAsync(r registration) {
+	select {
+	case <-p.stoppedC:
+		return
+	default:
+	}
+	r.setShouldUnregister()
+	p.pendingUnregistrations.Store(true)
+	p.scheduler.Enqueue(RequestQueued)
 }
 
 func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {

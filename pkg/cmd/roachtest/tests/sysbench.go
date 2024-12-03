@@ -7,6 +7,7 @@ package tests
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,7 +16,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -193,7 +196,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 
 		t.Status("exporting results")
-		return exportSysbenchResults(t, result.Stdout, start)
+		return exportSysbenchResults(t, c, result.Stdout, start, opts)
 	}
 	if opts.usePostgres {
 		if err := runWorkload(ctx); err != nil {
@@ -281,12 +284,20 @@ type sysbenchMetrics struct {
 	Reconnects   string `json:"reconnects"`
 }
 
-// exportSysbenchResults parses the output of `sysbench` into a JSON file
-// and writes it to the perf directory that roachperf expects. Sysbench does
-// have a way to customize the report output via injecting a custom
-// `sysbench.hooks.report_intermediate` hook, but then we would lose the
-// human-readable output in the test itself.
-func exportSysbenchResults(t test.Test, result string, start time.Time) error {
+type openmetricsValues struct {
+	Value string
+	Time  int64
+}
+
+// exportSysbenchResults parses the output of `sysbench` into a stats
+// file and writes it to the perf directory that roachperf expects. The
+// format of the stats file is dependent on t.ExportOpenmetrics().
+// Sysbench does have a way to customize the report output via injecting
+// a custom `sysbench.hooks.report_intermediate` hook, but then we would
+// lose the human-readable output in the test itself.
+func exportSysbenchResults(
+	t test.Test, c cluster.Cluster, result string, start time.Time, opts sysbenchOptions,
+) error {
 	// Parse the results into a JSON file that roachperf understands.
 	// The output of the results look like:
 	// 		1. Start up information.
@@ -309,6 +320,46 @@ func exportSysbenchResults(t test.Test, result string, start time.Time) error {
 
 	var snapshotsFound int
 	s := bufio.NewScanner(strings.NewReader(result))
+	labels := map[string]string{
+		"distribution":   opts.distribution,
+		"duration":       fmt.Sprintf("%f", opts.duration.Seconds()),
+		"concurrency":    fmt.Sprintf("%d", opts.concurrency),
+		"table":          fmt.Sprintf("%d", opts.tables),
+		"rows-per-table": fmt.Sprintf("%d", opts.rowsPerTable),
+		"use-postgres":   fmt.Sprintf("%t", opts.usePostgres),
+	}
+	labelString := clusterstats.GetOpenmetricsLabelString(t, c, labels)
+	openmetricsMap := make(map[string][]openmetricsValues)
+	tick := func(fields []string, qpsByType []string) error {
+		snapshotTick := sysbenchMetrics{
+			Time:         start.Unix(),
+			Threads:      fields[1],
+			Transactions: fields[3],
+			Qps:          fields[5],
+			ReadQps:      qpsByType[0],
+			WriteQps:     qpsByType[1],
+			OtherQps:     qpsByType[2],
+			P95Latency:   fields[10],
+			Errors:       fields[12],
+			Reconnects:   fields[14],
+		}
+
+		if t.ExportOpenmetrics() {
+			addCurrentSnapshotToOpenmetrics(snapshotTick, openmetricsMap)
+		} else {
+			var snapshotTickBytes []byte
+			snapshotTickBytes, err = json.Marshal(snapshotTick)
+			if err != nil {
+				return errors.Errorf("error marshaling metrics")
+			}
+			snapshotTickBytes = append(snapshotTickBytes, []byte("\n")...)
+			metricBytes = append(metricBytes, snapshotTickBytes...)
+		}
+
+		start = start.Add(time.Second)
+		return nil
+	}
+
 	for s.Scan() {
 		if matched := regex.MatchString(s.Text()); !matched {
 			continue
@@ -328,26 +379,11 @@ func exportSysbenchResults(t test.Test, result string, start time.Time) error {
 		if len(qpsByType) != 3 {
 			return errors.Errorf("QPS metrics output in unexpected format, expected 3 fields got: %d", len(qpsByType))
 		}
-		snapshotTick := sysbenchMetrics{
-			Time:         start.Unix(),
-			Threads:      fields[1],
-			Transactions: fields[3],
-			Qps:          fields[5],
-			ReadQps:      qpsByType[0],
-			WriteQps:     qpsByType[1],
-			OtherQps:     qpsByType[2],
-			P95Latency:   fields[10],
-			Errors:       fields[12],
-			Reconnects:   fields[14],
+
+		if err := tick(fields, qpsByType); err != nil {
+			return err
 		}
 
-		snapshotTickBytes, err := json.Marshal(snapshotTick)
-		if err != nil {
-			return errors.Errorf("error marshaling metrics")
-		}
-		metricBytes = append(metricBytes, snapshotTickBytes...)
-		metricBytes = append(metricBytes, []byte("\n")...)
-		start = start.Add(time.Second)
 	}
 	// Guard against the possibility that the format changed and we no longer
 	// get any output.
@@ -363,5 +399,40 @@ func exportSysbenchResults(t test.Test, result string, start time.Time) error {
 		return err
 	}
 
-	return os.WriteFile(fmt.Sprintf("%s/stats.json", perfDir), metricBytes, 0666)
+	if t.ExportOpenmetrics() {
+		metricBytes = getOpenmetricsBytes(openmetricsMap, labelString)
+	}
+	return os.WriteFile(fmt.Sprintf("%s/%s", perfDir, roachtestutil.GetBenchmarkMetricsFileName(t)), metricBytes, 0666)
+}
+
+// Add sysbenchMetrics to the openmetricsMap
+func addCurrentSnapshotToOpenmetrics(
+	metrics sysbenchMetrics, openmetricsMap map[string][]openmetricsValues,
+) {
+	time := metrics.Time
+	openmetricsMap["threads"] = append(openmetricsMap["threads"], openmetricsValues{Value: metrics.Threads, Time: time})
+	openmetricsMap["transactions"] = append(openmetricsMap["transactions"], openmetricsValues{Value: metrics.Transactions, Time: time})
+	openmetricsMap["qps"] = append(openmetricsMap["qps"], openmetricsValues{Value: metrics.Qps, Time: time})
+	openmetricsMap["read_qps"] = append(openmetricsMap["read_qps"], openmetricsValues{Value: metrics.ReadQps, Time: time})
+	openmetricsMap["write_qps"] = append(openmetricsMap["write_qps"], openmetricsValues{Value: metrics.WriteQps, Time: time})
+	openmetricsMap["other_qps"] = append(openmetricsMap["other_qps"], openmetricsValues{Value: metrics.OtherQps, Time: time})
+	openmetricsMap["p95_latency"] = append(openmetricsMap["p95_latency"], openmetricsValues{Value: metrics.P95Latency, Time: time})
+	openmetricsMap["errors"] = append(openmetricsMap["errors"], openmetricsValues{Value: metrics.Errors, Time: time})
+	openmetricsMap["reconnects"] = append(openmetricsMap["reconnects"], openmetricsValues{Value: metrics.Reconnects, Time: time})
+}
+
+// Convert openmetricsMap to bytes for writing to file
+func getOpenmetricsBytes(openmetricsMap map[string][]openmetricsValues, labelString string) []byte {
+	metricsBuf := bytes.NewBuffer([]byte{})
+	for key, values := range openmetricsMap {
+		metricName := util.SanitizeMetricName(key)
+		metricsBuf.WriteString(clusterstats.GetOpenmetricsGaugeType(metricName))
+		for _, value := range values {
+			metricsBuf.WriteString(fmt.Sprintf("%s{%s} %s %d\n", metricName, labelString, value.Value, value.Time))
+		}
+	}
+
+	// Add # EOF at the end for openmetrics
+	metricsBuf.WriteString("# EOF\n")
+	return metricsBuf.Bytes()
 }

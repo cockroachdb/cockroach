@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
@@ -58,8 +59,8 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 		mu.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(
-			`DELETE FROM %s WHERE database_id = $1`,
-			sessioninit.DatabaseRoleSettingsTableName,
+			`DELETE FROM system.public.%s WHERE database_id = $1`,
+			catconstants.DatabaseRoleSettingsTableName,
 		),
 		dbID,
 	)

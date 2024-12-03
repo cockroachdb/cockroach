@@ -466,7 +466,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 
 	if p != nil {
 		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			stream, func() { r.maybeDisconnectEmptyRangefeed(p) })
+			stream)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -499,20 +499,21 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r, span: desc.RSpan()}
 	cfg := rangefeed.Config{
-		AmbientContext:   r.AmbientContext,
-		Clock:            r.Clock(),
-		Stopper:          r.store.stopper,
-		Settings:         r.store.ClusterSettings(),
-		RangeID:          r.RangeID,
-		Span:             desc.RSpan(),
-		TxnPusher:        &tp,
-		PushTxnsAge:      r.store.TestingKnobs().RangeFeedPushTxnsAge,
-		EventChanCap:     defaultEventChanCap,
-		EventChanTimeout: defaultEventChanTimeout,
-		Metrics:          r.store.metrics.RangeFeedMetrics,
-		MemBudget:        feedBudget,
-		Scheduler:        r.store.getRangefeedScheduler(),
-		Priority:         isSystemSpan, // only takes effect when Scheduler != nil
+		AmbientContext:        r.AmbientContext,
+		Clock:                 r.Clock(),
+		Stopper:               r.store.stopper,
+		Settings:              r.store.ClusterSettings(),
+		RangeID:               r.RangeID,
+		Span:                  desc.RSpan(),
+		TxnPusher:             &tp,
+		PushTxnsAge:           r.store.TestingKnobs().RangeFeedPushTxnsAge,
+		EventChanCap:          defaultEventChanCap,
+		EventChanTimeout:      defaultEventChanTimeout,
+		Metrics:               r.store.metrics.RangeFeedMetrics,
+		MemBudget:             feedBudget,
+		Scheduler:             r.store.getRangefeedScheduler(),
+		Priority:              isSystemSpan, // only takes effect when Scheduler != nil
+		UnregisterFromReplica: r.unsetRangefeedProcessor,
 	}
 	p = rangefeed.NewProcessor(cfg)
 
@@ -547,7 +548,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
 	reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff,
-		withFiltering, withOmitRemote, stream, func() { r.maybeDisconnectEmptyRangefeed(p) })
+		withFiltering, withOmitRemote, stream)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
