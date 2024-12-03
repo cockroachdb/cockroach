@@ -198,6 +198,10 @@ const (
 	// range-ID local key, which is written below raft.
 	V25_1_AddRangeForceFlushKey
 
+	// V25_1_BatchStreamRPC adds the BatchStream RPC, which allows for more
+	// efficient Batch unary RPCs.
+	V25_1_BatchStreamRPC
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -240,6 +244,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_1_AddJobsTables:          {Major: 24, Minor: 3, Internal: 4},
 	V25_1_MoveRaftTruncatedState: {Major: 24, Minor: 3, Internal: 6},
 	V25_1_AddRangeForceFlushKey:  {Major: 24, Minor: 3, Internal: 8},
+	V25_1_BatchStreamRPC:         {Major: 24, Minor: 3, Internal: 10},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
