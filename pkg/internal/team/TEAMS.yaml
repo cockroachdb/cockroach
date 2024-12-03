@@ -41,6 +41,10 @@ cockroachdb/sql-queries:
 cockroachdb/kv:
   aliases:
     cockroachdb/kv-triage: roachtest
+    # This is a hack - we can't have the same key twice,
+    # but it also doesn't seem worth rewriting the aliases
+    # into slice form for just this.
+    'cockroachdb/kv-triage ': unittest
     cockroachdb/kv-prs: other
   triage_column_id: 14242655
   label: T-kv
