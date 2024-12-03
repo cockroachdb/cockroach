@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
@@ -2145,7 +2144,8 @@ func (ds *DistSender) sendPartialBatch(
 	// Start a retry loop for sending the batch to the range. Each iteration of
 	// this loop uses a new descriptor. Attempts to send to multiple replicas in
 	// this descriptor are done at a lower level.
-	tBegin, attempts := timeutil.Now(), int64(0) // for slow log message
+	tBegin := crtime.NowMono() // for slow log message
+	var attempts int64
 	// prevTok maintains the EvictionToken used on the previous iteration.
 	var prevTok rangecache.EvictionToken
 	for r := retry.StartWithCtx(ctx, ds.rpcRetryOptions); r.Next(); {
@@ -2202,7 +2202,7 @@ func (ds *DistSender) sendPartialBatch(
 		prevTok = routingTok
 		reply, err = ds.sendToReplicas(ctx, ba, routingTok, withCommit)
 
-		if dur := timeutil.Since(tBegin); dur > slowDistSenderRangeThreshold && !tBegin.IsZero() {
+		if dur := tBegin.Elapsed(); dur > slowDistSenderRangeThreshold && tBegin != 0 {
 			{
 				var s redact.StringBuilder
 				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
@@ -2212,14 +2212,14 @@ func (ds *DistSender) sendPartialBatch(
 			// RPC is not retried any more.
 			if err != nil || reply.Error != nil {
 				ds.metrics.SlowRPCs.Inc(1)
-				defer func(tBegin time.Time, attempts int64) {
+				defer func(tBegin crtime.Mono, attempts int64) {
 					ds.metrics.SlowRPCs.Dec(1)
 					var s redact.StringBuilder
-					slowRangeRPCReturnWarningStr(&s, timeutil.Since(tBegin), attempts)
+					slowRangeRPCReturnWarningStr(&s, tBegin.Elapsed(), attempts)
 					log.Warningf(ctx, "slow RPC response: %v", &s)
 				}(tBegin, attempts)
 			}
-			tBegin = time.Time{} // prevent reentering branch for this RPC
+			tBegin = 0 // prevent reentering branch for this RPC
 		}
 
 		if err != nil {
