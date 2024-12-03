@@ -89,11 +89,13 @@ const (
 	// PurposeRoachtest indicates that the team handles that should be mentioned
 	// in roachtest issues should be returned.
 	PurposeRoachtest = Purpose("roachtest")
+	PurposeUnittest  = Purpose("unittest")
 )
 
 var validPurposes = map[Purpose]struct{}{
 	PurposeOther:     {},
 	PurposeRoachtest: {}, // mention in roachtest issues
+	PurposeUnittest:  {}, // mention in unit test issues
 }
 
 // LoadTeams loads the teams from an io input.
