@@ -258,6 +258,19 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 	})
 }
 
+func TestKafkaSinkClientV2_MultipleBrokers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	fx := newKafkaSinkV2Fx(t, withRealClient(), withSinkURI("kafka://localhost:9092,localhost:9093"))
+	defer fx.close()
+
+	client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+	brokers := client.OptValue("SeedBrokers").([]string)
+	require.Equal(t, []string{"localhost:9092", "localhost:9093"}, brokers)
+
+}
+
 func TestKafkaSinkClientV2_Opts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -470,6 +483,7 @@ type kafkaSinkV2Fx struct {
 	batchConfig     sinkBatchConfig
 	realClient      bool
 	additionalKOpts []kgo.Opt
+	uri             string
 
 	sink *kafkaSinkClientV2
 	bs   *batchingSink
@@ -513,6 +527,12 @@ func withRealClient() fxOpt {
 	}
 }
 
+func withSinkURI(uri string) fxOpt {
+	return func(fx *kafkaSinkV2Fx) {
+		fx.uri = uri
+	}
+}
+
 func withKOptsClient(kOpts []kgo.Opt) fxOpt {
 	return func(fx *kafkaSinkV2Fx) {
 		fx.additionalKOpts = kOpts
@@ -549,13 +569,18 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 		}
 	}
 
+	uri := "kafka://localhost:9092"
+	if fx.uri != "" {
+		uri = fx.uri
+	}
+
 	var err error
-	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts, fx.batchConfig, "no addrs", settings, knobs, nilMetricsRecorderBuilder, nil)
+	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts, fx.batchConfig, uri, settings, knobs, nilMetricsRecorderBuilder, nil)
 	require.NoError(t, err)
 
 	targets := makeChangefeedTargets(fx.targetNames...)
 
-	u, err := url.Parse("kafka://localhost:9092")
+	u, err := url.Parse(uri)
 	require.NoError(t, err)
 
 	q := u.Query()
