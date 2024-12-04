@@ -3,12 +3,11 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package revertccl
+package revert
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
@@ -41,9 +40,6 @@ func alterTenantResetHook(
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		if err := sql.CanManageTenant(ctx, p); err != nil {
-			return err
-		}
-		if err := utilccl.CheckEnterpriseEnabled(p.ExecCfg().Settings, alterTenantResetOp); err != nil {
 			return err
 		}
 

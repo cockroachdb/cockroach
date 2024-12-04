@@ -1,16 +1,15 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "revertccl",
+    name = "revert",
     srcs = [
         "alter_reset_tenant.go",
         "revert.go",
         "revert_tenant.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/revertccl",
+    importpath = "github.com/cockroachdb/cockroach/pkg/revert",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/utilccl",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvpb",
@@ -41,20 +40,18 @@ go_library(
 )
 
 go_test(
-    name = "revertccl_test",
+    name = "revert_test",
     srcs = [
         "main_test.go",
         "revert_test.go",
     ],
-    embed = [":revertccl"],
+    embed = [":revert"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "large"},
         "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
-        "//pkg/ccl/storageccl",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
