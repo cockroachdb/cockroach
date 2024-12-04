@@ -1119,6 +1119,9 @@ func BenchmarkEndToEnd(b *testing.B) {
 	srv, db, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "bench"})
 	defer srv.Stopper().Stop(context.Background())
 	sr := sqlutils.MakeSQLRunner(db)
+	sr.Exec(b, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	sr.Exec(b, `SET CLUSTER SETTING sql.stats.flush.enabled = false`)
+	sr.Exec(b, `SET CLUSTER SETTING sql.metrics.statement_details.enabled = false`)
 	sr.Exec(b, `CREATE DATABASE bench`)
 	for _, schema := range schemas {
 		sr.Exec(b, schema)
