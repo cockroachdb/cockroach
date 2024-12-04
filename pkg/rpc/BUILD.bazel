@@ -75,6 +75,8 @@ go_library(
         "@com_github_montanaflynn_stats//:stats",
         "@com_github_vividcortex_ewma//:ewma",
         "@io_opentelemetry_go_otel//attribute",
+        "@io_storj_drpc//drpcmux",
+        "@io_storj_drpc//drpcserver",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//backoff",
         "@org_golang_google_grpc//codes",
