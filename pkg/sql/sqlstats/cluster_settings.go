@@ -15,7 +15,7 @@ import (
 // TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 var StmtStatsEnable = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
-	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", true,
+	"sql.metrics.statement_details.enabled", "collect per-statement query statistics", false,
 	settings.WithPublic)
 
 // TxnStatsNumStmtFingerprintIDsToRecord limits the number of statementFingerprintIDs stored in

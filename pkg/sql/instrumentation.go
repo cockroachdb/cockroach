@@ -54,7 +54,7 @@ var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"sql.txn_stats.sample_rate",
 	"the probability that a given transaction will collect execution statistics (displayed in the DB Console)",
-	0.01,
+	0.00,
 	settings.Fraction,
 )
 
@@ -458,6 +458,9 @@ func (ih *instrumentationHelper) Setup(
 
 	var previouslySampled bool
 	previouslySampled, ih.savePlanForStats = statsCollector.ShouldSample(fingerprint, implicitTxn, p.SessionData().Database)
+	if !previouslySampled && (fingerprint == "BEGIN TRANSACTION" || fingerprint == "COMMIT TRANSACTION") {
+		previouslySampled = true
+	}
 
 	defer func() { ih.finalizeSetup(newCtx, cfg) }()
 
