@@ -8,7 +8,6 @@ package physical
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -16,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/revert"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -47,7 +47,7 @@ func (r *streamIngestManagerImpl) GetReplicationStatsAndStatus(
 func (r *streamIngestManagerImpl) RevertTenantToTimestamp(
 	ctx context.Context, tenantName roachpb.TenantName, revertTo hlc.Timestamp,
 ) error {
-	return revertccl.RevertTenantToTimestamp(ctx, r.evalCtx, tenantName, revertTo, r.sessionID)
+	return revert.RevertTenantToTimestamp(ctx, r.evalCtx, tenantName, revertTo, r.sessionID)
 }
 
 func newStreamIngestManagerWithPrivilegesCheck(

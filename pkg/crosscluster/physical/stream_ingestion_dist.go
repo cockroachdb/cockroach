@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/revert"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -74,11 +74,11 @@ func startDistIngestion(
 		log.Infof(ctx, "reverting tenant %s to time %s (via %s) before starting replication", details.DestinationTenantID, replicatedTime, revertTo)
 
 		spanToRevert := keys.MakeTenantSpan(details.DestinationTenantID)
-		if err := revertccl.RevertSpansFanout(ctx, execCtx.ExecCfg().DB, execCtx,
+		if err := revert.RevertSpansFanout(ctx, execCtx.ExecCfg().DB, execCtx,
 			[]roachpb.Span{spanToRevert},
 			revertTo,
 			false, /* ignoreGCThreshold */
-			revertccl.RevertDefaultBatchSize,
+			revert.RevertDefaultBatchSize,
 			nil, /* onCompletedCallback */
 		); err != nil {
 			return err
