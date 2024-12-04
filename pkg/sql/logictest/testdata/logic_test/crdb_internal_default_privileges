@@ -1133,6 +1133,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT INSERT ON TABLES TO roach_a;
 statement ok
 DELETE FROM system.users WHERE username = 'roach_a';
 
+# Force the role membership cache to be updated.
+statement ok
+CREATE ROLE tmp;
+
 query TTTBTTTB colnames
 SELECT * FROM crdb_internal.default_privileges WHERE grantee = 'roach_a'
 ORDER BY role;
