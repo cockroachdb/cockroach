@@ -970,6 +970,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	}()
 
 	workloadDoneCh := make(chan struct{})
+	workloadErrCh := make(chan error, 1)
 	workloadMonitor.Go(func(ctx context.Context) error {
 		defer close(workloadDoneCh)
 		err := rd.runWorkload(ctx)
@@ -978,8 +979,11 @@ func (rd *replicationDriver) main(ctx context.Context) {
 		if err != nil && ctx.Err() == nil {
 			// Implies the workload context was not cancelled and the workload cmd returned a
 			// different error.
+			rd.t.L().Printf("Workload context was not cancelled. Error returned by workload cmd: %s", err)
+			workloadErrCh <- err
 			return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
 		}
+		workloadErrCh <- nil
 		rd.t.L().Printf("workload successfully finished")
 		return nil
 	})
@@ -1032,6 +1036,9 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	select {
 	case <-workloadDoneCh:
 		rd.t.L().Printf("workload finished on its own")
+		if err := <-workloadErrCh; err != nil {
+			rd.t.Fatal(err)
+		}
 	case <-time.After(rd.getWorkloadTimeout()):
 		workloadCancel()
 		rd.t.L().Printf("workload was cancelled after %s", rd.rs.additionalDuration)
