@@ -49,13 +49,15 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
+	"storj.io/drpc/drpcmux"
+	"storj.io/drpc/drpcserver"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
 func NewServer(ctx context.Context, rpcCtx *Context, opts ...ServerOption) (*grpc.Server, error) {
-	srv, _ /* interceptors */, err := NewServerEx(ctx, rpcCtx, opts...)
+	srv, _, _, err := NewServerEx(ctx, rpcCtx, opts...)
 	return srv, err
 }
 
@@ -77,13 +79,19 @@ type ClientInterceptorInfo struct {
 	StreamInterceptors []grpc.StreamClientInterceptor
 }
 
+type DrpcServer struct {
+	Srv    *drpcserver.Server
+	Mux    *drpcmux.Mux
+	TLSCfg *tls.Config
+}
+
 // NewServerEx is like NewServer, but also returns the interceptors that have
 // been registered with gRPC for the server. These interceptors can be used
 // manually when bypassing gRPC to call into the server (like the
 // internalClientAdapter does).
 func NewServerEx(
 	ctx context.Context, rpcCtx *Context, opts ...ServerOption,
-) (s *grpc.Server, sii ServerInterceptorInfo, err error) {
+) (s *grpc.Server, d *DrpcServer, sii ServerInterceptorInfo, err error) {
 	var o serverOpts
 	for _, f := range opts {
 		f(&o)
@@ -112,7 +120,7 @@ func NewServerEx(
 	if !rpcCtx.ContextOptions.Insecure {
 		tlsConfig, err := rpcCtx.GetServerTLSConfig()
 		if err != nil {
-			return nil, sii, err
+			return nil, nil, sii, err
 		}
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
@@ -184,11 +192,21 @@ func NewServerEx(
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
 	s = grpc.NewServer(grpcOpts...)
+	dmux := drpcmux.New()
+	dsrv := drpcserver.NewWithOptions(dmux, drpcserver.Options{ /* TODO */ })
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
-	return s, ServerInterceptorInfo{
-		UnaryInterceptors:  unaryInterceptor,
-		StreamInterceptors: streamInterceptor,
-	}, nil
+	tlsCfg, err := rpcCtx.GetServerTLSConfig()
+	if err != nil {
+		return nil, nil, ServerInterceptorInfo{}, err
+	}
+	return s, &DrpcServer{
+			Srv:    dsrv,
+			Mux:    dmux,
+			TLSCfg: tlsCfg,
+		}, ServerInterceptorInfo{
+			UnaryInterceptors:  unaryInterceptor,
+			StreamInterceptors: streamInterceptor,
+		}, nil
 }
 
 // Context is a pool of *grpc.ClientConn that are periodically health-checked,

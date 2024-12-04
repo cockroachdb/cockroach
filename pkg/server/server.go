@@ -957,6 +957,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		cfg.LicenseEnforcer,
 	)
 	kvpb.RegisterInternalServer(grpcServer.Server, node)
+	if grpcServer.drpc != nil {
+		if err := kvpb.DRPCRegisterDRPCBatchService(grpcServer.drpc.Mux, node); err != nil {
+			return nil, err
+		}
+	}
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
 	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
