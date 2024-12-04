@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -69,8 +68,6 @@ var scheduledBackupGCProtectionEnabled = settings.RegisterBoolSetting(
 // for evaluation
 type scheduledBackupSpec struct {
 	*tree.ScheduledBackup
-
-	isEnterpriseUser bool
 
 	// Schedule specific properties that get evaluated.
 	scheduleLabel        *string
@@ -379,7 +376,7 @@ func doCreateBackupSchedules(
 
 	if firstRun != nil {
 		full.SetNextRun(*firstRun)
-	} else if eval.isEnterpriseUser && fullRecurrencePicked {
+	} else if fullRecurrencePicked {
 		// The enterprise user did not indicate preference when to run full backups,
 		// and we picked the schedule ourselves.
 		// Run full backup immediately so that we do not wind up waiting for a long
@@ -623,12 +620,7 @@ func makeScheduledBackupSpec(
 		spec.recurrence = &rec
 	}
 
-	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings,
-		"BACKUP INTO LATEST")
-	spec.isEnterpriseUser = enterpriseCheckErr == nil
-
-	if spec.isEnterpriseUser && schedule.FullBackup != nil {
+	if schedule.FullBackup != nil {
 		if schedule.FullBackup.AlwaysFull {
 			spec.fullBackupRecurrence = spec.recurrence
 			spec.recurrence = nil
@@ -638,21 +630,6 @@ func makeScheduledBackupSpec(
 				return nil, err
 			}
 			spec.fullBackupRecurrence = &rec
-		}
-	} else if !spec.isEnterpriseUser {
-		if schedule.FullBackup == nil || schedule.FullBackup.AlwaysFull {
-			// All backups are full cluster backups for free users.
-			spec.fullBackupRecurrence = spec.recurrence
-			spec.recurrence = nil
-			if schedule.FullBackup == nil {
-				p.BufferClientNotice(ctx,
-					pgnotice.Newf("Without an enterprise license,"+
-						" this schedule will only run full backups. To mute this notice, "+
-						"add the 'FULL BACKUP ALWAYS' clause to your CREATE SCHEDULE command."))
-			}
-		} else {
-			// Cannot use incremental backup w/out enterprise license.
-			return nil, enterpriseCheckErr
 		}
 	}
 
