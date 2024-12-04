@@ -9,10 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestIndexStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Empty stats.
 	stats := IndexStats{}
 	require.Equal(t, strings.TrimSpace(`
@@ -59,6 +64,9 @@ CV stats:
 }
 
 func TestChildKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	childKey1 := ChildKey{PartitionKey: 10}
 	childKey2 := ChildKey{PartitionKey: 20}
 	childKey3 := ChildKey{PrimaryKey: []byte{1, 2, 3}}
