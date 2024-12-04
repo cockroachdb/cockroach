@@ -14,12 +14,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/internal"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/gonum/floats/scalar"
 )
 
 func TestInMemoryStore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := internal.WithWorkspace(context.Background(), &internal.Workspace{})
 
 	childKey2 := ChildKey{PartitionKey: 2}
@@ -307,6 +312,9 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 }
 
 func TestInMemoryStoreUpdateStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 
 	// Insert root partition into new store.
@@ -390,6 +398,9 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 }
 
 func TestInMemoryStoreMarshalling(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	raBitQuantizer := quantize.NewRaBitQuantizer(2, 42)
 	unquantizer := quantize.NewUnQuantizer(2)
 	store := InMemoryStore{

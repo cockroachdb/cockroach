@@ -191,3 +191,13 @@ func (vs *Set) Centroid(centroid T) T {
 	num32.Scale(1/float32(vs.Count), centroid)
 	return centroid
 }
+
+// Equal returns true if this set is equal to the other set. Two sets are equal
+// if they have the same number of dimensions, the same number of vectors, and
+// the same values in the same order.
+func (vs *Set) Equal(other *Set) bool {
+	if vs.Dims != other.Dims || vs.Count != other.Count {
+		return false
+	}
+	return slices.Equal(vs.Data, other.Data)
+}
