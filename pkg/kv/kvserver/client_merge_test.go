@@ -2332,8 +2332,8 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	}
 
 	// Failures in this test often present as a deadlock. Set a short timeout to
-	// limit the damage.
-	ctx, cancel := context.WithTimeout(ctx, testutils.DefaultSucceedsSoonDuration)
+	// limit the damage, but a longer deadline for race builds.
+	ctx, cancel := context.WithTimeout(ctx, testutils.SucceedsSoonDuration())
 	defer cancel()
 
 	const numGetWorkers = 16
