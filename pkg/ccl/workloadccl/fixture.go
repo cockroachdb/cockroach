@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -328,22 +327,11 @@ func (l ImportDataLoader) InitialDataLoad(
 
 // Specify an explicit empty prefix for crdb_internal to avoid an error if
 // the database we're connected to does not exist.
-const numNodesQuery = `SELECT count(node_id) FROM "".crdb_internal.gossip_liveness`
-const numNodesQuerySQLInstances = `SELECT count(1) FROM system.sql_instances WHERE addr IS NOT NULL`
+const numNodesQuery = `SELECT count(1) FROM system.sql_instances WHERE addr IS NOT NULL`
 
 func getNodeCount(ctx context.Context, sqlDB *gosql.DB) (int, error) {
 	var numNodes int
 	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
-		// If the query is unsupported because we're in
-		// multi-tenant mode, use the sql_instances table.
-		if !strings.Contains(err.Error(), errorutil.UnsupportedUnderClusterVirtualizationMessage) {
-			return 0, err
-
-		}
-	} else {
-		return numNodes, nil
-	}
-	if err := sqlDB.QueryRow(numNodesQuerySQLInstances).Scan(&numNodes); err != nil {
 		return 0, err
 	}
 	return numNodes, nil
