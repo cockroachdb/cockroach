@@ -1356,6 +1356,10 @@ func (n *Node) registerEnginesForDiskStatsMap(
 	return pmp, nil
 }
 
+func (n *Node) makeStoreRegistryProvider() admission.MetricsRegistryProvider {
+	return &storeMetricsRegistryProvider{n: n}
+}
+
 type nodePebbleMetricsProvider struct {
 	n            *Node
 	diskStatsMap diskStatsMap
@@ -1382,7 +1386,6 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 			Metrics:         m.Metrics,
 			WriteStallCount: m.WriteStallCount,
 			DiskStats:       diskStats,
-			MetricsRegistry: store.Registry(),
 		})
 		return nil
 	})
@@ -1392,6 +1395,21 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 // Close implements admission.PebbleMetricsProvider.
 func (pmp *nodePebbleMetricsProvider) Close() {
 	pmp.diskStatsMap.closeDiskMonitors()
+}
+
+type storeMetricsRegistryProvider struct {
+	n *Node
+}
+
+// GetMetricsRegistry implements admission.MetricsRegistryProvider.
+func (mrp *storeMetricsRegistryProvider) GetMetricsRegistry(
+	storeID roachpb.StoreID,
+) *metric.Registry {
+	registryMap := mrp.n.stores.GetStoreMetricRegistryMap()
+	if registry, ok := registryMap[storeID]; ok {
+		return registry
+	}
+	return nil
 }
 
 // GetTenantWeights implements kvserver.TenantWeightProvider.
