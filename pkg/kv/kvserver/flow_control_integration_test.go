@@ -2713,7 +2713,8 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 			// This test doesn't want leadership changing hands, and leader leases (by
 			// virtue of raft fortification) help ensure this. Override to disable any
 			// metamorphosis.
-			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+			// TODO(kv-team): Re-enable leader leases on this test, see #136292.
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseEpoch)
 			// Using a manual clock here ensures that StoreLiveness support, once
 			// established, never expires. By extension, leadership should stay
 			// sticky.
