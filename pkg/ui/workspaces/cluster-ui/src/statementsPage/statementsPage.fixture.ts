@@ -415,7 +415,6 @@ export const statementsPagePropsWithRequestError: StatementsPageProps = {
     lastUpdated,
     valid: true,
     error: new RequestError(
-      "request_error",
       403,
       "this operation requires admin privilege",
     ),
