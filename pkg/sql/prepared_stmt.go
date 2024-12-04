@@ -325,8 +325,9 @@ func (p *PreparedPortal) size(portalName string) int64 {
 	return int64(uintptr(len(portalName)) + unsafe.Sizeof(p))
 }
 
+// isPausable checks if a portal is pausable.
 func (p *PreparedPortal) isPausable() bool {
-	return p.pauseInfo != nil
+	return p != nil && p.pauseInfo != nil
 }
 
 // cleanupFuncStack stores cleanup functions for a portal. The clean-up
