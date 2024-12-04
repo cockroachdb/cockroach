@@ -10870,10 +10870,12 @@ func (o *mergeJoinLeftSemiOp) Next() coldata.Batch {
 			// If this is the first batch or we're done with the current batch,
 			// get the next batch.
 			if o.proberState.lBatch == nil || (o.proberState.lLength != 0 && o.proberState.lIdx == o.proberState.lLength) {
+				o.cancelChecker.CheckEveryCall()
 				o.proberState.lIdx, o.proberState.lBatch = 0, o.InputOne.Next()
 				o.proberState.lLength = o.proberState.lBatch.Length()
 			}
 			if o.proberState.rBatch == nil || (o.proberState.rLength != 0 && o.proberState.rIdx == o.proberState.rLength) {
+				o.cancelChecker.CheckEveryCall()
 				o.proberState.rIdx, o.proberState.rBatch = 0, o.InputTwo.Next()
 				o.proberState.rLength = o.proberState.rBatch.Length()
 			}
