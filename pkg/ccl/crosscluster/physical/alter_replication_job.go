@@ -200,6 +200,12 @@ func alterReplicationJobHook(
 		}
 	}
 
+	// Ensure the TenantSpec is type checked, even if we don't use the result.
+	_, _, _, err = exprEval.TenantSpec(ctx, alterTenantStmt.TenantSpec)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
 	retentionTTLSeconds := defaultRetentionTTLSeconds
 	if ret, ok := options.GetRetention(); ok {
 		retentionTTLSeconds = ret
