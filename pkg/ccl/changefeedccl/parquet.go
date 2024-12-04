@@ -54,7 +54,7 @@ func newParquetSchemaDefintion(
 	var columnTypes []*types.T
 
 	numCols := 0
-	if err := row.ForAllColumns().Col(func(col cdcevent.ResultColumn) error {
+	if err := row.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
 		columnNames = append(columnNames, col.Name)
 		columnTypes = append(columnTypes, col.Typ)
 		numCols += 1
@@ -164,7 +164,7 @@ func (w *parquetWriter) populateDatums(
 ) error {
 	datums := w.datumAlloc[:0]
 
-	if err := updatedRow.ForAllColumns().Datum(func(d tree.Datum, _ cdcevent.ResultColumn) error {
+	if err := updatedRow.ForEachColumn().Datum(func(d tree.Datum, _ cdcevent.ResultColumn) error {
 		datums = append(datums, d)
 		return nil
 	}); err != nil {
@@ -256,13 +256,13 @@ func addParquetTestMetadata(
 		return parquetOpts, err
 	}
 
-	// Iterate over ForAllColumns to determine the offets of each column
+	// Iterate over ForEachColumn to determine the offets of each column
 	// in a parquet row (ie. the slice of datums provided to addData). We don't
 	// do this above because there is no way to determine it from
 	// cdcevent.ResultColumn. The Ordinal() method may return an invalid
 	// number for virtual columns.
 	idx := 0
-	if err := row.ForAllColumns().Col(func(col cdcevent.ResultColumn) error {
+	if err := row.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
 		if _, colIsInKey := keyCols[col.Name]; colIsInKey {
 			keyCols[col.Name] = idx
 		}

@@ -1322,15 +1322,27 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 		rowJSONBuilder := json.NewObjectBuilder(len(valueColumnNamesOrdered) - len(metaColumnNameSet))
 		keyJSONBuilder := json.NewArrayBuilder(len(primaryKeysNamesOrdered))
 
+		if len(row) != len(valueColumnNamesOrdered) {
+			// Throw this error if datums are duplicated in the parquet output
+			return errors.New("More datums than columns in parquet row")
+		}
+
 		for _, primaryKeyColumnName := range primaryKeysNamesOrdered {
-			datum := row[primaryKeyColumnSet[primaryKeyColumnName]]
+			primaryKeyIndex := primaryKeyColumnSet[primaryKeyColumnName]
+			if primaryKeyIndex == -1 {
+				// In the event that the primary key is not specified in the output of
+				// a CDC query, it is expected that the output row doesn't contain the
+				// primary key.
+				continue
+			}
+			datum := row[primaryKeyIndex]
 			j, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
 			if err != nil {
 				return err
 			}
 			keyJSONBuilder.Add(j)
-
 		}
+
 		for _, valueColumnName := range valueColumnNamesOrdered {
 			if _, isMeta := metaColumnNameSet[valueColumnName]; isMeta {
 				continue
