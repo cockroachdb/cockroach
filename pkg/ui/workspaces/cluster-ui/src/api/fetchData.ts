@@ -63,21 +63,10 @@ export const fetchData = <P extends ProtoBuilder<P>, T extends ProtoBuilder<T>>(
   return fetch(withBasePath(path), params)
     .then(response => {
       if (!response.ok) {
-        return response.arrayBuffer().then(buffer => {
-          let respError;
-          try {
-            respError = cockroach.server.serverpb.ResponseError.decode(
-              new Uint8Array(buffer),
-            );
-          } catch {
-            respError = new cockroach.server.serverpb.ResponseError({
-              error: response.statusText,
-            });
-          }
+        return getErrorBodyFromResponse(response).then(errorBody => {
           throw new RequestError(
-            response.statusText,
             response.status,
-            respError.error,
+            errorBody || response.statusText,
           );
         });
       }
@@ -111,13 +100,42 @@ export function fetchDataJSON<ResponseType, RequestType>(
 
   return fetch(withBasePath(path), params).then(response => {
     if (!response.ok) {
-      throw new RequestError(
-        response.statusText,
-        response.status,
-        response.statusText,
-      );
+      return getErrorBodyFromResponse(response).then(errorBody => {
+        throw new RequestError(
+          response.status,
+          errorBody || response.statusText,
+        );
+      });
     }
 
     return response.json();
   });
+}
+
+async function getErrorBodyFromResponse(response: Response): Promise<string> {
+  const contentType = response.headers.get("Content-Type");
+  try {
+    if (contentType.includes("application/json")) {
+      const json = await response.json();
+      return JSON.stringify(json);
+    }
+
+    if (contentType.includes("text/plain")) {
+      return response.text();
+    }
+
+    if (contentType.includes("application/x-protobuf")) {
+      const buffer = await response.arrayBuffer();
+      const error = cockroach.server.serverpb.ResponseError.decode(
+        new Uint8Array(buffer),
+      );
+      return error.error;
+    }
+  } catch {
+    // If we can't parse the error body, we'll just return the status text.
+    // Note that statusText is not available in http2 responses so we'll fall
+    // back to status code.
+  }
+
+  return Promise.resolve(response.statusText || response.status.toString());
 }
