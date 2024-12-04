@@ -7,15 +7,12 @@ package errorutil
 
 import "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 
-// UnsupportedUnderClusterVirtualizationMessage is the message used by UnsupportedUnderClusterVirtualization error.
-const UnsupportedUnderClusterVirtualizationMessage = "operation is unsupported within a virtual cluster"
-
 // UnsupportedUnderClusterVirtualization returns an error suitable for
 // returning when an operation could not be carried out due to the SQL
 // server running inside a virtual cluster. In that mode, Gossip and
 // other components of the KV layer are not available.
 func UnsupportedUnderClusterVirtualization(issue int) error {
-	return unimplemented.NewWithIssue(issue, UnsupportedUnderClusterVirtualizationMessage)
+	return unimplemented.NewWithIssue(issue, "operation is unsupported within a virtual cluster")
 }
 
 // FeatureNotAvailableToNonSystemTenantsIssue is to be used with the
