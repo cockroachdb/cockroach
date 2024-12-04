@@ -26,6 +26,12 @@ import (
 )
 
 func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
+	doCreateSequence(b, n)
+}
+
+// doCreateSequence creates a sequence and returns the sequence element that
+// has been created.
+func doCreateSequence(b BuildCtx, n *tree.CreateSequence) *scpb.Sequence {
 	dbElts, scElts := b.ResolveTargetObject(n.Name.ToUnresolvedObjectName(), privilege.CREATE)
 	_, _, schemaElem := scpb.FindSchema(scElts)
 	_, _, dbElem := scpb.FindDatabase(dbElts)
@@ -47,7 +53,7 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 		})
 	if ers != nil && !ers.IsEmpty() {
 		if n.IfNotExists {
-			return
+			return nil
 		}
 		panic(sqlerrors.NewRelationAlreadyExistsError(n.Name.FQString()))
 	}
@@ -204,6 +210,7 @@ func CreateSequence(b BuildCtx, n *tree.CreateSequence) {
 	}
 	// Log the creation of this sequence.
 	b.LogEventForExistingTarget(sequenceElem)
+	return sequenceElem
 }
 
 func maybeAssignSequenceOwner(b BuildCtx, sequence *scpb.Namespace, owner *tree.ColumnItem) {

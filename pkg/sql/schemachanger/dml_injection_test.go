@@ -170,6 +170,40 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
 		},
 		{
+			desc:         "add column default serial rowid",
+			setup:        []string{"SET serial_normalization=rowid"},
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
+		},
+		{
+			desc:         "add column default serial unordered_rowid",
+			setup:        []string{"SET serial_normalization=unordered_rowid"},
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
+		},
+		{
+			desc:         "add column default serial sql_sequence",
+			setup:        []string{"SET serial_normalization=sql_sequence"},
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
+			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
+		},
+		{
+			desc:         "add column default serial sql_sequence_cached",
+			setup:        []string{"SET serial_normalization=sql_sequence_cached"},
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
+			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
+		},
+		{
+			desc:         "add column default serial sql_sequence_cached_node",
+			setup:        []string{"SET serial_normalization=sql_sequence_cached_node"},
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
+			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
+		},
+		{
+			desc:         "add column default serial virtual_sequence",
+			setup:        []string{"SET serial_normalization=virtual_sequence"},
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
+			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
+		},
+		{
 			desc:         "alter column type trivial",
 			setup:        []string{"ALTER TABLE tbl ADD COLUMN new_col SMALLINT NOT NULL DEFAULT 100"},
 			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE BIGINT",

@@ -91,12 +91,13 @@ func TestBuildDataDriven(t *testing.T) {
 								sctestdeps.ReadSessionDataFromDB(
 									t,
 									tdb,
-									func(sd *sessiondata.SessionData) {
+									func(sd *sessiondata.SessionData, localData sessiondatapb.LocalOnlySessionData) {
 										// For setting up a builder inside tests we will ensure that the new schema
 										// changer will allow non-fully implemented operations.
 										sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafeAlways
 										sd.ApplicationName = ""
 										sd.EnableUniqueWithoutIndexConstraints = true
+										sd.SerialNormalizationMode = localData.SerialNormalizationMode
 									},
 								),
 							),
