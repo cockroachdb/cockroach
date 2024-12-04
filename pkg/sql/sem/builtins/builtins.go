@@ -10130,8 +10130,8 @@ func arrayVariadicBuiltin(impls func(*types.T) []tree.Overload) builtinDefinitio
 	}
 	// Prevent usage in DistSQL because it cannot handle arrays of untyped tuples.
 	tupleOverload := impls(types.AnyTuple)
-	for _, t := range tupleOverload {
-		t.DistsqlBlocklist = true
+	for i := range tupleOverload {
+		tupleOverload[i].DistsqlBlocklist = true
 	}
 	overloads = append(overloads, tupleOverload...)
 	return makeBuiltin(
