@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -366,16 +365,6 @@ func checkPrivilegesForBackup(
 	return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
 }
 
-func requireEnterprise(execCfg *sql.ExecutorConfig, feature string) error {
-	if err := utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings,
-		fmt.Sprintf("BACKUP with %s", feature),
-	); err != nil {
-		return err
-	}
-	return nil
-}
-
 func backupTypeCheck(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (matched bool, header colinfo.ResultColumns, _ error) {
@@ -536,12 +525,6 @@ func backupPlanHook(
 			return errors.Errorf("BACKUP cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
-		if len(to) > 1 {
-			if err := requireEnterprise(p.ExecCfg(), "partitioned destinations"); err != nil {
-				return err
-			}
-		}
-
 		if len(incrementalStorage) > 0 && (len(incrementalStorage) != len(to)) {
 			return errors.New("the incremental_location option must contain the same number of locality" +
 				" aware URIs as the full backup destination")
@@ -564,27 +547,9 @@ func backupPlanHook(
 
 		switch encryptionParams.Mode {
 		case jobspb.EncryptionMode_Passphrase:
-			if err := requireEnterprise(p.ExecCfg(), "encryption"); err != nil {
-				return err
-			}
 			encryptionParams.RawPassphrase = pw
 		case jobspb.EncryptionMode_KMS:
 			encryptionParams.RawKmsUris = kms
-			if err := requireEnterprise(p.ExecCfg(), "encryption"); err != nil {
-				return err
-			}
-		}
-
-		if revisionHistory {
-			if err := requireEnterprise(p.ExecCfg(), "revision_history"); err != nil {
-				return err
-			}
-		}
-
-		if executionLocality.NonEmpty() {
-			if err := requireEnterprise(p.ExecCfg(), "execution locality"); err != nil {
-				return err
-			}
 		}
 
 		var targetDescs []catalog.Descriptor

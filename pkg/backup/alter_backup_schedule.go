@@ -10,7 +10,6 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
@@ -144,7 +143,6 @@ func doAlterBackupSchedules(
 		p,
 		spec.fullBackupAlways,
 		spec.fullBackupRecurrence,
-		spec.isEnterpriseUser,
 		s,
 	); err != nil {
 		return err
@@ -418,7 +416,6 @@ func processFullBackupRecurrence(
 	p sql.PlanHookState,
 	fullBackupAlways bool,
 	fullBackupRecurrence string,
-	isEnterpriseUser bool,
 	s scheduleDetails,
 ) (scheduleDetails, error) {
 	var err error
@@ -447,12 +444,6 @@ func processFullBackupRecurrence(
 		s.incJob = nil
 		s.incArgs = nil
 		return s, nil
-	}
-
-	// We have FULL BACKUP <cron>.
-	if !isEnterpriseUser {
-		return scheduleDetails{}, errors.Newf("Enterprise license required to use incremental backups. " +
-			"To modify the cadence of a full backup, use the 'RECURRING <cron>' clause instead.")
 	}
 
 	if s.incJob == nil {
@@ -628,7 +619,6 @@ type alterBackupScheduleSpec struct {
 	recurrence           string
 	fullBackupRecurrence string
 	fullBackupAlways     bool
-	isEnterpriseUser     bool
 	label                string
 	into                 []string
 	backupOptions        tree.BackupOptions
@@ -711,11 +701,6 @@ func makeAlterBackupScheduleSpec(
 	if err != nil {
 		return nil, err
 	}
-
-	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings,
-		"BACKUP INTO LATEST")
-	spec.isEnterpriseUser = enterpriseCheckErr == nil
 
 	return spec, nil
 }
