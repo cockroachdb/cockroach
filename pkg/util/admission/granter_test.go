@@ -136,7 +136,8 @@ func TestGranterBasic(t *testing.T) {
 			}
 			var metricsProvider testMetricsProvider
 			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
-			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &metricsProvider, &metricsProvider)
+			registryProvider := &testRegistryProvider{registry: registry}
+			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &metricsProvider, registryProvider, &metricsProvider)
 			var ok bool
 			coord, ok = storeCoordinators.gcMap.Load(1)
 			require.True(t, ok)
@@ -357,9 +358,10 @@ func TestStoreCoordinators(t *testing.T) {
 	metrics := pebble.Metrics{}
 	mp := testMetricsProvider{}
 	mp.setMetricsForStores([]int32{10, 20}, metrics)
+	registryProvider := &testRegistryProvider{registry: registry}
 	// Setting the metrics provider will cause the initialization of two
 	// GrantCoordinators for the two stores.
-	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp, &mp)
+	storeCoords.SetPebbleMetricsProvider(context.Background(), &mp, registryProvider, &mp)
 	// Now we have 1+2*2 = 5 KVWork requesters.
 	require.Equal(t, 5, len(requesters))
 	// Confirm that the store IDs are as expected.
@@ -522,3 +524,11 @@ func (n *noopOnLogEntryAdmitted) AdmittedLogEntry(context.Context, LogEntryAdmit
 }
 
 var _ OnLogEntryAdmitted = &noopOnLogEntryAdmitted{}
+
+type testRegistryProvider struct {
+	registry *metric.Registry
+}
+
+func (r *testRegistryProvider) GetMetricsRegistry(roachpb.StoreID) *metric.Registry {
+	return r.registry
+}

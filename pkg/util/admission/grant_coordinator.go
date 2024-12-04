@@ -63,7 +63,10 @@ type StoreGrantCoordinators struct {
 // SetPebbleMetricsProvider sets a PebbleMetricsProvider and causes the load
 // on the various storage engines to be used for admission control.
 func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
-	startupCtx context.Context, pmp PebbleMetricsProvider, iotc IOThresholdConsumer,
+	startupCtx context.Context,
+	pmp PebbleMetricsProvider,
+	mrp MetricsRegistryProvider,
+	iotc IOThresholdConsumer,
 ) {
 	if sgc.setPebbleMetricsProviderCalled {
 		panic(errors.AssertionFailedf("SetPebbleMetricsProvider called more than once"))
@@ -73,7 +76,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	sgc.closeCh = make(chan struct{})
 	metrics := pebbleMetricsProvider.GetPebbleMetrics()
 	for _, m := range metrics {
-		gc := sgc.initGrantCoordinator(m.StoreID, m.MetricsRegistry)
+		gc := sgc.initGrantCoordinator(m.StoreID, mrp.GetMetricsRegistry(m.StoreID))
 		// Defensive call to LoadAndStore even though Store ought to be sufficient
 		// since SetPebbleMetricsProvider can only be called once. This code
 		// guards against duplication of stores returned by GetPebbleMetrics.
