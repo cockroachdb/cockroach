@@ -1417,35 +1417,42 @@ func (og *operationGenerator) tableHasOngoingAlterPKSchemaChanges(
 		ctx,
 		tx,
 		`
-WITH
-	descriptors
-		AS (
-			SELECT
-				crdb_internal.pb_to_json(
-					'cockroach.sql.sqlbase.Descriptor',
-					descriptor
-				)->'table'
-					AS d
-			FROM
-				system.descriptor
-			WHERE
-				id = $1::REGCLASS
-		)
-SELECT
-	EXISTS(
-		SELECT
-			mut
-		FROM
-			(
-				SELECT
-					json_array_elements(d->'mutations')
-						AS mut
-				FROM
-					descriptors
-			)
-		WHERE
-			(mut->'primaryKeySwap') IS NOT NULL
-	);
+WITH descriptors AS (
+                    SELECT crdb_internal.pb_to_json(
+                            'cockroach.sql.sqlbase.Descriptor',
+                            descriptor
+                           )->'table' AS d
+                      FROM system.descriptor
+                     WHERE id = $1::REGCLASS
+                 ),
+     mutations AS (
+                SELECT json_array_elements(
+                        d->'mutations'
+                       ) AS m
+                  FROM descriptors
+               ),
+     primaryindex AS (
+                    SELECT d->'primaryIndex' AS p
+                      FROM descriptors
+                  )
+		 -- Check for legacy primary key swaps which exist as mutations
+     SELECT EXISTS(
+                SELECT mut
+                  FROM (
+                        SELECT json_array_elements(
+                                d->'mutations'
+                               ) AS mut
+                          FROM descriptors
+                       )
+                 WHERE (mut->'primaryKeySwap') IS NOT NULL
+		 -- Check for declarative primary key swaps, which will appear as
+		 -- as new primary indexes with different key columns
+     UNION SELECT p
+             FROM primaryindex AS pk, mutations AS mut
+            WHERE m->'index'->'encodingType' = '1'::JSONB
+                  AND m->'index'->'keyColumnIds'
+                    != p->'keyColumnIds'
+			);
 		`,
 		tableName.String(),
 	)
