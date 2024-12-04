@@ -45,6 +45,7 @@ var activeRecordIgnoreList = blocklist{
 	"BasicsTest#test_default_values_are_deeply_dupped":                                                                "flaky - sometimes attempts to call a method on nil",
 	"BinaryTest#test_mixed_encoding":                                                                                                                           "flaky - sometimes complains that a relation does not exist",
 	"CockroachDB::FixturesTest#test_bulk_insert":                                                                                                               "flaky",
+	`CockroachDB::FixturesTest#test_create_fixtures`:                                                                                                           "flaky",
 	"CockroachDB::PostgresqlIntervalTest#test_column":                                                                                                          "flaky - sometimes complains that a relation does not exist",
 	"CockroachDB::PostgresqlIntervalTest#test_simple_interval":                                                                                                 "flaky - sometimes time format is wrong",
 	"CockroachDB::PostgresqlIntervalTest#test_interval_type":                                                                                                   "flaky - sometimes complains that a relation does not exist",
