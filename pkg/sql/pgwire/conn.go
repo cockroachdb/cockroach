@@ -1345,14 +1345,7 @@ func (c *conn) CreateStatementResult(
 	implicitTxn bool,
 	portalPausability sql.PortalPausablity,
 ) sql.CommandResult {
-	rowLimit := limit
-	if tree.ReturnsAtMostOneRow(stmt) {
-		// When a statement returns at most one row, the result row limit doesn't
-		// matter. We set it to 0 to fetch all rows, which allows us to clean up
-		// resources sooner if using a pausable portal.
-		rowLimit = 0
-	}
-	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, rowLimit, portalName, implicitTxn, portalPausability)
+	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, limit, portalName, implicitTxn, portalPausability)
 }
 
 // CreateSyncResult is part of the sql.ClientComm interface.
