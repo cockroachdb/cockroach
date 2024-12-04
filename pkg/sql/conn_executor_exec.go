@@ -1329,6 +1329,10 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	res RestrictedCommandResult,
 	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	if portal == nil && !portal.isPausable() {
+		return nil, nil, errors.AssertionFailedf("expected pausable portal")
+	}
+
 	type localVars struct {
 		logErr      error
 		cancelQuery context.CancelFunc
@@ -1341,18 +1345,13 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// requires only a single heap allocation.
 	var vars localVars
 
-	// We need this to be function rather than a static bool, because a portal's
-	// "pausability" can be revoked in `dispatchToExecutionEngine()` if the
-	// underlying statement contains sub/post queries. Thus, we should evaluate
-	// whether a portal is pausable when executing the cleanup step.
-	isPausablePortal := func() bool { return portal != nil && portal.isPausable() }
 	// updateRetErrAndPayload ensures that the latest event payload and error is
 	// always recorded by portal.pauseInfo.
 	// TODO(janexing): add test for this.
 	updateRetErrAndPayload := func(err error, payload fsm.EventPayload) {
 		retPayload = payload
 		retErr = err
-		if isPausablePortal() {
+		if portal.isPausable() {
 			portal.pauseInfo.execStmtInOpenState.retPayload = payload
 			portal.pauseInfo.execStmtInOpenState.retErr = err
 		}
@@ -1361,7 +1360,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// adding the function to the execStmtInOpenStateCleanup.
 	// Otherwise, perform the clean-up step within every execution.
 	processCleanupFunc := func(fName string, f func()) {
-		if !isPausablePortal() {
+		if !portal.isPausable() {
 			f()
 		} else if !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
 			portal.pauseInfo.execStmtInOpenState.cleanup.appendFunc(namedFunc{
@@ -1378,11 +1377,11 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	defer func() {
 		// This is the first defer, so it will always be called after any cleanup
 		// func being added to the stack from the defers below.
-		if isPausablePortal() && !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
+		if portal.isPausable() && !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
 			portal.pauseInfo.execStmtInOpenState.cleanup.isComplete = true
 		}
 		// If there's any error, do the cleanup right here.
-		if (retErr != nil || payloadHasError(retPayload)) && isPausablePortal() {
+		if (retErr != nil || payloadHasError(retPayload)) && portal.isPausable() {
 			updateRetErrAndPayload(retErr, retPayload)
 			portal.pauseInfo.resumableFlow.cleanup.run()
 			portal.pauseInfo.dispatchToExecutionEngine.cleanup.run()
@@ -1395,19 +1394,19 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// we would be checking the ones evaluated at the portal's first-time
 	// execution.
 	defer func() {
-		if isPausablePortal() {
+		if portal.isPausable() {
 			updateRetErrAndPayload(retErr, retPayload)
 		}
 	}()
 
 	vars.ast = parserStmt.AST
 	var sp *tracing.Span
-	if !isPausablePortal() || !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
+	if !portal.isPausable() || !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
 		ctx, sp = tracing.ChildSpan(ctx, "sql query")
 		// TODO(andrei): Consider adding the placeholders as tags too.
 		sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
 		ctx = withStatement(ctx, vars.ast)
-		if isPausablePortal() {
+		if portal.isPausable() {
 			portal.pauseInfo.execStmtInOpenState.spCtx = ctx
 		}
 		defer func() {
@@ -1423,7 +1422,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	}
 
 	var queryID clusterunique.ID
-	if isPausablePortal() {
+	if portal.isPausable() {
 		if !portal.pauseInfo.isQueryIDSet() {
 			portal.pauseInfo.execStmtInOpenState.queryID = ex.server.cfg.GenerateID()
 		}
@@ -1459,7 +1458,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 	// For pausable portal, the active query needs to be set up only when
 	// the portal is executed for the first time.
-	if !isPausablePortal() || !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
+	if !portal.isPausable() || !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
 		ctx, vars.cancelQuery = ctxlog.WithCancel(ctx)
 		ex.incrementStartedStmtCounter(vars.ast)
 		ex.state.mu.Lock()
@@ -1467,7 +1466,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		ex.state.mu.Unlock()
 		ex.addActiveQuery(parserStmt, pinfo, queryID, vars.cancelQuery)
 
-		if isPausablePortal() {
+		if portal.isPausable() {
 			portal.pauseInfo.execStmtInOpenState.cancelQueryFunc = vars.cancelQuery
 			portal.pauseInfo.execStmtInOpenState.cancelQueryCtx = ctx
 		}
@@ -1477,7 +1476,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 				func() {
 					// We need to check the latest errors rather than the ones evaluated
 					// when this function is created.
-					if isPausablePortal() {
+					if portal.isPausable() {
 						retErr = portal.pauseInfo.execStmtInOpenState.retErr
 						retPayload = portal.pauseInfo.execStmtInOpenState.retPayload
 					}
@@ -1642,7 +1641,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 	// For pausable portal, the instrumentation helper needs to be set up only
 	// when the portal is executed for the first time.
-	if !isPausablePortal() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
+	if !portal.isPausable() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
 		ctx = ih.Setup(
 			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
 			vars.stmt.StmtNoConstants, os.ImplicitTxn.Get(),
@@ -1663,7 +1662,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// ih and reuse it for all re-executions. So the planner's ih and the portal's
 	// ih should never have the same address, otherwise changing the former will
 	// change the latter, and we will never be able to persist it.
-	if isPausablePortal() {
+	if portal.isPausable() {
 		if portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
 			portal.pauseInfo.execStmtInOpenState.ihWrapper = &instrumentationHelperWrapper{
 				ctx: ctx,
@@ -1683,7 +1682,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// closing the correct instrumentation helper for the paused portal.
 		ihToFinish := ih
 		curRes := res
-		if isPausablePortal() {
+		if portal.isPausable() {
 			ihToFinish = &portal.pauseInfo.execStmtInOpenState.ihWrapper.ih
 			curRes = portal.pauseInfo.curRes
 			retErr = portal.pauseInfo.execStmtInOpenState.retErr
@@ -1816,7 +1815,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 		var bulkJobId uint64
 		var rowsAffected int
-		if isPausablePortal() {
+		if portal.isPausable() {
 			ppInfo := portal.pauseInfo
 			if p.extendedEvalCtx.Annotations == nil {
 				// This is a safety check in case resetPlanner() was
@@ -1874,14 +1873,14 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 		processCleanupFunc("set query error", func() {
 			cancelQueryCtx := ctx
-			if isPausablePortal() {
+			if portal.isPausable() {
 				cancelQueryCtx = portal.pauseInfo.execStmtInOpenState.cancelQueryCtx
 			}
 			resToPushErr := res
 			// For pausable portals, we retain the query but update the result for
 			// each execution. When the query context is cancelled and we're in the
 			// middle of an portal execution, push the error to the current result.
-			if isPausablePortal() {
+			if portal.isPausable() {
 				resToPushErr = portal.pauseInfo.curRes
 			}
 			vars.logErr = resToPushErr.ErrAllowReleased()
@@ -1903,7 +1902,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 				// error and then perform a query-cleanup step. In this case, we don't
 				// want to override the original timeout error with the query-cancelled
 				// error.
-				if isPausablePortal() && (errors.Is(resToPushErr.Err(), sqlerrors.QueryTimeoutError) ||
+				if portal.isPausable() && (errors.Is(resToPushErr.Err(), sqlerrors.QueryTimeoutError) ||
 					errors.Is(resToPushErr.Err(), sqlerrors.TxnTimeoutError)) {
 					errToPush = resToPushErr.Err()
 				}
@@ -2161,7 +2160,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		}
 	}
 
-	if isPausablePortal() {
+	if portal.isPausable() {
 		p.pausablePortal = portal
 	}
 
