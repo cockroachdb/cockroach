@@ -775,6 +775,17 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 						} else if status.Term != term {
 							return errors.Errorf("terms do not agree: %d vs %d", status.Term, term)
 						}
+						if !hasLeader {
+							// If we haven't been able to establish a  leader yet, send a get
+							// request to force the issue.
+							getReq := getArgs(key)
+							_, err := kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, i).TestSender(), getReq)
+							// It should be fine if we get a NLHE for some reason.
+							nlhe := &kvpb.NotLeaseHolderError{}
+							if !errors.As(err.GetDetail(), &nlhe) {
+								return err.GetDetail()
+							}
+						}
 					}
 					if !hasLeader {
 						return errors.New("no leader")
@@ -4591,174 +4602,194 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var filterRangeIDAtomic int64
-
-	ctx := context.Background()
-	testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) (retErr *kvpb.Error) {
-		if rangeID := roachpb.RangeID(atomic.LoadInt64(&filterRangeIDAtomic)); rangeID != ba.RangeID {
-			return nil
-		}
-		pErr := kvpb.NewErrorf("blocking %s in this test", ba.Summary())
-		if len(ba.Requests) != 1 {
-			return pErr
-		}
-		_, ok := ba.Requests[0].GetInner().(*kvpb.PutRequest)
-		if !ok {
-			return pErr
-		}
-		return nil
-	}
-
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						DisableReplicaGCQueue: true,
-						TestingRequestFilter:  testingRequestFilter,
-					},
-				},
-			},
-		})
-	defer tc.Stopper().Stop(ctx)
-
-	store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
-	distSender := tc.Servers[0].DistSenderI().(kv.Sender)
-
-	key := []byte("a")
-	tc.SplitRangeOrFatal(t, key)
-	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
-
-	repl0, err := store0.GetReplica(desc.RangeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	atomic.StoreInt64(&filterRangeIDAtomic, int64(desc.RangeID))
-
-	leaseIndex0 := repl0.LastAssignedLeaseIndex()
-
-	type target struct {
-		client kvserver.PerReplicaClient
-		header kvserver.StoreRequestHeader
-	}
-
-	var targets []target
-	for _, s := range tc.Servers {
-		conn, err := s.NodeDialer().(*nodedialer.Dialer).Dial(ctx, s.NodeID(), rpc.DefaultClass)
-		if err != nil {
-			t.Fatal(err)
-		}
-		targets = append(targets, target{
-			client: kvserver.NewPerReplicaClient(conn),
-			header: kvserver.StoreRequestHeader{NodeID: s.NodeID(), StoreID: s.GetFirstStoreID()},
-		})
-	}
-
-	// Wait for a command that is already applied. The request should return
-	// immediately.
-	for i, target := range targets {
-		_, err := target.client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
-			StoreRequestHeader: target.header,
-			RangeID:            desc.RangeID,
-			LeaseIndex:         leaseIndex0,
-		})
-		if err != nil {
-			t.Fatalf("%d: %+v", i, err)
-		}
-	}
-
-	const count = 5
-
-	// Wait for a command that is `count` indexes later.
-	var errChs []chan error
-	for _, target := range targets {
-		errCh := make(chan error)
-		errChs = append(errChs, errCh)
-		target := target
-		go func() {
-			_, err := target.client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
-				StoreRequestHeader: target.header,
-				RangeID:            desc.RangeID,
-				LeaseIndex:         leaseIndex0 + count,
-			})
-			errCh <- err
-		}()
-	}
-
-	// The request should not return when less than `count` commands have
-	// been issued.
-	putArgs := putArgs(roachpb.Key("foo"), []byte("bar"))
-	for i := 0; i < count-1; i++ {
-		if _, pErr := kv.SendWrapped(ctx, distSender, putArgs); pErr != nil {
-			t.Fatal(pErr)
-		}
-		// Wait a little bit to increase the likelihood that we observe an invalid
-		// ordering. This is not intended to be foolproof.
-		time.Sleep(10 * time.Millisecond)
-		for j, errCh := range errChs {
-			select {
-			case err := <-errCh:
-				t.Fatalf("%d: WaitForApplication returned early (request: %d, err: %v)", j, i, err)
-			default:
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(),
+		func(t *testing.T, leaseType roachpb.LeaseType) {
+			if leaseType == roachpb.LeaseLeader {
+				// TODO(ibrahim): Find out why this test is very slow with leader leases
+				// if run under race/deadlock.
+				skip.UnderRace(t, "slow with leader leases")
+				skip.UnderDeadlock(t, "slow with leader leases")
 			}
-		}
-	}
+			var filterRangeIDAtomic int64
 
-	// Once the `count`th command has been issued, the request should return.
-	if _, pErr := kv.SendWrapped(ctx, distSender, putArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
-	for i, errCh := range errChs {
-		if err := <-errCh; err != nil {
-			t.Fatalf("%d: %+v", i, err)
-		}
-	}
+			ctx := context.Background()
+			testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) (retErr *kvpb.Error) {
+				if rangeID := roachpb.RangeID(atomic.LoadInt64(&filterRangeIDAtomic)); rangeID != ba.RangeID {
+					return nil
+				}
+				pErr := kvpb.NewErrorf("blocking %s in this test", ba.Summary())
+				if len(ba.Requests) != 1 {
+					return pErr
+				}
+				_, ok := ba.Requests[0].GetInner().(*kvpb.PutRequest)
+				if !ok {
+					return pErr
+				}
+				return nil
+			}
 
-	atomic.StoreInt64(&filterRangeIDAtomic, 0)
+			settings := cluster.MakeTestingClusterSettings()
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, leaseType)
+			tc := testcluster.StartTestCluster(t, 3,
+				base.TestClusterArgs{
+					ReplicationMode: base.ReplicationManual,
+					ServerArgs: base.TestServerArgs{
+						Settings: settings,
+						Knobs: base.TestingKnobs{
+							Store: &kvserver.StoreTestingKnobs{
+								DisableReplicaGCQueue: true,
+								TestingRequestFilter:  testingRequestFilter,
+							},
+						},
+					},
+				})
+			defer tc.Stopper().Stop(ctx)
 
-	// GC the replica while a request is in progress. The request should return
-	// an error.
-	go func() {
-		_, err := targets[2].client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
-			StoreRequestHeader: targets[2].header,
-			RangeID:            desc.RangeID,
-			LeaseIndex:         math.MaxInt64,
+			store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
+			distSender := tc.Servers[0].DistSenderI().(kv.Sender)
+
+			key := []byte("a")
+			tc.SplitRangeOrFatal(t, key)
+			desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+			repl0, err := store0.GetReplica(desc.RangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			leaseIndex0 := repl0.GetLeaseAppliedIndex()
+			if leaseType == roachpb.LeaseLeader {
+				// When running with leader leases, when there is no leader, we acquire
+				// an expiration based lease, and then acquiring a leader lease.
+				// Therefore, the lease applied index is incremented by an extra 1.
+				leaseIndex0++
+				// Before blocking requests, make sure that the expiration lease gets
+				// upgraded to a leader lease.
+				tc.WaitForLeaseUpgrade(ctx, t, desc)
+			}
+
+			atomic.StoreInt64(&filterRangeIDAtomic, int64(desc.RangeID))
+			type target struct {
+				client kvserver.PerReplicaClient
+				header kvserver.StoreRequestHeader
+			}
+
+			var targets []target
+			for _, s := range tc.Servers {
+				conn, err := s.NodeDialer().(*nodedialer.Dialer).Dial(ctx, s.NodeID(), rpc.DefaultClass)
+				if err != nil {
+					t.Fatal(err)
+				}
+				targets = append(targets, target{
+					client: kvserver.NewPerReplicaClient(conn),
+					header: kvserver.StoreRequestHeader{NodeID: s.NodeID(), StoreID: s.GetFirstStoreID()},
+				})
+			}
+
+			// Wait for a command that is already applied. The request should return
+			// immediately.
+			for i, target := range targets {
+				_, err := target.client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
+					StoreRequestHeader: target.header,
+					RangeID:            desc.RangeID,
+					LeaseIndex:         leaseIndex0,
+				})
+				if err != nil {
+					t.Fatalf("%d: %+v", i, err)
+				}
+			}
+
+			const count = 5
+
+			// Wait for a command that is `count` indexes later.
+			var errChs []chan error
+			for _, target := range targets {
+				errCh := make(chan error)
+				errChs = append(errChs, errCh)
+				target := target
+				go func() {
+					_, err := target.client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
+						StoreRequestHeader: target.header,
+						RangeID:            desc.RangeID,
+						LeaseIndex:         leaseIndex0 + count,
+					})
+					errCh <- err
+				}()
+			}
+
+			// The request should not return when less than `count` commands have
+			// been issued.
+			putArgs := putArgs(roachpb.Key("foo"), []byte("bar"))
+			for i := 0; i < count-1; i++ {
+				if _, pErr := kv.SendWrapped(ctx, distSender, putArgs); pErr != nil {
+					t.Fatal(pErr)
+				}
+				// Wait a little bit to increase the likelihood that we observe an invalid
+				// ordering. This is not intended to be foolproof.
+				time.Sleep(10 * time.Millisecond)
+				for j, errCh := range errChs {
+					select {
+					case err := <-errCh:
+						t.Fatalf("%d: WaitForApplication returned early (request: %d, err: %v)", j, i, err)
+					default:
+					}
+				}
+			}
+
+			// Once the `count`th command has been issued, the request should return.
+			if _, pErr := kv.SendWrapped(ctx, distSender, putArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+			for i, errCh := range errChs {
+				if err := <-errCh; err != nil {
+					t.Fatalf("%d: %+v", i, err)
+				}
+			}
+
+			atomic.StoreInt64(&filterRangeIDAtomic, 0)
+
+			// GC the replica while a request is in progress. The request should return
+			// an error.
+			go func() {
+				_, err := targets[2].client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
+					StoreRequestHeader: targets[2].header,
+					RangeID:            desc.RangeID,
+					LeaseIndex:         math.MaxInt64,
+				})
+				errChs[2] <- err
+			}()
+			repl2, err := store2.GetReplica(desc.RangeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tc.RemoveVotersOrFatal(t, key, tc.Target(2))
+			if err := store2.ManualReplicaGC(repl2); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := repl2.IsDestroyed(); err == nil {
+				t.Fatalf("replica was not destroyed after gc on store2")
+			}
+			err = <-errChs[2]
+			if exp := fmt.Sprintf("r%d was not found", desc.RangeID); !testutils.IsError(err, exp) {
+				t.Fatalf("expected %q error, but got %v", exp, err)
+			}
+
+			// Allow the client context to time out while a request is in progress. The
+			// request should return an error.
+			{
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, 50*time.Millisecond)
+				defer cancel()
+				_, err := targets[0].client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
+					StoreRequestHeader: targets[0].header,
+					RangeID:            desc.RangeID,
+					LeaseIndex:         math.MaxInt64,
+				})
+				if exp := "context deadline exceeded"; !testutils.IsError(err, exp) {
+					t.Fatalf("expected %q error, but got %v", exp, err)
+				}
+			}
 		})
-		errChs[2] <- err
-	}()
-	repl2, err := store2.GetReplica(desc.RangeID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tc.RemoveVotersOrFatal(t, key, tc.Target(2))
-	if err := store2.ManualReplicaGC(repl2); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repl2.IsDestroyed(); err == nil {
-		t.Fatalf("replica was not destroyed after gc on store2")
-	}
-	err = <-errChs[2]
-	if exp := fmt.Sprintf("r%d was not found", desc.RangeID); !testutils.IsError(err, exp) {
-		t.Fatalf("expected %q error, but got %v", exp, err)
-	}
-
-	// Allow the client context to time out while a request is in progress. The
-	// request should return an error.
-	{
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 50*time.Millisecond)
-		defer cancel()
-		_, err := targets[0].client.WaitForApplication(ctx, &kvserver.WaitForApplicationRequest{
-			StoreRequestHeader: targets[0].header,
-			RangeID:            desc.RangeID,
-			LeaseIndex:         math.MaxInt64,
-		})
-		if exp := "context deadline exceeded"; !testutils.IsError(err, exp) {
-			t.Fatalf("expected %q error, but got %v", exp, err)
-		}
-	}
 }
 
 func TestStoreWaitForReplicaInit(t *testing.T) {
