@@ -211,6 +211,12 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderRangefeedCatchupRangesWaitingClientSide = metric.Metadata{
+		Name:        "distsender.rangefeed.catchup_ranges_waiting_client_side",
+		Help:        `Number of ranges waiting on the client-side limiter to perform catchup scans`,
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderRangefeedErrorCatchupRanges = metric.Metadata{
 		Name:        "distsender.rangefeed.error_catchup_ranges",
 		Help:        `Number of ranges in catchup mode which experienced an error`,
@@ -313,9 +319,10 @@ type DistSenderMetrics struct {
 
 // DistSenderRangeFeedMetrics is a set of rangefeed specific metrics.
 type DistSenderRangeFeedMetrics struct {
-	RangefeedRanges        *metric.Gauge
-	RangefeedCatchupRanges *metric.Gauge
-	Errors                 rangeFeedErrorCounters
+	RangefeedRanges                         *metric.Gauge
+	RangefeedCatchupRanges                  *metric.Gauge
+	RangefeedCatchupRangesWaitingClientSide *metric.Gauge
+	Errors                                  rangeFeedErrorCounters
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -435,9 +442,10 @@ func (rangeFeedErrorCounters) MetricStruct() {}
 
 func makeDistSenderRangeFeedMetrics() DistSenderRangeFeedMetrics {
 	return DistSenderRangeFeedMetrics{
-		RangefeedRanges:        metric.NewGauge(metaDistSenderRangefeedTotalRanges),
-		RangefeedCatchupRanges: metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
-		Errors:                 makeRangeFeedErrorCounters(),
+		RangefeedRanges:                         metric.NewGauge(metaDistSenderRangefeedTotalRanges),
+		RangefeedCatchupRanges:                  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
+		RangefeedCatchupRangesWaitingClientSide: metric.NewGauge(metaDistSenderRangefeedCatchupRangesWaitingClientSide),
+		Errors:                                  makeRangeFeedErrorCounters(),
 	}
 }
 
