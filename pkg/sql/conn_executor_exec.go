@@ -413,21 +413,18 @@ func (ex *connExecutor) execStmtInOpenState(
 	var queryDoneAfterFunc chan struct{}
 	var txnDoneAfterFunc chan struct{}
 
-	addActiveQuery := func() {
-		ctx, vars.cancelQuery = ctxlog.WithCancel(ctx)
-		ex.incrementStartedStmtCounter(vars.ast)
-		func(st *txnState) {
-			st.mu.Lock()
-			defer st.mu.Unlock()
-			st.mu.stmtCount++
-		}(&ex.state)
-		ex.addActiveQuery(parserStmt, pinfo, queryID, vars.cancelQuery)
-	}
-
 	// For pausable portal, the active query needs to be set up only when
 	// the portal is executed for the first time.
 	if !isPausablePortal() || !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
-		addActiveQuery()
+		ctx, vars.cancelQuery = ctxlog.WithCancel(ctx)
+		ex.incrementStartedStmtCounter(vars.ast)
+		func(st *txnState) {
+			ex.state.mu.Lock()
+			defer st.mu.Unlock()
+			ex.state.mu.stmtCount++
+		}(&ex.state)
+		ex.addActiveQuery(parserStmt, pinfo, queryID, vars.cancelQuery)
+
 		if isPausablePortal() {
 			portal.pauseInfo.execStmtInOpenState.cancelQueryFunc = vars.cancelQuery
 			portal.pauseInfo.execStmtInOpenState.cancelQueryCtx = ctx
