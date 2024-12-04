@@ -58,6 +58,7 @@ go_library(
 
 go_test(
     name = "loqrecovery_test",
+    size = "large", # times out under medium size sometimes
     srcs = [
         "apply_test.go",
         "collect_raft_log_test.go",
