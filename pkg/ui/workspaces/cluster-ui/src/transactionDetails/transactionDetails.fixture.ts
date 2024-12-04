@@ -44,7 +44,6 @@ export const nodeRegions = {
 };
 
 export const error = new RequestError(
-  "Forbidden",
   403,
   "this operation requires admin privilege",
 );
