@@ -359,6 +359,7 @@ func makeWebhookSink(
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
 	settings *cluster.Settings,
+	knobs *TestingKnobs,
 ) (Sink, error) {
 	m := mb(requiresResourceAccounting)
 
@@ -384,5 +385,6 @@ func makeWebhookSink(
 		source,
 		m,
 		settings,
+		knobs,
 	), nil
 }

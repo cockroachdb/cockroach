@@ -477,5 +477,6 @@ func makePubsubSink(
 		source,
 		m,
 		settings,
+		knobs,
 	), nil
 }

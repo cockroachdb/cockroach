@@ -99,6 +99,14 @@ type TestingKnobs struct {
 
 	// WrapTelemetryLogger is used to wrap the periodic telemetry logger in tests.
 	WrapTelemetryLogger func(logger telemetryLogger) telemetryLogger
+
+	BatchingSinkOnAppend func(*rowEvent)
+
+	ParallelIOOnEmit func()
+
+	OverrideParallelIOMetricsRecorder func() parallelIOMetricsRecorder
+
+	KafkaSinkClientV2Knobs kafkaSinkV2Knobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

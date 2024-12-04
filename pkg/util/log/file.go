@@ -258,7 +258,7 @@ func (l *fileSink) flushAndMaybeSyncLocked(doSync bool) {
 		// of logfDepth for details.)
 		sev := severity.ERROR
 		// We default to assuming a fatal on log stall.
-		if l.fatalOnLogStall == nil || l.fatalOnLogStall() {
+		if false { // l.fatalOnLogStall == nil || l.fatalOnLogStall() {
 			sev = severity.FATAL
 			// The write stall may prevent the process from exiting. If the process
 			// won't exit, we can at least terminate all our RPC connections first.

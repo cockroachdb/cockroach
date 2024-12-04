@@ -525,11 +525,26 @@ type parallelIOMetricsRecorder interface {
 	setInFlightKeys(n int64)
 }
 
+type histogram interface {
+	RecordValue(v int64)
+}
+
+type gauge interface {
+	Update(n int64)
+	Inc(n int64)
+	Dec(n int64)
+}
+
+// Not used currently, but for completeness.
+type counter interface {
+	Inc(n int64)
+}
+
 type parallelIOMetricsRecorderImpl struct {
-	pendingQueueNanos *aggmetric.Histogram
-	pendingRows       *aggmetric.Gauge
-	resultQueueNanos  *aggmetric.Histogram
-	inFlight          *aggmetric.Gauge
+	pendingQueueNanos histogram
+	pendingRows       gauge
+	resultQueueNanos  histogram
+	inFlight          gauge
 }
 
 func (p *parallelIOMetricsRecorderImpl) setInFlightKeys(n int64) {
