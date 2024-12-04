@@ -414,6 +414,13 @@ func initTestServer(
 
 		Settings: cluster.MakeClusterSettings(),
 		Knobs:    knobs,
+		RaftConfig: base.RaftConfig{
+			// If leader leases is enabled, the peer might take a couple of seconds
+			// before it can establish store liveness support before campaigning.
+			// Disabling that check causes tests to run faster and be less flaky
+			// because of deadline exceeded error.
+			TestingDisablePreCampaignStoreLivenessCheck: true,
+		},
 	})
 
 	// Given small test cluster, this better exercises the planning logic.
