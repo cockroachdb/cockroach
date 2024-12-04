@@ -28,6 +28,7 @@ go_proto_library(
 go_library(
     name = "vecstore",
     srcs = [
+        "encoding.go",
         "in_memory_store.go",
         "partition.go",
         "search_set.go",
@@ -41,6 +42,7 @@ go_library(
         "//pkg/sql/vecindex/internal",
         "//pkg/sql/vecindex/quantize",
         "//pkg/util/container/heap",
+        "//pkg/util/encoding",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "//pkg/util/vector",
@@ -52,16 +54,22 @@ go_library(
 go_test(
     name = "vecstore_test",
     srcs = [
+        "encoding_test.go",
         "in_memory_store_test.go",
+        "main_test.go",
         "partition_test.go",
         "search_set_test.go",
         "vecstorepb_test.go",
     ],
     embed = [":vecstore"],
     deps = [
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/sql/vecindex/internal",
         "//pkg/sql/vecindex/quantize",
         "//pkg/util/num32",
+        "//pkg/util/randutil",
         "//pkg/util/vector",
         "@com_github_stretchr_testify//require",
         "@org_gonum_v1_gonum//floats/scalar",
