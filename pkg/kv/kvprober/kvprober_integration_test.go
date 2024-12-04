@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -411,10 +412,32 @@ func initTestServer(
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// KV probes always go to the storage layer.
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-
-		Settings: cluster.MakeClusterSettings(),
-		Knobs:    knobs,
+		Settings:          cluster.MakeClusterSettings(),
+		Knobs:             knobs,
+		RaftConfig: base.RaftConfig{
+			// Speed up tests.
+			RaftTickInterval:           100 * time.Millisecond,
+			RaftElectionTimeoutTicks:   2,
+			RaftHeartbeatIntervalTicks: 1,
+		},
 	})
+
+	// With leader leases, wait for store liveness support to be established. This
+	// is useful as the leader will only be elected once it has quorum support
+	// in store liveness. Without this, we could see some deadline exceeded errors
+	// until the store liveness support is established and the leader is elected.
+	if kvserver.RaftLeaderFortificationFractionEnabled.Get(&s.ClusterSettings().SV) != 0 {
+		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+		testutils.SucceedsSoon(t, func() error {
+			ident := slpb.StoreIdent{NodeID: store.NodeID(), StoreID: store.StoreID()}
+			_, live := store.TestingStoreLivenessSupportManager().SupportFor(ident)
+			if !live {
+				return errors.New("support not established")
+			}
+			return nil
+		})
+	}
 
 	// Given small test cluster, this better exercises the planning logic.
 	kvprober.NumStepsToPlanAtOnce.Override(context.Background(), &s.ClusterSettings().SV, 10)

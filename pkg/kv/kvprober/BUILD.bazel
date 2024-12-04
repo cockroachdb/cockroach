@@ -48,6 +48,8 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/storeliveness",
+        "//pkg/kv/kvserver/storeliveness/storelivenesspb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
