@@ -2420,6 +2420,14 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				Values: portal.Qargs,
 			}
 
+			if tcmd.Limit != 0 && tree.ReturnsAtMostOneRow(portal.Stmt.AST) {
+				// When a statement returns at most one row, the result row
+				// limit doesn't matter. We set it to 0 to fetch all rows, which
+				// allows us to clean up resources sooner if using a pausable
+				// portal.
+				tcmd.Limit = 0
+			}
+
 			// If this is the first-time execution of a portal without a limit set,
 			// it means all rows will be exhausted, so no need to pause this portal.
 			if tcmd.Limit == 0 && portal.pauseInfo != nil && portal.pauseInfo.curRes == nil {
