@@ -97,3 +97,15 @@ func RequireSystemTenantOrClusterSetting(
 		"Feature was disabled by the system operator."),
 		"Feature flag: %s", setting.Name())
 }
+
+// CachedSequencesCacheSizeSetting is the default cache size used when
+// SessionNormalizationMode is SerialUsesCachedSQLSequences or
+// SerialUsesCachedNodeSQLSequences.
+var CachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.serial_sequences_cache_size",
+	"the default cache size when the session's serial normalization mode is set to cached sequences"+
+		"A cache size of 1 means no caching. Any cache size less than 1 is invalid.",
+	256,
+	settings.PositiveInt,
+)
