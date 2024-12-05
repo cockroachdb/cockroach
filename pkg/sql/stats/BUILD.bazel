@@ -24,7 +24,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",

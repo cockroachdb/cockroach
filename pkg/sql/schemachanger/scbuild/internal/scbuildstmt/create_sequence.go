@@ -7,7 +7,6 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -94,10 +93,6 @@ func doCreateSequence(b BuildCtx, n *tree.CreateSequence) *scpb.Sequence {
 		}
 		if opt.Name == tree.SeqOptRestart {
 			restartWith = opt.IntVal
-		}
-		if opt.Name == tree.SeqOptCacheNode && !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.V24_1) {
-			panic(scerrors.NotImplementedErrorf(n, "node-level sequence caching unsupported"+
-				"before V24.1"))
 		}
 	}
 	// If the database is multi-region then CREATE SEQUENCE will fallback.

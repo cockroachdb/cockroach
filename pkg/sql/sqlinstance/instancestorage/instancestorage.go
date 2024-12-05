@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -216,13 +215,9 @@ func (s *Storage) SetInstanceDraining(
 		// TODO: When can be instance.sessionID unequal sessionID?
 
 		batch := txn.NewBatch()
-		encodeIsDraining, err := s.shouldEncodeIsDraining(ctx, txn)
-		if err != nil {
-			return err
-		}
 		value, err := s.rowCodec.encodeValue(
 			n.rpcAddr, n.sqlAddr, n.sessionID, n.locality, n.binaryVersion,
-			encodeIsDraining, true /* isDraining */)
+			true /* encodeIsDraining */, true /* isDraining */)
 		if err != nil {
 			return err
 		}
@@ -248,26 +243,13 @@ func (s *Storage) ReleaseInstance(
 		}
 
 		batch := txn.NewBatch()
-		encodeIsDraining, err := s.shouldEncodeIsDraining(ctx, txn)
-		if err != nil {
-			return err
-		}
-		value, err := s.rowCodec.encodeAvailableValue(encodeIsDraining)
+		value, err := s.rowCodec.encodeAvailableValue(true /* encodeIsDraining */)
 		if err != nil {
 			return err
 		}
 		batch.Put(key, value)
 		return txn.CommitInBatch(ctx, batch)
 	})
-}
-
-func (s *Storage) shouldEncodeIsDraining(ctx context.Context, txn *kv.Txn) (bool, error) {
-	guard, err := s.settingsWatch.MakeVersionGuard(
-		ctx, txn, clusterversion.V24_3_SQLInstancesAddDraining)
-	if err != nil {
-		return false, err
-	}
-	return guard.IsActive(clusterversion.V24_3_SQLInstancesAddDraining), nil
 }
 
 func (s *Storage) createInstanceRow(
@@ -330,13 +312,9 @@ func (s *Storage) createInstanceRow(
 
 			b := txn.NewBatch()
 
-			encodeIsDraining, err := s.shouldEncodeIsDraining(ctx, txn)
-			if err != nil {
-				return err
-			}
 			value, err := s.rowCodec.encodeValue(rpcAddr, sqlAddr,
 				session.ID(), locality, binaryVersion,
-				encodeIsDraining, false /* isDraining */)
+				true /* encodeIsDraining*/, false /* isDraining */)
 			if err != nil {
 				return err
 			}
@@ -472,12 +450,8 @@ func (s *Storage) reclaimRegion(ctx context.Context, region []byte) error {
 		toReclaim, toDelete := idsToReclaim(target, instances, isExpired)
 
 		writeBatch := txn.NewBatch()
-		encodeIsDraining, err := s.shouldEncodeIsDraining(ctx, txn)
-		if err != nil {
-			return err
-		}
 		for _, instance := range toReclaim {
-			availableValue, err := s.rowCodec.encodeAvailableValue(encodeIsDraining)
+			availableValue, err := s.rowCodec.encodeAvailableValue(true /* encodeIsDraining */)
 			if err != nil {
 				return err
 			}
@@ -716,12 +690,8 @@ func (s *Storage) generateAvailableInstanceRowsWithTxn(
 
 	b := txn.NewBatch()
 
-	encodeIsDraining, err := s.shouldEncodeIsDraining(ctx, txn)
-	if err != nil {
-		return err
-	}
 	for _, row := range idsToAllocate(target, regions, onlineInstances) {
-		value, err := s.rowCodec.encodeAvailableValue(encodeIsDraining)
+		value, err := s.rowCodec.encodeAvailableValue(true /* encodeIsDraining */)
 		if err != nil {
 			return errors.Wrapf(err, "failed to encode row for instance id %d", row.instanceID)
 		}

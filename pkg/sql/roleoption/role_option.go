@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -210,9 +209,6 @@ func MakeListFromKVOptions(
 		switch option {
 		case SUBJECT:
 			roleOptions[i].Validate = func(settings *cluster.Settings, u username.SQLUsername, s string) error {
-				if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
-					return pgerror.Newf(pgcode.FeatureNotSupported, "SUBJECT role option is only supported after v24.1 upgrade is finalized")
-				}
 				if err := base.CheckEnterpriseEnabled(settings, "SUBJECT role option"); err != nil {
 					return err
 				}

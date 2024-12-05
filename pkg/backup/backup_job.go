@@ -1678,7 +1678,7 @@ func createBackupManifest(
 	elide := execinfrapb.ElidePrefix_None
 	if len(prevBackups) > 0 {
 		elide = prevBackups[0].ElidedPrefix
-	} else if execCfg.Settings.Version.IsActive(ctx, clusterversion.V24_1) && elidePrefixes.Get(&execCfg.Settings.SV) {
+	} else if elidePrefixes.Get(&execCfg.Settings.SV) {
 		if len(tenants) > 0 {
 			elide = execinfrapb.ElidePrefix_Tenant
 		} else {

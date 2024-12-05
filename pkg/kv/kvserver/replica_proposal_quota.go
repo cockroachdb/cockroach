@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
@@ -115,11 +114,9 @@ func (r *Replica) shouldReplicationAdmissionControlUsePullMode(ctx context.Conte
 		return knobs.OverridePullPushMode()
 	}
 
-	var versionEnabled bool
+	versionEnabled := true
 	if knobs := r.store.TestingKnobs().FlowControlTestingKnobs; knobs != nil && knobs.OverrideV2EnabledWhenLeaderLevel != nil {
 		versionEnabled = knobs.OverrideV2EnabledWhenLeaderLevel() == kvflowcontrol.V2EnabledWhenLeaderV2Encoding
-	} else {
-		versionEnabled = r.store.cfg.Settings.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2Full)
 	}
 
 	return versionEnabled &&

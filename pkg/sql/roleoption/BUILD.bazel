@@ -12,7 +12,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cli/cliflags",
-        "//pkg/clusterversion",
         "//pkg/security/distinguishedname",
         "//pkg/security/username",
         "//pkg/settings/cluster",
