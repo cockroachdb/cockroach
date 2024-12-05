@@ -2465,6 +2465,7 @@ func (s *fakePubsubServer) NotifyMessage() chan struct{} {
 }
 
 func (ps *fakePubsubServer) Dial() (*grpc.ClientConn, error) {
+	//lint:ignore SA1019 grpc.Dial is deprecated
 	return grpc.Dial(ps.srv.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 }
 

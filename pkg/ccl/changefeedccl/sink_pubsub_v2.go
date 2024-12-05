@@ -328,6 +328,7 @@ func makePublisherClient(
 	// See https://pkg.go.dev/cloud.google.com/go/pubsub#hdr-Emulator for emulator information.
 	if addr, _ := envutil.ExternalEnvString("PUBSUB_EMULATOR_HOST", 1); addr != "" {
 		log.Infof(ctx, "Establishing connection to pubsub emulator at %s", addr)
+		//lint:ignore SA1019 grpc.Dial is deprecated
 		conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, errors.Newf("grpc.Dial: %w", err)

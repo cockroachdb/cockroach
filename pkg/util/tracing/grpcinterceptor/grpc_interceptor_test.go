@@ -226,6 +226,7 @@ func TestGRPCInterceptors(t *testing.T) {
 					t.Error(err)
 				}
 			}))
+			//lint:ignore SA1019 grpc.DialContext is deprecated
 			conn, err := grpc.DialContext(bgCtx, ln.Addr().String(),
 				//lint:ignore SA1019 grpc.WithInsecure is deprecated
 				grpc.WithInsecure(),

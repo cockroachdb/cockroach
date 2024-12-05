@@ -10,15 +10,16 @@ go 1.22.8
 // merge of any upgrades we should communicate to all teams to be on the lookout
 // for behavior changes, just like we would after a go upgrade.
 require (
-	golang.org/x/crypto v0.26.0
+	golang.org/x/crypto v0.27.0
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
 	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
 	golang.org/x/mod v0.20.0 // indirect
-	golang.org/x/net v0.28.0
-	golang.org/x/oauth2 v0.7.0
+	golang.org/x/net v0.29.0
+	golang.org/x/oauth2 v0.23.0
 	golang.org/x/sync v0.8.0
-	golang.org/x/sys v0.23.0
+	golang.org/x/sys v0.25.0
 	golang.org/x/text v0.19.0
+	// NOTE: `replace` directive in effect!
 	golang.org/x/time v0.3.0
 	golang.org/x/tools v0.24.0
 )
@@ -29,6 +30,7 @@ require (
 // reviewers.
 require (
 	github.com/gogo/googleapis v1.4.1 // indirect
+	// NOTE: `replace` directive in effect!
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
 	github.com/golang/mock v1.6.0
@@ -38,9 +40,10 @@ require (
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/uuid v1.6.0 // indirect
 	google.golang.org/api v0.114.0
-	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
-	google.golang.org/grpc v1.56.3
-	google.golang.org/protobuf v1.35.1
+	google.golang.org/genproto v0.0.0-20230526161137-0005af68ea54
+	// NOTE: `replace` directive in effect.
+	google.golang.org/grpc v1.68.0
+	google.golang.org/protobuf v1.35.2
 )
 
 // If any of the following dependencies get updated as a side-effect
@@ -147,6 +150,7 @@ require (
 	github.com/dave/dst v0.24.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/distribution v2.7.1+incompatible
+	// NOTE: `replace` directive in effect!
 	github.com/docker/docker v24.0.6+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/dustin/go-humanize v1.0.0
@@ -206,6 +210,7 @@ require (
 	github.com/montanaflynn/stats v0.7.0
 	github.com/mozillazg/go-slugify v0.2.0
 	github.com/nightlyone/lockfile v1.0.0
+	// NOTE: `replace` directive in effect!
 	github.com/olekukonko/tablewriter v0.0.5-0.20200416053754-163badb3bac6
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
 	github.com/otan/gopgkrb5 v1.0.3
@@ -228,7 +233,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.21.12
 	github.com/slack-go/slack v0.9.5
 	github.com/snowflakedb/gosnowflake v1.3.4
-	github.com/spf13/afero v1.9.2
+	github.com/spf13/afero v1.10.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
@@ -248,19 +253,21 @@ require (
 	go.opentelemetry.io/otel/trace v1.17.0
 	go.opentelemetry.io/proto/otlp v0.11.0
 	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5
-	golang.org/x/term v0.23.0
+	golang.org/x/term v0.24.0
 	golang.org/x/tools/go/vcs v0.1.0-deprecated
 	gonum.org/v1/gonum v0.15.1
+	google.golang.org/genproto/googleapis/api v0.0.0-20240903143218-8af14fe29dc1
+	// NOTE: `replace` directive in effect!
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	honnef.co/go/tools v0.4.5
+	// NOTE: `replace` directive in effect!
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
 require (
 	cloud.google.com/go v0.110.0 // indirect
-	cloud.google.com/go/compute v1.19.1 // indirect
-	cloud.google.com/go/compute/metadata v0.2.3 // indirect
+	cloud.google.com/go/compute/metadata v0.5.0 // indirect
 	cloud.google.com/go/iam v0.13.0 // indirect
 	cloud.google.com/go/longrunning v0.4.1 // indirect
 	git.sr.ht/~sbinet/gg v0.6.0 // indirect
@@ -304,7 +311,8 @@ require (
 	github.com/bits-and-blooms/bitset v1.4.0 // indirect
 	github.com/campoy/embedmd v1.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
-	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	// NOTE: `replace` directive in effect!
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
 	github.com/cockroachdb/swiss v0.0.0-20240612210725-f4de07ae6964 // indirect
@@ -445,6 +453,8 @@ require (
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gonum.org/v1/plot v0.14.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
+	google.golang.org/genproto/googleapis/bytestream v0.0.0-20241118233622-e639e219e697 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 )
 
@@ -454,8 +464,8 @@ require (
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
-	github.com/envoyproxy/protoc-gen-validate v0.10.1 // indirect
-	github.com/golang/glog v1.1.0 // indirect
+	github.com/envoyproxy/protoc-gen-validate v1.1.0 // indirect
+	github.com/golang/glog v1.2.2 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-zglob v0.0.3 // indirect
 	github.com/muesli/ansi v0.0.0-20211031195517-c9f0611b6c70 // indirect
@@ -473,8 +483,6 @@ replace github.com/charmbracelet/bubbletea => github.com/cockroachdb/bubbletea v
 
 replace github.com/olekukonko/tablewriter => github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847
 
-replace github.com/abourget/teamcity => github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11
-
 replace vitess.io/vitess => github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82
 
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d6955c8edbc
@@ -484,3 +492,13 @@ replace github.com/docker/docker => github.com/moby/moby v24.0.6+incompatible
 replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c
 
 replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20241118145159-46874edb1b83
+
+// We must use the noalpncheck version of grpc-go until the MinSupportedVersion
+// also uses gRPC at v1.68.0 or above. Also, v1.68.0 lost an optimization that
+// allowed the Decompressor (snappyDecompressor) in our case to announce how many
+// bytes the decompressed data will occupy. This led to a blow-up in allocated bytes
+// for workloads in which requests weigh in at less than 32KiB, which is common.
+//
+// See https://github.com/cockroachdb/cockroach/issues/136367 for `noalpncheck`.
+// See https://github.com/cockroachdb/cockroach/pull/136278#issuecomment-2506494078 for `decompsize`.
+replace google.golang.org/grpc v1.68.0 => github.com/cockroachdb/grpc-go v1.68.0-noalpncheck.0.20241129124825-5710e83f714e

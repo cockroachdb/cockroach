@@ -91,6 +91,7 @@ func configureGRPCGateway(
 		telemetry.Inc(getServerEndpointCounter(method))
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
+	//lint:ignore SA1019 grpc.DialContext is deprecated
 	conn, err := grpc.DialContext(ctx, GRPCAddr, append(
 		dialOpts,
 		grpc.WithUnaryInterceptor(callCountInterceptor),

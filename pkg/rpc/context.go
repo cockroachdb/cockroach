@@ -1602,6 +1602,7 @@ func (rpcCtx *Context) dialOptsNetwork(
 
 	// Don't retry on dial errors either, otherwise the onlyOnceDialer will get
 	// into a bad state for connection errors.
+	//lint:ignore SA1019 grpc.FailOnNonTempDialError is deprecated
 	dialOpts = append(dialOpts, grpc.FailOnNonTempDialError(true))
 
 	return dialOpts, nil
@@ -1952,6 +1953,7 @@ func (rpcCtx *Context) grpcDialRaw(
 
 	dialOpts = append(dialOpts, additionalOpts...)
 
+	//lint:ignore SA1019 grpc.DialContext is deprecated
 	return grpc.DialContext(ctx, target, dialOpts...)
 }
 
@@ -2147,6 +2149,7 @@ func VerifyDialback(
 		// A throwaway connection keeps it simple.
 		ctx := rpcCtx.wrapCtx(ctx, target, request.OriginNodeID, SystemClass)
 		ctx = logtags.AddTag(ctx, "dialback", nil)
+		//lint:ignore SA1019 grpc.WithBlock is deprecated
 		conn, err := rpcCtx.grpcDialRaw(ctx, target, SystemClass, grpc.WithBlock())
 		if conn != nil { // NB: the nil check simplifies mocking in TestVerifyDialback
 			_ = conn.Close() // nolint:grpcconnclose

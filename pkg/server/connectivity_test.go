@@ -208,6 +208,7 @@ func TestClusterConnectivity(t *testing.T) {
 						return err
 					}
 
+					//lint:ignore SA1019 grpc.DialContext is deprecated
 					conn, err := grpc.DialContext(ctx, target, dialOpts...)
 					if err != nil {
 						return err

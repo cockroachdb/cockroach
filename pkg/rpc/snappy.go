@@ -154,8 +154,8 @@ func (snappyCompressor) Decompress(r io.Reader) (io.Reader, error) {
 // pre-allocate a buffer with the exact decompressed size instead of needing to
 // dynamically grow the buffer while decompressing (in io.ReadAll), which can
 // incur multiple allocations and memory copies.
-func (snappyCompressor) DecompressedSize(p []byte) int {
-	v, ok := readDecompressedLength(p)
+func (snappyCompressor) DecompressedSize(p io.Reader) int {
+	v, ok := readDecompressedLengthReader(p)
 	if !ok {
 		// No decompressed size chunk.
 		return -1
@@ -175,6 +175,13 @@ func writeDecompressedLength(dst *[chunkTypeDecompressedLengthMaxSize]byte, v in
 	return 4 + chunkLen
 }
 
+var readDecompressedLengthScratchPool = sync.Pool{
+	New: func() any {
+		sl := make([]byte, binary.MaxVarintLen64)
+		return &sl
+	},
+}
+
 // readDecompressedLength reads the decompressed length from the snappy
 // compressed data. It does so by stepping through the data chunk by chunk until
 // it finds the decompressed length chunk.
@@ -183,26 +190,39 @@ func writeDecompressedLength(dst *[chunkTypeDecompressedLengthMaxSize]byte, v in
 // first will be returned. We could change this if it ever becomes important.
 //
 // The function returns (0, false) if the decompressed length chunk is missing.
-func readDecompressedLength(p []byte) (int, bool) {
+//
+// TODO(server): this is called by grpc.decompress() and would be more efficient
+// if the `p` they're passing in (mem.BufferSlice().Reader())` were an `io.Seeker`.
+// Then we could more efficiently skip over all of the data chunks.
+func readDecompressedLengthReader(p io.Reader) (int, bool) {
+	scratchRef := readDecompressedLengthScratchPool.Get()
+	defer readDecompressedLengthScratchPool.Put(scratchRef)
+	scratch := *(scratchRef.(*[]byte))
 	for {
-		if len(p) < 4 {
+		if n, err := p.Read(scratch[:4]); err != nil || n != 4 {
 			// Corrupt chunk.
 			return 0, false
 		}
-		chunkType := p[0]
-		chunkLen := int(p[1]) | int(p[2])<<8 | int(p[3])<<16
-		p = p[4:] // strip chunk header
+		chunkType := scratch[0]
+		chunkLen := int(scratch[1]) | int(scratch[2])<<8 | int(scratch[3])<<16
 		if chunkType != chunkTypeDecompressedLength {
-			if chunkLen > len(p) {
-				// Corrupt chunk.
+			// Jump to next chunk.
+			if _, err := io.CopyN(io.Discard, p, int64(chunkLen)); err != nil {
+				// Corruption.
 				return 0, false
 			}
-			// Jump to next chunk.
-			p = p[chunkLen:]
 			continue
 		}
+		if chunkLen > binary.MaxVarintLen64 {
+			// Corruption.
+			return 0, false
+		}
 		// Decode the decompressed length chunk.
-		v, n := binary.Uvarint(p)
+		if _, err := io.ReadFull(p, scratch[:chunkLen]); err != nil {
+			// Corruption.
+			return 0, false
+		}
+		v, n := binary.Uvarint(scratch)
 		if n <= 0 {
 			// Uvarint decoding failed.
 			return 0, false

@@ -94,7 +94,7 @@ go_proto_library(
         # NB: The grpc-gateway compiler injects a dependency on the descriptor
         # package that Gazelle isn't prepared to deal with.
         "@com_github_golang_protobuf//descriptor:go_default_library_gen",  # keep
-        "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
+        "@org_golang_google_genproto_googleapis_api//annotations:go_default_library",
     ],
 )
 

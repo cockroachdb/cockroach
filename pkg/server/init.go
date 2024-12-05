@@ -479,6 +479,8 @@ func (s *initServer) attemptJoinTo(
 	if err != nil {
 		return nil, err
 	}
+
+	//lint:ignore SA1019 grpc.DialContext is deprecated
 	conn, err := grpc.DialContext(ctx, addr, dialOpts...)
 	if err != nil {
 		return nil, err
