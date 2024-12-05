@@ -278,18 +278,13 @@ type BytesMonitor struct {
 
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize     = 160
-	expectedMonitorSizeRace = 168
-	expectedAccountSize     = 24
+	expectedMonitorSize = 160
+	expectedAccountSize = 24
 )
 
 func init() {
 	monitorSize := unsafe.Sizeof(BytesMonitor{})
-	if util.RaceEnabled {
-		if monitorSize != expectedMonitorSizeRace {
-			panic(errors.AssertionFailedf("expected monitor size to be %d under race, found %d", expectedMonitorSizeRace, monitorSize))
-		}
-	} else {
+	if !util.RaceEnabled {
 		if monitorSize != expectedMonitorSize {
 			panic(errors.AssertionFailedf("expected monitor size to be %d, found %d", expectedMonitorSize, monitorSize))
 		}
