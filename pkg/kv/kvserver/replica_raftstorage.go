@@ -807,7 +807,7 @@ func (r *Replica) applySnapshot(
 	// each raft command. These will be lost during a snapshot, so disconnect
 	// the rangefeed, if one exists.
 	r.disconnectRangefeedWithReason(
-		kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
+		kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
 	)
 
 	// Update the replica's cached byte thresholds. This is a no-op if the system
