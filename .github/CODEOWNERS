@@ -254,7 +254,7 @@
 /pkg/crosscluster/       @cockroachdb/disaster-recovery
 /pkg/backup/          @cockroachdb/disaster-recovery
 /pkg//backup/*_job.go  @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
-/pkg/ccl/revertccl/          @cockroachdb/disaster-recovery
+/pkg/revert/          @cockroachdb/disaster-recovery
 /pkg/ccl/storageccl/         @cockroachdb/disaster-recovery
 /pkg/ccl/cloudccl/           @cockroachdb/disaster-recovery
 /pkg/cloud/                  @cockroachdb/disaster-recovery

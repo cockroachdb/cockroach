@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/revertccl"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/revert"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -501,13 +501,13 @@ func maybeRevertToCutoverTimestamp(
 		return cutoverTimestamp, false, err
 	}
 
-	batchSize := int64(revertccl.RevertDefaultBatchSize)
+	batchSize := int64(revert.RevertDefaultBatchSize)
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize != 0 {
 		batchSize = p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize
 	}
 	// On cutover, replication has stopped so therefore should set replicated time to 0
 	p.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplicatedTimeSeconds.Update(0)
-	if err := revertccl.RevertSpansFanout(ctx,
+	if err := revert.RevertSpansFanout(ctx,
 		p.ExecCfg().DB,
 		p,
 		remainingSpansToRevert,
