@@ -100,6 +100,7 @@ FILES = [
     "create_index_stmt",
     "create_index_with_storage_param",
     "create_inverted_index_stmt",
+    "create_logical_replication_stream_stmt",
     "create_proc",
     "create_role_stmt",
     "create_schedule_for_backup_stmt",
