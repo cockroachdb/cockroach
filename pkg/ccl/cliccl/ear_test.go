@@ -137,7 +137,7 @@ func TestList(t *testing.T) {
 	require.NoError(t, err)
 	env, err := fs.InitEnv(ctx, vfs.Default, dir, fs.EnvConfig{EncryptionOptions: encOpts}, nil /* statsCollector */)
 	require.NoError(t, err)
-	p, err := storage.Open(ctx, env, cluster.MakeClusterSettings())
+	p, err := storage.Open(ctx, env, cluster.MakeTestingClusterSettings())
 	require.NoError(t, err)
 
 	// Write a key and flush, to create a table in the store.
