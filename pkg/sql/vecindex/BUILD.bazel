@@ -51,7 +51,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/num32",
         "//pkg/util/stop",
-        "//pkg/util/timeutil",
         "//pkg/util/vector",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
