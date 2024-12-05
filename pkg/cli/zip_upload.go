@@ -81,7 +81,8 @@ const (
 
 	// datadog endpoint URLs
 	datadogProfileUploadURLTmpl = "https://intake.profile.%s/v1/input"
-	datadogCreateArchiveURLTmpl = "https://%s/api/v2/logs/config/archives"
+	datadogCreateArchiveURLTmpl = "https://api.%s/api/v2/logs/config/archives"
+	datadogLogIntakeURLTmpl     = "https://http-intake.logs.%s/api/v2/logs"
 
 	// datadog archive attributes
 	ddArchiveType            = "archives"
@@ -92,6 +93,19 @@ const (
 
 	gcsPathTimeFormat = "dt=20060102/hour=15"
 	zipUploadRetries  = 5
+
+	// datadog allows us to use logs API logs only for the last 72 hours. So, we
+	// are setting the oldest allowed log duration to 71 hours. The -1 hour is to
+	// keep some buffer for delays, etc.
+	datadogOldestAllowedLogDuration = 71 * time.Hour
+	datadogMaxLogLinesPerReq        = 1000
+)
+
+type logUploadType int
+
+const (
+	logUploadTypeDatadog logUploadType = iota
+	logUploadTypeGCS
 )
 
 var debugZipUploadOpts = struct {
@@ -135,7 +149,7 @@ func runDebugZipUpload(cmd *cobra.Command, args []string) error {
 	}
 
 	// a unique ID for this upload session. This should be used to tag all the artifacts uploaded in this session
-	uploadID := newUploadID(debugZipUploadOpts.clusterName, timeutil.Now())
+	uploadID := newUploadID(debugZipUploadOpts.clusterName, getCurrentTime())
 
 	// override the list of artifacts to upload if the user has provided any
 	artifactsToUpload := zipArtifactTypes
@@ -268,7 +282,7 @@ func newProfileUploadReq(
 	var (
 		body  bytes.Buffer
 		mw    = multipart.NewWriter(&body)
-		now   = timeutil.Now()
+		now   = getCurrentTime()
 		event = &profileUploadEvent{
 			Version: profileVersion,
 			Family:  profileFamily,
@@ -331,14 +345,27 @@ func newProfileUploadReq(
 func processLogFile(
 	uploadID, debugDirPath string, file fileInfo, uploadFn func(logUploadSig),
 ) (time.Time, time.Time, error) {
+	// We collect the parsed log lines in an array instead of bytes buffer.
+	// Because, now this has two use-cases. Rehydration and Logs API.
+	//
+	//   * The rehydration flow has no constraints and can use either array or buffer
+	//   * But with the logs API, there is a 1000 line limit per payload. To keep
+	//     this function agnostic of the upload method, the 1000 line limit will be
+	//     handled downstream, just before upload
 	var (
 		pathParts                            = strings.Split(strings.TrimPrefix(file.path, debugDirPath), "/")
 		inputEditMode                        = log.SelectEditMode(false /* redactable */, false /* redactInput */)
 		nodeID                               = pathParts[2]
 		fileName                             = path.Base(file.path)
-		logBuffer                            = &bytes.Buffer{}
+		logLines                             = [][]byte{}
 		localMinTimestamp, localMaxTimestamp = time.Time{}, time.Time{}
-		prevTargetPath                       = ""
+
+		// prevTargetPath and prevTimestamp are used to keep track of the
+		// previously parsed log line. This is used to determine when to conclude
+		// the current batch of logs and send them for upload. They are also sent
+		// as metadata as part of the logUploadSig.
+		prevTargetPath = ""
+		prevTimestamp  time.Time
 	)
 
 	stream, err := newFileLogStream(
@@ -360,51 +387,48 @@ func processLogFile(
 		// <cluster-name>/<upload-id>/dt=20210901/hour=15/<node_id>/<filename>
 		currTargetPath := path.Join(
 			debugZipUploadOpts.clusterName, uploadID,
-			timeutil.Unix(0, e.Time).Format(gcsPathTimeFormat), nodeID, fileName,
+			currentTimestamp.Format(gcsPathTimeFormat), nodeID, fileName,
 		)
 
 		if prevTargetPath != "" && prevTargetPath != currTargetPath {
 			// we've found a new hour, so we need to send the logs of the
 			// previous hour for upload
 			uploadFn(logUploadSig{
-				key:    prevTargetPath,
-				nodeID: nodeID,
-				data:   logBuffer.Bytes(),
+				logUploadType: getUploadType(prevTimestamp),
+				key:           prevTargetPath,
+				nodeID:        nodeID,
+				logLines:      logLines,
 			})
 
-			logBuffer.Reset()
+			logLines = [][]byte{}
 		}
 
-		rawLine, err := logEntryToJSON(e, appendUserTags(
-			append(
-				defaultDDTags, makeDDTag(uploadIDTag, uploadID), makeDDTag(nodeIDTag, nodeID),
-				makeDDTag(clusterTag, debugZipUploadOpts.clusterName),
-			), // system generated tags
+		rawLine, err := logEntryToJSON(e, appendUserTags(append(
+			defaultDDTags, makeDDTag(uploadIDTag, uploadID), makeDDTag(nodeIDTag, nodeID),
+			makeDDTag(clusterTag, debugZipUploadOpts.clusterName),
+		), // system generated tags
 			debugZipUploadOpts.tags..., // user provided tags
-		))
+		), getUploadType(currentTimestamp))
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
 
-		_, err = logBuffer.Write(append(rawLine, []byte("\n")...))
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
+		logLines = append(logLines, rawLine)
 		stream.pop()
+
+		prevTimestamp = currentTimestamp
 		prevTargetPath = currTargetPath
 	}
 
 	// upload the remaining logs
-	if logBuffer.Len() > 0 {
+	if len(logLines) > 0 {
 		uploadFn(logUploadSig{
-			key:    prevTargetPath,
-			data:   logBuffer.Bytes(),
-			nodeID: nodeID,
+			logUploadType: getUploadType(prevTimestamp),
+			key:           prevTargetPath,
+			nodeID:        nodeID,
+			logLines:      logLines,
 		})
-		logBuffer.Reset()
 	}
 
 	return localMinTimestamp, localMaxTimestamp, nil
@@ -484,11 +508,12 @@ func logReaderPool(
 func uploadZipLogs(ctx context.Context, uploadID string, debugDirPath string) error {
 	var (
 		// both the channels are buffered to keep the workers busy
-		gcsWorkChan = make(chan logUploadSig, debugZipUploadOpts.maxConcurrentUploads*2)
-		doneChan    = make(chan logUploadStatus, debugZipUploadOpts.maxConcurrentUploads*2)
-		writerGroup = sync.WaitGroup{}
-		totalSize   = 0
-		nodeLookup  = make(map[string]struct{})
+		gcsWorkChan                      = make(chan logUploadSig, debugZipUploadOpts.maxConcurrentUploads*2)
+		ddWorkChan                       = make(chan logUploadSig, debugZipUploadOpts.maxConcurrentUploads*2)
+		doneChan                         = make(chan logUploadStatus, debugZipUploadOpts.maxConcurrentUploads*2)
+		writerGroup                      = sync.WaitGroup{}
+		historicalLogSize, recentLogSize = 0, 0
+		nodeLookup                       = make(map[string]struct{})
 	)
 
 	go func() {
@@ -500,25 +525,48 @@ func uploadZipLogs(ctx context.Context, uploadID string, debugDirPath string) er
 
 			if sig.err != nil {
 				fmt.Fprintln(os.Stderr, "error while uploading logs:", sig.err)
+			} else if sig.logUploadType == logUploadTypeGCS {
+				historicalLogSize += sig.uploadSize
 			} else {
-				totalSize += sig.uploadSize
+				recentLogSize += sig.uploadSize
 			}
 
 			writerGroup.Done()
 		}
 	}()
 
-	// queueForUpload is responsible for receiving the logs from the
-	// logReaderPool and queuing them for upload. Currently, it just adds the
-	// logs to the gcsWorkChan but this can be extended to add work to more than
-	// on worker pool. In the near future, this will extend support to datadog
-	// logs API
+	// queueForUpload is responsible for queuing the batched logs for upload. If
+	// logs are older than the oldest allowed log duration, they are queued for
+	// upload to GCS (to follow the rehydration path). Otherwise, they are queued
+	// for upload to datadog directly (using logs API).
 	queueForUpload := func(sig logUploadSig) {
+		if sig.logUploadType == logUploadTypeDatadog {
+			if len(sig.logLines) < datadogMaxLogLinesPerReq {
+				writerGroup.Add(1)
+				ddWorkChan <- sig
+				return
+			}
+
+			// datadog's logs API only allows 1000 lines of logs per request. So, we
+			// need to split the signal accordingly. It's best to do it here because
+			// splitting the signal affects the concurrency of the upload workers.
+			for _, newSig := range sig.split() {
+				writerGroup.Add(1)
+				ddWorkChan <- newSig
+			}
+			return
+		}
+
 		writerGroup.Add(1)
 		gcsWorkChan <- sig
 	}
 
-	startGCSWriterPool(debugZipUploadOpts.maxConcurrentUploads, gcsWorkChan, doneChan)
+	// start the GCS writer pool
+	startWriterPool(gcsLogUpload, debugZipUploadOpts.maxConcurrentUploads, gcsWorkChan, doneChan)
+
+	// start the datadog writer pool
+	startWriterPool(ddLogUpload, debugZipUploadOpts.maxConcurrentUploads, ddWorkChan, doneChan)
+
 	waitForReads, err := logReaderPool(
 		debugZipUploadOpts.maxConcurrentUploads, debugDirPath, uploadID, queueForUpload,
 	)
@@ -531,18 +579,25 @@ func uploadZipLogs(ctx context.Context, uploadID string, debugDirPath string) er
 
 	writerGroup.Wait()
 	close(gcsWorkChan)
+	close(ddWorkChan)
 	close(doneChan)
 
-	if totalSize != 0 {
-		fmt.Fprintf(os.Stderr, "Upload complete! Total size: %s\n", humanReadableSize(totalSize))
+	if recentLogSize != 0 {
+		fmt.Fprintf(os.Stderr, "Logs from within the last 72 hours were directly uploaded to datadog! (%s)\n", humanReadableSize(recentLogSize))
+		fmt.Fprintf(
+			os.Stderr, "Explore the logs here: https://us5.datadoghq.com/logs?query=upload_id:%s&from_ts=%d&to_ts=%d\n",
+			uploadID, firstEventTime.UnixMilli(), lastEventTime.UnixMilli(),
+		)
+	}
 
+	if historicalLogSize != 0 {
 		if err := setupDDArchive(
 			ctx, path.Join(debugZipUploadOpts.clusterName, uploadID), uploadID,
 		); err != nil {
 			return errors.Wrap(err, "failed to setup datadog archive")
 		}
 
-		printRehydrationSteps(uploadID, uploadID, firstEventTime, lastEventTime)
+		printRehydrationSteps(humanReadableSize(historicalLogSize), uploadID, uploadID, firstEventTime, lastEventTime)
 	}
 
 	return nil
@@ -618,35 +673,74 @@ func setupDDArchive(ctx context.Context, pathPrefix, archiveName string) error {
 }
 
 type logUploadSig struct {
-	key    string
-	nodeID string
-	data   []byte
+	logUploadType logUploadType
+	key           string
+	nodeID        string
+	logLines      [][]byte
+}
+
+// split the logUploadSig into multiple signals if the number of logLines
+// exceeds the maximum allowed lines per request. Datadog has limits on both
+// number of lines and the size of the payload. But in case of CRDB logs, the
+// average size of 1000 lines is well within the limit (5MB). So, we are only
+// splitting based on the number of lines.
+func (s logUploadSig) split() []logUploadSig {
+	var (
+		noOfNewSignals = len(s.logLines)/datadogMaxLogLinesPerReq + 1
+		newSignals     = make([]logUploadSig, noOfNewSignals)
+	)
+
+	for i := 0; i < noOfNewSignals; i++ {
+		startIdx := i * datadogMaxLogLinesPerReq
+		remaining := len(s.logLines[startIdx:])
+
+		// the min function is used to make sure that the last signal doesn't end
+		// up with trailing empty logLines. For example: if there are 800 log
+		// lines remaining, logLines[x:x+1000] will result in 200 empty log lines.
+		// So, we use logLines[x:x+min(1000, 800)] instead.
+		endIdx := startIdx + min(datadogMaxLogLinesPerReq, remaining)
+
+		newSignals[i] = logUploadSig{
+			logUploadType: s.logUploadType,
+			key:           s.key,
+			nodeID:        s.nodeID,
+			logLines:      s.logLines[startIdx:endIdx],
+		}
+	}
+
+	return newSignals
 }
 
 type logUploadStatus struct {
-	err        error
-	uploadSize int
-	nodeID     string
+	logUploadType logUploadType
+	err           error
+	uploadSize    int
+	nodeID        string
 }
 
-// startGCSWriterPool creates a worker pool that can concurrently write the
-// logs to GCS. This function only orchestrates the upload process. This pool
-// is terminated when the workChan is closed
-func startGCSWriterPool(size int, workChan <-chan logUploadSig, doneChan chan<- logUploadStatus) {
+// logUploadFunc is a function type that implements the actual writing of the logs
+// to a destination. The function signature is used to abstract the actual
+// uploading logic from the writer pool.
+type logUploadFunc func(context.Context, logUploadSig) (int, error)
+
+// startWriterPool creates a worker pool that can concurrently write the logs
+// using the given writeFunc. This function only orchestrates the upload
+// process. This pool is terminated when the workChan is closed
+func startWriterPool(
+	fn logUploadFunc, size int, workChan <-chan logUploadSig, doneChan chan<- logUploadStatus,
+) {
 	for i := 0; i < size; i++ {
 		go func() {
 			for sig := range workChan {
-				doneChan <- logUploadStatus{
-					err:        writeLogsToGCS(context.Background(), sig),
-					uploadSize: len(sig.data),
-					nodeID:     sig.nodeID,
-				}
+				status := logUploadStatus{nodeID: sig.nodeID, logUploadType: sig.logUploadType}
+				status.uploadSize, status.err = fn(context.Background(), sig)
+				doneChan <- status
 			}
 		}()
 	}
 }
 
-// writeLogsToGCS is a function that writes the logs to GCS.
+// gcsLogUpload is a function that writes the logs to GCS.
 // The key in the gcsWorkerSig is the target path where the logs should be
 // uploaded.
 //
@@ -655,10 +749,11 @@ func startGCSWriterPool(size int, workChan <-chan logUploadSig, doneChan chan<- 
 // Each path will be uploaded as a separate file. The final file name will be
 // randomly generated just be for uploading. This function only does the actual
 // writing to GCS. The concurrency has to be handled by the caller.
-var writeLogsToGCS = func(ctx context.Context, sig logUploadSig) error {
+// This function implements the logUploadFunc signature.
+var gcsLogUpload = func(ctx context.Context, sig logUploadSig) (int, error) {
 	gcsClient, closeGCSClient, err := newGCSClient(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer closeGCSClient()
 
@@ -670,10 +765,11 @@ var writeLogsToGCS = func(ctx context.Context, sig logUploadSig) error {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = zipUploadRetries
 
+	data := bytes.Join(sig.logLines, []byte("\n"))
 	for retry := retry.Start(retryOpts); retry.Next(); {
 		objectWriter := gcsClient.Bucket(ddArchiveBucketName).Object(filename).NewWriter(ctx)
 		w := gzip.NewWriter(objectWriter)
-		_, err = w.Write(sig.data)
+		_, err = w.Write(data)
 		if err != nil {
 			continue
 		}
@@ -690,7 +786,64 @@ var writeLogsToGCS = func(ctx context.Context, sig logUploadSig) error {
 		break
 	}
 
-	return err
+	return len(data), err
+}
+
+// ddLogUpload wraps the uploadLogsToDatadog function and adds the required
+// formatting required for uploading multiple logs at once. This function
+// implements the logUploadFunc signature.
+func ddLogUpload(ctx context.Context, sig logUploadSig) (int, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	buf.Write(bytes.Join(sig.logLines, []byte(",")))
+	buf.WriteByte(']')
+
+	return uploadLogsToDatadog(ctx, buf.Bytes())
+}
+
+// uploadLogsToDatadog is a generic function that uploads the given payload of
+// logs to datadog. This exists because artifacts other than logs might also
+// need to be uploaded to datadog in the form of logs (example: table dumps,
+// events etc.).
+func uploadLogsToDatadog(ctx context.Context, payload []byte) (int, error) {
+	var (
+		compressedLogs      bytes.Buffer
+		compressedlogWriter = gzip.NewWriter(&compressedLogs)
+		url                 = makeDDURL(datadogLogIntakeURLTmpl)
+	)
+
+	if _, err := compressedlogWriter.Write(payload); err != nil {
+		return 0, err
+	}
+	if err := compressedlogWriter.Close(); err != nil {
+		return 0, err
+	}
+
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.MaxRetries = zipUploadRetries
+
+	var req *http.Request
+	var err error
+	for retry := retry.Start(retryOpts); retry.Next(); {
+		req, err = http.NewRequest(http.MethodPost, url, &compressedLogs)
+		if err != nil {
+			continue
+		}
+
+		req.Header.Set(httputil.ContentTypeHeader, httputil.JSONContentType)
+		req.Header.Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
+		req.Header.Set(datadogAPIKeyHeader, debugZipUploadOpts.ddAPIKey)
+
+		if _, err = doUploadReq(req); err == nil {
+			break
+		}
+	}
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to upload logs to datadog. response: %w", err)
+	}
+
+	return len(payload), nil
 }
 
 func newGCSClient(ctx context.Context) (*storage.Client, func(), error) {
@@ -712,7 +865,7 @@ func newGCSClient(ctx context.Context) (*storage.Client, func(), error) {
 	}, nil
 }
 
-type ddLogEntry struct {
+type ddArchiveLogAttrs struct {
 	logpb.Entry
 
 	Date      string `json:"date"`
@@ -726,11 +879,33 @@ type ddLogEntry struct {
 	Tags    string `json:"tags,omitempty"`
 }
 
+type ddLogsAPIEntry struct {
+	logpb.Entry
+	Timestamp int64  `json:"timestamp"`
+	Severity  string `json:"severity"`
+	Channel   string `json:"channel"`
+	DDTags    string `json:"ddtags"`
+
+	// remove the below fields via the omitempty tags
+	Time string `json:"time,omitempty"`
+	Tags string `json:"tags,omitempty"`
+}
+
 // logEntryToJSON converts a logpb.Entry to a JSON byte slice and also
 // transform a few fields to use the correct types. The JSON format is based on
 // the specification provided by datadog.
 // Refer: https://gist.github.com/ckelner/edc0e4efe4fa110f6b6b61f69d580171
-func logEntryToJSON(e logpb.Entry, tags []string) ([]byte, error) {
+func logEntryToJSON(e logpb.Entry, tags []string, lt logUploadType) ([]byte, error) {
+	if lt == logUploadTypeDatadog {
+		return json.Marshal(ddLogsAPIEntry{
+			Entry:     e,
+			Timestamp: e.Time / 1e6, // convert nanoseconds to milliseconds
+			Severity:  e.Severity.String(),
+			Channel:   e.Channel.String(),
+			DDTags:    strings.Join(tags, ","),
+		})
+	}
+
 	var message any = e.Message
 	if strings.HasPrefix(e.Message, "{") {
 		// If the message is already a JSON object, we don't want to escape it
@@ -746,19 +921,19 @@ func logEntryToJSON(e logpb.Entry, tags []string) ([]byte, error) {
 
 	return json.Marshal(struct {
 		// override the following fields in the embedded logpb.Entry struct
-		Timestamp  int64      `json:"timestamp"`
-		Date       string     `json:"date"`
-		Message    any        `json:"message"`
-		Tags       []string   `json:"tags"`
-		ID         string     `json:"_id"`
-		Attributes ddLogEntry `json:"attributes"`
+		Timestamp  int64             `json:"timestamp"`
+		Date       string            `json:"date"`
+		Message    any               `json:"message"`
+		Tags       []string          `json:"tags"`
+		ID         string            `json:"_id"`
+		Attributes ddArchiveLogAttrs `json:"attributes"`
 	}{
 		Timestamp: timestamp,
 		Date:      date,
 		Message:   message,
 		Tags:      tags,
 		ID:        newRandStr(24, false /* numericOnly */),
-		Attributes: ddLogEntry{
+		Attributes: ddArchiveLogAttrs{
 			Entry:     e,
 			Date:      date,
 			Timestamp: timestamp,
@@ -865,7 +1040,7 @@ var newRandStr = func(length int, numericOnly bool) string {
 		charSet = "0123456789"
 	}
 
-	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	r := rand.New(rand.NewSource(getCurrentTime().UnixNano()))
 	b := make([]byte, length)
 	for i := range b {
 		b[i] = charSet[r.Intn(len(charSet))]
@@ -873,10 +1048,10 @@ var newRandStr = func(length int, numericOnly bool) string {
 	return string(b)
 }
 
-func printRehydrationSteps(uploadID, archiveName string, from, to time.Time) {
+func printRehydrationSteps(size, uploadID, archiveName string, from, to time.Time) {
 	msg := `
-The logs have been added to an archive and are ready for rehydration (ingestion). This has to be
-triggered manually for now. This will be automated as soon as the datadog API supports it.
+A datadog archive has been created for logs older than 72 hours and are ready for rehydration (%s).
+This has to be triggered manually for now. This will be automated as soon as the datadog API supports it.
 
 Follow these steps to trigger rehydration:
 
@@ -894,7 +1069,7 @@ You will receive an email notification once the rehydration is complete.
 	from = from.Truncate(time.Hour)            // round down to the nearest hour
 	to = to.Add(time.Hour).Truncate(time.Hour) // round up to the nearest hour
 	fmt.Fprintf(
-		os.Stderr, msg, from.Format(timeFormat), to.Format(timeFormat), archiveName, uploadID,
+		os.Stderr, msg, size, from.Format(timeFormat), to.Format(timeFormat), archiveName, uploadID,
 	)
 }
 
@@ -919,4 +1094,12 @@ func humanReadableSize(bytes int) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+func getUploadType(t time.Time) logUploadType {
+	if t.Before(getCurrentTime().Add(-datadogOldestAllowedLogDuration)) {
+		return logUploadTypeGCS
+	}
+
+	return logUploadTypeDatadog
 }
