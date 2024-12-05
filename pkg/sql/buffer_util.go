@@ -31,10 +31,7 @@ type rowContainerHelper struct {
 }
 
 func (c *rowContainerHelper) Init(
-	ctx context.Context,
-	typs []*types.T,
-	evalContext *extendedEvalContext,
-	opName redact.RedactableString,
+	ctx context.Context, typs []*types.T, evalContext *extendedEvalContext, opName redact.SafeString,
 ) {
 	c.initMonitors(ctx, evalContext, opName)
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
@@ -49,10 +46,7 @@ func (c *rowContainerHelper) Init(
 // InitWithDedup is a variant of init that is used if row deduplication
 // functionality is needed (see addRowWithDedup).
 func (c *rowContainerHelper) InitWithDedup(
-	ctx context.Context,
-	typs []*types.T,
-	evalContext *extendedEvalContext,
-	opName redact.RedactableString,
+	ctx context.Context, typs []*types.T, evalContext *extendedEvalContext, opName redact.SafeString,
 ) {
 	c.initMonitors(ctx, evalContext, opName)
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
@@ -81,7 +75,7 @@ func (c *rowContainerHelper) InitWithParentMon(
 	typs []*types.T,
 	parent *mon.BytesMonitor,
 	evalContext *extendedEvalContext,
-	opName redact.RedactableString,
+	opName redact.SafeString,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	// TODO(yuzefovich): currently the memory usage of c.memMonitor and
@@ -89,13 +83,13 @@ func (c *rowContainerHelper) InitWithParentMon(
 	// Fix it.
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		ctx, parent, distSQLCfg, evalContext.SessionData(),
-		redact.Sprintf("%s-limited", opName),
+		opName+"-limited",
 	)
 	c.unlimitedMemMonitor = execinfra.NewMonitor(
-		ctx, parent, redact.Sprintf("%s-unlimited", opName),
+		ctx, parent, opName+"-unlimited",
 	)
 	c.diskMonitor = execinfra.NewMonitor(
-		ctx, distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName),
+		ctx, distSQLCfg.ParentDiskMonitor, opName+"-disk",
 	)
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
@@ -106,7 +100,7 @@ func (c *rowContainerHelper) InitWithParentMon(
 }
 
 func (c *rowContainerHelper) initMonitors(
-	ctx context.Context, evalContext *extendedEvalContext, opName redact.RedactableString,
+	ctx context.Context, evalContext *extendedEvalContext, opName redact.SafeString,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	// TODO(yuzefovich): currently the memory usage of c.memMonitor and
@@ -114,13 +108,13 @@ func (c *rowContainerHelper) initMonitors(
 	// Fix it.
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		ctx, evalContext.Planner.Mon(), distSQLCfg, evalContext.SessionData(),
-		redact.Sprintf("%s-limited", opName),
+		opName+"-limited",
 	)
 	c.unlimitedMemMonitor = execinfra.NewMonitor(
-		ctx, evalContext.Planner.Mon(), redact.Sprintf("%s-unlimited", opName),
+		ctx, evalContext.Planner.Mon(), opName+"-unlimited",
 	)
 	c.diskMonitor = execinfra.NewMonitor(
-		ctx, distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName),
+		ctx, distSQLCfg.ParentDiskMonitor, opName+"-disk",
 	)
 }
 

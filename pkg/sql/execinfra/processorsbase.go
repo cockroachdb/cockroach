@@ -948,7 +948,7 @@ func (pb *ProcessorBaseNoHelper) ConsumerClosed() {
 // memory monitor with the given name and start it. The returned monitor must
 // be closed.
 func NewMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, name redact.RedactableString,
+	ctx context.Context, parent *mon.BytesMonitor, name redact.SafeString,
 ) *mon.BytesMonitor {
 	monitor := mon.NewMonitorInheritWithLimit(name, 0 /* limit */, parent, false /* longLiving */)
 	monitor.StartNoReserved(ctx, parent)
@@ -962,7 +962,7 @@ func NewMonitor(
 // ServerConfig.TestingKnobs.ForceDiskSpill is set or
 // ServerConfig.TestingKnobs.MemoryLimitBytes if not.
 func NewLimitedMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name redact.RedactableString,
+	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name redact.SafeString,
 ) *mon.BytesMonitor {
 	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(flowCtx), parent, false /* longLiving */)
 	limitedMon.StartNoReserved(ctx, parent)
@@ -973,7 +973,7 @@ func NewLimitedMonitor(
 // guarantees that the monitor's limit is at least minMemoryLimit bytes.
 // flowCtx.Mon is used as the parent for the new monitor.
 func NewLimitedMonitorWithLowerBound(
-	ctx context.Context, flowCtx *FlowCtx, name redact.RedactableString, minMemoryLimit int64,
+	ctx context.Context, flowCtx *FlowCtx, name redact.SafeString, minMemoryLimit int64,
 ) *mon.BytesMonitor {
 	memoryLimit := GetWorkMemLimit(flowCtx)
 	if memoryLimit < minMemoryLimit {
@@ -991,7 +991,7 @@ func NewLimitedMonitorNoFlowCtx(
 	parent *mon.BytesMonitor,
 	config *ServerConfig,
 	sd *sessiondata.SessionData,
-	name redact.RedactableString,
+	name redact.SafeString,
 ) *mon.BytesMonitor {
 	// Create a fake FlowCtx populating only the required fields.
 	flowCtx := &FlowCtx{
