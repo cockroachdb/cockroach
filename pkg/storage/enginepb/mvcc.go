@@ -62,7 +62,7 @@ func TxnSeqIsIgnored(seq TxnSeq, ignored []IgnoredSeqNumRange) bool {
 
 // Short returns a prefix of the transaction's ID.
 func (t TxnMeta) Short() redact.SafeString {
-	return redact.SafeString(t.ID.Short())
+	return redact.SafeString(t.ID.Short().String())
 }
 
 // Total returns the range size as the sum of the key and value

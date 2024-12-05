@@ -543,7 +543,7 @@ func (q *Queue) MaybeWaitForPush(
 
 	pusherStr := "non-txn"
 	if req.PusherTxn.ID != (uuid.UUID{}) {
-		pusherStr = req.PusherTxn.ID.Short()
+		pusherStr = req.PusherTxn.ID.Short().String()
 	}
 	log.VEventf(
 		ctx,
@@ -729,7 +729,7 @@ func (q *Queue) waitForPush(
 			_, haveDependency := push.mu.dependents[req.PusheeTxn.ID]
 			dependents := make([]string, 0, len(push.mu.dependents))
 			for id := range push.mu.dependents {
-				dependents = append(dependents, id.Short())
+				dependents = append(dependents, id.Short().String())
 			}
 			log.VEventf(
 				ctx,
