@@ -55,6 +55,7 @@ go_test(
     ],
     embed = [":util"],
     deps = [
+        "//pkg/testutils/datapathutils",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
