@@ -128,12 +128,12 @@ require (
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go/v2 v2.3.7
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
-	github.com/cockroachdb/crlib v0.0.0-20241112164430-1264a2edc35b
+	github.com/cockroachdb/crlib v0.0.0-20241205024402-793d93d6e446
 	github.com/cockroachdb/datadriven v1.0.3-0.20240530155848-7682d40af056
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
-	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b
+	github.com/cockroachdb/logtags v0.0.0-20241205023844-89a8856d99be
 	github.com/cockroachdb/pebble v0.0.0-20241128154944-1724e81ecbc4
 	github.com/cockroachdb/redact v1.1.5
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd

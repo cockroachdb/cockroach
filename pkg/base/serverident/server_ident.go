@@ -5,16 +5,18 @@
 
 package serverident
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
+)
 
 // SystemTenantID is the string representation of
 // roachpb.SystemTenantID. Injected at initialization to avoid
 // an import dependency cycle. See SetSystemTenantID.
 var SystemTenantID string
 
-// ServerIdentificationContextKey is the type of a context.Value key
-// used to carry ServerIdentificationPayload values.
-type ServerIdentificationContextKey struct{}
+var serverIdentificationContextKey = ctxutil.RegisterFastValueKey()
 
 // ContextWithServerIdentification returns a context annotated with the provided
 // server identity. Use ServerIdentificationFromContext(ctx) to retrieve it from
@@ -22,21 +24,23 @@ type ServerIdentificationContextKey struct{}
 func ContextWithServerIdentification(
 	ctx context.Context, serverID ServerIdentificationPayload,
 ) context.Context {
-	return context.WithValue(ctx, ServerIdentificationContextKey{}, serverID)
+	return ctxutil.WithFastValue(ctx, serverIdentificationContextKey, serverID)
 }
 
 // ServerIdentificationFromContext retrieves the server identity put in the
 // context by ContextWithServerIdentification.
 func ServerIdentificationFromContext(ctx context.Context) ServerIdentificationPayload {
-	r := ctx.Value(ServerIdentificationContextKey{})
+	r := ctxutil.FastValue(ctx, serverIdentificationContextKey)
 	if r == nil {
 		return nil
 	}
+	// TODO(radu): an interface-to-interface conversion is not great in a hot
+	// path. Maybe the type should be just a func instead of an interface.
 	return r.(ServerIdentificationPayload)
 }
 
 // ServerIdentificationPayload is the type of a context.Value payload
-// associated with a ServerIdentificationContextKey.
+// associated with a serverIdentificationContextKey.
 type ServerIdentificationPayload interface {
 	// ServerIdentityString retrieves an identifier corresponding to the
 	// given retrieval key. If there is no value known for a given key,
@@ -57,7 +61,7 @@ const (
 	IdentifyInstanceID
 	// IdentifyTenantID retrieves the tenant ID of the server.
 	IdentifyTenantID
-	// IdentifyTenantLabel retrieves the tenant name of the server.
+	// IdentifyTenantName retrieves the tenant name of the server.
 	IdentifyTenantName
 )
 

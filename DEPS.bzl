@@ -1765,10 +1765,10 @@ def go_deps():
         name = "com_github_cockroachdb_crlib",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/crlib",
-        sha256 = "4e55a6088c146af4bda503535b067a9c5c980449e0f185a48b5e1e06606d0ef8",
-        strip_prefix = "github.com/cockroachdb/crlib@v0.0.0-20241112164430-1264a2edc35b",
+        sha256 = "6e3a3e6b6f5a5d6350e40abdbd2bbcb0b77bd9cd19cca1421a8ef98be830a17b",
+        strip_prefix = "github.com/cockroachdb/crlib@v0.0.0-20241205024402-793d93d6e446",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/crlib/com_github_cockroachdb_crlib-v0.0.0-20241112164430-1264a2edc35b.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/crlib/com_github_cockroachdb_crlib-v0.0.0-20241205024402-793d93d6e446.zip",
         ],
     )
     go_repository(
@@ -1821,10 +1821,10 @@ def go_deps():
         name = "com_github_cockroachdb_logtags",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/logtags",
-        sha256 = "ca7776f47e5fecb4c495490a679036bfc29d95bd7625290cfdb9abb0baf97476",
-        strip_prefix = "github.com/cockroachdb/logtags@v0.0.0-20230118201751-21c54148d20b",
+        sha256 = "ff8b3d36873cfff78669000d194cbaa96520549a62408c52b538380d953b99d7",
+        strip_prefix = "github.com/cockroachdb/logtags@v0.0.0-20241205023844-89a8856d99be",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/logtags/com_github_cockroachdb_logtags-v0.0.0-20230118201751-21c54148d20b.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/logtags/com_github_cockroachdb_logtags-v0.0.0-20241205023844-89a8856d99be.zip",
         ],
     )
     go_repository(
