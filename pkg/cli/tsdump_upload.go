@@ -42,15 +42,15 @@ var (
 	// each site in datadog has a different host name. ddSiteToHostMap
 	// holds the mapping of site name to the host name.
 	ddSiteToHostMap = map[string]string{
-		"us1":     "api.datadoghq.com",
-		"us3":     "api.us3.datadoghq.com",
-		"us5":     "api.us5.datadoghq.com",
-		"eu1":     "api.datadoghq.eu",
-		"ap1":     "api.ap1.datadoghq.com",
-		"us1-fed": "api.ddog-gov.com",
+		"us1":     "datadoghq.com",
+		"us3":     "us3.datadoghq.com",
+		"us5":     "us5.datadoghq.com",
+		"eu1":     "datadoghq.eu",
+		"ap1":     "ap1.datadoghq.com",
+		"us1-fed": "ddog-gov.com",
 	}
 
-	targetURLFormat           = "https://%s/api/v2/series"
+	targetURLFormat           = "https://api.%s/api/v2/series"
 	datadogDashboardURLFormat = "https://us5.datadoghq.com/dashboard/bif-kwe-gx2/self-hosted-db-console-tsdump?" +
 		"tpl_var_cluster=%s&tpl_var_upload_id=%s&tpl_var_upload_day=%d&tpl_var_upload_month=%d&tpl_var_upload_year=%d&from_ts=%d&to_ts=%d"
 	zipFileSignature = []byte{0x50, 0x4B, 0x03, 0x04}
