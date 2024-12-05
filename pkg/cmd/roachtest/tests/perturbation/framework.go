@@ -76,7 +76,7 @@ type variations struct {
 	// These fields are set up during construction.
 	seed                 int64
 	fillDuration         time.Duration
-	maxBlockBytes        int
+	blockSize            int
 	perturbationDuration time.Duration
 	validationDuration   time.Duration
 	ratioOfMax           float64
@@ -102,7 +102,7 @@ const NUM_REGIONS = 3
 
 var durationOptions = []time.Duration{10 * time.Second, 10 * time.Minute, 30 * time.Minute}
 var splitOptions = []int{1, 100, 10000}
-var maxBlockBytes = []int{1, 1024, 4096}
+var blockSize = []int{1, 1024, 4096}
 var numNodes = []int{5, 12, 30}
 var numVCPUs = []int{4, 8, 16, 32}
 var numDisks = []int{1, 2}
@@ -186,15 +186,28 @@ func (a admissionControlMode) getSettings() map[string]string {
 	}
 }
 
-func (v variations) String() string {
-	return fmt.Sprintf("seed: %d, fillDuration: %s, maxBlockBytes: %d, perturbationDuration: %s, "+
-		"validationDuration: %s, ratioOfMax: %f, splits: %d, numNodes: %d, numWorkloadNodes: %d, "+
-		"vcpu: %d, disks: %d, memory: %s, leaseType: %s, cloud: %v, acMode: %s, diskBandwidthLimit %s, "+
-		"perturbation: %+v",
-		v.seed, v.fillDuration, v.maxBlockBytes,
-		v.perturbationDuration, v.validationDuration, v.ratioOfMax, v.splits, v.numNodes, v.numWorkloadNodes,
-		v.vcpu, v.disks, v.mem, v.leaseType, v.cloud, v.acMode, v.diskBandwidthLimit,
-		v.perturbation)
+// getParameterMap returns a map of the parameters used for the test in
+// stringified format. They can be used in logging to more easily identify the
+// test reproduction.
+func (v variations) getParameterMap() map[string]string {
+	params := map[string]string{}
+	params["seed"] = strconv.FormatInt(v.seed, 10)
+	params["fillDuration"] = v.fillDuration.String()
+	params["blockSize"] = strconv.Itoa(v.blockSize)
+	params["perturbationDuration"] = v.perturbationDuration.String()
+	params["validationDuration"] = v.validationDuration.String()
+	params["ratioOfMax"] = strconv.FormatFloat(v.ratioOfMax, 'f', -1, 64)
+	params["splits"] = strconv.Itoa(v.splits)
+	params["numNodes"] = strconv.Itoa(v.numNodes)
+	params["numWorkloadNodes"] = strconv.Itoa(v.numWorkloadNodes)
+	params["vcpu"] = strconv.Itoa(v.vcpu)
+	params["disks"] = strconv.Itoa(v.disks)
+	params["mem"] = v.mem.String()
+	params["leaseType"] = v.leaseType.String()
+	params["cloud"] = v.cloud.String()
+	params["acMode"] = v.acMode.String()
+	params["diskBandwidthLimit"] = v.diskBandwidthLimit
+	return params
 }
 
 // Normally a single worker can handle 20-40 nodes. If we find this is
@@ -204,7 +217,7 @@ const numNodesPerWorker = 20
 // randomize will randomize the test parameters for a metamorphic run.
 func (v variations) randomize(rng *rand.Rand) variations {
 	v.splits = splitOptions[rng.Intn(len(splitOptions))]
-	v.maxBlockBytes = maxBlockBytes[rng.Intn(len(maxBlockBytes))]
+	v.blockSize = blockSize[rng.Intn(len(blockSize))]
 	v.perturbationDuration = durationOptions[rng.Intn(len(durationOptions))]
 	v.leaseType = leases[rng.Intn(len(leases))]
 	v.numNodes = numNodes[rng.Intn(len(numNodes))]
@@ -226,7 +239,7 @@ func setup(p perturbation, acceptableChange float64) variations {
 	v := variations{}
 	v.workload = kvWorkload{}
 	v.leaseType = registry.EpochLeases
-	v.maxBlockBytes = 4096
+	v.blockSize = 4096
 	v.splits = 10000
 	v.numNodes = 12
 	v.numWorkloadNodes = v.numNodes/numNodesPerWorker + 1
@@ -312,7 +325,7 @@ func (v *variations) applyEnvOverride(key string, val string) (err error) {
 	case "fillDuration":
 		v.fillDuration, err = time.ParseDuration(val)
 	case "blockSize":
-		v.maxBlockBytes, err = strconv.Atoi(val)
+		v.blockSize, err = strconv.Atoi(val)
 	case "perturbationDuration":
 		v.perturbationDuration, err = time.ParseDuration(val)
 	case "validationDuration":
@@ -563,7 +576,11 @@ func (w workloadData) worstStats(i interval) map[string]trackedStat {
 // runTest is the main entry point for all the tests. Its ste
 func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster) {
 	v.Cluster = c
-	t.L().Printf("test variations are: %+v", v)
+	params := v.getParameterMap()
+	for k, val := range params {
+		t.AddParam(k, val)
+		t.L().Printf("%s: %s", k, val)
+	}
 	t.Status("T0: starting nodes")
 
 	// Track the three operations that we are sending in this test.

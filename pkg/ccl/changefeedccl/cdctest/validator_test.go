@@ -8,24 +8,15 @@ package cdctest
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	workloadrand "github.com/cockroachdb/cockroach/pkg/workload/rand"
 	"github.com/stretchr/testify/require"
 )
 
@@ -104,63 +95,6 @@ func TestOrderValidator(t *testing.T) {
 	})
 }
 
-func TestBeforeAfterValidatorForGeometry(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
-	defer s.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
-	tsRaw := make([]string, 1)
-
-	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE foo (k INT PRIMARY KEY,  geom geometry(point))`)
-	sqlDB.QueryRow(t, `INSERT INTO foo VALUES(1, 'point(1 2)') RETURNING cluster_logical_timestamp()`).Scan(&tsRaw[0])
-
-	ts := make([]hlc.Timestamp, len(tsRaw))
-	for i := range tsRaw {
-		var err error
-		ts[i], err = hlc.ParseHLC(tsRaw[i])
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
-	require.NoError(t, err)
-	assertValidatorFailures(t, v)
-	noteRow(t, v, `p`, `[1]`, `{"after": {"k":1, "geom":{"coordinates": [1,2], "type": "Point"}}}`, ts[0])
-}
-
-func TestConvertFieldFromJSON(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 134904)
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	testutils.RunValues(t, "types=",
-		[]*types.T{types.Geometry, types.Int, types.Geography, types.JSONBArray}, func(t *testing.T, typ *types.T) {
-			for i := 0; i < 10; i++ {
-				datum := randgen.RandDatum(rng, typ, true)
-				jsonStr, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
-				require.NoError(t, err)
-				actualStr, err := convertFieldFromJSON(jsonStr)
-				require.NoError(t, err)
-				expectedStr, err := workloadrand.DatumToGoSQL(datum)
-				require.NoError(t, err)
-				require.Equal(t, fmt.Sprint(expectedStr), fmt.Sprint(actualStr))
-				if randgen.IsAllowedForArray(typ) {
-					typ = types.MakeArray(typ)
-					datum := randgen.RandDatum(rng, typ, true)
-					jsonStr, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
-					require.NoError(t, err)
-					actualStr, err := convertFieldFromJSON(jsonStr)
-					require.NoError(t, err)
-					expectedStr, err := workloadrand.DatumToGoSQL(datum)
-					require.NoError(t, err)
-					require.Equal(t, fmt.Sprint(expectedStr), fmt.Sprint(actualStr))
-					require.NoError(t, err)
-				}
-			}
-		})
-}
-
 func TestBeforeAfterValidator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -213,7 +147,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 		assertValidatorFailures(t, v,
 			`"before" field did not agree with row at `+ts[3].Prev().AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[3].Prev().AsOfSystemTime()+
-				`' WHERE k = $1 AND v = $2 [1 3]`)
+				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 3]`)
 	})
 	t.Run(`missing before`, func(t *testing.T) {
 		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
@@ -224,7 +158,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 		assertValidatorFailures(t, v,
 			`"before" field did not agree with row at `+ts[2].Prev().AsOfSystemTime()+
 				`: SELECT count(*) = 0 FROM foo AS OF SYSTEM TIME '`+ts[2].Prev().AsOfSystemTime()+
-				`' WHERE k = $1 [1]`)
+				`' WHERE to_json(k)::TEXT = $1 [1]`)
 	})
 	t.Run(`incorrect before`, func(t *testing.T) {
 		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
@@ -235,7 +169,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 		assertValidatorFailures(t, v,
 			`"before" field did not agree with row at `+ts[3].Prev().AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[3].Prev().AsOfSystemTime()+
-				`' WHERE k = $1 AND v = $2 [5 10]`)
+				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [5 10]`)
 	})
 	t.Run(`unnecessary before`, func(t *testing.T) {
 		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
@@ -246,7 +180,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 		assertValidatorFailures(t, v,
 			`"before" field did not agree with row at `+ts[1].Prev().AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[1].Prev().AsOfSystemTime()+
-				`' WHERE k = $1 AND v = $2 [1 1]`)
+				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 1]`)
 	})
 	t.Run(`missing after`, func(t *testing.T) {
 		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
@@ -257,7 +191,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 		assertValidatorFailures(t, v,
 			`"after" field did not agree with row at `+ts[2].AsOfSystemTime()+
 				`: SELECT count(*) = 0 FROM foo AS OF SYSTEM TIME '`+ts[2].AsOfSystemTime()+
-				`' WHERE k = $1 [1]`)
+				`' WHERE to_json(k)::TEXT = $1 [1]`)
 	})
 	t.Run(`incorrect after`, func(t *testing.T) {
 		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
@@ -268,7 +202,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 		assertValidatorFailures(t, v,
 			`"after" field did not agree with row at `+ts[3].AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[3].AsOfSystemTime()+
-				`' WHERE k = $1 AND v = $2 [1 5]`)
+				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 5]`)
 	})
 	t.Run(`unnecessary after`, func(t *testing.T) {
 		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
@@ -279,7 +213,7 @@ func TestBeforeAfterValidator(t *testing.T) {
 		assertValidatorFailures(t, v,
 			`"after" field did not agree with row at `+ts[4].AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[4].AsOfSystemTime()+
-				`' WHERE k = $1 AND v = $2 [1 3]`)
+				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 3]`)
 	})
 	t.Run(`incorrect before and after`, func(t *testing.T) {
 		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
@@ -290,10 +224,10 @@ func TestBeforeAfterValidator(t *testing.T) {
 		assertValidatorFailures(t, v,
 			`"after" field did not agree with row at `+ts[3].AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[3].AsOfSystemTime()+
-				`' WHERE k = $1 AND v = $2 [1 5]`,
+				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 5]`,
 			`"before" field did not agree with row at `+ts[3].Prev().AsOfSystemTime()+
 				`: SELECT count(*) = 1 FROM foo AS OF SYSTEM TIME '`+ts[3].Prev().AsOfSystemTime()+
-				`' WHERE k = $1 AND v = $2 [1 4]`)
+				`' WHERE to_json(k)::TEXT = $1 AND to_json(v)::TEXT = $2 [1 4]`)
 	})
 	t.Run(`correct`, func(t *testing.T) {
 		v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
@@ -311,6 +245,34 @@ func TestBeforeAfterValidator(t *testing.T) {
 		noteRow(t, v, `p`, `[2]`, `{"after": {"k":2,"v":2}, "before": null}`, ts[2])
 		assertValidatorFailures(t, v)
 	})
+}
+
+// TestBeforeAfterValidatorForGeometry tests the BeforeAfterValidator with a
+// table that has a geometry column.
+func TestBeforeAfterValidatorForGeometry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	tsRaw := make([]string, 1)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE foo (k INT PRIMARY KEY, geom GEOMETRY(POINT))`)
+	sqlDB.QueryRow(t, `INSERT INTO foo VALUES(1, 'point(1 2)') RETURNING cluster_logical_timestamp()`).Scan(&tsRaw[0])
+
+	ts := make([]hlc.Timestamp, len(tsRaw))
+	for i := range tsRaw {
+		var err error
+		ts[i], err = hlc.ParseHLC(tsRaw[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	v, err := NewBeforeAfterValidator(sqlDBRaw, `foo`)
+	require.NoError(t, err)
+	assertValidatorFailures(t, v)
+	noteRow(t, v, `p`, `[1]`, `{"after": {"k":1, "geom":{"coordinates": [1,2], "type": "Point"}}}`, ts[0])
 }
 
 func TestFingerprintValidator(t *testing.T) {

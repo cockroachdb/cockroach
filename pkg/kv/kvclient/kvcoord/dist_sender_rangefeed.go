@@ -585,6 +585,9 @@ func (a catchupAlloc) Release() {
 func (a *activeRangeFeed) acquireCatchupScanQuota(
 	ctx context.Context, rl *catchupScanRateLimiter, metrics *DistSenderRangeFeedMetrics,
 ) error {
+	metrics.RangefeedCatchupRangesWaitingClientSide.Inc(1)
+	defer metrics.RangefeedCatchupRangesWaitingClientSide.Dec(1)
+
 	// Indicate catchup scan is starting.
 	alloc, err := rl.Pace(ctx)
 	if err != nil {

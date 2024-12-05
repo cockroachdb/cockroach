@@ -62,7 +62,7 @@ func (intents) startPerturbation(ctx context.Context, t test.Test, v variations)
 	i := 0
 	for ; timeutil.Since(startTime) < v.perturbationDuration; i++ {
 		startKey := int64(rng.Uint64())
-		bytes := make([]byte, v.maxBlockBytes)
+		bytes := make([]byte, v.blockSize)
 		for b := range bytes {
 			bytes[b] = byte(rng.Int() & 0xff)
 		}
