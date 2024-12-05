@@ -57,6 +57,8 @@ type KVAccessor struct {
 	// but left configurable for ease-of-testing.
 	configurationsTableFQN string
 
+	codec keys.SQLCodec
+
 	knobs *spanconfig.TestingKnobs
 }
 
@@ -69,13 +71,14 @@ func New(
 	settings *cluster.Settings,
 	clock *hlc.Clock,
 	configurationsTableFQN string,
+	codec keys.SQLCodec,
 	knobs *spanconfig.TestingKnobs,
 ) *KVAccessor {
 	if _, err := parser.ParseQualifiedTableName(configurationsTableFQN); err != nil {
 		panic(fmt.Sprintf("unabled to parse configurations table FQN: %s", configurationsTableFQN))
 	}
 
-	return newKVAccessor(db, ie, settings, clock, configurationsTableFQN, knobs, nil /* optionalTxn */)
+	return newKVAccessor(db, ie, settings, clock, configurationsTableFQN, codec, knobs, nil /* optionalTxn */)
 }
 
 // WithTxn is part of the KVAccessor interface.
@@ -83,7 +86,7 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 	if k.optionalTxn != nil {
 		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithTxn(...) chained multiple times?)")
 	}
-	return newKVAccessor(k.db, k.ie, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn)
+	return newKVAccessor(k.db, k.ie, k.settings, k.clock, k.configurationsTableFQN, k.codec, k.knobs, txn)
 }
 
 // WithISQLTxn is part of the KVAccessor interface.
@@ -91,7 +94,7 @@ func (k *KVAccessor) WithISQLTxn(ctx context.Context, txn isql.Txn) spanconfig.K
 	if k.optionalTxn != nil {
 		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithISQLTxn(...) chained multiple times?)")
 	}
-	return newKVAccessor(txn.KV().DB(), txn, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn.KV())
+	return newKVAccessor(txn.KV().DB(), txn, k.settings, k.clock, k.configurationsTableFQN, k.codec, k.knobs, txn.KV())
 }
 
 // GetAllSystemSpanConfigsThatApply is part of the spanconfig.KVAccessor
@@ -191,6 +194,7 @@ func newKVAccessor(
 	settings *cluster.Settings,
 	clock *hlc.Clock,
 	configurationsTableFQN string,
+	codec keys.SQLCodec,
 	knobs *spanconfig.TestingKnobs,
 	optionalTxn *kv.Txn,
 ) *KVAccessor {

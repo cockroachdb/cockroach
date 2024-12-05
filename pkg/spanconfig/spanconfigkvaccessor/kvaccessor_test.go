@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
@@ -86,7 +87,8 @@ func TestDataDriven(t *testing.T) {
 			ts.ClusterSettings(),
 			ts.Clock(),
 			dummySpanConfigurationsFQN,
-			nil, /* knobs */
+			keys.SystemSQLCodec, /* TODO(shubham): Incorrect most likely */
+			nil,                 /* knobs */
 		)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -167,7 +169,8 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 				ts.ClusterSettings(),
 				ts.Clock(),
 				dummySpanConfigurationsFQN,
-				nil, /* knobs */
+				keys.SystemSQLCodec, /* TODO(shubham): Incorrect most likely */
+				nil,                 /* knobs */
 			)
 
 			start := timeutil.Now()
@@ -210,6 +213,7 @@ func TestKVAccessorPagination(t *testing.T) {
 		ts.ClusterSettings(),
 		ts.Clock(),
 		dummySpanConfigurationsFQN,
+		keys.SystemSQLCodec, /* TODO(shubham): Incorrect most likely */
 		&spanconfig.TestingKnobs{
 			KVAccessorPaginationInterceptor: func() {
 				batches++
@@ -336,6 +340,7 @@ func TestKVAccessorCommitMinTSWaitRespondsToCtxCancellation(t *testing.T) {
 		ts.ClusterSettings(),
 		ts.Clock(),
 		dummySpanConfigurationsFQN,
+		keys.SystemSQLCodec, /* TODO(shubham): Incorrect most likely */
 		&spanconfig.TestingKnobs{
 			KVAccessorPreCommitMinTSWaitInterceptor: func() {
 				cancel()

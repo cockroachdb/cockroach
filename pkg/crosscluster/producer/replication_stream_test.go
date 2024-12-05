@@ -814,7 +814,8 @@ USE d;`)
 		h.SysServer.ClusterSettings(),
 		h.SysServer.Clock(),
 		dummyFQN.String(),
-		nil, /* knobs */
+		tenantCodec, /* TODO(shubham): Incorrect most likely */
+		nil,         /* knobs */
 	)
 
 	const streamSpanConfigsQuery = `SELECT * FROM crdb_internal.setup_span_configs_stream($1)`
