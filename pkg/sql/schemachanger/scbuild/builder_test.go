@@ -312,7 +312,7 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 	tdb.Exec(t, `use system;`)
 
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     "test-sc-build-mon",
+		Name:     mon.MakeMonitorName("test-sc-build-mon"),
 		Settings: s.ClusterSettings(),
 	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(5*1024*1024 /* 5MiB */))
