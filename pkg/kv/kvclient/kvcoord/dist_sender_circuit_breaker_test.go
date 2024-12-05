@@ -138,10 +138,14 @@ func TestDistSenderCircuitBreakerModes(t *testing.T) {
 			func(t *testing.T, mode kvcoord.DistSenderCircuitBreakersMode) {
 				ctx := context.Background()
 
-				// The lease won't move unless we use expiration-based leases. We also
-				// speed up the test by reducing various intervals and timeouts.
+				// The lease won't move unless we use expiration-based leases. This is
+				// because a deadlocked range with expiration-based leases would
+				// eventually cause the lease to expire. However, with epoch-based or
+				// leader leases, the lease wouldn't expire due to a deadlocked range
+				// since lease extensions are happening at a different layer.
+				// We also speed up the test by reducing various intervals and timeouts.
 				st := cluster.MakeTestingClusterSettings()
-				kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+				kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseExpiration)
 				kvcoord.CircuitBreakersMode.Override(ctx, &st.SV, mode)
 				kvcoord.CircuitBreakerCancellation.Override(ctx, &st.SV, true)
 				kvcoord.CircuitBreakerProbeThreshold.Override(ctx, &st.SV, time.Second)
