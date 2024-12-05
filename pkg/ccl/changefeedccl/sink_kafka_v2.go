@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"hash/fnv"
 	"io"
 	"net"
@@ -452,6 +453,17 @@ func buildKgoConfig(
 				return nil, err
 			}
 			s = sasloauth.Oauth(tp)
+		// This is another "fake" mechanism we use to signify that we're using
+		// the ID Anywhere identity provider, which is not OAUTH-compliant and requires special handling.
+		case changefeedbase.SASLTypeIDAnywhere:
+			tp, err := newIDAnywhereOauthTokenProvider(ctx, dialConfig)
+			if err != nil {
+				return nil, err
+			}
+			s = sasloauth.Oauth(tp)
+			// DBG
+			tokres, tokerr := tp(ctx)
+			fmt.Printf("DBG: tokres: %+#v, tokerr: %v\n", tokres, tokerr)
 		// TODO(#126991): Remove this sarama dependency.
 		case sarama.SASLTypeOAuth:
 			tp, err := newKgoOauthTokenProvider(ctx, dialConfig)
@@ -459,6 +471,9 @@ func buildKgoConfig(
 				return nil, err
 			}
 			s = sasloauth.Oauth(tp)
+			// DBG
+			tokres, tokerr := tp(ctx)
+			fmt.Printf("DBG: tokres: %+#v, tokerr: %v\n", tokres, tokerr)
 		case sarama.SASLTypePlaintext, "":
 			s = saslplain.Plain(func(ctc context.Context) (saslplain.Auth, error) {
 				return saslplain.Auth{
@@ -675,6 +690,38 @@ func newKgoOauthTokenProvider(
 		ClientSecret:   dialConfig.saslClientSecret,
 		TokenURL:       tokenURL.String(),
 		Scopes:         dialConfig.saslScopes,
+		EndpointParams: endpointParams,
+	}
+	ts := cfg.TokenSource(ctx)
+
+	return func(ctx context.Context) (sasloauth.Auth, error) {
+		tok, err := ts.Token()
+		if err != nil {
+			return sasloauth.Auth{}, err
+		}
+		return sasloauth.Auth{Token: tok.AccessToken}, nil
+	}, nil
+}
+
+func newIDAnywhereOauthTokenProvider(
+	ctx context.Context, dialConfig kafkaDialConfig,
+) (func(ctx context.Context) (sasloauth.Auth, error), error) {
+	tokenURL, err := url.Parse(dialConfig.saslIDAnywhereTokenURL)
+	if err != nil {
+		return nil, errors.Wrap(err, "malformed token url")
+	}
+
+	// TODO: this also sets grant_type=client_credentials in the lib. is that ok?
+
+	endpointParams := url.Values{
+		"encoded_jwt_with_signature": {dialConfig.saslIDAnywhereEncodedJWTWithSignature},
+		"client_id":                  {dialConfig.saslIDAnywhereClientID},
+		"resource_uri":               {dialConfig.saslIDAnywhereResourceURI},
+	}
+
+	cfg := clientcredentials.Config{
+		ClientID:       dialConfig.saslClientID,
+		TokenURL:       tokenURL.String(),
 		EndpointParams: endpointParams,
 	}
 	ts := cfg.TokenSource(ctx)
