@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 	"gonum.org/v1/gonum/floats/scalar"
 )
 
@@ -454,6 +455,83 @@ func TestInMemoryStoreMarshalling(t *testing.T) {
 	require.Equal(t, vector.T{12, 13}, store2.mu.vectors[string([]byte{3, 4})])
 	require.Equal(t, float64(100), store2.mu.stats.VectorsPerPartition)
 	require.Equal(t, int64(42), store2.seed)
+}
+
+func TestInMemoryLock(t *testing.T) {
+	t.Run("lock reentrancy", func(t *testing.T) {
+		var l inMemoryLock
+		l.Acquire(1)
+		require.True(t, l.IsAcquiredBy(1))
+		l.AcquireShared(1)
+		l.AcquireShared(1)
+		l.Acquire(1)
+		require.True(t, l.IsAcquiredBy(1))
+		l.Release()
+		l.ReleaseShared()
+		l.ReleaseShared()
+		l.Release()
+		require.False(t, l.IsAcquiredBy(1))
+	})
+
+	t.Run("shared lock does not wait for shared lock", func(t *testing.T) {
+		var l inMemoryLock
+		l.AcquireShared(1)
+		l.AcquireShared(2)
+		require.False(t, l.IsAcquiredBy(1))
+		require.False(t, l.IsAcquiredBy(2))
+		l.ReleaseShared()
+		l.ReleaseShared()
+	})
+
+	t.Run("exclusive lock waits for exclusive lock", func(t *testing.T) {
+		var l inMemoryLock
+		l.Acquire(1)
+
+		var acquired atomic.Bool
+		go func() {
+			l.Acquire(2)
+			acquired.Store(true)
+			l.Release()
+		}()
+
+		runtime.Gosched()
+		require.False(t, acquired.Load())
+
+		l.Release()
+	})
+
+	t.Run("exclusive lock waits for shared lock", func(t *testing.T) {
+		var l inMemoryLock
+		l.AcquireShared(1)
+
+		var acquired atomic.Bool
+		go func() {
+			l.Acquire(2)
+			acquired.Store(true)
+			l.Release()
+		}()
+
+		runtime.Gosched()
+		require.False(t, acquired.Load())
+		l.ReleaseShared()
+	})
+
+	t.Run("shared lock waits for exclusive lock", func(t *testing.T) {
+		var l inMemoryLock
+		l.Acquire(1)
+
+		var acquired atomic.Bool
+		go func() {
+			l.AcquireShared(2)
+			acquired.Store(true)
+			l.ReleaseShared()
+		}()
+
+		runtime.Gosched()
+		require.False(t, acquired.Load())
+
+		l.Release()
+	})
 }
 
 func beginTransaction(ctx context.Context, t *testing.T, store Store) Txn {
