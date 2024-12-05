@@ -9,9 +9,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
+	"fmt"
 	"hash/fnv"
 	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -39,6 +42,7 @@ import (
 	sasloauth "github.com/twmb/franz-go/pkg/sasl/oauth"
 	saslplain "github.com/twmb/franz-go/pkg/sasl/plain"
 	saslscram "github.com/twmb/franz-go/pkg/sasl/scram"
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -452,6 +456,17 @@ func buildKgoConfig(
 				return nil, err
 			}
 			s = sasloauth.Oauth(tp)
+		// This is another "fake" mechanism we use to signify that we're using
+		// the custom identity provider, which is not OAUTH-compliant and requires special handling.
+		case changefeedbase.SASLTypeCustom:
+			tp, err := newCustomOauthTokenProvider(ctx, dialConfig)
+			if err != nil {
+				return nil, err
+			}
+			s = sasloauth.Oauth(tp)
+			// DBG
+			tokres, tokerr := tp(ctx)
+			fmt.Printf("DBG: tokres: %+#v, tokerr: %v\n", tokres, tokerr)
 		// TODO(#126991): Remove this sarama dependency.
 		case sarama.SASLTypeOAuth:
 			tp, err := newKgoOauthTokenProvider(ctx, dialConfig)
@@ -459,6 +474,9 @@ func buildKgoConfig(
 				return nil, err
 			}
 			s = sasloauth.Oauth(tp)
+			// DBG
+			tokres, tokerr := tp(ctx)
+			fmt.Printf("DBG: tokres: %+#v, tokerr: %v\n", tokres, tokerr)
 		case sarama.SASLTypePlaintext, "":
 			s = saslplain.Plain(func(ctc context.Context) (saslplain.Auth, error) {
 				return saslplain.Auth{
@@ -701,6 +719,85 @@ func newKgoAWSIAMRoleOauthTokenProvider(
 			return sasloauth.Auth{}, err
 		}
 		return sasloauth.Auth{Token: token}, nil
+	}, nil
+}
+
+type customTokenSource struct {
+	dialConfig kafkaDialConfig
+	// The oauth2.TokenSource API seems to require us to keep a context in here.
+	ctx    context.Context
+	client *http.Client
+}
+
+// Token implements the oauth2.TokenSource interface.
+func (iats customTokenSource) Token() (*oauth2.Token, error) {
+	tokenURL, err := url.Parse(iats.dialConfig.saslTokenURL)
+	if err != nil {
+		return nil, errors.Wrap(err, "malformed token url")
+	}
+
+	bodyParams := url.Values{
+		"grant_type":            {"client_credentials"},
+		"client_id":             {iats.dialConfig.saslClientID},
+		"client_assertion_type": {iats.dialConfig.saslCustomConfig.clientAssertionType},
+		"client_assertion":      {iats.dialConfig.saslCustomConfig.clientAssertion},
+		"resource":              {iats.dialConfig.saslCustomConfig.resource},
+	}
+
+	req, err := http.NewRequestWithContext(iats.ctx, "POST", tokenURL.String(), strings.NewReader(bodyParams.Encode()))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create oauth token request")
+	}
+	req.Header.Set("Content-Type", "application/www-url-encoded")
+	res, err := iats.client.Do(req)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to make oauth token request")
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read oauth response body")
+	}
+	if err := res.Body.Close(); err != nil {
+		return nil, errors.Wrap(err, "failed to close oauth response body")
+	}
+
+	// The endpoint returns JSON; this format was given to us by the customer.
+	var resp struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse oauth response")
+	}
+	if resp.AccessToken == "" {
+		return nil, errors.Errorf("no access token in oauth response")
+	}
+
+	tok := &oauth2.Token{AccessToken: resp.AccessToken, TokenType: resp.TokenType}
+
+	if resp.ExpiresIn > 0 {
+		tok.Expiry = time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second)
+	}
+
+	return tok, nil
+}
+
+var _ oauth2.TokenSource = customTokenSource{}
+
+func newCustomOauthTokenProvider(
+	ctx context.Context, dialConfig kafkaDialConfig,
+) (func(ctx context.Context) (sasloauth.Auth, error), error) {
+	// TODO: not sure if the reuse stuff is necessary. the normal oauth token source wraps itself with that so like maybe?
+	// im not even sure if the custom stuff returns expiry info either...
+	// -> probably not necessary; see https://docs.confluent.io/legacy/platform/5.2.4/kafka/authentication_sasl/authentication_sasl_oauth.html#token-refresh-for-sasl-oauthbearer
+	ts := oauth2.ReuseTokenSource(nil, customTokenSource{dialConfig: dialConfig, ctx: ctx, client: &http.Client{}})
+	return func(ctx context.Context) (sasloauth.Auth, error) {
+		tok, err := ts.Token()
+		if err != nil {
+			return sasloauth.Auth{}, err
+		}
+		return sasloauth.Auth{Token: tok.AccessToken}, nil
 	}, nil
 }
 

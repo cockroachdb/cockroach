@@ -5381,6 +5381,9 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `sasl_client_id must be provided when SASL is enabled using mechanism OAUTHBEARER`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_mechanism=OAUTHBEARER`,
 	)
+
+	// TODO: add some test cases in here for option validation
+
 	sqlDB.ExpectErrWithTimeout(
 		t, `sasl_enabled must be enabled if sasl_user is provided`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_user=a`,
