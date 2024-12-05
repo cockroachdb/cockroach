@@ -452,7 +452,7 @@ func (r *Replica) applyTimestampCache(
 		} else {
 			conflictMsg := "conflicting txn unknown"
 			if conflictingTxn != uuid.Nil {
-				conflictMsg = "conflicting txn: " + conflictingTxn.Short()
+				conflictMsg = "conflicting txn: " + conflictingTxn.Short().String()
 			}
 			log.VEventf(ctx, 2, "bumped write timestamp to %s; %s", bumpedTS, redact.Safe(conflictMsg))
 		}

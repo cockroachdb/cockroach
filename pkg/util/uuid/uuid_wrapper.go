@@ -7,6 +7,7 @@ package uuid
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -14,9 +15,29 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Short returns the first eight characters of the output of String().
-func (u UUID) Short() string {
-	return u.String()[:8]
+const (
+	shortSize    = 4
+	shortStrSize = 8
+)
+
+type Short struct {
+	b [shortSize]byte
+}
+
+// String returns the 8-character hexidecimal representation of the abbreviated
+// UUID.
+func (s Short) String() string {
+	var b [shortStrSize]byte
+	hex.Encode(b[:], s.b[:])
+	return string(b[:])
+}
+
+// Short returns an abbreviated version of the UUID containing the first four
+// bytes.
+func (u UUID) Short() Short {
+	return Short{
+		b: [shortSize]byte(u[0:shortSize]),
+	}
 }
 
 // ShortStringer implements fmt.Stringer to output Short() on String().
@@ -24,7 +45,7 @@ type ShortStringer UUID
 
 // String is part of fmt.Stringer.
 func (s ShortStringer) String() string {
-	return UUID(s).Short()
+	return UUID(s).Short().String()
 }
 
 var _ fmt.Stringer = ShortStringer{}

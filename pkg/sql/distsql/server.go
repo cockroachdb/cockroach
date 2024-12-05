@@ -236,7 +236,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	monitor = mon.NewMonitor(mon.Options{
-		Name:     "flow " + redact.RedactableString(req.Flow.FlowID.Short()),
+		Name:     "flow " + redact.RedactableString(req.Flow.FlowID.Short().String()),
 		CurCount: ds.Metrics.CurBytesCount,
 		MaxHist:  ds.Metrics.MaxBytesHist,
 		Settings: ds.Settings,
@@ -366,7 +366,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	if !f.IsLocal() {
-		flowCtx.AmbientContext.AddLogTag("f", flowCtx.ID.Short())
+		flowCtx.AmbientContext.AddLogTag("f", flowCtx.ID.Short().String())
 		if req.JobTag != "" {
 			flowCtx.AmbientContext.AddLogTag("job", req.JobTag)
 		}
