@@ -124,6 +124,11 @@ func registerElasticIO(r registry.Registry) {
 				// Sleep initially for stability to be achieved, before measuring.
 				time.Sleep(5 * time.Minute)
 				for {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					default:
+					}
 					time.Sleep(10 * time.Second)
 					val, err := getMetricVal(subLevelMetric)
 					if err != nil {
