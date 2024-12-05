@@ -81,6 +81,17 @@ func registerUATests(r registry.Registry) {
 				runSpanConfigPTSValidations(ctx, t, c)
 			},
 		})
+		r.Add(registry.TestSpec{
+			Name:             "ua/span-config-pts",
+			Owner:            registry.OwnerSQLFoundations,
+			Cluster:          r.MakeClusterSpec(3),
+			CompatibleClouds: registry.AllClouds,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runSpanConfigPTSValidations(ctx, t, c)
+			},
+		})
 	}
 }
 
