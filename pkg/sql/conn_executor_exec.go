@@ -134,7 +134,10 @@ func (ex *connExecutor) execStmt(
 
 	case stateOpen:
 		var preparedStmt *PreparedStatement
-		if portal != nil && portal.isPausable() {
+		if portal != nil {
+			preparedStmt = portal.Stmt
+		}
+		if portal.isPausable() {
 			preparedStmt = portal.Stmt
 			err = ex.execWithProfiling(ctx, ast, preparedStmt, func(ctx context.Context) error {
 				ev, payload, err = ex.execStmtInOpenStateWithPausablePortal(
@@ -144,9 +147,7 @@ func (ex *connExecutor) execStmt(
 			})
 		} else {
 			err = ex.execWithProfiling(ctx, ast, preparedStmt, func(ctx context.Context) error {
-				ev, payload, err = ex.execStmtInOpenState(
-					ctx, parserStmt, portal, pinfo, res, canAutoCommit,
-				)
+				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, preparedStmt, pinfo, res, canAutoCommit)
 				return err
 			})
 		}
@@ -289,15 +290,11 @@ func (ex *connExecutor) execPortal(
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context,
 	parserStmt statements.Statement[tree.Statement],
-	portal *PreparedPortal,
+	prepared *PreparedStatement,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
 	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
-	if portal != nil && portal.isPausable() {
-		return nil, nil, errors.AssertionFailedf("unexpected pausable portal")
-	}
-
 	type localVars struct {
 		logErr      error
 		cancelQuery context.CancelFunc
@@ -332,11 +329,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 	os := ex.machine.CurState().(stateOpen)
 
-	isExtendedProtocol := portal != nil && portal.Stmt != nil
+	isExtendedProtocol := prepared != nil
 	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
 
 	if isExtendedProtocol {
-		vars.stmt = makeStatementFromPrepared(portal.Stmt, queryID)
+		vars.stmt = makeStatementFromPrepared(prepared, queryID)
 	} else {
 		vars.stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
 	}
@@ -602,7 +599,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		if retEv != nil || retErr != nil {
 			return
 		}
-		// As portals are from extended protocol, we don't auto commit for them.
 		if canAutoCommit && !isExtendedProtocol {
 			retEv, retPayload = ex.handleAutoCommit(ctx, vars.ast)
 		}
@@ -870,13 +866,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	// don't return any event unless an error happens, or a CALL statement
 	// performs a nested transaction COMMIT or ROLLBACK.
 
-	// For a portal (prepared stmt), since handleAOST() is called when preparing
-	// the statement, and this function is idempotent, we don't need to
-	// call it again during execution.
-	if portal == nil {
-		if err := ex.handleAOST(ctx, vars.ast); err != nil {
-			return makeErrEvent(err)
-		}
+	if err := ex.handleAOST(ctx, vars.ast); err != nil {
+		return makeErrEvent(err)
 	}
 
 	// The first order of business is to ensure proper sequencing
