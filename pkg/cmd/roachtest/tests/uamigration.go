@@ -116,13 +116,6 @@ func runSpanConfigPTSValidations(ctx context.Context, t test.Test, c cluster.Clu
 	dbOne := c.Conn(ctx, t.L(), 1)
 	defer dbOne.Close()
 
-	t.L().Printf("Creating table and setting gc.ttl")
-	_, err := dbOne.ExecContext(ctx, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
-	require.NoError(t, err, "cannot create table foo")
-
-	_, err = dbOne.ExecContext(ctx, `ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;`)
-	require.NoError(t, err, "cannot change gcttl")
-
 	numWarehouses := 10
 
 	nodeOne := c.Nodes(1)
@@ -132,8 +125,12 @@ func runSpanConfigPTSValidations(ctx context.Context, t test.Test, c cluster.Clu
 		Arg("{pgurl%s}", nodeOne).
 		Flag("warehouses", numWarehouses)
 
-	err = c.RunE(ctx, option.WithNodes(nodeOne), init.String())
+	err := c.RunE(ctx, option.WithNodes(nodeOne), init.String())
 	require.NoError(t, err, "failed to run tpcc init")
+
+	tableName := "tpcc.order_line"
+	_, err = dbOne.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = 1;`, tableName))
+	require.NoError(t, err, "cannot change gcttl")
 
 	runDuration := 30 * time.Second
 
@@ -166,25 +163,31 @@ func runSpanConfigPTSValidations(ctx context.Context, t test.Test, c cluster.Clu
 	settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_UA=true")
 	c.Start(ctx, t.L(), opts, settings, nodeTwo)
 
+	t.L().Printf("Taking full backup")
+	// Run a full backup, reason: Don't know
+	baseBackupURI := "userfile:///order_line"
+	_, err = dbOne.ExecContext(ctx, fmt.Sprintf(`BACKUP TABLE %s INTO '%s'`, tableName, baseBackupURI))
+	require.NoError(t, err, "cannot create full backup")
+
 	t.L().Printf("Setting pausepoint")
 	_, err = dbOne.ExecContext(ctx,
 		`SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow'`)
 	require.NoError(t, err, "cannot set pausepoint")
 
-	t.L().Printf("Taking full backup")
-	baseBackupURI := "userfile:///foo"
+	t.L().Printf("Taking incremental backup")
 	var jobID int
 	err = dbOne.QueryRow(
 		fmt.Sprintf(
-			`BACKUP TABLE foo INTO '%s'`, baseBackupURI)).Scan(&jobID)
-	require.NoError(t, err, "cannot full backup")
+			`BACKUP TABLE %s INTO LATEST IN '%s' WITH detached`, tableName, baseBackupURI)).Scan(&jobID)
+	require.NoError(t, err, "cannot incremental backup")
 
 	t.L().Printf("Wait for backup job to pause")
 	waitForJobStatus(t, jobID, dbOne, jobs.StatusPaused)
 
 	m.Wait()
 
-	_, err = dbOne.ExecContext(ctx, "DROP TABLE foo")
+	// restart everyone and gc queue
+	_, err = dbOne.ExecContext(ctx, fmt.Sprintf("DROP TABLE %s", tableName))
 	require.NoError(t, err, "cannont drop table")
 
 	t.L().Printf("Going to sleep")
