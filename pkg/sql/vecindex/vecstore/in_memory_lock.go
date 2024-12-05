@@ -27,8 +27,8 @@ type inMemoryLock struct {
 	exclusiveOwner atomic.Uint64
 }
 
-// IsAcquiredBy returns the current exclusive owner of the lock, or zero if
-// there is currently no exclusive owner.
+// IsAcquiredBy returns true if the lock is exclusively owned by the given
+// owner, or false if not.
 func (pl *inMemoryLock) IsAcquiredBy(owner uint64) bool {
 	return pl.exclusiveOwner.Load() == owner
 }
@@ -45,7 +45,7 @@ func (pl *inMemoryLock) Acquire(owner uint64) {
 
 	// Block until exclusive lock is acquired.
 	pl.mu.Lock()
-	pl.exclusiveOwner.Store(owner)
+	pl.exclusiveOwner.Store(owner) //nolint:deferunlockcheck
 }
 
 // AcquireShared obtains shared read access to the resource protected by this

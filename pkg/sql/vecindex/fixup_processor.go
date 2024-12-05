@@ -221,6 +221,28 @@ func (fp *fixupProcessor) runAll(ctx context.Context) error {
 	}
 }
 
+// clearPending removes all pending fixups from the processor. This should only
+// be called on one foreground goroutine, and only in cases where Start was not
+// called.
+func (fp *fixupProcessor) clearPending() {
+	fp.mu.Lock()
+	defer fp.mu.Unlock()
+
+	// Clear enqueued fixups.
+	for {
+		select {
+		case <-fp.fixups:
+			continue
+		default:
+		}
+		break
+	}
+
+	// Clear pending fixups.
+	fp.mu.pendingPartitions = make(map[partitionFixupKey]bool)
+	fp.mu.pendingVectors = make(map[string]bool)
+}
+
 // run processes the next fixup in the queue and returns true. If "wait" is
 // false, then run returns false if there are no fixups in the queue. If "wait"
 // is true, then run blocks until it has processed a fixup or until the context
@@ -361,6 +383,12 @@ func (fp *fixupProcessor) splitPartition(
 		return errors.Wrapf(err, "getting partition %d to split", partitionKey)
 	}
 
+	// Don't split the partition if it's no longer over-sized.
+	if partition.Count() <= fp.index.options.MaxPartitionSize {
+		log.VEventf(ctx, 2, "partition %d is not over-sized, do not split", partitionKey)
+		return nil
+	}
+
 	// Load the parent of the partition to split.
 	var parentPartition *vecstore.Partition
 	if partitionKey != vecstore.RootKey {
@@ -374,8 +402,8 @@ func (fp *fixupProcessor) splitPartition(
 				parentPartitionKey, partitionKey)
 		}
 
-		// Remove the splitting partition from the parent partition.
-		if !parentPartition.ReplaceWithLastByKey(vecstore.ChildKey{PartitionKey: partitionKey}) {
+		// Don't split the partition if it is no longer a child of the parent.
+		if parentPartition.Find(vecstore.ChildKey{PartitionKey: partitionKey}) == -1 {
 			log.VEventf(ctx, 2, "partition %d is no longer child of partition %d, do not split",
 				partitionKey, parentPartitionKey)
 			return nil
@@ -391,7 +419,7 @@ func (fp *fixupProcessor) splitPartition(
 		// This could happen if the partition had tons of dangling references that
 		// need to be cleaned up.
 		// TODO(andyk): We might consider cleaning up references and/or rewriting
-		// the partition.
+		// the partition, or maybe enqueueing a merge fixup.
 		log.VEventf(ctx, 2, "partition %d has only %d live vectors, do not split",
 			partitionKey, vectors.Count)
 		return nil
@@ -408,8 +436,14 @@ func (fp *fixupProcessor) splitPartition(
 		ctx, partition, vectors, tempLeftOffsets, tempRightOffsets)
 
 	if parentPartition != nil {
-		// De-link the splitting partition from its parent partition.
+		// De-link the splitting partition from its parent partition. This does
+		// not delete data or metadata in the partition.
 		childKey := vecstore.ChildKey{PartitionKey: partitionKey}
+		if !parentPartition.ReplaceWithLastByKey(childKey) {
+			return errors.Wrapf(err, "removing splitting partition %d from its in-memory parent %d",
+				partitionKey, parentPartitionKey)
+		}
+
 		count, err := fp.index.removeFromPartition(ctx, txn, parentPartitionKey, childKey)
 		if err != nil {
 			return errors.Wrapf(err, "removing splitting partition %d from its parent %d",
@@ -472,7 +506,7 @@ func (fp *fixupProcessor) splitPartition(
 		rightPartitionKey, len(rightSplit.Partition.ChildKeys()))
 
 	// Now link the new partitions into the K-means tree.
-	if partitionKey == vecstore.RootKey {
+	if parentPartition == nil {
 		// Add a new level to the tree by setting a new root partition that points
 		// to the two new partitions.
 		centroids := vector.MakeSet(fp.index.rootQuantizer.GetRandomDims())
@@ -501,14 +535,14 @@ func (fp *fixupProcessor) splitPartition(
 
 		searchCtx.Randomized = leftSplit.Partition.Centroid()
 		childKey := vecstore.ChildKey{PartitionKey: leftPartitionKey}
-		err = fp.index.insertHelper(searchCtx, childKey, true /* allowRetry */)
+		err = fp.index.insertHelper(searchCtx, childKey)
 		if err != nil {
 			return errors.Wrapf(err, "inserting left partition for split of partition %d", partitionKey)
 		}
 
 		searchCtx.Randomized = rightSplit.Partition.Centroid()
 		childKey = vecstore.ChildKey{PartitionKey: rightPartitionKey}
-		err = fp.index.insertHelper(searchCtx, childKey, true /* allowRetry */)
+		err = fp.index.insertHelper(searchCtx, childKey)
 		if err != nil {
 			return errors.Wrapf(err, "inserting right partition for split of partition %d", partitionKey)
 		}
@@ -693,7 +727,7 @@ func (fp *fixupProcessor) linkNearbyVectors(
 		return nil
 	}
 	searchSet := vecstore.SearchSet{MaxResults: maxResults}
-	err := fp.index.searchHelper(searchCtx, &searchSet, true /* allowRetry */)
+	err := fp.index.searchHelper(searchCtx, &searchSet)
 	if err != nil {
 		return err
 	}
@@ -780,6 +814,12 @@ func (fp *fixupProcessor) mergePartition(
 		return errors.Wrapf(err, "getting partition %d to merge", partitionKey)
 	}
 
+	// Don't merge the partition if it's no longer under-sized.
+	if partition.Count() >= fp.index.options.MinPartitionSize {
+		log.VEventf(ctx, 2, "partition %d is not under-sized, do not merge", partitionKey)
+		return nil
+	}
+
 	// Load the parent of the partition to merge.
 	parentPartition, err := fp.index.store.GetPartition(ctx, txn, parentPartitionKey)
 	if errors.Is(err, vecstore.ErrPartitionNotFound) {
@@ -798,6 +838,13 @@ func (fp *fixupProcessor) mergePartition(
 		return nil
 	}
 
+	// Don't merge the partition if it is no longer a child of the parent.
+	if parentPartition.Find(vecstore.ChildKey{PartitionKey: partitionKey}) == -1 {
+		log.VEventf(ctx, 2, "partition %d is no longer child of partition %d, do not merge",
+			partitionKey, parentPartitionKey)
+		return nil
+	}
+
 	// Get the full vectors for the merging partition's children.
 	vectors, err := fp.getFullVectorsForPartition(ctx, txn, partitionKey, partition)
 	if err != nil {
@@ -806,6 +853,32 @@ func (fp *fixupProcessor) mergePartition(
 
 	log.VEventf(ctx, 2, "merging partition %d (%d vectors)",
 		partitionKey, len(partition.ChildKeys()))
+
+	// Delete the merging partition from the store. This actually deletes the
+	// partition's data and metadata.
+	if err = fp.index.store.DeletePartition(ctx, txn, partitionKey); err != nil {
+		return errors.Wrapf(err, "deleting partition %d", partitionKey)
+	}
+
+	// If the merging partition is the last partition in the parent, then the
+	// entire level needs to be removed from the tree. This is only allowed if
+	// the parent partition is the root partition (the sibling partition check
+	// made above ensures that this is the case). Reduce the number of levels in
+	// the tree by one by merging vectors in the merging partition into the root
+	// partition.
+	if parentPartition.Count() == 1 {
+		if parentPartitionKey != vecstore.RootKey {
+			return errors.AssertionFailedf("only root partition can have zero vectors")
+		}
+		quantizedSet := fp.index.rootQuantizer.Quantize(ctx, &vectors)
+		rootPartition := vecstore.NewPartition(
+			fp.index.rootQuantizer, quantizedSet, partition.ChildKeys(), partition.Level())
+		if err = fp.index.store.SetRootPartition(ctx, txn, rootPartition); err != nil {
+			return errors.Wrapf(err, "setting new root for merge of partition %d", partitionKey)
+		}
+
+		return nil
+	}
 
 	// De-link the merging partition from its parent partition. This does not
 	// delete data or metadata in the partition.
@@ -820,45 +893,21 @@ func (fp *fixupProcessor) mergePartition(
 			partitionKey, parentPartitionKey)
 	}
 
-	// Delete the merging partition from the store. This actually deletes the
-	// partition's data and metadata.
-	if err = fp.index.store.DeletePartition(ctx, txn, partitionKey); err != nil {
-		return errors.Wrapf(err, "deleting partition %d", partitionKey)
+	// Re-insert vectors from deleted partition into remaining partitions at the
+	// same level.
+	fp.searchCtx = searchContext{
+		Ctx:       ctx,
+		Workspace: fp.workspace,
+		Txn:       txn,
+		Level:     parentPartition.Level(),
 	}
 
-	// Move vectors from the deleted partition to other partitions.
-	if parentPartition.Count() == 0 {
-		// The parent is now empty, which means the deleted partition was the last
-		// partition in the parent. That means that the entire level needs to be
-		// removed from the tree. This is only allowed if the parent partition is
-		// the root partition (the sibling partition check made above ensure that
-		// this is the case). Reduce the number of levels in the tree by one by
-		// merging vectors in the merging partition into the root partition.
-		if parentPartitionKey != vecstore.RootKey {
-			return errors.AssertionFailedf("only root partition can have zero vectors")
-		}
-		quantizedSet := fp.index.rootQuantizer.Quantize(ctx, &vectors)
-		rootPartition := vecstore.NewPartition(
-			fp.index.rootQuantizer, quantizedSet, partition.ChildKeys(), partition.Level())
-		if err = fp.index.store.SetRootPartition(ctx, txn, rootPartition); err != nil {
-			return errors.Wrapf(err, "setting new root for merge of partition %d", partitionKey)
-		}
-	} else {
-		// Re-insert vectors into remaining partitions at the same level.
-		fp.searchCtx = searchContext{
-			Ctx:       ctx,
-			Workspace: fp.workspace,
-			Txn:       txn,
-			Level:     parentPartition.Level(),
-		}
-
-		childKeys := partition.ChildKeys()
-		for i := range childKeys {
-			fp.searchCtx.Randomized = vectors.At(i)
-			err = fp.index.insertHelper(&fp.searchCtx, childKeys[i], true /* allowRetry */)
-			if err != nil {
-				return errors.Wrapf(err, "inserting vector from merged partition %d", partitionKey)
-			}
+	childKeys := partition.ChildKeys()
+	for i := range childKeys {
+		fp.searchCtx.Randomized = vectors.At(i)
+		err = fp.index.insertHelper(&fp.searchCtx, childKeys[i])
+		if err != nil {
+			return errors.Wrapf(err, "inserting vector from merged partition %d", partitionKey)
 		}
 	}
 

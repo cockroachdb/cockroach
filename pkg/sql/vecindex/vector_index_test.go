@@ -10,7 +10,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"math/rand"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -62,6 +61,9 @@ func TestDataDriven(t *testing.T) {
 			case "delete":
 				return state.Delete(d)
 
+			case "force-split", "force-merge":
+				return state.ForceSplitOrMerge(d)
+
 			case "recall":
 				return state.Recall(d)
 
@@ -88,7 +90,6 @@ type testState struct {
 
 func (s *testState) NewIndex(d *datadriven.TestData) string {
 	var err error
-	var stopper *stop.Stopper
 	dims := 2
 	s.Options = VectorIndexOptions{Seed: 42}
 	for _, arg := range d.CmdArgs {
@@ -117,16 +118,12 @@ func (s *testState) NewIndex(d *datadriven.TestData) string {
 			require.Len(s.T, arg.Vals, 1)
 			s.Options.BaseBeamSize, err = strconv.Atoi(arg.Vals[0])
 			require.NoError(s.T, err)
-
-		case "background-fixups":
-			require.Len(s.T, arg.Vals, 0)
-			stopper = s.Stopper
 		}
 	}
 
 	s.Quantizer = quantize.NewRaBitQuantizer(dims, 42)
 	s.InMemStore = vecstore.NewInMemoryStore(dims, 42)
-	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, &s.Options, stopper)
+	s.Index, err = NewVectorIndex(s.Ctx, s.InMemStore, s.Quantizer, &s.Options, nil /* stopper */)
 	require.NoError(s.T, err)
 
 	// Insert initial vectors.
@@ -189,11 +186,11 @@ func (s *testState) Search(d *datadriven.TestData) string {
 		result := &results[i]
 		var errorBound string
 		if result.ErrorBound != 0 {
-			errorBound = fmt.Sprintf("±%s ", formatFloat(result.ErrorBound))
+			errorBound = fmt.Sprintf("±%s ", formatFloat(result.ErrorBound, 2))
 		}
 		fmt.Fprintf(&buf, "%s: %s %s(centroid=%s)\n",
-			string(result.ChildKey.PrimaryKey), formatFloat(result.QuerySquaredDistance),
-			errorBound, formatFloat(result.CentroidDistance))
+			string(result.ChildKey.PrimaryKey), formatFloat(result.QuerySquaredDistance, 4),
+			errorBound, formatFloat(result.CentroidDistance, 2))
 	}
 
 	buf.WriteString(fmt.Sprintf("%d leaf vectors, ", searchSet.Stats.QuantizedLeafVectorCount))
@@ -202,7 +199,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	buf.WriteString(fmt.Sprintf("%d partitions", searchSet.Stats.PartitionCount))
 
 	// Handle any fixups triggered by the search.
-	require.NoError(s.T, s.runAllFixups())
+	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
 
 	return buf.String()
 }
@@ -210,6 +207,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 func (s *testState) Insert(d *datadriven.TestData) string {
 	var err error
 	hideTree := false
+	noFixups := false
 	count := 0
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
@@ -221,6 +219,10 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		case "hide-tree":
 			require.Len(s.T, arg.Vals, 0)
 			hideTree = true
+
+		case "no-fixups":
+			require.Len(s.T, arg.Vals, 0)
+			noFixups = true
 		}
 	}
 
@@ -251,49 +253,27 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 		}
 	}
 
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	var wait sync.WaitGroup
-	i := 0
-	for i < vectors.Count {
-		// Use static step size if the test needs to be deterministic.
-		step := (s.Options.MinPartitionSize + s.Options.MaxPartitionSize) / 2
-		if s.Index.cancel != nil {
-			step = rng.Intn(s.Options.MaxPartitionSize*2) + 1
+	step := (s.Options.MinPartitionSize + s.Options.MaxPartitionSize) / 2
+	for i := 0; i < vectors.Count; i++ {
+		// Insert within the scope of a transaction.
+		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
+		s.InMemStore.InsertVector(txn, childKeys[i].PrimaryKey, vectors.At(i))
+		require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(i), childKeys[i].PrimaryKey))
+		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
+
+		if (i+1)%step == 0 && !noFixups {
+			require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
 		}
-
-		// Insert block of vectors within the scope of a transaction.
-		insertBlock := func(start, end int) {
-			txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-			for j := start; j < end; j++ {
-				s.InMemStore.InsertVector(txn, childKeys[j].PrimaryKey, vectors.At(j))
-				require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(j), childKeys[j].PrimaryKey))
-			}
-			commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
-		}
-
-		// If background fixups are not enabled, do inserts in series, since the
-		// test needs to be deterministic.
-		end := min(i+step, vectors.Count)
-		if s.Index.cancel == nil {
-			insertBlock(i, end)
-
-			// Run synchronous fixups so that test results are deterministic.
-			require.NoError(s.T, s.runAllFixups())
-		} else {
-			// Run inserts in parallel.
-			wait.Add(1)
-			go func(i int) {
-				insertBlock(i, end)
-				wait.Done()
-			}(i)
-		}
-
-		i += step
 	}
 	wait.Wait()
 
-	// Handle any remaining fixups.
-	require.NoError(s.T, s.runAllFixups())
+	if noFixups {
+		s.Index.fixups.clearPending()
+	} else {
+		// Handle any remaining fixups.
+		require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+	}
 
 	if hideTree {
 		str := fmt.Sprintf("Created index with %d vectors with %d dimensions.\n",
@@ -353,14 +333,44 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 
 		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
-		if (i+1)%s.Options.MaxPartitionSize == 0 && s.Index.cancel == nil {
+		if (i+1)%s.Options.MaxPartitionSize == 0 {
 			// Run synchronous fixups so that test results are deterministic.
-			require.NoError(s.T, s.runAllFixups())
+			require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
 		}
 	}
 
 	// Handle any remaining fixups.
-	require.NoError(s.T, s.runAllFixups())
+	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
+
+	return s.FormatTree(d)
+}
+
+func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
+	var parentPartitionKey, partitionKey vecstore.PartitionKey
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "parent-partition-key":
+			require.Len(s.T, arg.Vals, 1)
+			val, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(s.T, err)
+			parentPartitionKey = vecstore.PartitionKey(val)
+
+		case "partition-key":
+			require.Len(s.T, arg.Vals, 1)
+			val, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(s.T, err)
+			partitionKey = vecstore.PartitionKey(val)
+		}
+	}
+
+	if d.Cmd == "force-split" {
+		s.Index.ForceSplit(s.Ctx, parentPartitionKey, partitionKey)
+	} else {
+		s.Index.ForceMerge(s.Ctx, parentPartitionKey, partitionKey)
+	}
+
+	// Ensure the fixup runs.
+	require.NoError(s.T, s.Index.fixups.runAll(s.Ctx))
 
 	return s.FormatTree(d)
 }
@@ -515,18 +525,6 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 	return fmt.Sprintf("Validated index with %d vectors.\n", vectorCount)
 }
 
-// runAllFixups forces all pending fixups to be processed.
-func (s *testState) runAllFixups() error {
-	if s.Index.cancel != nil {
-		// Background fixup goroutine is running, so wait until it has processed
-		// all fixups.
-		s.Index.ProcessFixups()
-		return nil
-	}
-	// Synchronously run fixups.
-	return s.Index.fixups.runAll(s.Ctx)
-}
-
 // parseVector parses a vector string in this form: (1.5, 6, -4).
 func (s *testState) parseVector(str string) vector.T {
 	// Remove parentheses and split by commas.
@@ -547,8 +545,8 @@ func (s *testState) parseVector(str string) vector.T {
 	return vector
 }
 
-func formatFloat(value float32) string {
-	s := strconv.FormatFloat(float64(value), 'f', 4, 32)
+func formatFloat(value float32, prec int) string {
+	s := strconv.FormatFloat(float64(value), 'f', prec, 32)
 	if strings.Contains(s, ".") {
 		s = strings.TrimRight(s, "0")
 		s = strings.TrimRight(s, ".")
@@ -589,4 +587,135 @@ func findMAP(prediction, truth []vecstore.PrimaryKey) float64 {
 		}
 	}
 	return intersect / float64(len(truth))
+}
+
+// TestVectorIndexConcurrency builds an index on multiple goroutines, with
+// background splits and merges enabled.
+func TestVectorIndexConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create index.
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Load features.
+	vectors := testutils.LoadFeatures(t, 10000)
+	vectors.SplitAt(100)
+	primaryKeys := make([]vecstore.PrimaryKey, vectors.Count)
+	for i := 0; i < vectors.Count; i++ {
+		primaryKeys[i] = vecstore.PrimaryKey(fmt.Sprintf("vec%d", i))
+	}
+
+	for i := 0; i < 10; i++ {
+		options := VectorIndexOptions{
+			MinPartitionSize: 2,
+			MaxPartitionSize: 8,
+			BaseBeamSize:     2,
+			QualitySamples:   4,
+			Seed:             42,
+		}
+		store := vecstore.NewInMemoryStore(vectors.Dims, options.Seed)
+		quantizer := quantize.NewRaBitQuantizer(vectors.Dims, options.Seed)
+		index, err := NewVectorIndex(ctx, store, quantizer, &options, stopper)
+		require.NoError(t, err)
+
+		buildIndex(ctx, t, store, index, vectors, primaryKeys)
+
+		vectorCount := validateIndex(ctx, t, store)
+		require.Equal(t, vectors.Count, vectorCount)
+	}
+}
+
+func buildIndex(
+	ctx context.Context,
+	t *testing.T,
+	store *vecstore.InMemoryStore,
+	index *VectorIndex,
+	vectors vector.Set,
+	primaryKeys []vecstore.PrimaryKey,
+) {
+	// Insert block of vectors within the scope of a transaction.
+	insertBlock := func(start, end int) {
+		for i := start; i < end; i++ {
+			txn := beginTransaction(ctx, t, store)
+			store.InsertVector(txn, primaryKeys[i], vectors.At(i))
+			require.NoError(t, index.Insert(ctx, txn, vectors.At(i), primaryKeys[i]))
+			commitTransaction(ctx, t, store, txn)
+		}
+	}
+
+	// Insert vectors into the store on multiple goroutines.
+	var wait sync.WaitGroup
+	procs := runtime.GOMAXPROCS(-1)
+	countPerProc := (vectors.Count + procs) / procs
+	blockSize := index.Options().MinPartitionSize
+	for i := 0; i < vectors.Count; i += countPerProc {
+		end := min(i+countPerProc, vectors.Count)
+		wait.Add(1)
+		go func(start, end int) {
+			// Break vector group into individual transactions that each insert a
+			// block of vectors. Run any pending fixups after each block.
+			for j := start; j < end; j += blockSize {
+				insertBlock(j, min(j+blockSize, end))
+				index.ProcessFixups()
+			}
+
+			wait.Done()
+		}(i, end)
+	}
+	wait.Wait()
+}
+
+func validateIndex(ctx context.Context, t *testing.T, store *vecstore.InMemoryStore) int {
+	txn := beginTransaction(ctx, t, store)
+	defer commitTransaction(ctx, t, store, txn)
+
+	vectorCount := 0
+	partitionKeys := []vecstore.PartitionKey{vecstore.RootKey}
+	for {
+		// Get all child keys for next level.
+		var childKeys []vecstore.ChildKey
+		for _, key := range partitionKeys {
+			partition, err := store.GetPartition(ctx, txn, key)
+			if err != nil {
+				panic(err)
+			}
+			require.NoError(t, err)
+			childKeys = append(childKeys, partition.ChildKeys()...)
+		}
+
+		if len(childKeys) == 0 {
+			break
+		}
+
+		// Verify full vectors exist for the level.
+		refs := make([]vecstore.VectorWithKey, len(childKeys))
+		for i := range childKeys {
+			refs[i].Key = childKeys[i]
+		}
+		err := store.GetFullVectors(ctx, txn, refs)
+		require.NoError(t, err)
+		for i := range refs {
+			if refs[i].Vector == nil {
+				panic("vector is nil")
+			}
+			require.NotNil(t, refs[i].Vector)
+		}
+
+		// If this is not the leaf level, then process the next level.
+		if childKeys[0].PrimaryKey == nil {
+			partitionKeys = make([]vecstore.PartitionKey, len(childKeys))
+			for i := range childKeys {
+				partitionKeys[i] = childKeys[i].PartitionKey
+			}
+		} else {
+			// This is the leaf level, so count vectors and end.
+			vectorCount += len(childKeys)
+			break
+		}
+	}
+
+	return vectorCount
 }
