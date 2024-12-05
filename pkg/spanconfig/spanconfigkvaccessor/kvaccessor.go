@@ -12,11 +12,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -306,6 +309,14 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 		return err
 	}
 
+	// TODO(shubham): conditionally initialise
+	desc := systemschema.SpanConfigurationsTable
+	w := bootstrap.MakeKVWriter(
+		keys.MakeSQLCodec(roachpb.TenantTwo), desc)
+	// Changing this to true _may_ cause issue with tenant two as codec stuff
+	// isn't passed down yet.
+	someCondition := true
+
 	if len(toDelete) > 0 {
 		if err := k.paginate(len(toDelete), func(startIdx, endIdx int) error {
 			toDeleteBatch := toDelete[startIdx:endIdx]
@@ -319,6 +330,21 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			}
 			if n != len(toDeleteBatch) {
 				return errors.AssertionFailedf("expected to delete %d row(s), deleted %d", len(toDeleteBatch), n)
+			}
+			if someCondition {
+				batch := txn.NewBatch()
+				for _, target := range toDeleteBatch {
+					encodedSpan := target.Encode()
+					if err := w.Delete(ctx, batch, false, /* kvTrace */
+						tree.NewDBytes(tree.DBytes(encodedSpan.Key)),
+						tree.NewDBytes(tree.DBytes(encodedSpan.EndKey)),
+						tree.NewDBytes(tree.DBytes(""))); err != nil {
+						return err
+					}
+				}
+				if err := txn.Run(ctx, batch); err != nil {
+					return err
+				}
 			}
 			return nil
 		}); err != nil {
@@ -343,6 +369,26 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 			return err
 		} else if n != len(toUpsertBatch) {
 			return errors.AssertionFailedf("expected to upsert %d row(s), upserted %d", len(toUpsertBatch), n)
+		}
+		if someCondition {
+			batch := txn.NewBatch()
+			for _, record := range toUpsertBatch {
+				cfg := record.GetConfig()
+				marshaled, err := protoutil.Marshal(&cfg)
+				if err != nil {
+					return err
+				}
+				encodedSpan := record.GetTarget().Encode()
+				if err := w.Insert(ctx, batch, false, /* kvTrace */
+					tree.NewDBytes(tree.DBytes(encodedSpan.Key)),
+					tree.NewDBytes(tree.DBytes(encodedSpan.EndKey)),
+					tree.NewDBytes(tree.DBytes(marshaled))); err != nil {
+					return err
+				}
+			}
+			if err := txn.Run(ctx, batch); err != nil {
+				return err
+			}
 		}
 
 		validationStmt, validationQueryArgs := k.constructValidationStmtAndArgs(toUpsertBatch)
