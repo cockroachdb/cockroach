@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"time"
 
@@ -67,6 +68,96 @@ func registerUATests(r registry.Registry) {
 			},
 		})
 	}
+}
+
+// runSpanConfigMigration is meant more for manual observations rather than
+// automated testing
+func runSpanConfigMigration(ctx context.Context, t test.Test, c cluster.Cluster) {
+	opts := option.DefaultStartOpts()
+	settings := install.MakeClusterSettings()
+	settings.ClusterSettings["kv.rangefeed.enabled"] = "true"
+	c.Start(ctx, t.L(), opts, settings, c.All())
+
+	dbOne := c.Conn(ctx, t.L(), 1)
+	defer dbOne.Close()
+
+	// Create TenantTwo
+	// TODO(shubham): Use service_mode as none.
+	query := `select crdb_internal.create_tenant('{"id": 2, "name": "system2", "service_mode": "shared"}'::jsonb);`
+	_, err := dbOne.ExecContext(ctx, query)
+	require.NoError(t, err, "cannot create TenantTwo")
+
+	nodeTwo := c.Nodes(2)
+
+	// Stop node 2
+	stopOpts := option.DefaultStopOpts()
+	c.Stop(ctx, t.L(), stopOpts, nodeTwo)
+
+	// Start node 2
+	settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_UA=true")
+	c.Start(ctx, t.L(), opts, settings, nodeTwo)
+
+	numWarehouses := 10
+
+	nodeOne := c.Nodes(1)
+
+	m := c.NewMonitor(ctx, c.CRDBNodes())
+	init := roachtestutil.NewCommand("./cockroach workload init tpcc --split").
+		Arg("{pgurl%s}", nodeOne).
+		Flag("warehouses", numWarehouses)
+
+	err = c.RunE(ctx, option.WithNodes(nodeOne), init.String())
+	require.NoError(t, err, "failed to run tpcc init")
+
+	runDuration := 10 * time.Minute
+
+	m.Go(func(ctx context.Context) error {
+		run := roachtestutil.NewCommand("./cockroach workload run tpcc").
+			Arg("{pgurl%s}", nodeOne).
+			Flag("warehouses", numWarehouses).
+			Flag("duration", runDuration).
+			Option("tolerate-errors")
+
+		err := c.RunE(ctx, option.WithNodes(nodeOne), run.String())
+		// Instead, return err?
+		require.NoError(t, err, "failed to run tpcc run")
+		return nil
+	})
+
+	// TODO(shubham): run workloads in parallel too
+
+	// Run workloads
+
+	query = "CREATE CHANGEFEED FOR TABLE tpcc.order_line into 'null://?delay=1s';"
+
+	_, err = dbOne.ExecContext(ctx, query)
+	require.NoError(t, err, "cannot create change feed on order_line")
+
+	dbTwo := c.Conn(ctx, t.L(), 2)
+	defer dbTwo.Close()
+
+	querySpanConfig := func(db *gosql.DB) int {
+		query = `SELECT count(*) FROM system.span_configurations`
+		rows, err := db.QueryContext(ctx, query)
+		require.NoError(t, err, "failed to query system.span_configurations")
+		defer rows.Close()
+		var id int
+		for rows.Next() {
+			err := rows.Scan(&id)
+			require.NoError(t, err, "couldn't do SCAN")
+			t.L().Printf("count: %d", id)
+		}
+		require.NoError(t, rows.Err(), "some failure while reading result")
+		return id
+	}
+
+	for {
+		countOne := querySpanConfig(dbOne)
+		countTwo := querySpanConfig(dbTwo)
+		require.Equal(t, countOne, countTwo, "span config count mismatch: countOne=%d, countTwo=%d", countOne, countTwo)
+	}
+
+	// m.Wait()
 }
 
 // - Start a cluster
