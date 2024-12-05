@@ -166,7 +166,7 @@ func CreateDocker(
 	cli.NegotiateAPIVersion(ctx)
 
 	clusterID := uuid.MakeV4()
-	clusterIDS := clusterID.Short()
+	clusterIDS := clusterID.Short().String()
 
 	if volumesDir == "" {
 		volumesDir, err = os.MkdirTemp(datapathutils.DebuggableTempDir(), fmt.Sprintf("cockroach-acceptance-%s", clusterIDS))
