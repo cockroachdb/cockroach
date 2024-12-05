@@ -29,6 +29,7 @@ go_library(
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/semenumpb",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
