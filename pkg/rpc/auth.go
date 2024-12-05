@@ -369,9 +369,9 @@ func (a kvAuth) selectAuthzMethod(
 		// TODO(shubham): ideally we should be sending our world view, e.g. the
 		// system tenant id of the requester
 
-		log.Ops.Infof(ctx,
-			"a.tenant.tenantID: %d, roachpb.SystemTenantID: %d, authnResult: %+v",
-			a.tenant.tenantID, roachpb.SystemTenantID, ar)
+		// log.Ops.Infof(ctx,
+		// 	"a.tenant.tenantID: %d, roachpb.SystemTenantID: %d, authnResult: %+v",
+		// 	a.tenant.tenantID, roachpb.SystemTenantID, ar)
 		// if a.tenant.tenantID == roachpb.SystemTenantID {
 		// 	return authzTenantServerToKVServer(res), nil
 		// }
