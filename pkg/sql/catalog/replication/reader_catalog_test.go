@@ -8,8 +8,8 @@ package replication_test
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,18 +38,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestReaderCatalog sets up a reader catalog and confirms
-// the contents of the catalog and system tables which are
-// replicated.
-func TestReaderCatalog(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	skip.UnderDuressWithIssue(t, 130901)
+type readerCatalogTest struct {
+	ts         serverutils.TestServerInterface
+	srcTenant  serverutils.ApplicationLayerInterface
+	destTenant serverutils.ApplicationLayerInterface
 
-	ctx := context.Background()
+	srcRunner  *sqlutils.SQLRunner
+	destRunner *sqlutils.SQLRunner
+	destURL    url.URL
+
+	// setupCompleteTS tracks the time when the last timestamp advance
+	// was completed.
+	setupCompleteTS atomic.Value
+	// srcAOST timestmap used for reading from the src tenant for
+	// the comparison operatons below.
+	srcAOST hlc.Timestamp
+}
+
+func newReaderCatalogTest(
+	t *testing.T,
+	ctx context.Context,
+	destTestingKnobs base.TestingKnobs,
+	destSettings *cluster.Settings,
+) (r *readerCatalogTest, cleanup func()) {
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
-	defer ts.Stop(ctx)
 	srcTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 		TenantID:   serverutils.TestTenantID(),
 		TenantName: "src",
@@ -58,96 +72,149 @@ func TestReaderCatalog(t *testing.T) {
 	destTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
 		TenantID:   serverutils.TestTenantID2(),
 		TenantName: "dest",
+		Knobs:      destTestingKnobs,
+		Settings:   destSettings,
 	})
 	require.NoError(t, err)
-	srcConn := srcTenant.SQLConn(t)
-	srcRunner := sqlutils.MakeSQLRunner(srcConn)
+	srcRunner := sqlutils.MakeSQLRunner(srcTenant.SQLConn(t))
+	destRunner := sqlutils.MakeSQLRunner(destTenant.SQLConn(t))
 
-	ddlToExec := []string{
-		"CREATE USER roacher WITH CREATEROLE;",
-		"GRANT ADMIN TO roacher;",
-		"ALTER USER roacher SET timezone='America/New_York';",
-		"CREATE DATABASE db1;",
-		"CREATE SCHEMA db1.sc1;",
-		"CREATE SEQUENCE sq1;",
-		"CREATE TYPE IF NOT EXISTS status AS ENUM ('open', 'closed', 'inactive');",
-		"CREATE TABLE t1(n int default nextval('sq1'), val status);",
-		"INSERT INTO t1(val) VALUES('open');",
-		"INSERT INTO t1(val) VALUES('closed');",
-		"INSERT INTO t1(val) VALUES('inactive');",
-		"CREATE VIEW v1 AS (SELECT n from t1);",
-		"CREATE TABLE t2(n int);",
+	r = &readerCatalogTest{
+		ts:         ts,
+		srcTenant:  srcTenant,
+		destTenant: destTenant,
+		srcRunner:  srcRunner,
+		destRunner: destRunner,
 	}
-	for _, ddl := range ddlToExec {
-		srcRunner.Exec(t, ddl)
+	r.setupCompleteTS.Store(hlc.Timestamp{})
+
+	// Create a reader user.
+	srcRunner.Exec(t, `
+CREATE USER reader password 'reader';
+GRANT ADMIN TO reader;
+ `)
+
+	destURL, destURLCleanup := r.destTenant.PGUrl(t, serverutils.UserPassword("reader", "reader"), serverutils.ClientCerts(false))
+	r.destURL = destURL
+
+	return r, func() {
+		destURLCleanup()
+		r.ts.Stop(ctx)
 	}
+}
 
-	now := ts.Clock().Now()
-	idb := destTenant.InternalDB().(*sql.InternalDB)
-	var setupCompleteTS atomic.Value
-	setupCompleteTS.Store(hlc.Timestamp{})
+// updateSrcAOST advances the AOST used by the comparison function, when reading
+// from the source tenant.
+func (r *readerCatalogTest) updateSrcAOST(now hlc.Timestamp) {
+	r.srcAOST = now
+}
 
-	advanceTS := func(now hlc.Timestamp) error {
-		err = replication.SetupOrAdvanceStandbyReaderCatalog(ctx, serverutils.TestTenantID(), now, idb, destTenant.ClusterSettings())
-		if err != nil {
-			return err
+// advanceTS advances the timestamp on the destination tenant, and can optionally
+// advance the AOST for reading from the source tenant for comparisons.
+func (r *readerCatalogTest) advanceTS(
+	ctx context.Context, now hlc.Timestamp, refreshAOST bool,
+) error {
+	idb := r.destTenant.InternalDB().(*sql.InternalDB)
+	err := replication.SetupOrAdvanceStandbyReaderCatalog(ctx, serverutils.TestTenantID(), now, idb, r.destTenant.ClusterSettings())
+	if err != nil {
+		return err
+	}
+	r.setupCompleteTS.Store(r.ts.Clock().Now())
+	if refreshAOST {
+		r.srcAOST = now
+	}
+	return nil
+}
+
+// compareEqual compares the source and destination tenant for equality. Reading
+// the destination tenant at now and the source tenant srcAOST.
+func (r *readerCatalogTest) compareEqual(t *testing.T, query string) {
+	r.check(t, query, true)
+}
+
+// check the source and destination tenant for equality.
+func (r *readerCatalogTest) check(t *testing.T, query string, isEqual bool) {
+	lm := r.destTenant.LeaseManager().(*lease.Manager)
+	testutils.SucceedsSoon(t, func() error {
+		// Waiting for leases to catch up to when the setup was done.
+		if lm.GetSafeReplicationTS().Less(r.setupCompleteTS.Load().(hlc.Timestamp)) {
+			return errors.AssertionFailedf("waiting for descriptor close timestamp to catch up")
 		}
-		setupCompleteTS.Store(ts.Clock().Now())
 		return nil
+	})
+
+	tx := r.srcRunner.Begin(t)
+	_, err := tx.Exec(fmt.Sprintf("SET TRANSACTION AS OF SYSTEM TIME %s", r.srcAOST.AsOfSystemTime()))
+	require.NoError(t, err)
+	srcRows, err := tx.Query(query)
+	require.NoError(t, err)
+	srcRes, err := sqlutils.RowsToStrMatrix(srcRows)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+	destRes := r.destRunner.QueryStr(t, query)
+	if isEqual {
+		require.Equal(t, srcRes, destRes)
+	} else {
+		require.NotEqualValues(t, srcRes, destRes)
 	}
 
-	require.NoError(t, advanceTS(now))
-	// Connect only after the reader catalog is setup, so the connection
-	// executor is aware.
-	destConn := destTenant.SQLConn(t)
-	destRunner := sqlutils.MakeSQLRunner(destConn)
+	// Sanity: Execute the same query as prepared statement inside the reader
+	// catalog .
+	ctx := context.Background()
+	destPgxConn, err := pgx.Connect(ctx, r.destURL.String())
+	require.NoError(t, err)
+	_, err = destPgxConn.Prepare(ctx, query, query)
+	require.NoError(t, err)
+	rows, err := destPgxConn.Query(ctx, query)
+	require.NoError(t, err)
+	defer rows.Close()
+	require.NoError(t, destPgxConn.Close(ctx))
+}
 
-	check := func(query string, isEqual bool) {
-		lm := destTenant.LeaseManager().(*lease.Manager)
-		testutils.SucceedsSoon(t, func() error {
-			// Waiting for leases to catch up to when the setup was done.
-			if lm.GetSafeReplicationTS().Less(setupCompleteTS.Load().(hlc.Timestamp)) {
-				return errors.AssertionFailedf("waiting for descriptor close timestamp to catch up")
-			}
-			return nil
-		})
+// TestReaderCatalog sets up a reader catalog and confirms
+// the contents of the catalog and system tables which are
+// replicated.
+func TestReaderCatalog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDuressWithIssue(t, 130901)
 
-		tx := srcRunner.Begin(t)
-		_, err := tx.Exec(fmt.Sprintf("SET TRANSACTION AS OF SYSTEM TIME %s", now.AsOfSystemTime()))
-		require.NoError(t, err)
-		srcRows, err := tx.Query(query)
-		require.NoError(t, err)
-		srcRes, err := sqlutils.RowsToStrMatrix(srcRows)
-		require.NoError(t, err)
-		require.NoError(t, tx.Commit())
-		destRes := destRunner.QueryStr(t, query)
-		if isEqual {
-			require.Equal(t, srcRes, destRes)
-		} else {
-			require.NotEqualValues(t, srcRes, destRes)
-		}
-	}
+	ctx := context.Background()
+	r, cleanup := newReaderCatalogTest(t, ctx, base.TestingKnobs{}, nil)
+	defer cleanup()
 
-	compareEqual := func(query string) {
-		check(query, true)
-	}
+	r.srcRunner.Exec(t, `
+CREATE USER roacher WITH CREATEROLE;
+GRANT ADMIN TO roacher;
+ALTER USER roacher SET timezone='America/New_York';
+CREATE DATABASE db1;
+CREATE SCHEMA db1.sc1;
+CREATE SEQUENCE sq1;
+CREATE TYPE IF NOT EXISTS status AS ENUM ('open', 'closed', 'inactive');
+CREATE TABLE t1(n int default nextval('sq1'), val status);
+INSERT INTO t1(val) VALUES('open');
+INSERT INTO t1(val) VALUES('closed');
+INSERT INTO t1(val) VALUES('inactive');
+CREATE VIEW v1 AS (SELECT n from t1);
+CREATE TABLE t2(n int);
+`)
+	require.NoError(t, r.advanceTS(ctx, r.ts.Clock().Now(), true))
 
 	// Validate tables and views match in the catalog reader
-	compareEqual("SELECT * FROM t1 ORDER BY n")
-	compareEqual("SELECT * FROM v1 ORDER BY 1")
-	compareEqual("SELECT * FROM t2 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM v1 ORDER BY 1")
+	r.compareEqual(t, "SELECT * FROM t2 ORDER BY n")
 
 	// Validate that system tables are synced
-	compareEqual("SELECT * FROM system.users")
-	compareEqual("SELECT * FROM system.table_statistics")
-	compareEqual("SELECT * FROM system.role_options")
-	compareEqual("SELECT * FROM system.database_role_settings")
+	r.compareEqual(t, "SELECT * FROM system.users")
+	r.compareEqual(t, "SELECT * FROM system.table_statistics")
+	r.compareEqual(t, "SELECT * FROM system.role_options")
+	r.compareEqual(t, "SELECT * FROM system.database_role_settings")
 
 	// Validate that sequences can be selected.
-	compareEqual("SELECT * FROM sq1")
+	r.compareEqual(t, "SELECT * FROM sq1")
 
 	// Modify the schema next in the src tenant.
-	ddlToExec = []string{
+	ddlToExec := []string{
 		"INSERT INTO t1(val) VALUES('open');",
 		"INSERT INTO t1(val) VALUES('closed');",
 		"INSERT INTO t1(val) VALUES('inactive');",
@@ -158,40 +225,42 @@ func TestReaderCatalog(t *testing.T) {
 		"INSERT INTO t4 VALUES (32)",
 	}
 	for _, ddl := range ddlToExec {
-		srcRunner.Exec(t, ddl)
+		r.srcRunner.Exec(t, ddl)
 	}
 
 	// Validate that system tables are synced at the old timestamp.
-	compareEqual("SELECT * FROM t1 ORDER BY n")
-	compareEqual("SELECT * FROM v1 ORDER BY 1")
-	compareEqual("SELECT * FROM system.users")
-	compareEqual("SELECT * FROM system.table_statistics")
-	compareEqual("SELECT * FROM system.role_options")
-	compareEqual("SELECT * FROM system.database_role_settings")
+	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM v1 ORDER BY 1")
+	r.compareEqual(t, "SELECT * FROM system.users")
+	r.compareEqual(t, "SELECT * FROM system.table_statistics")
+	r.compareEqual(t, "SELECT * FROM system.role_options")
+	r.compareEqual(t, "SELECT * FROM system.database_role_settings")
 
-	now = ts.Clock().Now()
+	// Move the src timestamp into the future when comparing
+	// values.
+	r.updateSrcAOST(r.ts.Clock().Now())
 	// Validate that system tables are not matching with new timestamps.
-	check("SELECT * FROM t1 ORDER BY n", false)
-	check("SELECT * FROM v1 ORDER BY 1", false)
-	check("SELECT * FROM system.users", false)
-	check("SELECT * FROM system.role_options", false)
-	check("SELECT * FROM system.database_role_settings", false)
+	r.check(t, "SELECT * FROM t1 ORDER BY n", false)
+	r.check(t, "SELECT * FROM v1 ORDER BY 1", false)
+	r.check(t, "SELECT * FROM system.users", false)
+	r.check(t, "SELECT * FROM system.role_options", false)
+	r.check(t, "SELECT * FROM system.database_role_settings", false)
 
 	// Move the timestamp up on the reader catalog, and confirm that everything matches.
-	require.NoError(t, advanceTS(now))
+	require.NoError(t, r.advanceTS(ctx, r.srcAOST, true))
 
 	// Validate that system tables are synced and the new object shows.
-	compareEqual("SELECT * FROM t1 ORDER BY n")
-	compareEqual("SELECT * FROM v1 ORDER BY 1")
-	compareEqual("SELECT * FROM system.users")
-	compareEqual("SELECT * FROM system.table_statistics")
-	compareEqual("SELECT * FROM system.role_options")
-	compareEqual("SELECT * FROM system.database_role_settings")
-	compareEqual("SELECT * FROM t4 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM v1 ORDER BY 1")
+	r.compareEqual(t, "SELECT * FROM system.users")
+	r.compareEqual(t, "SELECT * FROM system.table_statistics")
+	r.compareEqual(t, "SELECT * FROM system.role_options")
+	r.compareEqual(t, "SELECT * FROM system.database_role_settings")
+	r.compareEqual(t, "SELECT * FROM t4 ORDER BY n")
 
 	// Validate that sequence operations are blocked.
-	destRunner.ExpectErr(t, "cannot execute nextval\\(\\) in a read-only transaction", "SELECT nextval('sq1')")
-	destRunner.ExpectErr(t, "cannot execute setval\\(\\) in a read-only transaction", "SELECT setval('sq1', 32)")
+	r.destRunner.ExpectErr(t, "cannot execute nextval\\(\\) in a read-only transaction", "SELECT nextval('sq1')")
+	r.destRunner.ExpectErr(t, "cannot execute setval\\(\\) in a read-only transaction", "SELECT setval('sq1', 32)")
 	// Manipulate the schema first.
 	ddlToExec = []string{
 		"ALTER TABLE t1 ADD COLUMN j int default 32",
@@ -202,25 +271,23 @@ func TestReaderCatalog(t *testing.T) {
 		"CREATE TABLE t2(j int, i int);",
 	}
 	for _, ddl := range ddlToExec {
-		_, err = srcConn.Exec(ddl)
-		require.NoError(t, err)
+		r.srcRunner.Exec(t, ddl)
 	}
 	// Confirm that everything matches at the old timestamp.
-	now = ts.Clock().Now()
-	require.NoError(t, advanceTS(now))
-	compareEqual("SELECT * FROM t1 ORDER BY n")
-	compareEqual("SELECT * FROM v1 ORDER BY 1")
-	compareEqual("SELECT * FROM t2 ORDER BY j")
+	require.NoError(t, r.advanceTS(ctx, r.ts.Clock().Now(), true))
+	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM v1 ORDER BY 1")
+	r.compareEqual(t, "SELECT * FROM t2 ORDER BY j")
 
 	// Validate that schema changes are blocked.
-	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE SCHEMA sc1")
-	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE DATABASE db2")
-	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE SEQUENCE sq4")
-	destRunner.ExpectErr(t, "cannot execute CREATE VIEW in a read-only transaction", "CREATE VIEW v3 AS (SELECT n FROM t1)")
-	destRunner.ExpectErr(t, "cannot execute CREATE TABLE in a read-only transaction", "CREATE TABLE t4 AS (SELECT n FROM t1)")
-	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TABLE t1 ADD COLUMN abc int")
-	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER SEQUENCE sq1 RENAME TO sq4")
-	destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TYPE status ADD VALUE 'newval' ")
+	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE SCHEMA sc1")
+	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE DATABASE db2")
+	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "CREATE SEQUENCE sq4")
+	r.destRunner.ExpectErr(t, "cannot execute CREATE VIEW in a read-only transaction", "CREATE VIEW v3 AS (SELECT n FROM t1)")
+	r.destRunner.ExpectErr(t, "cannot execute CREATE TABLE in a read-only transaction", "CREATE TABLE t4 AS (SELECT n FROM t1)")
+	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TABLE t1 ADD COLUMN abc int")
+	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER SEQUENCE sq1 RENAME TO sq4")
+	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TYPE status ADD VALUE 'newval' ")
 
 }
 
@@ -232,15 +299,6 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 	skip.UnderDuressWithIssue(t, 130901)
 
 	ctx := context.Background()
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-	})
-	defer ts.Stop(ctx)
-	srcTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
-		TenantID:   serverutils.TestTenantID(),
-		TenantName: "src",
-	})
-	require.NoError(t, err)
 
 	waitForRefresh := make(chan struct{})
 	descriptorRefreshHookEnabled := atomic.Bool{}
@@ -261,14 +319,9 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 			},
 		},
 	}
-	destTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
-		TenantID:   serverutils.TestTenantID2(),
-		TenantName: "dest",
-		Knobs:      destTestingKnobs,
-	})
-	require.NoError(t, err)
-	srcConn := srcTenant.SQLConn(t)
-	srcRunner := sqlutils.MakeSQLRunner(srcConn)
+
+	r, cleanup := newReaderCatalogTest(t, ctx, destTestingKnobs, nil)
+	defer cleanup()
 
 	ddlToExec := []string{
 		"CREATE USER bob password 'bob'",
@@ -280,95 +333,21 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 		"CREATE TABLE t2(i int,  j int);",
 	}
 	for _, ddl := range ddlToExec {
-		srcRunner.Exec(t, ddl)
+		r.srcRunner.Exec(t, ddl)
 	}
 
-	now := ts.Clock().Now()
-	idb := destTenant.InternalDB().(*sql.InternalDB)
-	var setupCompleteTS atomic.Value
-	setupCompleteTS.Store(hlc.Timestamp{})
-
-	advanceTS := func(now hlc.Timestamp) error {
-		err = replication.SetupOrAdvanceStandbyReaderCatalog(ctx, serverutils.TestTenantID(), now, idb, destTenant.ClusterSettings())
-		if err != nil {
-			return err
-		}
-		setupCompleteTS.Store(ts.Clock().Now())
-		return nil
-	}
-
-	// Connect only after the reader catalog is setup, so the connection
-	// executor is aware.
-	destConn := destTenant.SQLConn(t)
-	destURL, destURLCleanup := destTenant.PGUrl(t, serverutils.UserPassword("bob", "bob"), serverutils.ClientCerts(false))
-	defer destURLCleanup()
-	require.NoError(t, err)
-	destRunner := sqlutils.MakeSQLRunner(destConn)
-
-	check := func(query string, isEqual bool) {
-		lm := destTenant.LeaseManager().(*lease.Manager)
-		testutils.SucceedsSoon(t, func() error {
-			// Waiting for leases to catch up to when the setup was done.
-			if lm.GetSafeReplicationTS().Less(setupCompleteTS.Load().(hlc.Timestamp)) {
-				return errors.AssertionFailedf("waiting for descriptor close timestamp to catch up")
-			}
-			return nil
-		})
-		tx := srcRunner.Begin(t)
-		_, err := tx.Exec(fmt.Sprintf("SET TRANSACTION AS OF SYSTEM TIME %s", now.AsOfSystemTime()))
-		require.NoError(t, err)
-		srcRows, err := tx.Query(query)
-		require.NoError(t, err)
-		srcRes, err := sqlutils.RowsToStrMatrix(srcRows)
-		require.NoError(t, err)
-		require.NoError(t, tx.Commit())
-		destRes := destRunner.QueryStr(t, query)
-		if isEqual {
-			require.Equal(t, srcRes, destRes)
-		} else {
-			require.NotEqualValues(t, srcRes, destRes)
-		}
-
-		// Sanity: Execute the same query as prepared statement inside the reader
-		// catalog .
-		destPgxConn, err := pgx.Connect(ctx, destURL.String())
-		require.NoError(t, err)
-		_, err = destPgxConn.Prepare(ctx, query, query)
-		require.NoError(t, err)
-		rows, err := destPgxConn.Query(ctx, query)
-		require.NoError(t, err)
-		defer rows.Close()
-		require.NoError(t, destPgxConn.Close(ctx))
-	}
-
-	compareEqual := func(query string) {
-		check(query, true)
-	}
-
-	require.NoError(t, advanceTS(now))
-	compareEqual("SELECT * FROM t1")
+	require.NoError(t, r.advanceTS(ctx, r.ts.Clock().Now(), true))
+	r.compareEqual(t, "SELECT * FROM t1")
 
 	var newTS hlc.Timestamp
 	descriptorRefreshHookEnabled.Store(true)
-	existingPgxConn, err := pgx.Connect(ctx, destURL.String())
+	existingPgxConn, err := pgx.Connect(ctx, r.destURL.String())
 	require.NoError(t, err)
 	_, err = existingPgxConn.Prepare(ctx, "basic select", "SELECT * FROM t1, v1, t2")
 	require.NoError(t, err)
 	for _, useAOST := range []bool{false, true} {
 		if useAOST {
 			closeWaitForRefresh()
-		}
-		// When AOST is enabled then a fixed number of iterations sufficient. When
-		// the AOST is disabled, then we will iterate until a reader timestamp error
-		// is generated.
-		errorDetected := false
-		checkAOSTError := func(err error) {
-			if useAOST || err == nil {
-				require.NoError(t, err)
-				return
-			}
-			errorDetected = errorDetected ||
-				strings.Contains(err.Error(), "PCR reader timestamp has moved forward, existing descriptor")
 		}
 		// Validate multiple advances of the timestamp work concurrently with queries.
 		// The tight loop below should relatively easily hit errors if all the timestamps
@@ -384,15 +363,15 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 			// Ensure the minimum iterations are met, and any expected errors
 			// are observed before stopping TS advances.
 			for iter := 0; iter < NumIterations; iter++ {
-				if _, err := srcRunner.DB.ExecContext(ctx,
+				if _, err := r.srcRunner.DB.ExecContext(ctx,
 					"INSERT INTO t1(val, j) VALUES('open', $1);",
 					iter); err != nil {
 					return err
 				}
 				// Signal the next timestamp value.
-				newTS = ts.Clock().Now()
+				newTS = r.ts.Clock().Now()
 				// Advanced the timestamp next.
-				if err := advanceTS(newTS); err != nil {
+				if err := r.advanceTS(ctx, newTS, false); err != nil {
 					return err
 				}
 			}
@@ -401,9 +380,9 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 		// Validates that the implicit txn and explicit txn's
 		// can safely use fixed timestamps.
 		if useAOST {
-			destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost='off'")
+			r.destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost='off'")
 		} else {
-			destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost='on'")
+			r.destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost='on'")
 		}
 		iterationsDone := false
 		uniqueIdx := 0
@@ -423,59 +402,59 @@ func TestReaderCatalogTSAdvance(t *testing.T) {
 			case <-iterationsDoneCh:
 				iterationsDone = true
 			default:
-				// Prepare on an existing connection.
-				rows, err := existingPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
-				require.NoError(t, err)
-				rows.Close()
-				uniqueQuery := fmt.Sprintf("SELECT a.j + %d FROM t1 as a, v1 as b, t2 as c ", uniqueIdx)
-				_, err = existingPgxConn.Prepare(ctx, fmt.Sprintf("q%d", uniqueIdx), uniqueQuery)
-				require.NoError(t, err)
-				rows, err = existingPgxConn.Query(ctx, uniqueQuery)
-				require.NoError(t, err)
-				rows.Close()
-				// Open new connections.
-				newPgxConn, err := pgx.Connect(ctx, destURL.String())
-				require.NoError(t, err)
-				_, err = newPgxConn.Prepare(ctx, "basic select", "SELECT * FROM t1, v1, t2")
-				require.NoError(t, err)
-				rows, err = newPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
-				require.NoError(t, err)
-				rows.Close()
-				require.NoError(t, newPgxConn.Close(ctx))
+				// Validate both prepares and opening connections while the timestamp
+				// advances.
+				validateNewConnsAndPrepare := func() {
+					rows, err := existingPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
+					require.NoError(t, err)
+					rows.Close()
+					uniqueQuery := fmt.Sprintf("SELECT a.j + %d FROM t1 as a, v1 as b, t2 as c ", uniqueIdx)
+					_, err = existingPgxConn.Prepare(ctx, fmt.Sprintf("q%d", uniqueIdx), uniqueQuery)
+					require.NoError(t, err)
+					rows, err = existingPgxConn.Query(ctx, uniqueQuery)
+					require.NoError(t, err)
+					rows.Close()
+					// Open new connections.
+					newPgxConn, err := pgx.Connect(ctx, r.destURL.String())
+					require.NoError(t, err)
+					defer func() {
+						require.NoError(t, newPgxConn.Close(ctx))
+					}()
+					_, err = newPgxConn.Prepare(ctx, "basic select", "SELECT * FROM t1, v1, t2")
+					require.NoError(t, err)
+					rows, err = newPgxConn.Query(ctx, "SELECT * FROM t1, v1, t2")
+					require.NoError(t, err)
+					rows.Close()
+				}
+				validateNewConnsAndPrepare()
 
 				// Only use txn's with AOST, which should never hit retryable errors.
-				// Automatic retry's are enabled for PCR errors, but they can still
+				// Automatic retries are enabled for PCR errors, but they can still
 				// happen in a txn. When AOST is off don't try the txn.
 				if useAOST {
-					tx := destRunner.Begin(t)
+					tx := r.destRunner.Begin(t)
 					_, err = tx.Exec("SELECT * FROM t1")
-					checkAOSTError(err)
+					require.NoError(t, err)
 					_, err = tx.Exec("SELECT * FROM v1")
-					checkAOSTError(err)
+					require.NoError(t, err)
 					_, err = tx.Exec("SELECT * FROM t2")
-					checkAOSTError(err)
-					checkAOSTError(tx.Commit())
+					require.NoError(t, err)
+					require.NoError(t, tx.Commit())
 				}
 
-				_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM t1,v1, t2")
-				checkAOSTError(err)
-				_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM v1 ORDER BY 1")
-				checkAOSTError(err)
-				_, err = destRunner.DB.ExecContext(ctx, "SELECT * FROM t2 ORDER BY 1")
-				checkAOSTError(err)
+				// Validate implicit txn's never hit any error.
+				_, err = r.destRunner.DB.ExecContext(ctx, "SELECT * FROM t1,v1,t2")
+				require.NoError(t, err)
 			}
 		}
 		// Finally ensure the queries actually match.
 		require.NoError(t, grp.Wait())
-		// When the AOST is shut off we retry, so no errors should occur.
-		require.Equalf(t, false, errorDetected,
-			"error was detected unexpectedly (AOST = %t on connection)", useAOST)
 	}
 	require.NoError(t, existingPgxConn.Close(ctx))
-	now = newTS
-	compareEqual("SELECT * FROM t1 ORDER BY j")
-	compareEqual("SELECT * FROM v1 ORDER BY 1")
-	compareEqual("SELECT * FROM t2 ORDER BY j, i")
+	r.updateSrcAOST(newTS)
+	r.compareEqual(t, "SELECT * FROM t1 ORDER BY j")
+	r.compareEqual(t, "SELECT * FROM v1 ORDER BY 1")
+	r.compareEqual(t, "SELECT * FROM t2 ORDER BY j, i")
 
 }
 
@@ -486,27 +465,13 @@ func TestReaderCatalogTSAdvanceWithLongTxn(t *testing.T) {
 	skip.UnderDuress(t)
 
 	ctx := context.Background()
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-	})
-	defer ts.Stop(ctx)
-	srcTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
-		TenantID:   serverutils.TestTenantID(),
-		TenantName: "src",
-	})
-	require.NoError(t, err)
+
 	destSettings := cluster.MakeClusterSettings()
 	const LeaseExpirationTime = time.Second * 15
 	lease.LeaseDuration.Override(ctx, &destSettings.SV, LeaseExpirationTime)
 	lease.LeaseJitterFraction.Override(ctx, &destSettings.SV, 0)
-	destTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
-		TenantID:   serverutils.TestTenantID2(),
-		TenantName: "dest",
-		Settings:   destSettings,
-	})
-	require.NoError(t, err)
-	srcConn := srcTenant.SQLConn(t)
-	srcRunner := sqlutils.MakeSQLRunner(srcConn)
+	r, cleanup := newReaderCatalogTest(t, ctx, base.TestingKnobs{}, destSettings)
+	defer cleanup()
 
 	ddlToExec := []string{
 		"CREATE USER roacher WITH CREATEROLE;",
@@ -519,67 +484,26 @@ func TestReaderCatalogTSAdvanceWithLongTxn(t *testing.T) {
 		"CREATE TABLE t2(n int);",
 	}
 	for _, ddl := range ddlToExec {
-		srcRunner.Exec(t, ddl)
+		r.srcRunner.Exec(t, ddl)
 	}
 
-	now := ts.Clock().Now()
-	idb := destTenant.InternalDB().(*sql.InternalDB)
-	var setupCompleteTS atomic.Value
-	setupCompleteTS.Store(hlc.Timestamp{})
-
-	advanceTS := func(now hlc.Timestamp) error {
-		err = replication.SetupOrAdvanceStandbyReaderCatalog(ctx, serverutils.TestTenantID(), now, idb, destTenant.ClusterSettings())
-		if err != nil {
-			return err
-		}
-		setupCompleteTS.Store(ts.Clock().Now())
-		return nil
-	}
-
-	require.NoError(t, advanceTS(now))
-	// Connect only after the reader catalog is setup, so the connection
-	// executor is aware.
-	destConn := destTenant.SQLConn(t)
-	destRunner := sqlutils.MakeSQLRunner(destConn)
-
-	compareEqual := func(query string) {
-		lm := destTenant.LeaseManager().(*lease.Manager)
-		testutils.SucceedsSoon(t, func() error {
-			// Waiting for leases to catch up to when the setup was done.
-			if lm.GetSafeReplicationTS().Less(setupCompleteTS.Load().(hlc.Timestamp)) {
-				return errors.AssertionFailedf("waiting for descriptor close timestamp to catch up")
-			}
-			return nil
-		})
-
-		tx := srcRunner.Begin(t)
-		_, err := tx.Exec(fmt.Sprintf("SET TRANSACTION AS OF SYSTEM TIME %s", now.AsOfSystemTime()))
-		require.NoError(t, err)
-		srcRows, err := tx.Query(query)
-		require.NoError(t, err)
-		srcRes, err := sqlutils.RowsToStrMatrix(srcRows)
-		require.NoError(t, err)
-		require.NoError(t, tx.Commit())
-		destRes := destRunner.QueryStr(t, query)
-		require.Equal(t, srcRes, destRes)
-	}
+	require.NoError(t, r.advanceTS(ctx, r.ts.Clock().Now(), true))
 
 	// Validate all tables match,
-	compareEqual("SELECT * FROM t1 ORDER BY n")
-	compareEqual("SELECT * FROM t2 ORDER BY n")
-	compareEqual("SELECT * FROM sq1")
+	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM t2 ORDER BY n")
+	r.compareEqual(t, "SELECT * FROM sq1")
 
 	// Next attempt to advance the TS with a long-running
 	// txn.
-	tx := destRunner.Begin(t)
-	_, err = tx.Exec("SELECT * FROM t1")
+	tx := r.destRunner.Begin(t)
+	_, err := tx.Exec("SELECT * FROM t1")
 	require.NoError(t, err)
 
 	// Attempt to advance the TS, this will wait for
 	// the lease on t1 to expire.
 	advanceStartTime := timeutil.Now()
-	now = ts.Clock().Now()
-	require.NoError(t, advanceTS(now))
+	require.NoError(t, r.advanceTS(ctx, r.ts.Clock().Now(), true))
 	// Confirm we waited for the lease to expire.
 	require.LessOrEqual(t, LeaseExpirationTime, timeutil.Since(advanceStartTime))
 
@@ -592,7 +516,6 @@ func TestReaderCatalogTSAdvanceWithLongTxn(t *testing.T) {
 	_, err = tx.Exec("SELECT * FROM sq1")
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
-
 }
 
 func TestMain(m *testing.M) {
