@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 )
 
 // DatumAlloc provides batch allocation of datum pointers, amortizing the cost
@@ -86,7 +87,7 @@ const maxEWKBAllocSize = 16384    // Arbitrary, could be tuned.
 
 // ResetTypeAllocSizes resets the type-specific allocation sizes.
 func (a *DatumAlloc) ResetTypeAllocSizes() {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return
 	}
 	a.typeAllocSizes = typeSizes{}
@@ -95,7 +96,7 @@ func (a *DatumAlloc) ResetTypeAllocSizes() {
 // AddTypeAllocSize adds the given size to the allocation size for the given
 // type family.
 func (a *DatumAlloc) AddTypeAllocSize(size int, t types.Family) {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return
 	}
 	switch t {
@@ -128,7 +129,7 @@ func (a *DatumAlloc) AddTypeAllocSize(size int, t types.Family) {
 
 // NewDatums allocates Datums of the specified size.
 func (a *DatumAlloc) NewDatums(num int) Datums {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return make(Datums, num)
 	}
 	buf := &a.datumAlloc
@@ -149,7 +150,7 @@ func (a *DatumAlloc) NewDatums(num int) Datums {
 
 // NewDInt allocates a DInt.
 func (a *DatumAlloc) NewDInt(v DInt) *DInt {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dintAlloc
@@ -170,7 +171,7 @@ func (a *DatumAlloc) NewDInt(v DInt) *DInt {
 
 // NewDPGLSN allocates a DPGLSN.
 func (a *DatumAlloc) NewDPGLSN(v DPGLSN) *DPGLSN {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dpglsnAlloc
@@ -189,7 +190,7 @@ func (a *DatumAlloc) NewDPGLSN(v DPGLSN) *DPGLSN {
 
 // NewDFloat allocates a DFloat.
 func (a *DatumAlloc) NewDFloat(v DFloat) *DFloat {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dfloatAlloc
@@ -226,7 +227,7 @@ func (a *DatumAlloc) newString() *string {
 
 // NewDString allocates a DString.
 func (a *DatumAlloc) NewDString(v DString) *DString {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	r := (*DString)(a.newString())
@@ -236,7 +237,7 @@ func (a *DatumAlloc) NewDString(v DString) *DString {
 
 // NewDCollatedString allocates a DCollatedString.
 func (a *DatumAlloc) NewDCollatedString(contents string, locale string) (*DCollatedString, error) {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return NewDCollatedString(contents, locale, &CollationEnvironment{})
 	}
 	return NewDCollatedString(contents, locale, &a.env)
@@ -254,7 +255,7 @@ func (a *DatumAlloc) NewDRefCursor(v DString) Datum {
 
 // NewDBytes allocates a DBytes.
 func (a *DatumAlloc) NewDBytes(v DBytes) *DBytes {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	r := (*DBytes)(a.newString())
@@ -264,7 +265,7 @@ func (a *DatumAlloc) NewDBytes(v DBytes) *DBytes {
 
 // NewDEncodedKey allocates a DEncodedKey.
 func (a *DatumAlloc) NewDEncodedKey(v DEncodedKey) *DEncodedKey {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	r := (*DEncodedKey)(a.newString())
@@ -274,7 +275,7 @@ func (a *DatumAlloc) NewDEncodedKey(v DEncodedKey) *DEncodedKey {
 
 // NewDBitArray allocates a DBitArray.
 func (a *DatumAlloc) NewDBitArray(v DBitArray) *DBitArray {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dbitArrayAlloc
@@ -293,7 +294,7 @@ func (a *DatumAlloc) NewDBitArray(v DBitArray) *DBitArray {
 
 // NewDDecimal allocates a DDecimal.
 func (a *DatumAlloc) NewDDecimal(v DDecimal) *DDecimal {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.ddecimalAlloc
@@ -314,7 +315,7 @@ func (a *DatumAlloc) NewDDecimal(v DDecimal) *DDecimal {
 
 // NewDDate allocates a DDate.
 func (a *DatumAlloc) NewDDate(v DDate) *DDate {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.ddateAlloc
@@ -335,7 +336,7 @@ func (a *DatumAlloc) NewDDate(v DDate) *DDate {
 
 // NewDEnum allocates a DEnum.
 func (a *DatumAlloc) NewDEnum(v DEnum) *DEnum {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.denumAlloc
@@ -356,7 +357,7 @@ func (a *DatumAlloc) NewDEnum(v DEnum) *DEnum {
 
 // NewDBox2D allocates a DBox2D.
 func (a *DatumAlloc) NewDBox2D(v DBox2D) *DBox2D {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dbox2dAlloc
@@ -375,7 +376,7 @@ func (a *DatumAlloc) NewDBox2D(v DBox2D) *DBox2D {
 
 // NewDGeography allocates a DGeography.
 func (a *DatumAlloc) NewDGeography(v DGeography) *DGeography {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dgeographyAlloc
@@ -394,7 +395,7 @@ func (a *DatumAlloc) NewDGeography(v DGeography) *DGeography {
 
 // NewDVoid allocates a new DVoid.
 func (a *DatumAlloc) NewDVoid() *DVoid {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &DVoid{}
 	}
 	buf := &a.dvoidAlloc
@@ -422,7 +423,7 @@ func (a *DatumAlloc) NewDGeographyEmpty() *DGeography {
 // DoneInitNewDGeo is called after unmarshalling a SpatialObject allocated via
 // NewDGeographyEmpty/NewDGeometryEmpty, to return space to the DatumAlloc.
 func (a *DatumAlloc) DoneInitNewDGeo(so *geopb.SpatialObject) {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return
 	}
 	// Don't allocate next time if the allocation was wasted and there is no way
@@ -439,7 +440,7 @@ func (a *DatumAlloc) DoneInitNewDGeo(so *geopb.SpatialObject) {
 
 // NewDGeometry allocates a DGeometry.
 func (a *DatumAlloc) NewDGeometry(v DGeometry) *DGeometry {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dgeometryAlloc
@@ -466,7 +467,7 @@ func (a *DatumAlloc) NewDGeometryEmpty() *DGeometry {
 }
 
 func (a *DatumAlloc) giveBytesToEWKB(so *geopb.SpatialObject) {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return
 	}
 	if a.ewkbAlloc == nil && !a.lastEWKBBeyondAllocSize {
@@ -484,7 +485,7 @@ func (a *DatumAlloc) giveBytesToEWKB(so *geopb.SpatialObject) {
 
 // NewDTime allocates a DTime.
 func (a *DatumAlloc) NewDTime(v DTime) *DTime {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dtimeAlloc
@@ -503,7 +504,7 @@ func (a *DatumAlloc) NewDTime(v DTime) *DTime {
 
 // NewDTimeTZ allocates a DTimeTZ.
 func (a *DatumAlloc) NewDTimeTZ(v DTimeTZ) *DTimeTZ {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dtimetzAlloc
@@ -522,7 +523,7 @@ func (a *DatumAlloc) NewDTimeTZ(v DTimeTZ) *DTimeTZ {
 
 // NewDTimestamp allocates a DTimestamp.
 func (a *DatumAlloc) NewDTimestamp(v DTimestamp) *DTimestamp {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dtimestampAlloc
@@ -543,7 +544,7 @@ func (a *DatumAlloc) NewDTimestamp(v DTimestamp) *DTimestamp {
 
 // NewDTimestampTZ allocates a DTimestampTZ.
 func (a *DatumAlloc) NewDTimestampTZ(v DTimestampTZ) *DTimestampTZ {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dtimestampTzAlloc
@@ -564,7 +565,7 @@ func (a *DatumAlloc) NewDTimestampTZ(v DTimestampTZ) *DTimestampTZ {
 
 // NewDInterval allocates a DInterval.
 func (a *DatumAlloc) NewDInterval(v DInterval) *DInterval {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dintervalAlloc
@@ -585,7 +586,7 @@ func (a *DatumAlloc) NewDInterval(v DInterval) *DInterval {
 
 // NewDUuid allocates a DUuid.
 func (a *DatumAlloc) NewDUuid(v DUuid) *DUuid {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.duuidAlloc
@@ -606,7 +607,7 @@ func (a *DatumAlloc) NewDUuid(v DUuid) *DUuid {
 
 // NewDIPAddr allocates a DIPAddr.
 func (a *DatumAlloc) NewDIPAddr(v DIPAddr) *DIPAddr {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dipnetAlloc
@@ -625,7 +626,7 @@ func (a *DatumAlloc) NewDIPAddr(v DIPAddr) *DIPAddr {
 
 // NewDJSON allocates a DJSON.
 func (a *DatumAlloc) NewDJSON(v DJSON) *DJSON {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.djsonAlloc
@@ -646,7 +647,7 @@ func (a *DatumAlloc) NewDJSON(v DJSON) *DJSON {
 
 // NewDTuple allocates a DTuple.
 func (a *DatumAlloc) NewDTuple(v DTuple) *DTuple {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.dtupleAlloc
@@ -665,7 +666,7 @@ func (a *DatumAlloc) NewDTuple(v DTuple) *DTuple {
 
 // NewDOid allocates a DOid.
 func (a *DatumAlloc) NewDOid(v DOid) Datum {
-	if a == nil {
+	if a == nil || buildutil.CrdbTestBuild {
 		return &v
 	}
 	buf := &a.doidAlloc
