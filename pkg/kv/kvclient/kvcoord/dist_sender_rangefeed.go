@@ -556,9 +556,19 @@ func handleRangefeedError(
 			kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
 			kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
 			kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER,
-			kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED:
-			// Try again with same descriptor. These are transient
-			// errors that should not show up again.
+			kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED,
+			kvpb.RangeFeedRetryError_REASON_LAGGING_CLOSED_TIMESTAMP:
+			// Try again with same descriptor. These are transient errors that should
+			// not show up again, or should be retried on another replica which will
+			// likely not have the same issue.
+			//
+			// TODO(kvoli): Mixed-version concerns: this logic can be run on the SQL
+			// pod in single-process multi-tenancy. It seems that the SQL pod could
+			// be running a much further behind version and not recognize the error
+			// codes? Or, even in a non-multi-tenant world, the cluster could be
+			// mixed-version with the server on a version with the error and the
+			// client not. Perhaps, we should just-reuse one of the above error codes
+			// with the same behavior to get around this problem.
 			return rangefeedErrorInfo{}, nil
 		case kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 			kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,

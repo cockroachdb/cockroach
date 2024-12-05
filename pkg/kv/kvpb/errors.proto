@@ -654,6 +654,9 @@ message RangeFeedRetryError {
     REASON_RANGEFEED_CLOSED = 7;
     // The range was manually split in two.
     REASON_MANUAL_RANGE_SPLIT = 8;
+    // The replica's closed timestamp is persistently lagging behind the
+    // current time by greater than the cancellation threshold.
+    REASON_LAGGING_CLOSED_TIMESTAMP = 9;
   }
   optional Reason reason = 1 [(gogoproto.nullable) = false];
 }
