@@ -1124,6 +1124,7 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 		whereClausesChecked := make(map[string]struct{}, n)
 		for i := 0; i < n; i++ {
 			query := queryGen.Generate()
+			fmt.Println(query)
 			where, ok := getWhereClause(query)
 			if !ok {
 				continue

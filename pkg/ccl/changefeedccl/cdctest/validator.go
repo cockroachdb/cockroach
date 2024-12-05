@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -291,10 +292,19 @@ func (v *beforeAfterValidator) checkRowAt(
 			if len(args) != 0 {
 				stmtBuf.WriteString(` AND `)
 			}
-			fmt.Fprintf(&stmtBuf, `%s = $%d`, col, i+1)
-			args = append(args, rowDatums[col])
+			if rowDatums[col] == nil {
+				fmt.Fprintf(&stmtBuf, `%s IS NULL`, col)
+			} else {
+				fmt.Fprintf(&stmtBuf, `%s = $%d`, col, i+1)
+				args = append(args, rowDatums[col])
+			}
 		}
 	}
+
+	for _, arg := range args {
+		fmt.Println(reflect.TypeOf(arg))
+	}
+	fmt.Println("------")
 
 	var valid bool
 	stmt := stmtBuf.String()

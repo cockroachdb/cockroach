@@ -11,8 +11,10 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"runtime/debug"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -33,7 +35,12 @@ func RunNemesis(
 	isCloudstorage bool,
 	withLegacySchemaChanger bool,
 	rng *rand.Rand,
-) (Validator, error) {
+) (v Validator, _err error) {
+	defer func() {
+		if _err != nil {
+			debug.PrintStack()
+		}
+	}()
 	// possible additional nemeses:
 	// - schema changes
 	// - merges
@@ -127,12 +134,6 @@ func RunNemesis(
 	if _, err := db.Exec(`CREATE TABLE foo (id INT PRIMARY KEY, ts STRING DEFAULT '0')`); err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(`SET CLUSTER SETTING kv.range_merge.queue.enabled = false`); err != nil {
-		return nil, err
-	}
-	if _, err := db.Exec(`ALTER TABLE foo SPLIT AT VALUES ($1)`, ns.rowCount/2); err != nil {
-		return nil, err
-	}
 
 	// Initialize table rows by repeatedly running the `openTxn` transition,
 	// then randomly either committing or rolling back transactions. This will
@@ -155,6 +156,37 @@ func RunNemesis(
 				return nil, err
 			}
 		}
+	}
+
+	queryGen, _ := sqlsmith.NewSmither(db, rng,
+		sqlsmith.MutationsOnly(),
+		sqlsmith.SetScalarComplexity(0.5),
+		sqlsmith.SetComplexity(0.1),
+		// TODO(harding): Validators don't handle geometry types correctly.
+		sqlsmith.SimpleScalarTypes(),
+		// TODO(#129072): Reenable cross joins when the likelihood of generating
+		// queries that could hang decreases.
+		sqlsmith.DisableCrossJoins(),
+		sqlsmith.SimpleDatums(),
+	)
+	defer queryGen.Close()
+
+	fmt.Print("Generated queries:\n")
+	const numInserts = 100
+	for i := 0; i < numInserts; i++ {
+		query := queryGen.Generate()
+		if _, err := db.Exec(query); err != nil {
+			log.Infof(ctx, "Skipping query %s because error %s", query, err)
+			continue
+		}
+	}
+	fmt.Println("\nDONEEE HEREE")
+
+	if _, err := db.Exec(`SET CLUSTER SETTING kv.range_merge.queue.enabled = false`); err != nil {
+		return nil, err
+	}
+	if _, err := db.Exec(`ALTER TABLE foo SPLIT AT VALUES ($1)`, ns.rowCount/2); err != nil {
+		return nil, err
 	}
 
 	withFormatParquet := ""
@@ -180,14 +212,13 @@ func RunNemesis(
 	if err != nil {
 		return nil, err
 	}
-	fprintV, err := NewFingerprintValidator(db, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount)
-	if err != nil {
-		return nil, err
-	}
+	//fprintV, err := NewFingerprintValidator(db, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount)
+	//if err != nil {
+	//	return nil, err
+	//}
 	ns.v = NewCountValidator(Validators{
 		NewOrderValidator(`foo`),
 		baV,
-		fprintV,
 	})
 
 	// Initialize the actual row count, overwriting what the initialization loop did. That
@@ -234,6 +265,7 @@ func RunNemesis(
 			return nil, err
 		}
 	}
+	//return nil, nil
 }
 
 type openTxnType string

@@ -437,9 +437,8 @@ var SimpleNames = simpleOption("simple names", func(s *Smither) {
 var MutationsOnly = simpleOption("mutations only", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
 		{7, makeInsert},
-		{1, makeUpdate},
+		{2, makeUpdate},
 		{1, makeDelete},
-		{1, makeCreateStats},
 	}
 })
 

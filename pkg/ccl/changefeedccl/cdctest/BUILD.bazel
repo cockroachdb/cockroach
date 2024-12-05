@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/geo",
+        "//pkg/internal/sqlsmith",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvclient/rangefeed",
