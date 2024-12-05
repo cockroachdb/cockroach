@@ -5,6 +5,8 @@
 
 package scop
 
+import "github.com/cockroachdb/redact"
+
 // A Phase represents the context in which an op is executed within a schema
 // change. Different phases require different dependencies for the execution of
 // the ops to be plumbed in.
@@ -13,6 +15,11 @@ package scop
 // and partially executed in the user transaction. This will change as we
 // transition to transactional schema changes.
 type Phase int
+
+var _ redact.SafeValue = Phase(0)
+
+// SafeValue implements the redact.SafeValue interface.
+func (p Phase) SafeValue() {}
 
 //go:generate stringer --type Phase
 
