@@ -33,7 +33,7 @@ type MemoryBackedQuotaPool struct {
 // NewMemoryBackedQuotaPool creates a MemoryBackedQuotaPool from a parent
 // monitor m with a limit.
 func NewMemoryBackedQuotaPool(
-	ctx context.Context, m *mon.BytesMonitor, name redact.RedactableString, limit int64,
+	ctx context.Context, m *mon.BytesMonitor, name redact.SafeString, limit int64,
 ) *MemoryBackedQuotaPool {
 	q := MemoryBackedQuotaPool{
 		quotaPool: quotapool.NewIntPool(fmt.Sprintf("%s-pool", name), 0),

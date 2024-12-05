@@ -353,7 +353,7 @@ func NewInternalPlanner(
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
 func newInternalPlanner(
-	// TODO(yuzefovich): make this redact.RedactableString.
+	// TODO(yuzefovich/mgartner): make this redact.SafeString.
 	opName string,
 	txn *kv.Txn,
 	user username.SQLUsername,
@@ -403,7 +403,11 @@ func newInternalPlanner(
 	}
 
 	plannerMon := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeMonitorName(redact.Sprintf("internal-planner.%s.%s", user, opName)),
+		Name: mon.MakeMonitorName(
+			"internal-planner." +
+				redact.SafeString(user.Normalized()) + "." +
+				redact.SafeString(opName),
+		),
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
 		Settings: execCfg.Settings,
