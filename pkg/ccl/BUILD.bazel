@@ -12,7 +12,6 @@ go_library(
         "//pkg/ccl/buildccl",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/cliccl",
-        "//pkg/ccl/gqpccl",
         "//pkg/ccl/gssapiccl",
         "//pkg/ccl/jwtauthccl",
         "//pkg/ccl/kvccl",
