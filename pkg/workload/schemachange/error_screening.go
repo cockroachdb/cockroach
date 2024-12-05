@@ -1445,14 +1445,14 @@ WITH descriptors AS (
                           FROM descriptors
                        )
                  WHERE (mut->'primaryKeySwap') IS NOT NULL
-            )
 		 -- Check for declarative primary key swaps, which will appear as
 		 -- as new primary indexes with different key columns
-     UNION SELECT count(*) > 0
+     UNION SELECT p
              FROM primaryindex AS pk, mutations AS mut
             WHERE m->'index'->'encodingType' = '1'::JSONB
                   AND m->'index'->'keyColumnIds'
-                    != p->'keyColumnIds';
+                    != p->'keyColumnIds'
+			);
 		`,
 		tableName.String(),
 	)
