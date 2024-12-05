@@ -4,6 +4,7 @@ go_library(
     name = "perturbation",
     srcs = [
         "add_node.go",
+        "backup.go",
         "decommission.go",
         "elastic_workload.go",
         "framework.go",
@@ -25,6 +26,7 @@ go_library(
         "//pkg/cmd/roachtest/test",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/testutils",
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/timeutil",
