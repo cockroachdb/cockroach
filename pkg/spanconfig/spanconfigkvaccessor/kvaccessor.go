@@ -319,7 +319,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 		keys.MakeSQLCodec(roachpb.TenantTwo), desc)
 	// Changing this to true _may_ cause issue with tenant two as codec stuff
 	// isn't passed down yet.
-	someCondition := true
+	someCondition := false
 
 	if len(toDelete) > 0 {
 		if err := k.paginate(len(toDelete), func(startIdx, endIdx int) error {

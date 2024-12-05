@@ -17,7 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,7 +70,118 @@ func registerUATests(r registry.Registry) {
 				runSpanConfigConflictsTest(ctx, t, c)
 			},
 		})
+		r.Add(registry.TestSpec{
+			Name:             "ua/span-config-pts",
+			Owner:            registry.OwnerSQLFoundations,
+			Cluster:          r.MakeClusterSpec(3),
+			CompatibleClouds: registry.AllClouds,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runSpanConfigPTSValidations(ctx, t, c)
+			},
+		})
 	}
+}
+
+// Steps:
+// * Create tenant two
+// * Create backup (it inserts PTS and pauses)
+// * spanconfigreconciler job picks this PTS and applies the policy.
+// * No dual write is here so policy isn't replicated to tenant two
+// * GC runs on system tenant two. Since there are no policy that data is removed
+// * Backup fails because row isn't available as it's GCed
+//
+// Note: some parts inspired by pkg/ccl/backupccl/backup_test.go
+func runSpanConfigPTSValidations(ctx context.Context, t test.Test, c cluster.Cluster) {
+	opts := option.DefaultStartOpts()
+	settings := install.MakeClusterSettings(install.ClusterSettingsOption{
+		// TODO: Don't know why I'm doing this
+		"kv.protectedts.poll_interval":        "10ms", // TODO: Maybe execute this later
+		"kv.closed_timestamp.target_duration": "100ms",
+	})
+	c.Start(ctx, t.L(), opts, settings, c.All())
+
+	dbOne := c.Conn(ctx, t.L(), 1)
+	defer dbOne.Close()
+
+	t.L().Printf("Creating table and setting gc.ttl")
+	_, err := dbOne.ExecContext(ctx, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
+	require.NoError(t, err, "cannot create table foo")
+
+	_, err = dbOne.ExecContext(ctx, `ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = 1;`)
+	require.NoError(t, err, "cannot change gcttl")
+
+	t.L().Printf("Creating the tenant `main`")
+	query := `select crdb_internal.create_tenant('{"id": 2, "name": "main", "service_mode": "shared"}'::jsonb);`
+	_, err = dbOne.ExecContext(ctx, query)
+	require.NoError(t, err, "cannot create TenantTwo")
+
+	nodeTwo := c.Nodes(2)
+
+	t.L().Printf("Restarting node 2")
+	// Stop node 2
+	stopOpts := option.DefaultStopOpts()
+	c.Stop(ctx, t.L(), stopOpts, nodeTwo)
+
+	// Start node 2
+	settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_UA=true")
+	c.Start(ctx, t.L(), opts, settings, nodeTwo)
+
+	t.L().Printf("Taking full backup")
+	// Run a full backup, reason: Don't know
+	baseBackupURI := "userfile:///foo"
+	_, err = dbOne.ExecContext(ctx, fmt.Sprintf(`BACKUP TABLE foo INTO '%s'`, baseBackupURI))
+	require.NoError(t, err, "cannot create full backup")
+
+	t.L().Printf("Setting pausepoint")
+	_, err = dbOne.ExecContext(ctx,
+		`SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.before.flow'`)
+	require.NoError(t, err, "cannot set pausepoint")
+
+	t.L().Printf("Taking incremental backup")
+	var jobID int
+	err = dbOne.QueryRow(
+		fmt.Sprintf(
+			`BACKUP TABLE foo INTO LATEST IN '%s' WITH detached`, baseBackupURI)).Scan(&jobID)
+	require.NoError(t, err, "cannot incremental backup")
+
+	t.L().Printf("Wait for backup job to pause")
+	waitForJobStatus(t, jobID, dbOne, jobs.StatusPaused)
+
+	_, err = dbOne.ExecContext(ctx, "DROP TABLE foo")
+	require.NoError(t, err, "cannont drop table")
+
+	t.L().Printf("Going to sleep")
+	time.Sleep(1 * time.Minute)
+
+	_, err = dbOne.ExecContext(ctx, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+	require.NoError(t, err, "cannot reset pausepoint")
+
+	t.L().Printf("Resuming the job")
+	_, err = dbOne.ExecContext(ctx, `RESUME JOB $1`, jobID)
+	require.NoError(t, err, "cannot resume job")
+
+	t.L().Printf("Waiting for backup to succeed (really for failing)")
+	waitForJobStatus(t, jobID, dbOne, jobs.StatusSucceeded)
+	t.L().Printf("Backup succeeded (Yeay??)")
+}
+
+func waitForJobStatus(t test.Test, jobID int, db *gosql.DB, expected jobs.Status) {
+	testutils.SucceedsWithin(t, func() error {
+		var res string
+		err := db.QueryRow(`SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&res)
+		require.NoError(t, err, "cannot query system.jobs")
+		status := jobs.Status(res)
+		t.L().Printf("job status : %v", status)
+		if status == jobs.StatusFailed {
+			t.Fatalf("job failed")
+		}
+		if status != expected {
+			return errors.Errorf("expected job status %s, but got %s", expected, status)
+		}
+		return nil
+	}, 2*time.Minute)
 }
 
 // runSpanConfigMigration is meant more for manual observations rather than
