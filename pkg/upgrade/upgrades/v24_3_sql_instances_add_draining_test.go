@@ -61,6 +61,8 @@ func TestCreateInstancesAndUpgrades(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, 24, 3)
+
 	ctx := context.Background()
 
 	setupServer := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, *kv.DB) {

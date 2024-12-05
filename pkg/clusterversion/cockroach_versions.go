@@ -316,7 +316,7 @@ var versionTable = [numKeys]roachpb.Version{
 const Latest Key = numKeys - 1
 
 // MinSupported is the minimum logical cluster version supported by this branch.
-const MinSupported Key = V24_2
+const MinSupported Key = V24_3
 
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).

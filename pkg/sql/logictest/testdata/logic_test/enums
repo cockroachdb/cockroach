@@ -1005,7 +1005,7 @@ statement error pq: foreign key violation: "enum_origin" row x='hello' has no ma
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
 
 # Tests for ALTER COLUMN SET DATA TYPE.
-onlyif config local-legacy-schema-changer local-mixed-24.2 local-mixed-24.3
+onlyif config local-legacy-schema-changer local-mixed-24.3
 statement ok
 SET enable_experimental_alter_column_type_general = true;
 
@@ -1014,7 +1014,7 @@ CREATE TABLE enum_data_type (x STRING, y INT);
 INSERT INTO enum_data_type VALUES ('hello'), ('howdy');
 
 # The legacy schema changed doesn't hydrate the type name in the message.
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-legacy-schema-changer
 statement error pq: column "y" cannot be cast automatically to type public.greeting\nHINT: You might need to specify "USING y::public.greeting".
 ALTER TABLE enum_data_type ALTER COLUMN y SET DATA TYPE greeting;
 
@@ -1025,7 +1025,7 @@ statement error pq: invalid cast: int -> greeting
 ALTER TABLE enum_data_type ALTER COLUMN y SET DATA TYPE greeting USING y::greeting;
 
 # The legacy schema changed doesn't hydrate the type name in the message.
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-legacy-schema-changer
 statement error pq: column "x" cannot be cast automatically to type public.greeting\nHINT: You might need to specify "USING x::public.greeting".
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting;
 

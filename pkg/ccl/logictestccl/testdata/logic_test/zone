@@ -1354,7 +1354,7 @@ CREATE TABLE person (
                     )
         );
 
-skipif config local-mixed-24.2 local-mixed-24.3
+skipif config local-mixed-24.3
 statement ok
 SET use_declarative_schema_changer = unsafe_always;
 
