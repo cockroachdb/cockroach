@@ -2064,6 +2064,18 @@ SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5231231244234)::string
 make_timestamp
 2013-07-15 08:15:23.523123
 
+# Test with seconds < 1.
+
+query T
+select make_timestamp(1, 1, 1, 0, 0, 0);
+----
+0001-01-01 00:00:00 +0000 +0000
+
+query T
+select make_timestamp(1, 1, 1, 0, 0, 0.1234);
+----
+0001-01-01 00:00:00.1234 +0000 +0000
+
 statement error pgcode 22008 pq: make_timestamp\(\): year value of 0 is not valid
 SELECT make_timestamp(0, 7, 15, 8, 15, 23.5);
 
@@ -2097,6 +2109,18 @@ SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5, 'America/New_York')
 ----
 make_timestamptz
 2013-07-15 07:15:23.5 -0500 EST
+
+# Test with seconds < 1.
+
+query T
+select make_timestamptz(2020, 1, 1, 0, 0, 0, 'America/New_York');
+----
+2020-01-01 00:00:00 -0500 EST
+
+query T
+select make_timestamptz(2020, 1, 1, 0, 0, 0.1234, 'America/New_York');
+----
+2020-01-01 00:00:00.1234 -0500 EST
 
 statement error pgcode 22008 pq: make_timestamptz\(\): year value of 0 is not valid
 SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5);
