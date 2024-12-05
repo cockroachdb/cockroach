@@ -9,6 +9,7 @@
 # This script is run by pebble_nightly_metamorphic_crossversion.sh to build test
 # binaries of the pebble metamorphic package at different branches. This script
 # takes two argments:
+#   - The crdb branch to use; the major release must match the pebble branch.
 #   - The pebble branch to build, eg "crl-release-22.1" or "master"
 #   - A destination directory into which the binary will be copied with the
 #     filename <SHA>.test.
@@ -16,8 +17,13 @@
 
 set -euo pipefail
 
-PEBBLE_BRANCH="$1"
-DEST="$2"
+CRDB_BRANCH="$1"
+PEBBLE_BRANCH="$2"
+DEST="$3"
+
+RESTORE_COMMIT=$(git rev-parse HEAD)
+git fetch origin "$CRDB_BRANCH"
+git checkout "origin/$CRDB_BRANCH"
 
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
 
@@ -45,7 +51,12 @@ bazel build --define gotags=bazel,invariants \
 cp $BAZEL_BIN/external/com_github_cockroachdb_pebble/internal/metamorphic/metamorphic_test_/metamorphic_test \
     "$DEST/$PEBBLE_SHA.test"
 chmod a+w "$DEST/$PEBBLE_SHA.test"
-echo "$PEBBLE_SHA"
 
-# Return DEPS.bzl and the patch to its previous contents.
-git checkout HEAD -- DEPS.bzl build/patches
+# Discard changes.
+git reset -q --hard HEAD
+
+# Go back. This is important because the current tree is used for the next
+# invocation of this script.
+git checkout -q  "$RESTORE_COMMIT"
+
+echo "$PEBBLE_SHA"
