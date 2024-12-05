@@ -86,7 +86,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 
 func newFlowCtxForExplainPurposes(ctx context.Context, p *planner) *execinfra.FlowCtx {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     "explain",
+		Name:     mon.MakeMonitorName("explain"),
 		Settings: p.execCfg.Settings,
 	})
 	// Note that we do not use planner's monitor here in order to not link any

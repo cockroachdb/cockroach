@@ -103,7 +103,7 @@ func (r *MonitorRegistry) CreateExtraMemAccountForSpillStrategy(
 	// Iterate backwards since most likely that we want to create an account
 	// bound to the most recently created monitor.
 	for i := len(r.monitors) - 1; i >= 0; i-- {
-		if r.monitors[i].Name() == monitorName {
+		if r.monitors[i].Name() == mon.MakeMonitorName(redact.RedactableString(monitorName)) {
 			bufferingMemAccount := r.monitors[i].MakeBoundAccount()
 			r.accounts = append(r.accounts, &bufferingMemAccount)
 			return &bufferingMemAccount
@@ -220,7 +220,7 @@ func (r *MonitorRegistry) AssertInvariants() {
 	// Check that all memory monitor names are unique (colexec.diskSpillerBase
 	// relies on this in order to catch "memory budget exceeded" errors only
 	// from "its own" component).
-	names := make(map[string]struct{}, len(r.monitors))
+	names := make(map[mon.MonitorName]struct{}, len(r.monitors))
 	for _, m := range r.monitors {
 		if _, seen := names[m.Name()]; seen {
 			colexecerror.InternalError(errors.AssertionFailedf("monitor named %q encountered twice", m.Name()))

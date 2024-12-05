@@ -180,7 +180,7 @@ func MakeInternalExecutorMemMonitor(
 	memMetrics MemoryMetrics, settings *cluster.Settings,
 ) *mon.BytesMonitor {
 	return mon.NewMonitor(mon.Options{
-		Name:       "internal SQL executor",
+		Name:       mon.MakeMonitorName("internal SQL executor"),
 		CurCount:   memMetrics.CurBytesCount,
 		MaxHist:    memMetrics.MaxBytesHist,
 		Settings:   settings,

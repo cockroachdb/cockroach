@@ -60,7 +60,7 @@ func newSQLStats(
 	anomalies *insights.AnomalyDetector,
 ) *SQLStats {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:       "SQLStats",
+		Name:       mon.MakeMonitorName("SQLStats"),
 		CurCount:   curMemBytesCount,
 		MaxHist:    maxMemBytesHist,
 		Settings:   st,

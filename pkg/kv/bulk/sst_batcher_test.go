@@ -47,7 +47,7 @@ func TestDuplicateHandling(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: "lots"})
+	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeMonitorName("lots")})
 	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -307,7 +307,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			))
 
 			ts := hlc.Timestamp{WallTime: 100}
-			mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: "lots"})
+			mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeMonitorName("lots")})
 			reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
 			b, err := bulk.MakeBulkAdder(
 				ctx, kvDB, mockCache, s.ClusterSettings(), ts,
@@ -373,7 +373,7 @@ func TestImportEpochIngestion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: "lots"})
+	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeMonitorName("lots")})
 	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
