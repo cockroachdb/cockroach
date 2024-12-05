@@ -75,7 +75,7 @@ import (
 func NewOneInputDiskSpiller(
 	input colexecop.Operator,
 	inMemoryOp colexecop.BufferingInMemoryOperator,
-	inMemoryMemMonitorName redact.RedactableString,
+	inMemoryMemMonitorName redact.SafeString,
 	diskBackedOpConstructor func(input colexecop.Operator) colexecop.Operator,
 	diskBackedReuseMode colexecop.BufferingOpReuseMode,
 	spillingCallbackFn func(),
@@ -143,7 +143,7 @@ func NewOneInputDiskSpiller(
 func NewTwoInputDiskSpiller(
 	inputOne, inputTwo colexecop.Operator,
 	inMemoryOp colexecop.BufferingInMemoryOperator,
-	inMemoryMemMonitorNames []redact.RedactableString,
+	inMemoryMemMonitorNames []redact.SafeString,
 	diskBackedOpConstructor func(inputOne, inputTwo colexecop.Operator) colexecop.Operator,
 	spillingCallbackFn func(),
 ) colexecop.ClosableOperator {

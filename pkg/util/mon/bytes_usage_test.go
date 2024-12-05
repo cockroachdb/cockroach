@@ -415,7 +415,7 @@ func TestReservedAccountCleared(t *testing.T) {
 }
 
 func getMonitor(
-	ctx context.Context, st *cluster.Settings, name redact.RedactableString, parent *BytesMonitor,
+	ctx context.Context, st *cluster.Settings, name redact.SafeString, parent *BytesMonitor,
 ) *BytesMonitor {
 	var reservedBytes int64
 	if parent == nil {
@@ -427,7 +427,7 @@ func getMonitor(
 func getMonitorEx(
 	ctx context.Context,
 	st *cluster.Settings,
-	name redact.RedactableString,
+	name redact.SafeString,
 	parent *BytesMonitor,
 	reservedBytes int64,
 ) *BytesMonitor {
@@ -444,7 +444,7 @@ func getMonitorUsed(
 	t *testing.T,
 	ctx context.Context,
 	st *cluster.Settings,
-	name redact.RedactableString,
+	name redact.SafeString,
 	parent *BytesMonitor,
 	usedBytes, reservedBytes int64,
 ) *BytesMonitor {
@@ -559,7 +559,7 @@ func TestBytesMonitorNoDeadlocks(t *testing.T) {
 					return
 				default:
 					func() {
-						m := getMonitor(ctx, st, redact.RedactableString(fmt.Sprintf("m%d", i)), root)
+						m := getMonitor(ctx, st, redact.SafeString(fmt.Sprintf("m%d", i)), root)
 						defer m.Stop(ctx)
 						numOps := rng.Intn(10 + 1)
 						var reserved int64
@@ -636,7 +636,7 @@ func BenchmarkTraverseTree(b *testing.B) {
 			allMonitors[level] = make([]*BytesMonitor, 0, len(allMonitors[level-1])*numChildrenPerMonitor)
 			for parent, parentMon := range allMonitors[level-1] {
 				for child := 0; child < numChildrenPerMonitor; child++ {
-					name := redact.RedactableString(fmt.Sprintf("child%d_parent%d", child, parent))
+					name := redact.SafeString(fmt.Sprintf("child%d_parent%d", child, parent))
 					allMonitors[level] = append(allMonitors[level], getMonitor(ctx, st, name, parentMon))
 				}
 			}
