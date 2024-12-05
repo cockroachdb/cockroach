@@ -3036,7 +3036,6 @@ SELECT (SELECT * FROM [SHOW crdb_version]) = version()
 true
 
 # Replicated version field was added in 24.3, which will make the two non-equivalent.
-skipif config local-mixed-24.2
 query B
 select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)) = descriptor from system.descriptor where id = 1
 ----

@@ -1,4 +1,4 @@
-skipif config 3node-tenant-default-configs local-mixed-24.2 local-mixed-24.3
+skipif config 3node-tenant-default-configs local-mixed-24.3
 query IITI rowsort
 SELECT * FROM system.namespace
 ----

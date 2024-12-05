@@ -60,33 +60,11 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",  # keep
-        "//pkg/build",
-        "//pkg/clusterversion",
-        "//pkg/config/zonepb",
-        "//pkg/gossip",
-        "//pkg/jobs/jobspb",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
-        "//pkg/multitenant/mtinfopb",
-        "//pkg/raft/raftpb",
         "//pkg/roachpb",
-        "//pkg/server/diagnostics/diagnosticspb",
-        "//pkg/server/status/statuspb",
-        "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/descpb",  # keep
-        "//pkg/sql/contentionpb",
         "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/pgwire/pgwirecancel",  # keep
-        "//pkg/sql/sqlstats/insights",
-        "//pkg/storage/enginepb",
-        "//pkg/ts/catalog",
-        "//pkg/util",
-        "//pkg/util/hlc",
-        "//pkg/util/log/logpb",
-        "//pkg/util/metric",
-        "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",  # keep
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_cockroachdb_redact//:redact",  # keep
@@ -95,6 +73,28 @@ go_proto_library(
         # package that Gazelle isn't prepared to deal with.
         "@com_github_golang_protobuf//descriptor:go_default_library_gen",  # keep
         "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
+        "//pkg/build",
+        "//pkg/clusterversion",
+        "//pkg/config/zonepb",
+        "//pkg/gossip",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
+        "//pkg/multitenant/mtinfopb",
+        "//pkg/raft/raftpb",
+        "//pkg/server/diagnostics/diagnosticspb",
+        "//pkg/server/status/statuspb",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/contentionpb",
+        "//pkg/sql/sqlstats/insights",
+        "//pkg/storage/enginepb",
+        "//pkg/ts/catalog",
+        "//pkg/util",
+        "//pkg/util/hlc",
+        "//pkg/util/log/logpb",
+        "//pkg/util/metric",
+        "//pkg/util/tracing/tracingpb",
     ],
 )
 

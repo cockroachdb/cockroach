@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-24.2 !local-legacy-schema-changer
+# LogicTest: !local-legacy-schema-changer
 
 # Include some hidden columns that won't be visible to triggers.
 statement ok

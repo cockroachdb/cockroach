@@ -484,24 +484,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		// This config runs tests using 24.2 cluster version, simulating a node that
-		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-24.2",
-		NumNodes:                    1,
-		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V24_2,
-		DisableUpgrade:              true,
-		DeclarativeCorpusCollection: true,
-	},
-	{
-		// This config runs a cluster with 3 nodes, with a separate process per
-		// node. The nodes initially start on v24.2.
-		Name:                     "cockroach-go-testserver-24.2",
-		UseCockroachGoTestserver: true,
-		BootstrapVersion:         clusterversion.V24_2,
-		NumNodes:                 3,
-	},
-	{
 		// This config runs tests using 24.3 cluster version, simulating a node that
 		// is operating in a mixed-version cluster.
 		Name:                        "local-mixed-24.3",
@@ -605,7 +587,6 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
-		"local-mixed-24.2",
 		"local-mixed-24.3",
 	),
 
