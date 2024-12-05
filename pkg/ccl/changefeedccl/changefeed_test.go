@@ -9480,6 +9480,10 @@ func TestParallelIOMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test relies on messing with timings to see pending rows build up,
+	//  so skip it when the system is loaded.
+	skip.UnderDuress(t)
+
 	// Add delay so queuing occurs, which results in the below metrics being
 	// nonzero.
 	defer testingEnableQueuingDelay()()
