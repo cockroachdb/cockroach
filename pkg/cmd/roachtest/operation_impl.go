@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -46,6 +47,8 @@ type operationImpl struct {
 
 		status string
 	}
+
+	workLoadCluster *clusterImpl
 }
 
 func (o *operationImpl) ClusterCockroach() string {
@@ -140,6 +143,14 @@ func (o *operationImpl) Failed() bool {
 	defer o.mu.RUnlock()
 
 	return len(o.mu.failures) > 0
+}
+
+// WorkloadCluster can return nil if o.workLoadCluster is not set.
+func (o *operationImpl) WorkloadCluster() cluster.Cluster {
+	if o.workLoadCluster == nil {
+		return nil
+	}
+	return o.workLoadCluster
 }
 
 var _ operation.Operation = &operationImpl{}
