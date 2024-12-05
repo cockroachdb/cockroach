@@ -251,6 +251,12 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderRangefeedCatchupRangesWaitingClientSide = metric.Metadata{
+		Name:        "distsender.rangefeed.catchup_ranges_waiting_client_side",
+		Help:        `Number of ranges waiting on the client-side limiter to perform catchup scans`,
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderRangefeedLocalRanges = metric.Metadata{
 		Name:        "distsender.rangefeed.local_ranges",
 		Help:        `Number of ranges connected to local node.`,
@@ -457,10 +463,11 @@ func (DistSenderCircuitBreakerMetrics) MetricStruct() {}
 
 // DistSenderRangeFeedMetrics is a set of rangefeed specific metrics.
 type DistSenderRangeFeedMetrics struct {
-	RangefeedRanges        *metric.Gauge
-	RangefeedCatchupRanges *metric.Gauge
-	RangefeedLocalRanges   *metric.Gauge
-	Errors                 rangeFeedErrorCounters
+	RangefeedRanges                         *metric.Gauge
+	RangefeedCatchupRanges                  *metric.Gauge
+	RangefeedLocalRanges                    *metric.Gauge
+	RangefeedCatchupRangesWaitingClientSide *metric.Gauge
+	Errors                                  rangeFeedErrorCounters
 }
 
 func MakeDistSenderMetrics(locality roachpb.Locality) DistSenderMetrics {
@@ -586,10 +593,11 @@ func (rangeFeedErrorCounters) MetricStruct() {}
 
 func makeDistSenderRangeFeedMetrics() DistSenderRangeFeedMetrics {
 	return DistSenderRangeFeedMetrics{
-		RangefeedRanges:        metric.NewGauge(metaDistSenderRangefeedTotalRanges),
-		RangefeedCatchupRanges: metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
-		RangefeedLocalRanges:   metric.NewGauge(metaDistSenderRangefeedLocalRanges),
-		Errors:                 makeRangeFeedErrorCounters(),
+		RangefeedRanges:                         metric.NewGauge(metaDistSenderRangefeedTotalRanges),
+		RangefeedCatchupRanges:                  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
+		RangefeedLocalRanges:                    metric.NewGauge(metaDistSenderRangefeedLocalRanges),
+		RangefeedCatchupRangesWaitingClientSide: metric.NewGauge(metaDistSenderRangefeedCatchupRangesWaitingClientSide),
+		Errors:                                  makeRangeFeedErrorCounters(),
 	}
 }
 

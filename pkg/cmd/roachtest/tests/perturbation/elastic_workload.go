@@ -57,7 +57,7 @@ func (e elasticWorkload) startPerturbation(
 	startTime := timeutil.Now()
 	runCmd := fmt.Sprintf(
 		"./cockroach workload run kv --db elastic --txn-qos=background --duration=%s --max-block-bytes=%d --min-block-bytes=%d --concurrency=500 {pgurl%s}",
-		v.perturbationDuration, v.maxBlockBytes, v.maxBlockBytes, v.stableNodes())
+		v.perturbationDuration, v.blockSize, v.blockSize, v.stableNodes())
 	v.Run(ctx, option.WithNodes(v.workloadNodes()), runCmd)
 
 	// Wait a few seconds to allow the latency to resume after stopping the
