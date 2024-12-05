@@ -280,20 +280,18 @@ type BytesMonitor struct {
 // MonitorName is used to identify monitors in logging messages. It consists of
 // a string name and an optional ID.
 type MonitorName struct {
-	// TODO(mgartner): This should probably be a safe string instead of a
-	// redactable string.
-	name redact.RedactableString
+	name redact.SafeString
 	id   uuid.Short
 }
 
 // MakeMonitorName constructs a MonitorName with the given name.
-func MakeMonitorName(name redact.RedactableString) MonitorName {
+func MakeMonitorName(name redact.SafeString) MonitorName {
 	return MonitorName{name: name}
 }
 
 // MakeMonitorNameWithID constructs a MonitorName with the given name and
 // ID.
-func MakeMonitorNameWithID(name redact.RedactableString, id uuid.Short) MonitorName {
+func MakeMonitorNameWithID(name redact.SafeString, id uuid.Short) MonitorName {
 	return MonitorName{name: name, id: id}
 }
 
@@ -304,7 +302,7 @@ func (mn MonitorName) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (mn MonitorName) SafeFormat(w redact.SafePrinter, r rune) {
-	mn.name.SafeFormat(w, r)
+	w.SafeString(mn.name)
 	var nullShort uuid.Short
 	if mn.id != nullShort {
 		w.SafeString(redact.SafeString(mn.id.String()))
@@ -497,7 +495,7 @@ func NewMonitor(args Options) *BytesMonitor {
 // those chunks would be reported as used by pool while downstream monitors will
 // not.
 func NewMonitorInheritWithLimit(
-	name redact.RedactableString, limit int64, m *BytesMonitor, longLiving bool,
+	name redact.SafeString, limit int64, m *BytesMonitor, longLiving bool,
 ) *BytesMonitor {
 	res := MemoryResource
 	if m.mu.tracksDisk {

@@ -339,12 +339,12 @@ func (r opResult) createDiskBackedSort(
 	matchLen uint32,
 	maxNumberPartitions int,
 	processorID int32,
-	opNamePrefix redact.RedactableString,
+	opNamePrefix redact.SafeString,
 	factory coldata.ColumnFactory,
 	diskBackedReuseMode colexecop.BufferingOpReuseMode,
 ) colexecop.Operator {
 	var (
-		sorterMemMonitorName redact.RedactableString
+		sorterMemMonitorName redact.SafeString
 		inMemorySorter       colexecop.Operator
 	)
 	if len(ordering.Columns) == int(matchLen) {
@@ -469,7 +469,7 @@ func (r opResult) makeDiskBackedSorterConstructor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
-	opNamePrefix redact.RedactableString,
+	opNamePrefix redact.SafeString,
 	factory coldata.ColumnFactory,
 ) colexecdisk.DiskBackedSorterConstructor {
 	return func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) colexecop.Operator {
@@ -643,10 +643,10 @@ func makeNewHashJoinerArgs(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
-	opName redact.RedactableString,
+	opName redact.SafeString,
 	core *execinfrapb.HashJoinerSpec,
 	factory coldata.ColumnFactory,
-) (colexecjoin.NewHashJoinerArgs, redact.RedactableString) {
+) (colexecjoin.NewHashJoinerArgs, redact.SafeString) {
 	hashJoinerMemAccount, hashJoinerMemMonitorName := args.MonitorRegistry.CreateMemAccountForSpillStrategy(
 		ctx, flowCtx, opName, args.Spec.ProcessorID,
 	)
@@ -677,14 +677,10 @@ func makeNewHashAggregatorArgs(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
-	opName redact.RedactableString,
+	opName redact.SafeString,
 	newAggArgs *colexecagg.NewAggregatorArgs,
 	factory coldata.ColumnFactory,
-) (
-	*colexecagg.NewHashAggregatorArgs,
-	*colexecutils.NewSpillingQueueArgs,
-	redact.RedactableString,
-) {
+) (*colexecagg.NewHashAggregatorArgs, *colexecutils.NewSpillingQueueArgs, redact.SafeString) {
 	// We will divide the available memory equally between the two usages - the
 	// hash aggregation itself and the input tuples tracking.
 	totalMemLimit := execinfra.GetWorkMemLimit(flowCtx)
@@ -704,7 +700,7 @@ func makeNewHashAggregatorArgs(
 		ctx, flowCtx, hashAggregationMemLimit, opName, args.Spec.ProcessorID,
 	)
 	hashTableMemAccount := args.MonitorRegistry.CreateExtraMemAccountForSpillStrategy(
-		string(hashAggregatorMemMonitorName),
+		hashAggregatorMemMonitorName,
 	)
 	// We need to create five unlimited memory accounts so that each component
 	// could track precisely its own usage. The components are
@@ -998,7 +994,7 @@ func NewColOperator(
 			result.ColumnTypes = newAggArgs.OutputTypes
 
 			if needHash {
-				opName := redact.RedactableString("hash-aggregator")
+				opName := redact.SafeString("hash-aggregator")
 				// We have separate unit tests that instantiate the in-memory
 				// hash aggregators, so we don't need to look at
 				// args.TestingKnobs.DiskSpillingDisabled and always instantiate
@@ -1037,7 +1033,7 @@ func NewColOperator(
 					inMemoryHashAggregator := colexec.NewHashAggregator(
 						ctx, newHashAggArgs, sqArgs,
 					)
-					ehaOpName := redact.RedactableString("external-hash-aggregator")
+					ehaOpName := redact.SafeString("external-hash-aggregator")
 					ehaAccounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 						ctx, flowCtx, ehaOpName, spec.ProcessorID, 4, /* numAccounts */
 					)
@@ -1121,7 +1117,7 @@ func NewColOperator(
 					allocator, inputs[0].Root, core.Distinct.DistinctColumns, result.ColumnTypes,
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
-				edOpName := redact.RedactableString("external-distinct")
+				edOpName := redact.SafeString("external-distinct")
 				diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
 				diskSpiller := colexecdisk.NewOneInputDiskSpiller(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
@@ -1171,7 +1167,7 @@ func NewColOperator(
 			if len(core.HashJoiner.LeftEqColumns) == 0 {
 				// We are performing a cross-join, so we need to plan a
 				// specialized operator.
-				opName := redact.RedactableString("cross-joiner")
+				opName := redact.SafeString("cross-joiner")
 				accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, spec.ProcessorID, 2 /* numAccounts */)
 				crossJoinerDiskAcc := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 				unlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
@@ -1188,7 +1184,7 @@ func NewColOperator(
 				)
 				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 			} else {
-				opName := redact.RedactableString("hash-joiner")
+				opName := redact.SafeString("hash-joiner")
 				hjArgs, hashJoinerMemMonitorName := makeNewHashJoinerArgs(
 					ctx,
 					flowCtx,
@@ -1204,11 +1200,11 @@ func NewColOperator(
 					// in-memory hash joiner.
 					result.Root = inMemoryHashJoiner
 				} else {
-					opName := redact.RedactableString("external-hash-joiner")
+					opName := redact.SafeString("external-hash-joiner")
 					diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 					diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
-						[]redact.RedactableString{hashJoinerMemMonitorName},
+						[]redact.SafeString{hashJoinerMemMonitorName},
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 							accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 								ctx, flowCtx, opName, spec.ProcessorID, 2, /* numAccounts */
@@ -1262,7 +1258,7 @@ func NewColOperator(
 				onExpr = &core.MergeJoiner.OnExpr
 			}
 
-			opName := redact.RedactableString("merge-joiner")
+			opName := redact.SafeString("merge-joiner")
 			// We are using an unlimited memory monitor here because merge
 			// joiner itself is responsible for making sure that we stay within
 			// the memory limit, and it will fall back to disk if necessary.
@@ -1297,7 +1293,7 @@ func NewColOperator(
 
 			hgjSpec := core.HashGroupJoiner
 			hjSpec, aggSpec := &hgjSpec.HashJoinerSpec, &hgjSpec.AggregatorSpec
-			opName := redact.RedactableString("hash-group-joiner")
+			opName := redact.SafeString("hash-group-joiner")
 			hjArgs, hashJoinerMemMonitorName := makeNewHashJoinerArgs(
 				ctx, flowCtx, args, opName, hjSpec, factory,
 			)
@@ -1359,7 +1355,7 @@ func NewColOperator(
 			)
 			result.ToClose = append(result.ToClose, hgj.(colexecop.Closer))
 
-			ehgjOpName := redact.RedactableString("external-hash-group-joiner")
+			ehgjOpName := redact.SafeString("external-hash-group-joiner")
 			ehgjAccounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 				ctx, flowCtx, ehgjOpName, spec.ProcessorID, 6, /* numAccounts */
 			)
@@ -1374,7 +1370,7 @@ func NewColOperator(
 			evalCtx.SingleDatumAggMemAccount = ehaMemAccount
 			diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 				inputs[0].Root, inputs[1].Root, hgj,
-				[]redact.RedactableString{hashJoinerMemMonitorName, hashAggregatorMemMonitorName},
+				[]redact.SafeString{hashJoinerMemMonitorName, hashAggregatorMemMonitorName},
 				func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 					// When we spill to disk, we just use a combo of an external
 					// hash join followed by an external hash aggregation.
@@ -1445,7 +1441,7 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 1); err != nil {
 				return r, err
 			}
-			opNamePrefix := redact.RedactableString("window-")
+			opNamePrefix := redact.SafeString("window-")
 			input := inputs[0].Root
 			result.ColumnTypes = spec.Input[0].ColumnTypes
 			for _, wf := range core.Windower.WindowFns {
@@ -1623,7 +1619,7 @@ func NewColOperator(
 					}
 				} else if wf.Func.AggregateFunc != nil {
 					// This is an aggregate window function.
-					opName := opNamePrefix + redact.RedactableString(strings.ToLower(wf.Func.AggregateFunc.String()))
+					opName := opNamePrefix + redact.SafeString(strings.ToLower(wf.Func.AggregateFunc.String()))
 					result.finishBufferedWindowerArgs(
 						ctx, flowCtx, args.MonitorRegistry, windowArgs, opName,
 						spec.ProcessorID, factory, true, /* needsBuffer */
@@ -2008,7 +2004,7 @@ func (r opResult) finishBufferedWindowerArgs(
 	flowCtx *execinfra.FlowCtx,
 	monitorRegistry *colexecargs.MonitorRegistry,
 	args *colexecwindow.WindowArgs,
-	opName redact.RedactableString,
+	opName redact.SafeString,
 	processorID int32,
 	factory coldata.ColumnFactory,
 	needsBuffer bool,

@@ -21,7 +21,7 @@ func addMonitor(
 	t *testing.T,
 	ctx context.Context,
 	st *cluster.Settings,
-	name redact.RedactableString,
+	name redact.SafeString,
 	parent *mon.BytesMonitor,
 	usedBytes int64,
 	reservedBytes int64,
