@@ -39,6 +39,12 @@ func (b backfill) setupMetamorphic(rng *rand.Rand) variations {
 	if v.mem == spec.Low {
 		v.mem = spec.Standard
 	}
+	// TODO(#136848): The backfill test will cause WAL failover resulting in
+	// OOMs even with high memory configurations. This test passes without WAL
+	// failover enabled or with more vCPUs per node.
+	if v.disks > 1 && v.numNodes >= 30 && v.vcpu <= 8 {
+		v.vcpu = 16
+	}
 	return v
 }
 
