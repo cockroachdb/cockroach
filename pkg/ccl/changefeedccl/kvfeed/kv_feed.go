@@ -391,6 +391,9 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
+		if log.V(2) {
+			log.Infof(ctx, "kv feed encountered table events: %#v", events)
+		}
 
 		// Detect whether the event corresponds to a primary index change. Also
 		// detect whether the change corresponds to any change in the set of visible
