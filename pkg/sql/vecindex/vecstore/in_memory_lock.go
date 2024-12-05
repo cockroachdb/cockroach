@@ -45,7 +45,7 @@ func (pl *inMemoryLock) Acquire(owner uint64) {
 
 	// Block until exclusive lock is acquired.
 	pl.mu.Lock()
-	pl.exclusiveOwner.Store(owner)
+	pl.exclusiveOwner.Store(owner) //nolint:deferunlockcheck
 }
 
 // AcquireShared obtains shared read access to the resource protected by this

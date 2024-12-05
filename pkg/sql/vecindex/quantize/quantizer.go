@@ -95,6 +95,7 @@ type QuantizedVectorSet interface {
 	// dimensions.
 	// NOTE: This centroid is calculated once, when the set is first created. It
 	// is not updated when quantized vectors are added to or removed from the set.
+	// Since it is immutable, this method is thread-safe.
 	GetCentroid() vector.T
 
 	// GetCentroidDistances returns the exact distances of each full-size vector

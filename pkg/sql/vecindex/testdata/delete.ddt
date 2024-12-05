@@ -173,15 +173,15 @@ vec3
 search max-results=1
 (4, 3)
 ----
-vec4: 5 (centroid=1.118)
+vec4: 5 (centroid=1.12)
 4 leaf vectors, 6 vectors, 4 full vectors, 3 partitions
 
 # Again, with higher max results.
 search max-results=2
 (4, 3)
 ----
-vec4: 5 (centroid=1.118)
-vec1: 10 (centroid=1.5811)
+vec4: 5 (centroid=1.12)
+vec1: 10 (centroid=1.58)
 3 leaf vectors, 5 vectors, 3 full vectors, 3 partitions
 
 # Vector should now be gone from the index.

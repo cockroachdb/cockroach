@@ -16,7 +16,7 @@ vec3: (4, 3)
 search
 (7, 4)
 ----
-vec2: 0 (centroid=8.0623)
+vec2: 0 (centroid=8.06)
 3 leaf vectors, 3 vectors, 3 full vectors, 1 partitions
 
 # Search for vector with no exact match.
@@ -24,7 +24,7 @@ search max-results=2
 (3, 5)
 ----
 vec3: 5 (centroid=5)
-vec1: 13 (centroid=2.2361)
+vec1: 13 (centroid=2.24)
 3 leaf vectors, 3 vectors, 3 full vectors, 1 partitions
 
 # ----------
@@ -76,16 +76,16 @@ vec13: (6, 2)
 search max-results=2 beam-size=1
 (1, 6)
 ----
-vec7: 5 (centroid=1.0541)
-vec10: 10 (centroid=0.3333)
+vec7: 5 (centroid=1.05)
+vec10: 10 (centroid=0.33)
 4 leaf vectors, 8 vectors, 4 full vectors, 2 partitions
 
 # Search for closest vectors with beam-size=2.
 search max-results=2 beam-size=2
 (1, 6)
 ----
-vec7: 5 (centroid=1.0541)
-vec9: 5 (centroid=3.6667)
+vec7: 5 (centroid=1.05)
+vec9: 5 (centroid=3.67)
 8 leaf vectors, 12 vectors, 6 full vectors, 3 partitions
 
 # ----------
@@ -156,10 +156,10 @@ vec1: (-2, -2)
 search max-results=6
 (1, 1)
 ----
-vec3: 13 (centroid=1.4142)
-vec1: 18 (centroid=5.5227)
-vec5: 25 (centroid=1.4142)
-vec4: 41 (centroid=2.9155)
+vec3: 13 (centroid=1.41)
+vec1: 18 (centroid=5.52)
+vec5: 25 (centroid=1.41)
+vec4: 41 (centroid=2.92)
 4 leaf vectors, 7 vectors, 4 full vectors, 3 partitions
 
 # Do not rerank results. This may cause a different vec1 duplicate to be
@@ -167,8 +167,8 @@ vec4: 41 (centroid=2.9155)
 search max-results=6 skip-rerank
 (8, 9)
 ----
-vec1: 17.8042 ±10.1242 (centroid=1.5811)
-vec2: 28.1958 ±10.1242 (centroid=1.5811)
-vec3: 45.6359 ±15.2315 (centroid=1.4142)
-vec5: 74.3641 ±15.2315 (centroid=1.4142)
+vec1: 17.8042 ±10.12 (centroid=1.58)
+vec2: 28.1958 ±10.12 (centroid=1.58)
+vec3: 45.6359 ±15.23 (centroid=1.41)
+vec5: 74.3641 ±15.23 (centroid=1.41)
 4 leaf vectors, 7 vectors, 0 full vectors, 3 partitions

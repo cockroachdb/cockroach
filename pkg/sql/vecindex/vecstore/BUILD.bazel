@@ -28,6 +28,7 @@ go_proto_library(
 go_library(
     name = "vecstore",
     srcs = [
+        "in_memory_lock.go",
         "in_memory_store.go",
         "partition.go",
         "search_set.go",
@@ -41,6 +42,7 @@ go_library(
         "//pkg/sql/vecindex/internal",
         "//pkg/sql/vecindex/quantize",
         "//pkg/util/container/heap",
+        "//pkg/util/container/list",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "//pkg/util/vector",

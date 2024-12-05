@@ -103,6 +103,7 @@ func (p *Partition) QuantizedSet() quantize.QuantizedVectorSet {
 }
 
 // Centroid is the full-sized centroid vector for this partition.
+// NOTE: The centroid is immutable and therefore this method is thread-safe.
 func (p *Partition) Centroid() vector.T {
 	return p.quantizedSet.GetCentroid()
 }

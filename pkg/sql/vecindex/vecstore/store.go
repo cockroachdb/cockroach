@@ -16,9 +16,13 @@ import (
 // cannot be found because it has been deleted by another agent.
 var ErrPartitionNotFound = errors.New("partition not found")
 
-// ErrVectorNotFound is returned by the store when the requested vector cannot
-// be found because it has been deleted in the primary index.
-var ErrVectorNotFound = errors.New("vector not found")
+// ErrRestartOperation is returned by the store when it needs the last index
+// operation (e.g. search or insert) to be restarted. This should only be
+// returned in situations where restarting the operation is guaranteed to make
+// progress, in order to avoid an infinite loop. An example is a stale root
+// partition, where a restarted operation can make progress after the cache has
+// been refreshed.
+var ErrRestartOperation = errors.New("conflict detected, restart operation")
 
 // VectorWithKey contains a original, full-size vector and its referencing key.
 type VectorWithKey struct {
