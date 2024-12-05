@@ -149,8 +149,7 @@ func TestShowTenantFingerprintsProtectsTimestamp(t *testing.T) {
 	testingRequestFilter := func(_ context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 		for _, req := range ba.Requests {
 			if expReq := req.GetExport(); expReq != nil {
-				if expReq.ExportFingerprint && !exportStartedClosed.Load() {
-					exportStartedClosed.Store(true)
+				if expReq.ExportFingerprint && exportStartedClosed.CompareAndSwap(false, true) {
 					close(exportsStarted)
 					<-exportsResume
 				}
