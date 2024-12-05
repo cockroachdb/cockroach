@@ -488,7 +488,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	}
 
 	if opts.LogicalClusterID == nil {
-		if opts.TenantID.IsSystem() {
+		if opts.TenantID == roachpb.TenantOne { /* check more like this */
 			// We currently expose the storage cluster ID as logical
 			// cluster ID in the system tenant so that someone with
 			// access to the system tenant can extract the storage cluster ID
