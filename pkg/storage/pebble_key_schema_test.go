@@ -338,7 +338,7 @@ func TestKeySchema_RandomKeys(t *testing.T) {
 	var dec colblk.DataBlockDecoder
 	dec.Init(&keySchema, blk)
 	var it colblk.DataBlockIter
-	it.InitOnce(&keySchema, EngineKeyCompare, EngineKeySplit, nil)
+	it.InitOnce(&keySchema, EngineComparer, nil)
 	require.NoError(t, it.Init(&dec, block.NoTransforms))
 	// Ensure that a scan across the block finds all the relevant keys.
 	var valBuf []byte
