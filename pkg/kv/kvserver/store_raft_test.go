@@ -36,7 +36,7 @@ func TestRaftReceiveQueue(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	g := metric.NewGauge(metric.Metadata{})
 	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     "test",
+		Name:     mon.MakeMonitorName("test"),
 		CurCount: g,
 		Settings: st,
 	})

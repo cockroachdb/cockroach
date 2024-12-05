@@ -8391,7 +8391,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 	require.NoError(t, err)
 
 	m := mon.NewMonitor(mon.Options{
-		Name:     "test-monitor",
+		Name:     mon.MakeMonitorName("test-monitor"),
 		Settings: st,
 	})
 	m.Start(ctx, nil, mon.NewStandaloneBudget(128<<20))

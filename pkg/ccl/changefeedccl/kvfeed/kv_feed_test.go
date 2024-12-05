@@ -116,7 +116,7 @@ func TestKVFeed(t *testing.T) {
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
 		mm := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-			Name:     "test",
+			Name:     mon.MakeMonitorName("test"),
 			Settings: settings,
 		})
 		metrics := kvevent.MakeMetrics(time.Minute)

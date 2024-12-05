@@ -51,7 +51,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/timeutil",
-        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
