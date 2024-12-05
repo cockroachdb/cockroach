@@ -23,7 +23,6 @@ go_library(
     deps = [
         "//pkg/backup",
         "//pkg/base",
-        "//pkg/ccl/revertccl",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/externalconn",
@@ -45,6 +44,7 @@ go_library(
         "//pkg/multitenant/mtinfopb",
         "//pkg/repstream",
         "//pkg/repstream/streampb",
+        "//pkg/revert",
         "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/settings",
