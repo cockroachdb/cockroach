@@ -466,28 +466,44 @@
 /pkg/cmd/roachprod/vm/azure/auth.go @cockroachdb/test-eng @cockroachdb/prodsec
 /pkg/cmd/roachprod-microbench/ @cockroachdb/test-eng
 /pkg/cmd/roachprod-stress/   @cockroachdb/test-eng
-/pkg/cmd/roachtest/          @cockroachdb/test-eng
-/pkg/cmd/roachtest/tests/activerecord.go  @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/asyncpg.go       @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/django.go        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/gopg.go	        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/gorm.go	        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/hibernate.go	    @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/knex.go	        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/libpq.go	        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/npgsql.go	      @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/pgjdbc.go	      @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/pgx.go	          @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/ruby_pg.go	      @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/sequelize.go	    @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/roachtest/tests/typeorm.go	      @cockroachdb/test-eng @cockroachdb/docs-infra-prs
-/pkg/cmd/label-merged-pr/    @cockroachdb/dev-inf
+#!/pkg/cmd/roachtest/          @cockroachdb/test-eng-noreview
+/pkg/cmd/roachtest/*.go               @cockroachdb/test-eng
+/pkg/cmd/roachtest/cluster/           @cockroachdb/test-eng
+/pkg/cmd/roachtest/clusterstats/      @cockroachdb/test-eng
+/pkg/cmd/roachtest/grafana/           @cockroachdb/test-eng
+/pkg/cmd/roachtest/fixtures/          @cockroachdb/test-eng
+# TODO: should be owned by DRP team
+/pkg/cmd/roachtest/operation/         @cockroachdb/test-eng
+/pkg/cmd/roachtest/operations/        @cockroachdb/test-eng
+/pkg/cmd/roachtest/option/            @cockroachdb/test-eng
+/pkg/cmd/roachtest/registry/          @cockroachdb/test-eng
+/pkg/cmd/roachtest/roachtestflags     @cockroachdb/test-eng
+/pkg/cmd/roachtest/roachtestutil/     @cockroachdb/test-eng
+/pkg/cmd/roachtest/spec/              @cockroachdb/test-eng
+/pkg/cmd/roachtest/test/              @cockroachdb/test-eng
+/pkg/cmd/roachtest/testdata/          @cockroachdb/test-eng
+/pkg/cmd/roachtest/testselector/      @cockroachdb/test-eng
 # This isn't quite right, each file should ideally be owned
 # by a team (or at least most of them), namely the team that
 # is the Owner for the roachtest, but until we unify these
 # two concepts of ownership we don't want to ping test-eng
 # on each test change.
 #!/pkg/cmd/roachtest/tests     @cockroachdb/test-eng-noreview
+/pkg/cmd/roachtest/tests/activerecord.go  @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/asyncpg.go       @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/django.go        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/gopg.go	        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/gorm.go	        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/hibernate.go	    @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/knex.go	        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/libpq.go	        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/npgsql.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/pgjdbc.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/pgx.go	          @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/ruby_pg.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/sequelize.go	    @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/typeorm.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/label-merged-pr/    @cockroachdb/dev-inf
 /pkg/cmd/roachvet/           @cockroachdb/dev-inf
 /pkg/cmd/skip-test/          @cockroachdb/test-eng
 /pkg/cmd/skiperrs/           @cockroachdb/sql-foundations
