@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
@@ -166,9 +165,6 @@ type Flags struct {
 	// DisableCheckExpr indicates that a test should skip the assertions in
 	// memo/check_expr.go.
 	DisableCheckExpr bool
-
-	// Generic enables optimizations for generic query plans.
-	Generic bool
 
 	// ExploreTraceRule restricts the ExploreTrace output to only show the effects
 	// of a specific rule.
@@ -483,11 +479,6 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 //     norm disable=(NegateOr,NegateAnd)
 //
 //   - disable-check-expr: skips the assertions in memo/check_expr.go.
-//
-//   - generic: enables optimizations for generic query plans.
-//     NOTE: This flag sets the plan_cache_mode session setting to "auto", which
-//     cannot be done via the "set" flag because it requires a CCL license,
-//     which optimizer tests are not set up to utilize.
 //
 //   - rule: used with exploretrace; the value is the name of a rule. When
 //     specified, the exploretrace output is filtered to only show expression
@@ -1049,9 +1040,6 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 
 	case "disable-check-expr":
 		f.DisableCheckExpr = true
-
-	case "generic":
-		f.evalCtx.SessionData().PlanCacheMode = sessiondatapb.PlanCacheModeAuto
 
 	case "rule":
 		if len(arg.Vals) != 1 {
