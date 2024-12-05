@@ -198,6 +198,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 	// replica GC issues, but is a distraction at the moment.
 	// r.AmbientContext.AddLogTag("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 
+	r.raftMu.rangefeedCTLagObserver = newRangeFeedCTLagObserver()
 	r.raftMu.stateLoader = stateloader.Make(rangeID)
 	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
 		store.cfg.Settings,
