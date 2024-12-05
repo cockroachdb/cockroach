@@ -3216,6 +3216,10 @@ SELECT * FROM T1`)
 func TestLeaseTxnDeadlineExtensionWithSession(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// We may not see the desired transaction retry error when running under
+	// race since the txn could end up being aborted because of availability
+	// load in this configuration.
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 	filterMu := syncutil.Mutex{}
