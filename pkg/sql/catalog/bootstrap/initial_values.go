@@ -148,6 +148,7 @@ func copySystemTableKVs(
 		catconstants.SettingsTableName,
 		catconstants.RangeEventTableName,
 		catconstants.ReportsMetaTableName,
+		catconstants.SpanConfigurationsTableName,
 	}
 
 	sourceDescMap, err := GetSystemTableDescsID(ctx, isqlTxn)
