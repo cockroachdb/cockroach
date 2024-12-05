@@ -49,7 +49,7 @@ var LogRaftTracesToCockroachLog = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.raft.trace_to_cockroach_log.enabled",
 	"when true, log raft traces to the cockroach log in addition to the trace",
-	true,
+	false,
 )
 
 // traceValue represents the trace information for a single registration.
