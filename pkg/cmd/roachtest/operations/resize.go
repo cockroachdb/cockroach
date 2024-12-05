@@ -72,6 +72,11 @@ func resizeCluster(
 	if err != nil {
 		o.Fatal(err)
 	}
+	// Grow command generate new certificates, update certificate on workload cluster.
+	if wc := o.WorkloadCluster(); wc != nil {
+		_ = c.Get(ctx, o.L(), "certs", path.Join(tmpDir, "certs"), c.Node(1))
+		wc.Put(ctx, path.Join(tmpDir, "certs"), "./", wc.All())
+	}
 	newNodes := c.Range(origClusterSize+1, origClusterSize+growCount)
 
 	// Copy the required files to the new nodes.
@@ -80,7 +85,7 @@ func resizeCluster(
 
 	// Start the new nodes.
 	startOpts := o.StartOpts()
-	startOpts.RoachprodOpts.IsRestart = true
+	startOpts.RoachprodOpts.IsRestart = false
 	c.Start(ctx, o.L(), startOpts, o.ClusterSettings(), newNodes)
 
 	return &cleanupResize{growCount: growCount, origClusterSize: origClusterSize}
