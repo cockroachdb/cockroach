@@ -156,30 +156,10 @@ type eventLogOptions struct {
 	// If verboseTraceLevel is non-zero, its value is used as value for
 	// the vmodule filter. See exec_log for an example use.
 	verboseTraceLevel log.Level
-
-	// Additional redaction options, if necessary.
-	rOpts redactionOptions
 }
 
-// redactionOptions contains instructions on how to redact the SQL
-// events.
-type redactionOptions struct {
-	omitSQLNameRedaction bool
-}
-
-func (ro *redactionOptions) toFlags() tree.FmtFlags {
-	if ro.omitSQLNameRedaction {
-		return tree.FmtOmitNameRedaction
-	}
-	return tree.FmtSimple
-}
-
-var defaultRedactionOptions = redactionOptions{
-	omitSQLNameRedaction: false,
-}
-
-func (p *planner) getCommonSQLEventDetails(opt redactionOptions) eventpb.CommonSQLEventDetails {
-	redactableStmt := formatStmtKeyAsRedactableString(p.stmt.AST, p.extendedEvalCtx.Context.Annotations, opt.toFlags())
+func (p *planner) getCommonSQLEventDetails() eventpb.CommonSQLEventDetails {
+	redactableStmt := formatStmtKeyAsRedactableString(p.stmt.AST, p.extendedEvalCtx.Context.Annotations, tree.FmtSimple)
 	commonSQLEventDetails := eventpb.CommonSQLEventDetails{
 		Statement:       redactableStmt,
 		Tag:             p.stmt.AST.StatementTag(),
@@ -207,7 +187,7 @@ func (p *planner) logEventsWithOptions(
 		p.extendedEvalCtx.ExecCfg, p.InternalSQLTxn(),
 		1+depth,
 		opts,
-		p.getCommonSQLEventDetails(opts.rOpts),
+		p.getCommonSQLEventDetails(),
 		entries...)
 }
 

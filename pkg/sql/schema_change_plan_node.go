@@ -43,7 +43,7 @@ import (
 func (p *planner) FormatAstAsRedactableString(
 	statement tree.Statement, annotations *tree.Annotations,
 ) redact.RedactableString {
-	return formatStmtKeyAsRedactableString(statement, annotations, tree.FmtSimple|tree.FmtOmitNameRedaction)
+	return formatStmtKeyAsRedactableString(statement, annotations, tree.FmtSimple)
 }
 
 // SchemaChange provides the planNode for the new schema changer.
