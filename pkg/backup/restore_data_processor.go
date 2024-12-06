@@ -150,7 +150,9 @@ func newRestoreDataProcessor(
 		progCh: make(chan backuppb.RestoreProgress, maxConcurrentRestoreWorkers),
 	}
 
-	rd.qp = backuputils.NewMemoryBackedQuotaPool(ctx, flowCtx.Cfg.BackupMonitor, "restore-mon", 0)
+	rd.qp = backuputils.NewMemoryBackedQuotaPool(
+		ctx, flowCtx.Cfg.BackupMonitor, "restore-mon", 0,
+	)
 	if err := rd.Init(ctx, rd, post, restoreDataOutputTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},

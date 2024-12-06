@@ -42,7 +42,7 @@ func (s *sorterBase) init(
 	self execinfra.RowSource,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	processorName redact.RedactableString,
+	processorName redact.SafeString,
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	ordering colinfo.ColumnOrdering,
@@ -56,7 +56,7 @@ func (s *sorterBase) init(
 
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// The processor will overflow to disk if this limit is not enough.
-	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, redact.Sprintf("%s-limited", processorName))
+	memMonitor := execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, processorName+"-limited")
 	if err := s.ProcessorBase.Init(
 		ctx, self, post, input.OutputTypes(), flowCtx, processorID, memMonitor, opts,
 	); err != nil {
@@ -64,8 +64,8 @@ func (s *sorterBase) init(
 		return err
 	}
 
-	s.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, redact.Sprintf("%s-unlimited", processorName))
-	s.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, redact.Sprintf("%s-disk", processorName))
+	s.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, processorName+"-unlimited")
+	s.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, processorName+"-disk")
 	rc := rowcontainer.DiskBackedRowContainer{}
 	rc.Init(
 		ordering,

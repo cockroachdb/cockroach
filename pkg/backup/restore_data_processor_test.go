@@ -270,7 +270,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			Settings: s.ClusterSettings(),
 			Codec:    s.Codec(),
 			BackupMonitor: mon.NewUnlimitedMonitor(ctx, mon.Options{
-				Name:     "test",
+				Name:     mon.MakeMonitorName("test"),
 				Settings: s.ClusterSettings(),
 			}),
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
@@ -408,7 +408,9 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 					},
 				},
 				spec: mockRestoreDataSpec,
-				qp:   backuputils.NewMemoryBackedQuotaPool(ctx, nil /* m */, "restore-mon", 0 /* limit */),
+				qp: backuputils.NewMemoryBackedQuotaPool(
+					ctx, nil /* m */, "restore-mon", 0, /* limit */
+				),
 			}
 			sst, res, err := mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, nil)
 			require.NoError(t, err)

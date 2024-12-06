@@ -21,13 +21,13 @@ func addMonitor(
 	t *testing.T,
 	ctx context.Context,
 	st *cluster.Settings,
-	name string,
+	name redact.SafeString,
 	parent *mon.BytesMonitor,
 	usedBytes int64,
 	reservedBytes int64,
 ) *mon.BytesMonitor {
 	m := mon.NewMonitor(mon.Options{
-		Name:      redact.RedactableString(name),
+		Name:      mon.MakeMonitorName(name),
 		Increment: 1,
 		Settings:  st,
 	})

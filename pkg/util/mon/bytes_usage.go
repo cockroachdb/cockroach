@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -245,7 +246,7 @@ type BytesMonitor struct {
 	}
 
 	// name identifies this monitor in logging messages.
-	name redact.RedactableString
+	name MonitorName
 
 	// reserved indicates how many bytes were already reserved for this
 	// monitor before it was instantiated. Allocations registered to
@@ -276,20 +277,47 @@ type BytesMonitor struct {
 	settings *cluster.Settings
 }
 
+// MonitorName is used to identify monitors in logging messages. It consists of
+// a string name and an optional ID.
+type MonitorName struct {
+	name redact.SafeString
+	id   uuid.Short
+}
+
+// MakeMonitorName constructs a MonitorName with the given name.
+func MakeMonitorName(name redact.SafeString) MonitorName {
+	return MonitorName{name: name}
+}
+
+// MakeMonitorNameWithID constructs a MonitorName with the given name and
+// ID.
+func MakeMonitorNameWithID(name redact.SafeString, id uuid.Short) MonitorName {
+	return MonitorName{name: name, id: id}
+}
+
+// String returns the monitor name as a string.
+func (mn MonitorName) String() string {
+	return redact.StringWithoutMarkers(mn)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (mn MonitorName) SafeFormat(w redact.SafePrinter, r rune) {
+	w.SafeString(mn.name)
+	var nullShort uuid.Short
+	if mn.id != nullShort {
+		w.SafeString(redact.SafeString(mn.id.String()))
+	}
+}
+
 const (
 	// Consult with SQL Queries before increasing these values.
-	expectedMonitorSize     = 160
-	expectedMonitorSizeRace = 168
-	expectedAccountSize     = 24
+	expectedMonitorSize = 168
+	expectedAccountSize = 24
 )
 
 func init() {
 	monitorSize := unsafe.Sizeof(BytesMonitor{})
-	if util.RaceEnabled {
-		if monitorSize != expectedMonitorSizeRace {
-			panic(errors.AssertionFailedf("expected monitor size to be %d under race, found %d", expectedMonitorSizeRace, monitorSize))
-		}
-	} else {
+	if !util.RaceEnabled {
 		if monitorSize != expectedMonitorSize {
 			panic(errors.AssertionFailedf("expected monitor size to be %d, found %d", expectedMonitorSize, monitorSize))
 		}
@@ -319,7 +347,7 @@ type MonitorState struct {
 	// root.
 	Level int
 	// Name is the name of the monitor.
-	Name string
+	Name MonitorName
 	// ID is the "id" of the monitor (its address converted to int64).
 	ID int64
 	// ParentID is the "id" of the parent monitor (parent's address converted to
@@ -369,7 +397,7 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 	}
 	monitorState := MonitorState{
 		Level:            level,
-		Name:             string(mm.name),
+		Name:             mm.name,
 		ID:               int64(id),
 		ParentID:         int64(parentID),
 		Used:             mm.mu.curAllocated,
@@ -419,7 +447,7 @@ var DefaultPoolAllocationSize = envutil.EnvOrDefaultInt64("COCKROACH_ALLOCATION_
 type Options struct {
 	// Name is used to annotate log messages, can be used to distinguish
 	// monitors.
-	Name redact.RedactableString
+	Name MonitorName
 	// Res specifies what kind of resource the monitor is tracking allocations
 	// for (e.g. memory or disk). If unset, MemoryResource is assumed.
 	Res   Resource
@@ -467,14 +495,14 @@ func NewMonitor(args Options) *BytesMonitor {
 // those chunks would be reported as used by pool while downstream monitors will
 // not.
 func NewMonitorInheritWithLimit(
-	name redact.RedactableString, limit int64, m *BytesMonitor, longLiving bool,
+	name redact.SafeString, limit int64, m *BytesMonitor, longLiving bool,
 ) *BytesMonitor {
 	res := MemoryResource
 	if m.mu.tracksDisk {
 		res = DiskResource
 	}
 	return NewMonitor(Options{
-		Name:       name,
+		Name:       MakeMonitorName(name),
 		Res:        res,
 		Limit:      limit,
 		CurCount:   nil, // CurCount is not inherited as we don't want to double count allocations
@@ -521,9 +549,9 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 	mm.mu.stopped = false
 	mm.reserved = reserved
 	if log.V(2) {
-		poolname := redact.RedactableString("(none)")
+		poolname := redact.SafeString("(none)")
 		if pool != nil {
-			poolname = pool.name
+			poolname = redact.SafeString(pool.name.String())
 		}
 		log.InfofDepth(ctx, 1, "%s: starting monitor, reserved %s, pool %s",
 			mm.name,
@@ -594,8 +622,8 @@ func (mm *BytesMonitor) Stop(ctx context.Context) {
 }
 
 // Name returns the name of the monitor.
-func (mm *BytesMonitor) Name() string {
-	return string(mm.name)
+func (mm *BytesMonitor) Name() MonitorName {
+	return mm.name
 }
 
 // Limit returns the memory limit of the monitor.

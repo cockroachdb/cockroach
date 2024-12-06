@@ -39,10 +39,10 @@ func (r *MonitorRegistry) NewStreamingMemAccount(flowCtx *execinfra.FlowCtx) *mo
 // getMemMonitorName returns a unique (for this MonitorRegistry) memory monitor
 // name.
 func (r *MonitorRegistry) getMemMonitorName(
-	opName redact.RedactableString, processorID int32, suffix redact.RedactableString,
-) redact.RedactableString {
-	return opName + "-" + redact.RedactableString(strconv.Itoa(int(processorID))) + "-" +
-		suffix + "-" + redact.RedactableString(strconv.Itoa(len(r.monitors)))
+	opName redact.SafeString, processorID int32, suffix redact.SafeString,
+) redact.SafeString {
+	return opName + "-" + redact.SafeString(strconv.Itoa(int(processorID))) + "-" +
+		suffix + "-" + redact.SafeString(strconv.Itoa(len(r.monitors)))
 }
 
 // CreateMemAccountForSpillStrategy instantiates a memory monitor and a memory
@@ -51,11 +51,8 @@ func (r *MonitorRegistry) getMemMonitorName(
 // used, this will be 1. The receiver is updated to have references to both
 // objects. Memory monitor name is also returned.
 func (r *MonitorRegistry) CreateMemAccountForSpillStrategy(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	opName redact.RedactableString,
-	processorID int32,
-) (*mon.BoundAccount, redact.RedactableString) {
+	ctx context.Context, flowCtx *execinfra.FlowCtx, opName redact.SafeString, processorID int32,
+) (*mon.BoundAccount, redact.SafeString) {
 	monitorName := r.getMemMonitorName(opName, processorID, "limited" /* suffix */)
 	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
 		ctx, flowCtx.Mon, flowCtx, monitorName,
@@ -74,9 +71,9 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	limit int64,
-	opName redact.RedactableString,
+	opName redact.SafeString,
 	processorID int32,
-) (*mon.BoundAccount, redact.RedactableString) {
+) (*mon.BoundAccount, redact.SafeString) {
 	if flowCtx.Cfg.TestingKnobs.ForceDiskSpill {
 		if limit != 1 {
 			colexecerror.InternalError(errors.AssertionFailedf(
@@ -98,12 +95,12 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 // is expected that such a monitor with a such name was already created by the
 // MonitorRegistry. If no such monitor is found, then nil is returned.
 func (r *MonitorRegistry) CreateExtraMemAccountForSpillStrategy(
-	monitorName string,
+	monitorName redact.SafeString,
 ) *mon.BoundAccount {
 	// Iterate backwards since most likely that we want to create an account
 	// bound to the most recently created monitor.
 	for i := len(r.monitors) - 1; i >= 0; i-- {
-		if r.monitors[i].Name() == monitorName {
+		if r.monitors[i].Name() == mon.MakeMonitorName(monitorName) {
 			bufferingMemAccount := r.monitors[i].MakeBoundAccount()
 			r.accounts = append(r.accounts, &bufferingMemAccount)
 			return &bufferingMemAccount
@@ -123,7 +120,7 @@ func (r *MonitorRegistry) CreateExtraMemAccountForSpillStrategy(
 func (r *MonitorRegistry) CreateUnlimitedMemAccounts(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	opName redact.RedactableString,
+	opName redact.SafeString,
 	processorID int32,
 	numAccounts int,
 ) []*mon.BoundAccount {
@@ -135,10 +132,7 @@ func (r *MonitorRegistry) CreateUnlimitedMemAccounts(
 // CreateUnlimitedMemAccount is a light wrapper around
 // CreateUnlimitedMemAccounts when only a single account is desired.
 func (r *MonitorRegistry) CreateUnlimitedMemAccount(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	opName redact.RedactableString,
-	processorID int32,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, opName redact.SafeString, processorID int32,
 ) *mon.BoundAccount {
 	return r.CreateUnlimitedMemAccounts(ctx, flowCtx, opName, processorID, 1 /* numAccounts */)[0]
 }
@@ -146,16 +140,13 @@ func (r *MonitorRegistry) CreateUnlimitedMemAccount(
 // CreateUnlimitedMemAccountsWithName is similar to CreateUnlimitedMemAccounts
 // with the only difference that the monitor name is provided by the caller.
 func (r *MonitorRegistry) CreateUnlimitedMemAccountsWithName(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name redact.RedactableString, numAccounts int,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name redact.SafeString, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	return r.createUnlimitedMemAccounts(ctx, flowCtx, name+"-unlimited", numAccounts)
 }
 
 func (r *MonitorRegistry) createUnlimitedMemAccounts(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	monitorName redact.RedactableString,
-	numAccounts int,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, monitorName redact.SafeString, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
 		ctx, flowCtx.Mon, monitorName,
@@ -171,10 +162,7 @@ func (r *MonitorRegistry) createUnlimitedMemAccounts(
 
 // CreateDiskMonitor instantiates an unlimited disk monitor.
 func (r *MonitorRegistry) CreateDiskMonitor(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	opName redact.RedactableString,
-	processorID int32,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, opName redact.SafeString, processorID int32,
 ) *mon.BytesMonitor {
 	monitorName := r.getMemMonitorName(opName, processorID, "disk" /* suffix */)
 	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, monitorName)
@@ -188,10 +176,7 @@ func (r *MonitorRegistry) CreateDiskMonitor(
 // Note that the memory monitor name is not returned (unlike above) because no
 // caller actually needs it.
 func (r *MonitorRegistry) CreateDiskAccount(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	opName redact.RedactableString,
-	processorID int32,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, opName redact.SafeString, processorID int32,
 ) *mon.BoundAccount {
 	opDiskMonitor := r.CreateDiskMonitor(ctx, flowCtx, opName, processorID)
 	opDiskAccount := opDiskMonitor.MakeBoundAccount()
@@ -202,7 +187,7 @@ func (r *MonitorRegistry) CreateDiskAccount(
 // CreateDiskAccounts instantiates an unlimited disk monitor and disk accounts
 // to be used for disk spilling infrastructure in vectorized engine.
 func (r *MonitorRegistry) CreateDiskAccounts(
-	ctx context.Context, flowCtx *execinfra.FlowCtx, name redact.RedactableString, numAccounts int,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, name redact.SafeString, numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	diskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, name)
 	r.monitors = append(r.monitors, diskMonitor)
@@ -220,7 +205,7 @@ func (r *MonitorRegistry) AssertInvariants() {
 	// Check that all memory monitor names are unique (colexec.diskSpillerBase
 	// relies on this in order to catch "memory budget exceeded" errors only
 	// from "its own" component).
-	names := make(map[string]struct{}, len(r.monitors))
+	names := make(map[mon.MonitorName]struct{}, len(r.monitors))
 	for _, m := range r.monitors {
 		if _, seen := names[m.Name()]; seen {
 			colexecerror.InternalError(errors.AssertionFailedf("monitor named %q encountered twice", m.Name()))

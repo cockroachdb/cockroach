@@ -42,7 +42,7 @@ func getAllocator(increment int64) (_ *colmem.Allocator, _ *mon.BoundAccount, cl
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	testMemMonitor := mon.NewMonitor(mon.Options{
-		Name:      "test-mem",
+		Name:      mon.MakeMonitorName("test-mem"),
 		Increment: increment,
 		Settings:  st,
 	})
