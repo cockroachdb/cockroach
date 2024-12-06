@@ -6,7 +6,7 @@ ALTER TABLE t DROP COLUMN j CASCADE;
 CREATE UNIQUE INDEX idx ON t(k);
 EXPLAIN (DDL) rollback at post-commit stage 5 of 7;
 ----
-Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹k›); following ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE;
+Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.t (k); following ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 3 elements transitioning toward PUBLIC

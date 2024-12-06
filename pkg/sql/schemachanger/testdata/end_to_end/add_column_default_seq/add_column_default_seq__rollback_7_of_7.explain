@@ -7,7 +7,7 @@ CREATE SEQUENCE db.public.sq1;
 ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAULT nextval('db.public.sq1');
 EXPLAIN (DDL) rollback at post-commit stage 7 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›);
+Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 9 elements transitioning toward ABSENT

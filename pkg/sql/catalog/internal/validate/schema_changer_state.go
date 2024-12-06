@@ -113,7 +113,7 @@ func validateSchemaChangerState(d catalog.Descriptor, vea catalog.ValidationErro
 		statementRanks.Add(int(s.StatementRank))
 		if _, ok := statementsExpected[s.StatementRank]; !ok {
 			report(errors.Errorf("unexpected statement %d (%s)",
-				s.StatementRank, s.Statement.Statement))
+				s.StatementRank, s.Statement.RedactedStatement))
 		}
 	}
 
