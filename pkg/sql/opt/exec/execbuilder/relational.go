@@ -2652,9 +2652,201 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	return nil
 }
 
+// TODO: Explain this.
+func (b *Builder) buildLookupJoinScan(
+	join *memo.LookupJoinExpr,
+) (_ execPlan, outputCols colOrdMap, ok bool, err error) {
+	// TODO: Check that:
+	//   - the index is not inverted
+	//   - ordering?
+	//   - We have a (LookupJoin (Values)) pattern with a single input row
+	//   - And the lookup join has equality columns; no predicate, lookup expr,
+	//     or remote lookup expression
+	//   - no continuation column
+	//   - no locking
+	//   - not a child of locality optimized search
+
+	valuesExpr, ok := join.Input.(*memo.ValuesExpr)
+	if !ok {
+		return execPlan{}, colOrdMap{}, false, nil
+	}
+
+	if len(valuesExpr.Rows) != 1 {
+		return execPlan{}, colOrdMap{}, false, nil
+	}
+
+	row, ok := valuesExpr.Rows[0].(*memo.TupleExpr)
+	if !ok {
+		return execPlan{}, colOrdMap{}, false, errors.AssertionFailedf("expected tuple expression")
+	}
+
+	// Check that all the elements in the tuple are placeholders or constants.
+	for i := range row.Elems {
+		if _, ok := row.Elems[i].(*memo.PlaceholderExpr); ok {
+			continue
+		}
+		if !memo.CanExtractConstDatum(row.Elems[i]) {
+			return execPlan{}, colOrdMap{}, false, nil
+		}
+	}
+
+	md := b.mem.Metadata()
+	tab := md.Table(join.Table)
+	idx := tab.Index(join.Index)
+
+	// Build the index constraint.
+	spanColumns := make([]opt.OrderingColumn, len(join.KeyCols))
+	for i := range spanColumns {
+		col := idx.Column(i)
+		colID := join.KeyCols[i]
+		spanColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+	}
+	var columns constraint.Columns
+	columns.Init(spanColumns)
+	keyCtx := constraint.MakeKeyContext(b.ctx, &columns, b.evalCtx)
+
+	// TODO: Explain this.
+	values := make([]tree.Datum, len(join.KeyCols))
+	for i := range join.KeyCols {
+		keyCol := join.KeyCols[i]
+		for j, col := range valuesExpr.Cols {
+			if col != keyCol {
+				continue
+			}
+			expr := row.Elems[j]
+			// The expression is either a placeholder or a constant, according
+			// to the check above.
+			if p, ok := expr.(*memo.PlaceholderExpr); ok {
+				val, err := eval.Expr(b.ctx, b.evalCtx, p.Value)
+				if err != nil {
+					return execPlan{}, colOrdMap{}, false, err
+				}
+				values[i] = val
+			} else {
+				values[i] = memo.ExtractConstDatum(expr)
+			}
+			break
+		}
+	}
+
+	key := constraint.MakeCompositeKey(values...)
+	var span constraint.Span
+	span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+	var spans constraint.Spans
+	spans.InitSingleSpan(&span)
+
+	var c constraint.Constraint
+	c.Init(&keyCtx, &spans)
+
+	private := memo.ScanPrivate{
+		Table: join.Table,
+		Index: join.Index,
+		Cols:  join.Cols,
+		// Constraint:               nil,
+		// InvertedConstraint:       nil,
+		// HardLimit:                0,
+		// Distribution:             physical.Distribution{},
+		// Flags:                    memo.ScanFlags{},
+		// Locking:                  opt.Locking{},
+		// LocalityOptimized:        false,
+		// PartitionConstrainedScan: false,
+		// ExactPrefix:              0,
+	}
+	// private := scan.ScanPrivate
+	private.SetConstraint(b.ctx, b.evalCtx, &c)
+
+	var params exec.ScanParams
+	params, scanCols, err := b.scanParams(tab, &private, join.Relational(), join.RequiredPhysical())
+	if err != nil {
+		return execPlan{}, colOrdMap{}, false, err
+	}
+	// TODO: Do I need this?
+	scanOrdering, err := reqOrdering(join, scanCols)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, false, err
+	}
+	scan, err := b.factory.ConstructScan(
+		tab,
+		tab.Index(join.Index),
+		params,
+		scanOrdering,
+	)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, false, err
+	}
+
+	// Now the values need to be projected on top of the scan...
+	numExprs := join.Cols.Len()
+	exprs := make(tree.TypedExprs, 0, numExprs)
+	cols := make(colinfo.ResultColumns, 0, numExprs)
+	ctx := makeBuildScalarCtx(scanCols)
+	outputCols = b.colOrdsAlloc.Alloc()
+	for colID, ok := join.Cols.Next(0); ok; colID, ok = join.Cols.Next(colID + 1) {
+		if _, ok := scanCols.Get(colID); ok {
+			indexedVar, err := b.indexedVar(&ctx, md, colID)
+			if err != nil {
+				return execPlan{}, colOrdMap{}, false, err
+			}
+			outputCols.Set(colID, len(exprs))
+			exprs = append(exprs, indexedVar)
+			meta := md.ColumnMeta(colID)
+			cols = append(cols, colinfo.ResultColumn{
+				Name: meta.Alias,
+				Typ:  meta.Type,
+			})
+		}
+		// Otherwise, project the placeholder or constant value.
+		for i, col := range valuesExpr.Cols {
+			if col != colID {
+				continue
+			}
+			expr, err := b.buildScalar(&ctx, row.Elems[i])
+			if err != nil {
+				return execPlan{}, colOrdMap{}, false, err
+			}
+			outputCols.Set(colID, len(exprs))
+			exprs = append(exprs, expr)
+			meta := md.ColumnMeta(colID)
+			cols = append(cols, colinfo.ResultColumn{
+				Name: meta.Alias,
+				Typ:  meta.Type,
+			})
+			break
+		}
+	}
+
+	// The scan columns are no longer needed, so they can be freed.
+	b.colOrdsAlloc.Free(scanCols)
+
+	// TODO: Do I need this?
+	projectOrdering, err := reqOrdering(join, outputCols)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, false, err
+	}
+
+	var res execPlan
+	res.root, err = b.factory.ConstructRender(scan, cols, exprs, projectOrdering)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, false, err
+	}
+	return res, outputCols, true, nil
+}
+
 func (b *Builder) buildLookupJoin(
 	join *memo.LookupJoinExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {
+	// The lookup join may have been generated for a generic query plan. In this
+	// case, it's input is a single-row values expression. Try to build the
+	// LookupJoin+Values into a Scan operator to avoid the execution overhead of
+	// a lookup join + values operator.
+	p, scanOutputCols, ok, err := b.buildLookupJoinScan(join)
+	if err != nil {
+		return execPlan{}, colOrdMap{}, err
+	}
+	if ok {
+		return p, scanOutputCols, nil
+	}
+
 	md := b.mem.Metadata()
 	if !b.disableTelemetry {
 		telemetry.Inc(sqltelemetry.JoinAlgoLookupUseCounter)
