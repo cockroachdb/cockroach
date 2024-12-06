@@ -122,6 +122,8 @@ type Command interface {
 	// isExtendedProtocolCmd says whether the command is only send as part of the
 	// pgwire extended protocol.
 	isExtendedProtocolCmd() bool
+	//
+	signal() bool
 }
 
 // ExecStmt is the command for running a query sent through the "simple" pgwire
@@ -160,6 +162,8 @@ func (ExecStmt) command() string { return "exec stmt" }
 // isExtendedProtocolCmd implements the Command interface.
 func (e ExecStmt) isExtendedProtocolCmd() bool { return false }
 
+func (e ExecStmt) signal() bool { return false }
+
 func (e ExecStmt) String() string {
 	// We have the original SQL, but we still use String() because it obfuscates
 	// passwords.
@@ -193,6 +197,8 @@ func (ExecPortal) command() string { return "exec portal" }
 // isExtendedProtocolCmd implements the Command interface.
 func (e ExecPortal) isExtendedProtocolCmd() bool { return true }
 
+func (e ExecPortal) signal() bool { return false }
+
 func (e ExecPortal) String() string {
 	return fmt.Sprintf("ExecPortal name: %q", e.Name)
 }
@@ -223,6 +229,8 @@ func (PrepareStmt) command() string { return "prepare stmt" }
 // isExtendedProtocolCmd implements the Command interface.
 func (e PrepareStmt) isExtendedProtocolCmd() bool { return true }
 
+func (e PrepareStmt) signal() bool { return true }
+
 func (p PrepareStmt) String() string {
 	// We have the original SQL, but we still use String() because it obfuscates
 	// passwords.
@@ -248,6 +256,8 @@ func (DescribeStmt) command() string { return "describe stmt" }
 
 // isExtendedProtocolCmd implements the Command interface.
 func (e DescribeStmt) isExtendedProtocolCmd() bool { return true }
+
+func (e DescribeStmt) signal() bool { return false }
 
 func (d DescribeStmt) String() string {
 	return fmt.Sprintf("Describe: %q", d.Name)
@@ -292,6 +302,8 @@ func (BindStmt) command() string { return "bind stmt" }
 // isExtendedProtocolCmd implements the Command interface.
 func (e BindStmt) isExtendedProtocolCmd() bool { return true }
 
+func (e BindStmt) signal() bool { return false }
+
 func (b BindStmt) String() string {
 	return fmt.Sprintf("BindStmt: %q->%q", b.PreparedStatementName, b.PortalName)
 }
@@ -309,6 +321,8 @@ func (DeletePreparedStmt) command() string { return "delete stmt" }
 
 // isExtendedProtocolCmd implements the Command interface.
 func (e DeletePreparedStmt) isExtendedProtocolCmd() bool { return false }
+
+func (e DeletePreparedStmt) signal() bool { return true }
 
 func (d DeletePreparedStmt) String() string {
 	return fmt.Sprintf("DeletePreparedStmt: %q", d.Name)
@@ -338,6 +352,8 @@ func (Sync) command() string { return "sync" }
 // isExtendedProtocolCmd implements the Command interface.
 func (e Sync) isExtendedProtocolCmd() bool { return false }
 
+func (e Sync) signal() bool { return true }
+
 func (Sync) String() string {
 	return "Sync"
 }
@@ -353,6 +369,8 @@ func (Flush) command() string { return "flush" }
 
 // isExtendedProtocolCmd implements the Command interface.
 func (e Flush) isExtendedProtocolCmd() bool { return false }
+
+func (e Flush) signal() bool { return true }
 
 func (Flush) String() string {
 	return "Flush"
@@ -390,6 +408,8 @@ func (CopyIn) command() string { return "copy" }
 // isExtendedProtocolCmd implements the Command interface.
 func (e CopyIn) isExtendedProtocolCmd() bool { return false }
 
+func (e CopyIn) signal() bool { return true }
+
 func (c CopyIn) String() string {
 	s := "(empty)"
 	if c.Stmt != nil {
@@ -419,6 +439,8 @@ func (CopyOut) command() string { return "copy" }
 // isExtendedProtocolCmd implements the Command interface.
 func (e CopyOut) isExtendedProtocolCmd() bool { return false }
 
+func (e CopyOut) signal() bool { return true }
+
 func (c CopyOut) String() string {
 	s := "(empty)"
 	if c.Stmt != nil {
@@ -441,6 +463,8 @@ func (DrainRequest) command() string { return "drain" }
 // isExtendedProtocolCmd implements the Command interface.
 func (e DrainRequest) isExtendedProtocolCmd() bool { return false }
 
+func (e DrainRequest) signal() bool { return true }
+
 func (DrainRequest) String() string {
 	return "Drain"
 }
@@ -460,6 +484,8 @@ func (SendError) command() string { return "send error" }
 
 // isExtendedProtocolCmd implements the Command interface.
 func (e SendError) isExtendedProtocolCmd() bool { return false }
+
+func (e SendError) signal() bool { return true }
 
 func (s SendError) String() string {
 	return fmt.Sprintf("SendError: %s", s.Err)
@@ -514,8 +540,9 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 	if buf.PipelineCount != nil {
 		buf.PipelineCount.Inc(1)
 	}
-
-	buf.mu.cond.Signal()
+	if cmd.signal() {
+		buf.mu.cond.Signal()
+	}
 	return nil
 }
 
