@@ -1586,6 +1586,9 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 		return errors.NewAssertionErrorWithWrappedErrf(err,
 			`unmarshalling aggregator progress update: %x`, raw)
 	}
+	if log.V(2) {
+		log.Infof(cf.Ctx(), "progress update from aggregator: %#v", resolvedSpans)
+	}
 
 	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
 
