@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql/schemachanger/scexec/backfiller",
         "//pkg/sql/schemachanger/scrun",
         "//pkg/util/log",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

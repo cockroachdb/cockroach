@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -119,11 +120,13 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		return nil
 	}
 
+	startTime := timeutil.FromUnixMicros(payload.StartedMicros)
 	err := scrun.RunSchemaChangesInJob(
 		ctx,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		deps,
 		n.job.ID(),
+		startTime,
 		payload.DescriptorIDs,
 		n.rollbackCause,
 	)
