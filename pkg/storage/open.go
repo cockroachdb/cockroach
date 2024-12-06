@@ -168,12 +168,12 @@ func CacheSize(size int64) ConfigOption {
 	}
 }
 
-// Caches sets the block and table caches. Useful when multiple stores share
+// Caches sets the block and file caches. Useful when multiple stores share
 // the same caches.
-func Caches(cache *pebble.Cache, tableCache *pebble.TableCache) ConfigOption {
+func Caches(cache *pebble.Cache, fileCache *pebble.FileCache) ConfigOption {
 	return func(cfg *engineConfig) error {
 		cfg.opts.Cache = cache
-		cfg.opts.TableCache = tableCache
+		cfg.opts.FileCache = fileCache
 		return nil
 	}
 }
