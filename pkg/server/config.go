@@ -735,12 +735,12 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 	log.Event(ctx, "initializing engines")
 
-	var tableCache *pebble.TableCache
-	// TODO(radu): use the tableCache for in-memory stores as well.
+	var fileCache *pebble.FileCache
+	// TODO(radu): use the fileCache for in-memory stores as well.
 	if physicalStores > 0 {
-		perStoreLimit := pebble.TableCacheSize(int(openFileLimitPerStore))
+		perStoreLimit := pebble.FileCacheSize(int(openFileLimitPerStore))
 		totalFileLimit := perStoreLimit * physicalStores
-		tableCache = pebble.NewTableCache(pebbleCache, runtime.GOMAXPROCS(0), totalFileLimit)
+		fileCache = pebble.NewFileCache(pebbleCache, runtime.GOMAXPROCS(0), totalFileLimit)
 	}
 
 	var storeKnobs kvserver.StoreTestingKnobs
@@ -830,7 +830,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				addCfgOpt(storage.MaxSizeBytes(sizeInBytes))
 			}
 			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec, du)))
-			addCfgOpt(storage.Caches(pebbleCache, tableCache))
+			addCfgOpt(storage.Caches(pebbleCache, fileCache))
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
 			addCfgOpt(storage.MaxOpenFiles(int(openFileLimitPerStore)))
 			addCfgOpt(storage.MaxWriterConcurrency(2))
@@ -871,9 +871,9 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		engines = append(engines, eng)
 	}
 
-	if tableCache != nil {
+	if fileCache != nil {
 		// Unref the table cache now that the engines hold references to it.
-		if err := tableCache.Unref(); err != nil {
+		if err := fileCache.Unref(); err != nil {
 			return nil, err
 		}
 	}
