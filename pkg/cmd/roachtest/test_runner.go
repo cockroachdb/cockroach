@@ -1487,27 +1487,16 @@ func (r *testRunner) postTestAssertions(
 	postAssertCh := make(chan struct{})
 	_ = r.stopper.RunAsyncTask(ctx, "test-post-assertions", func(ctx context.Context) {
 		defer close(postAssertCh)
-		// When a dead node is detected, the subsequent post validation queries are likely
-		// to hang (reason unclear), and eventually timeout according to the statement_timeout.
-		// If this occurs frequently enough, we can look at skipping post validations on a node
-		// failure (or even on any test failure).
-		if err := c.assertNoDeadNode(ctx, t); err != nil {
-			// Some tests expect dead nodes, so they may opt out of this check.
-			if t.spec.SkipPostValidations&registry.PostValidationNoDeadNodes == 0 {
-				postAssertionErr(err)
-			} else {
-				t.L().Printf("dead node(s) detected but expected")
-			}
-		}
 
 		// We collect all the admin health endpoints in parallel,
 		// and select the first one that succeeds to run the validation queries
-		statuses, err := c.HealthStatus(ctx, t.L(), c.All())
+		statuses, err := c.HealthStatus(ctx, t.L(), c.CRDBNodes())
 		if err != nil {
 			postAssertionErr(errors.WithDetail(err, "Unable to check health status"))
 		}
 
 		validationNode := 0
+		liveNodes := 0
 		for _, s := range statuses {
 			if s.Err != nil {
 				t.L().Printf("n%d:/health?ready=1 error=%s", s.Node, s.Err)
@@ -1523,6 +1512,23 @@ func (r *testRunner) postTestAssertions(
 				validationNode = s.Node // NB: s.Node is never zero
 			}
 			t.L().Printf("n%d:/health?ready=1 status=200 ok", s.Node)
+			liveNodes++
+		}
+
+		// When a dead node is detected, the subsequent post validation queries are likely
+		// to hang (reason unclear), and eventually timeout according to the statement_timeout.
+		// If this occurs frequently enough, we can look at skipping post validations on a node
+		// failure (or even on any test failure).
+		if liveNodes != len(c.CRDBNodes()) {
+			// Some tests expect dead nodes, so they may opt out of this check.
+			if t.spec.SkipPostValidations&registry.PostValidationNoDeadNodes == 0 {
+				postAssertionErr(
+					errors.Newf("unexpected dead node(s) detected, expected %d live nodes out of %d",
+						liveNodes, len(c.CRDBNodes())),
+				)
+			} else {
+				t.L().Printf("dead node(s) detected but expected")
+			}
 		}
 
 		// We avoid trying to do this when t.Failed() (and in particular when there
