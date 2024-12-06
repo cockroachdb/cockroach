@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type tableDescReferences []descpb.TableDescriptor_Reference
@@ -179,7 +180,7 @@ func NewReferenceProviderFactory(p *planner) scbuild.ReferenceProviderFactory {
 // after test is done.
 func NewReferenceProviderFactoryForTest(
 	ctx context.Context,
-	opName string,
+	opName redact.SafeString,
 	txn *kv.Txn,
 	user username.SQLUsername,
 	execCfg *ExecutorConfig,

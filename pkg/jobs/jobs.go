@@ -238,8 +238,9 @@ func (j *Job) CreatedBy() *CreatedByInfo {
 
 // taskName is the name for the async task on the registry stopper that will
 // execute this job.
-func (j *Job) taskName() string {
-	return fmt.Sprintf(`job-%d`, j.ID())
+func (j *Job) taskName() redact.SafeString {
+	// JobID is not sensitive.
+	return redact.SafeString(fmt.Sprintf(`job-%d`, j.ID()))
 }
 
 // Started marks the tracked job as started by updating status to running in
@@ -795,7 +796,7 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 		return fmt.Errorf("cannot resume %T job which is not committed", sj.resumer)
 	}
 
-	if err := sj.registry.stopper.RunAsyncTask(ctx, sj.taskName(), func(_ context.Context) {
+	if err := sj.registry.stopper.RunAsyncTask(ctx, string(sj.taskName()), func(_ context.Context) {
 		resumeCtx, cancel := sj.registry.stopper.WithCancelOnQuiesce(sj.resumerCtx)
 		defer cancel()
 		sj.execErr = sj.registry.runJob(resumeCtx, sj.resumer, sj.Job, StatusRunning, sj.taskName())

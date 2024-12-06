@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +51,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	require.NoError(t, err)
 
 	extractCatalog := func() externalpb.ExternalCatalog {
-		opName := "extractCatalog"
+		opName := redact.SafeString("extractCatalog")
 		planner, close := sql.NewInternalPlanner(
 			opName,
 			kv.NewTxn(ctx, kvDB, 0),

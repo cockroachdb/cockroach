@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -351,7 +352,7 @@ const (
 	ViewClusterMetadataRole
 )
 
-type authzAccessorFactory func(ctx context.Context, opName string) (_ sql.AuthorizationAccessor, cleanup func())
+type authzAccessorFactory func(ctx context.Context, opName redact.SafeString) (_ sql.AuthorizationAccessor, cleanup func())
 
 // roleAuthorizationMux enforces a role (eg. type of user) for an arbitrary
 // inner mux. Meant to be used under authenticationV2Mux. If the logged-in user
