@@ -22,4 +22,6 @@ stmt_without_legacy_transaction ::=
 	| fetch_cursor_stmt
 	| move_cursor_stmt
 	| unlisten_stmt
+	| listen_stmt
+	| notify_stmt
 	| show_commit_timestamp_stmt

@@ -388,7 +388,7 @@ storage.columnar_blocks.enabled	boolean	true	set to true to enable columnar-bloc
 storage.delete_compaction_excise.enabled	boolean	true	set to false to direct Pebble to not partially excise sstables in delete-only compactions	system-visible
 storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
-storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
+storage.max_sync_duration.fatal.enabled	boolean	false	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
 storage.sstable.compression_algorithm	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store; [snappy = 1, zstd = 2, none = 3]	system-visible
 storage.sstable.compression_algorithm_backup_storage	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage; [snappy = 1, zstd = 2, none = 3]	system-visible
 storage.sstable.compression_algorithm_backup_transport	enumeration	snappy	determines the compression algorithm to use when compressing sstable data blocks for backup transport; [snappy = 1, zstd = 2, none = 3]	system-visible

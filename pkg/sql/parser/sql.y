@@ -990,6 +990,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> LEADING LEASE LEAST LEAKPROOF LEFT LESS LEVEL LIKE LIMIT
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
 %token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGICAL LOGIN LOOKUP LOW LSHIFT
+%token <str> LISTEN
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MODIFYSQLCLUSTERSETTING MODE MONTH MOVE
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
@@ -1000,6 +1001,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NODE NOLOGIN NOMODIFYCLUSTERSETTING NOREPLICATION
 %token <str> NOSQLLOGIN NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT
 %token <str> NOTHING NOTHING_AFTER_RETURNING
+%token <str> NOTIFY
 %token <str> NOTNULL
 %token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOVIEWCLUSTERSETTING NOWAIT NULL NULLIF NULLS NUMERIC
 
@@ -1357,6 +1359,9 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> show_full_scans_stmt
 %type <tree.Statement> show_completions_stmt
 %type <tree.Statement> show_logical_replication_jobs_stmt opt_show_logical_replication_jobs_options show_logical_replication_jobs_options
+
+%type <tree.Statement> listen_stmt
+%type <tree.Statement> notify_stmt
 
 %type <str> statements_or_queries
 
@@ -1864,6 +1869,8 @@ stmt_without_legacy_transaction:
 | move_cursor_stmt           // EXTEND WITH HELP: MOVE
 | reindex_stmt
 | unlisten_stmt
+| listen_stmt
+| notify_stmt
 | show_commit_timestamp_stmt // EXTEND WITH HELP: SHOW COMMIT TIMESTAMP
 
 // %Help: ALTER
@@ -4596,8 +4603,8 @@ create_stmt:
 // %Help: CREATE LOGICAL REPLICATION STREAM - create a new logical replication stream
 // %Category: Experimental
 // %Text:
-// CREATE LOGICAL REPLICATION STREAM 
-//  FROM <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name> 
+// CREATE LOGICAL REPLICATION STREAM
+//  FROM <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
 //  ON 'stream_uri'
 //  INTO <TABLE remote_name | TABLES (remote_name, ...) | DATABASE remote_name>
 //  [WITH
@@ -4653,7 +4660,7 @@ logical_replication_resources_list:
   {
     $$.val = tree.LogicalReplicationResources{
       Tables: append($1.logicalReplicationResources().Tables, $3.unresolvedObjectName().ToUnresolvedName()),
-    } 
+    }
   }
 
 // Optional logical replication options.
@@ -4698,7 +4705,7 @@ logical_replication_options:
 | DEFAULT FUNCTION '=' string_or_placeholder
   {
     $$.val = &tree.LogicalReplicationOptions{DefaultFunction: $4.expr()}
-  } 
+  }
 | FUNCTION db_object_name FOR TABLE db_object_name
   {
      $$.val = &tree.LogicalReplicationOptions{UserFunctions: map[tree.UnresolvedName]tree.RoutineName{*$5.unresolvedObjectName().ToUnresolvedName():$2.unresolvedObjectName().ToRoutineName()}}
@@ -6381,6 +6388,7 @@ preparable_stmt:
 | truncate_stmt     // EXTEND WITH HELP: TRUNCATE
 | update_stmt       // EXTEND WITH HELP: UPDATE
 | upsert_stmt       // EXTEND WITH HELP: UPSERT
+// here?
 
 // These are statements that can be used as a data source using the special
 // syntax with brackets. These are a subset of preparable_stmt.
@@ -9664,6 +9672,32 @@ opt_on_targets_roles:
 | /* EMPTY */
   {
     $$.val = (*tree.GrantTargetList)(nil)
+  }
+
+// %Help: LISTEN - listen for asynchronous msgs
+// %Category: Misc
+// %Text:
+// LISTEN <channel name>
+// %SeeAlso: NOTIFY
+listen_stmt:
+  LISTEN type_name
+  {
+    $$.val = &tree.Listen{ChannelName: $2.unresolvedObjectName()}
+  }
+
+// %Help: NOTIFY - notify asynchronous msgs
+// %Category: Misc
+// %Text:
+// NOTIFY <channel name> [ , <payload> ]
+// %SeeAlso: LISTEN
+notify_stmt:
+  NOTIFY type_name string_or_placeholder
+  {
+    $$.val = &tree.Notify{ChannelName: $2.unresolvedObjectName(), Payload: $3.expr()}
+  }
+| NOTIFY type_name
+  {
+    $$.val = &tree.Notify{ChannelName: $2.unresolvedObjectName()}
   }
 
 // grant_targets is a non-terminal for a list of privilege targets, either a
@@ -17655,6 +17689,7 @@ unreserved_keyword:
 | LINESTRINGZ
 | LINESTRINGZM
 | LIST
+| LISTEN
 | LOCAL
 | LOCKED
 | LOGICAL
@@ -17696,6 +17731,7 @@ unreserved_keyword:
 | NO
 | NORMAL
 | NOTHING
+| NOTIFY
 | NO_INDEX_JOIN
 | NO_ZIGZAG_JOIN
 | NO_FULL_SCAN
@@ -18210,6 +18246,7 @@ bare_label_keywords:
 | LINESTRINGZ
 | LINESTRINGZM
 | LIST
+| LISTEN
 | LOCAL
 | LOCALITY
 | LOCALTIME
@@ -18267,6 +18304,7 @@ bare_label_keywords:
 | NOT
 | NOTHING
 | NOTHING_AFTER_RETURNING
+| NOTIFY
 | NOVIEWACTIVITY
 | NOVIEWACTIVITYREDACTED
 | NOVIEWCLUSTERSETTING
