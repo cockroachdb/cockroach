@@ -139,7 +139,7 @@ func TestAdminAuditLogTransaction(t *testing.T) {
 	db.Exec(t, `SET CLUSTER SETTING sql.log.admin_audit.enabled = true;`)
 	db.Exec(t, `
 BEGIN;
-CREATE TABLE t();
+CREATE TABLE t(a INT8 PRIMARY KEY DEFAULT 2);
 SELECT * FROM t;
 SELECT 1;
 COMMIT;
@@ -155,11 +155,11 @@ COMMIT;
 		},
 		{
 			"select-*-from-table-query",
-			`"EventType":"admin_query","Statement":"SELECT * FROM ‹\"\"›.‹\"\"›.‹t›"`,
+			`"EventType":"admin_query","Statement":"SELECT * FROM \"\".\"\".t"`,
 		},
 		{
 			"create-table-query",
-			`"EventType":"admin_query","Statement":"CREATE TABLE ‹defaultdb›.public.‹t› ()"`,
+			`"EventType":"admin_query","Statement":"CREATE TABLE defaultdb.public.t (a INT8 PRIMARY KEY DEFAULT ‹2›)"`,
 		},
 	}
 
@@ -222,7 +222,7 @@ func TestAdminAuditLogMultipleTransactions(t *testing.T) {
 
 	if _, err := testuser.Exec(`
 BEGIN;
-CREATE TABLE t();
+CREATE TABLE t(a INT8 PRIMARY KEY DEFAULT 2);
 SELECT * FROM t;
 SELECT 1;
 COMMIT;
@@ -240,11 +240,11 @@ COMMIT;
 		},
 		{
 			"select-*-from-table-query",
-			`"EventType":"admin_query","Statement":"SELECT * FROM ‹\"\"›.‹\"\"›.‹t›"`,
+			`"EventType":"admin_query","Statement":"SELECT * FROM \"\".\"\".t"`,
 		},
 		{
 			"create-table-query",
-			`"EventType":"admin_query","Statement":"CREATE TABLE ‹defaultdb›.public.‹t› ()"`,
+			`"EventType":"admin_query","Statement":"CREATE TABLE defaultdb.public.t (a INT8 PRIMARY KEY DEFAULT ‹2›)"`,
 		},
 	}
 
