@@ -139,7 +139,7 @@ export class CustomChart extends React.Component<
         return [];
       }
 
-      return keys(metricsMetadata.metadata).map(k => {
+      return keys(metricsMetadata.recordedNames).map(k => {
         const fullMetricName = metricsMetadata.recordedNames[k];
         return {
           value: fullMetricName,

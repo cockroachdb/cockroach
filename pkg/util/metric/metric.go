@@ -1050,24 +1050,107 @@ func MergeWindowedHistogram(cur *prometheusgo.Histogram, prev *prometheusgo.Hist
 	*cur.SampleSum = sampleSum
 }
 
-// Quantile is a quantile along with a string suffix to be attached to the metric
-// name upon recording into the internal TSDB.
-type Quantile struct {
-	Suffix   string
-	Quantile float64
+// HistogramMetricComputer is the computation function used to compute and
+// store histogram metrics into the internal TSDB, along with the suffix
+// to be attached to the metric.
+type HistogramMetricComputer struct {
+	Suffix         string
+	IsPercentile   bool
+	ComputedMetric func(h WindowedHistogram) float64
 }
 
-// RecordHistogramQuantiles are the quantiles at which (windowed) histograms
-// are recorded into the internal TSDB.
-var RecordHistogramQuantiles = []Quantile{
-	{"-max", 100},
-	{"-p99.999", 99.999},
-	{"-p99.99", 99.99},
-	{"-p99.9", 99.9},
-	{"-p99", 99},
-	{"-p90", 90},
-	{"-p75", 75},
-	{"-p50", 50},
+// HistogramMetricComputers is a slice of all the HistogramMetricComputer
+// that are used to record (windowed) histogram metrics into TSDB.
+var HistogramMetricComputers = []HistogramMetricComputer{
+	{
+		Suffix:       "-max",
+		IsPercentile: true,
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			return h.WindowedSnapshot().ValueAtQuantile(100)
+		},
+	},
+	{
+
+		Suffix:       "-p99.999",
+		IsPercentile: true,
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			return h.WindowedSnapshot().ValueAtQuantile(99.999)
+		},
+	},
+	{
+		Suffix:       "-p99.99",
+		IsPercentile: true,
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			return h.WindowedSnapshot().ValueAtQuantile(99.99)
+		},
+	},
+	{
+		Suffix:       "-p99.9",
+		IsPercentile: true,
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			return h.WindowedSnapshot().ValueAtQuantile(99.9)
+		},
+	},
+	{
+		Suffix:       "-p99",
+		IsPercentile: true,
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			return h.WindowedSnapshot().ValueAtQuantile(99)
+		},
+	},
+	{
+		Suffix:       "-p90",
+		IsPercentile: true,
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			return h.WindowedSnapshot().ValueAtQuantile(90)
+		},
+	},
+	{
+		Suffix:       "-p75",
+		IsPercentile: true,
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			return h.WindowedSnapshot().ValueAtQuantile(75)
+		},
+	},
+	{
+		Suffix:       "-p50",
+		IsPercentile: true,
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			return h.WindowedSnapshot().ValueAtQuantile(90)
+		},
+	},
+	{
+		Suffix: "-avg",
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			avg := h.WindowedSnapshot().Mean()
+			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
+				avg = 0
+			}
+			return avg
+		},
+	},
+	{
+		Suffix: "-count",
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			cumulative, ok := h.(CumulativeHistogram)
+			if !ok {
+				return 0
+			}
+			count, _ := cumulative.CumulativeSnapshot().Total()
+			return float64(count)
+		},
+	},
+	{
+		Suffix: "-sum",
+		ComputedMetric: func(h WindowedHistogram) float64 {
+			cumulative, ok := h.(CumulativeHistogram)
+			if !ok {
+				return 0
+			}
+			_, sum := cumulative.CumulativeSnapshot().Total()
+			return sum
+		},
+	},
 }
 
 // vector holds the base vector implementation. This is meant to be embedded

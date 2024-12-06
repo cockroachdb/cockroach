@@ -608,7 +608,10 @@ func TestMetricsRecorder(t *testing.T) {
 				})
 				reg.reg.AddMetric(h)
 				h.RecordValue(data.val)
-				for _, q := range metric.RecordHistogramQuantiles {
+				for _, q := range metric.HistogramMetricComputers {
+					if !q.IsPercentile {
+						continue
+					}
 					addExpected(reg.prefix, data.name+q.Suffix, reg.source, 100, 10, reg.isNode)
 				}
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)

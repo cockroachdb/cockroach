@@ -86,12 +86,10 @@ func GetInternalTimeseriesNamesFromServer(
 	var sl []string
 	for name, meta := range resp.Metadata {
 		if meta.MetricType == io_prometheus_client.MetricType_HISTOGRAM {
-			// See usage of RecordHistogramQuantiles in pkg/server/status/recorder.go.
-			for _, q := range metric.RecordHistogramQuantiles {
+			// See usage of HistogramMetricComputers in pkg/server/status/recorder.go.
+			for _, q := range metric.HistogramMetricComputers {
 				sl = append(sl, name+q.Suffix)
 			}
-			sl = append(sl, name+"-avg")
-			sl = append(sl, name+"-count")
 		} else {
 			sl = append(sl, name)
 		}
