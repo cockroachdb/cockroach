@@ -36,7 +36,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	monitor := mon.NewMonitor(mon.Options{
-		Name:      "test-monitor",
+		Name:      mon.MakeMonitorName("test-monitor"),
 		Limit:     100000,
 		Increment: 5000,
 		Settings:  st,

@@ -21,7 +21,7 @@ import (
 func TestCache(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	memoryMonitor := mon.NewMonitor(mon.Options{
-		Name:     "test-mem",
+		Name:     mon.MakeMonitorName("test-mem"),
 		Settings: st,
 	})
 	stopper := &stop.Stopper{}

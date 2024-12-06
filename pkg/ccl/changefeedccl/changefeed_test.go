@@ -8331,7 +8331,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 
 func startMonitorWithBudget(budget int64) *mon.BytesMonitor {
 	mm := mon.NewMonitor(mon.Options{
-		Name:      "test-mm",
+		Name:      mon.MakeMonitorName("test-mm"),
 		Limit:     budget,
 		Increment: 128, /* small allocation increment */
 		Settings:  cluster.MakeTestingClusterSettings(),

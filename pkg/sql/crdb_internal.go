@@ -8705,7 +8705,7 @@ CREATE TABLE crdb_internal.node_memory_monitors (
 		monitorStateCb := func(monitor mon.MonitorState) error {
 			return addRow(
 				tree.NewDInt(tree.DInt(monitor.Level)),
-				tree.NewDString(monitor.Name),
+				tree.NewDString(monitor.Name.String()),
 				tree.NewDInt(tree.DInt(monitor.ID)),
 				tree.NewDInt(tree.DInt(monitor.ParentID)),
 				tree.NewDInt(tree.DInt(monitor.Used)),

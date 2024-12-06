@@ -226,7 +226,7 @@ func newAdminServer(
 	// TODO(knz): We do not limit memory usage by admin operations
 	// yet. Is this wise?
 	server.memMonitor = mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     "admin",
+		Name:     mon.MakeMonitorName("admin"),
 		Settings: cs,
 	})
 	return server

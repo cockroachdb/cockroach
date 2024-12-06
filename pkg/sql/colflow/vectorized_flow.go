@@ -9,6 +9,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -791,13 +792,14 @@ func (s *vectorizedFlowCreator) setupRouter(
 	}
 
 	// HashRouter memory monitor names are the concatenated output stream IDs.
-	var streamIDs redact.RedactableString
+	var sb strings.Builder
 	for i, s := range output.Streams {
 		if i > 0 {
-			streamIDs = streamIDs + ","
+			sb.WriteByte(',')
 		}
-		streamIDs = redact.Sprintf("%s%d", streamIDs, s.StreamID)
+		sb.WriteString(s.StreamID.String())
 	}
+	streamIDs := redact.SafeString(sb.String())
 	mmName := "hash-router-[" + streamIDs + "]"
 
 	numOutputs := len(output.Streams)

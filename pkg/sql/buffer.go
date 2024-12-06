@@ -26,13 +26,14 @@ type bufferNode struct {
 	currentRow tree.Datums
 
 	// label is a string used to describe the node in an EXPLAIN plan.
-	// TODO(yuzefovich): make this redact.RedactableString.
+	// TODO(yuzefovich/mgartner): make this redact.SafeString.
 	label string
 }
 
 func (n *bufferNode) startExec(params runParams) error {
 	n.typs = planTypes(n.plan)
-	n.rows.Init(params.ctx, n.typs, params.extendedEvalCtx, redact.Sprint(n.label))
+	n.rows.Init(params.ctx, n.typs, params.extendedEvalCtx,
+		redact.SafeString(redact.Sprint(n.label).Redact()))
 	return nil
 }
 

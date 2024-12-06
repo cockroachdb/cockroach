@@ -993,7 +993,7 @@ func (c *cluster) detectDeadlocks() {
 						if i > 0 {
 							chainBuf.WriteString("->")
 						}
-						chainBuf.WriteString(id.Short())
+						chainBuf.WriteString(id.Short().String())
 					}
 					log.Eventf(origPush.ctx, "dependency cycle detected %s", redact.Safe(chainBuf.String()))
 				}
