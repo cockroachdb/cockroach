@@ -7,7 +7,7 @@ CREATE UNIQUE INDEX idx ON t(j) WHERE (i > 0);
 CREATE SCHEMA sc;
 EXPLAIN (DDL) rollback at post-commit stage 6 of 7;
 ----
-Schema change plan for rolling back CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹j›) WHERE (‹i› > ‹0›);
+Schema change plan for rolling back CREATE SCHEMA defaultdb.sc; following CREATE UNIQUE INDEX idx ON defaultdb.public.t (j) WHERE (i > ‹0›);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 13 elements transitioning toward ABSENT

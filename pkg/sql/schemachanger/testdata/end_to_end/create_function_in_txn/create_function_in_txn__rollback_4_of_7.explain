@@ -6,7 +6,7 @@ CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE UNIQUE INDEX idx ON t(b);
 EXPLAIN (DDL) rollback at post-commit stage 4 of 7;
 ----
-Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹b›); following CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
+Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.t (b); following CREATE FUNCTION defaultdb.public.t()
 	RETURNS INT8
 	LANGUAGE SQL
 	AS $$SELECT ‹1›;$$;

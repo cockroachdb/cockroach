@@ -109,8 +109,7 @@ func Build(
 			an.ValidateAnnotations()
 		}
 		currentStatementID := uint32(len(els.statements) - 1)
-		els.statements[currentStatementID].RedactedStatement = string(
-			dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
+		els.statements[currentStatementID].RedactedStatement = dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation)
 	}
 
 	// Generate returned state.
