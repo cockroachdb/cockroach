@@ -259,6 +259,7 @@
 /pkg/ccl/cloudccl/           @cockroachdb/disaster-recovery
 /pkg/cloud/                  @cockroachdb/disaster-recovery
 /pkg/sql/distsql_plan_bulk*  @cockroachdb/disaster-recovery
+/pkg/sql/catalog/externalcatalog            @cockroachdb/disaster-recovery
 
 /pkg/geo/                    @cockroachdb/spatial
 

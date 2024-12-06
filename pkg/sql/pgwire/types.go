@@ -102,18 +102,16 @@ func writeTextUUID(b *writeBuffer, v uuid.UUID) {
 }
 
 func writeTextString(b *writeBuffer, s string, t *types.T) {
-	if paddingNeeded([]byte(s), t) {
-		b.writePaddedData([]byte(s), t)
-	} else {
-		b.writeLengthPrefixedString(s)
+	pad := bpcharPadding(len(s), t)
+	b.putInt32(int32(len(s) + pad))
+	b.writeString(s)
+
+	// apply padding (in the form of blanks spaces) to the right of the write buffer
+	for pad > 0 {
+		n := min(pad, len(spaces))
+		b.write(spaces[:n])
+		pad -= n
 	}
-}
-
-func paddingNeeded(v []byte, t *types.T) bool {
-	blankPaddedCharType := t.Oid() == oid.T_bpchar
-	paddingNeeded := len(v) < int(t.Width())
-
-	return blankPaddedCharType && paddingNeeded
 }
 
 func writeTextTimestamp(b *writeBuffer, v time.Time) {
@@ -538,11 +536,24 @@ func writeBinaryBytes(b *writeBuffer, v []byte, t *types.T) {
 		v = []byte{0}
 	}
 
-	if paddingNeeded(v, t) {
-		b.writePaddedData(v, t)
-	} else {
-		b.writeLengthPrefixedByteSlice(v, int32(len(v)))
+	pad := bpcharPadding(len(v), t)
+	b.putInt32(int32(len(v) + pad))
+	b.write(v)
+
+	// apply padding (in the form of blanks spaces) to the right of the write buffer
+	for pad > 0 {
+		n := min(pad, len(spaces))
+		b.write(spaces[:n])
+		pad -= n
 	}
+}
+
+// bpcharPadding returns the number of spaces to pad when writing a BPCHAR datum of length n.
+func bpcharPadding(n int, t *types.T) int {
+	if t.Oid() == oid.T_bpchar && n < int(t.Width()) {
+		return int(t.Width()) - n
+	}
+	return 0
 }
 
 func writeBinaryString(b *writeBuffer, s string, t *types.T) {
@@ -552,11 +563,7 @@ func writeBinaryString(b *writeBuffer, s string, t *types.T) {
 		s = string([]byte{0})
 	}
 
-	if paddingNeeded([]byte(s), t) {
-		b.writePaddedData([]byte(s), t)
-	} else {
-		b.writeLengthPrefixedString(s)
-	}
+	writeTextString(b, s, t)
 }
 
 func writeBinaryTimestamp(b *writeBuffer, v time.Time) {
