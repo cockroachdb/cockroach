@@ -1614,6 +1614,7 @@ func (rc *rangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspec
 	return kvflowinspectpb.Handle{
 		RangeID:          rc.opts.RangeID,
 		ConnectedStreams: streams,
+		ForceFlushIndex:  roachpb.ForceFlushIndex{Index: rc.forceFlushIndex},
 	}
 }
 
