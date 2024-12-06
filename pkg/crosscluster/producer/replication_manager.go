@@ -24,15 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/externalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -81,29 +80,21 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 
 	// Resolve table names to tableIDs and spans.
 	spans := make([]roachpb.Span, 0, len(req.TableNames))
-	tableDescs := make(map[string]descpb.TableDescriptor, len(req.TableNames))
 	mutableTableDescs := make([]*tabledesc.Mutable, 0, len(req.TableNames))
 	tableIDs := make([]uint32, 0, len(req.TableNames))
-	typeDescriptors := make([]descpb.TypeDescriptor, 0)
-	foundTypeDescriptors := make(map[descpb.ID]struct{})
-	for _, name := range req.TableNames {
-		uon, err := parser.ParseTableName(name)
+
+	externalCatalog, err := externalcatalog.ExtractExternalCatalog(ctx, r.resolver, r.txn, r.txn.Descriptors(), req.TableNames...)
+	if err != nil {
+		return streampb.ReplicationProducerSpec{}, err
+	}
+
+	for _, td := range externalCatalog.Tables {
+		mut, err := r.txn.Descriptors().MutableByID(r.txn.KV()).Table(ctx, td.ID)
 		if err != nil {
 			return streampb.ReplicationProducerSpec{}, err
 		}
-		tn := uon.ToTableName()
-		_, td, err := resolver.ResolveMutableExistingTableObject(ctx, r.resolver, &tn, true, tree.ResolveRequireTableDesc)
-		if err != nil {
-			return streampb.ReplicationProducerSpec{}, err
-		}
-		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
-		tableIDs = append(tableIDs, uint32(td.GetID()))
-		mutableTableDescs = append(mutableTableDescs, td)
-		tableDescs[name] = td.TableDescriptor
-		typeDescriptors, foundTypeDescriptors, err = getUDTs(ctx, r.txn, typeDescriptors, foundTypeDescriptors, td)
-		if err != nil {
-			return streampb.ReplicationProducerSpec{}, err
-		}
+		mutableTableDescs = append(mutableTableDescs, mut)
+		tableIDs = append(tableIDs, uint32(td.ID))
 	}
 
 	registry := execConfig.JobRegistry
@@ -142,8 +133,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		StreamID:             streampb.StreamID(jr.JobID),
 		SourceClusterID:      r.evalCtx.ClusterID,
 		ReplicationStartTime: replicationStartTime,
-		TableDescriptors:     tableDescs,
-		TypeDescriptors:      typeDescriptors,
+		ExternalCatalog:      externalCatalog,
 	}, nil
 }
 
@@ -203,6 +193,9 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 	typeDescriptors := make([]descpb.TypeDescriptor, 0)
 	foundTypeDescriptors := make(map[descpb.ID]struct{})
 	descriptors := r.txn.Descriptors()
+
+	// TODO(msbutler): use a variant of ExtractExternalCatalog that takes table
+	// IDs as input.
 	for _, requestedTableID := range req.TableIDs {
 
 		td, err := descriptors.MutableByID(r.txn.KV()).Table(ctx, descpb.ID(requestedTableID))
