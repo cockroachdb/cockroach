@@ -295,28 +295,16 @@ func (ex *connExecutor) execStmtInOpenState(
 	res RestrictedCommandResult,
 	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
-	type localVars struct {
-		logErr      error
-		cancelQuery context.CancelFunc
-		ast         tree.Statement
-		stmt        Statement
-	}
-
-	// vars contains local variables that are heap allocated, usually because
-	// they are referenced by closures. Grouping them into a single struct
-	// requires only a single heap allocation.
-	var vars localVars
-
-	vars.ast = parserStmt.AST
+	ast := parserStmt.AST
 	var sp *tracing.Span
 	ctx, sp = tracing.ChildSpan(ctx, "sql query")
 	// TODO(andrei): Consider adding the placeholders as tags too.
 	sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
-	ctx = withStatement(ctx, vars.ast)
+	ctx = withStatement(ctx, ast)
 	defer sp.Finish()
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, vars.ast)
+		ev, payload := ex.makeErrEvent(err, ast)
 		return ev, payload, nil
 	}
 
@@ -332,10 +320,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	isExtendedProtocol := prepared != nil
 	stmtFingerprintFmtMask := tree.FmtHideConstants | tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
 
+	var stmt Statement
 	if isExtendedProtocol {
-		vars.stmt = makeStatementFromPrepared(prepared, queryID)
+		stmt = makeStatementFromPrepared(prepared, queryID)
 	} else {
-		vars.stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
+		stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
 	}
 
 	var queryTimeoutTicker *time.Timer
@@ -347,24 +336,25 @@ func (ex *connExecutor) execStmtInOpenState(
 	var queryDoneAfterFunc chan struct{}
 	var txnDoneAfterFunc chan struct{}
 
-	ctx, vars.cancelQuery = ctxlog.WithCancel(ctx)
-	ex.incrementStartedStmtCounter(vars.ast)
+	var cancelQuery context.CancelFunc
+	ctx, cancelQuery = ctxlog.WithCancel(ctx)
+	ex.incrementStartedStmtCounter(ast)
 	ex.state.mu.Lock()
 	ex.state.mu.stmtCount++
 	ex.state.mu.Unlock()
-	ex.addActiveQuery(parserStmt, pinfo, queryID, vars.cancelQuery)
+	ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
 	defer func() {
 		// We need to check the latest errors rather than the ones evaluated
 		// when this function is created.
 		if retErr == nil && !payloadHasError(retPayload) {
-			ex.incrementExecutedStmtCounter(vars.ast)
+			ex.incrementExecutedStmtCounter(ast)
 		}
 	}()
 
 	// Make sure that we always unregister the query.
 	defer func() {
-		ex.removeActiveQuery(queryID, vars.ast)
-		vars.cancelQuery()
+		ex.removeActiveQuery(queryID, ast)
+		cancelQuery()
 
 		// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 		// client connection, and is Server.InternalMetrics for internal executors.
@@ -418,7 +408,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 		// Enforce license policies. Throttling can occur if there is no valid
 		// license or if the existing one has expired.
-		if isSQLOkayToThrottle(vars.ast) {
+		if isSQLOkayToThrottle(ast) {
 			if notice, err := ex.server.cfg.LicenseEnforcer.MaybeFailIfThrottled(ctx, curOpen); err != nil {
 				return makeErrEvent(err)
 			} else if notice != nil {
@@ -428,7 +418,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	// Special top-level handling for EXPLAIN ANALYZE.
-	if e, ok := vars.ast.(*tree.ExplainAnalyze); ok {
+	if e, ok := ast.(*tree.ExplainAnalyze); ok {
 		switch e.Mode {
 		case tree.ExplainDebug:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
@@ -460,21 +450,21 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(errors.AssertionFailedf("unsupported EXPLAIN ANALYZE mode %s", e.Mode))
 		}
 		// Strip off the explain node to execute the inner statement.
-		vars.stmt.AST = e.Statement
-		vars.ast = e.Statement
+		stmt.AST = e.Statement
+		ast = e.Statement
 		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
 		// stmt.SQL?
 
 		// Clear any ExpectedTypes we set if we prepared this statement (they
 		// reflect the column types of the EXPLAIN itself and not those of the inner
 		// statement).
-		vars.stmt.ExpectedTypes = nil
+		stmt.ExpectedTypes = nil
 	}
 
 	// Special top-level handling for EXECUTE. This must happen after the handling
 	// for EXPLAIN ANALYZE (in order to support EXPLAIN ANALYZE EXECUTE) but
 	// before setting up the instrumentation helper.
-	if e, ok := vars.ast.(*tree.Execute); ok {
+	if e, ok := ast.(*tree.Execute); ok {
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
 		name := e.Name.String()
@@ -491,22 +481,22 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 
 		// TODO(radu): what about .SQL, .NumAnnotations, .NumPlaceholders?
-		vars.stmt.Statement = ps.Statement
-		vars.stmt.Prepared = ps
-		vars.stmt.ExpectedTypes = ps.Columns
-		vars.stmt.StmtNoConstants = ps.StatementNoConstants
-		vars.stmt.StmtSummary = ps.StatementSummary
+		stmt.Statement = ps.Statement
+		stmt.Prepared = ps
+		stmt.ExpectedTypes = ps.Columns
+		stmt.StmtNoConstants = ps.StatementNoConstants
+		stmt.StmtSummary = ps.StatementSummary
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
 			ih.SetDiscardRows()
 		}
-		vars.ast = vars.stmt.Statement.AST
+		ast = stmt.Statement.AST
 	}
 
 	ctx = ih.Setup(
 		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-		vars.stmt.StmtNoConstants, os.ImplicitTxn.Get(),
+		stmt.StmtNoConstants, os.ImplicitTxn.Get(),
 		// This goroutine is the only one that can modify
 		// txnState.mu.priority, so we don't need to get a mutex here.
 		ex.state.mu.priority,
@@ -525,8 +515,8 @@ func (ex *connExecutor) execStmtInOpenState(
 				&ex.extraTxnState.accumulatedStats,
 				ih.collectExecStats,
 				p,
-				vars.ast,
-				vars.stmt.SQL,
+				ast,
+				stmt.SQL,
 				res,
 				retPayload,
 				retErr,
@@ -555,7 +545,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			txnTimeoutTicker = time.AfterFunc(
 				timerDuration,
 				func() {
-					vars.cancelQuery()
+					cancelQuery()
 					txnTimedOut = true
 					txnDoneAfterFunc <- struct{}{}
 				})
@@ -564,7 +554,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	// We exempt `SET` statements from the statement timeout, particularly so as
 	// not to block the `SET statement_timeout` command itself.
-	if ex.sessionData().StmtTimeout > 0 && vars.ast.StatementTag() != "SET" {
+	if ex.sessionData().StmtTimeout > 0 && ast.StatementTag() != "SET" {
 		timerDuration :=
 			ex.sessionData().StmtTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
 		// There's no need to proceed with execution if the timer has already expired.
@@ -576,7 +566,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		queryTimeoutTicker = time.AfterFunc(
 			timerDuration,
 			func() {
-				vars.cancelQuery()
+				cancelQuery()
 				// Also cancel the transactions context, so that there is no danger
 				// getting stuck rolling back.
 				ex.state.txnCancelFn()
@@ -591,7 +581,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			if perr, ok := retPayload.(payloadWithError); ok {
 				execErr = perr.errorCause()
 			}
-			filter(ctx, ex.sessionData(), vars.stmt.AST.String(), execErr)
+			filter(ctx, ex.sessionData(), stmt.AST.String(), execErr)
 		}
 
 		// Do the auto-commit, if necessary. In the extended protocol, the
@@ -600,7 +590,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return
 		}
 		if canAutoCommit && !isExtendedProtocol {
-			retEv, retPayload = ex.handleAutoCommit(ctx, vars.ast)
+			retEv, retPayload = ex.handleAutoCommit(ctx, ast)
 		}
 	}(ctx)
 
@@ -621,10 +611,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
-	p.stmt = vars.stmt
-	p.semaCtx.Annotations = tree.MakeAnnotations(vars.stmt.NumAnnotations)
+	p.stmt = stmt
+	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
+	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
 	// This flag informs logging decisions.
@@ -632,13 +622,14 @@ func (ex *connExecutor) execStmtInOpenState(
 	// some special plan initialization for logging.
 	dispatchToExecEngine := false
 
+	var logErr error
 	defer func() {
 		// If we did not dispatch to the execution engine, we need to initialize
 		// the plan here.
 		if !dispatchToExecEngine {
 			p.curPlan.init(&p.stmt, &p.instrumentation)
 			if p, ok := retPayload.(payloadWithError); ok {
-				vars.logErr = p.errorCause()
+				logErr = p.errorCause()
 			}
 		}
 
@@ -661,7 +652,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			rowsAffected,
 			ex.state.mu.stmtCount,
 			bulkJobId,
-			vars.logErr,
+			logErr,
 			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
@@ -690,7 +681,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 		cancelQueryCtx := ctx
 		resToPushErr := res
-		vars.logErr = resToPushErr.ErrAllowReleased()
+		logErr = resToPushErr.ErrAllowReleased()
 		// Detect context cancelation and overwrite whatever error might have been
 		// set on the result before. The idea is that once the query's context is
 		// canceled, all sorts of actors can detect the cancelation and set all
@@ -702,12 +693,12 @@ func (ex *connExecutor) execStmtInOpenState(
 			// intercept the event and payload returned here to ensure that the query
 			// is not retried.
 			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(vars.ast)),
+				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
 			errToPush := cancelchecker.QueryCanceledError
 			resToPushErr.SetError(errToPush)
 			retPayload = eventNonRetriableErrPayload{err: errToPush}
-			vars.logErr = errToPush
+			logErr = errToPush
 			// Cancel the txn if we are inside an implicit txn too.
 			if ex.implicitTxn() && ex.state.txnCancelFn != nil {
 				ex.state.txnCancelFn()
@@ -728,23 +719,23 @@ func (ex *connExecutor) execStmtInOpenState(
 			// A timed out query should never produce retryable errors/events/payloads
 			// so we intercept and overwrite them all here.
 			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(vars.ast)),
+				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
 			res.SetError(sqlerrors.QueryTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
-			vars.logErr = sqlerrors.QueryTimeoutError
+			logErr = sqlerrors.QueryTimeoutError
 		} else if txnTimedOut {
 			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(vars.ast)),
+				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
 			res.SetError(sqlerrors.TxnTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
-			vars.logErr = sqlerrors.TxnTimeoutError
+			logErr = sqlerrors.TxnTimeoutError
 		}
 
 	}(ctx, res)
 
-	switch s := vars.ast.(type) {
+	switch s := ast.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is only allowed if we are in an implicit txn.
 		if os.ImplicitTxn.Get() {
@@ -760,7 +751,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	case *tree.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no plan for it.
-		ev, payload := ex.commitSQLTransaction(ctx, vars.ast, ex.commitSQLTransactionInternal)
+		ev, payload := ex.commitSQLTransaction(ctx, ast, ex.commitSQLTransactionInternal)
 		return ev, payload, nil
 
 	case *tree.RollbackTransaction:
@@ -807,8 +798,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		var typeHints tree.PlaceholderTypes
 		// We take max(len(s.Types), stmt.NumPlaceHolders) as the length of types.
 		numParams := len(s.Types)
-		if vars.stmt.NumPlaceholders > numParams {
-			numParams = vars.stmt.NumPlaceholders
+		if stmt.NumPlaceholders > numParams {
+			numParams = stmt.NumPlaceholders
 		}
 		if len(s.Types) > 0 {
 			typeHints = make(tree.PlaceholderTypes, numParams)
@@ -828,8 +819,8 @@ func (ex *connExecutor) execStmtInOpenState(
 				// string and store it in tree.Prepare.
 				SQL:             tree.AsStringWithFlags(s.Statement, tree.FmtParsable),
 				AST:             s.Statement,
-				NumPlaceholders: vars.stmt.NumPlaceholders,
-				NumAnnotations:  vars.stmt.NumAnnotations,
+				NumPlaceholders: stmt.NumPlaceholders,
+				NumAnnotations:  stmt.NumAnnotations,
 			},
 			ex.server.cfg.GenerateID(),
 			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
@@ -844,7 +835,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			// The call to addPreparedStmt changed the planner stmt to the
 			// statement being prepared. Set it back to the PREPARE statement,
 			// so that it's logged correctly.
-			p.stmt = vars.stmt
+			p.stmt = stmt
 			p.extendedEvalCtx.Placeholders = oldPlaceholders
 		}()
 		if _, err := ex.addPreparedStmt(
@@ -858,7 +849,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	dispatchToExecEngine = true
 
 	// Check if we need to auto-commit the transaction due to DDL.
-	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, vars.ast); ev != nil {
+	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, ast); ev != nil {
 		return ev, payload, nil
 	}
 
@@ -866,7 +857,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// don't return any event unless an error happens, or a CALL statement
 	// performs a nested transaction COMMIT or ROLLBACK.
 
-	if err := ex.handleAOST(ctx, vars.ast); err != nil {
+	if err := ex.handleAOST(ctx, ast); err != nil {
 		return makeErrEvent(err)
 	}
 
@@ -977,7 +968,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	var rollbackHomeRegionSavepoint *tree.RollbackToSavepoint
 	var releaseHomeRegionSavepoint *tree.ReleaseSavepoint
 	enforceHomeRegion := p.EnforceHomeRegion()
-	_, isSelectStmt := vars.stmt.AST.(*tree.Select)
+	_, isSelectStmt := stmt.AST.(*tree.Select)
 	if enforceHomeRegion && ex.state.mu.txn.IsOpen() && isSelectStmt {
 		// Create a savepoint at a point before which rows were read so that we can
 		// roll back to it, which will allow the txn to be modified with a
@@ -1029,7 +1020,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			rec := stmtThresholdSpan.FinishAndGetRecording(tracingpb.RecordingVerbose)
 			// NB: This recording does not include the commit for implicit
 			// transactions if the statement didn't auto-commit.
-			redactableStmt := p.FormatAstAsRedactableString(vars.stmt.AST, &p.semaCtx.Annotations)
+			redactableStmt := p.FormatAstAsRedactableString(stmt.AST, &p.semaCtx.Annotations)
 			logTraceAboveThreshold(
 				ctx,
 				rec,                /* recording */
@@ -1101,7 +1092,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		rc, canAutoRetry := ex.getRewindTxnCapability()
 		if canAutoRetry {
 			ev := eventRetriableErr{
-				IsCommit:     fsm.FromBool(isCommit(vars.ast)),
+				IsCommit:     fsm.FromBool(isCommit(ast)),
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
 			payload := eventRetriableErrPayload{
@@ -1121,7 +1112,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	case tree.StoredProcTxnCommit:
 		// Commit the current transaction. The connExecutor will open a new
 		// transaction, and then return to executing the same CALL statement.
-		ev, payload := ex.commitSQLTransaction(ctx, vars.ast, ex.commitSQLTransactionInternal)
+		ev, payload := ex.commitSQLTransaction(ctx, ast, ex.commitSQLTransactionInternal)
 		if payload != nil {
 			return ev, payload, nil
 		}
@@ -1129,7 +1120,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	case tree.StoredProcTxnRollback:
 		// Abort the current transaction. The connExecutor will open a new
 		// transaction, and then return to executing the same CALL statement.
-		ev, payload := ex.rollbackSQLTransaction(ctx, vars.ast)
+		ev, payload := ex.rollbackSQLTransaction(ctx, ast)
 		if payload != nil {
 			return ev, payload, nil
 		}
