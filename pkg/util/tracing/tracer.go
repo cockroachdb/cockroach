@@ -192,8 +192,7 @@ var periodicSnapshotInterval = settings.RegisterDurationSetting(
 
 // panicOnUseAfterFinish, if set, causes use of a span after Finish() to panic
 // if detected.
-var panicOnUseAfterFinish = buildutil.CrdbTestBuild ||
-	envutil.EnvOrDefaultBool("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", false)
+var panicOnUseAfterFinish = false
 
 // debugUseAfterFinish controls whether to debug uses of Span values after finishing.
 // FOR DEBUGGING ONLY. This will slow down the program.

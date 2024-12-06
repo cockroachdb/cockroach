@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -855,6 +856,12 @@ type RestrictedCommandResult interface {
 	// data in the provided column when sending messages to the client.
 	GetFormatCode(colIdx int) (pgwirebase.FormatCode, error)
 
+	SupportsPausing() bool
+	ResumeAfterPause(newLimit int)
+	CloseAfterPause()
+	WaitForRows() (fsm.Event, fsm.EventPayload, error)
+	RowsExhausted(ev fsm.Event, payload fsm.EventPayload, err error)
+
 	// AddRow accumulates a result row.
 	//
 	// The implementation cannot hold on to the row slice; it needs to make a
@@ -1129,6 +1136,26 @@ func (r *streamingCommandResult) GetFormatCode(colIdx int) (pgwirebase.FormatCod
 	// Rows aren't serialized in the streamingCommandResult, so this format code
 	// doesn't really matter - return the default.
 	return pgwirebase.FormatText, nil
+}
+
+func (r *streamingCommandResult) SupportsPausing() bool {
+	return false
+}
+
+func (r *streamingCommandResult) ResumeAfterPause(newLimit int) {
+	panic("unimplemented")
+}
+
+func (r *streamingCommandResult) CloseAfterPause() {
+	panic("unimplemented")
+}
+
+func (r *streamingCommandResult) WaitForRows() (fsm.Event, fsm.EventPayload, error) {
+	panic("unimplemented")
+}
+
+func (r *streamingCommandResult) RowsExhausted(ev fsm.Event, payload fsm.EventPayload, err error) {
+	panic("unimplemented")
 }
 
 // AddRow is part of the RestrictedCommandResult interface.
