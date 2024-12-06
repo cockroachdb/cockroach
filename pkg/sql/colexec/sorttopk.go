@@ -117,6 +117,8 @@ type topKSorter struct {
 	emitted int
 	output  coldata.Batch
 
+	cancelChecker colexecutils.CancelChecker
+
 	exportedFromTopK  int
 	exportedFromBatch int
 	windowedBatch     coldata.Batch
@@ -150,6 +152,7 @@ func (t *topKSorter) Init(ctx context.Context) {
 		t.orderState.distincter.Init(t.Ctx)
 		t.orderState.group = make([]int, t.k)
 	}
+	t.cancelChecker.Init(t.Ctx)
 }
 
 func (t *topKSorter) Next() coldata.Batch {
