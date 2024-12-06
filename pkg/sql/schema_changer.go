@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 var schemaChangeJobMaxRetryBackoff = settings.RegisterDurationSetting(
@@ -2237,7 +2238,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			sc.descID,
 			sc.mutationID,
 			&eventpb.ReverseSchemaChange{
-				Error:        fmt.Sprintf("%+v", causingError),
+				Error:        redact.Sprintf("%+v", causingError),
 				SQLSTATE:     pgerror.GetPGCode(causingError).String(),
 				LatencyNanos: timeutil.Since(startTime).Nanoseconds(),
 			})
