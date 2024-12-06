@@ -1480,43 +1480,6 @@ func (c *clusterImpl) FetchVMSpecs(ctx context.Context, l *logger.Logger) error 
 	})
 }
 
-// checkNoDeadNode returns an error if at least one of the nodes that have a populated
-// data dir are found to be not running. It prints both to t.L() and the test
-// output.
-func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) error {
-	if c.spec.NodeCount == 0 {
-		// No nodes can happen during unit tests and implies nothing to do.
-		return nil
-	}
-
-	t.L().Printf("checking for dead nodes")
-	eventsCh, err := roachprod.Monitor(ctx, t.L(), c.name, install.MonitorOpts{OneShot: true, IgnoreEmptyNodes: true})
-
-	// An error here means there was a problem initialising a SyncedCluster.
-	if err != nil {
-		return err
-	}
-
-	deadProcesses := 0
-	for info := range eventsCh {
-		t.L().Printf("%s", info)
-
-		if _, isDeath := info.Event.(install.MonitorProcessDead); isDeath {
-			deadProcesses++
-		}
-	}
-
-	var plural string
-	if deadProcesses > 1 {
-		plural = "es"
-	}
-
-	if deadProcesses > 0 {
-		return errors.Newf("%d dead cockroach process%s detected", deadProcesses, plural)
-	}
-	return nil
-}
-
 func selectedNodesOrDefault(
 	opts []option.Option, defaultNodes option.NodeListOption,
 ) option.NodeListOption {

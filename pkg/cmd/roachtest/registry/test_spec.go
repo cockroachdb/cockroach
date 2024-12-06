@@ -196,6 +196,9 @@ const (
 	// the crdb_internal.invalid_objects virtual table.
 	PostValidationInvalidDescriptors
 	// PostValidationNoDeadNodes checks if there are any dead nodes in the cluster.
+	// TODO: Deprecate or replace this functionality.
+	// In its current state it is no longer functional.
+	// See: https://github.com/cockroachdb/cockroach/issues/137329 for details.
 	PostValidationNoDeadNodes
 )
 
