@@ -703,7 +703,6 @@ func (sc *TableStatisticsCache) parseStats(
 // DecodeHistogramBuckets decodes encoded HistogramData in tabStat and writes
 // the resulting buckets into tabStat.Histogram.
 func DecodeHistogramBuckets(tabStat *TableStatistic) error {
-	var offset int
 	if tabStat.NullCount > 0 {
 		// A bucket for NULL is not persisted, but we create a fake one to
 		// make histograms easier to work with. The length of res.Histogram
@@ -711,33 +710,36 @@ func DecodeHistogramBuckets(tabStat *TableStatistic) error {
 		// buckets.
 		// TODO(michae2): Combine this with setHistogramBuckets, especially if we
 		// need to change both after #6224 is fixed (NULLS LAST in index ordering).
-		tabStat.Histogram = make([]cat.HistogramBucket, len(tabStat.HistogramData.Buckets)+1)
+		tabStat.Histogram = make([]cat.HistogramBucket, 1, len(tabStat.HistogramData.Buckets)+1)
 		tabStat.Histogram[0] = cat.HistogramBucket{
 			NumEq:         float64(tabStat.NullCount),
 			NumRange:      0,
 			DistinctRange: 0,
 			UpperBound:    tree.DNull,
 		}
-		offset = 1
 	} else {
-		tabStat.Histogram = make([]cat.HistogramBucket, len(tabStat.HistogramData.Buckets))
-		offset = 0
+		tabStat.Histogram = make([]cat.HistogramBucket, 0, len(tabStat.HistogramData.Buckets))
 	}
 
 	// Decode the histogram data so that it's usable by the opt catalog.
 	var a tree.DatumAlloc
-	for i := offset; i < len(tabStat.Histogram); i++ {
-		bucket := &tabStat.HistogramData.Buckets[i-offset]
+	for i := range tabStat.HistogramData.Buckets {
+		bucket := &tabStat.HistogramData.Buckets[i]
 		datum, err := decodeUpperBound(tabStat.HistogramData.ColumnType, &a, bucket.UpperBound)
 		if err != nil {
+			if tabStat.HistogramData.ColumnType.Family() == types.EnumFamily &&
+				errors.Is(err, types.EnumValueNotFound) {
+				// Skip over buckets for enum values that were dropped.
+				continue
+			}
 			return err
 		}
-		tabStat.Histogram[i] = cat.HistogramBucket{
+		tabStat.Histogram = append(tabStat.Histogram, cat.HistogramBucket{
 			NumEq:         float64(bucket.NumEq),
 			NumRange:      float64(bucket.NumRange),
 			DistinctRange: bucket.DistinctRange,
 			UpperBound:    datum,
-		}
+		})
 	}
 	return nil
 }

@@ -60,29 +60,29 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 		return fmt.Errorf("histogram type is unset")
 	}
 	js.HistogramColumnType = typ.SQLString()
-	js.HistogramBuckets = make([]JSONHistoBucket, len(h.Buckets))
+	js.HistogramBuckets = make([]JSONHistoBucket, 0, len(h.Buckets))
 	js.HistogramVersion = h.Version
 	var a tree.DatumAlloc
 	for i := range h.Buckets {
 		b := &h.Buckets[i]
-		js.HistogramBuckets[i].NumEq = b.NumEq
-		js.HistogramBuckets[i].NumRange = b.NumRange
-		js.HistogramBuckets[i].DistinctRange = b.DistinctRange
-
 		if b.UpperBound == nil {
 			return fmt.Errorf("histogram bucket upper bound is unset")
 		}
 		datum, err := decodeUpperBound(typ, &a, b.UpperBound)
 		if err != nil {
+			if h.ColumnType.Family() == types.EnumFamily && errors.Is(err, types.EnumValueNotFound) {
+				// Skip over buckets for enum values that were dropped.
+				continue
+			}
 			return err
 		}
 
-		js.HistogramBuckets[i] = JSONHistoBucket{
+		js.HistogramBuckets = append(js.HistogramBuckets, JSONHistoBucket{
 			NumEq:         b.NumEq,
 			NumRange:      b.NumRange,
 			DistinctRange: b.DistinctRange,
 			UpperBound:    tree.AsStringWithFlags(datum, tree.FmtExport),
-		}
+		})
 	}
 	return nil
 }
