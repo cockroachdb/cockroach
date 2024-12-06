@@ -1299,6 +1299,9 @@ func (s *TestState) logEvent(event logpb.EventPayload) error {
 		// Remove common details from text output, they're never decorated.
 		if inM, ok := in.(map[string]interface{}); ok {
 			delete(inM, "common")
+
+			// Also remove latency measurement, since it's not deterministic.
+			delete(inM, "latencyNanos")
 		}
 	})
 	if err != nil {
