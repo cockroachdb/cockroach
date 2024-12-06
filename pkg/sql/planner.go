@@ -403,11 +403,7 @@ func newInternalPlanner(
 	}
 
 	plannerMon := mon.NewMonitor(mon.Options{
-		Name: mon.MakeMonitorName(
-			"internal-planner." +
-				redact.SafeString(user.Normalized()) + "." +
-				redact.SafeString(opName),
-		),
+		Name:     mon.MakeMonitorName("internal-planner." + redact.SafeString(opName)),
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
 		Settings: execCfg.Settings,
