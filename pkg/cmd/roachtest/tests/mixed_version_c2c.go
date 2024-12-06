@@ -129,7 +129,6 @@ func InitC2CMixed(
 		mixedversion.EnabledDeploymentModes(mixedversion.SharedProcessDeployment),
 		mixedversion.WithTag("source"),
 		mixedversion.WithSkipVersionProbability(boolToProb(sourceVersionSkips)),
-		mixedversion.EnableWaitForReplication, // see #130384
 	)
 
 	destMvt := mixedversion.NewTest(ctx, t, t.L(), c, c.Range(sp.srcNodes+1, sp.srcNodes+sp.dstNodes),
@@ -138,7 +137,6 @@ func InitC2CMixed(
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 		mixedversion.WithTag("dest"),
 		mixedversion.WithSkipVersionProbability(boolToProb(destVersionSkips)),
-		mixedversion.EnableWaitForReplication, // see #130384
 	)
 
 	return &c2cMixed{

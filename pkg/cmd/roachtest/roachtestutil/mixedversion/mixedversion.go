@@ -517,9 +517,11 @@ func defaultTestOptions() testOptions {
 		minUpgrades:             1,
 		maxUpgrades:             4,
 		minimumSupportedVersion: OldestSupportedVersion,
-		// TODO(testeng): consider switching this default to `true`, as it
-		// better reflects how rolling restarts are run in production.
-		waitForReplication:             false,
+		// We've seen tests flake due to overload right after restarting a
+		// node (#130384). Waiting for 3X replication between each node restart
+		// appears to help, but we should be cautious of tests that create a lot
+		// of ranges as this may add significant delay.
+		waitForReplication:             true,
 		predecessorFunc:                randomPredecessor,
 		enabledDeploymentModes:         allDeploymentModes,
 		skipVersionProbability:         0.5,
@@ -545,10 +547,10 @@ func WithSkipVersionProbability(p float64) CustomOption {
 	}
 }
 
-// EnableWaitForReplication enables the wait for 3x replication
+// DisableWaitForReplication disables the wait for 3x replication
 // after each node restart in a mixedversion test.
-func EnableWaitForReplication(opts *testOptions) {
-	opts.waitForReplication = true
+func DisableWaitForReplication(opts *testOptions) {
+	opts.waitForReplication = false
 }
 
 // NewTest creates a Test struct that users can use to create and run
