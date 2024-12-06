@@ -257,7 +257,7 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 	if err := s.acquireCatchupScanQuota(ctx, m.catchupSem, m.metrics); err != nil {
 		return err
 	}
-	m.metrics.RangefeedCatchUpBlockedNanos.Inc(startTime.Elapsed().Nanoseconds())
+	m.metrics.RangefeedCatchUpBlockedNanos.RecordValue(startTime.Elapsed().Nanoseconds())
 
 	// Start a retry loop for sending the batch to the range.
 	for r := retry.StartWithCtx(ctx, m.ds.rpcRetryOptions); r.Next(); {

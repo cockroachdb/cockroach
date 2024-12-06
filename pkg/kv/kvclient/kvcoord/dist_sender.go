@@ -473,7 +473,7 @@ type DistSenderRangeFeedMetrics struct {
 	RangefeedCatchupRanges                  *metric.Gauge
 	RangefeedLocalRanges                    *metric.Gauge
 	RangefeedCatchupRangesWaitingClientSide *metric.Gauge
-	RangefeedCatchUpBlockedNanos            *metric.Counter
+	RangefeedCatchUpBlockedNanos            metric.IHistogram
 	Errors                                  rangeFeedErrorCounters
 }
 
@@ -604,8 +604,13 @@ func makeDistSenderRangeFeedMetrics() DistSenderRangeFeedMetrics {
 		RangefeedCatchupRanges:                  metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
 		RangefeedLocalRanges:                    metric.NewGauge(metaDistSenderRangefeedLocalRanges),
 		RangefeedCatchupRangesWaitingClientSide: metric.NewGauge(metaDistSenderRangefeedCatchupRangesWaitingClientSide),
-		RangefeedCatchUpBlockedNanos:            metric.NewCounter(metaDistSenderRangefeedCatchUpBlockedNanos),
-		Errors:                                  makeRangeFeedErrorCounters(),
+		RangefeedCatchUpBlockedNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     metaDistSenderRangefeedCatchUpBlockedNanos,
+			Duration:     base.DefaultHistogramWindowInterval(),
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		Errors: makeRangeFeedErrorCounters(),
 	}
 }
 
