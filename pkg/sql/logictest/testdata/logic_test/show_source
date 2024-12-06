@@ -157,7 +157,7 @@ override_multi_region_zone_config                          off
 parallelize_multi_key_lookup_joins_enabled                 off
 password_encryption                                        scram-sha-256
 pg_trgm.similarity_threshold                               0.3
-plan_cache_mode                                            force_custom_plan
+plan_cache_mode                                            auto
 plpgsql_use_strict_into                                    off
 prefer_lookup_joins_for_fks                                off
 prepared_statements_cache_size                             0 B

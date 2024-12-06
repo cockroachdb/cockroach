@@ -5,4 +5,5 @@ create_stmt ::=
 	| create_changefeed_stmt
 	| create_extension_stmt
 	| create_external_connection_stmt
+	| create_logical_replication_stream_stmt
 	| create_schedule_stmt

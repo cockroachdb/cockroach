@@ -15,7 +15,7 @@ CREATE TABLE t (
 # GenerateParameterizedJoin
 # --------------------------------------------------
 
-opt generic expect=GenerateParameterizedJoin
+opt expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE k = $1
 ----
 project
@@ -42,7 +42,7 @@ project
       │    └── ($1,)
       └── filters (true)
 
-opt generic expect=GenerateParameterizedJoin
+opt expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE k = $1::INT
 ----
 project
@@ -69,7 +69,7 @@ project
       │    └── ($1,)
       └── filters (true)
 
-opt generic expect=GenerateParameterizedJoin
+opt expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = $1 AND s = $2 AND b = $3
 ----
 project
@@ -103,7 +103,7 @@ project
 
 # A placeholder referenced multiple times in the filters should only appear once
 # in the Values expression.
-opt generic expect=GenerateParameterizedJoin
+opt expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE k = $1 AND i = $1
 ----
 project
@@ -133,7 +133,7 @@ project
 
 # The generated join should not be reordered and merge joins should not be
 # explored on it.
-opt generic expect=GenerateParameterizedJoin expect-not=(ReorderJoins,GenerateMergeJoins)
+opt expect=GenerateParameterizedJoin expect-not=(ReorderJoins,GenerateMergeJoins)
 SELECT * FROM t WHERE i = $1
 ----
 project
@@ -165,7 +165,7 @@ project
       │    └── filters (true)
       └── filters (true)
 
-opt generic expect=GenerateParameterizedJoin
+opt expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE k = (SELECT i FROM t WHERE k = $1)
 ----
 project
@@ -209,7 +209,7 @@ project
 
 # TODO(mgartner): The rule doesn't apply because the filters do not reference
 # the placeholder directly. Consider ways to handle cases like this.
-opt generic
+opt
 SELECT * FROM t WHERE k = (SELECT $1::INT)
 ----
 project
@@ -242,7 +242,7 @@ exec-ddl
 CREATE INDEX partial_idx ON t(t) WHERE t IS NOT NULL
 ----
 
-opt generic expect=GenerateParameterizedJoin
+opt expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE t = $1
 ----
 project
@@ -282,7 +282,7 @@ exec-ddl
 CREATE INDEX partial_idx ON t(i, t) WHERE i IS NOT NULL AND t IS NOT NULL
 ----
 
-opt generic expect=GenerateParameterizedJoin
+opt expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = $1 AND t = $2
 ----
 project
@@ -322,7 +322,7 @@ exec-ddl
 CREATE INDEX partial_idx ON t(s) WHERE k = i
 ----
 
-opt generic
+opt expect=GenerateParameterizedJoin
 SELECT * FROM t@partial_idx WHERE s = $1 AND k = $2 AND i = $2
 ----
 project
@@ -362,7 +362,7 @@ exec-ddl
 DROP INDEX partial_idx
 ----
 
-opt generic no-stable-folds expect=GenerateParameterizedJoin
+opt no-stable-folds expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE t = now()
 ----
 project
@@ -394,7 +394,7 @@ project
       │    └── filters (true)
       └── filters (true)
 
-opt generic no-stable-folds expect=GenerateParameterizedJoin
+opt no-stable-folds expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = $1 AND t = now()
 ----
 project
@@ -426,7 +426,7 @@ project
       │    └── filters (true)
       └── filters (true)
 
-opt generic no-stable-folds expect=GenerateParameterizedJoin
+opt no-stable-folds expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = $1 AND t > now()
 ----
 project
@@ -461,7 +461,7 @@ project
       │    └── filters (true)
       └── filters (true)
 
-opt generic no-stable-folds expect=GenerateParameterizedJoin
+opt no-stable-folds expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = $1 AND t = now() + $2
 ----
 project
@@ -506,7 +506,7 @@ project
            │    └── filters (true)
            └── filters (true)
 
-opt generic no-stable-folds expect=GenerateParameterizedJoin
+opt no-stable-folds expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = $1 AND t = now() + '1 hr'::INTERVAL
 ----
 project
@@ -552,7 +552,7 @@ project
            └── filters (true)
 
 # TODO(mgartner): Apply the rule to stable, non-leaf expressions.
-opt generic no-stable-folds
+opt no-stable-folds
 SELECT * FROM t WHERE t = '2024-01-01 12:00:00'::TIMESTAMP::TIMESTAMPTZ
 ----
 select
@@ -571,7 +571,7 @@ select
 # arguments.
 # TODO(mgartner): We should be able to relax this restriction as long as all the
 # arguments are constants or placeholders.
-opt generic no-stable-folds expect=GenerateParameterizedJoin
+opt no-stable-folds expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = $1 AND s = quote_literal(1::INT)
 ----
 project
@@ -607,7 +607,7 @@ project
 # A stable function is not included in the Values expression if its arguments
 # reference a column from the table. This would create an illegal outer column
 # reference in a non-apply-join.
-opt generic no-stable-folds expect=GenerateParameterizedJoin
+opt no-stable-folds expect=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = $1 AND s = quote_literal(i)
 ----
 project
@@ -642,7 +642,7 @@ project
 
 # The rule does not match if there are no placeholders or stable expressions in
 # the filters.
-opt generic expect-not=GenerateParameterizedJoin
+opt expect-not=GenerateParameterizedJoin
 SELECT * FROM t WHERE i = 1 AND s = 'foo'
 ----
 index-join t
@@ -656,7 +656,7 @@ index-join t
       └── fd: ()-->(2,3), (1)-->(4)
 
 # The rule does not match if generic optimizations are disabled.
-opt expect-not=GenerateParameterizedJoin
+opt set=(plan_cache_mode=force_custom_plan) expect-not=GenerateParameterizedJoin
 SELECT * FROM t WHERE k = $1 AND s = quote_literal(1::INT)
 ----
 select

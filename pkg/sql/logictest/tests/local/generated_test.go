@@ -913,11 +913,11 @@ func TestLogic_generator_probe_ranges(
 	runLogicTest(t, "generator_probe_ranges")
 }
 
-func TestLogic_generic_license(
+func TestLogic_generic(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "generic_license")
+	runLogicTest(t, "generic")
 }
 
 func TestLogic_geospatial(
