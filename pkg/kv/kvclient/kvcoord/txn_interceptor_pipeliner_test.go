@@ -2376,7 +2376,7 @@ func TestTxnPipelinerCondenseLockSpans2(t *testing.T) {
 			TrackedWritesMaxSize.Override(ctx, &tp.st.SV, tc.maxBytes)
 
 			for _, sp := range tc.lockSpans {
-				tp.lockFootprint.insert(roachpb.Span{Key: roachpb.Key(sp.start), EndKey: roachpb.Key(sp.end)})
+				tp.lockFootprint.insert(true, roachpb.Span{Key: roachpb.Key(sp.start), EndKey: roachpb.Key(sp.end)})
 			}
 
 			for _, k := range tc.ifWrites {

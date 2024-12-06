@@ -805,14 +805,15 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			if qiResp.FoundIntent || qiResp.FoundUnpushedIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence, qiReq.Strength)
 				// Move to lock footprint.
-				tp.lockFootprint.insert(roachpb.Span{Key: qiReq.Key})
+				tp.lockFootprint.insert(false, roachpb.Span{Key: qiReq.Key})
 			}
 		} else if kvpb.IsLocking(req) {
 			// If the request intended to acquire locks, track its lock spans.
 			seq := req.Header().Sequence
 			str := lock.Intent
+			durability := lock.Replicated
 			if readOnlyReq, ok := req.(kvpb.LockingReadRequest); ok {
-				str, _ = readOnlyReq.KeyLocking()
+				str, durability = readOnlyReq.KeyLocking()
 			}
 			trackLocks := func(span roachpb.Span, _ lock.Durability) {
 				if ba.AsyncConsensus {
@@ -825,7 +826,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 				} else {
 					// If the lock acquisitions weren't performed asynchronously
 					// then add them directly to our lock footprint.
-					tp.lockFootprint.insert(span)
+					tp.lockFootprint.insert(durability == lock.Replicated, span)
 				}
 			}
 			if err := kvpb.LockSpanIterate(req, resp, trackLocks); err != nil {
@@ -837,7 +838,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 }
 
 func (tp *txnPipeliner) trackLocks(s roachpb.Span, _ lock.Durability) {
-	tp.lockFootprint.insert(s)
+	tp.lockFootprint.insert(true, s)
 }
 
 // stripQueryIntents adjusts the BatchResponse to hide the fact that this
@@ -921,7 +922,7 @@ func (tp *txnPipeliner) epochBumpedLocked() {
 	// fail to clean them up.
 	if tp.ifWrites.len() > 0 {
 		tp.ifWrites.ascend(func(w *inFlightWrite) {
-			tp.lockFootprint.insert(roachpb.Span{Key: w.Key})
+			tp.lockFootprint.insert(true, roachpb.Span{Key: w.Key})
 		})
 		tp.lockFootprint.mergeAndSort()
 		tp.ifWrites.clear(true /* reuse */)
@@ -941,7 +942,7 @@ func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoi
 	needCollecting := !s.Initial()
 	tp.ifWrites.ascend(func(w *inFlightWrite) {
 		if w.Sequence >= s.seqNum {
-			tp.lockFootprint.insert(roachpb.Span{Key: w.Key})
+			tp.lockFootprint.insert(true, roachpb.Span{Key: w.Key})
 			if needCollecting {
 				writesToDelete = append(writesToDelete, w)
 			}

@@ -41,9 +41,7 @@ type condensableSpanSet struct {
 	// spans).
 	condensed bool
 
-	// totalUncondensedBytes is the number of bytes that are inserted into this
-	// span set. This doesn't take into account if the bytes are later merged or
-	// condensed.
+	// totalUncondensedBytes is the number of bytes that are inserted into this span set. This doesn't take into account if the bytes are later merged or condensed.
 	totalUncondensedBytes int64
 
 	// Avoid heap allocations for transactions with a small number of spans.
@@ -52,14 +50,16 @@ type condensableSpanSet struct {
 
 // insert adds new spans to the condensable span set. No attempt to condense the
 // set or deduplicate the new span with existing spans is made.
-func (s *condensableSpanSet) insert(spans ...roachpb.Span) {
+func (s *condensableSpanSet) insert(durable bool, spans ...roachpb.Span) {
 	if cap(s.s) == 0 {
 		s.s = s.sAlloc[:0]
 	}
 	s.s = append(s.s, spans...)
 	for _, sp := range spans {
 		s.bytes += spanSize(sp)
-		s.totalUncondensedBytes += spanSize(sp)
+		if durable {
+			s.totalUncondensedBytes += spanSize(sp)
+		}
 	}
 }
 
