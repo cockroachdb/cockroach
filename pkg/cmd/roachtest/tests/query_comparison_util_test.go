@@ -124,6 +124,30 @@ func TestUnsortedMatricesDiff(t *testing.T) {
 			exactMatch:  false,
 			approxMatch: true,
 		},
+		{
+			name:        "decimals with trailing zeroes",
+			colTypes:    []string{"DECIMAL"},
+			t1:          [][]string{{"1.20"}, {"1.000"}},
+			t2:          [][]string{{"1.200"}, {"1"}},
+			exactMatch:  false,
+			approxMatch: true,
+		},
+		{
+			name:        "decimals with non-trailing zeroes",
+			colTypes:    []string{"DECIMAL"},
+			t1:          [][]string{{"10"}, {"1.000"}},
+			t2:          [][]string{{"1.0"}, {"1000"}},
+			exactMatch:  false,
+			approxMatch: false,
+		},
+		{
+			name:        "decimals with trailing zeroes in array",
+			colTypes:    []string{"[]DECIMAL"},
+			t1:          [][]string{{"1.0,1.000"}, {"3.0,4.000"}},
+			t2:          [][]string{{"1.00,1"}, {"3.00,4"}},
+			exactMatch:  false,
+			approxMatch: true,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

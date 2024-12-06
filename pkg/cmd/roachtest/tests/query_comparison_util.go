@@ -655,6 +655,28 @@ func sortRowsWithFloatComp(rowMatrix1, rowMatrix2 [][]string, colTypes []string)
 	})
 }
 
+func trimDecimalTrailingZeroes(d string) string {
+	if !strings.Contains(d, ".") {
+		// The number is an integer - nothing to trim.
+		return d
+	}
+	d = strings.TrimRight(d, "0")
+	if d[len(d)-1] == '.' {
+		// We fully trimmed the fractional part, so we need to remove the
+		// dangling dot.
+		d = d[:len(d)-1]
+	}
+	return d
+}
+
+func trimDecimalsTrailingZeroesInArray(array string) string {
+	decimals := strings.Split(strings.Trim(array, "{}"), ",")
+	for i := range decimals {
+		decimals[i] = trimDecimalTrailingZeroes(decimals[i])
+	}
+	return "{" + strings.Join(decimals, ",") + "}"
+}
+
 // unsortedMatricesDiffWithFloatComp sorts and compares the rows in rowMatrix1
 // to rowMatrix2 and outputs a diff or message related to the comparison. If a
 // string comparison of the rows fails, and they contain floats or decimals, it
@@ -673,14 +695,14 @@ func unsortedMatricesDiffWithFloatComp(
 	if len(rows1) != len(rows2) || len(colTypes) != len(rowMatrix1[0]) || len(colTypes) != len(rowMatrix2[0]) {
 		return result, nil
 	}
-	var needApproxMatch bool
+	var needCustomMatch bool
 	for _, colType := range colTypes {
-		if needApproximateMatch(colType) {
-			needApproxMatch = true
+		if needApproximateMatch(colType) || colType == "DECIMAL" || colType == "[]DECIMAL" {
+			needCustomMatch = true
 			break
 		}
 	}
-	if !needApproxMatch {
+	if !needCustomMatch {
 		return result, nil
 	}
 	sortRowsWithFloatComp(rowMatrix1, rowMatrix2, colTypes)
@@ -707,6 +729,17 @@ func unsortedMatricesDiffWithFloatComp(
 					return result, nil
 				}
 			} else {
+				switch colType {
+				case "DECIMAL":
+					// For decimals, remove any trailing zeroes.
+					row1[j] = trimDecimalTrailingZeroes(row1[j])
+					row2[j] = trimDecimalTrailingZeroes(row2[j])
+				case "[]DECIMAL":
+					// For decimal arrays, remove any trailing zeroes from each
+					// decimal.
+					row1[j] = trimDecimalsTrailingZeroesInArray(row1[j])
+					row2[j] = trimDecimalsTrailingZeroesInArray(row2[j])
+				}
 				// Check that other columns are equal with a string comparison.
 				if row1[j] != row2[j] {
 					return result, nil
