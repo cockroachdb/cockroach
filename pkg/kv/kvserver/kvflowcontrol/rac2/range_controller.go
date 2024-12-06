@@ -194,6 +194,17 @@ type ReplicaStateInfo struct {
 	InflightBytes uint64
 }
 
+func (rsi ReplicaStateInfo) String() string {
+	return redact.StringWithoutMarkers(rsi)
+}
+
+var _ redact.SafeFormatter = ReplicaStateInfo{}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rsi ReplicaStateInfo) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("state=%v match=%v next=%v", rsi.State, rsi.Match, rsi.Next)
+}
+
 // sendQueueStatRefreshInterval is the interval at which the send queue stats
 // are refreshed by the range controller, as part of
 // HandleRaftEventRaftMuLocked. One should expect the stats to be at most this
@@ -1067,6 +1078,12 @@ func constructRaftEventForReplica(
 //
 // Requires replica.raftMu to be held.
 func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e RaftEvent) error {
+	if buildutil.CrdbTestBuild {
+		// NB: This logging is incredibly verbose, and should not be enabled on
+		// real clusters. It is only enabled in test builds as such.
+		log.VInfof(ctx, 3, "r%v/%v handle raft event: %v",
+			rc.opts.RangeID, rc.opts.LocalReplicaID, debugFmtRaftEvent(e))
+	}
 	// NB: e.Term can be empty when the RaftEvent was not constructed using a
 	// MsgStorageAppend. Hence, the assertion is gated on the conditions that
 	// ensure e.Term was initialized.
