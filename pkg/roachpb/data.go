@@ -218,6 +218,26 @@ func (k Key) Compare(b Key) int {
 	return bytes.Compare(k, b)
 }
 
+// Less says whether key k is less than key b.
+func (k Key) Less(b Key) bool {
+	return k.Compare(b) < 0
+}
+
+// Clamp fixes the key to something within the range a < k < b.
+func (k Key) Clamp(min, max Key) (Key, error) {
+	if max.Less(min) {
+		return nil, errors.Newf("cannot clamp when min '%s' is larger than max '%s'", min, max)
+	}
+	result := k
+	if k.Less(min) {
+		result = min
+	}
+	if max.Less(k) {
+		result = max
+	}
+	return result, nil
+}
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (k Key) SafeFormat(w redact.SafePrinter, _ rune) {
 	SafeFormatKey(w, nil /* valDirs */, k)
@@ -2358,6 +2378,27 @@ func (s Span) EqualValue(o Span) bool {
 // Equal compares two spans.
 func (s Span) Equal(o Span) bool {
 	return s.Key.Equal(o.Key) && s.EndKey.Equal(o.EndKey)
+}
+
+// ZeroLength returns true if the distance between the start and end key is 0.
+func (s Span) ZeroLength() bool {
+	return s.Key.Equal(s.EndKey)
+}
+
+// Clamp clamps span s's keys within the span defined in bounds.
+func (s Span) Clamp(bounds Span) (Span, error) {
+	start, err := s.Key.Clamp(bounds.Key, bounds.EndKey)
+	if err != nil {
+		return Span{}, err
+	}
+	end, err := s.EndKey.Clamp(bounds.Key, bounds.EndKey)
+	if err != nil {
+		return Span{}, err
+	}
+	return Span{
+		Key:    start,
+		EndKey: end,
+	}, nil
 }
 
 // Overlaps returns true WLOG for span A and B iff:

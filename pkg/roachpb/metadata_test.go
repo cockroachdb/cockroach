@@ -8,6 +8,7 @@ package roachpb
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -660,5 +661,26 @@ func TestGCHint(t *testing.T) {
 			assert.Equal(t, !hint.Equal(tc.was), updated, "returned incorrect 'updated' bit")
 			assert.Equal(t, tc.want, hint)
 		})
+	}
+}
+
+func TestRangeDescriptorsByStartKey(t *testing.T) {
+	// table-prefix-range-key
+	tprk := func(t byte) RKey {
+		return RKey(Key([]byte{t}))
+	}
+	ranges := []RangeDescriptor{
+		{StartKey: tprk(2), EndKey: tprk(7)},
+		{StartKey: tprk(5), EndKey: tprk(5)},
+		{StartKey: tprk(7), EndKey: tprk(2)},
+		{StartKey: tprk(1), EndKey: tprk(10)},
+		{StartKey: tprk(5), EndKey: tprk(5)},
+	}
+	sort.Stable(RangeDescriptorsByStartKey(ranges))
+
+	for i := 0; i < len(ranges)-1; i++ {
+		if ranges[i+1].StartKey.AsRawKey().Less(ranges[i].StartKey.AsRawKey()) {
+			t.Fatalf("expected ranges to be ordered increasing by start key, failed on %d, %d with keys %s, %s", i, i+1, ranges[i].StartKey.AsRawKey(), ranges[i+1].StartKey.AsRawKey())
+		}
 	}
 }

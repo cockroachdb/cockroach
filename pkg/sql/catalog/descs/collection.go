@@ -740,6 +740,13 @@ func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, 
 	return ret.Catalog, nil
 }
 
+// GetDescriptorsInSpans returns all descriptors within a given span.
+func (tc *Collection) GetDescriptorsInSpans(
+	ctx context.Context, txn *kv.Txn, spans []roachpb.Span,
+) (nstree.Catalog, error) {
+	return tc.cr.ScanDescriptorsInSpans(ctx, txn, spans)
+}
+
 // GetAllComments gets all comments for all descriptors in the given database.
 // This method never returns the underlying catalog, since it will be incomplete and only
 // contain comments.
@@ -1120,6 +1127,25 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 		return nil, err
 	}
 	return ret, nil
+}
+
+// GetAllDatabaseDescriptorsMap returns the results of
+// GetAllDatabaseDescriptors but as a map with the database ID as the
+// key.
+func (tc *Collection) GetAllDatabaseDescriptorsMap(
+	ctx context.Context, txn *kv.Txn,
+) (map[descpb.ID]catalog.DatabaseDescriptor, error) {
+	descriptors, err := tc.GetAllDatabaseDescriptors(ctx, txn)
+	result := map[descpb.ID]catalog.DatabaseDescriptor{}
+	if err != nil {
+		return nil, err
+	}
+
+	for _, descriptor := range descriptors {
+		result[descriptor.GetID()] = descriptor
+	}
+
+	return result, nil
 }
 
 // GetSchemasForDatabase returns the schemas for a given database
