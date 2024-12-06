@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -45,6 +47,11 @@ import (
 	"github.com/mitchellh/reflectwalk"
 	"google.golang.org/protobuf/proto"
 )
+
+// TelemetryHttpTimeout allows for configuration of the client timeout
+// for sending telemetry reports. It is not expected that customers
+// would tweak this.
+var TelemetryHttpTimeout = envutil.EnvOrDefaultDuration("COCKROACH_TELEMETRY_HTTP_CLIENT_TIMEOUT", 5*time.Minute)
 
 // NodeStatusGenerator abstracts the status.MetricRecorder for read access.
 type NodeStatusGenerator interface {
@@ -99,6 +106,50 @@ type Reporter struct {
 	// regardless of whether the response we get back is successful or
 	// not.
 	LastSuccessfulTelemetryPing atomic.Int64
+
+	// client is the HTTP client used for sending requests to the
+	// registration server.
+	client *httputil.Client
+}
+
+func NewDiagnosticReporter(
+	startTime time.Time,
+	ambientCtx *log.AmbientContext,
+	config *base.Config,
+	settings *cluster.Settings,
+	storageClusterID func() uuid.UUID,
+	logicalClusterID func() uuid.UUID,
+	tenantID roachpb.TenantID,
+	sqlInstanceID func() base.SQLInstanceID,
+	sqlServer *sql.Server,
+	internalExec *sql.InternalExecutor,
+	db *kv.DB,
+	recorder NodeStatusGenerator,
+	locality roachpb.Locality,
+) *Reporter {
+	timeout := TelemetryHttpTimeout
+	if timeout > 5*time.Minute {
+		timeout = 5 * time.Minute
+	} else if timeout < 3*time.Second {
+		timeout = 3 * time.Second
+	}
+
+	return &Reporter{
+		StartTime:        timeutil.Now(),
+		AmbientCtx:       ambientCtx,
+		Config:           config,
+		Settings:         settings,
+		StorageClusterID: storageClusterID,
+		LogicalClusterID: logicalClusterID,
+		TenantID:         tenantID,
+		SQLInstanceID:    sqlInstanceID,
+		SQLServer:        sqlServer,
+		InternalExec:     internalExec,
+		DB:               db,
+		Recorder:         recorder,
+		Locality:         locality,
+		client:           httputil.NewClientWithTimeout(timeout),
+	}
 }
 
 // shouldReportDiagnostics determines using the diagnostics report setting in
@@ -129,7 +180,7 @@ func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
 	// Prior to starting the periodic report job, we store the current
 	// timestamp to initialize to a valid value.
-	r.LastSuccessfulTelemetryPing.Store(timeutil.Now().Unix())
+	r.LastSuccessfulTelemetryPing.Store(r.now().Unix())
 	_ = stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "diagnostics", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
 		nextReport := r.StartTime
@@ -155,6 +206,13 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 			}
 		}
 	})
+}
+
+func (r *Reporter) now() time.Time {
+	if r.TestingKnobs != nil && r.TestingKnobs.TimeSource != nil {
+		return r.TestingKnobs.TimeSource.Now()
+	}
+	return timeutil.Now()
 }
 
 // ReportDiagnostics phones home to report usage and diagnostics.
@@ -184,7 +242,7 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 		return
 	}
 
-	res, err := httputil.Post(
+	res, err := r.client.Post(
 		ctx, url.String(), "application/x-protobuf", bytes.NewReader(b),
 	)
 	if err != nil {
@@ -192,6 +250,13 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 			// This is probably going to be relatively common in production
 			// environments where network access is usually curtailed.
 			log.Warningf(ctx, "failed to report node usage metrics: %v", err)
+		}
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			// We consider timeout errors to signal successful "contact" with
+			// telemetry server. They can happen for a number of reasons
+			// outside of the cluster's control.
+			r.LastSuccessfulTelemetryPing.Store(r.now().Unix())
 		}
 		return
 	}
@@ -207,7 +272,7 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 	// with the telemetry server and any further problems are not the
 	// customer's fault. We update the telemetry timestamp before moving
 	// on with other request handling.
-	r.LastSuccessfulTelemetryPing.Store(timeutil.Now().Unix())
+	r.LastSuccessfulTelemetryPing.Store(r.now().Unix())
 
 	if res.StatusCode != http.StatusOK {
 		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s", res.Status, b)

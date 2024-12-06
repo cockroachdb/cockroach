@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -29,8 +30,9 @@ type Server struct {
 		last        *RequestData
 
 		// Testing knobs. Setting these will override response from the test server.
-		respError error
-		respCode  int
+		respError   error
+		respCode    int
+		waitSeconds int
 	}
 }
 
@@ -80,6 +82,10 @@ func NewServer() *Server {
 			panic(err)
 		}
 		srv.mu.last = data
+
+		if srv.mu.waitSeconds > 0 {
+			time.Sleep(time.Duration(srv.mu.waitSeconds) * time.Second)
+		}
 
 		if srv.mu.respError != nil {
 			http.Error(w, srv.mu.respError.Error(), srv.mu.respCode)
@@ -140,5 +146,15 @@ func (s *Server) SetRespCode(code int) func() {
 	s.mu.respCode = code
 	return func() {
 		s.SetRespCode(0)
+	}
+}
+
+func (s *Server) SetWaitSeconds(seconds int) func() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.mu.waitSeconds = seconds
+	return func() {
+		s.SetWaitSeconds(0)
 	}
 }

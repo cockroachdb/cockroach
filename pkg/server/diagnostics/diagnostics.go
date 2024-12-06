@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
@@ -64,6 +65,10 @@ type TestingKnobs struct {
 	// OverrideReportingURL if set, overrides the URL used to report diagnostics.
 	// It is a pointer to pointer to allow overriding to the nil URL.
 	OverrideReportingURL **url.URL
+
+	// TimeSource if set will be used to set timestamp for last
+	// successful telemetry ping.
+	TimeSource timeutil.TimeSource
 }
 
 // ClusterInfo contains cluster information that will become part of URLs.
