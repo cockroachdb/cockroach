@@ -76,6 +76,7 @@ go_library(
         "@com_github_montanaflynn_stats//:stats",
         "@com_github_vividcortex_ewma//:ewma",
         "@io_opentelemetry_go_otel//attribute",
+        "@io_storj_drpc//:drpc",
         "@io_storj_drpc//drpcconn",
         "@io_storj_drpc//drpcmigrate",
         "@io_storj_drpc//drpcmux",
