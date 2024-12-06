@@ -23,7 +23,6 @@ go_library(
         "//pkg/security/certnames",
         "//pkg/security/securitytest",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/lexbase",
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
         "//pkg/sql/pgwire/pgerror",

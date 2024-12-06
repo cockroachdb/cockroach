@@ -1107,9 +1107,6 @@ statement ok
 SET override_multi_region_zone_config = true;
 
 statement ok
-SET use_declarative_schema_changer = off;
-
-statement ok
 ALTER INDEX tbl2@tbl2_i_idx CONFIGURE ZONE USING num_replicas=10;
 
 statement ok

@@ -862,24 +862,6 @@ func makeSwapIndexSpec(
 	return in, temp
 }
 
-// fallBackIfSubZoneConfigExists determines if the table has a subzone
-// config. Normally this logic is used to limit index related operations,
-// since dropping indexes will need to remove entries of sub zones from
-// the zone config.
-func fallBackIfSubZoneConfigExists(b BuildCtx, n tree.NodeFormatter, id catid.DescID) {
-	{
-		tableElts := b.QueryByID(id)
-		if _, _, elem := scpb.FindIndexZoneConfig(tableElts); elem != nil {
-			panic(scerrors.NotImplementedErrorf(n,
-				"sub zone configs are not supported"))
-		}
-		if _, _, elem := scpb.FindPartitionZoneConfig(tableElts); elem != nil {
-			panic(scerrors.NotImplementedErrorf(n,
-				"sub zone configs are not supported"))
-		}
-	}
-}
-
 // ExtractColumnIDsInExpr extracts column IDs used in expr. It's similar to
 // schemaexpr.ExtractColumnIDs but this function can also extract columns
 // added in the same transaction (e.g. for `ADD COLUMN j INT CHECK (j > 0);`,

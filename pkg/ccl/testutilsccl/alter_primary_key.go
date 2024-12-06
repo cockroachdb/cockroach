@@ -18,7 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/stretchr/testify/require"
 )
@@ -115,9 +117,18 @@ USE t;
 			// Insert some rows so we can interrupt inspect state during backfill.
 			require.NoError(t, sqltestutils.BulkInsertIntoTable(sqlDB, maxValue))
 
-			runCheck = true
-			_, err := sqlDB.Exec(tc.AlterQuery)
-			require.NoError(t, err)
+			testutils.RunTrueAndFalse(t, "uses-declarative-for-alter-table",
+				func(t *testing.T, useDeclarativeSchemaChangerForAlter bool) {
+					if useDeclarativeSchemaChangerForAlter {
+						skip.WithIssue(t, 136846)
+					} else {
+						_, err := sqlDB.Exec("SET CLUSTER SETTING sql.schema.force_declarative_statements = '!ALTER TABLE';")
+						require.NoError(t, err)
+					}
+					runCheck = true
+					_, err := sqlDB.Exec(tc.AlterQuery)
+					require.NoError(t, err)
+				})
 		})
 	}
 

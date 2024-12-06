@@ -88,14 +88,15 @@ func maybeDropIndex(
 				"use DROP CONSTRAINT ... PRIMARY KEY followed by ADD CONSTRAINT ... PRIMARY KEY in a transaction",
 		))
 	}
-	// TODO (Xiang): Check if requires CCL binary for eventual zone config removal.
 	_, _, sie := scpb.FindSecondaryIndex(toBeDroppedIndexElms)
 	if sie == nil {
 		panic(errors.AssertionFailedf("programming error: cannot find secondary index element."))
 	}
-	// We don't support handling zone config related properties for tables, so
-	// throw an unsupported error.
-	fallBackIfSubZoneConfigExists(b, nil, sie.TableID)
+	// TODO(136320): If a region is being added or dropped on this database
+	// concurrently, we have to block dropping an index for RBR tables. The logic
+	// for detecting a concurrent ADD/DROP region is not yet in the DSC; falling
+	// back for now.
+	fallBackIfRegionalByRowTable(b, nil, sie.TableID)
 	panicIfSchemaChangeIsDisallowed(b.QueryByID(sie.TableID), n)
 	// Cannot drop the index if not CASCADE and a unique constraint depends on it.
 	if n.DropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {

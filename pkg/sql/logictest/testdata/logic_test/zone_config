@@ -417,7 +417,7 @@ subtest end
 
 subtest txn_zone_config
 
-skipif config local-mixed-24.3
+skipif config local-mixed-24.3 local-legacy-schema-changer
 statement ok
 SET use_declarative_schema_changer = unsafe_always;
 
@@ -445,6 +445,81 @@ FROM settings;
 ----
 replicas  ttl
 7         10000
+
+statement ok
+RESET use_declarative_schema_changer;
+
+subtest end
+
+# Ensure that temp indexes created during a backfill can properly be
+# zone-configured.
+subtest zc_backfill
+
+statement ok
+CREATE TABLE t(i INT, j INT NOT NULL, INDEX idx (j))
+
+skipif config local-mixed-24.3 local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = unsafe_always;
+
+statement ok
+BEGIN;
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 11;
+COMMIT;
+
+query I colnames
+WITH subzones AS (
+    SELECT
+        json_array_elements(
+            crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzones'
+        ) AS config
+    FROM system.zones
+    WHERE id = 't'::REGCLASS::OID
+),
+subzone_configs AS (
+    SELECT
+        (config -> 'config' ->> 'numReplicas')::INT AS replicas
+    FROM subzones
+)
+SELECT *
+FROM subzone_configs
+----
+replicas
+11
+
+skipif config local-mixed-24.3 local-legacy-schema-changer
+# Ensure that the subzone config exists on the new primary index. The legacy
+# schema changer does not do this; so, we skip those test configs.
+query B colnames
+WITH subzones AS (
+    SELECT
+        json_array_elements(
+            crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig', config) -> 'subzones'
+        ) AS config
+    FROM system.zones
+    WHERE id = 't'::REGCLASS::OID
+),
+subzone_indexes AS (
+    SELECT
+        (config -> 'indexId')::INT AS indexID
+    FROM subzones
+),
+primary_index AS (
+    SELECT
+        (crdb_internal.pb_to_json(
+            'cockroach.sql.sqlbase.Descriptor',
+            descriptor
+        )->'table'->'primaryIndex'->>'id')::INT AS primaryID
+    FROM system.descriptor
+    WHERE id = 't'::regclass::oid
+)
+SELECT
+    (primaryID = indexID) AS match_found
+FROM primary_index, subzone_indexes;
+----
+match_found
+true
 
 statement ok
 RESET use_declarative_schema_changer;
