@@ -26,9 +26,14 @@ import (
 // ExtractExternalCatalog extracts the table descriptors via the schema
 // resolver.
 func ExtractExternalCatalog(
-	ctx context.Context, schemaResolver resolver.SchemaResolver, tableNames ...string,
+	ctx context.Context,
+	schemaResolver resolver.SchemaResolver,
+	txn isql.Txn,
+	descCol *descs.Collection,
+	tableNames ...string,
 ) (externalpb.ExternalCatalog, error) {
 	externalCatalog := externalpb.ExternalCatalog{}
+	foundTypeDescriptors := make(map[descpb.ID]struct{})
 
 	for _, name := range tableNames {
 		uon, err := parser.ParseTableName(name)
@@ -40,10 +45,47 @@ func ExtractExternalCatalog(
 		if err != nil {
 			return externalpb.ExternalCatalog{}, err
 		}
-
+		externalCatalog.Types, foundTypeDescriptors, err = getUDTsForTable(ctx, txn, descCol, externalCatalog.Types, foundTypeDescriptors, td)
+		if err != nil {
+			return externalpb.ExternalCatalog{}, err
+		}
 		externalCatalog.Tables = append(externalCatalog.Tables, td.TableDescriptor)
 	}
 	return externalCatalog, nil
+}
+
+func getUDTsForTable(
+	ctx context.Context,
+	txn isql.Txn,
+	descsCol *descs.Collection,
+	typeDescriptors []descpb.TypeDescriptor,
+	foundTypeDescriptors map[descpb.ID]struct{},
+	td *tabledesc.Mutable,
+) ([]descpb.TypeDescriptor, map[descpb.ID]struct{}, error) {
+	dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, td.GetParentID())
+	if err != nil {
+		return nil, nil, err
+	}
+	typeIDs, _, err := td.GetAllReferencedTypeIDs(dbDesc,
+		func(id descpb.ID) (catalog.TypeDescriptor, error) {
+			return descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, id)
+		})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "resolving type descriptors")
+	}
+	for _, typeID := range typeIDs {
+		if _, ok := foundTypeDescriptors[typeID]; ok {
+			continue
+		}
+		foundTypeDescriptors[typeID] = struct{}{}
+
+		typeDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, typeID)
+		if err != nil {
+			return nil, nil, err
+		}
+		typeDescriptors = append(typeDescriptors, *typeDesc.TypeDesc())
+	}
+	return typeDescriptors, nil, nil
 }
 
 // IngestExternalCatalog ingests the tables in the external catalog into into
