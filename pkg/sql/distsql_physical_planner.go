@@ -918,6 +918,9 @@ type PlanningCtx struct {
 	// local flow finished running and is being cleaned up. It allows us to
 	// release the resources that are acquired during the physical planning and
 	// are being held onto throughout the whole flow lifecycle.
+	// Note that these functions might not be called in some cases (when
+	// DistSQLPlanner.Run is not called), but that is ok since on the main query
+	// path it will get called.
 	onFlowCleanup []func()
 
 	// This is true if plan is a simple insert that can be vectorized.
@@ -1072,7 +1075,13 @@ func flowSpecsToDiagram(
 // local flow finished running. This can be called only after the physical
 // planning has been completed.
 func (p *PlanningCtx) getCleanupFunc() func() {
+	if len(p.onFlowCleanup) == 0 {
+		// Make sure to release the physical infrastructure after the execution
+		// finishes.
+		return p.infra.Release
+	}
 	return func() {
+		p.infra.Release()
 		for _, r := range p.onFlowCleanup {
 			r()
 		}
@@ -5049,6 +5058,9 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 	localityFiler roachpb.Locality,
 ) *PlanningCtx {
 	distribute := distributionType == FullDistribution
+	// Note: infra.Release is not added to the planCtx's onFlowCleanup
+	// functions below. It is instead called directly in the function
+	// returned by getCleanupFunc.
 	infra := physicalplan.NewPhysicalInfrastructure(uuid.MakeV4(), dsp.gatewaySQLInstanceID)
 	planCtx := &PlanningCtx{
 		ExtendedEvalCtx: evalCtx,
@@ -5056,11 +5068,6 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 		infra:           infra,
 		isLocal:         !distribute,
 		planner:         planner,
-		// Make sure to release the physical infrastructure after the execution
-		// finishes. Note that onFlowCleanup might not be called in some cases
-		// (when DistSQLPlanner.Run is not called), but that is ok since on the
-		// main query path it will get called.
-		onFlowCleanup: []func(){infra.Release},
 	}
 	if !distribute {
 		if planner == nil ||

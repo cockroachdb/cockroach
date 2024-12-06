@@ -22,7 +22,15 @@ describe("health check: authenticated user", () => {
     cy.findByText("Capacity Usage", { selector: "h3>span" });
     cy.findByText("Node Status");
     cy.findByText("Replication Status");
-
+    // Asserts that storage used from nodes_ui metrics is populated
+    cy.get(".cluster-summary__metric.storage-used").should(
+      isTextGreaterThanZero,
+    );
+    // Asserts that storage usable from nodes_ui metrics is populated
+    cy.get(".cluster-summary__metric.storage-usable").should(
+      isTextGreaterThanZero,
+    );
+    cy.get(".cluster-summary__metric.live-nodes").should(isTextGreaterThanZero);
     // Check for sidebar contents
     cy.findByRole("navigation").within(() => {
       cy.findByRole("link", { name: "Overview" });
@@ -35,3 +43,9 @@ describe("health check: authenticated user", () => {
     });
   });
 });
+
+const isTextGreaterThanZero = (ele: JQuery<HTMLElement>) => {
+  const text = ele.get()[0].innerText;
+  const textAsFloat = parseFloat(text);
+  expect(textAsFloat).to.be.greaterThan(0);
+};
