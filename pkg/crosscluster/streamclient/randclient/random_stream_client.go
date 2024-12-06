@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/externalcatalog/externalpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -829,8 +830,8 @@ func (m *RandomStreamClient) CreateForTables(
 	return &streampb.ReplicationProducerSpec{
 		StreamID:             streampb.StreamID(1),
 		ReplicationStartTime: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
-		TableDescriptors: map[string]descpb.TableDescriptor{
-			req.TableNames[0]: *m.tableDesc.TableDesc(),
+		ExternalCatalog: externalpb.ExternalCatalog{
+			Tables: []descpb.TableDescriptor{*m.tableDesc.TableDesc()},
 		},
 	}, nil
 }
