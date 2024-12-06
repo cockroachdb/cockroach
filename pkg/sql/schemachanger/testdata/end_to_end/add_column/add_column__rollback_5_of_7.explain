@@ -10,7 +10,7 @@ INSERT INTO db.public.tbl VALUES(-3);
 ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42;
 EXPLAIN (DDL) rollback at post-commit stage 5 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›;
+Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT ‹42›;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 11 elements transitioning toward ABSENT
