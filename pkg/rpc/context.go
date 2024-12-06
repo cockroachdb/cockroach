@@ -49,8 +49,10 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
+	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmux"
 	"storj.io/drpc/drpcserver"
+	"storj.io/drpc/drpcwire"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -193,7 +195,12 @@ func NewServerEx(
 
 	s = grpc.NewServer(grpcOpts...)
 	dmux := drpcmux.New()
-	dsrv := drpcserver.NewWithOptions(dmux, drpcserver.Options{ /* TODO */ })
+	dsrv := drpcserver.NewWithOptions(dmux, drpcserver.Options{
+		Log: func(err error) {
+			log.Errorf(context.Background(), "TBG server error %v", err)
+		},
+		Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
+	})
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
 	tlsCfg, err := rpcCtx.GetServerTLSConfig()
 	if err != nil {
