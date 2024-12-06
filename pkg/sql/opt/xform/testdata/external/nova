@@ -107,7 +107,7 @@ create table instance_type_extra_specs
 )
 ----
 
-opt generic
+opt
 select anon_1.flavors_created_at as anon_1_flavors_created_at,
        anon_1.flavors_updated_at as anon_1_flavors_updated_at,
        anon_1.flavors_id as anon_1_flavors_id,
@@ -670,7 +670,7 @@ sort
            └── filters
                 └── instance_type_extra_specs_1.instance_type_id:22 = instance_types.id:1 [outer=(1,22), constraints=(/1: (/NULL - ]; /22: (/NULL - ]), fd=(1)==(22), (22)==(1)]
 
-opt generic
+opt
 select anon_1.instance_types_created_at as anon_1_instance_types_created_at,
        anon_1.instance_types_updated_at as anon_1_instance_types_updated_at,
        anon_1.instance_types_deleted_at as anon_1_instance_types_deleted_at,
@@ -813,7 +813,7 @@ project
       │         └── instance_type_extra_specs_1.deleted:36 = $7 [outer=(36), constraints=(/36: (/NULL - ]), fd=()-->(36)]
       └── filters (true)
 
-opt generic
+opt
 select anon_1.instance_types_created_at as anon_1_instance_types_created_at,
        anon_1.instance_types_updated_at as anon_1_instance_types_updated_at,
        anon_1.instance_types_deleted_at as anon_1_instance_types_deleted_at,
@@ -970,7 +970,7 @@ project
       │         └── instance_type_extra_specs_1.deleted:36 = $7 [outer=(36), constraints=(/36: (/NULL - ]), fd=()-->(36)]
       └── filters (true)
 
-opt generic
+opt
 select anon_1.flavors_created_at as anon_1_flavors_created_at,
        anon_1.flavors_updated_at as anon_1_flavors_updated_at,
        anon_1.flavors_id as anon_1_flavors_id,
@@ -1102,7 +1102,7 @@ project
       │    └── filters (true)
       └── filters (true)
 
-opt generic
+opt
 select anon_1.flavors_created_at as anon_1_flavors_created_at,
        anon_1.flavors_updated_at as anon_1_flavors_updated_at,
        anon_1.flavors_id as anon_1_flavors_id,
@@ -1521,7 +1521,7 @@ sort
            └── filters
                 └── instance_type_extra_specs_1.instance_type_id:35 = instance_types.id:1 [outer=(1,35), constraints=(/1: (/NULL - ]; /35: (/NULL - ]), fd=(1)==(35), (35)==(1)]
 
-opt generic
+opt
 select anon_1.instance_types_created_at as anon_1_instance_types_created_at,
        anon_1.instance_types_updated_at as anon_1_instance_types_updated_at,
        anon_1.instance_types_deleted_at as anon_1_instance_types_deleted_at,
@@ -2221,7 +2221,7 @@ sort
            └── filters
                 └── instance_type_extra_specs_1.instance_type_id:48 = instance_types.id:1 [outer=(1,48), constraints=(/1: (/NULL - ]; /48: (/NULL - ]), fd=(1)==(48), (48)==(1)]
 
-opt generic
+opt
 select anon_1.instance_types_created_at as anon_1_instance_types_created_at,
        anon_1.instance_types_updated_at as anon_1_instance_types_updated_at,
        anon_1.instance_types_deleted_at as anon_1_instance_types_deleted_at,
@@ -2367,7 +2367,7 @@ project
       │         └── instance_type_extra_specs_1.deleted:36 = $7 [outer=(36), constraints=(/36: (/NULL - ]), fd=()-->(36)]
       └── filters (true)
 
-opt generic
+opt
 select anon_1.flavors_created_at as anon_1_flavors_created_at,
        anon_1.flavors_updated_at as anon_1_flavors_updated_at,
        anon_1.flavors_id as anon_1_flavors_id,

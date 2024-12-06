@@ -12,10 +12,11 @@ import (
 )
 
 type CreateLogicalReplicationStream struct {
-	PGURL   Expr
-	From    LogicalReplicationResources
-	Into    LogicalReplicationResources
-	Options LogicalReplicationOptions
+	PGURL       Expr
+	From        LogicalReplicationResources
+	Into        LogicalReplicationResources
+	CreateTable bool
+	Options     LogicalReplicationOptions
 }
 
 type LogicalReplicationResources struct {
@@ -39,12 +40,21 @@ var _ NodeFormatter = &LogicalReplicationOptions{}
 
 // Format implements the NodeFormatter interface.
 func (node *CreateLogicalReplicationStream) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE LOGICAL REPLICATION STREAM FROM ")
-	ctx.FormatNode(&node.From)
-	ctx.WriteString(" ON ")
-	ctx.FormatNode(node.PGURL)
-	ctx.WriteString(" INTO ")
-	ctx.FormatNode(&node.Into)
+	if node.CreateTable {
+		ctx.WriteString("CREATE LOGICALLY REPLICATED ")
+		ctx.FormatNode(&node.Into)
+		ctx.WriteString(" FROM ")
+		ctx.FormatNode(&node.From)
+		ctx.WriteString(" ON ")
+		ctx.FormatNode(node.PGURL)
+	} else {
+		ctx.WriteString("CREATE LOGICAL REPLICATION STREAM FROM ")
+		ctx.FormatNode(&node.From)
+		ctx.WriteString(" ON ")
+		ctx.FormatNode(node.PGURL)
+		ctx.WriteString(" INTO ")
+		ctx.FormatNode(&node.Into)
+	}
 
 	if !node.Options.IsDefault() {
 		ctx.WriteString(" WITH OPTIONS (")

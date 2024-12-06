@@ -886,7 +886,7 @@ project
       └── filters
            └── min:14 = $1 [outer=(14), constraints=(/14: (/NULL - ]), fd=()-->(14)]
 
-opt generic
+opt
 select
     person0_.id as id1_2_,
     person0_.address as address2_2_,
@@ -951,7 +951,7 @@ project
       └── filters
            └── max:16 = 0 [outer=(16), constraints=(/16: [/0 - /0]; tight), fd=()-->(16)]
 
-opt generic
+opt
 select
     person0_.id as id1_2_,
     person0_.address as address2_2_,
@@ -1016,7 +1016,7 @@ project
            │         └── filters (true)
            └── filters (true)
 
-opt generic
+opt
 select
     person0_.id as id1_2_,
     person0_.address as address2_2_,

@@ -202,6 +202,7 @@ create_stmt ::=
 	| create_changefeed_stmt
 	| create_extension_stmt
 	| create_external_connection_stmt
+	| create_logical_replication_stream_stmt
 	| create_schedule_stmt
 
 delete_stmt ::=
@@ -606,6 +607,9 @@ create_extension_stmt ::=
 
 create_external_connection_stmt ::=
 	'CREATE' 'EXTERNAL' 'CONNECTION' label_spec 'AS' string_or_placeholder
+
+create_logical_replication_stream_stmt ::=
+	'CREATE' 'LOGICALLY' 'REPLICATED' logical_replication_resources 'FROM' logical_replication_resources 'ON' string_or_placeholder opt_logical_replication_options
 
 create_schedule_stmt ::=
 	create_schedule_for_changefeed_stmt
@@ -1237,6 +1241,7 @@ unreserved_keyword ::=
 	| 'LOCAL'
 	| 'LOCKED'
 	| 'LOGICAL'
+	| 'LOGICALLY'
 	| 'LOGIN'
 	| 'LOCALITY'
 	| 'LOOKUP'
@@ -1365,6 +1370,7 @@ unreserved_keyword ::=
 	| 'RENAME'
 	| 'REPEATABLE'
 	| 'REPLACE'
+	| 'REPLICATED'
 	| 'REPLICATION'
 	| 'RESET'
 	| 'RESTART'
@@ -1842,6 +1848,16 @@ changefeed_target_expr ::=
 label_spec ::=
 	string_or_placeholder
 	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
+
+logical_replication_resources ::=
+	'TABLE' db_object_name
+	| 'TABLES' '(' logical_replication_resources_list ')'
+	| 'DATABASE' database_name
+
+opt_logical_replication_options ::=
+	'WITH' logical_replication_options_list
+	| 'WITH' 'OPTIONS' '(' logical_replication_options_list ')'
+	| 
 
 create_schedule_for_changefeed_stmt ::=
 	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_targets changefeed_sink opt_with_options cron_expr opt_with_schedule_options
@@ -2639,6 +2655,12 @@ target_elem ::=
 	| a_expr
 	| '*'
 
+logical_replication_resources_list ::=
+	( db_object_name ) ( ( ',' db_object_name ) )*
+
+logical_replication_options_list ::=
+	( logical_replication_options ) ( ( ',' logical_replication_options ) )*
+
 schedule_label_spec ::=
 	label_spec
 	| 
@@ -3280,6 +3302,15 @@ target_name ::=
 bare_col_label ::=
 	'identifier'
 	| bare_label_keywords
+
+logical_replication_options ::=
+	'CURSOR' '=' string_or_placeholder
+	| 'MODE' '=' string_or_placeholder
+	| 'DEFAULT' 'FUNCTION' '=' string_or_placeholder
+	| 'FUNCTION' db_object_name 'FOR' 'TABLE' db_object_name
+	| 'DISCARD' '=' string_or_placeholder
+	| 'SKIP' 'SCHEMA' 'CHECK'
+	| 'LABEL' '=' string_or_placeholder
 
 common_table_expr ::=
 	table_alias_name opt_col_def_list_no_types 'AS' materialize_clause '(' preparable_stmt ')'
@@ -3926,6 +3957,7 @@ bare_label_keywords ::=
 	| 'LOCALTIMESTAMP'
 	| 'LOCKED'
 	| 'LOGICAL'
+	| 'LOGICALLY'
 	| 'LOGIN'
 	| 'LOOKUP'
 	| 'LOW'
@@ -4067,6 +4099,7 @@ bare_label_keywords ::=
 	| 'RENAME'
 	| 'REPEATABLE'
 	| 'REPLACE'
+	| 'REPLICATED'
 	| 'REPLICATION'
 	| 'RESET'
 	| 'RESTART'

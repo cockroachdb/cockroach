@@ -15,7 +15,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/cliccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/gqpccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"

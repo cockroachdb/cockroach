@@ -113,6 +113,7 @@ DOCS_SRCS = [
     "//docs/generated/sql/bnf:create_index_stmt.bnf",
     "//docs/generated/sql/bnf:create_index_with_storage_param.bnf",
     "//docs/generated/sql/bnf:create_inverted_index_stmt.bnf",
+    "//docs/generated/sql/bnf:create_logical_replication_stream_stmt.bnf",
     "//docs/generated/sql/bnf:create_proc.bnf",
     "//docs/generated/sql/bnf:create_role_stmt.bnf",
     "//docs/generated/sql/bnf:create_schedule_for_backup_stmt.bnf",
