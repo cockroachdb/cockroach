@@ -655,7 +655,7 @@ func (sr *txnSpanRefresher) appendRefreshSpans(
 		if expLogEnabled {
 			log.VEventf(ctx, 3, "recording span to refresh: %s", span.String())
 		}
-		sr.refreshFootprint.insert(span)
+		sr.refreshFootprint.insert(true, span)
 	})
 }
 
@@ -789,7 +789,7 @@ func (sr *txnSpanRefresher) importLeafFinalState(
 		sr.refreshInvalid = true
 		sr.refreshFootprint.clear()
 	} else if !sr.refreshInvalid {
-		sr.refreshFootprint.insert(tfs.RefreshSpans...)
+		sr.refreshFootprint.insert(true, tfs.RefreshSpans...)
 		// Check whether we should condense the refresh spans.
 		sr.maybeCondenseRefreshSpans(ctx, &tfs.Txn)
 	}
@@ -818,7 +818,7 @@ func (sr *txnSpanRefresher) createSavepointLocked(ctx context.Context, s *savepo
 func (sr *txnSpanRefresher) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
 	if !KeepRefreshSpansOnSavepointRollback.Get(&sr.st.SV) {
 		sr.refreshFootprint.clear()
-		sr.refreshFootprint.insert(s.refreshSpans...)
+		sr.refreshFootprint.insert(true, s.refreshSpans...)
 		sr.refreshInvalid = s.refreshInvalid
 	}
 }

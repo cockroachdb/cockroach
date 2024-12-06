@@ -20,8 +20,8 @@ func TestCondensableSpanSetMergeContiguousSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s := condensableSpanSet{}
-	s.insert(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")})
-	s.insert(roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")})
+	s.insert(true, roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")})
+	s.insert(true, roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")})
 	require.Equal(t, 4+2*roachpb.SpanOverhead, s.bytes)
 	s.mergeAndSort()
 	require.Equal(t, 2+roachpb.SpanOverhead, s.bytes)
@@ -77,7 +77,7 @@ func TestCondensableSpanSetEstimateSize(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			s := condensableSpanSet{}
-			s.insert(tc.set...)
+			s.insert(true, tc.set...)
 			require.Equal(t, tc.expEstimate, s.estimateSize(tc.newSpans, tc.mergeThreshold))
 		})
 	}
