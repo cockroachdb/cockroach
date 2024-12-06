@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-24.3
+# LogicTest: cockroach-go-testserver-configs
 
 query T
 SELECT crdb_internal.node_executable_version()

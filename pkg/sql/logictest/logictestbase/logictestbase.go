@@ -616,6 +616,11 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"local-read-committed",
 		"local-repeatable-read",
 	),
+
+	// Special alias for all testserver configs (for mixed-version testing).
+	"cockroach-go-testserver-configs": makeConfigSet(
+		"cockroach-go-testserver-24.3",
+	),
 }
 
 // logger is an interface implemented by testing.TB as well as stdlogger below.
