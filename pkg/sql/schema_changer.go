@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 var schemaChangeJobMaxRetryBackoff = settings.RegisterDurationSetting(
@@ -300,7 +301,11 @@ func (sc *SchemaChanger) refreshMaterializedView(
 const schemaChangerBackfillTxnDebugName = "schemaChangerBackfill"
 
 func (sc *SchemaChanger) backfillQueryIntoTable(
-	ctx context.Context, table catalog.TableDescriptor, query string, ts hlc.Timestamp, desc string,
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	query string,
+	ts hlc.Timestamp,
+	opName redact.SafeString,
 ) (err error) {
 	if fn := sc.testingKnobs.RunBeforeQueryBackfill; fn != nil {
 		if err := fn(); err != nil {
@@ -335,7 +340,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		// Create an internal planner as the planner used to serve the user query
 		// would have committed by this point.
 		p, cleanup := NewInternalPlanner(
-			desc,
+			opName,
 			txn.KV(),
 			username.NodeUserName(),
 			&MemoryMetrics{},

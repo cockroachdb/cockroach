@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -173,7 +174,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	opName := "allocate-descriptor-rewrites"
+	opName := redact.SafeString("allocate-descriptor-rewrites")
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
