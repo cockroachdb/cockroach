@@ -33,8 +33,8 @@ func (w kvWorkload) runWorkload(
 	ctx context.Context, v variations, duration time.Duration, maxRate int,
 ) (*workloadData, error) {
 	runCmd := fmt.Sprintf(
-		`./cockroach workload run kv --db target --display-format=incremental-json --duration=%s --max-rate=%d --tolerate-errors 
-		--max-block-bytes=%d --min-block-bytes=%d --read-percent=50 --follower-read-percent=50 --concurrency=500 {pgurl%s}`,
+		`./cockroach workload run kv --db target --display-format=incremental-json --duration=%s --max-rate=%d --tolerate-errors `+
+			`--max-block-bytes=%d --min-block-bytes=%d --read-percent=50 --follower-read-percent=50 --concurrency=500 {pgurl%s}`,
 		duration,
 		maxRate,
 		v.blockSize,
