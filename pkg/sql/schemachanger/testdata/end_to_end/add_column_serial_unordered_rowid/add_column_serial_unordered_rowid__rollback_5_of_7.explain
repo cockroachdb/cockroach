@@ -7,7 +7,7 @@ SET serial_normalization='unordered_rowid';
 ALTER TABLE db.public.tbl ADD COLUMN serial_id SERIAL;
 EXPLAIN (DDL) rollback at post-commit stage 5 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹serial_id› INT8;
+Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_id INT8;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 9 elements transitioning toward ABSENT
