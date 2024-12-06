@@ -52,14 +52,16 @@ type condensableSpanSet struct {
 
 // insert adds new spans to the condensable span set. No attempt to condense the
 // set or deduplicate the new span with existing spans is made.
-func (s *condensableSpanSet) insert(spans ...roachpb.Span) {
+func (s *condensableSpanSet) insert(durable bool, spans ...roachpb.Span) {
 	if cap(s.s) == 0 {
 		s.s = s.sAlloc[:0]
 	}
 	s.s = append(s.s, spans...)
 	for _, sp := range spans {
 		s.bytes += spanSize(sp)
-		s.insertCount++
+		if durable {
+			s.insertCount++
+		}
 	}
 }
 
