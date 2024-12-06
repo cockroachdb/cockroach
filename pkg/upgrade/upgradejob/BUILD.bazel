@@ -20,5 +20,6 @@ go_library(
         "//pkg/upgrade",
         "//pkg/upgrade/migrationstable",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )

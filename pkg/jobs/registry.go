@@ -199,7 +199,7 @@ func (r *Registry) UpdateJobWithTxn(
 // subpackage like sqlbase is difficult because of the amount of sql-only
 // stuff that JobExecContext exports. One other choice is to merge this package
 // back into the sql package. There's maybe a better way that I'm unaware of.
-type jobExecCtxMaker func(ctx context.Context, opName string, user username.SQLUsername) (interface{}, func())
+type jobExecCtxMaker func(ctx context.Context, opName redact.SafeString, user username.SQLUsername) (interface{}, func())
 
 // PreventAdoptionFile is the name of the file which, if present in the first
 // on-disk store, will prevent the adoption of background jobs by that node.

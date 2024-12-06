@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -253,7 +254,7 @@ func (r *Registry) resumeJob(
 	}
 
 	r.metrics.ResumedJobs.Inc(1)
-	if err := r.stopper.RunAsyncTask(resumeCtx, job.taskName(), func(ctx context.Context) {
+	if err := r.stopper.RunAsyncTask(resumeCtx, string(job.taskName()), func(ctx context.Context) {
 		// Wait for the job to finish. No need to print the error because if there
 		// was one it's been set in the job status already.
 		var cleanup func()
@@ -367,7 +368,7 @@ func (r *Registry) addAdoptedJob(
 }
 
 func (r *Registry) runJob(
-	ctx context.Context, resumer Resumer, job *Job, status Status, taskName string,
+	ctx context.Context, resumer Resumer, job *Job, status Status, taskName redact.SafeString,
 ) error {
 	if r.IsDraining() {
 		return errors.Newf("refusing to start %q; job registry is draining", taskName)

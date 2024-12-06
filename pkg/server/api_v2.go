@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/redact"
 	"github.com/gorilla/mux"
 )
 
@@ -215,8 +216,8 @@ func registerRoutes(
 		}
 
 		// Tell the authz server how to connect to SQL.
-		authzAccessorFactory := func(ctx context.Context, opName string) (sql.AuthorizationAccessor, func()) {
-			txn := a.db.NewTxn(ctx, opName)
+		authzAccessorFactory := func(ctx context.Context, opName redact.SafeString) (sql.AuthorizationAccessor, func()) {
+			txn := a.db.NewTxn(ctx, string(opName))
 			p, cleanup := sql.NewInternalPlanner(
 				opName,
 				txn,
