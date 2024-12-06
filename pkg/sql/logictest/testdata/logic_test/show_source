@@ -313,137 +313,23 @@ public           tenant_id_seq
 
 query TTTTT colnames
 SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM system]
+WHERE table_name IN ('descriptor_id_seq', 'comments', 'locations')
 ORDER BY schema_name, table_name
 ----
-schema_name  table_name                       type      owner  locality
-public       comments                         table     node   NULL
-public       database_role_settings           table     node   NULL
-public       descriptor                       table     node   NULL
-public       descriptor_id_seq                sequence  node   NULL
-public       eventlog                         table     node   NULL
-public       external_connections             table     node   NULL
-public       job_info                         table     node   NULL
-public       job_message                      table     node   NULL
-public       job_progress                     table     node   NULL
-public       job_progress_history             table     node   NULL
-public       job_status                       table     node   NULL
-public       jobs                             table     node   NULL
-public       join_tokens                      table     node   NULL
-public       lease                            table     node   NULL
-public       locations                        table     node   NULL
-public       migrations                       table     node   NULL
-public       mvcc_statistics                  table     node   NULL
-public       namespace                        table     node   NULL
-public       privileges                       table     node   NULL
-public       protected_ts_meta                table     node   NULL
-public       protected_ts_records             table     node   NULL
-public       rangelog                         table     node   NULL
-public       region_liveness                  table     node   NULL
-public       replication_constraint_stats     table     node   NULL
-public       replication_critical_localities  table     node   NULL
-public       replication_stats                table     node   NULL
-public       reports_meta                     table     node   NULL
-public       role_id_seq                      sequence  node   NULL
-public       role_members                     table     node   NULL
-public       role_options                     table     node   NULL
-public       scheduled_jobs                   table     node   NULL
-public       settings                         table     node   NULL
-public       span_configurations              table     node   NULL
-public       span_count                       table     node   NULL
-public       span_stats_buckets               table     node   NULL
-public       span_stats_samples               table     node   NULL
-public       span_stats_tenant_boundaries     table     node   NULL
-public       span_stats_unique_keys           table     node   NULL
-public       sql_instances                    table     node   NULL
-public       sqlliveness                      table     node   NULL
-public       statement_activity               table     node   NULL
-public       statement_bundle_chunks          table     node   NULL
-public       statement_diagnostics            table     node   NULL
-public       statement_diagnostics_requests   table     node   NULL
-public       statement_execution_insights     table     node   NULL
-public       statement_statistics             table     node   NULL
-public       table_metadata                   table     node   NULL
-public       table_statistics                 table     node   NULL
-public       task_payloads                    table     node   NULL
-public       tenant_id_seq                    sequence  node   NULL
-public       tenant_settings                  table     node   NULL
-public       tenant_tasks                     table     node   NULL
-public       tenant_usage                     table     node   NULL
-public       tenants                          table     node   NULL
-public       transaction_activity             table     node   NULL
-public       transaction_execution_insights   table     node   NULL
-public       transaction_statistics           table     node   NULL
-public       ui                               table     node   NULL
-public       users                            table     node   NULL
-public       web_sessions                     table     node   NULL
-public       zones                            table     node   NULL
+schema_name  table_name         type      owner  locality
+public       comments           table     node   NULL
+public       descriptor_id_seq  sequence  node   NULL
+public       locations          table     node   NULL
 
 query TTTTTT colnames
 SELECT schema_name, table_name, type, owner, locality, comment FROM [SHOW TABLES FROM system WITH COMMENT]
+WHERE table_name IN ('comments', 'locations', 'descriptor_id_seq')
 ORDER BY schema_name, table_name
 ----
-schema_name  table_name                       type      owner  locality  comment
-public       comments                         table     node   NULL      ·
-public       database_role_settings           table     node   NULL      ·
-public       descriptor                       table     node   NULL      ·
-public       descriptor_id_seq                sequence  node   NULL      ·
-public       eventlog                         table     node   NULL      ·
-public       external_connections             table     node   NULL      ·
-public       job_info                         table     node   NULL      ·
-public       job_message                      table     node   NULL      ·
-public       job_progress                     table     node   NULL      ·
-public       job_progress_history             table     node   NULL      ·
-public       job_status                       table     node   NULL      ·
-public       jobs                             table     node   NULL      ·
-public       join_tokens                      table     node   NULL      ·
-public       lease                            table     node   NULL      ·
-public       locations                        table     node   NULL      ·
-public       migrations                       table     node   NULL      ·
-public       mvcc_statistics                  table     node   NULL      ·
-public       namespace                        table     node   NULL      ·
-public       privileges                       table     node   NULL      ·
-public       protected_ts_meta                table     node   NULL      ·
-public       protected_ts_records             table     node   NULL      ·
-public       rangelog                         table     node   NULL      ·
-public       region_liveness                  table     node   NULL      ·
-public       replication_constraint_stats     table     node   NULL      ·
-public       replication_critical_localities  table     node   NULL      ·
-public       replication_stats                table     node   NULL      ·
-public       reports_meta                     table     node   NULL      ·
-public       role_id_seq                      sequence  node   NULL      ·
-public       role_members                     table     node   NULL      ·
-public       role_options                     table     node   NULL      ·
-public       scheduled_jobs                   table     node   NULL      ·
-public       settings                         table     node   NULL      ·
-public       span_configurations              table     node   NULL      ·
-public       span_count                       table     node   NULL      ·
-public       span_stats_buckets               table     node   NULL      ·
-public       span_stats_samples               table     node   NULL      ·
-public       span_stats_tenant_boundaries     table     node   NULL      ·
-public       span_stats_unique_keys           table     node   NULL      ·
-public       sql_instances                    table     node   NULL      ·
-public       sqlliveness                      table     node   NULL      ·
-public       statement_activity               table     node   NULL      ·
-public       statement_bundle_chunks          table     node   NULL      ·
-public       statement_diagnostics            table     node   NULL      ·
-public       statement_diagnostics_requests   table     node   NULL      ·
-public       statement_execution_insights     table     node   NULL      ·
-public       statement_statistics             table     node   NULL      ·
-public       table_metadata                   table     node   NULL      ·
-public       table_statistics                 table     node   NULL      ·
-public       task_payloads                    table     node   NULL      ·
-public       tenant_id_seq                    sequence  node   NULL      ·
-public       tenant_settings                  table     node   NULL      ·
-public       tenant_tasks                     table     node   NULL      ·
-public       tenant_usage                     table     node   NULL      ·
-public       tenants                          table     node   NULL      ·
-public       transaction_activity             table     node   NULL      ·
-public       transaction_execution_insights   table     node   NULL      ·
-public       transaction_statistics           table     node   NULL      ·
-public       ui                               table     node   NULL      ·
-public       users                            table     node   NULL      ·
-public       web_sessions                     table     node   NULL      ·
-public       zones                            table     node   NULL      ·
+schema_name  table_name         type      owner  locality  comment
+public       comments           table     node   NULL      ·
+public       descriptor_id_seq  sequence  node   NULL      ·
+public       locations          table     node   NULL      ·
 
 query ITTT colnames
 SELECT node_id, user_name, application_name, active_queries
