@@ -1318,9 +1318,39 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 	}
 	metaColumnNameSet := extractMetaColumns(columnNameSet)
 
+	// Count the number of distinct columns in the output so we can later verify
+	// that it matches the number of datums we output. Duplicating them in the
+	// output or missing one of these keys in the parquet output would be
+	// unexpected.
+	seenColumnNames := make(map[string]struct{})
+	for _, colName := range primaryKeysNamesOrdered {
+		seenColumnNames[colName] = struct{}{}
+	}
+	for _, colName := range valueColumnNamesOrdered {
+		// No key should appear twice within the primary key list or within the
+		// value columns. The role of this check is to verify that a key that
+		// appears as both a primary and value key is not duplicated in the parquet
+		// output.
+		if _, ok := seenColumnNames[colName]; !ok {
+			seenColumnNames[colName] = struct{}{}
+		}
+	}
+
 	for _, row := range datums {
 		rowJSONBuilder := json.NewObjectBuilder(len(valueColumnNamesOrdered) - len(metaColumnNameSet))
 		keyJSONBuilder := json.NewArrayBuilder(len(primaryKeysNamesOrdered))
+
+		numDatumsInRow := len(row)
+		numDistinctColumns := len(seenColumnNames)
+		if numDatumsInRow != numDistinctColumns {
+			// If a column is duplicated in the parquet output, we would catch that in
+			// tests by throwing this error.
+			return errors.Newf(
+				`Number of datums in parquet output row doesn't match number of distinct columns, Expected: %d, Recieved: %d`,
+				numDistinctColumns,
+				numDatumsInRow,
+			)
+		}
 
 		for _, primaryKeyColumnName := range primaryKeysNamesOrdered {
 			datum := row[primaryKeyColumnSet[primaryKeyColumnName]]
