@@ -410,7 +410,7 @@ func (izo *indexZoneConfigObj) fillIndexFromZoneSpecifier(b BuildCtx, zs tree.Zo
 		indexID = primaryIndexElem.IndexID
 	} else {
 		indexElems := b.ResolveIndex(tableID, tree.Name(indexName), ResolveParams{})
-		indexID = indexElems.FilterIndexName().MustGetOneElement().IndexID
+		indexID = indexElems.Filter(publicStatusFilter).FilterIndexName().MustGetOneElement().IndexID
 	}
 	izo.indexID = indexID
 }
