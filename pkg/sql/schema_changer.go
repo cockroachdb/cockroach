@@ -2243,7 +2243,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			sc.descID,
 			sc.mutationID,
 			&eventpb.ReverseSchemaChange{
-				Error:        fmt.Sprintf("%+v", causingError),
+				Error:        redact.Sprintf("%+v", causingError),
 				SQLSTATE:     pgerror.GetPGCode(causingError).String(),
 				LatencyNanos: timeutil.Since(startTime).Nanoseconds(),
 			})
