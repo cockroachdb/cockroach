@@ -149,7 +149,7 @@ func TestRegistryWithOmitOrigin(t *testing.T) {
 	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val, PrevValue: val})
 	ev2.MustSetValue(&kvpb.RangeFeedValue{Key: keyB, Value: val, PrevValue: val})
 
-	reg := makeRegistry(NewMetrics())
+	reg := makeRegistry(newTestMetrics())
 	rAC := newTestRegistration(spAC, hlc.Timestamp{}, nil, false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
 	originFiltering := newTestRegistration(spAC, hlc.Timestamp{}, nil, false /* withDiff */, false /* withFiltering */, true /* withOmitRemote */)
 
@@ -192,7 +192,7 @@ func TestRegistryBasic(t *testing.T) {
 		return ev
 	}
 
-	reg := makeRegistry(NewMetrics())
+	reg := makeRegistry(newTestMetrics())
 	require.Equal(t, 0, reg.Len())
 	reg.PublishToOverlapping(ctx, spAB, ev1, logicalOpMetadata{}, nil /* alloc */)
 	reg.DisconnectWithErr(ctx, spAB, err1)
@@ -323,7 +323,7 @@ func TestRegistryBasic(t *testing.T) {
 func TestRegistryPublishBeneathStartTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	reg := makeRegistry(NewMetrics())
+	reg := makeRegistry(newTestMetrics())
 
 	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, /* catchup */
 		false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
@@ -404,7 +404,7 @@ func TestRegistrationString(t *testing.T) {
 func TestRegistryShutdownMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	reg := makeRegistry(NewMetrics())
+	reg := makeRegistry(newTestMetrics())
 
 	regDoneC := make(chan interface{})
 	r := newTestRegistration(spAB, hlc.Timestamp{WallTime: 10}, nil, /*catchup */

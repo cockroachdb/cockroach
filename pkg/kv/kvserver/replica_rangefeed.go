@@ -297,7 +297,7 @@ func (r *Replica) RangeFeed(
 
 		startTime := crtime.NowMono()
 		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(streamCtx)
-		r.store.metrics.RangeFeedMetrics.RangefeedCatchUpBlockedNanos.Inc(startTime.Elapsed().Nanoseconds())
+		r.store.metrics.RangeFeedMetrics.RangefeedCatchUpBlockedNanos.RecordValue(startTime.Elapsed().Nanoseconds())
 		if err != nil {
 			perConsumerRelease()
 			return nil, err

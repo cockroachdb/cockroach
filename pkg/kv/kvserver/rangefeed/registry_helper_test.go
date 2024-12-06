@@ -265,7 +265,7 @@ func newTestRegistration(
 		withOmitRemote,
 		5,
 		false, /* blockWhenFull */
-		NewMetrics(),
+		newTestMetrics(),
 		s,
 		func(registration) {},
 	)

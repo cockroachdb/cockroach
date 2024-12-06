@@ -376,6 +376,13 @@ func makeIntentScanner(data []storeOp, span roachpb.RSpan) (*blockingScanner, fu
 		}, nil
 }
 
+// Actual value used is not important to test.
+const testHistogramInterval = 10 * time.Second
+
+func newTestMetrics() *Metrics {
+	return NewMetrics(testHistogramInterval)
+}
+
 func newTestProcessor(
 	t testing.TB, opts ...option,
 ) (Processor, *processorTestHelper, *stop.Stopper) {
@@ -393,7 +400,7 @@ func newTestProcessor(
 			Span:             roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 			EventChanTimeout: testProcessorEventCTimeout,
 			EventChanCap:     testProcessorEventCCap,
-			Metrics:          NewMetrics(),
+			Metrics:          newTestMetrics(),
 		},
 	}
 	for _, o := range opts {

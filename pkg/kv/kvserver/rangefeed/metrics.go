@@ -92,7 +92,7 @@ var (
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
-	RangefeedCatchUpBlockedNanos           *metric.Counter
+	RangefeedCatchUpBlockedNanos           metric.IHistogram
 	RangeFeedCatchUpScanNanos              *metric.Counter
 	RangeFeedBudgetExhausted               *metric.Counter
 	RangefeedProcessorQueueTimeout         *metric.Counter
@@ -117,9 +117,14 @@ type Metrics struct {
 func (*Metrics) MetricStruct() {}
 
 // NewMetrics makes the metrics for RangeFeeds monitoring.
-func NewMetrics() *Metrics {
+func NewMetrics(histogramWindow time.Duration) *Metrics {
 	return &Metrics{
-		RangefeedCatchUpBlockedNanos:           metric.NewCounter(metaRangeFeedCatchUpBlockedNanos),
+		RangefeedCatchUpBlockedNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     metaRangeFeedCatchUpBlockedNanos,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
 		RangeFeedCatchUpScanNanos:              metric.NewCounter(metaRangeFeedCatchUpScanNanos),
 		RangefeedProcessorQueueTimeout:         metric.NewCounter(metaQueueTimeout),
 		RangeFeedBudgetExhausted:               metric.NewCounter(metaRangeFeedExhausted),
