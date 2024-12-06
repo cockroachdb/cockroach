@@ -145,7 +145,9 @@ func (n *Dialer) DialInternalClient(
 	if err != nil {
 		return nil, err
 	}
-	return TracingInternalClient{InternalClient: kvpb.NewInternalClient(conn)}, nil
+	client := kvpb.NewInternalClient(conn)
+	client = maybeWrapInTracingClient(ctx, client)
+	return client, nil
 }
 
 // dial performs the dialing of the remote connection. If checkBreaker
@@ -282,8 +284,16 @@ type TracingInternalClient struct {
 	kvpb.InternalClient
 }
 
+func maybeWrapInTracingClient(ctx context.Context, client kvpb.InternalClient) kvpb.InternalClient {
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil && !sp.IsNoop() {
+		client = &TracingInternalClient{InternalClient: client}
+	}
+	return client
+}
+
 // Batch overrides the Batch RPC client method and fills in tracing information.
-func (tic TracingInternalClient) Batch(
+func (tic *TracingInternalClient) Batch(
 	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
 ) (*kvpb.BatchResponse, error) {
 	sp := tracing.SpanFromContext(ctx)
