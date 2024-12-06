@@ -117,10 +117,15 @@ WHERE "eventType" = 'alter_table'
 1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.a ADD COLUMN val INT8", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
 1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 1}
+
+# Verify that LatencyNanos is populated.
+statement ok
+SELECT 1 / coalesce((info::JSONB->'LatencyNanos')::INT, 0) FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
 
 query I
 SELECT "reportingID" FROM system.eventlog
@@ -156,13 +161,13 @@ ORDER BY "timestamp", info
 1  {"EventType": "alter_table", "MutationID": 2, "Statement": "ALTER TABLE test.public.a ADD CONSTRAINT foo UNIQUE (val)", "TableName": "test.public.a", "Tag": "ALTER TABLE", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'  FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos'  FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
 1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 1}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'Error'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'Error' - 'LatencyNanos'
   FROM system.eventlog
 WHERE "eventType" = 'reverse_schema_change'
 ----
@@ -170,7 +175,7 @@ WHERE "eventType" = 'reverse_schema_change'
 
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change_rollback'
 ----
 1  {"EventType": "finish_schema_change_rollback", "InstanceID": 1, "MutationID": 2}
@@ -189,7 +194,7 @@ WHERE "eventType" = 'create_index'
 1  {"EventType": "create_index", "IndexName": "a_foo", "MutationID": 3, "Statement": "CREATE INDEX a_foo ON test.public.a (val)", "TableName": "test.public.a", "Tag": "CREATE INDEX", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ORDER BY "timestamp", info
 ----
@@ -207,7 +212,7 @@ WHERE "eventType" = 'create_index'
 1  {"EventType": "create_index", "IndexName": "a_val_idx", "MutationID": 4, "Statement": "CREATE INDEX ON test.public.a (val)", "TableName": "test.public.a", "Tag": "CREATE INDEX", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ORDER BY "timestamp", info
 ----
@@ -229,7 +234,7 @@ WHERE "eventType" = 'drop_index'
 1  {"EventType": "drop_index", "IndexName": "a_foo", "MutationID": 5, "Statement": "DROP INDEX test.public.a@a_foo", "TableName": "test.public.a", "Tag": "DROP INDEX", "User": "root"}
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' FROM system.eventlog
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ORDER BY "timestamp", info
 ----
