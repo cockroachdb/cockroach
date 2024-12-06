@@ -1391,7 +1391,7 @@ PreCommitPhase stage 2 of 2 with 152 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.shipments CASCADE
-        redactedstatement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+        redactedstatement: DROP TABLE defaultdb.public.shipments CASCADE
         statementtag: DROP TABLE
 PostCommitNonRevertiblePhase stage 1 of 1 with 16 MutationType ops
   transitions:
@@ -2961,7 +2961,7 @@ PreCommitPhase stage 2 of 2 with 7 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 51 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.customers CASCADE
-        redactedstatement: DROP TABLE ‹defaultdb›.public.‹customers› CASCADE
+        redactedstatement: DROP TABLE defaultdb.public.customers CASCADE
         statementtag: DROP TABLE
 PostCommitNonRevertiblePhase stage 1 of 2 with 55 MutationType ops
   transitions:
@@ -4375,7 +4375,7 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.greeter
-        redactedstatement: DROP TABLE ‹defaultdb›.public.‹greeter›
+        redactedstatement: DROP TABLE defaultdb.public.greeter
         statementtag: DROP TABLE
 PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   transitions:
