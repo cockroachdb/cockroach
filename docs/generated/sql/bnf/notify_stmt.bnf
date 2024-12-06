@@ -1,0 +1,3 @@
+notify_stmt ::=
+	'NOTIFY' type_name string_or_placeholder
+	| 'NOTIFY' type_name

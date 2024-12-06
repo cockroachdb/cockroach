@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotification"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -554,6 +555,10 @@ type ClientNoticeSender interface {
 	// to implement PLpgSQL RAISE statements; most cases should use
 	// BufferClientNotice.
 	SendClientNotice(ctx context.Context, notice pgnotice.Notice) error
+}
+
+type ClientNotificationSender interface {
+	BufferClientNotification(ctx context.Context, notification pgnotification.Notification)
 }
 
 // DeferredRoutineSender allows a nested routine to send the information needed

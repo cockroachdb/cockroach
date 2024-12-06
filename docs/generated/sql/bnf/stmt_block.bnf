@@ -31,6 +31,8 @@ stmt_without_legacy_transaction ::=
 	| fetch_cursor_stmt
 	| move_cursor_stmt
 	| unlisten_stmt
+	| listen_stmt
+	| notify_stmt
 	| show_commit_timestamp_stmt
 
 legacy_transaction_stmt ::=
@@ -170,6 +172,13 @@ move_cursor_stmt ::=
 unlisten_stmt ::=
 	'UNLISTEN' type_name
 	| 'UNLISTEN' '*'
+
+listen_stmt ::=
+	'LISTEN' type_name
+
+notify_stmt ::=
+	'NOTIFY' type_name string_or_placeholder
+	| 'NOTIFY' type_name
 
 show_commit_timestamp_stmt ::=
 	'SHOW' 'COMMIT' 'TIMESTAMP'
@@ -503,6 +512,10 @@ cursor_movement_specifier ::=
 	| 'FIRST' opt_from_or_in cursor_name
 	| 'LAST' opt_from_or_in cursor_name
 
+string_or_placeholder ::=
+	non_reserved_word_or_sconst
+	| 'PLACEHOLDER'
+
 opt_transaction ::=
 	'TRANSACTION'
 	| 
@@ -676,10 +689,6 @@ explain_option_list ::=
 
 import_format ::=
 	name
-
-string_or_placeholder ::=
-	non_reserved_word_or_sconst
-	| 'PLACEHOLDER'
 
 opt_with_options ::=
 	'WITH' kv_option_list
@@ -1234,6 +1243,7 @@ unreserved_keyword ::=
 	| 'LINESTRINGZ'
 	| 'LINESTRINGZM'
 	| 'LIST'
+	| 'LISTEN'
 	| 'LOCAL'
 	| 'LOCKED'
 	| 'LOGICAL'
@@ -1275,6 +1285,7 @@ unreserved_keyword ::=
 	| 'NO'
 	| 'NORMAL'
 	| 'NOTHING'
+	| 'NOTIFY'
 	| 'NO_INDEX_JOIN'
 	| 'NO_ZIGZAG_JOIN'
 	| 'NO_FULL_SCAN'
@@ -1634,6 +1645,10 @@ opt_forward_backward ::=
 signed_iconst64 ::=
 	signed_iconst
 
+non_reserved_word_or_sconst ::=
+	non_reserved_word
+	| 'SCONST'
+
 alter_table_stmt ::=
 	alter_onetable_stmt
 	| alter_split_stmt
@@ -1917,10 +1932,6 @@ drop_trigger_stmt ::=
 explain_option_name ::=
 	non_reserved_word
 
-non_reserved_word_or_sconst ::=
-	non_reserved_word
-	| 'SCONST'
-
 kv_option_list ::=
 	( kv_option ) ( ( ',' kv_option ) )*
 
@@ -2151,6 +2162,12 @@ opt_comma ::=
 signed_iconst ::=
 	'ICONST'
 	| only_signed_iconst
+
+non_reserved_word ::=
+	'identifier'
+	| unreserved_keyword
+	| col_name_keyword
+	| type_func_name_keyword
 
 alter_onetable_stmt ::=
 	'ALTER' 'TABLE' relation_expr alter_table_cmds
@@ -2716,12 +2733,6 @@ view_name_list ::=
 
 sequence_name_list ::=
 	db_object_name_list
-
-non_reserved_word ::=
-	'identifier'
-	| unreserved_keyword
-	| col_name_keyword
-	| type_func_name_keyword
 
 kv_option ::=
 	name '=' string_or_placeholder
@@ -3920,6 +3931,7 @@ bare_label_keywords ::=
 	| 'LINESTRINGZ'
 	| 'LINESTRINGZM'
 	| 'LIST'
+	| 'LISTEN'
 	| 'LOCAL'
 	| 'LOCALITY'
 	| 'LOCALTIME'
@@ -3977,6 +3989,7 @@ bare_label_keywords ::=
 	| 'NOT'
 	| 'NOTHING'
 	| 'NOTHING'
+	| 'NOTIFY'
 	| 'NOVIEWACTIVITY'
 	| 'NOVIEWACTIVITYREDACTED'
 	| 'NOVIEWCLUSTERSETTING'

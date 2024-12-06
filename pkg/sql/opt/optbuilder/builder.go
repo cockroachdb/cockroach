@@ -8,6 +8,7 @@ package optbuilder
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -341,6 +342,9 @@ func (b *Builder) buildStmtAtRootWithScope(
 func (b *Builder) buildStmt(
 	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
+	if strings.HasPrefix(stmt.String(), "LISTEN") || strings.HasPrefix(stmt.String(), "UNLISTEN") {
+		log.Infof(b.ctx, "Building statement: %s", stmt)
+	}
 	if b.insideViewDef {
 		// A blocklist of statements that can't be used from inside a view.
 		switch stmt := stmt.(type) {

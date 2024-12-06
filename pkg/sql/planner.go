@@ -268,6 +268,10 @@ type planner struct {
 	// Do not use this object directly; use the BufferClientNotice() method
 	// instead.
 	noticeSender noticeSender
+	// ditto? idk.
+	// hooked up to the client comm. this is like a sink.
+	// TODO: this has to be thread safe wrt the conn and statements executing on it.
+	notificationSender notificationSender
 
 	queryCacheSession querycache.Session
 

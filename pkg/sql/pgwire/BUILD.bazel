@@ -53,6 +53,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
+        "//pkg/sql/pgwire/pgnotification",
         "//pkg/sql/pgwire/pgwirebase",
         "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/sem/catconstants",

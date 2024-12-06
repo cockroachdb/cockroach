@@ -477,6 +477,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutatorIterator.paramStatusUpdater = res
 	p.noticeSender = res
+	p.notificationSender = ex.clientComm
 	ih := &p.instrumentation
 
 	if ex.executorType != executorTypeInternal {
