@@ -5691,6 +5691,13 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 	// lower (8 and 16 MiB default).
 	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, 2<<20)
 	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, 4<<20)
+	// This test doesn't want leadership changing hands, and leader leases (by
+	// virtue of raft fortification) help ensure this. Override to disable any
+	// metamorphosis.
+	kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, roachpb.LeaseLeader)
+	// Using a manual clock here ensures that StoreLiveness support, once
+	// established, never expires. By extension, leadership should stay sticky.
+	manualClock := hlc.NewHybridManualClock()
 
 	disableWorkQueueGrantingServers := make([]atomic.Bool, numNodes)
 	setTokenReturnEnabled := func(enabled bool, serverIdxs ...int) {
@@ -5705,6 +5712,9 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 		argsPerServer[i] = base.TestServerArgs{
 			Settings: settings,
 			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
+				},
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
 						UseOnlyForScratchRanges: true,
