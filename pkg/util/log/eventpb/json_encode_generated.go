@@ -3145,6 +3145,15 @@ func (m *FinishSchemaChange) AppendJSONFields(printComma bool, b redact.Redactab
 
 	printComma, b = m.CommonSchemaChangeEventDetails.AppendJSONFields(printComma, b)
 
+	if m.LatencyNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LatencyNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.LatencyNanos), 10)
+	}
+
 	return printComma, b
 }
 
@@ -3154,6 +3163,15 @@ func (m *FinishSchemaChangeRollback) AppendJSONFields(printComma bool, b redact.
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
 
 	printComma, b = m.CommonSchemaChangeEventDetails.AppendJSONFields(printComma, b)
+
+	if m.LatencyNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LatencyNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.LatencyNanos), 10)
+	}
 
 	return printComma, b
 }
@@ -4284,6 +4302,15 @@ func (m *ReverseSchemaChange) AppendJSONFields(printComma bool, b redact.Redacta
 		b = append(b, "\"SQLSTATE\":\""...)
 		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SQLSTATE)))
 		b = append(b, '"')
+	}
+
+	if m.LatencyNanos != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LatencyNanos\":"...)
+		b = strconv.AppendInt(b, int64(m.LatencyNanos), 10)
 	}
 
 	return printComma, b
