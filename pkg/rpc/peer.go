@@ -9,6 +9,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"math"
+	"net"
 	"runtime/debug"
 	"runtime/pprof"
 	"time"
@@ -31,8 +33,11 @@ import (
 	"google.golang.org/grpc/status"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcconn"
+	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
 	"storj.io/drpc/drpcpool"
+	"storj.io/drpc/drpcstream"
+	"storj.io/drpc/drpcwire"
 )
 
 type peerStatus int
@@ -245,10 +250,18 @@ func (c *closeConnOnWriteFailureConn) Invoke(
 	ctx context.Context, rpc string, enc drpc.Encoding, in,
 	out drpc.Message,
 ) error {
-	err := c.Conn.Invoke(ctx, rpc, enc, in, out)
+	// HACK: I think something might go wrong if incoming ctx is canceled
+	// while Invoke is inflight.
+	nonCancelCtx := context.Background()
+	err := c.Conn.Invoke(nonCancelCtx, rpc, enc, in, out)
 	if err != nil {
-		log.Errorf(ctx, "TBG closing drpcconn after Invoke err: %v", err)
-		_ = c.Conn.Close()
+		var closed bool
+		select {
+		case <-c.Conn.Closed():
+			closed = true
+		default:
+		}
+		log.Errorf(ctx, "TBG Invoke err (conn closed: %t): %v", closed, err)
 	}
 	return err
 }
@@ -266,6 +279,15 @@ func (c closeConnOnWriteFailureConn) NewStream(ctx context.Context, rpc string, 
 	panic("implement me")
 }
 */
+
+type logOnCloseNetConn struct {
+	net.Conn
+}
+
+func (c *logOnCloseNetConn) Close() error {
+	log.Errorf(context.Background(), "TBG net.Conn.Close() called: %v", string(debug.Stack()))
+	return c.Conn.Close()
+}
 
 // newPeer returns circuit breaker that trips when connection (associated
 // with provided peerKey) is failed. The breaker's probe *is* the heartbeat loop
@@ -312,14 +334,33 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 			pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{})
 			pooledConn := pool.Get(context.Background() /* unused */, struct{}{}, func(ctx context.Context,
 				_ struct{}) (drpcpool.Conn, error) {
-				rawconn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
-				if err != nil {
-					return nil, err
+				var rawconn *logOnCloseNetConn
+				{
+					netConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
+					if err != nil {
+						return nil, err
+					}
+					rawconn = &logOnCloseNetConn{netConn}
 				}
 
+				opts := drpcconn.Options{
+					Manager: drpcmanager.Options{
+						WriterBufferSize: 0,
+						Reader: drpcwire.ReaderOptions{
+							MaximumBufferSize: math.MaxInt,
+						},
+						Stream: drpcstream.Options{
+							SplitSize:         0,
+							ManualFlush:       false,
+							MaximumBufferSize: 0,
+						},
+						SoftCancel:        false,
+						InactivityTimeout: 0,
+					},
+				}
 				var conn *drpcconn.Conn
 				if rpcCtx.ContextOptions.Insecure {
-					conn = drpcconn.New(rawconn)
+					conn = drpcconn.NewWithOptions(rawconn, opts)
 				} else {
 					tlsConfig, err := rpcCtx.GetClientTLSConfig()
 					if err != nil {
@@ -327,7 +368,7 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 					}
 					tlsConfig.InsecureSkipVerify = true // HACK
 					tlsConn := tls.Client(rawconn, tlsConfig)
-					conn = drpcconn.New(tlsConn)
+					conn = drpcconn.NewWithOptions(tlsConn, opts)
 				}
 				// TODO(tbg): if we remove gRPC, this is where we'd do an initial ping
 				// to ascertain that the peer is compatible with us before returning
