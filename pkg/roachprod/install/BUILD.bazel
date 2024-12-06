@@ -58,6 +58,7 @@ go_test(
     srcs = [
         "cluster_synced_test.go",
         "cockroach_test.go",
+        "monitor_test.go",
         "services_test.go",
         "session_test.go",
         "staging_test.go",
@@ -72,6 +73,7 @@ go_test(
         "//pkg/roachprod/vm/gce/testutils",
         "//pkg/roachprod/vm/local",
         "//pkg/testutils/datapathutils",
+        "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "@com_github_cockroachdb_datadriven//:datadriven",
