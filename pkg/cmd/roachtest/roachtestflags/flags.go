@@ -265,6 +265,13 @@ var (
 			binary)`,
 	})
 
+	ForceCpuProfile bool
+	_               = registerRunFlag(&ForceCpuProfile, FlagInfo{
+		Name: "force-cpu-profile",
+		Usage: `
+                        Enable unconditional collection of CPU profiles`,
+	})
+
 	Parallelism int = 10
 	_               = registerRunFlag(&Parallelism, FlagInfo{
 		Name:  "parallelism",
