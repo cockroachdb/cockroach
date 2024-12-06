@@ -331,7 +331,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		// The delta in these historical proposals is accurate, but does not account
 		// for the sideloaded entries.
 		// TODO(pav-kv): remove the zero clause after any below-raft migration.
-		sm.r.handleTruncatedStateResult(ctx, truncState, rResult.RaftExpectedFirstIndex,
+		sm.r.handleTruncatedStateResult(ctx, *truncState, rResult.RaftExpectedFirstIndex,
 			rResult.RaftLogDelta, true /* isDeltaTrusted */, false /* sideloadIncluded */)
 		rResult.RaftLogDelta = 0
 		rResult.RaftExpectedFirstIndex = 0
