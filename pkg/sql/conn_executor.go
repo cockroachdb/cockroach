@@ -1970,6 +1970,10 @@ func (ns *prepStmtNamespace) closeAllPortals(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
 ) {
 	for name, p := range ns.portals {
+		if p.pausableRes != nil {
+			p.pausableRes.CloseAfterPause()
+			_, _, _ = p.pausableRes.WaitForRows()
+		}
 		p.close(ctx, prepStmtsNamespaceMemAcc, name)
 		delete(ns.portals, name)
 	}
@@ -1979,7 +1983,9 @@ func (ns *prepStmtNamespace) closeAllPausablePortals(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
 ) {
 	for name, p := range ns.portals {
-		if p.pauseInfo != nil {
+		if p.pausableRes != nil {
+			p.pausableRes.CloseAfterPause()
+			_, _, _ = p.pausableRes.WaitForRows()
 			p.close(ctx, prepStmtsNamespaceMemAcc, name)
 			delete(ns.portals, name)
 		}
@@ -2434,32 +2440,43 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				portal.pauseInfo = nil
 			}
 
-			stmtRes := ex.clientComm.CreateStatementResult(
-				portal.Stmt.AST,
-				// The client is using the extended protocol, so no row description is
-				// needed.
-				DontNeedRowDesc,
-				pos, portal.OutFormats,
-				ex.sessionData().DataConversionConfig,
-				ex.sessionData().GetLocation(),
-				tcmd.Limit,
-				portalName,
-				ex.implicitTxn(),
-				portal.portalPausablity,
-			)
-			if portal.pauseInfo != nil {
-				portal.pauseInfo.curRes = stmtRes
-			}
-			res = stmtRes
+			if tcmd.Limit == 0 || portal.pausableRes == nil {
+				stmtRes := ex.clientComm.CreateStatementResult(
+					portal.Stmt.AST,
+					// The client is using the extended protocol, so no row description is
+					// needed.
+					DontNeedRowDesc,
+					pos, portal.OutFormats,
+					ex.sessionData().DataConversionConfig,
+					ex.sessionData().GetLocation(),
+					tcmd.Limit,
+					portalName,
+					ex.implicitTxn(),
+					portal.portalPausablity,
+				)
+				if portal.pauseInfo != nil {
+					portal.pauseInfo.curRes = stmtRes
+				}
+				res = stmtRes
+				if tcmd.Limit != 0 {
+					portal.pausableRes = stmtRes
+					ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
+				}
 
-			// In the extended protocol, autocommit is not always allowed. The postgres
-			// docs say that commands in the extended protocol are all treated as an
-			// implicit transaction that does not get committed until a Sync message is
-			// received. However, if we are executing a statement that is immediately
-			// followed by Sync (which is the common case), then we still can auto-commit,
-			// which allows the 1PC txn fast path to be used.
-			canAutoCommit := ex.implicitTxn() && tcmd.FollowedBySync
-			ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo, canAutoCommit)
+				// In the extended protocol, autocommit is not always allowed. The postgres
+				// docs say that commands in the extended protocol are all treated as an
+				// implicit transaction that does not get committed until a Sync message is
+				// received. However, if we are executing a statement that is immediately
+				// followed by Sync (which is the common case), then we still can auto-commit,
+				// which allows the 1PC txn fast path to be used.
+				canAutoCommit := ex.implicitTxn() && tcmd.FollowedBySync
+				ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo, canAutoCommit)
+				return err
+			}
+
+			res = portal.pausableRes
+			portal.pausableRes.ResumeAfterPause(tcmd.Limit)
+			ev, payload, err = portal.pausableRes.WaitForRows()
 			return err
 		}()
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
@@ -2476,10 +2493,10 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		}
 		// Update the cmd and pos in the stmtBuf as limitedCommandResult will have
 		// advanced the position if the the portal is repeatedly executed with a limit
-		cmd, pos, err = ex.stmtBuf.CurCmd()
-		if err != nil {
-			return err
-		}
+		//cmd, pos, err = ex.stmtBuf.CurCmd()
+		//if err != nil {
+		//	return err
+		//}
 
 	case PrepareStmt:
 		ex.curStmtAST = tcmd.AST

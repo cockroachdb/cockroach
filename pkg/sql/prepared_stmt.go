@@ -254,6 +254,8 @@ type PreparedPortal struct {
 	// OutFormats contains the requested formats for the output columns.
 	OutFormats []pgwirebase.FormatCode
 
+	pausableRes CommandResult
+
 	// exhausted tracks whether this portal has already been fully exhausted,
 	// meaning that any additional attempts to execute it should return no
 	// rows.
@@ -289,9 +291,9 @@ func (ex *connExecutor) makePreparedPortal(
 		telemetry.Inc(sqltelemetry.StmtsTriedWithPausablePortals)
 		// We will check whether the statement itself is pausable (i.e., that it
 		// doesn't contain DDL or mutations) when we build the plan.
-		portal.pauseInfo = &portalPauseInfo{}
-		portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
-		portal.portalPausablity = PausablePortal
+		//portal.pauseInfo = &portalPauseInfo{}
+		//portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
+		//portal.portalPausablity = PausablePortal
 	}
 	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 }
