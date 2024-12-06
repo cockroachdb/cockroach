@@ -122,17 +122,16 @@ func (bs *BufferedSender) run(
 		case <-bs.notifyDataC:
 			for {
 				e, success := bs.popFront()
-				if success {
-					err := bs.sender.Send(e.ev)
-					e.alloc.Release(ctx)
-					if e.ev.Error != nil {
-						onError(e.ev.StreamID)
-					}
-					if err != nil {
-						return err
-					}
-				} else {
+				if !success {
 					break
+				}
+				err := bs.sender.Send(e.ev)
+				e.alloc.Release(ctx)
+				if e.ev.Error != nil {
+					onError(e.ev.StreamID)
+				}
+				if err != nil {
+					return err
 				}
 			}
 		}
