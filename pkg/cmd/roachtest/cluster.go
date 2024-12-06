@@ -2161,6 +2161,17 @@ func (c *clusterImpl) StartE(
 		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_CHECK_CONSISTENCY_FATAL=true")
 	}
 
+	if roachtestflags.ForceCpuProfile {
+		settings.ClusterSettings["server.cpu_profile.duration"] = "20s"
+		settings.ClusterSettings["server.cpu_profile.interval"] = "1m"
+		// NB: the docs say that the profiling becomes unconditional if
+		// you set the threshold to 0. This is incorrect, the database
+		// has no such functionality. We set it to 1 as we expect the
+		// CPU usage % to be greater than 1% either way.
+		settings.ClusterSettings["server.cpu_profile.cpu_usage_combined_threshold"] = "1"
+		settings.ClusterSettings["server.cpu_profile.total_dump_size_limit"] = "256 MiB"
+	}
+
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
 	if err := roachprod.Start(ctx, l, c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
