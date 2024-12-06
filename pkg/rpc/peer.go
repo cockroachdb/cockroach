@@ -210,6 +210,16 @@ func (p *peer) snap() PeerSnap {
 	return p.mu.PeerSnap
 }
 
+type closeEntirePoolConn struct {
+	drpcpool.Conn
+	pool *drpcpool.Pool[struct{}, drpcpool.Conn]
+}
+
+func (c *closeEntirePoolConn) Close() error {
+	_ = c.Conn.Close()
+	return c.pool.Close()
+}
+
 // newPeer returns circuit breaker that trips when connection (associated
 // with provided peerKey) is failed. The breaker's probe *is* the heartbeat loop
 // and is thus running at all times. The exception is a decommissioned node, for
@@ -277,7 +287,15 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 				// the conn for general use.
 				return conn, err
 			})
-			return pooledConn, nil
+			// `pooledConn.Close` doesn't tear down any of the underlying TCP
+			// connections but simply marks the pooledConn handle as returning
+			// errors. When we "close" this conn, we want to tear down all of
+			// the connections in the pool (in effect mirroring the behavior of
+			// gRPC where a single conn is shared).
+			return &closeEntirePoolConn{
+				Conn: pooledConn,
+				pool: pool,
+			}, nil
 		},
 		heartbeatInterval: rpcCtx.RPCHeartbeatInterval,
 		heartbeatTimeout:  rpcCtx.RPCHeartbeatTimeout,
@@ -412,9 +430,15 @@ func (p *peer) runOnce(ctx context.Context, report func(error)) error {
 	if err != nil {
 		return err
 	}
-	dc, err := p.dialDRPC(ctx, p.k.TargetAddr)
 	defer func() {
 		_ = cc.Close() // nolint:grpcconnclose
+	}()
+	dc, err := p.dialDRPC(ctx, p.k.TargetAddr)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = dc.Close()
 	}()
 
 	// Set up notifications on a channel when gRPC tears down, so that we
