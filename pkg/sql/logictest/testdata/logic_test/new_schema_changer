@@ -1103,12 +1103,17 @@ statement ok
 DROP VIEW v1ev CASCADE;
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos'
 FROM system.eventlog
 ORDER BY "timestamp", info DESC
 ----
 1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW test.public.v1ev CASCADE", "Tag": "DROP VIEW", "User": "root", "ViewName": "test.public.v1ev"}
 1  {"EventType": "finish_schema_change", "InstanceID": 1}
+
+# Verify that LatencyNanos is populated.
+statement ok
+SELECT 1 / coalesce((info::JSONB->'LatencyNanos')::INT, 0) FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
 
 statement ok
 CREATE VIEW v1ev AS (SELECT name FROM T1EV);
@@ -1123,7 +1128,7 @@ statement ok
 DROP TABLE t1ev,t2ev CASCADE;
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
@@ -1142,7 +1147,7 @@ statement ok
 ALTER TABLE fooev ADD COLUMN j INT
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
@@ -1190,7 +1195,7 @@ statement ok
 DROP DATABASE db2 cascade;
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
