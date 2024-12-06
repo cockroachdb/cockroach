@@ -6,7 +6,7 @@ CREATE INDEX idx_b ON t(b);
 alter table t add primary key (a);
 EXPLAIN (DDL) rollback at post-commit stage 5 of 15;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ADD PRIMARY KEY (‹a›);
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD PRIMARY KEY (a);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 1 element transitioning toward PUBLIC

@@ -5,7 +5,7 @@ CREATE TABLE t (a INT NOT NULL);
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 EXPLAIN (DDL) rollback at post-commit stage 11 of 15;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›);
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (a);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 3 elements transitioning toward PUBLIC

@@ -52,7 +52,7 @@ PreCommitPhase stage 2 of 2 with 3 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops pending
       Statements:
       - statement: DROP INDEX idx1 CASCADE
-        redactedstatement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx1› CASCADE
+        redactedstatement: DROP INDEX defaultdb.public.t1@idx1 CASCADE
         statementtag: DROP INDEX
 PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
   transitions:
@@ -209,7 +209,7 @@ PreCommitPhase stage 2 of 2 with 5 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops pending
       Statements:
       - statement: DROP INDEX idx2 CASCADE
-        redactedstatement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx2› CASCADE
+        redactedstatement: DROP INDEX defaultdb.public.t1@idx2 CASCADE
         statementtag: DROP INDEX
 PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
   transitions:
@@ -431,7 +431,7 @@ PreCommitPhase stage 2 of 2 with 6 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops pending
       Statements:
       - statement: DROP INDEX idx3 CASCADE
-        redactedstatement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx3› CASCADE
+        redactedstatement: DROP INDEX defaultdb.public.t1@idx3 CASCADE
         statementtag: DROP INDEX
 PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
   transitions:
@@ -867,7 +867,7 @@ PreCommitPhase stage 2 of 2 with 23 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops pending
       Statements:
       - statement: DROP INDEX idx4 CASCADE
-        redactedstatement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx4› CASCADE
+        redactedstatement: DROP INDEX defaultdb.public.t1@idx4 CASCADE
         statementtag: DROP INDEX
 PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
   transitions:
@@ -1482,7 +1482,7 @@ PreCommitPhase stage 2 of 2 with 37 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops pending
       Statements:
       - statement: DROP INDEX v2@idx CASCADE
-        redactedstatement: DROP INDEX ‹defaultdb›.public.‹v2›@‹idx› CASCADE
+        redactedstatement: DROP INDEX defaultdb.public.v2@idx CASCADE
         statementtag: DROP INDEX
 PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
   transitions:

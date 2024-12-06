@@ -70,7 +70,7 @@ func makeEventLogCallback(
 		descID := screl.GetDescID(lt.target.Element())
 		stmtID := lt.target.Metadata.StatementID
 		details := eventpb.CommonSQLEventDetails{
-			Statement:       redact.RedactableString(ts.Statements[stmtID].RedactedStatement),
+			Statement:       ts.Statements[stmtID].RedactedStatement,
 			Tag:             ts.Statements[stmtID].StatementTag,
 			User:            ts.Authorization.UserName,
 			DescriptorID:    uint32(descID),
