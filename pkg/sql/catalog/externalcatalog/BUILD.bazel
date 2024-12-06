@@ -31,7 +31,6 @@ go_test(
     embed = [":externalcatalog"],
     deps = [
         "//pkg/base",
-        "//pkg/kv",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",

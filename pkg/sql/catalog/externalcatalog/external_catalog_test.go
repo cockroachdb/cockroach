@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -34,7 +33,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, conn, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -51,19 +50,24 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	require.NoError(t, err)
 
 	extractCatalog := func() externalpb.ExternalCatalog {
-		opName := redact.SafeString("extractCatalog")
-		planner, close := sql.NewInternalPlanner(
-			opName,
-			kv.NewTxn(ctx, kvDB, 0),
-			sqlUser,
-			&sql.MemoryMetrics{},
-			&execCfg,
-			sql.NewInternalSessionData(ctx, execCfg.Settings, opName),
-		)
-		defer close()
+		var catalog externalpb.ExternalCatalog
+		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			opName := redact.SafeString("extractCatalog")
+			planner, close := sql.NewInternalPlanner(
+				opName,
+				txn.KV(),
+				sqlUser,
+				&sql.MemoryMetrics{},
+				&execCfg,
+				sql.NewInternalSessionData(ctx, execCfg.Settings, opName),
+			)
+			defer close()
 
-		catalog, err := ExtractExternalCatalog(ctx, planner.(resolver.SchemaResolver), "db1.sc1.tab1", "db1.sc1.tab2")
-		require.NoError(t, err)
+			catalog, err = ExtractExternalCatalog(ctx, planner.(resolver.SchemaResolver), txn, col, "db1.sc1.tab1", "db1.sc1.tab2")
+			require.NoError(t, err)
+			return nil
+		}))
+
 		return catalog
 	}
 
@@ -74,6 +78,13 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	// Extract the same tables but note that tab1 now has a back reference.
 	sqlDB.Exec(t, "CREATE TABLE db1.sc1.tab3 (a INT PRIMARY KEY, b INT REFERENCES db1.sc1.tab2(a))")
 	sadCatalog := extractCatalog()
+
+	// Modify table 1 to have a udt column
+	sqlDB.Exec(t, "CREATE TYPE db1.sc1.udt AS ENUM ('a', 'b', 'c')")
+	sqlDB.Exec(t, "ALTER TABLE db1.sc1.tab1 ADD COLUMN c db1.sc1.udt")
+	udtCatalog := extractCatalog()
+	require.Equal(t, "udt", udtCatalog.Types[0].Name)
+	require.Equal(t, "_udt", udtCatalog.Types[1].Name)
 
 	srv2, conn2, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	execCfg2 := srv2.ExecutorConfig().(sql.ExecutorConfig)
