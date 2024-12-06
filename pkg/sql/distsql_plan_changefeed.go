@@ -116,10 +116,14 @@ func PlanCDCExpression(
 	}
 
 	const allowAutoCommit = false
-	if err := opc.runExecBuilder(
-		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.SemaCtx(), p.EvalContext(), allowAutoCommit,
+	const disableTelemetryAndPlanGists = false
+	if result, err := opc.runExecBuilder(
+		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.SemaCtx(),
+		p.EvalContext(), allowAutoCommit, disableTelemetryAndPlanGists,
 	); err != nil {
 		return cdcPlan, err
+	} else {
+		p.curPlan.planComponents = *result
 	}
 
 	// Walk the plan, perform sanity checks and extract information we need.

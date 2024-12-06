@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -574,8 +573,10 @@ func (ih *instrumentationHelper) setupWithPlanGist(
 	}
 	// Since we haven't enabled the bundle collection before the optimization,
 	// explain plan wasn't populated. We'll rerun the execbuilder with the
-	// explain factory to get that, on the copy of the memo (to be safe to not
-	// mutate the original memo).
+	// explain factory to get that (the explain factory will be used because we
+	// now have collectBundle set to true), on the copy of the memo (to be safe
+	// to not mutate the original memo).
+	// TODO: do we need this copy?
 	copiedMemo := func(o *xform.Optimizer, mem *memo.Memo) *memo.Memo {
 		f := o.Factory()
 		f.CopyAndReplace(
@@ -586,29 +587,23 @@ func (ih *instrumentationHelper) setupWithPlanGist(
 		return f.DetachMemo()
 	}(&p.optPlanningCtx.optimizer, p.curPlan.mem)
 
-	explainFactory := explain.NewFactory(newExecFactory(ctx, p), p.SemaCtx(), p.EvalContext())
-	bld := execbuilder.New(
-		ctx, explainFactory, &p.optPlanningCtx.optimizer, copiedMemo,
-		p.curPlan.catalog, copiedMemo.RootExpr(),
-		p.SemaCtx(), p.EvalContext(), p.autoCommit, statements.IsANSIDML(p.stmt.AST),
-	)
 	// Disable telemetry in order to not double count things since we've already
 	// built the plan once.
-	bld.DisableTelemetry()
-	if plan, err := bld.Build(); err != nil {
+	const disableTelemetryAndPlanGists = true
+	p.optPlanningCtx.reset(ctx)
+	// TODO: which memo do we want to keep referencing?
+	result, err := p.runExecBuild(ctx, copiedMemo, disableTelemetryAndPlanGists)
+	if err != nil {
+		// This seems unexpected, but let's proceed with the original plan.
 		log.VEventf(ctx, 1, "hit an error when using explain factory: %v", err)
 	} else {
-		ep := plan.(*explain.Plan)
-		ih.RecordExplainPlan(ep)
 		// We need to close the original plan since we're going to overwrite it.
 		// Note that the new plan will be closed correctly by the defer in
 		// dispatchToExecutionEngine.
-		p.curPlan.close(ctx)
-		// We need to use the newly-created plan going forward in order for
-		// execution stats to be attributed correctly (execNodeTraceMetadata is
-		// a map from pointers to plan nodes).
-		p.curPlan.planComponents = *ep.WrappedPlan.(*planComponents)
+		p.curPlan.planComponents.close(ctx)
+		p.curPlan.planComponents = *result
 	}
+
 	return ctx
 }
 
