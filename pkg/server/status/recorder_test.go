@@ -515,7 +515,7 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testGauge", "gauge", 20},
 		{"testGaugeFloat64", "floatgauge", 20},
 		{"testCounter", "counter", 5},
-		{"testHistogram", "histogram", 9},
+		{"testHistogram", "histogram", 10},
 		{"testAggGauge", "agggauge", 4},
 		{"testAggCounter", "aggcounter", 7},
 
@@ -608,12 +608,14 @@ func TestMetricsRecorder(t *testing.T) {
 				})
 				reg.reg.AddMetric(h)
 				h.RecordValue(data.val)
-				for _, q := range metric.RecordHistogramQuantiles {
+				for _, q := range metric.HistogramMetricComputers {
+					if !q.IsSummaryMetric {
+						continue
+					}
 					addExpected(reg.prefix, data.name+q.Suffix, reg.source, 100, 10, reg.isNode)
 				}
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
-				addExpected(reg.prefix, data.name+"-sum", reg.source, 100, 9, reg.isNode)
-				addExpected(reg.prefix, data.name+"-avg", reg.source, 100, 9, reg.isNode)
+				addExpected(reg.prefix, data.name+"-sum", reg.source, 100, 10, reg.isNode)
 			default:
 				t.Fatalf("unexpected: %+v", data)
 			}
