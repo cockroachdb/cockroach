@@ -602,11 +602,9 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 			updateFn()
 		})
 	}
-	if nl := store.cfg.NodeLiveness; nl != nil { // node liveness is nil for some unittests
-		nl.RegisterCallback(func(_ livenesspb.Liveness) {
-			updateFn()
-		})
-	}
+	store.cfg.NodeLiveness.RegisterCallback(func(_ livenesspb.Liveness) {
+		updateFn()
+	})
 
 	return rq
 }

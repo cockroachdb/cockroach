@@ -805,9 +805,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			// Update the liveness map.
-			if s.cfg.NodeLiveness != nil {
-				s.updateLivenessMap()
-			}
+			s.updateLivenessMap()
 			s.updateIOThresholdMap()
 
 			s.unquiescedReplicas.Lock()
