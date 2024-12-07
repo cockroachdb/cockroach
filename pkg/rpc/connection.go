@@ -34,17 +34,26 @@ type Connection struct {
 	// It always has to be signaled eventually, regardless of the stopper
 	// draining, etc, since callers might be blocking on it.
 	connFuture connFuture
+	// batchStreamPool holds a pool of BatchStreamClient streams established on
+	// the connection. The pool can be used to avoid the overhead of unary Batch
+	// RPCs.
+	//
+	// The pool is only initialized once the ClientConn is resolved.
+	batchStreamPool BatchStreamPool
 }
 
 // newConnectionToNodeID makes a Connection for the given node, class, and nontrivial Signal
 // that should be queried in Connect().
-func newConnectionToNodeID(k peerKey, breakerSignal func() circuit.Signal) *Connection {
+func newConnectionToNodeID(
+	opts *ContextOptions, k peerKey, breakerSignal func() circuit.Signal,
+) *Connection {
 	c := &Connection{
 		breakerSignalFn: breakerSignal,
 		k:               k,
 		connFuture: connFuture{
 			ready: make(chan struct{}),
 		},
+		batchStreamPool: makeStreamPool(opts.Stopper, newBatchStream),
 	}
 	return c
 }
@@ -154,6 +163,13 @@ func (c *Connection) Health() error {
 
 func (c *Connection) Signal() circuit.Signal {
 	return c.breakerSignalFn()
+}
+
+func (c *Connection) BatchStreamPool() *BatchStreamPool {
+	if !c.connFuture.Resolved() {
+		panic("BatchStreamPool called on unresolved connection")
+	}
+	return &c.batchStreamPool
 }
 
 type connFuture struct {

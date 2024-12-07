@@ -572,6 +572,30 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: noError,
 			},
 		},
+		"/cockroach.roachpb.Internal/BatchStream": {
+			{
+				req:    &kvpb.BatchRequest{},
+				expErr: `requested key span /Max not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &kvpb.BatchRequest{Requests: makeReqs(
+					makeReq("a", "b"),
+				)},
+				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &kvpb.BatchRequest{Requests: makeReqs(
+					makeReq(prefix(5, "a"), prefix(5, "b")),
+				)},
+				expErr: `requested key span /Tenant/5{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &kvpb.BatchRequest{Requests: makeReqs(
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+				)},
+				expErr: noError,
+			},
+		},
 		"/cockroach.roachpb.Internal/RangeLookup": {
 			{
 				req:    &kvpb.RangeLookupRequest{},
@@ -1009,7 +1033,7 @@ func TestTenantAuthRequest(t *testing.T) {
 						// cross-read capability and the request is a read, expect no error.
 						if canCrossRead && strings.Contains(tc.expErr, "fully contained") {
 							switch method {
-							case "/cockroach.roachpb.Internal/Batch":
+							case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream":
 								if tc.req.(*kvpb.BatchRequest).IsReadOnly() {
 									tc.expErr = noError
 								}
