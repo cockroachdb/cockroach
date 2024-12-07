@@ -3669,8 +3669,9 @@ message JoinNodeResponse {
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
+  rpc BatchStream        (stream BatchRequest)       returns (stream BatchResponse)           {}
   rpc RangeLookup        (RangeLookupRequest)        returns (RangeLookupResponse)            {}
-  rpc MuxRangeFeed       (stream RangeFeedRequest)   returns (stream MuxRangeFeedEvent) {}
+  rpc MuxRangeFeed       (stream RangeFeedRequest)   returns (stream MuxRangeFeedEvent)       {}
   rpc GossipSubscription (GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
   rpc ResetQuorum        (ResetQuorumRequest)        returns (ResetQuorumResponse)            {}
 

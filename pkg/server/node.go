@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"sort"
@@ -1870,6 +1871,29 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
 	}
 	return br, nil
+}
+
+// BatchStream implements the kvpb.InternalServer interface.
+func (n *Node) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
+	ctx := stream.Context()
+	for {
+		args, err := stream.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+
+		br, err := n.Batch(ctx, args)
+		if err != nil {
+			return err
+		}
+		err = stream.Send(br)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // spanForRequest is the retval of setupSpanForIncomingRPC. It groups together a

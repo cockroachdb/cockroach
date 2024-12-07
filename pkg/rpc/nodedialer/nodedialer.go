@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
+	"storj.io/drpc/drpcpool"
 )
 
 // An AddressResolver translates NodeIDs into addresses.
@@ -96,7 +97,8 @@ func (n *Dialer) Dial(
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
 		return nil, err
 	}
-	return n.dial(ctx, nodeID, addr, locality, true, class)
+	conn, _, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	return conn, err
 }
 
 // DialNoBreaker is like Dial, but will not check the circuit breaker before
@@ -112,7 +114,8 @@ func (n *Dialer) DialNoBreaker(
 	if err != nil {
 		return nil, err
 	}
-	return n.dial(ctx, nodeID, addr, locality, false, class)
+	conn, _, _, err := n.dial(ctx, nodeID, addr, locality, false, class)
+	return conn, err
 }
 
 // DialInternalClient is a specialization of DialClass for callers that
@@ -141,11 +144,36 @@ func (n *Dialer) DialInternalClient(
 		return nil, errors.Wrap(err, "resolver error")
 	}
 	log.VEventf(ctx, 2, "sending request to %s", addr)
-	conn, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	conn, pool, dconn, err := n.dial(ctx, nodeID, addr, locality, true, class)
 	if err != nil {
 		return nil, err
 	}
-	return TracingInternalClient{InternalClient: kvpb.NewInternalClient(conn)}, nil
+
+	const useDRPC = true
+
+	if useDRPC {
+		grpcClient := kvpb.NewInternalClient(conn) // used for RangeFeed only
+		client := &unaryDRPCBatchServiceToInternalAdapter{
+			InternalClient: grpcClient,
+			drpcClient:     kvpb.NewDRPCDRPCBatchServiceClient(dconn),
+		}
+		return client, nil
+	}
+	client := kvpb.NewInternalClient(conn)
+	client = &BatchStreamerClient{InternalClient: client, pool: pool}
+	client = &TracingInternalClient{InternalClient: client}
+	return client, nil
+}
+
+type unaryDRPCBatchServiceToInternalAdapter struct {
+	kvpb.InternalClient
+	drpcClient kvpb.DRPCDRPCBatchServiceClient
+}
+
+func (a *unaryDRPCBatchServiceToInternalAdapter) Batch(
+	ctx context.Context, in *kvpb.BatchRequest, opts ...grpc.CallOption,
+) (*kvpb.BatchResponse, error) {
+	return a.drpcClient.Batch(ctx, in)
 }
 
 // dial performs the dialing of the remote connection. If checkBreaker
@@ -158,28 +186,28 @@ func (n *Dialer) dial(
 	locality roachpb.Locality,
 	checkBreaker bool,
 	class rpc.ConnectionClass,
-) (_ *grpc.ClientConn, err error) {
+) (_ *grpc.ClientConn, _ *rpc.BatchStreamPool, _ drpcpool.Conn, err error) {
 	const ctxWrapMsg = "dial"
 	// Don't trip the breaker if we're already canceled.
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, errors.Wrap(ctxErr, ctxWrapMsg)
+		return nil, nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
 	}
 	rpcConn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class)
-	connect := rpcConn.Connect
+	connect := rpcConn.Connect2
 	if !checkBreaker {
 		connect = rpcConn.ConnectNoBreaker
 	}
-	conn, err := connect(ctx)
+	conn, dconn, err := connect(ctx)
 	if err != nil {
 		// If we were canceled during the dial, don't trip the breaker.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, errors.Wrap(ctxErr, ctxWrapMsg)
+			return nil, nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
 		}
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	return conn, nil
+	return conn, &rpcConn.BatchStreamPool, dconn, nil
 }
 
 // ConnHealth returns nil if we have an open connection of the request
@@ -283,7 +311,7 @@ type TracingInternalClient struct {
 }
 
 // Batch overrides the Batch RPC client method and fills in tracing information.
-func (tic TracingInternalClient) Batch(
+func (tic *TracingInternalClient) Batch(
 	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
 ) (*kvpb.BatchResponse, error) {
 	sp := tracing.SpanFromContext(ctx)
@@ -292,4 +320,39 @@ func (tic TracingInternalClient) Batch(
 		ba.TraceInfo = sp.Meta().ToProto()
 	}
 	return tic.InternalClient.Batch(ctx, ba, opts...)
+}
+
+// BatchStreamerClient is a client that sends Batch RPCs over a long-lived
+// BatchStream RPC.
+type BatchStreamerClient struct {
+	kvpb.InternalClient
+	pool *rpc.BatchStreamPool
+}
+
+// Batch overrides the Batch RPC client method to use BatchStream.
+func (bsc *BatchStreamerClient) Batch(
+	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
+) (*kvpb.BatchResponse, error) {
+	sc := bsc.pool.Get()
+	if sc == nil {
+		var err error
+		sc, err = bsc.InternalClient.BatchStream(context.TODO(), opts...)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// TODO(nvanbenschoten): check for cancellation. This is going to require the
+	// introduction of a new goroutine with the same lifetime as the stream, as we
+	// need to establish the BatchStream with a cancellable context and then
+	// cancel the stream if the context of the current request is canceled.
+	_ = ctx.Err()
+	if err := sc.Send(ba); err != nil {
+		return nil, err
+	}
+	br, err := sc.Recv()
+	if err != nil {
+		return nil, err
+	}
+	bsc.pool.Put(sc)
+	return br, nil
 }
