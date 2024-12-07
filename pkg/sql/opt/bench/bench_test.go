@@ -517,6 +517,22 @@ var queries = [...]benchQuery{
 		args:  []interface{}{"'abc'"},
 	},
 	{
+		name:  "single-col-histogram-bounded-range-small",
+		query: "SELECT * FROM single_col_histogram WHERE k >= $1 and k < $2",
+		args: []interface{}{
+			"'abcdefghijklmnopqrstuvwxyz___________________7325'",
+			"'abcdefghijklmnopqrstuvwxyz___________________7350'",
+		},
+	},
+	{
+		name:  "single-col-histogram-bounded-range-big",
+		query: "SELECT * FROM single_col_histogram WHERE k >= $1 and k < $2",
+		args: []interface{}{
+			"'abcdefghijklmnopqrstuvwxyz___________________7325'",
+			"'abcdefghijklmnopqrstuvwxyz___________________9000'",
+		},
+	},
+	{
 		name:    "json-insert",
 		query:   `INSERT INTO json_table(k, i, j) VALUES (1, 10, '{"a": "foo", "b": "bar", "c": [2, 3, "baz", true, false, null]}')`,
 		args:    []interface{}{},
