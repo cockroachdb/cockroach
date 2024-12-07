@@ -1,0 +1,27 @@
+monitor nodes=1
+----
+
+write node=1
+cockroach-system=500
+status=unknown
+cockroach-tenant_0=501
+status=unknown
+<\n>
+----
+
+events count=2
+----
+n1: cockroach process for system interface is running (PID: 500)
+n1: cockroach process for virtual cluster "tenant", instance 0 is running (PID: 501)
+
+write node=1
+cockroach-system=0
+status=7
+cockroach-tenant_0=501
+status=unknown
+<\n>
+----
+
+events count=1
+----
+n1: cockroach process for system interface died (exit code 7)
