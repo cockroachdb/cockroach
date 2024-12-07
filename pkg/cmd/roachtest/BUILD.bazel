@@ -71,6 +71,7 @@ go_library(
         "@com_github_prometheus_client_golang//prometheus/promhttp",
         "@com_github_slack_go_slack//:slack",
         "@com_github_spf13_cobra//:cobra",
+        "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_sys//unix",
     ],

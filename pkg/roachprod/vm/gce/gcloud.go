@@ -1774,7 +1774,8 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 		if addCount == 0 {
 			continue
 		}
-		createArgs := []string{"compute", "instance-groups", "managed", "create-instance", "--zone", group.Zone, groupName}
+		createArgs := []string{"compute", "instance-groups", "managed", "create-instance", "--zone", group.Zone, groupName,
+			"--project", project}
 		for i := 0; i < addCount; i++ {
 			name := names[0]
 			names = names[1:]
