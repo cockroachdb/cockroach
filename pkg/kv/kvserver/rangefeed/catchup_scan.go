@@ -137,6 +137,7 @@ type outputEventFn func(e *kvpb.RangeFeedEvent) error
 // to SimpleMVCCIterator to replace the context.
 func (i *CatchUpIterator) CatchUpScan(
 	ctx context.Context,
+	streamCtx context.Context,
 	outputFn outputEventFn,
 	withDiff bool,
 	withFiltering bool,
@@ -175,213 +176,216 @@ func (i *CatchUpIterator) CatchUpScan(
 		} else if !ok {
 			break
 		}
-
-		if err := i.pacer.Pace(ctx); err != nil {
-			// We're unable to pace things automatically -- shout loudly
-			// semi-infrequently but don't fail the rangefeed itself.
-			if every.ShouldLog() {
-				log.Errorf(ctx, "automatic pacing: %v", err)
+		select {
+		case <-streamCtx.Done():
+			return streamCtx.Err()
+		default:
+			if err := i.pacer.Pace(ctx); err != nil {
+				// We're unable to pace things automatically -- shout loudly
+				// semi-infrequently but don't fail the rangefeed itself.
+				if every.ShouldLog() {
+					log.Errorf(context.Background(), "automatic pacing: %v", err)
+				}
 			}
-		}
 
-		// Emit any new MVCC range tombstones when their start key is encountered.
-		// Range keys can currently only be MVCC range tombstones.
-		//
-		// NB: RangeKeyChangedIgnoringTime() may trigger because a previous
-		// NextIgnoringTime() call moved onto an MVCC range tombstone outside of the
-		// time bounds. In this case, HasPointAndRange() will return false,false and
-		// we step forward.
-		if i.RangeKeyChangedIgnoringTime() {
-			hasPoint, hasRange := i.HasPointAndRange()
-			if hasRange {
-				// Emit events for these MVCC range tombstones, in chronological order.
-				rangeKeys := i.RangeKeys()
-				for j := rangeKeys.Len() - 1; j >= 0; j-- {
-					var span roachpb.Span
-					a, span.Key = a.Copy(rangeKeys.Bounds.Key, 0)
-					a, span.EndKey = a.Copy(rangeKeys.Bounds.EndKey, 0)
-					ts := rangeKeys.Versions[j].Timestamp
-					err := outputFn(&kvpb.RangeFeedEvent{
-						DeleteRange: &kvpb.RangeFeedDeleteRange{
-							Span:      span,
-							Timestamp: ts,
-						},
-					})
-					if err != nil {
-						return err
-					}
-					if i.OnEmit != nil {
-						v, err := storage.DecodeMVCCValue(rangeKeys.Versions[j].Value)
+			// Emit any new MVCC range tombstones when their start key is encountered.
+			// Range keys can currently only be MVCC range tombstones.
+			//
+			// NB: RangeKeyChangedIgnoringTime() may trigger because a previous
+			// NextIgnoringTime() call moved onto an MVCC range tombstone outside of the
+			// time bounds. In this case, HasPointAndRange() will return false,false and
+			// we step forward.
+			if i.RangeKeyChangedIgnoringTime() {
+				hasPoint, hasRange := i.HasPointAndRange()
+				if hasRange {
+					// Emit events for these MVCC range tombstones, in chronological order.
+					rangeKeys := i.RangeKeys()
+					for j := rangeKeys.Len() - 1; j >= 0; j-- {
+						var span roachpb.Span
+						a, span.Key = a.Copy(rangeKeys.Bounds.Key, 0)
+						a, span.EndKey = a.Copy(rangeKeys.Bounds.EndKey, 0)
+						ts := rangeKeys.Versions[j].Timestamp
+						err := outputFn(&kvpb.RangeFeedEvent{
+							DeleteRange: &kvpb.RangeFeedDeleteRange{
+								Span:      span,
+								Timestamp: ts,
+							},
+						})
 						if err != nil {
 							return err
 						}
-						i.OnEmit(span.Key, span.EndKey, ts, v.MVCCValueHeader)
-					}
-				}
-			}
-			// If there's no point key here (e.g. we found a bare range key above), then
-			// step onto the next key. This may be a point key version at the same key
-			// as the range key's start bound, or a later point/range key.
-			if !hasPoint {
-				i.Next()
-				continue
-			}
-		}
-
-		unsafeKey := i.UnsafeKey()
-		unsafeValRaw, err := i.UnsafeValue()
-		if err != nil {
-			return err
-		}
-		if !unsafeKey.IsValue() {
-			// Found a metadata key.
-			if err := protoutil.Unmarshal(unsafeValRaw, &meta); err != nil {
-				return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
-			}
-
-			// Inline values are unsupported by rangefeeds. MVCCIncrementalIterator
-			// should have errored on them already.
-			if meta.IsInline() {
-				return errors.AssertionFailedf("unexpected inline key %s", unsafeKey)
-			}
-
-			// This is an MVCCMetadata key for an intent. The catchUp scan
-			// only cares about committed values, so ignore this and skip past
-			// the corresponding provisional key-value. To do this, iterate to
-			// the provisional key-value, validate its timestamp, then iterate
-			// again. If we arrived here with a preceding call to NextIgnoringTime
-			// (in the with-diff case), it's possible that the intent is not within
-			// the time bounds. Using `NextIgnoringTime` on the next line makes sure
-			// that we are guaranteed to validate the version that belongs to the
-			// intent.
-			i.NextIgnoringTime()
-
-			if ok, err := i.Valid(); err != nil {
-				return errors.Wrap(err, "iterating to provisional value for intent")
-			} else if !ok {
-				return errors.Errorf("expected provisional value for intent")
-			}
-			if meta.Timestamp.ToTimestamp() != i.UnsafeKey().Timestamp {
-				return errors.Errorf("expected provisional value for intent with ts %s, found %s",
-					meta.Timestamp, i.UnsafeKey().Timestamp)
-			}
-			// Now move to the next key of interest. Note that if in the last
-			// iteration of the loop we called `NextIgnoringTime`, the fact that we
-			// hit an intent proves that there wasn't a previous value, so we can
-			// (in fact, have to, to avoid surfacing unwanted keys) unconditionally
-			// enforce time bounds.
-			i.Next()
-			continue
-		}
-
-		mvccVal, err := storage.DecodeMVCCValue(unsafeValRaw)
-		if err != nil {
-			return errors.Wrapf(err, "decoding mvcc value: %v", unsafeKey)
-		}
-		unsafeVal := mvccVal.Value.RawBytes
-
-		// Ignore the version if its timestamp is at or before the registration's
-		// (exclusive) starting timestamp.
-		ts := unsafeKey.Timestamp
-		ignore := ts.LessEq(i.startTime)
-		if ignore && !withDiff {
-			// Skip all the way to the next key.
-			// NB: fast-path to avoid value copy when !r.withDiff.
-			i.NextKey()
-			continue
-		}
-
-		// Determine whether the iterator moved to a new key.
-		sameKey := bytes.Equal(unsafeKey.Key, lastKey)
-		if !sameKey {
-			// If so, output events for the last key encountered.
-			if err := outputEvents(); err != nil {
-				return err
-			}
-			a, lastKey = a.Copy(unsafeKey.Key, 0)
-		}
-		key := lastKey
-
-		// INVARIANT: !ignore || withDiff
-		//
-		// Cases:
-		//
-		// - !ignore: we need to copy the unsafeVal to add to
-		//   the reorderBuf to be output eventually,
-		//   regardless of the value of withDiff
-		//
-		// - withDiff && ignore: we need to copy the unsafeVal
-		//   only if there is already something in the
-		//   reorderBuf for which we need to set the previous
-		//   value.
-		if !ignore || (withDiff && len(reorderBuf) > 0) {
-			var val []byte
-			a, val = a.Copy(unsafeVal, 0)
-			if withDiff {
-				// Update the last version with its previous value (this version).
-				if l := len(reorderBuf) - 1; l >= 0 {
-					// The previous value may have already been set by an event with
-					// either OmitInRangefeeds = true (and withFiltering = true) or
-					// OriginID !=0 (and withOmitRemote = true). That event is not in
-					// reorderBuf because we want to filter it out of the rangefeed, but
-					// we still want to keep it as a previous value.
-					if !reorderBuf[l].Val.PrevValue.IsPresent() {
-						// However, don't emit a value if an MVCC range tombstone existed
-						// between this value and the next one. The RangeKeysIgnoringTime()
-						// call is cheap, no need for caching.
-						rangeKeys := i.RangeKeysIgnoringTime()
-						if rangeKeys.IsEmpty() || !rangeKeys.HasBetween(ts, reorderBuf[l].Val.Value.Timestamp) {
-							// TODO(sumeer): find out if it is deliberate that we are not populating
-							// PrevValue.Timestamp.
-							reorderBuf[l].Val.PrevValue.RawBytes = val
+						if i.OnEmit != nil {
+							v, err := storage.DecodeMVCCValue(rangeKeys.Versions[j].Value)
+							if err != nil {
+								return err
+							}
+							i.OnEmit(span.Key, span.EndKey, ts, v.MVCCValueHeader)
 						}
 					}
 				}
+				// If there's no point key here (e.g. we found a bare range key above), then
+				// step onto the next key. This may be a point key version at the same key
+				// as the range key's start bound, or a later point/range key.
+				if !hasPoint {
+					i.Next()
+					continue
+				}
 			}
 
-			// The iterator may move to the next version for this key if at least one
-			// of the conditions is met: 1) the value has the OmitInRangefeeds flag,
-			// and this iterator has opted into filtering; 2) the value is from a
-			// remote cluster (non zero originID), and the iterator has opted into
-			// omitting remote values.
-			if (mvccVal.OmitInRangefeeds && withFiltering) || (mvccVal.OriginID != 0 && withOmitRemote) {
+			unsafeKey := i.UnsafeKey()
+			unsafeValRaw, err := i.UnsafeValue()
+			if err != nil {
+				return err
+			}
+			if !unsafeKey.IsValue() {
+				// Found a metadata key.
+				if err := protoutil.Unmarshal(unsafeValRaw, &meta); err != nil {
+					return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
+				}
+
+				// Inline values are unsupported by rangefeeds. MVCCIncrementalIterator
+				// should have errored on them already.
+				if meta.IsInline() {
+					return errors.AssertionFailedf("unexpected inline key %s", unsafeKey)
+				}
+
+				// This is an MVCCMetadata key for an intent. The catchUp scan
+				// only cares about committed values, so ignore this and skip past
+				// the corresponding provisional key-value. To do this, iterate to
+				// the provisional key-value, validate its timestamp, then iterate
+				// again. If we arrived here with a preceding call to NextIgnoringTime
+				// (in the with-diff case), it's possible that the intent is not within
+				// the time bounds. Using `NextIgnoringTime` on the next line makes sure
+				// that we are guaranteed to validate the version that belongs to the
+				// intent.
+				i.NextIgnoringTime()
+
+				if ok, err := i.Valid(); err != nil {
+					return errors.Wrap(err, "iterating to provisional value for intent")
+				} else if !ok {
+					return errors.Errorf("expected provisional value for intent")
+				}
+				if meta.Timestamp.ToTimestamp() != i.UnsafeKey().Timestamp {
+					return errors.Errorf("expected provisional value for intent with ts %s, found %s",
+						meta.Timestamp, i.UnsafeKey().Timestamp)
+				}
+				// Now move to the next key of interest. Note that if in the last
+				// iteration of the loop we called `NextIgnoringTime`, the fact that we
+				// hit an intent proves that there wasn't a previous value, so we can
+				// (in fact, have to, to avoid surfacing unwanted keys) unconditionally
+				// enforce time bounds.
 				i.Next()
 				continue
 			}
 
-			if !ignore {
-				// Add value to reorderBuf to be output.
-				var event kvpb.RangeFeedEvent
-				event.MustSetValue(&kvpb.RangeFeedValue{
-					Key: key,
-					Value: roachpb.Value{
-						RawBytes:  val,
-						Timestamp: ts,
-					},
-				})
-				reorderBuf = append(reorderBuf, event)
-				if i.OnEmit != nil {
-					i.OnEmit(key, nil, ts, mvccVal.MVCCValueHeader)
+			mvccVal, err := storage.DecodeMVCCValue(unsafeValRaw)
+			if err != nil {
+				return errors.Wrapf(err, "decoding mvcc value: %v", unsafeKey)
+			}
+			unsafeVal := mvccVal.Value.RawBytes
+
+			// Ignore the version if its timestamp is at or before the registration's
+			// (exclusive) starting timestamp.
+			ts := unsafeKey.Timestamp
+			ignore := ts.LessEq(i.startTime)
+			if ignore && !withDiff {
+				// Skip all the way to the next key.
+				// NB: fast-path to avoid value copy when !r.withDiff.
+				i.NextKey()
+				continue
+			}
+
+			// Determine whether the iterator moved to a new key.
+			sameKey := bytes.Equal(unsafeKey.Key, lastKey)
+			if !sameKey {
+				// If so, output events for the last key encountered.
+				if err := outputEvents(); err != nil {
+					return err
+				}
+				a, lastKey = a.Copy(unsafeKey.Key, 0)
+			}
+			key := lastKey
+
+			// INVARIANT: !ignore || withDiff
+			//
+			// Cases:
+			//
+			// - !ignore: we need to copy the unsafeVal to add to
+			//   the reorderBuf to be output eventually,
+			//   regardless of the value of withDiff
+			//
+			// - withDiff && ignore: we need to copy the unsafeVal
+			//   only if there is already something in the
+			//   reorderBuf for which we need to set the previous
+			//   value.
+			if !ignore || (withDiff && len(reorderBuf) > 0) {
+				var val []byte
+				a, val = a.Copy(unsafeVal, 0)
+				if withDiff {
+					// Update the last version with its previous value (this version).
+					if l := len(reorderBuf) - 1; l >= 0 {
+						// The previous value may have already been set by an event with
+						// either OmitInRangefeeds = true (and withFiltering = true) or
+						// OriginID !=0 (and withOmitRemote = true). That event is not in
+						// reorderBuf because we want to filter it out of the rangefeed, but
+						// we still want to keep it as a previous value.
+						if !reorderBuf[l].Val.PrevValue.IsPresent() {
+							// However, don't emit a value if an MVCC range tombstone existed
+							// between this value and the next one. The RangeKeysIgnoringTime()
+							// call is cheap, no need for caching.
+							rangeKeys := i.RangeKeysIgnoringTime()
+							if rangeKeys.IsEmpty() || !rangeKeys.HasBetween(ts, reorderBuf[l].Val.Value.Timestamp) {
+								// TODO(sumeer): find out if it is deliberate that we are not populating
+								// PrevValue.Timestamp.
+								reorderBuf[l].Val.PrevValue.RawBytes = val
+							}
+						}
+					}
+				}
+
+				// The iterator may move to the next version for this key if at least one
+				// of the conditions is met: 1) the value has the OmitInRangefeeds flag,
+				// and this iterator has opted into filtering; 2) the value is from a
+				// remote cluster (non zero originID), and the iterator has opted into
+				// omitting remote values.
+				if (mvccVal.OmitInRangefeeds && withFiltering) || (mvccVal.OriginID != 0 && withOmitRemote) {
+					i.Next()
+					continue
+				}
+
+				if !ignore {
+					// Add value to reorderBuf to be output.
+					var event kvpb.RangeFeedEvent
+					event.MustSetValue(&kvpb.RangeFeedValue{
+						Key: key,
+						Value: roachpb.Value{
+							RawBytes:  val,
+							Timestamp: ts,
+						},
+					})
+					reorderBuf = append(reorderBuf, event)
+					if i.OnEmit != nil {
+						i.OnEmit(key, nil, ts, mvccVal.MVCCValueHeader)
+					}
+				}
+			}
+
+			if ignore {
+				// Skip all the way to the next key.
+				i.NextKey()
+			} else {
+				// Move to the next version of this key (there may not be one, in which
+				// case it will move to the next key).
+				if withDiff {
+					// Need to see the next version even if it is older than the time
+					// bounds.
+					i.NextIgnoringTime()
+				} else {
+					i.Next()
 				}
 			}
 		}
-
-		if ignore {
-			// Skip all the way to the next key.
-			i.NextKey()
-		} else {
-			// Move to the next version of this key (there may not be one, in which
-			// case it will move to the next key).
-			if withDiff {
-				// Need to see the next version even if it is older than the time
-				// bounds.
-				i.NextIgnoringTime()
-			} else {
-				i.Next()
-			}
-		}
 	}
-
 	// Output events for the last key encountered.
 	return outputEvents()
 }
