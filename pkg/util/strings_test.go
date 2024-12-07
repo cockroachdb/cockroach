@@ -7,8 +7,14 @@ package util
 
 import (
 	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"runtime/pprof"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -135,4 +141,74 @@ func TestStringListBuilder(t *testing.T) {
 	b.Addf(&buf, "%s", "two")
 	b.Finish(&buf)
 	expect("[one, two]")
+}
+
+type alloc struct {
+	s []string
+}
+
+const defaultAllocSize = 16
+
+//go:noinline
+func (a *alloc) newString() *string {
+	buf := &a.s
+	if len(*buf) == 0 {
+		*buf = make([]string, defaultAllocSize)
+	}
+	r := &(*buf)[0]
+	*buf = (*buf)[1:]
+	return r
+}
+
+//go:noinline
+func (a *alloc) newDString(v dstring) *dstring {
+	r := (*dstring)(a.newString())
+	*r = v
+	return r
+}
+
+type datum interface {
+	marker()
+}
+
+type dstring string
+
+func (d *dstring) marker() {}
+
+//go:noinline
+func getDatum(i, j int) []byte {
+	return []byte(fmt.Sprintf("%d, %d", i, j))
+}
+
+func TestAlloc(t *testing.T) {
+	//f, err := os.Create("/Users/yuzefovich/go/src/github.com/cockroachdb/cockroach/test.pprof")
+	f, err := os.Create(filepath.Join(datapathutils.DebuggableTempDir(), "test.pprof"))
+	require.NoError(t, err)
+	defer f.Close()
+
+	var a alloc
+	samples := make([]datum, 120000)
+	for i := range samples {
+		for j := 0; j < defaultAllocSize; j++ {
+			d := getDatum(i, j)
+			samples[i] = a.newDString(dstring(d))
+		}
+	}
+
+	// Uncomment this part to only keep truly needed references. With this part
+	// commented out we see about 120k x <multiple in [8, 16] range> live
+	// objects even though samples slice directly only references 120k objects
+	// (perhaps that times two for interface boxing).
+	//
+	//for i := range samples {
+	//	v := samples[i].(*dstring)
+	//	samples[i] = a.newDString(*v)
+	//}
+
+	runtime.GC()
+	require.NoError(t, pprof.WriteHeapProfile(f))
+	// Make sure that samples aren't GC'ed.
+	for i := range samples {
+		samples[i] = samples[0]
+	}
 }
