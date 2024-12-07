@@ -34,7 +34,7 @@ t1/s3: eval reg=-30 MiB/+16 MiB ela=-30 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -48,7 +48,7 @@ NormalPri:
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+30 MiB ela=+0 B
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -65,7 +65,7 @@ MsgApps sent in pull mode:
 # Force flush up to index 2. Replica 2 starts force-flushing.
 set_force_flush_index range_id=1 index=2
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -79,7 +79,7 @@ NormalPri:
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+30 MiB ela=+0 B
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -95,7 +95,7 @@ scheduled-replicas: 2
 # Scheduler event. Entry at index 1 is popped from replica 2.
 handle_scheduler_event range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -105,13 +105,13 @@ NormalPri:
   term=1 index=4  tokens=6291456
   term=1 index=5  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,2) send_queue=[2,6) precise_q_size=+24 MiB force-flushing (stop=2)
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (6.0 MiB) send_queue=[2,6) precise_q_size=+24 MiB force-flushing (stop=2)
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+24 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -131,7 +131,7 @@ scheduled-replicas: 2
 # stops.
 handle_scheduler_event range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -141,14 +141,14 @@ NormalPri:
   term=1 index=4  tokens=6291456
   term=1 index=5  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,3) send_queue=[3,6) precise_q_size=+18 MiB watching-for-tokens
+(n2,s2):2: state=replicate closed=false inflight=[1,3) (12 MiB) send_queue=[3,6) precise_q_size=+18 MiB watching-for-tokens
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+18 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=6291456
   term=1 index=2  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -166,7 +166,7 @@ schedule-controller-event-count: 2
 # Force flush up to index 3. Replica 2 starts force-flushing.
 set_force_flush_index range_id=1 index=3
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -176,14 +176,14 @@ NormalPri:
   term=1 index=4  tokens=6291456
   term=1 index=5  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,3) send_queue=[3,6) precise_q_size=+18 MiB force-flushing (stop=3)
+(n2,s2):2: state=replicate closed=false inflight=[1,3) (12 MiB) send_queue=[3,6) precise_q_size=+18 MiB force-flushing (stop=3)
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+18 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=6291456
   term=1 index=2  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -200,7 +200,7 @@ scheduled-replicas: 2
 # stops.
 handle_scheduler_event range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -210,7 +210,7 @@ NormalPri:
   term=1 index=4  tokens=6291456
   term=1 index=5  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,6) precise_q_size=+12 MiB watching-for-tokens
+(n2,s2):2: state=replicate closed=false inflight=[1,4) (18 MiB) send_queue=[4,6) precise_q_size=+12 MiB watching-for-tokens
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+12 MiB ela=+0 B
 LowPri:
@@ -218,7 +218,7 @@ LowPri:
   term=1 index=2  tokens=6291456
   term=1 index=3  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -236,7 +236,7 @@ schedule-controller-event-count: 3
 # Force flush up to index 3, which is a noop.
 set_force_flush_index range_id=1 index=3
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -246,7 +246,7 @@ NormalPri:
   term=1 index=4  tokens=6291456
   term=1 index=5  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,6) precise_q_size=+12 MiB watching-for-tokens
+(n2,s2):2: state=replicate closed=false inflight=[1,4) (18 MiB) send_queue=[4,6) precise_q_size=+12 MiB watching-for-tokens
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+12 MiB ela=+0 B
 LowPri:
@@ -254,7 +254,7 @@ LowPri:
   term=1 index=2  tokens=6291456
   term=1 index=3  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -269,7 +269,7 @@ schedule-controller-event-count: 3
 # Force flush up to index 4. Replica 2 starts force-flushing.
 set_force_flush_index range_id=1 index=4
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -279,7 +279,7 @@ NormalPri:
   term=1 index=4  tokens=6291456
   term=1 index=5  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,6) precise_q_size=+12 MiB force-flushing (stop=4)
+(n2,s2):2: state=replicate closed=false inflight=[1,4) (18 MiB) send_queue=[4,6) precise_q_size=+12 MiB force-flushing (stop=4)
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+12 MiB ela=+0 B
 LowPri:
@@ -287,7 +287,7 @@ LowPri:
   term=1 index=2  tokens=6291456
   term=1 index=3  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -312,7 +312,7 @@ r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -322,7 +322,7 @@ NormalPri:
   term=1 index=4  tokens=6291456
   term=1 index=5  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,6) precise_q_size=+12 MiB force-flushing (stop=4)
+(n2,s2):2: state=replicate closed=false inflight=[1,4) (18 MiB) send_queue=[4,6) precise_q_size=+12 MiB force-flushing (stop=4)
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+12 MiB ela=+0 B
 LowPri:
@@ -339,7 +339,7 @@ scheduled-replicas: 2
 # stops.
 handle_scheduler_event range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -349,7 +349,7 @@ NormalPri:
   term=1 index=4  tokens=6291456
   term=1 index=5  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,5) send_queue=[5,6) precise_q_size=+6.0 MiB watching-for-tokens
+(n2,s2):2: state=replicate closed=false inflight=[1,5) (24 MiB) send_queue=[5,6) precise_q_size=+6.0 MiB watching-for-tokens
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+6.0 MiB ela=+0 B
 LowPri:
@@ -378,7 +378,7 @@ t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -388,7 +388,7 @@ NormalPri:
   term=1 index=4  tokens=6291456
   term=1 index=5  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,5) send_queue=[5,6) precise_q_size=+6.0 MiB force-flushing
+(n2,s2):2: state=replicate closed=false inflight=[1,5) (24 MiB) send_queue=[5,6) precise_q_size=+6.0 MiB force-flushing
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+6.0 MiB ela=+0 B
 LowPri:
@@ -405,7 +405,7 @@ scheduled-replicas: 2
 # Entry 5 is popped and force-flushing stops.
 handle_scheduler_event range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+30 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -415,7 +415,7 @@ NormalPri:
   term=1 index=4  tokens=6291456
   term=1 index=5  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,6) send_queue=[6,6) precise_q_size=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[1,6) (30 MiB) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+0 B ela=+30 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
@@ -447,7 +447,7 @@ t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,7) send_queue=[7,7) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,7) (36 MiB) send_queue=[7,7) precise_q_size=+0 B
 eval deducted: reg=+36 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -458,7 +458,7 @@ NormalPri:
   term=1 index=5  tokens=6291456
   term=1 index=6  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,7) send_queue=[7,7) precise_q_size=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[1,7) (36 MiB) send_queue=[7,7) precise_q_size=+0 B
 eval deducted: reg=+6.0 MiB ela=+30 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:

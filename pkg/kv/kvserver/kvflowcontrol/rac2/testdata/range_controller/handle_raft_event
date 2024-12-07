@@ -51,7 +51,7 @@ t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 # replica stream (1,2,3).
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -59,7 +59,7 @@ NormalPri:
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -67,7 +67,7 @@ NormalPri:
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -91,6 +91,18 @@ t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
 t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
        send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 
+# Send an empty event so that replicaSendStreams are aware of the update to
+# match.
+raft_event
+range_id=1
+----
+t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+
 stream_state range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[4,4) send_queue=[4,4) precise_q_size=+0 B
@@ -101,7 +113,7 @@ eval original in send-q: reg=+0 B ela=+0 B
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -138,7 +150,7 @@ eval original in send-q: reg=+0 B ela=+0 B
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
-(n3,s3):3: state=probeRecentlyNoSendQ closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+(n3,s3):3: state=probeRecentlyNoSendQ closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
@@ -199,13 +211,25 @@ check_state
 range_id=1 tenant_id={1} local_replica_id=1
   name=a pri=low-pri  done=false waited=false err=<nil>
 
+# Send an empty event so that replicaSendStreams are aware of the update to
+# match.
+raft_event
+range_id=1
+----
+t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-8.0 MiB/+8.0 MiB
+t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+
 stream_state range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[5,5) send_queue=[5,5) precise_q_size=+0 B
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[4,5) send_queue=[5,5) precise_q_size=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[4,5) (16 MiB) send_queue=[5,5) precise_q_size=+0 B
 eval deducted: reg=+16 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -246,7 +270,7 @@ range_id=1 tenant_id={1} local_replica_id=1
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -256,7 +280,7 @@ NormalPri:
 ++++
 (n2,s2):2: closed
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -268,7 +292,7 @@ NormalPri:
 # Schedule replica 2 for scheduler event. The schedule-controller-event-count becomes 1.
 internal_schedule_replica range_id=1 replica_id=2
 ----
-(n1,s1):1: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -278,7 +302,7 @@ NormalPri:
 ++++
 (n2,s2):2: closed
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -294,7 +318,7 @@ scheduled-replicas: 2
 # tracked in scheduled-replicas.
 internal_schedule_replica range_id=1 replica_id=3
 ----
-(n1,s1):1: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -304,7 +328,7 @@ NormalPri:
 ++++
 (n2,s2):2: closed
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -319,7 +343,7 @@ scheduled-replicas: 2 3
 # scheduled-replicas.
 handle_scheduler_event range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -329,7 +353,7 @@ NormalPri:
 ++++
 (n2,s2):2: closed
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[5,8) send_queue=[8,8) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[5,8) (3.0 MiB) send_queue=[8,8) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
