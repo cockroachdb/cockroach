@@ -1211,6 +1211,7 @@ type RangeControllerFactoryImpl struct {
 	scheduler                  rac2.Scheduler
 	sendTokenWatcher           *rac2.SendTokenWatcher
 	waitForEvalConfig          *rac2.WaitForEvalConfig
+	raftMaxInflightBytes       uint64
 	knobs                      *kvflowcontrol.TestingKnobs
 }
 
@@ -1223,6 +1224,7 @@ func NewRangeControllerFactoryImpl(
 	scheduler rac2.Scheduler,
 	sendTokenWatcher *rac2.SendTokenWatcher,
 	waitForEvalConfig *rac2.WaitForEvalConfig,
+	raftMaxInflightBytes uint64,
 	knobs *kvflowcontrol.TestingKnobs,
 ) RangeControllerFactoryImpl {
 	return RangeControllerFactoryImpl{
@@ -1234,6 +1236,7 @@ func NewRangeControllerFactoryImpl(
 		scheduler:                  scheduler,
 		sendTokenWatcher:           sendTokenWatcher,
 		waitForEvalConfig:          waitForEvalConfig,
+		raftMaxInflightBytes:       raftMaxInflightBytes,
 		knobs:                      knobs,
 	}
 }
@@ -1258,6 +1261,7 @@ func (f RangeControllerFactoryImpl) New(
 			EvalWaitMetrics:        f.evalWaitMetrics,
 			RangeControllerMetrics: f.rangeControllerMetrics,
 			WaitForEvalConfig:      f.waitForEvalConfig,
+			RaftMaxInflightBytes:   f.raftMaxInflightBytes,
 			ReplicaMutexAsserter:   state.muAsserter,
 			Knobs:                  f.knobs,
 		},
