@@ -936,6 +936,12 @@ type kafkaDialConfig struct {
 	saslAwsIAMRoleArn     string
 	saslAwsRegion         string
 	saslAwsIAMSessionName string
+
+	// These are specific to the (custom) IDAnywhere SASL mechanism.
+	saslIDAnywhereResourceURI             string
+	saslIDAnywhereEncodedJWTWithSignature string
+	saslIDAnywhereClientID                string
+	saslIDAnywhereTokenURL                string
 }
 
 func buildDialConfig(u sinkURL) (kafkaDialConfig, error) {
@@ -999,7 +1005,7 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 		dialConfig.saslMechanism = sarama.SASLTypePlaintext
 	}
 	switch dialConfig.saslMechanism {
-	case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext, changefeedbase.SASLTypeAWSMSKIAM:
+	case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext, changefeedbase.SASLTypeAWSMSKIAM, changefeedbase.SASLTypeIDAnywhere:
 	default:
 		return kafkaDialConfig{}, errors.Errorf(`param %s must be one of %s, %s, %s, %s or %s`,
 			changefeedbase.SinkParamSASLMechanism,
@@ -1014,6 +1020,8 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 	case changefeedbase.SASLTypeAWSMSKIAM:
 		requiredSASLParams = []string{changefeedbase.SinkParamSASLAwsRegion, changefeedbase.SinkParamSASLAwsIAMRoleArn,
 			changefeedbase.SinkParamSASLAwsIAMSessionName}
+	case changefeedbase.SASLTypeIDAnywhere:
+		requiredSASLParams = []string{changefeedbase.SinkParamSASLIDAnywhereResourceURI, changefeedbase.SinkParamSASLIDAnywhereEncodedJWTWithSignature, changefeedbase.SinkParamSASLIDAnywhereClientID, changefeedbase.SinkParamSASLIDAnywhereTokenURL}
 	default:
 		requiredSASLParams = []string{changefeedbase.SinkParamSASLUser, changefeedbase.SinkParamSASLPassword}
 	}
@@ -1057,6 +1065,11 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 	dialConfig.saslAwsRegion = u.consumeParam(changefeedbase.SinkParamSASLAwsRegion)
 	dialConfig.saslAwsIAMSessionName = u.consumeParam(changefeedbase.SinkParamSASLAwsIAMSessionName)
 	dialConfig.saslAwsIAMRoleArn = u.consumeParam(changefeedbase.SinkParamSASLAwsIAMRoleArn)
+
+	dialConfig.saslIDAnywhereResourceURI = u.consumeParam(changefeedbase.SinkParamSASLIDAnywhereResourceURI)
+	dialConfig.saslIDAnywhereEncodedJWTWithSignature = u.consumeParam(changefeedbase.SinkParamSASLIDAnywhereEncodedJWTWithSignature)
+	dialConfig.saslIDAnywhereClientID = u.consumeParam(changefeedbase.SinkParamSASLIDAnywhereClientID)
+	dialConfig.saslIDAnywhereTokenURL = u.consumeParam(changefeedbase.SinkParamSASLIDAnywhereTokenURL)
 
 	var decodedClientSecret []byte
 	if err := u.decodeBase64(changefeedbase.SinkParamSASLClientSecret, &decodedClientSecret); err != nil {
