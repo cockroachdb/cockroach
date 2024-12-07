@@ -144,9 +144,10 @@ func (p *ProgressTracker) LearnerNodes() []pb.PeerID {
 func (p *ProgressTracker) WithBasicProgress(visitor func(id pb.PeerID, pr BasicProgress)) {
 	for id, p := range p.progress {
 		visitor(id, BasicProgress{
-			Match: p.Match,
-			Next:  p.Next,
-			State: p.State,
+			Match:         p.Match,
+			Next:          p.Next,
+			State:         p.State,
+			InflightBytes: p.Inflights.bytes,
 		})
 	}
 }
