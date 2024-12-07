@@ -23,7 +23,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: ALTER TABLE test.public.my_spatial_table ADD COLUMN geom1 GEOMETRY(POINT,4326)
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: ()
@@ -181,7 +181,7 @@ vectorized: true
 ├── • subquery
 │   │ id: @S1
 │   │ original sql: ALTER TABLE my_spatial_table ADD COLUMN geom7 GEOMETRY(POINT,4326)
-│   │ exec mode: all rows
+│   │ exec mode: discard all rows
 │   │
 │   └── • buffer
 │       │ columns: ()
@@ -194,7 +194,7 @@ vectorized: true
 └── • subquery
     │ id: @S2
     │ original sql: ALTER TABLE my_spatial_table ADD COLUMN geom8 GEOMETRY(POINT,4326)
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: ()

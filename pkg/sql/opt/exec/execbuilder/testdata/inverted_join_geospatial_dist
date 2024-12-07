@@ -290,7 +290,7 @@ vectorized: true
 ├── • subquery
 │   │ id: @S1
 │   │ original sql: SELECT * FROM ltable WHERE lk > 2
-│   │ exec mode: all rows
+│   │ exec mode: discard all rows
 │   │
 │   └── • buffer
 │       │ label: buffer 1 (q)

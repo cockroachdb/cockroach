@@ -20,14 +20,18 @@ import (
 // trailing bits of the code are set to zero.
 type RaBitQCode []uint64
 
+// RaBitQCodeSetWidth returns the number of uint64values needed to store 1 bit
+// per dimension for a RaBitQ code.
+func RaBitQCodeSetWidth(dims int) int {
+	return (dims + 63) / 64
+}
+
 // MakeRaBitQCodeSet returns an empty set of quantization codes, where each code
 // in the set represents a quantized vector with the given number of dimensions.
 func MakeRaBitQCodeSet(dims int) RaBitQCodeSet {
 	return RaBitQCodeSet{
 		Count: 0,
-		// Calculate the number of uint64 values needed to store 1 bit per
-		// dimension.
-		Width: (dims + 63) / 64,
+		Width: RaBitQCodeSetWidth(dims),
 	}
 }
 

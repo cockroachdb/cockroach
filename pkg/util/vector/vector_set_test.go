@@ -136,6 +136,26 @@ func TestVectorSet(t *testing.T) {
 		require.Equal(t, []float32{9, 10, 3, 4, 5, 6, 7, 8}, vs2.Data)
 	})
 
+	t.Run("Equal method", func(t *testing.T) {
+		vs := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
+		vs2 := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
+		vs3 := vs.Clone()
+		require.True(t, vs.Equal(&vs))
+		require.True(t, vs.Equal(&vs2))
+		require.True(t, vs.Equal(&vs3))
+
+		vs.Add(T{7, 8})
+		require.False(t, vs.Equal(&vs2))
+		require.True(t, vs.Equal(&vs))
+		vs2.Add(T{7, 8})
+		require.True(t, vs.Equal(&vs2))
+		vs.ReplaceWithLast(1)
+		require.False(t, vs.Equal(&vs2))
+		require.True(t, vs.Equal(&vs))
+		vs2.ReplaceWithLast(1)
+		require.True(t, vs.Equal(&vs2))
+	})
+
 	t.Run("check that invalid operations will panic", func(t *testing.T) {
 		vs := MakeSetFromRawData([]float32{1, 2, 3, 4, 5, 6}, 2)
 		require.Panics(t, func() { vs.At(-1) })

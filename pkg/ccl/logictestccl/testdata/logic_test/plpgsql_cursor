@@ -268,7 +268,7 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function definition
+statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
     i INT := 3;
@@ -278,10 +278,18 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
     RETURN 0;
   END
 $$ LANGUAGE PLpgSQL;
+BEGIN;
+SELECT f();
 
-# TODO(#92961): once CTEs in routines are supported, the error should be:
-# pgcode 0A000 pq: DECLARE CURSOR must not contain data-modifying statements in WITH
-statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function definition
+query I rowsort
+FETCH FORWARD 3 FROM foo;
+----
+1
+
+statement ok
+ABORT;
+
+statement error pgcode 0A000 pq: DECLARE CURSOR must not contain data-modifying statements in WITH
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
     i INT := 3;
