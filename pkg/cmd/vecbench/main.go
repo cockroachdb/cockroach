@@ -456,7 +456,7 @@ func loadDataset(fileName string) dataset {
 }
 
 func beginTransaction(ctx context.Context, store vecstore.Store) vecstore.Txn {
-	txn, err := store.BeginTransaction(ctx)
+	txn, err := store.Begin(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -464,7 +464,7 @@ func beginTransaction(ctx context.Context, store vecstore.Store) vecstore.Txn {
 }
 
 func commitTransaction(ctx context.Context, store vecstore.Store, txn vecstore.Txn) {
-	if err := store.CommitTransaction(ctx, txn); err != nil {
+	if err := store.Commit(ctx, txn); err != nil {
 		panic(err)
 	}
 }
