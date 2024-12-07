@@ -1454,6 +1454,14 @@ func (r *raft) supportingFortifiedLeader() bool {
 	}
 	assertTrue(r.lead != None, "lead epoch is set but leader is not")
 	epoch, live := r.storeLiveness.SupportFor(r.lead)
+
+	if !live {
+		// If SupportFor returned !live, it means that the epoch is meaningless.
+		// This could happen if the leader's node suddenly got decommisioned. In
+		// this case, we should de-fortify the leader.
+		r.deFortify(r.lead, r.Term)
+		return false
+	}
 	assertTrue(epoch >= r.leadEpoch, "epochs in store liveness shouldn't regress")
 	return live && epoch == r.leadEpoch
 }
