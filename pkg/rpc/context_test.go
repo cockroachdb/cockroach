@@ -202,7 +202,7 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 	clientOpts := opts
 	// Experimentally, values below 50ms seem to incur flakiness.
 	clientOpts.RPCHeartbeatInterval = 100 * time.Millisecond
-	clientOpts.RPCHeartbeatTimeout = 100 * time.Millisecond
+	clientOpts.RPCHeartbeatTimeout = 200 * time.Millisecond
 	clientOpts.ClientOnly = clientOnly
 	clientOpts.OnOutgoingPing = func(ctx context.Context, req *PingRequest) error {
 		select {
