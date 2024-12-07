@@ -304,12 +304,12 @@ func TestCloudBackupRestoreKMSInaccessibleMetric(t *testing.T) {
 
 			// LastKMSInaccessibleErrorTime should not be set without
 			// updates_cluster_monitoring_metrics despite a KMS error.
-			sqlDB.ExpectErr(t, "failed to encrypt data key", "BACKUP INTO 'userfile:///foo' WITH OPTIONS (kms = $1)", tt.uri)
+			sqlDB.ExpectErr(t, "(failed to encrypt data key|could not describe key)", "BACKUP INTO 'userfile:///foo' WITH OPTIONS (kms = $1)", tt.uri)
 			require.Equal(t, bm.LastKMSInaccessibleErrorTime.Value(), int64(0))
 
 			// LastKMSInaccessibleErrorTime should be set with
 			// updates_cluster_monitoring_metrics.
-			sqlDB.ExpectErr(t, "failed to encrypt data key", "BACKUP INTO 'userfile:///foo' WITH OPTIONS (kms = $1, updates_cluster_monitoring_metrics)", tt.uri)
+			sqlDB.ExpectErr(t, "(failed to encrypt data key|could not describe key)", "BACKUP INTO 'userfile:///foo' WITH OPTIONS (kms = $1, updates_cluster_monitoring_metrics)", tt.uri)
 			require.GreaterOrEqual(t, bm.LastKMSInaccessibleErrorTime.Value(), testStart)
 		})
 	}
