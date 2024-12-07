@@ -153,6 +153,7 @@ func (c *conn) processCommands(
 	reserved *mon.BoundAccount,
 	onDefaultIntSizeChange func(newSize int32),
 	sessionID clusterunique.ID,
+	exPtr *atomic.Pointer[sql.ConnectionHandler],
 ) {
 	// reservedOwned is true while we own reserved, false when we pass ownership
 	// away.
@@ -245,6 +246,8 @@ func (c *conn) processCommands(
 	// is thrown below and we need to report to the client
 	// using the defer above.
 	authOK = true
+
+	exPtr.Store(&connHandler)
 
 	// Now actually process commands.
 	reservedOwned = false // We're about to pass ownership away.
@@ -601,7 +604,7 @@ func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleDescribe(ctx context.Context) error {
+func (c *conn) handleDescribe(ctx context.Context, ex *sql.ConnectionHandler) error {
 	telemetry.Inc(sqltelemetry.DescribeRequestCounter)
 	typ, err := c.readBuf.GetPrepareType()
 	if err != nil {
@@ -611,12 +614,15 @@ func (c *conn) handleDescribe(ctx context.Context) error {
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	return c.stmtBuf.Push(
-		ctx,
-		sql.DescribeStmt{
-			Name: tree.Name(name),
-			Type: typ,
-		})
+	cmd := sql.DescribeStmt{
+		Name: tree.Name(name),
+		Type: typ,
+	}
+	if ex != nil {
+		return ex.ExecCmdSync(ctx, cmd, -1)
+	} else {
+		return c.stmtBuf.Push(ctx, cmd)
+	}
 }
 
 // An error is returned iff the statement buffer has been closed. In that case,
@@ -647,7 +653,7 @@ var formatCodesAllText = []pgwirebase.FormatCode{pgwirebase.FormatText}
 // statement.
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleBind(ctx context.Context) error {
+func (c *conn) handleBind(ctx context.Context, ex *sql.ConnectionHandler) error {
 	telemetry.Inc(sqltelemetry.BindRequestCounter)
 	portalName, err := c.readBuf.GetString()
 	if err != nil {
@@ -758,21 +764,24 @@ func (c *conn) handleBind(ctx context.Context) error {
 			columnFormatCodes[i] = pgwirebase.FormatCode(ch)
 		}
 	}
-	return c.stmtBuf.Push(
-		ctx,
-		sql.BindStmt{
-			PreparedStatementName: statementName,
-			PortalName:            portalName,
-			Args:                  qargs,
-			ArgFormatCodes:        qArgFormatCodes,
-			OutFormats:            columnFormatCodes,
-		})
+	cmd := sql.BindStmt{
+		PreparedStatementName: statementName,
+		PortalName:            portalName,
+		Args:                  qargs,
+		ArgFormatCodes:        qArgFormatCodes,
+		OutFormats:            columnFormatCodes,
+	}
+	if ex != nil {
+		return ex.ExecCmdSync(ctx, cmd, -1)
+	} else {
+		return c.stmtBuf.Push(ctx, cmd)
+	}
 }
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleExecute(
-	ctx context.Context, timeReceived time.Time, followedBySync bool,
+	ctx context.Context, timeReceived time.Time, followedBySync bool, ex *sql.ConnectionHandler,
 ) error {
 	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
 	portalName, err := c.readBuf.GetString()
@@ -783,12 +792,17 @@ func (c *conn) handleExecute(
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	return c.stmtBuf.Push(ctx, sql.ExecPortal{
+	cmd := sql.ExecPortal{
 		Name:           portalName,
 		TimeReceived:   timeReceived,
 		Limit:          int(limit),
 		FollowedBySync: followedBySync,
-	})
+	}
+	if ex != nil {
+		return ex.ExecCmdSync(ctx, cmd, -1)
+	} else {
+		return c.stmtBuf.Push(ctx, cmd)
+	}
 }
 
 func (c *conn) handleFlush(ctx context.Context) error {
@@ -1243,7 +1257,9 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 		return err
 	}
 
-	c.writerState.fi.lastFlushed = pos
+	if pos >= 0 {
+		c.writerState.fi.lastFlushed = pos
+	}
 	// Make sure that the entire cmdStarts buffer is drained.
 	// Use (*ring.Buffer).Reset instead of (*ring.Buffer).Discard to preserve
 	// the underlying ring buffer memory for reuse.

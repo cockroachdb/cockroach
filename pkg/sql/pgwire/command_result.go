@@ -533,7 +533,7 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 	}
 	r.seenTuples++
 
-	if r.seenTuples == r.limit {
+	if r.seenTuples == r.limit && false {
 		// If we've seen up to the limit of rows, send a "portal suspended" message
 		// and wait for another exec portal message.
 		r.conn.bufferPortalSuspended()
