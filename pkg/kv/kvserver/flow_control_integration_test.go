@@ -5461,6 +5461,160 @@ func TestFlowControlSendQueueRangeRelocate(t *testing.T) {
 	})
 }
 
+// TestFlowControlSendQueueRangeSplitMergeMixedVersion attempts a split and
+// merge while the elastic tokens are exhausted to one store and the flow
+// control mode is apply_to_elastic. See the longer SQL comment for a detailed
+// view of the steps taken by the test.
+func TestFlowControlSendQueueRangeSplitMergeMixedVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const numNodes = 3
+	prevVKey := clusterversion.PreviousRelease
+	latestVKey := clusterversion.Latest
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		latestVKey.Version(), prevVKey.Version(), false)
+	var disableWorkQueueGranting atomic.Bool
+	disableWorkQueueGranting.Store(true)
+	// We want to exhaust the elastic tokens, but not the regular tokens.
+	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, 2<<20)
+
+	disableWorkQueueGrantingServers := make([]atomic.Bool, numNodes)
+	setTokenReturnEnabled := func(enabled bool, serverIdxs ...int) {
+		for _, serverIdx := range serverIdxs {
+			disableWorkQueueGrantingServers[serverIdx].Store(!enabled)
+		}
+	}
+
+	argsPerServer := make(map[int]base.TestServerArgs)
+	for i := range disableWorkQueueGrantingServers {
+		disableWorkQueueGrantingServers[i].Store(true)
+		argsPerServer[i] = base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClusterVersionOverride:         prevVKey.Version(),
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
+						UseOnlyForScratchRanges: true,
+						OverrideTokenDeduction: func(tokens kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+							return kvflowcontrol.Tokens(2 << 20)
+						},
+						OverrideAlwaysRefreshSendStreamStats: true,
+					},
+				},
+				AdmissionControl: &admission.TestingKnobs{
+					DisableWorkQueueFastPath: true,
+					DisableWorkQueueGranting: func() bool {
+						idx := i
+						return disableWorkQueueGrantingServers[idx].Load()
+					},
+				},
+			},
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: argsPerServer,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	k := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+
+	h := newFlowControlTestHelper(
+		t, tc, "flow_control_integration_v2", /* testdata */
+		kvflowcontrol.V2EnabledWhenLeaderV2Encoding, true, /* isStatic */
+	)
+
+	const mode = kvflowcontrol.ApplyToElastic
+	h.init(mode)
+	defer h.close("send_queue_range_split_merge_mixed_version")
+
+	desc, err := tc.LookupRange(k)
+	require.NoError(t, err)
+	h.enableVerboseRaftMsgLoggingForRange(desc.RangeID)
+	h.enableVerboseRaftMsgLoggingForRange(desc.RangeID + 1)
+	n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
+	h.resetV2TokenMetrics(ctx)
+
+	h.log(fmt.Sprintf("cluster_version=%v(%+v) latest_version=%v(%+v)",
+		prevVKey.Version(), prevVKey, latestVKey.Version(), latestVKey))
+	setTokenReturnEnabled(true /* enabled */, 0, 1)
+	h.comment(`
+-- This test is running with kvadmission.flow_control.mode="apply_to_elastic"
+-- and the cluster version set to the previous version. We will exhaust the
+-- elastic tokens towards s3, using a single 2 MiB write. Then, we will
+-- split and merge the range, expecting no send queue to form for any stream,
+-- as apply_to_elastic is the flow control mode. We also expect that the split
+-- and merge will proceed without issue. Note that admission is currently 
+-- blocked on n3(s3).
+`)
+
+	h.put(ctx, roachpb.Key(desc.StartKey), 1, admissionpb.BulkNormalPri)
+	h.comment(`(Sent 2 MiB BulkNormalPri put request to pre-split range)`)
+
+	h.comment(`-- (Splitting range.)`)
+	left, right := tc.SplitRangeOrFatal(t, k.Next())
+	h.waitForConnectedStreams(ctx, left.RangeID, 3, 0 /* serverIdx */)
+	h.waitForConnectedStreams(ctx, right.RangeID, 3, 0 /* serverIdx */)
+
+	h.comment(`-- Observe the newly split off replica, with its own three streams.`)
+	h.query(n1, `
+  SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
+`, "range_id", "stream_count")
+
+	h.put(ctx, roachpb.Key(left.StartKey), 1, admissionpb.NormalPri)
+	h.comment(`(Sent 2 MiB NormalPri put request to post-split LHS range)`)
+	h.put(ctx, roachpb.Key(right.StartKey), 1, admissionpb.NormalPri)
+	h.comment(`(Sent 2 MiB NormalPri put request to post-split RHS range)`)
+
+	h.comment(`
+-- Send queue and flow token metrics from n1, post-split and 1 MiB put on
+-- each side.`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`-- (Merging ranges.)`)
+	merged := tc.MergeRangesOrFatal(t, left.StartKey.AsRawKey())
+	h.waitForConnectedStreams(ctx, merged.RangeID, 3, 0 /* serverIdx */)
+	h.waitForSendQueueSize(ctx, merged.RangeID, 0 /* expSize 0 MiB */, 0 /* serverIdx */)
+
+	h.comment(`
+-- Send queue and flow token metrics from n1, post-split-merge.
+-- We expect to not see a force flush of the send queue for s3 again.`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`(Sending 2 MiB put request to post-split-merge range)`)
+	h.put(ctx, k, 1, admissionpb.NormalPri)
+	h.comment(`(Sent 2 MiB put request to post-split-merge range)`)
+	h.waitForSendQueueSize(ctx, merged.RangeID, 0 /* expSize 0 MiB */, 0 /* serverIdx */)
+
+	h.comment(`
+-- Send queue and flow token metrics from n1, post-split-merge and 2 MiB put.
+-- We do not expect to see the send queue develop for s3.`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	h.comment(`
+-- Allow admission to proceed on all nodes and wait for all tokens to be
+-- returned.`)
+	setTokenReturnEnabled(true /* enabled */, 0, 1, 2)
+	h.waitForAllTokensReturned(ctx, 3 /* expStreamCount */, 0 /* serverIdx */)
+
+	h.comment(`-- Flow token metrics from n1, all tokens should be returned.`)
+	h.query(n1, v2FlowTokensQueryStr)
+}
+
 func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
