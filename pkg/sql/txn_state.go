@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
@@ -52,7 +53,7 @@ type txnState struct {
 		txn *kv.Txn
 
 		// txnStart records the time that txn started.
-		txnStart time.Time
+		txnStart crtime.Mono
 
 		// The transaction's priority.
 		priority roachpb.UserPriority
@@ -251,7 +252,7 @@ func (ts *txnState) resetForNewSQLTxn(
 
 		txnID = ts.mu.txn.ID()
 		sp.SetTag("txn", attribute.StringValue(txnID.String()))
-		ts.mu.txnStart = timeutil.Now()
+		ts.mu.txnStart = crtime.NowMono()
 		ts.mu.autoRetryCounter = 0
 		ts.mu.autoRetryReason = nil
 		return txnID
@@ -309,7 +310,7 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 			}
 		}
 		ts.mu.txn = nil
-		ts.mu.txnStart = time.Time{}
+		ts.mu.txnStart = 0
 		return txnID, timestamp
 	}()
 }
