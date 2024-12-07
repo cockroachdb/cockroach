@@ -87,6 +87,7 @@ go_library(
         "//pkg/util/tsearch",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",

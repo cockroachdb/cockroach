@@ -8,7 +8,6 @@ package sql
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -24,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/redact"
 )
 
@@ -133,7 +132,7 @@ func (p *planner) maybeLogStatement(
 	numRetries, txnCounter, rows, stmtCount int,
 	bulkJobId uint64,
 	err error,
-	queryReceived time.Time,
+	queryReceived crtime.Mono,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryLoggingMetrics *telemetryLoggingMetrics,
 	implicitTxn bool,
@@ -153,7 +152,7 @@ func (p *planner) maybeLogStatementInternal(
 	numRetries, txnCounter, rows, stmtCount int,
 	bulkJobId uint64,
 	err error,
-	startTime time.Time,
+	startTime crtime.Mono,
 	hasAdminRoleCache *HasAdminRoleCache,
 	telemetryMetrics *telemetryLoggingMetrics,
 	implicitTxn bool,
@@ -196,7 +195,7 @@ func (p *planner) maybeLogStatementInternal(
 	// Compute the pieces of data that are going to be included in logged events.
 
 	// The duration of the query so far. Age is the duration expressed in milliseconds.
-	queryDuration := timeutil.Since(startTime)
+	queryDuration := startTime.Elapsed()
 	age := float32(queryDuration.Nanoseconds()) / 1e6
 	// The text of the error encountered, if the query did in fact end
 	// in error.

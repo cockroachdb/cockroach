@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -342,7 +343,7 @@ func (c *conn) bufferInitialReadyForQuery(queryCancelKey pgwirecancel.BackendKey
 func (c *conn) handleSimpleQuery(
 	ctx context.Context,
 	buf *pgwirebase.ReadBuffer,
-	timeReceived time.Time,
+	timeReceived crtime.Mono,
 	unqualifiedIntSize *types.T,
 ) error {
 	query, err := buf.GetString()
@@ -350,7 +351,7 @@ func (c *conn) handleSimpleQuery(
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 
-	startParse := timeutil.Now()
+	startParse := crtime.NowMono()
 	if c.sessionArgs.ReplicationMode != sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED &&
 		pgreplparser.IsReplicationProtocolCommand(query) {
 		stmt, err := pgreplparser.Parse(query)
@@ -366,7 +367,7 @@ func (c *conn) handleSimpleQuery(
 				Err: unimplemented.NewWithIssueDetail(0, fmt.Sprintf("%T", stmt.AST), "replication protocol command not implemented"),
 			})
 		}
-		endParse := timeutil.Now()
+		endParse := crtime.NowMono()
 		return c.stmtBuf.Push(
 			ctx,
 			sql.ExecStmt{
@@ -384,7 +385,7 @@ func (c *conn) handleSimpleQuery(
 		log.SqlExec.Infof(ctx, "could not parse simple query: %s", query)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	endParse := timeutil.Now()
+	endParse := crtime.NowMono()
 
 	if len(stmts) == 0 {
 		return c.stmtBuf.Push(
@@ -514,7 +515,7 @@ func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 		inTypeHints[i] = oid.Oid(typ)
 	}
 
-	startParse := timeutil.Now()
+	startParse := crtime.NowMono()
 	stmts, err := c.parser.ParseWithInt(query, nakedIntSize)
 	if err != nil {
 		log.SqlExec.Infof(ctx, "could not parse: %s", query)
@@ -572,7 +573,7 @@ func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 		}
 	}
 
-	endParse := timeutil.Now()
+	endParse := crtime.NowMono()
 
 	if _, ok := stmt.AST.(*tree.CopyFrom); ok {
 		// We don't support COPY in extended protocol because it'd be complicated:
@@ -772,7 +773,7 @@ func (c *conn) handleBind(ctx context.Context) error {
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleExecute(
-	ctx context.Context, timeReceived time.Time, followedBySync bool,
+	ctx context.Context, timeReceived crtime.Mono, followedBySync bool,
 ) error {
 	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
 	portalName, err := c.readBuf.GetString()

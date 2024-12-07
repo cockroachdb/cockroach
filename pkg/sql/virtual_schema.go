@@ -198,8 +198,8 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		nil,
 		sc,
 		id,
-		nil,       /* regionConfig */
-		startTime, /* creationTime */
+		nil, /* regionConfig */
+		virtualTableCreationTime,
 		catpb.NewPrivilegeDescriptor(
 			username.PublicRoleName(),
 			privilege.List{privilege.SELECT},
@@ -381,7 +381,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		sc.GetID(),
 		id,
 		columns,
-		startTime,
+		virtualTableCreationTime,
 		catpb.NewPrivilegeDescriptor(
 			username.PublicRoleName(),
 			privilege.List{privilege.SELECT},
@@ -423,7 +423,7 @@ var virtualSchemas = map[descpb.ID]virtualSchema{
 	catconstants.PgExtensionSchemaID: pgExtension,
 }
 
-var startTime = hlc.Timestamp{
+var virtualTableCreationTime = hlc.Timestamp{
 	WallTime: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
 }
 
