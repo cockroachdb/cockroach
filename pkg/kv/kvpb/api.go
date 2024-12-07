@@ -2113,7 +2113,7 @@ func (r *RefreshRangeRequest) flags() flag {
 	return isRead | isTxn | isRange | updatesTSCache
 }
 
-func (*SubsumeRequest) flags() flag    { return isRead | isAlone | updatesTSCache }
+func (*SubsumeRequest) flags() flag    { return isWrite | isAlone | updatesTSCache }
 func (*RangeStatsRequest) flags() flag { return isRead }
 func (*QueryResolvedTimestampRequest) flags() flag {
 	return isRead | isRange | requiresClosedTSOlderThanStorageSnapshot
