@@ -824,3 +824,44 @@ return-grant work=kv-snapshot v=20
 kv-snapshot: returnGrant(20)
 GrantCoordinator:
 (chain: id: 0 active: false index: 5) io-avail: 5(5), disk-write-tokens-avail: 20
+
+
+#####################################################################
+# Test store grant coordinator disk error accounting
+init-store-grant-coordinator
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930
+
+# Tokens already deducted is 0. Any writes that occur will be considered error.
+adjust-disk-error actual-write-bytes=10 actual-read-bytes=10
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912920
+
+set-tokens io-tokens=50 disk-write-tokens=70 disk-read-tokens=20 tick-interval=250
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 70
+
+# Tokens already deducted is 0. Any writes that occur will be considered error.
+# We accounted for 20B of reads, so reads in excess of that will be error. err =
+# (10-0) + (40-20) = 30. We expect 70-30=40 tokens available.
+adjust-disk-error actual-write-bytes=20 actual-read-bytes=50
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 50(50), disk-write-tokens-avail: 40
+
+try-get work=kv v=10
+----
+kv-regular: tryGet(10) returned true
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 40(40), disk-write-tokens-avail: 30
+
+# +20B writes and +5B reads since last error accounting. Since we already
+# deducted 10B of write tokens during admission, the error here is 10B. We
+# exhausted the read token bucket already, so we will deduct directly this time.
+adjust-disk-error actual-write-bytes=40 actual-read-bytes=55
+----
+GrantCoordinator:
+(chain: id: 0 active: false index: 5) io-avail: 40(40), disk-write-tokens-avail: 15
