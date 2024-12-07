@@ -5,7 +5,11 @@
 
 package sessionphase
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
 
 // SQL execution is separated in 3+ phases:
 // - parse/prepare
@@ -22,14 +26,10 @@ import "time"
 type SessionPhase int
 
 const (
-	// SessionInit is the SessionPhase the session is created (pgwire). It is used
-	// to compute the session age.
-	SessionInit SessionPhase = iota
-
 	// Executor phases.
 
 	// SessionQueryReceived is the SessionPhase when a query is received.
-	SessionQueryReceived
+	SessionQueryReceived = iota
 
 	// SessionStartParse is the SessionPhase when parsing starts.
 	SessionStartParse
@@ -94,12 +94,13 @@ const (
 // Times is the data structure that keep tracks of the time for each
 // SessionPhase.
 type Times struct {
-	times [SessionNumPhases]time.Time
+	initTime time.Time
+	times    [SessionNumPhases]time.Time
 }
 
 // NewTimes create a new instance of the Times.
 func NewTimes() *Times {
-	return &Times{}
+	return &Times{initTime: timeutil.Now()}
 }
 
 // SetSessionPhaseTime sets the time for a given SessionPhase.
@@ -110,6 +111,12 @@ func (t *Times) SetSessionPhaseTime(sp SessionPhase, time time.Time) {
 // GetSessionPhaseTime retrieves the time for a given SessionPhase.
 func (t *Times) GetSessionPhaseTime(sp SessionPhase) time.Time {
 	return t.times[sp]
+}
+
+// InitTime is the time when this Times instance was created (which should
+// coincide with the time the session was initialized).
+func (t *Times) InitTime() time.Time {
+	return t.initTime
 }
 
 // Clone returns a copy of the current PhaseTimes.
@@ -203,7 +210,7 @@ func (t *Times) GetCommitLatency() time.Duration {
 
 // GetSessionAge returns the age of the current session since initialization.
 func (t *Times) GetSessionAge() time.Duration {
-	return t.times[PlannerEndExecStmt].Sub(t.times[SessionInit])
+	return t.times[PlannerEndExecStmt].Sub(t.InitTime())
 }
 
 // GetIdleLatency deduces the rough amount of time spent waiting for the client
