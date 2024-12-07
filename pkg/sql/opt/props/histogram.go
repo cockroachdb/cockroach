@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/errors"
@@ -312,7 +313,6 @@ func (h *Histogram) filter(
 		evalCtx:     h.evalCtx,
 		col:         h.col,
 		selectivity: h.selectivity,
-		buckets:     make([]cat.HistogramBucket, 0, bucketCount),
 	}
 	if bucketCount == 0 {
 		return filtered
@@ -372,13 +372,31 @@ func (h *Histogram) filter(
 	} else if bucIndex == bucketCount {
 		return filtered
 	}
-	iter.setIdx(bucIndex)
+
+	// In the general case, we'll need the same number of buckets as the
+	// existing histogram, minus the buckets that come before the first bucket
+	// that overlaps with the spans. In the special, yet common, case where we
+	// have a single span that overlaps one bucket, we'll need only two buckets.
+	if bucIndex > 0 {
+		bucketCount = bucketCount - bucIndex + 1
+	}
+	if spanCount == 1 {
+		iter.setIdx(bucIndex + 1)
+		bucket := sb.makeSpanFromBucket(ctx, &iter, prefix)
+		if !desc && bucket.StartsAfter(&keyCtx, span) ||
+			desc && !bucket.StartsAfter(&keyCtx, span) {
+			bucketCount = 2
+		}
+	}
+	filtered.buckets = make([]cat.HistogramBucket, 0, bucketCount)
+
 	if !desc && bucIndex > 0 {
 		prevUpperBound := h.upperBound(bucIndex - 1)
 		filtered.addEmptyBucket(ctx, prevUpperBound, desc)
 	}
 
 	// For the remaining buckets and spans, use a variation on merge sort.
+	iter.setIdx(bucIndex)
 	for spanIndex < spanCount {
 		if spanIndex > 0 && colOffset < exactPrefix {
 			// If this column is part of the exact prefix, we don't need to look at
@@ -573,6 +591,11 @@ func (h *Histogram) addBucket(ctx context.Context, bucket *cat.HistogramBucket, 
 			lastBucket.NumRange = lower.NumRange
 			return
 		}
+	}
+	if buildutil.CrdbTestBuild && len(h.buckets) == cap(h.buckets) {
+		// We should have allocated enough buckets in the filter method, so
+		// growing the slice should not be necessary here.
+		panic(errors.AssertionFailedf("not enough capacity in histogram buckets"))
 	}
 	h.buckets = append(h.buckets, *bucket)
 }
