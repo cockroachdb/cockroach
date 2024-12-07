@@ -1284,7 +1284,7 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 		return errors.Errorf("could not find primary key column names in parquet metadata")
 	}
 
-	columnsNamesString, ok := meta.MetaFields["allCols"]
+	orderedColumnsNamesString, ok := meta.MetaFields["allCols"]
 	if !ok {
 		return errors.Errorf("could not find column names in parquet metadata")
 	}
@@ -1293,37 +1293,19 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 	if err != nil {
 		return err
 	}
-	valueColumnNamesOrdered, columnNameSet, err := deserializeMap(columnsNamesString)
-	if err != nil {
-		return err
-	}
 
-	// Extract metadata columns into metaColumnNameSet.
-	extractMetaColumns := func(columnNameSet map[string]int) map[string]int {
-		metaColumnNameSet := make(map[string]int)
-		for colName, colIdx := range columnNameSet {
-			switch colName {
-			case parquetCrdbEventTypeColName:
-				metaColumnNameSet[colName] = colIdx
-			case parquetOptUpdatedTimestampColName:
-				metaColumnNameSet[colName] = colIdx
-			case parquetOptMVCCTimestampColName:
-				metaColumnNameSet[colName] = colIdx
-			case parquetOptDiffColName:
-				metaColumnNameSet[colName] = colIdx
-			default:
-			}
-		}
-		return metaColumnNameSet
-	}
-	metaColumnNameSet := extractMetaColumns(columnNameSet)
+	valueColumnNamesOrdered := strings.Split(orderedColumnsNamesString, ",")
 
 	for _, row := range datums {
-		rowJSONBuilder := json.NewObjectBuilder(len(valueColumnNamesOrdered) - len(metaColumnNameSet))
+		var rowKeyValuePairs []string
 		keyJSONBuilder := json.NewArrayBuilder(len(primaryKeysNamesOrdered))
 
 		for _, primaryKeyColumnName := range primaryKeysNamesOrdered {
-			datum := row[primaryKeyColumnSet[primaryKeyColumnName]]
+			primaryKeyIndex := primaryKeyColumnSet[primaryKeyColumnName]
+			if primaryKeyIndex == -1 {
+				continue
+			}
+			datum := row[primaryKeyIndex]
 			j, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
 			if err != nil {
 				return err
@@ -1331,73 +1313,24 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 			keyJSONBuilder.Add(j)
 
 		}
-		for _, valueColumnName := range valueColumnNamesOrdered {
-			if _, isMeta := metaColumnNameSet[valueColumnName]; isMeta {
-				continue
-			}
 
-			datum := row[columnNameSet[valueColumnName]]
+		for i, valueColumnName := range valueColumnNamesOrdered {
+			datum := row[i]
 			j, err := tree.AsJSON(datum, sessiondatapb.DataConversionConfig{}, time.UTC)
 			if err != nil {
 				return err
 			}
-			rowJSONBuilder.Add(valueColumnName, j)
-		}
-
-		var valueWithAfter *json.ObjectBuilder
-
-		isDeleted := *(row[metaColumnNameSet[parquetCrdbEventTypeColName]].(*tree.DString)) == *parquetEventDelete.DString()
-
-		if envelopeType == changefeedbase.OptEnvelopeBare {
-			valueWithAfter = rowJSONBuilder
-		} else {
-			valueWithAfter = json.NewObjectBuilder(1)
-			if err != nil {
-				return err
-			}
-			if isDeleted {
-				nullJSON, err := tree.AsJSON(tree.DNull, sessiondatapb.DataConversionConfig{}, time.UTC)
-				if err != nil {
-					return err
-				}
-				valueWithAfter.Add("after", nullJSON)
-			} else {
-				vbJson := rowJSONBuilder.Build()
-				valueWithAfter.Add("after", vbJson)
-			}
-
-			if updatedColIdx, updated := metaColumnNameSet[parquetOptUpdatedTimestampColName]; updated {
-				j, err := tree.AsJSON(row[updatedColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
-				if err != nil {
-					return err
-				}
-				valueWithAfter.Add(changefeedbase.OptUpdatedTimestamps, j)
-			}
-			if mvccColIdx, mvcc := metaColumnNameSet[parquetOptMVCCTimestampColName]; mvcc {
-				j, err := tree.AsJSON(row[mvccColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
-				if err != nil {
-					return err
-				}
-				valueWithAfter.Add(changefeedbase.OptMVCCTimestamps, j)
-			}
-			if mvccColIdx, mvcc := metaColumnNameSet[parquetOptDiffColName]; mvcc {
-				j, err := tree.AsJSON(row[mvccColIdx], sessiondatapb.DataConversionConfig{}, time.UTC)
-				if err != nil {
-					return err
-				}
-				valueWithAfter.Add("before", j)
-			}
+			rowKeyValuePairs = append(rowKeyValuePairs, fmt.Sprintf("%s:%s", valueColumnName, j))
 		}
 
 		keyJSON := keyJSONBuilder.Build()
 
-		rowJSON := valueWithAfter.Build()
-
 		var keyBuf bytes.Buffer
 		keyJSON.Format(&keyBuf)
 
+		rowString := strings.Join(rowKeyValuePairs, ",")
 		var rowBuf bytes.Buffer
-		rowJSON.Format(&rowBuf)
+		rowBuf.WriteString(rowString)
 
 		m := &cdctest.TestFeedMessage{
 			Topic: topic,
