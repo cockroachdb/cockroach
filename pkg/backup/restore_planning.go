@@ -1817,10 +1817,6 @@ func doRestorePlan(
 		if err := checkManifestsForOnlineCompat(ctx, mainBackupManifests); err != nil {
 			return err
 		}
-		currentClusterVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version
-		if currentClusterVersion.Less(clusterversion.V24_1.Version()) {
-			return errors.Newf("cluster must fully upgrade to version %s to run online restore", clusterversion.V24_1.String())
-		}
 	}
 
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {

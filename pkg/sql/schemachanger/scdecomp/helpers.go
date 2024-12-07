@@ -139,6 +139,6 @@ func NewElementCreationMetadata(
 ) *scpb.ElementCreationMetadata {
 	return &scpb.ElementCreationMetadata{
 		In_23_1OrLater: true,
-		In_24_3OrLater: clusterVersion.IsActive(clusterversion.V24_3),
+		In_24_3OrLater: true,
 	}
 }

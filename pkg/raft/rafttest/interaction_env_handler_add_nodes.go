@@ -18,7 +18,6 @@
 package rafttest
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/datadriven"
@@ -146,12 +144,7 @@ func (env *InteractionEnv) AddNodes(n int, cfg raft.Config, snap pb.Snapshot) er
 			cfg.CRDBVersion = cluster.MakeTestingClusterSettings().Version
 		}
 
-		// Disable store liveness if the CRDB version is less than 24.3.
-		if cfg.CRDBVersion.IsActive(context.TODO(), clusterversion.V24_3_StoreLivenessEnabled) {
-			cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
-		} else {
-			cfg.StoreLiveness = raftstoreliveness.Disabled{}
-		}
+		cfg.StoreLiveness = newStoreLiveness(env.Fabric, id)
 
 		cfg.Metrics = raft.NewMetrics()
 

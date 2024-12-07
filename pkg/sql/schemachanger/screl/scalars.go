@@ -128,7 +128,8 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		*scpb.PartitionZoneConfig, *scpb.Trigger, *scpb.TriggerName,
 		*scpb.TriggerEnabled, *scpb.TriggerTiming, *scpb.TriggerEvents, *scpb.TriggerTransition,
 		*scpb.TriggerWhen, *scpb.TriggerFunctionCall, *scpb.TriggerDeps:
-		return version.IsActive(clusterversion.V24_3)
+		// These elements need v24.3 so they can be used without checking any version gates.
+		return true
 	case *scpb.NamedRangeZoneConfig:
 		return version.IsActive(clusterversion.V25_1)
 	default:

@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -292,11 +291,6 @@ func (n *createFunctionNode) replaceFunction(
 	if err := params.p.removeTypeBackReferences(params.ctx, udfDesc.DependsOnTypes, udfDesc.ID, jobDesc); err != nil {
 		return err
 	}
-	if !params.p.IsActive(params.ctx, clusterversion.V24_1) &&
-		len(udfDesc.DependsOnFunctions) > 0 {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"user defined functions cannot reference other user defined functions")
-	}
 	for _, id := range udfDesc.DependsOnFunctions {
 		backRefMutable, err := params.p.Descriptors().MutableByID(params.p.txn).Function(params.ctx, id)
 		if err != nil {
@@ -511,11 +505,6 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 		}
 	}
 
-	if !params.p.IsActive(params.ctx, clusterversion.V24_1) &&
-		len(n.functionDeps) > 0 {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"user defined functions cannot reference other user defined functions")
-	}
 	udfDesc.DependsOnFunctions = make([]descpb.ID, 0, len(n.functionDeps))
 	for id := range n.functionDeps {
 		// Add a reference to the dependency in here. Note that we need to add

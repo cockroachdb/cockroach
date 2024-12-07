@@ -9,7 +9,6 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -360,10 +359,6 @@ func (b *Builder) buildStmt(
 		case *tree.Select, tree.SelectStatement:
 		case *tree.Insert, *tree.Update, *tree.Delete:
 		case *tree.Call:
-			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
-			if !activeVersion.IsActive(clusterversion.V24_1) {
-				panic(unimplemented.Newf("stored procedures", "%s usage inside a routine definition is not supported until version 24.1", stmt.StatementTag()))
-			}
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}

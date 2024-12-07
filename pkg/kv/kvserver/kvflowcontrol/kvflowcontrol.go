@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -168,16 +167,8 @@ func GetV2EnabledWhenLeaderLevel(
 	if knobs != nil && knobs.OverrideV2EnabledWhenLeaderLevel != nil {
 		return knobs.OverrideV2EnabledWhenLeaderLevel()
 	}
-	if st.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2Full) {
-		// Full RACv2 can be enabled: RACv2 protocol with V2 entry encoding.
-		return V2EnabledWhenLeaderV2Encoding
-	}
-	if st.Version.IsActive(ctx, clusterversion.V24_3_UseRACV2WithV1EntryEncoding) {
-		// Partial RACv2 can be enabled: RACv2 protocol with V1 entry encoding.
-		return V2EnabledWhenLeaderV1Encoding
-	}
-	// RACv2 is not enabled.
-	return V2NotEnabledWhenLeader
+	// Full RACv2 can be enabled: RACv2 protocol with V2 entry encoding.
+	return V2EnabledWhenLeaderV2Encoding
 }
 
 // Stream models the stream over which we replicate data traffic, the

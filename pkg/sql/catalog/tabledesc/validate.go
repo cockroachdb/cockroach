@@ -1655,7 +1655,7 @@ func (desc *wrapper) validateTableIndexes(
 				return errors.Newf("secondary index %q contains dropped stored column %q", idx.GetName(), col.ColName())
 			}
 			// Ensure any active index does not store a primary key column (added and gated in V24.1).
-			if !idx.IsMutation() && catalog.MakeTableColSet(desc.PrimaryIndex.KeyColumnIDs...).Contains(colID) && isActive(clusterversion.V24_1) {
+			if !idx.IsMutation() && catalog.MakeTableColSet(desc.PrimaryIndex.KeyColumnIDs...).Contains(colID) {
 				return sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName())
 			}
 		}

@@ -59,55 +59,6 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
-	newFirstUpgrade(clusterversion.V24_3_Start.Version()),
-
-	upgrade.NewSystemUpgrade(
-		"create a zone config for the timeseries range if one does not exist already",
-		clusterversion.V24_3_AddTimeseriesZoneConfig.Version(),
-		addTimeseriesZoneConfig,
-		upgrade.RestoreActionNotRequired("this zone config isn't necessary for restore"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"add new table_metadata table and job to the system tenant",
-		clusterversion.V24_3_TableMetadata.Version(),
-		upgrade.NoPrecondition,
-		addTableMetadataTableAndJob,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"add exclude_data_from_backup to certain system tables on tenants",
-		clusterversion.V24_3_TenantExcludeDataFromBackup.Version(),
-		upgrade.NoPrecondition,
-		tenantExcludeDataFromBackup,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore affected tables"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"add new column to the system.sql_instances table to store whether a node is draining",
-		clusterversion.V24_3_SQLInstancesAddDraining.Version(),
-		upgrade.NoPrecondition,
-		sqlInstancesAddDrainingMigration,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"check that we are not in violation of the new license policies",
-		clusterversion.V24_3_MaybePreventUpgradeForCoreLicenseDeprecation.Version(),
-		checkForPostUpgradeThrottlePreCond,
-		checkForPostUpgradeThrottleProcessing,
-		upgrade.RestoreActionNotRequired("this check does not persist anything"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"adds new columns to table_metadata table",
-		clusterversion.V24_3_AddTableMetadataCols.Version(),
-		upgrade.NoPrecondition,
-		addTableMetadataCols,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
-	),
-
 	newFirstUpgrade(clusterversion.V25_1_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
