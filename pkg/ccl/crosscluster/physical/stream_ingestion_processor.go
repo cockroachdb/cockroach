@@ -1118,7 +1118,7 @@ func splitRangeKeySSTAtKey(
 		// we'll swap in the RHS writer.
 		leftWriter  = storage.MakeIngestionSSTWriter(ctx, st, left)
 		rightWriter = storage.MakeIngestionSSTWriter(ctx, st, right)
-		writer      = leftWriter
+		writer      = &leftWriter
 	)
 	defer leftWriter.Close()
 	defer rightWriter.Close()
@@ -1132,7 +1132,7 @@ func splitRangeKeySSTAtKey(
 		}
 
 		leftRet = &rangeKeySST{start: first, end: last, data: left.Data()}
-		writer = rightWriter
+		writer = &rightWriter
 		last = nil
 		first = nil
 		reachedSplit = true
