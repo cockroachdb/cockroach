@@ -137,10 +137,23 @@ func (ex *connExecutor) execStmt(
 		if portal != nil {
 			preparedStmt = portal.Stmt
 		}
-		err = ex.execWithProfiling(ctx, ast, preparedStmt, func(ctx context.Context) error {
-			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, portal, pinfo, res, canAutoCommit)
-			return err
-		})
+		if res.SupportsPausing() {
+			go func() {
+				var e fsm.Event
+				var p fsm.EventPayload
+				err := ex.execWithProfiling(ctx, ast, preparedStmt, func(ctx context.Context) error {
+					e, p, err = ex.execStmtInOpenState(ctx, parserStmt, portal, pinfo, res, canAutoCommit)
+					return err
+				})
+				res.RowsExhausted(e, p, err)
+			}()
+			ev, payload, err = res.WaitForRows()
+		} else {
+			err = ex.execWithProfiling(ctx, ast, preparedStmt, func(ctx context.Context) error {
+				ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, portal, pinfo, res, canAutoCommit)
+				return err
+			})
+		}
 		switch ev.(type) {
 		case eventNonRetriableErr:
 			ex.recordFailure()
@@ -254,7 +267,7 @@ func (ex *connExecutor) execPortal(
 		// to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
 		// so only exhaust it if it still exists.
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok && !portal.isPausable() {
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok && portal.pausableRes == nil {
 			defer ex.exhaustPortal(portalName)
 		}
 		return ev, payload, retErr

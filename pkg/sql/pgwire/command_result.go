@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -253,6 +254,26 @@ func (r *commandResult) beforeAdd() error {
 // JobIdColIdx is based on jobs.BulkJobExecutionResultHeader and
 // jobs.DetachedJobExecutionResultHeader.
 var JobIdColIdx int
+
+func (r *commandResult) SupportsPausing() bool {
+	return false
+}
+
+func (r *commandResult) ResumeAfterPause(newLimit int) {
+	panic("unimplemented")
+}
+
+func (r *commandResult) CloseAfterPause() {
+	panic("unimplemented")
+}
+
+func (r *commandResult) WaitForRows() (fsm.Event, fsm.EventPayload, error) {
+	panic("unimplemented")
+}
+
+func (r *commandResult) RowsExhausted(ev fsm.Event, payload fsm.EventPayload, err error) {
+	panic("unimplemented")
+}
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
@@ -494,6 +515,8 @@ func (c *conn) newCommandResult(
 		implicitTxn:      implicitTxn,
 		commandResult:    r,
 		portalPausablity: portalPausability,
+		resumeCh:         make(chan error),
+		blockCECh:        make(chan blockChPayload),
 	}
 }
 
@@ -520,11 +543,45 @@ type limitedCommandResult struct {
 	// If set, an error will be sent to the client if more rows are produced than
 	// this limit.
 	limit            int
-	reachedLimit     bool
 	portalPausablity sql.PortalPausablity
+
+	closed    bool
+	resumeCh  chan error
+	blockCECh chan blockChPayload
+}
+
+type blockChPayload struct {
+	ev      fsm.Event
+	payload fsm.EventPayload
+	err     error
 }
 
 var _ sql.RestrictedCommandResult = &limitedCommandResult{}
+
+func (r *limitedCommandResult) SupportsPausing() bool {
+	return true
+}
+
+func (r *limitedCommandResult) ResumeAfterPause(newLimit int) {
+	r.seenTuples = 0
+	r.limit = newLimit
+	r.resumeCh <- nil
+}
+
+func (r *limitedCommandResult) CloseAfterPause() {
+	r.closed = true
+	r.resumeCh <- sql.ErrLimitedResultClosed
+}
+
+func (r *limitedCommandResult) WaitForRows() (fsm.Event, fsm.EventPayload, error) {
+	p := <-r.blockCECh
+	return p.ev, p.payload, p.err
+}
+
+func (r *limitedCommandResult) RowsExhausted(ev fsm.Event, payload fsm.EventPayload, err error) {
+	r.blockCECh <- blockChPayload{ev: ev, payload: payload, err: err}
+	close(r.blockCECh)
+}
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
@@ -532,27 +589,23 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 		return err
 	}
 	r.seenTuples++
-
-	if r.seenTuples == r.limit {
-		// If we've seen up to the limit of rows, send a "portal suspended" message
-		// and wait for another exec portal message.
-		r.conn.bufferPortalSuspended()
-		if err := r.conn.Flush(r.pos); err != nil {
-			return err
-		}
-		if r.portalPausablity == sql.PausablePortal {
-			r.reachedLimit = true
-			return sql.ErrPortalLimitHasBeenReached
-		} else {
-			// TODO(janexing): we keep using the logic from before we added
-			// multiple-active-portals support to avoid bring too many bugs. Eventually
-			// we should remove them and use the "return the control to connExecutor"
-			// logic for all portals.
-			r.seenTuples = 0
-			return r.moreResultsNeeded(ctx)
-		}
+	if r.seenTuples < r.limit {
+		return nil
 	}
-	return nil
+
+	// If we've seen up to the limit of rows, send a "portal suspended" message
+	// and block until we're told to resume.
+	r.conn.bufferPortalSuspended()
+	if err := r.conn.Flush(r.pos); err != nil {
+		return err
+	}
+	r.blockCECh <- blockChPayload{}
+	select {
+	case err := <-r.resumeCh:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
@@ -728,11 +781,12 @@ func (r *limitedCommandResult) rewindAndClosePortal(
 	return sql.ErrLimitedResultClosed
 }
 
+// TODO: think about Discard.
+
 func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
-	if r.reachedLimit {
-		r.commandResult.typ = noCompletionMsg
+	if r.closed {
+		r.commandResult.Close(ctx, t)
 	}
-	r.commandResult.Close(ctx, t)
 }
 
 // Get the column index for job id based on the result header defined in
