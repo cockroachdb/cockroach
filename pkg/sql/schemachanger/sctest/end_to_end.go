@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -308,6 +309,7 @@ func execStatementWithTestDeps(
 	var state scpb.CurrentState
 	var logSchemaChangesFn scbuild.LogSchemaChangerEventsFn
 	var err error
+	startTime := timeutil.Now()
 
 	deps.WithTxn(func(s *sctestdeps.TestState) {
 		// Run statement phase.
@@ -334,7 +336,7 @@ func execStatementWithTestDeps(
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
 		err = scrun.RunSchemaChangesInJob(
-			ctx, deps.TestingKnobs(), deps, jobID, job.DescriptorIDs, nil, /* rollbackCause */
+			ctx, deps.TestingKnobs(), deps, jobID, startTime, job.DescriptorIDs, nil, /* rollbackCause */
 		)
 		require.NoError(t, err, "error in mock schema change job execution")
 		deps.LogSideEffectf("# end %s", deps.Phase())
