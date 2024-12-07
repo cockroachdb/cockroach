@@ -70,18 +70,6 @@ var initialValuesFactoryByKey = map[clusterversion.Key]initialValuesFactoryFn{
 		nonSystem:     v24_3_tenant_keys,
 		nonSystemHash: v24_3_tenant_sha256,
 	}.build,
-	clusterversion.V24_2: hardCodedInitialValues{
-		system:        v24_2_system_keys,
-		systemHash:    v24_2_system_sha256,
-		nonSystem:     v24_2_tenant_keys,
-		nonSystemHash: v24_2_tenant_sha256,
-	}.build,
-	clusterversion.V24_1: hardCodedInitialValues{
-		system:        v24_1_system_keys,
-		systemHash:    v24_1_system_sha256,
-		nonSystem:     v24_1_tenant_keys,
-		nonSystemHash: v24_1_tenant_sha256,
-	}.build,
 }
 
 // buildLatestInitialValues is the default initial value factory.
@@ -139,30 +127,6 @@ func (f hardCodedInitialValues) build(
 //
 // These files can be auto-generated for the latest version with the
 // sql-bootstrap-data CLI tool (see pkg/cmd/sql-bootstrap-data).
-
-//go:embed data/24_1_system.keys
-var v24_1_system_keys string
-
-//go:embed data/24_1_system.sha256
-var v24_1_system_sha256 string
-
-//go:embed data/24_1_tenant.keys
-var v24_1_tenant_keys string
-
-//go:embed data/24_1_tenant.sha256
-var v24_1_tenant_sha256 string
-
-//go:embed data/24_2_system.keys
-var v24_2_system_keys string
-
-//go:embed data/24_2_system.sha256
-var v24_2_system_sha256 string
-
-//go:embed data/24_2_tenant.keys
-var v24_2_tenant_keys string
-
-//go:embed data/24_2_tenant.sha256
-var v24_2_tenant_sha256 string
 
 //go:embed data/24_3_system.keys
 var v24_3_system_keys string

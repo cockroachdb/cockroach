@@ -9,7 +9,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -260,11 +259,7 @@ func stepTenantServiceState(
 		case mtinfopb.ServiceModeShared, mtinfopb.ServiceModeExternal:
 			switch targetMode {
 			case mtinfopb.ServiceModeNone:
-				if settings.Version.IsActive(ctx, clusterversion.V24_1) {
-					return mtinfopb.ServiceModeStopping, nil
-				} else {
-					return mtinfopb.ServiceModeNone, nil
-				}
+				return mtinfopb.ServiceModeStopping, nil
 			case mtinfopb.ServiceModeExternal, mtinfopb.ServiceModeShared:
 				return 0, errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"cannot change service mode %v to %v directly", currentMode, targetMode),

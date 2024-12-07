@@ -416,8 +416,7 @@ func (r *importResumer) prepareTablesForIngestion(
 	var newTableDescs []jobspb.ImportDetails_Table
 	var desc *descpb.TableDescriptor
 
-	useImportEpochs := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V24_1)
-	useImportEpochs = useImportEpochs && importEpochs.Get(&p.ExecCfg().Settings.SV)
+	useImportEpochs := importEpochs.Get(&p.ExecCfg().Settings.SV)
 	for i, table := range details.Tables {
 		if !table.IsNew {
 			desc, err = prepareExistingTablesForIngestion(ctx, txn, descsCol, table.Desc, useImportEpochs)

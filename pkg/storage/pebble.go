@@ -295,14 +295,7 @@ func getCompressionAlgorithm(
 	case compressionAlgorithmSnappy:
 		return pebble.SnappyCompression
 	case compressionAlgorithmZstd:
-		// Pre-24.1 Pebble's implementation of zstd had bugs that could cause
-		// in-memory corruption. We require that the cluster version is 24.1 which
-		// implies that all nodes are running 24.1 code and will never run code
-		// < 24.1 again.
-		if settings.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.V24_1) {
-			return pebble.ZstdCompression
-		}
-		return pebble.DefaultCompression
+		return pebble.ZstdCompression
 	case compressionAlgorithmNone:
 		return pebble.NoCompression
 	default:

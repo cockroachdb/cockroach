@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -21,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -45,15 +42,6 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 		"CREATE SEQUENCE",
 	); err != nil {
 		return nil, err
-	}
-
-	for _, option := range n.Options {
-		if option.Name == tree.SeqOptCacheNode && !p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V24_1) {
-			return nil, pgerror.New(
-				pgcode.FeatureNotSupported,
-				`node-level cache not supported before V24.1`,
-			)
-		}
 	}
 
 	un := n.Name.ToUnresolvedObjectName()
