@@ -7,7 +7,6 @@ package rangefeed
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -47,7 +46,7 @@ type bufferedRegistration struct {
 	blockWhenFull bool // if true, block when buf is full (for tests)
 
 	mu struct {
-		sync.Locker
+		syncutil.Mutex
 		// True if this registration buffer has overflowed, dropping a live event.
 		// This will cause the registration to exit with an error once the buffer
 		// has been emptied.
@@ -98,7 +97,6 @@ func newBufferedRegistration(
 		buf:           make(chan *sharedEvent, bufferSz),
 		blockWhenFull: blockWhenFull,
 	}
-	br.mu.Locker = &syncutil.Mutex{}
 	br.mu.caughtUp = true
 	br.mu.catchUpIter = catchUpIter
 	return br
@@ -136,16 +134,16 @@ func (br *bufferedRegistration) publish(
 			case br.buf <- e:
 				br.mu.Lock()
 				br.mu.caughtUp = false
-			case <-ctx.Done():
+			case <-ctx.Done(): // nolint:deferunlockcheck
 				br.mu.Lock()
-				alloc.Release(ctx)
+				alloc.Release(ctx) // nolint:deferunlockcheck
 			}
 			return
 		}
 		// Buffer exceeded and we are dropping this event. Registration will need
 		// a catch-up scan.
 		br.mu.overflowed = true
-		alloc.Release(ctx)
+		alloc.Release(ctx) // nolint:deferunlockcheck
 	}
 }
 
@@ -214,14 +212,15 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 	for {
 		overflowed := false
 		br.mu.Lock()
+		// nolint:deferunlockcheck
 		if len(br.buf) == 0 {
 			overflowed = br.mu.overflowed
 			br.mu.caughtUp = true
 		}
-		if firstIteration {
+		if firstIteration { // nolint:deferunlockcheck
 			wasOverflowedOnFirstIteration = br.mu.overflowed
 		}
-		br.mu.Unlock()
+		br.mu.Unlock() // nolint:deferunlockcheck
 		firstIteration = false
 
 		if overflowed {
@@ -259,13 +258,13 @@ func (br *bufferedRegistration) runOutputLoop(ctx context.Context, _forStacks ro
 	defer br.drainAllocations(ctx)
 
 	br.mu.Lock()
-	if br.mu.disconnected {
+	if br.mu.disconnected { // nolint:deferunlockcheck
 		// The registration has already been disconnected.
 		br.mu.Unlock()
 		return
 	}
-	ctx, br.mu.outputLoopCancelFn = context.WithCancel(ctx)
-	br.mu.Unlock()
+	ctx, br.mu.outputLoopCancelFn = context.WithCancel(ctx) // nolint:deferunlockcheck
+	br.mu.Unlock()                                          // nolint:deferunlockcheck
 	err := br.outputLoop(ctx)
 	br.Disconnect(kvpb.NewError(err))
 }
@@ -318,7 +317,7 @@ func (br *bufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	}
 	for re := retry.StartWithCtx(ctx, opts); re.Next(); {
 		br.mu.Lock()
-		caughtUp := len(br.buf) == 0 && br.mu.caughtUp
+		caughtUp := len(br.buf) == 0 && br.mu.caughtUp // nolint:deferunlockcheck
 		br.mu.Unlock()
 		if caughtUp {
 			return nil
