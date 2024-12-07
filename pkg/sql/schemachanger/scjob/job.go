@@ -141,11 +141,13 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		return nil
 	}
 
+	startTime := timeutil.FromUnixMicros(payload.StartedMicros)
 	err := scrun.RunSchemaChangesInJob(
 		ctx,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		n.deps,
 		n.job.ID(),
+		startTime,
 		payload.DescriptorIDs,
 		n.rollbackCause,
 	)

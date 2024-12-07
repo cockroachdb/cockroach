@@ -421,6 +421,8 @@ message ReverseSchemaChange {
   string error = 4 [(gogoproto.jsontag) = ",omitempty"];
   // The SQLSTATE code for the error.
   string sqlstate = 5 [(gogoproto.customname) = "SQLSTATE", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The amount of time the schema change job took before being reverted.
+  int64 latency_nanos = 6 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // FinishSchemaChange is recorded when a previously initiated schema
@@ -428,6 +430,8 @@ message ReverseSchemaChange {
 message FinishSchemaChange {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSchemaChangeEventDetails sc = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The amount of time the schema change job took to complete.
+  int64 latency_nanos = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // FinishSchemaChangeRollback is recorded when a previously
@@ -435,6 +439,8 @@ message FinishSchemaChange {
 message FinishSchemaChangeRollback {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSchemaChangeEventDetails sc = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The amount of time the schema change job took to rollback.
+  int64 latency_nanos = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 
