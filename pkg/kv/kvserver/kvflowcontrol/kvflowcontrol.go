@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 )
@@ -41,7 +42,11 @@ var Mode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_control.mode",
 	"determines the 'mode' of flow control we use for replication traffic in KV, if enabled",
-	modeDict[ApplyToElastic], /* default value */
+	metamorphic.ConstantWithTestChoice(
+		"kvadmission.flow_control.mode",
+		modeDict[ApplyToElastic], /* default value */
+		modeDict[ApplyToAll],     /* other value */
+	),
 	modeDict,
 )
 
