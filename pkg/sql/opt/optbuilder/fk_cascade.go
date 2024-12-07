@@ -61,18 +61,23 @@ type onDeleteCascadeBuilder struct {
 	// Note that the columns must be remapped to the new memo when the cascade is
 	// built.
 	oldValues opt.ColList
+
+	// stmtTreeInitFn returns a statementTree that tracks the mutations in
+	// ancestor statements. It may be unset if there are no ancestor statements.
+	stmtTreeInitFn func() statementTree
 }
 
 var _ memo.PostQueryBuilder = &onDeleteCascadeBuilder{}
 
-func newOnDeleteCascadeBuilder(
-	mutatedTable cat.Table, fkInboundOrdinal int, childTable cat.Table, oldValues opt.ColList,
+func (mb *mutationBuilder) newOnDeleteCascadeBuilder(
+	fkInboundOrdinal int, childTable cat.Table, oldValues opt.ColList,
 ) *onDeleteCascadeBuilder {
 	return &onDeleteCascadeBuilder{
-		mutatedTable:     mutatedTable,
+		mutatedTable:     mb.tab,
 		fkInboundOrdinal: fkInboundOrdinal,
 		childTable:       childTable,
 		oldValues:        oldValues,
+		stmtTreeInitFn:   mb.b.stmtTree.GetInitFnForPostQuery(),
 	}
 }
 
@@ -87,38 +92,42 @@ func (cb *onDeleteCascadeBuilder) Build(
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
-		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
+		func(b *Builder) memo.RelExpr {
+			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
-		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
+			fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+			dep := opt.DepByID(fk.OriginTableID())
+			b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
+			b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
 
-		var mb mutationBuilder
-		mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
+			var mb mutationBuilder
+			mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
 
-		// Build a semi join of the table with the mutation input.
-		//
-		// The scope returned by buildDeleteCascadeMutationInput has one column
-		// for each public table column, making it appropriate to set it as
-		// mb.fetchScope.
-		oldValues := cb.oldValues.RemapColumns(colMap)
-		mb.fetchScope = b.buildDeleteCascadeMutationInput(
-			cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
-		)
-		mb.outScope = mb.fetchScope
+			// Build a semi join of the table with the mutation input.
+			//
+			// The scope returned by buildDeleteCascadeMutationInput has one column
+			// for each public table column, making it appropriate to set it as
+			// mb.fetchScope.
+			oldValues := cb.oldValues.RemapColumns(colMap)
+			mb.fetchScope = b.buildDeleteCascadeMutationInput(
+				cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
+			)
+			mb.outScope = mb.fetchScope
 
-		// Set list of columns that will be fetched by the input expression.
-		mb.setFetchColIDs(mb.outScope.cols)
+			// Set list of columns that will be fetched by the input expression.
+			mb.setFetchColIDs(mb.outScope.cols)
 
-		// Cascades can fire triggers on the child table.
-		mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */)
+			// Register the mutation with the statementTree
+			b.checkMultipleMutations(mb.tab, generalMutation)
 
-		mb.buildDelete(nil /* returning */)
-		return mb.outScope.expr
-	})
+			// Cascades can fire triggers on the child table.
+			mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */)
+
+			mb.buildDelete(nil /* returning */)
+			return mb.outScope.expr
+		})
 }
 
 // onDeleteFastCascadeBuilder is a memo.PostQueryBuilder implementation for
@@ -155,6 +164,10 @@ type onDeleteFastCascadeBuilder struct {
 
 	origFilters memo.FiltersExpr
 	origFKCols  opt.ColList
+
+	// stmtTreeInitFn returns a statementTree that tracks the mutations in
+	// ancestor statements. It may be unset if there are no ancestor statements.
+	stmtTreeInitFn func() statementTree
 }
 
 var _ memo.PostQueryBuilder = &onDeleteFastCascadeBuilder{}
@@ -162,15 +175,11 @@ var _ memo.PostQueryBuilder = &onDeleteFastCascadeBuilder{}
 // tryNewOnDeleteFastCascadeBuilder checks if the fast path cascade is
 // applicable to the given mutation, and if yes it returns an instance of
 // onDeleteFastCascadeBuilder.
-func tryNewOnDeleteFastCascadeBuilder(
-	ctx context.Context,
-	md *opt.Metadata,
-	catalog cat.Catalog,
-	fk cat.ForeignKeyConstraint,
-	fkInboundOrdinal int,
-	parentTab, childTab cat.Table,
-	mutationInputScope *scope,
+func (mb *mutationBuilder) tryNewOnDeleteFastCascadeBuilder(
+	fk cat.ForeignKeyConstraint, fkInboundOrdinal int, childTab cat.Table,
 ) (_ *onDeleteFastCascadeBuilder, ok bool) {
+	parentTab := mb.tab
+	mutationInputScope := mb.outScope
 	fkCols := make(opt.ColList, fk.ColumnCount())
 	for i := range fkCols {
 		tabOrd := fk.ReferencedColumnOrdinal(parentTab, i)
@@ -212,7 +221,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 	}
 	// Check that the scan retrieves all table data (currently, this should always
 	// be the case in a normalized expression).
-	if !scan.IsUnfiltered(md) {
+	if !scan.IsUnfiltered(mb.md) {
 		return nil, false
 	}
 
@@ -245,7 +254,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 		case childTabID:
 			tab = childTab
 		default:
-			tab = resolveTable(ctx, catalog, tabID)
+			tab = resolveTable(mb.b.ctx, mb.b.catalog, tabID)
 		}
 		// If the table could not be resolved, then we cannot confirm that FK
 		// references form a simple tree, so we return false. This is possible
@@ -271,6 +280,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 		childTable:       childTab,
 		origFilters:      filters,
 		origFKCols:       fkCols,
+		stmtTreeInitFn:   mb.b.stmtTree.GetInitFnForPostQuery(),
 	}, true
 }
 
@@ -285,86 +295,90 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 	_ *props.Relational,
 	_ opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
-		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
+		func(b *Builder) memo.RelExpr {
+			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
-		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
+			fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+			dep := opt.DepByID(fk.OriginTableID())
+			b.checkPrivilege(dep, cb.childTable, privilege.DELETE)
+			b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
 
-		var mb mutationBuilder
-		mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
+			var mb mutationBuilder
+			mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
 
-		// Build the input to the delete mutation, which is simply a Scan with a
-		// Select on top.
-		mb.fetchScope = b.buildScan(
-			b.addTable(cb.childTable, &mb.alias),
-			tableOrdinals(cb.childTable, columnKinds{
-				includeMutations: false,
-				includeSystem:    false,
-				includeInverted:  false,
-			}),
-			nil, /* indexFlags */
-			noRowLocking,
-			b.allocScope(),
-			true, /* disableNotVisibleIndex */
-		)
-		mb.outScope = mb.fetchScope
+			// Build the input to the delete mutation, which is simply a Scan with a
+			// Select on top.
+			mb.fetchScope = b.buildScan(
+				b.addTable(cb.childTable, &mb.alias),
+				tableOrdinals(cb.childTable, columnKinds{
+					includeMutations: false,
+					includeSystem:    false,
+					includeInverted:  false,
+				}),
+				nil, /* indexFlags */
+				noRowLocking,
+				b.allocScope(),
+				true, /* disableNotVisibleIndex */
+			)
+			mb.outScope = mb.fetchScope
 
-		var filters memo.FiltersExpr
+			var filters memo.FiltersExpr
 
-		// Build the filters by copying the original filters and replacing all
-		// variable references.
-		if len(cb.origFilters) > 0 {
-			var replaceFn norm.ReplaceFunc
-			replaceFn = func(e opt.Expr) opt.Expr {
-				if v, ok := e.(*memo.VariableExpr); ok {
-					idx, found := cb.origFKCols.Find(v.Col)
-					if !found {
-						panic(errors.AssertionFailedf("non-FK variable in filter"))
+			// Build the filters by copying the original filters and replacing all
+			// variable references.
+			if len(cb.origFilters) > 0 {
+				var replaceFn norm.ReplaceFunc
+				replaceFn = func(e opt.Expr) opt.Expr {
+					if v, ok := e.(*memo.VariableExpr); ok {
+						idx, found := cb.origFKCols.Find(v.Col)
+						if !found {
+							panic(errors.AssertionFailedf("non-FK variable in filter"))
+						}
+						tabOrd := fk.OriginColumnOrdinal(cb.childTable, idx)
+						col := mb.outScope.getColumnForTableOrdinal(tabOrd)
+						return b.factory.ConstructVariable(col.id)
 					}
-					tabOrd := fk.OriginColumnOrdinal(cb.childTable, idx)
-					col := mb.outScope.getColumnForTableOrdinal(tabOrd)
-					return b.factory.ConstructVariable(col.id)
+					return b.factory.CopyAndReplaceDefault(e, replaceFn)
 				}
-				return b.factory.CopyAndReplaceDefault(e, replaceFn)
+				filters = *replaceFn(&cb.origFilters).(*memo.FiltersExpr)
 			}
-			filters = *replaceFn(&cb.origFilters).(*memo.FiltersExpr)
-		}
 
-		// We have to filter out rows that have NULL values; add an IS NOT NULL
-		// filter for each FK column, unless the column is not-nullable (this is
-		// a minor optimization, as normalization rules would have removed the
-		// filter anyway).
-		notNullCols := mb.outScope.expr.Relational().NotNullCols
-		for i := range cb.origFKCols {
-			tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
-			col := mb.outScope.getColumnForTableOrdinal(tabOrd)
-			if !notNullCols.Contains(col.id) {
-				filters = append(filters, b.factory.ConstructFiltersItem(
-					b.factory.ConstructIsNot(
-						b.factory.ConstructVariable(col.id),
-						b.factory.ConstructNull(col.typ),
-					),
-				))
+			// We have to filter out rows that have NULL values; add an IS NOT NULL
+			// filter for each FK column, unless the column is not-nullable (this is
+			// a minor optimization, as normalization rules would have removed the
+			// filter anyway).
+			notNullCols := mb.outScope.expr.Relational().NotNullCols
+			for i := range cb.origFKCols {
+				tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
+				col := mb.outScope.getColumnForTableOrdinal(tabOrd)
+				if !notNullCols.Contains(col.id) {
+					filters = append(filters, b.factory.ConstructFiltersItem(
+						b.factory.ConstructIsNot(
+							b.factory.ConstructVariable(col.id),
+							b.factory.ConstructNull(col.typ),
+						),
+					))
+				}
 			}
-		}
 
-		if len(filters) > 0 {
-			mb.outScope.expr = b.factory.ConstructSelect(mb.outScope.expr, filters)
-		}
+			if len(filters) > 0 {
+				mb.outScope.expr = b.factory.ConstructSelect(mb.outScope.expr, filters)
+			}
 
-		// Set list of columns that will be fetched by the input expression.
-		mb.setFetchColIDs(mb.outScope.cols)
+			// Set list of columns that will be fetched by the input expression.
+			mb.setFetchColIDs(mb.outScope.cols)
 
-		// Cascades can fire triggers on the child table.
-		mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */)
+			// Register the mutation with the statementTree
+			b.checkMultipleMutations(mb.tab, generalMutation)
 
-		mb.buildDelete(nil /* returning */)
-		return mb.outScope.expr
-	})
+			// Cascades can fire triggers on the child table.
+			mb.buildRowLevelBeforeTriggers(tree.TriggerEventDelete, true /* cascade */)
+
+			mb.buildDelete(nil /* returning */)
+			return mb.outScope.expr
+		})
 }
 
 // onDeleteSetBuilder is a memo.PostQueryBuilder implementation for
@@ -420,23 +434,24 @@ type onDeleteSetBuilder struct {
 	// Note that the columns must be remapped to the new memo when the cascade is
 	// built.
 	oldValues opt.ColList
+
+	// stmtTreeInitFn returns a statementTree that tracks the mutations in
+	// ancestor statements. It may be unset if there are no ancestor statements.
+	stmtTreeInitFn func() statementTree
 }
 
 var _ memo.PostQueryBuilder = &onDeleteSetBuilder{}
 
-func newOnDeleteSetBuilder(
-	mutatedTable cat.Table,
-	fkInboundOrdinal int,
-	childTable cat.Table,
-	action tree.ReferenceAction,
-	oldValues opt.ColList,
+func (mb *mutationBuilder) newOnDeleteSetBuilder(
+	fkInboundOrdinal int, childTable cat.Table, action tree.ReferenceAction, oldValues opt.ColList,
 ) *onDeleteSetBuilder {
 	return &onDeleteSetBuilder{
-		mutatedTable:     mutatedTable,
+		mutatedTable:     mb.tab,
 		fkInboundOrdinal: fkInboundOrdinal,
 		childTable:       childTable,
 		action:           action,
 		oldValues:        oldValues,
+		stmtTreeInitFn:   mb.b.stmtTree.GetInitFnForPostQuery(),
 	}
 }
 
@@ -451,60 +466,64 @@ func (cb *onDeleteSetBuilder) Build(
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
-		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
+		func(b *Builder) memo.RelExpr {
+			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
-		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
+			fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+			dep := opt.DepByID(fk.OriginTableID())
+			b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
+			b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
 
-		var mb mutationBuilder
-		mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
+			var mb mutationBuilder
+			mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
 
-		// Build a semi join of the table with the mutation input.
-		//
-		// The scope returned by buildDeleteCascadeMutationInput has one column
-		// for each public table column, making it appropriate to set it as
-		// mb.fetchScope.
-		oldValues := cb.oldValues.RemapColumns(colMap)
-		mb.fetchScope = b.buildDeleteCascadeMutationInput(
-			cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
-		)
-		mb.outScope = mb.fetchScope
+			// Build a semi join of the table with the mutation input.
+			//
+			// The scope returned by buildDeleteCascadeMutationInput has one column
+			// for each public table column, making it appropriate to set it as
+			// mb.fetchScope.
+			oldValues := cb.oldValues.RemapColumns(colMap)
+			mb.fetchScope = b.buildDeleteCascadeMutationInput(
+				cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues,
+			)
+			mb.outScope = mb.fetchScope
 
-		// Set list of columns that will be fetched by the input expression.
-		mb.setFetchColIDs(mb.outScope.cols)
-		// Add target columns.
-		numFKCols := fk.ColumnCount()
-		for i := 0; i < numFKCols; i++ {
-			tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
-			mb.addTargetCol(tabOrd)
-		}
-
-		// Add the SET expressions.
-		updateExprs := make(tree.UpdateExprs, numFKCols)
-		for i := range updateExprs {
-			updateExprs[i] = &tree.UpdateExpr{}
-			if cb.action == tree.SetNull {
-				updateExprs[i].Expr = tree.DNull
-			} else {
-				updateExprs[i].Expr = tree.DefaultVal{}
+			// Set list of columns that will be fetched by the input expression.
+			mb.setFetchColIDs(mb.outScope.cols)
+			// Add target columns.
+			numFKCols := fk.ColumnCount()
+			for i := 0; i < numFKCols; i++ {
+				tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
+				mb.addTargetCol(tabOrd)
 			}
-		}
-		mb.addUpdateCols(updateExprs)
 
-		// Cascades can fire triggers on the child table.
-		mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
+			// Add the SET expressions.
+			updateExprs := make(tree.UpdateExprs, numFKCols)
+			for i := range updateExprs {
+				updateExprs[i] = &tree.UpdateExpr{}
+				if cb.action == tree.SetNull {
+					updateExprs[i].Expr = tree.DNull
+				} else {
+					updateExprs[i].Expr = tree.DefaultVal{}
+				}
+			}
+			mb.addUpdateCols(updateExprs)
 
-		// TODO(radu): consider plumbing a flag to prevent building the FK check
-		// against the parent we are cascading from. Need to investigate in which
-		// cases this is safe (e.g. other cascades could have messed with the parent
-		// table in the meantime).
-		mb.buildUpdate(nil /* returning */)
-		return mb.outScope.expr
-	})
+			// Register the mutation with the statementTree
+			b.checkMultipleMutations(mb.tab, generalMutation)
+
+			// Cascades can fire triggers on the child table.
+			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
+
+			// TODO(radu): consider plumbing a flag to prevent building the FK check
+			// against the parent we are cascading from. Need to investigate in which
+			// cases this is safe (e.g. other cascades could have messed with the parent
+			// table in the meantime).
+			mb.buildUpdate(nil /* returning */)
+			return mb.outScope.expr
+		})
 }
 
 // buildDeleteCascadeMutationInput constructs a semi-join between the child
@@ -656,24 +675,28 @@ type onUpdateCascadeBuilder struct {
 	// table. Note that the columns must be remapped to the new memo when the
 	// cascade is built.
 	newValues opt.ColList
+
+	// stmtTreeInitFn returns a statementTree that tracks the mutations in
+	// ancestor statements. It may be unset if there are no ancestor statements.
+	stmtTreeInitFn func() statementTree
 }
 
 var _ memo.PostQueryBuilder = &onUpdateCascadeBuilder{}
 
-func newOnUpdateCascadeBuilder(
-	mutatedTable cat.Table,
+func (mb *mutationBuilder) newOnUpdateCascadeBuilder(
 	fkInboundOrdinal int,
 	childTable cat.Table,
 	action tree.ReferenceAction,
 	oldValues, newValues opt.ColList,
 ) *onUpdateCascadeBuilder {
 	return &onUpdateCascadeBuilder{
-		mutatedTable:     mutatedTable,
+		mutatedTable:     mb.tab,
 		fkInboundOrdinal: fkInboundOrdinal,
 		childTable:       childTable,
 		action:           action,
 		oldValues:        oldValues,
 		newValues:        newValues,
+		stmtTreeInitFn:   mb.b.stmtTree.GetInitFnForPostQuery(),
 	}
 }
 
@@ -688,64 +711,68 @@ func (cb *onUpdateCascadeBuilder) Build(
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, func(b *Builder) memo.RelExpr {
-		opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
+		func(b *Builder) memo.RelExpr {
+			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
-		fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
+			fk := cb.mutatedTable.InboundForeignKey(cb.fkInboundOrdinal)
 
-		dep := opt.DepByID(fk.OriginTableID())
-		b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
-		b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
+			dep := opt.DepByID(fk.OriginTableID())
+			b.checkPrivilege(dep, cb.childTable, privilege.UPDATE)
+			b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
 
-		var mb mutationBuilder
-		mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
+			var mb mutationBuilder
+			mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
 
-		// Build a join of the table with the mutation input.
-		oldValues := cb.oldValues.RemapColumns(colMap)
-		newValues := cb.newValues.RemapColumns(colMap)
-		mb.outScope = b.buildUpdateCascadeMutationInput(
-			cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues, newValues,
-		)
+			// Build a join of the table with the mutation input.
+			oldValues := cb.oldValues.RemapColumns(colMap)
+			newValues := cb.newValues.RemapColumns(colMap)
+			mb.outScope = b.buildUpdateCascadeMutationInput(
+				cb.childTable, &mb.alias, fk, binding, bindingProps, oldValues, newValues,
+			)
 
-		// The scope created by b.buildUpdateCascadeMutationInput has the table
-		// columns, followed by the old FK values, followed by the new FK values.
-		numFKCols := fk.ColumnCount()
-		tableScopeCols := mb.outScope.cols[:len(mb.outScope.cols)-2*numFKCols]
-		newValScopeCols := mb.outScope.cols[len(mb.outScope.cols)-numFKCols:]
-		mb.fetchScope = b.allocScope()
-		mb.fetchScope.appendColumns(tableScopeCols)
+			// The scope created by b.buildUpdateCascadeMutationInput has the table
+			// columns, followed by the old FK values, followed by the new FK values.
+			numFKCols := fk.ColumnCount()
+			tableScopeCols := mb.outScope.cols[:len(mb.outScope.cols)-2*numFKCols]
+			newValScopeCols := mb.outScope.cols[len(mb.outScope.cols)-numFKCols:]
+			mb.fetchScope = b.allocScope()
+			mb.fetchScope.appendColumns(tableScopeCols)
 
-		// Set list of columns that will be fetched by the input expression.
-		mb.setFetchColIDs(tableScopeCols)
-		// Add target columns.
-		for i := 0; i < numFKCols; i++ {
-			tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
-			mb.addTargetCol(tabOrd)
-		}
-
-		// Add the SET expressions.
-		updateExprs := make(tree.UpdateExprs, numFKCols)
-		for i := range updateExprs {
-			updateExprs[i] = &tree.UpdateExpr{}
-			switch cb.action {
-			case tree.Cascade:
-				updateExprs[i].Expr = &newValScopeCols[i]
-			case tree.SetNull:
-				updateExprs[i].Expr = tree.DNull
-			case tree.SetDefault:
-				updateExprs[i].Expr = tree.DefaultVal{}
-			default:
-				panic(errors.AssertionFailedf("unsupported action"))
+			// Set list of columns that will be fetched by the input expression.
+			mb.setFetchColIDs(tableScopeCols)
+			// Add target columns.
+			for i := 0; i < numFKCols; i++ {
+				tabOrd := fk.OriginColumnOrdinal(cb.childTable, i)
+				mb.addTargetCol(tabOrd)
 			}
-		}
-		mb.addUpdateCols(updateExprs)
 
-		// Cascades can fire triggers on the child table.
-		mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
+			// Add the SET expressions.
+			updateExprs := make(tree.UpdateExprs, numFKCols)
+			for i := range updateExprs {
+				updateExprs[i] = &tree.UpdateExpr{}
+				switch cb.action {
+				case tree.Cascade:
+					updateExprs[i].Expr = &newValScopeCols[i]
+				case tree.SetNull:
+					updateExprs[i].Expr = tree.DNull
+				case tree.SetDefault:
+					updateExprs[i].Expr = tree.DefaultVal{}
+				default:
+					panic(errors.AssertionFailedf("unsupported action"))
+				}
+			}
+			mb.addUpdateCols(updateExprs)
 
-		mb.buildUpdate(nil /* returning */)
-		return mb.outScope.expr
-	})
+			// Register the mutation with the statementTree
+			b.checkMultipleMutations(mb.tab, generalMutation)
+
+			// Cascades can fire triggers on the child table.
+			mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, true /* cascade */)
+
+			mb.buildUpdate(nil /* returning */)
+			return mb.outScope.expr
+		})
 }
 
 // buildUpdateCascadeMutationInput constructs an inner-join between the child
@@ -939,16 +966,28 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 // buildTriggerCascadeHelper contains boilerplate for PostQueryBuilder.Build
 // implementations. It creates a Builder, sets up panic-to-error conversion,
 // and executes the given function.
+//
+// - stmtTreeInitFn is a closure that returns a statement tree describing
+// mutations which might conflict with AFTER triggers. It may be nil if there
+// is no "outer" mutation that might conflict. Cascades must propagate this
+// information as well, since they can themselves fire triggers.
 func buildTriggerCascadeHelper(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
 	catalog cat.Catalog,
 	factoryI interface{},
+	stmtTreeInitFn func() statementTree,
 	fn func(b *Builder) memo.RelExpr,
 ) (_ memo.RelExpr, err error) {
 	factory := factoryI.(*norm.Factory)
 	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
+	if stmtTreeInitFn != nil {
+		b.stmtTree = stmtTreeInitFn()
+	}
+	// Push a new statement onto the statement tree.
+	b.stmtTree.Push()
+	defer b.stmtTree.Pop()
 
 	// Enact panic handling similar to Builder.Build().
 	defer func() {
