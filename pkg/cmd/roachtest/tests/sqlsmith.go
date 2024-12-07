@@ -121,19 +121,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		for _, stmt := range setup {
 			logStmt(stmt)
 			if _, err := conn.Exec(stmt); err != nil {
-				if strings.Contains(err.Error(), "does not exist") {
-					// This is likely to be an elusive 'pq: column
-					// "crdb_internal_idx_expr" does not exist' error that we
-					// cannot reproduce. The current hypothesis is that the
-					// CREATE TABLE statement contains some non-visible
-					// characters that get lost when printing as a string, so we
-					// will log this statement as a sequence of integers so that
-					// later we can reconstruct the stmt precisely.
-					for _, char := range stmt {
-						fmt.Fprintf(smithLog, "%d ", char)
-					}
-					fmt.Fprint(smithLog, "\n\n")
-				}
 				t.Fatalf("error: %s\nstatement: %s", err.Error(), stmt)
 			}
 		}
