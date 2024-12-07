@@ -54,6 +54,12 @@ type Statistics struct {
 	// expressions with Cardinality.Max > 0, RowCount will be >= epsilon.
 	RowCount float64
 
+	// EstimatedRowCount is an alternative estimate of the number of rows returned
+	// by the expression, possibly derived from prefiltered or precomputed statistics.
+	// This can be useful in cases where the RowCount might not accurately reflect the
+	// expected results due to filtering or other factors.
+	EstimatedRowCount int64
+
 	// VirtualCols is the set of virtual computed columns produced by our input
 	// that we have statistics on. Any of these could appear in ColStats. This set
 	// is maintained separately from OutputCols to allow lookup of statistics on
