@@ -1340,6 +1340,10 @@ type FKCascades []FKCascade
 type FKCascade struct {
 	FKConstraint cat.ForeignKeyConstraint
 
+	// HasBeforeTriggers is true if the mutation that is planned for the cascade
+	// will have BEFORE triggers.
+	HasBeforeTriggers bool
+
 	// Builder is an object that can be used as the "optbuilder" for the cascading
 	// query.
 	Builder PostQueryBuilder
