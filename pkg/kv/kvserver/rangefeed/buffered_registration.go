@@ -7,7 +7,6 @@ package rangefeed
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -48,7 +47,7 @@ type bufferedRegistration struct {
 	blockWhenFull bool // if true, block when buf is full (for tests)
 
 	mu struct {
-		sync.Locker
+		syncutil.Mutex
 		// True if this registration buffer has overflowed, dropping a live event.
 		// This will cause the registration to exit with an error once the buffer
 		// has been emptied.
@@ -100,7 +99,6 @@ func newBufferedRegistration(
 		buf:           make(chan *sharedEvent, bufferSz),
 		blockWhenFull: blockWhenFull,
 	}
-	br.mu.Locker = &syncutil.Mutex{}
 	br.mu.catchUpIter = catchUpIter
 	return br
 }
@@ -110,6 +108,8 @@ func newBufferedRegistration(
 // indicating that live events were lost and a catch-up scan should be initiated.
 // If overflowed is already set, events are ignored and not written to the
 // buffer.
+//
+// nolint:deferunlockcheck
 func (br *bufferedRegistration) publish(
 	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
@@ -189,6 +189,8 @@ func (br *bufferedRegistration) Disconnect(pErr *kvpb.Error) {
 // The loop exits with any error encountered, if the provided context is
 // canceled, or when the buffer has overflowed and all pre-overflow entries
 // have been emitted.
+//
+// nolint:deferunlockcheck
 func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 	// If the registration has a catch-up scan, run it.
 	if err := br.maybeRunCatchUpScan(ctx); err != nil {
@@ -255,6 +257,7 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 	}
 }
 
+// nolint:deferunlockcheck
 func (br *bufferedRegistration) runOutputLoop(ctx context.Context, _forStacks roachpb.RangeID) {
 	defer br.drainAllocations(ctx)
 
