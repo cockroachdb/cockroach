@@ -547,6 +547,73 @@ func (s deleteAllTenantsVersionOverrideStep) Run(
 	return h.System.Exec(rng, stmt, 0, "version")
 }
 
+// disableRateLimitersStep disables both the KV and the tenant(SQL) rate limiter
+// for the given virtual cluster. This step is necessary for separate process
+// tenants to avoid rate limiting which can cause tests to hang and fail.
+//
+// N.B. This step is not needed for shared process tenants as they already opt out
+// of both rate limiters. Shared process tenants are by default not subject to the
+// tenant rate limiter, as they create a `noopTenantSideCostController`. Shared process
+// tenants are automatically granted all tenant capabilities as of v24.1 which includes
+// exemption from the tenant rate limiter. For older versions, the mvt framework already
+// handles granting said capabilities (see: TenantsAndSystemAlignedSettingsVersion).
+type disableRateLimitersStep struct {
+	virtualClusterName string
+}
+
+func (s disableRateLimitersStep) Background() shouldStop { return nil }
+
+func (s disableRateLimitersStep) Description() string {
+	return fmt.Sprintf("disable KV and tenant rate limiter for virtual cluster %s", s.virtualClusterName)
+}
+
+func (s disableRateLimitersStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	// Disable the KV rate limiter.
+	stmt := fmt.Sprintf(
+		"ALTER TENANT %q GRANT CAPABILITY exempt_from_rate_limiting = true",
+		s.virtualClusterName,
+	)
+	if err := h.System.Exec(rng, stmt); err != nil {
+		return err
+	}
+
+	// Disable the tenant rate limiter. Unlike the KV rate limiter, there is no way
+	// to outright disable the tenant rate limiter. Instead, we instead set the tenant's
+	// resource limits to an arbitrarily high value.
+	stmt = fmt.Sprintf(
+		"SELECT id FROM system.tenants WHERE name = '%s'", s.virtualClusterName,
+	)
+
+	rows, err := h.System.Query(rng, stmt)
+	if err != nil {
+		return err
+	}
+
+	var tenantID int64
+	if rows.Next() {
+		if err = rows.Scan(&tenantID); err != nil {
+			return err
+		}
+	}
+
+	const (
+		// `+Inf` is used instead of `math.MaxFloat64` to avoid the long
+		// output when the SQL statement is logged by the framework.
+		availableTokens = "CAST('+Inf' AS FLOAT)"
+		refillRate      = "CAST('+Inf' AS FLOAT)"
+		maxBurstTokens  = 0 // 0 disables the limit.
+	)
+
+	stmt = fmt.Sprintf(
+		"SELECT crdb_internal.update_tenant_resource_limits(%d, %s, %s, %d, now(), 0); ",
+		tenantID, availableTokens, refillRate, maxBurstTokens,
+	)
+
+	return h.System.Exec(rng, stmt)
+}
+
 // nodesRunningAtLeast returns a list of nodes running a system or
 // tenant virtual cluster in a version that is guaranteed to be at
 // least `minVersion`. It assumes that the caller made sure that there
