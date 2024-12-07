@@ -1,0 +1,25 @@
+# Verify that multiple streams on the same range and different span and options produce valid results
+create-feed startKey=a endKey=z withDiff=true
+create-feed startKey=a endKey=h
+----
+
+put k=a v=1
+put k=b v=2
+put k=h v=3
+put k=a v=4
+put k=x v=5
+----
+feed A: key=a, val=1, ts=ts1
+feed A: key=a, val=4, prev=1, ts=ts4
+feed A: key=b, val=2, ts=ts2
+feed A: key=h, val=3, ts=ts3
+feed A: key=x, val=5, ts=ts5
+feed B: key=a, val=1, ts=ts1
+feed B: key=a, val=4, ts=ts4
+feed B: key=b, val=2, ts=ts2
+
+close-feed id=A
+put k=a v=6
+put k=x v=7
+----
+feed B: key=a, val=6, ts=ts6
