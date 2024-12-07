@@ -33,9 +33,10 @@ func MakeReplicaStateInfos(rn *raft.RawNode, infoMap map[roachpb.ReplicaID]rac2.
 	clear(infoMap)
 	rn.WithBasicProgress(func(peerID raftpb.PeerID, progress tracker.BasicProgress) {
 		infoMap[roachpb.ReplicaID(peerID)] = rac2.ReplicaStateInfo{
-			Match: progress.Match,
-			Next:  progress.Next,
-			State: progress.State,
+			State:         progress.State,
+			Match:         progress.Match,
+			Next:          progress.Next,
+			InflightBytes: progress.InflightBytes,
 		}
 	})
 }
