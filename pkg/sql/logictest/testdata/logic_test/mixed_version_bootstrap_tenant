@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-24.3
+# LogicTest: cockroach-go-testserver-configs
 
 # Create tenant using old binary.
 statement ok

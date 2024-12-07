@@ -2479,13 +2479,6 @@ func TestTenantLogic_update_from(
 	runLogicTest(t, "update_from")
 }
 
-func TestTenantLogic_upgrade_skip_version(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "upgrade_skip_version")
-}
-
 func TestTenantLogic_upsert(
 	t *testing.T,
 ) {
