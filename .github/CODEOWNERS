@@ -172,7 +172,7 @@
 /pkg/cli/testutils.go        @cockroachdb/test-eng
 /pkg/cli/tsdump*.go          @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/cli/userfile.go         @cockroachdb/disaster-recovery
-/pkg/cli/workload*           @cockroachdb/sql-foundations
+/pkg/cli/workload*           @cockroachdb/test-eng
 /pkg/cli/zip*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
 
 # Beware to not assign the entire server package directory to a single
@@ -421,7 +421,7 @@
 #!/pkg/ccl/testutilsccl/     @cockroachdb/test-eng-noreview
 /pkg/ccl/testutilsccl/alter_* @cockroachdb/sql-foundations
 #!/pkg/ccl/utilccl/          @cockroachdb/unowned
-/pkg/ccl/workloadccl/        @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
+/pkg/ccl/workloadccl/        @cockroachdb/test-eng
 /pkg/ccl/benchccl/rttanalysisccl/     @cockroachdb/sql-foundations
 #!/pkg/clusterversion/       @cockroachdb/dev-inf-noreview  @cockroachdb/kv-prs-noreview @cockroachdb/test-eng-prs
 /pkg/clusterversion/cockroach_versions.go @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
@@ -502,7 +502,7 @@
 /pkg/cmd/uptodate/           @cockroachdb/dev-inf
 #!/pkg/cmd/urlcheck/           @cockroachdb/docs-infra-prs
 /pkg/cmd/whoownsit/          @cockroachdb/test-eng
-/pkg/cmd/workload/           @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
+/pkg/cmd/workload/           @cockroachdb/test-eng
 #!/pkg/cmd/wraprules/          @cockroachdb/obs-prs-noreview
 #!/pkg/cmd/zerosum/            @cockroachdb/kv-noreview
 /pkg/col/                    @cockroachdb/sql-queries-prs
@@ -585,7 +585,7 @@
 /pkg/util/schedulerlatency/  @cockroachdb/admission-control
 /pkg/util/stop/              @cockroachdb/kv-prs
 /pkg/util/tracing            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
-/pkg/workload/               @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
+/pkg/workload/               @cockroachdb/test-eng
 /pkg/obs/                    @cockroachdb/obs-prs
 /pkg/ccl/auditloggingccl     @cockroachdb/obs-prs
 /pkg/cmd/drt*                @cockroachdb/test-eng
