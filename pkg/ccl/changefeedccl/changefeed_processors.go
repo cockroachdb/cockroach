@@ -834,6 +834,7 @@ func (ca *changeAggregator) flushBufferedEvents() error {
 	if err := ca.eventConsumer.Flush(ca.Ctx()); err != nil {
 		return err
 	}
+	defer ca.sliMetrics.recordFlushRequestCallback()()
 	return ca.sink.Flush(ca.Ctx())
 }
 
