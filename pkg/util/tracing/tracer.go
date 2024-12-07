@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -381,7 +381,7 @@ type Tracer struct {
 
 	// stack is populated in NewTracer and is printed in assertions related to
 	// mixing tracers.
-	stack string
+	stack debugutil.SafeStack
 	// closed is set on Close().
 	_closed int32 // accessed atomically
 }
@@ -617,7 +617,7 @@ func NewTracer() *Tracer {
 	}
 
 	t := &Tracer{
-		stack:               string(debug.Stack()),
+		stack:               debugutil.Stack(),
 		activeSpansRegistry: makeSpanRegistry(),
 		// These might be overridden in NewTracerWithOpt.
 		panicOnUseAfterFinish: panicOnUseAfterFinish,

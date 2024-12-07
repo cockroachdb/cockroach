@@ -30,6 +30,7 @@ go_library(
         "//pkg/roachprod/vm",
         "//pkg/testutils/release",
         "//pkg/util/ctxgroup",
+        "//pkg/util/debugutil",
         "//pkg/util/intsets",
         "//pkg/util/randutil",
         "//pkg/util/retry",

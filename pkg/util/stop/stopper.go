@@ -9,13 +9,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"runtime/debug"
 	"runtime/trace"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -42,7 +42,7 @@ func register(s *Stopper) {
 	trackedStoppers.Lock()
 	defer trackedStoppers.Unlock()
 	trackedStoppers.stoppers = append(trackedStoppers.stoppers,
-		stopperWithStack{s: s, createdAt: string(debug.Stack())})
+		stopperWithStack{s: s, createdAt: debugutil.Stack()})
 }
 
 func unregister(s *Stopper) {
@@ -60,7 +60,7 @@ func unregister(s *Stopper) {
 
 type stopperWithStack struct {
 	s         *Stopper
-	createdAt string // stack from NewStopper()
+	createdAt debugutil.SafeStack // stack from NewStopper()
 }
 
 var trackedStoppers struct {

@@ -23,7 +23,6 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
-	"runtime/debug"
 	"runtime/trace"
 	"sort"
 	"strconv"
@@ -69,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
@@ -4217,7 +4217,7 @@ func (t *logicTest) runFile(path string, config logictestbase.TestClusterConfig)
 	defer func() {
 		if r := recover(); r != nil {
 			// Translate panics during the test to test errors.
-			t.Fatalf("panic: %v\n%s", r, string(debug.Stack()))
+			t.Fatalf("panic: %v\n%s", r, debugutil.Stack())
 		}
 	}()
 

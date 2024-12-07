@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime/debug"
 	"sort"
 	"strings"
 	"testing"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -101,7 +101,7 @@ func TestFileRegistryOps(t *testing.T) {
 		registry.writeMu.Lock()
 		defer registry.writeMu.Unlock()
 		if diff := pretty.Diff(registry.writeMu.mu.entries, expected); diff != nil {
-			t.Log(string(debug.Stack()))
+			t.Log(debugutil.Stack())
 			t.Fatalf("%s\n%v", strings.Join(diff, "\n"), registry.writeMu.mu.entries)
 		}
 	}
