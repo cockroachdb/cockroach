@@ -44,7 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -1247,7 +1247,7 @@ func (ie *InternalExecutor) execInternal(
 		}
 	}()
 
-	timeReceived := timeutil.Now()
+	timeReceived := crtime.NowMono()
 	parseStart := timeReceived
 	parsed := ieStmt.parsed
 	if parsed.AST == nil {
@@ -1260,7 +1260,7 @@ func (ie *InternalExecutor) execInternal(
 	if err := ie.checkIfStmtIsAllowed(parsed.AST, txn); err != nil {
 		return nil, err
 	}
-	parseEnd := timeutil.Now()
+	parseEnd := crtime.NowMono()
 
 	// Transforms the args to datums. The datum types will be passed as type
 	// hints to the PrepareStmt command below.

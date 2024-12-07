@@ -186,6 +186,7 @@ func (ex *connExecutor) recordStatementSummary(
 		kvNodeIDs = queryLevelStats.KVNodeIDs
 	}
 
+	startTime := phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).ToUTC()
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		SessionID:            ex.planner.extendedEvalCtx.SessionID,
 		StatementID:          stmt.QueryID,
@@ -210,8 +211,8 @@ func (ex *connExecutor) recordStatementSummary(
 		StatementError:       stmtErr,
 		IndexRecommendations: idxRecommendations,
 		Query:                stmt.StmtNoConstants,
-		StartTime:            phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt),
-		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).Add(svcLatRaw),
+		StartTime:            startTime,
+		EndTime:              startTime.Add(svcLatRaw),
 		FullScan:             fullScan,
 		ExecStats:            queryLevelStats,
 		// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
