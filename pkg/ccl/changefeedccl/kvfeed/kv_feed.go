@@ -93,6 +93,8 @@ type Config struct {
 	Knobs TestingKnobs
 
 	ScopedTimers *timers.ScopedTimers
+
+	ConsumerID int64
 }
 
 // Run will run the kvfeed. The feed runs synchronously and returns an
@@ -123,6 +125,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
 		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering,
+		cfg.ConsumerID,
 		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
@@ -248,6 +251,7 @@ type kvFeed struct {
 	withDiff            bool
 	withFiltering       bool
 	withInitialBackfill bool
+	consumerID          int64
 	initialHighWater    hlc.Timestamp
 	endTime             hlc.Timestamp
 	writer              kvevent.Writer
@@ -278,6 +282,7 @@ func newKVFeed(
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
 	withInitialBackfill, withDiff, withFiltering bool,
+	consumerID int64,
 	initialHighWater hlc.Timestamp,
 	endTime hlc.Timestamp,
 	codec keys.SQLCodec,
@@ -297,6 +302,7 @@ func newKVFeed(
 		withInitialBackfill: withInitialBackfill,
 		withDiff:            withDiff,
 		withFiltering:       withFiltering,
+		consumerID:          consumerID,
 		initialHighWater:    initialHighWater,
 		endTime:             endTime,
 		schemaChangeEvents:  schemaChangeEvents,
@@ -585,6 +591,7 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 		Frontier:      resumeFrontier.Frontier(),
 		WithDiff:      f.withDiff,
 		WithFiltering: f.withFiltering,
+		ConsumerID:    f.consumerID,
 		Knobs:         f.knobs,
 		Timers:        f.timers,
 		RangeObserver: f.rangeObserver,
