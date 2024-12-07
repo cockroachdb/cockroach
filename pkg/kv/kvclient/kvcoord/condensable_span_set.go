@@ -33,12 +33,16 @@ type condensableSpanSet struct {
 	s     []roachpb.Span
 	bytes int64
 
-	// condensed is set if we ever condensed the spans. Meaning, if the set of
-	// spans currently tracked has lost fidelity compared to the spans inserted.
-	// Note that we might have otherwise mucked with the inserted spans to save
-	// memory without losing fidelity, in which case this flag would not be set
-	// (e.g. merging overlapping or adjacent spans).
+	// condensed is set if we ever condensed the spans due to exceeding a max
+	// size. Meaning, if the set of spans currently tracked has lost fidelity
+	// compared to the spans inserted. Note that we might have otherwise mucked
+	// with the inserted spans to save memory without losing fidelity, in which
+	// case this flag would not be set (e.g. merging overlapping or adjacent
+	// spans).
 	condensed bool
+
+	// totalUncondensedBytes is the number of bytes that are inserted into this span set. This doesn't take into account if the bytes are later merged or condensed.
+	totalUncondensedBytes int64
 
 	// Avoid heap allocations for transactions with a small number of spans.
 	sAlloc [2]roachpb.Span
@@ -46,13 +50,16 @@ type condensableSpanSet struct {
 
 // insert adds new spans to the condensable span set. No attempt to condense the
 // set or deduplicate the new span with existing spans is made.
-func (s *condensableSpanSet) insert(spans ...roachpb.Span) {
+func (s *condensableSpanSet) insert(durable bool, spans ...roachpb.Span) {
 	if cap(s.s) == 0 {
 		s.s = s.sAlloc[:0]
 	}
 	s.s = append(s.s, spans...)
 	for _, sp := range spans {
 		s.bytes += spanSize(sp)
+		if durable {
+			s.totalUncondensedBytes += spanSize(sp)
+		}
 	}
 }
 
@@ -162,7 +169,8 @@ func (s *condensableSpanSet) maybeCondense(
 					"combining span %s yielded invalid result", s)
 			}
 		}
-		s.bytes += spanSize(cs)
+		ss := spanSize(cs)
+		s.bytes += ss
 		s.s = append(s.s, cs)
 	}
 	s.condensed = true
