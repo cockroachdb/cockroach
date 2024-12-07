@@ -10,7 +10,6 @@ import (
 	"context"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -86,7 +85,7 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	// are enabled and the active cluster version is at least 24.3, use
 	// TableFormatPebblev5.
 	format := sstable.TableFormatPebblev4
-	if cs.Version.IsActive(ctx, clusterversion.V24_3) && ColumnarBlocksEnabled.Get(&cs.SV) {
+	if ColumnarBlocksEnabled.Get(&cs.SV) {
 		format = sstable.TableFormatPebblev5
 	}
 
@@ -126,7 +125,7 @@ func MakeTransportSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writ
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
 	format := sstable.TableFormatPebblev4
-	if cs.Version.IsActive(ctx, clusterversion.V24_3) && ColumnarBlocksEnabled.Get(&cs.SV) {
+	if ColumnarBlocksEnabled.Get(&cs.SV) {
 		format = sstable.TableFormatPebblev5
 	}
 

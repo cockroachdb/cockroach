@@ -9,7 +9,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -152,14 +151,9 @@ func (sm *SupportManager) SupportFrom(id slpb.StoreIdent) (slpb.Epoch, hlc.Times
 }
 
 // SupportFromEnabled implements the Fabric interface and determines if Store
-// Liveness sends heartbeats. It returns true if both the cluster setting and
-// version gate are on.
+// Liveness sends heartbeats. It returns true if the cluster setting is on.
 func (sm *SupportManager) SupportFromEnabled(ctx context.Context) bool {
-	clusterSettingEnabled := Enabled.Get(&sm.settings.SV)
-	versionGateEnabled := sm.settings.Version.IsActive(
-		ctx, clusterversion.V24_3_StoreLivenessEnabled,
-	)
-	return clusterSettingEnabled && versionGateEnabled
+	return Enabled.Get(&sm.settings.SV)
 }
 
 // Start starts the main processing goroutine in startLoop as an async task.

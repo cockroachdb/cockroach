@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -696,10 +695,6 @@ FROM (SELECT fingerprint_id,
           app_name) %s
 %s`
 	metadataAggFn := mergeAggStmtMetadataColumnLatest
-	if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
-		// Use the older, less performant metadata aggregation function for versions below 24.1.
-		metadataAggFn = mergeAggStmtMetadata_V23_2
-	}
 	activityQuery := strings.Join([]string{`
 SELECT 
     fingerprint_id,
