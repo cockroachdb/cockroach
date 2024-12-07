@@ -258,7 +258,7 @@ func (s *testState) Insert(d *datadriven.TestData) string {
 	for i := 0; i < vectors.Count; i++ {
 		// Insert within the scope of a transaction.
 		txn := beginTransaction(s.Ctx, s.T, s.InMemStore)
-		s.InMemStore.InsertVector(txn, childKeys[i].PrimaryKey, vectors.At(i))
+		s.InMemStore.InsertVector(childKeys[i].PrimaryKey, vectors.At(i))
 		require.NoError(s.T, s.Index.Insert(s.Ctx, txn, vectors.At(i), childKeys[i].PrimaryKey))
 		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
@@ -329,7 +329,7 @@ func (s *testState) Delete(d *datadriven.TestData) string {
 			err := s.Index.Delete(s.Ctx, txn, vec, key)
 			require.NoError(s.T, err)
 		}
-		s.InMemStore.DeleteVector(txn, key)
+		s.InMemStore.DeleteVector(key)
 
 		commitTransaction(s.Ctx, s.T, s.InMemStore, txn)
 
@@ -489,7 +489,7 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 		// Get all child keys for next level.
 		var childKeys []vecstore.ChildKey
 		for _, key := range partitionKeys {
-			partition, err := s.InMemStore.GetPartition(s.Ctx, txn, key)
+			partition, err := txn.GetPartition(s.Ctx, key)
 			require.NoError(s.T, err)
 			childKeys = append(childKeys, partition.ChildKeys()...)
 		}
@@ -503,7 +503,7 @@ func (s *testState) ValidateTree(d *datadriven.TestData) string {
 		for i := range childKeys {
 			refs[i].Key = childKeys[i]
 		}
-		err := s.InMemStore.GetFullVectors(s.Ctx, txn, refs)
+		err := txn.GetFullVectors(s.Ctx, refs)
 		require.NoError(s.T, err)
 		for i := range refs {
 			require.NotNil(s.T, refs[i].Vector)
@@ -555,13 +555,13 @@ func formatFloat(value float32, prec int) string {
 }
 
 func beginTransaction(ctx context.Context, t *testing.T, store vecstore.Store) vecstore.Txn {
-	txn, err := store.BeginTransaction(ctx)
+	txn, err := store.Begin(ctx)
 	require.NoError(t, err)
 	return txn
 }
 
 func commitTransaction(ctx context.Context, t *testing.T, store vecstore.Store, txn vecstore.Txn) {
-	err := store.CommitTransaction(ctx, txn)
+	err := store.Commit(ctx, txn)
 	require.NoError(t, err)
 }
 
@@ -640,7 +640,7 @@ func buildIndex(
 	insertBlock := func(start, end int) {
 		for i := start; i < end; i++ {
 			txn := beginTransaction(ctx, t, store)
-			store.InsertVector(txn, primaryKeys[i], vectors.At(i))
+			store.InsertVector(primaryKeys[i], vectors.At(i))
 			require.NoError(t, index.Insert(ctx, txn, vectors.At(i), primaryKeys[i]))
 			commitTransaction(ctx, t, store, txn)
 		}
@@ -678,7 +678,7 @@ func validateIndex(ctx context.Context, t *testing.T, store *vecstore.InMemorySt
 		// Get all child keys for next level.
 		var childKeys []vecstore.ChildKey
 		for _, key := range partitionKeys {
-			partition, err := store.GetPartition(ctx, txn, key)
+			partition, err := txn.GetPartition(ctx, key)
 			if err != nil {
 				panic(err)
 			}
@@ -695,7 +695,7 @@ func validateIndex(ctx context.Context, t *testing.T, store *vecstore.InMemorySt
 		for i := range childKeys {
 			refs[i].Key = childKeys[i]
 		}
-		err := store.GetFullVectors(ctx, txn, refs)
+		err := txn.GetFullVectors(ctx, refs)
 		require.NoError(t, err)
 		for i := range refs {
 			if refs[i].Vector == nil {
