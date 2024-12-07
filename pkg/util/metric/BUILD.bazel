@@ -29,6 +29,7 @@ go_library(
         "//pkg/util/metric/tick",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_axiomhq_hyperloglog//:hyperloglog",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_gogo_protobuf//proto",
