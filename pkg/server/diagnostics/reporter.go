@@ -51,7 +51,7 @@ import (
 // TelemetryHttpTimeout allows for configuration of the client timeout
 // for sending telemetry reports. It is not expected that customers
 // would tweak this.
-var TelemetryHttpTimeout = envutil.EnvOrDefaultDuration("COCKROACH_TELEMETRY_HTTP_CLIENT_TIMEOUT", 5*time.Minute)
+var TelemetryHttpTimeout = envutil.EnvOrDefaultDuration("COCKROACH_TELEMETRY_HTTP_CLIENT_TIMEOUT", 1*time.Minute)
 
 // NodeStatusGenerator abstracts the status.MetricRecorder for read access.
 type NodeStatusGenerator interface {
@@ -134,8 +134,8 @@ func NewDiagnosticReporter(
 		timeout = 3 * time.Second
 	}
 
-	return &Reporter{
-		StartTime:        timeutil.Now(),
+	r := &Reporter{
+		StartTime:        startTime,
 		AmbientCtx:       ambientCtx,
 		Config:           config,
 		Settings:         settings,
@@ -150,6 +150,9 @@ func NewDiagnosticReporter(
 		Locality:         locality,
 		client:           httputil.NewClientWithTimeout(timeout),
 	}
+	r.LastSuccessfulTelemetryPing.Store(r.now().Unix())
+
+	return r
 }
 
 // shouldReportDiagnostics determines using the diagnostics report setting in
@@ -178,9 +181,6 @@ func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
 // PeriodicallyReportDiagnostics starts a background worker that periodically
 // phones home to report usage and diagnostics.
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
-	// Prior to starting the periodic report job, we store the current
-	// timestamp to initialize to a valid value.
-	r.LastSuccessfulTelemetryPing.Store(r.now().Unix())
 	_ = stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "diagnostics", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
 		nextReport := r.StartTime
