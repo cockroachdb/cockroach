@@ -110,8 +110,12 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				desc, _, err := resolver.ResolveExistingObject(ctx, rs, &uon, tc.flags)
-				require.NoError(b, err)
-				require.NotNil(b, desc)
+				if err != nil {
+					b.Fatalf("unexpected err %v", err)
+				}
+				if desc == nil {
+					b.Fatal("unexpected nil desc")
+				}
 			}
 			b.StopTimer()
 		})

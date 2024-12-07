@@ -30,8 +30,7 @@ import (
 // use a different plan builder.
 // TODO(rytaft,andyk): study and reuse this.
 type SchemaResolver interface {
-	ObjectNameExistingResolver
-	ObjectNameTargetResolver
+	ObjectNameResolver
 	tree.QualifiedNameResolver
 	tree.TypeReferenceResolver
 	tree.FunctionReferenceResolver
@@ -50,13 +49,22 @@ type SchemaResolver interface {
 	CurrentSearchPath() sessiondata.SearchPath
 }
 
-// ObjectNameExistingResolver is the helper interface to resolve table
-// names when the object is expected to exist already. The boolean passed
-// is used to specify if a MutableTableDescriptor is to be returned in the
-// result. ResolvedObjectPrefix should always be populated by implementors
-// to allows us to generate errors at higher level layers, since it allows
-// us to know if the schema and database were found.
-type ObjectNameExistingResolver interface {
+// ObjectNameResolver is the helper interface to resolve schema and
+// table names. ResolvedObjectPrefix should always be populated by implementors
+// to allows us to generate errors at higher level layers, since it allows us to
+// know if the schema and database were found.
+type ObjectNameResolver interface {
+	// LookupDatabase looks up a database.
+	LookupDatabase(
+		ctx context.Context, dbName string,
+	) (db catalog.DatabaseDescriptor, err error)
+
+	// LookupSchema looks up a schema.
+	LookupSchema(
+		ctx context.Context, dbName, scName string,
+	) (found bool, scMeta catalog.ResolvedObjectPrefix, err error)
+
+	// LookupObject looks up an object, e.g., a table or a type.
 	LookupObject(
 		ctx context.Context, flags tree.ObjectLookupFlags,
 		dbName, scName, obName string,
@@ -66,16 +74,18 @@ type ObjectNameExistingResolver interface {
 		objMeta catalog.Descriptor,
 		err error,
 	)
-}
 
-// ObjectNameTargetResolver is the helper interface to resolve object
-// names when the object is not expected to exist. The planner implements
-// LookupSchema to return an object consisting of the parent database and
-// resolved target schema.
-type ObjectNameTargetResolver interface {
-	LookupSchema(
-		ctx context.Context, dbName, scName string,
-	) (found bool, scMeta catalog.ResolvedObjectPrefix, err error)
+	// LookupObjectInDatabase looks up an object, e.g., a table or a type,
+	// within a database descriptor.
+	LookupObjectInDatabase(
+		ctx context.Context, flags tree.ObjectLookupFlags,
+		db catalog.DatabaseDescriptor, scName, obName string,
+	) (
+		found bool,
+		prefix catalog.ResolvedObjectPrefix,
+		objMeta catalog.Descriptor,
+		err error,
+	)
 }
 
 // ErrNoPrimaryKey is returned when resolving a table object and the
@@ -314,7 +324,7 @@ type SchemaEntryForDB struct {
 func ResolveExisting(
 	ctx context.Context,
 	u *tree.UnresolvedObjectName,
-	r ObjectNameExistingResolver,
+	r ObjectNameResolver,
 	lookupFlags tree.ObjectLookupFlags,
 	curDb string,
 	searchPath sessiondata.SearchPath,
@@ -368,26 +378,29 @@ func ResolveExisting(
 		return found, prefix, result, err
 	}
 
+	db, err := r.LookupDatabase(ctx, curDb)
+	if err != nil {
+		return false, prefix, nil, err
+	}
+	if curDb != "" && db == nil {
+		// If we have a database, and we didn't find it, then we're never going
+		// to find it because it must not exist. This error return path is a bit
+		// of a rough edge, but it preserves backwards compatibility and makes
+		// sure we return a database does not exist error in cases where the
+		// current database definitely does not exist.
+		return false, prefix, nil, sqlerrors.NewUndefinedDatabaseError(curDb)
+	}
+
 	// This is a naked object name. Use the search path.
 	iter := searchPath.Iter()
-	foundDatabase := false
 	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
-		if found, prefix, result, err = r.LookupObject(
-			ctx, lookupFlags, curDb, next, u.Object(),
+		if found, prefix, result, err = r.LookupObjectInDatabase(
+			ctx, lookupFlags, db, next, u.Object(),
 		); found || err != nil {
 			return found, prefix, result, err
 		}
-		foundDatabase = foundDatabase || prefix.Database != nil
 	}
 
-	// If we have a database, and we didn't find it, then we're never going to
-	// find it because it must not exist. This error return path is a bit of
-	// a rough edge, but it preserves backwards compatibility and makes sure
-	// we return a database does not exist error in cases where the current
-	// database definitely does not exist.
-	if curDb != "" && !foundDatabase {
-		return false, prefix, nil, sqlerrors.NewUndefinedDatabaseError(curDb)
-	}
 	return false, prefix, nil, nil
 }
 
@@ -400,7 +413,7 @@ func ResolveExisting(
 func ResolveTarget(
 	ctx context.Context,
 	u *tree.UnresolvedObjectName,
-	r ObjectNameTargetResolver,
+	r ObjectNameResolver,
 	curDb string,
 	searchPath sessiondata.SearchPath,
 ) (found bool, _ tree.ObjectNamePrefix, scMeta catalog.ResolvedObjectPrefix, err error) {
@@ -448,7 +461,7 @@ func ResolveTarget(
 // patterns with stars, e.g. AllTablesSelector.
 func ResolveObjectNamePrefix(
 	ctx context.Context,
-	r ObjectNameTargetResolver,
+	r ObjectNameResolver,
 	curDb string,
 	searchPath sessiondata.SearchPath,
 	tp *tree.ObjectNamePrefix,
@@ -640,7 +653,7 @@ func ResolveIndex(
 // database with the same name, public schema under this db is returned.
 func resolvePrefixWithExplicitSchema(
 	ctx context.Context,
-	r ObjectNameTargetResolver,
+	r ObjectNameResolver,
 	curDb string,
 	searchPath sessiondata.SearchPath,
 	tp *tree.ObjectNamePrefix,
