@@ -14,6 +14,12 @@ import (
 )
 
 var (
+	metaRangeFeedCatchUpBlockedNanos = metric.Metadata{
+		Name:        "kv.rangefeed.catchup_scan_blocked_nanos",
+		Help:        "Time spent in RangeFeed waiting for the server-side catch-up semaphore",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRangeFeedCatchUpScanNanos = metric.Metadata{
 		Name:        "kv.rangefeed.catchup_scan_nanos",
 		Help:        "Time spent in RangeFeed catchup scan",
@@ -86,6 +92,7 @@ var (
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
+	RangefeedCatchUpBlockedNanos           metric.IHistogram
 	RangeFeedCatchUpScanNanos              *metric.Counter
 	RangeFeedBudgetExhausted               *metric.Counter
 	RangefeedProcessorQueueTimeout         *metric.Counter
@@ -110,8 +117,14 @@ type Metrics struct {
 func (*Metrics) MetricStruct() {}
 
 // NewMetrics makes the metrics for RangeFeeds monitoring.
-func NewMetrics() *Metrics {
+func NewMetrics(histogramWindow time.Duration) *Metrics {
 	return &Metrics{
+		RangefeedCatchUpBlockedNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     metaRangeFeedCatchUpBlockedNanos,
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
 		RangeFeedCatchUpScanNanos:              metric.NewCounter(metaRangeFeedCatchUpScanNanos),
 		RangefeedProcessorQueueTimeout:         metric.NewCounter(metaQueueTimeout),
 		RangeFeedBudgetExhausted:               metric.NewCounter(metaRangeFeedExhausted),
