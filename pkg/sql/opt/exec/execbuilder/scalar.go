@@ -865,18 +865,22 @@ func (b *Builder) buildSubquery(
 			if err != nil {
 				return err
 			}
-			if len(eb.subqueries) > 0 {
-				return expectedLazyRoutineError("subquery")
+			for i := range eb.subqueries {
+				if eb.subqueries[i].Mode != exec.SubqueryDiscardAllRows {
+					return expectedLazyRoutineError("subquery")
+				}
 			}
 			if len(eb.cascades) > 0 {
 				return expectedLazyRoutineError("cascade")
+			}
+			if len(eb.triggers) > 0 {
+				return expectedLazyRoutineError("trigger")
 			}
 			if len(eb.checks) > 0 {
 				return expectedLazyRoutineError("check")
 			}
 			plan, err := b.factory.ConstructPlan(
-				ePlan.root, nil /* subqueries */, nil /* cascades */, nil /* checks */, nil, /* triggers */
-				inputRowCount, eb.flags,
+				ePlan.root, eb.subqueries, eb.cascades, eb.triggers, eb.checks, inputRowCount, eb.flags,
 			)
 			if err != nil {
 				return err
@@ -1160,7 +1164,6 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 			// Copy the expression into a new memo. Replace parameter references
 			// with argument datums.
-			addedWithBindings := false
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {
 				switch t := e.(type) {
@@ -1185,11 +1188,15 @@ func (b *Builder) buildRoutinePlanGenerator(
 					// We lazily add these With expressions to the metadata here
 					// because the call to Factory.CopyAndReplace below clears With
 					// expressions in the metadata.
-					if allowOuterWithRefs && !addedWithBindings {
+					if allowOuterWithRefs {
 						b.mem.Metadata().ForEachWithBinding(func(id opt.WithID, expr opt.Expr) {
-							f.Metadata().AddWithBinding(id, expr)
+							// Make sure to check for an existing With binding, since we may
+							// have already rewritten the bound expression and added it to the
+							// new memo if the associated WithExpr is part of the routine.
+							if !f.Metadata().HasWithBinding(id) {
+								f.Metadata().AddWithBinding(id, expr)
+							}
 						})
-						addedWithBindings = true
 					}
 					// Fall through.
 				}
@@ -1238,8 +1245,10 @@ func (b *Builder) buildRoutinePlanGenerator(
 				}
 				return err
 			}
-			if len(eb.subqueries) > 0 {
-				return expectedLazyRoutineError("subquery")
+			for j := range eb.subqueries {
+				if eb.subqueries[j].Mode != exec.SubqueryDiscardAllRows {
+					return expectedLazyRoutineError("subquery")
+				}
 			}
 			var stmtForDistSQLDiagram string
 			if i < len(stmtStr) {

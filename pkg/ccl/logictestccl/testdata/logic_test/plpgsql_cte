@@ -1,0 +1,211 @@
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT);
+INSERT INTO ab VALUES (1, 10), (2, 20), (3, 30), (4, 40);
+
+statement ok
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    res INT;
+  BEGIN
+    WITH foo AS MATERIALIZED (SELECT 100) SELECT * INTO res FROM foo;
+    RETURN res;
+  END
+$$;
+
+query I
+SELECT f();
+----
+100
+
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    res INT;
+  BEGIN
+    WITH foo AS MATERIALIZED (SELECT b FROM ab WHERE a = 3) SELECT * INTO res FROM foo;
+    RETURN res;
+  END
+$$;
+
+query I
+SELECT f();
+----
+30
+
+# Multiple references to the CTE.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    res INT;
+  BEGIN
+    WITH foo (bar) AS (SELECT 1) SELECT foo.bar + foo2.bar INTO res FROM foo, foo foo2;
+    RETURN res;
+  END
+$$;
+
+query I
+SELECT f();
+----
+2
+
+# CTE with multiple branches.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    res INT;
+  BEGIN
+    WITH foo (x) AS MATERIALIZED (SELECT 1),
+    bar (x) AS MATERIALIZED (SELECT 2)
+    SELECT foo.x + bar.x INTO res FROM foo, bar;
+    RETURN res;
+  END
+$$;
+
+query I
+SELECT f();
+----
+3
+
+# Nested CTE expressions.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    res INT;
+  BEGIN
+    WITH foo (x) AS MATERIALIZED (SELECT 100)
+    SELECT * FROM (
+      WITH bar (x) AS MATERIALIZED (SELECT 200)
+      SELECT foo.x + bar.x INTO res FROM foo, bar
+    ) AS t;
+    RETURN res;
+  END
+$$;
+
+query I
+SELECT f();
+----
+300
+
+# Case with an outer CTE.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    res INT;
+  BEGIN
+    WITH foo AS MATERIALIZED (SELECT 1) SELECT * INTO res FROM foo;
+    RETURN res;
+  END
+$$;
+
+query II
+WITH bar AS (SELECT 2) SELECT f(), * FROM bar;
+----
+1  2
+
+# The outer CTE has the same name as the inner CTE.
+query II
+WITH foo AS (SELECT 2) SELECT f(), * FROM foo;
+----
+1  2
+
+# Case with a CTE inside a subquery.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    res INT;
+  BEGIN
+    SELECT (
+      WITH foo AS MATERIALIZED (SELECT b FROM ab)
+      SELECT * FROM foo
+    ) INTO res;
+    RETURN res;
+  END
+$$;
+
+# Avoid causing an error due to too many rows returned.
+statement ok
+DELETE FROM ab WHERE a > 1;
+
+query I
+SELECT f();
+----
+10
+
+statement ok
+INSERT INTO ab VALUES (2, 20), (3, 30), (4, 40);
+
+# Case with a recursive CTE.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f() RETURNS INT[] LANGUAGE PLpgSQL AS $$
+  DECLARE
+    res INT[];
+  BEGIN
+    WITH RECURSIVE foo (x, y) AS (
+      SELECT a, b FROM ab WHERE a = 1
+      UNION ALL
+      SELECT a, b FROM ab WHERE a = (SELECT max(x) + 1 FROM foo)
+    )
+    SELECT array_agg(y) INTO res FROM foo;
+    RETURN res;
+  END
+$$;
+
+query T
+SELECT f();
+----
+{10,20,30,40}
+
+# Case with PL/pgSQL IF statement branching.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(x INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    res INT;
+  BEGIN
+    IF (SELECT b FROM ab WHERE a = 3) = x THEN
+      WITH foo AS MATERIALIZED (SELECT 100) SELECT * INTO res FROM foo;
+    ELSE
+      WITH foo AS MATERIALIZED (SELECT 200) SELECT * INTO res FROM foo;
+    END IF;
+    RETURN res;
+  END
+$$;
+
+query II
+SELECT f(20), f(30);
+----
+200  100
+
+# Case with a loop and some branching.
+statement ok
+DROP FUNCTION f;
+CREATE FUNCTION f(n INT) RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    tmp INT := 0;
+    res INT := 0;
+    i INT := 0;
+  BEGIN
+    WHILE i < n LOOP
+      IF i%2 = 1 THEN
+        WITH foo AS MATERIALIZED (SELECT 100) SELECT * INTO tmp FROM foo;
+      ELSE
+        WITH foo AS MATERIALIZED (SELECT 1) SELECT * INTO tmp FROM foo;
+      END IF;
+      res := res + tmp;
+      i := i + 1;
+    END LOOP;
+    RETURN res;
+  END
+$$;
+
+query IIIIIII
+SELECT f(NULL), f(0), f(1), f(2), f(3), f(4), f(5);
+----
+0  0  1  101  102  202  203

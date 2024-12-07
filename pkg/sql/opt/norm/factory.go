@@ -322,6 +322,10 @@ func (f *Factory) CopyMetadataFrom(from *memo.Memo) {
 	// existing expressions.
 	f.mem.CopyNextRankFrom(from)
 
+	// Copy the next With ID to the target memo so that new CTE expressions built
+	// with the new memo will not share With IDs with existing expressions.
+	f.mem.CopyNextWithIDFrom(from)
+
 	// Copy all metadata to the target memo so that referenced tables and
 	// columns can keep the same ids they had in the "from" memo. Scalar
 	// expressions in the metadata cannot have placeholders, so we simply copy

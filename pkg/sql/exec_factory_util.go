@@ -57,6 +57,8 @@ func constructPlan(
 				out.execMode = rowexec.SubqueryExecModeAllRowsNormalized
 			case exec.SubqueryAllRows:
 				out.execMode = rowexec.SubqueryExecModeAllRows
+			case exec.SubqueryDiscardAllRows:
+				out.execMode = rowexec.SubqueryExecModeDiscardAllRows
 			default:
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}

@@ -8,10 +8,15 @@ package vecstore
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSearchResult(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	r1 := SearchResult{
 		QuerySquaredDistance: 1,
 		ErrorBound:           0.5,
@@ -68,6 +73,9 @@ func TestSearchResult(t *testing.T) {
 }
 
 func TestSearchStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	var stats SearchStats
 	stats.SearchedPartition(LeafLevel, 10)
 	stats.SearchedPartition(LeafLevel+1, 10)
@@ -84,6 +92,9 @@ func TestSearchStats(t *testing.T) {
 }
 
 func TestSearchSet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Empty.
 	searchSet := SearchSet{MaxResults: 3, MaxExtraResults: 7}
 	require.Nil(t, searchSet.PopResults())
