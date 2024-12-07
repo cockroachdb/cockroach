@@ -439,7 +439,7 @@ func TestLeaderCommitEntry(t *testing.T) {
 	assert.Equal(t, li+1, r.raftLog.committed)
 	assert.Equal(t, []pb.Entry{
 		{Index: li + 1, Term: 1, Data: []byte("some data")},
-	}, r.raftLog.nextCommittedEnts(true))
+	}, r.raftLog.nextCommittedEnts(noLimit, true))
 	msgs := r.readMessages()
 	slices.SortFunc(msgs, cmpMessages)
 	for i, m := range msgs {
@@ -516,7 +516,7 @@ func TestLeaderCommitPrecedingEntries(t *testing.T) {
 		assert.Equal(t, append(tt,
 			pb.Entry{Term: 3, Index: li + 1},
 			pb.Entry{Term: 3, Index: li + 2, Data: []byte("some data")},
-		), r.raftLog.nextCommittedEnts(true), "#%d", i)
+		), r.raftLog.nextCommittedEnts(noLimit, true), "#%d", i)
 	}
 }
 
@@ -563,7 +563,7 @@ func TestFollowerCommitEntry(t *testing.T) {
 		r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 1, Entries: tt.ents, Commit: tt.commit})
 
 		assert.Equal(t, tt.commit, r.raftLog.committed, "#%d", i)
-		assert.Equal(t, tt.ents[:int(tt.commit)], r.raftLog.nextCommittedEnts(true), "#%d", i)
+		assert.Equal(t, tt.ents[:int(tt.commit)], r.raftLog.nextCommittedEnts(noLimit, true), "#%d", i)
 	}
 }
 
@@ -823,7 +823,7 @@ func commitNoopEntry(r *raft, s *MemoryStorage) {
 	// ignore further messages to refresh followers' commit index
 	r.readMessages()
 	s.Append(r.raftLog.nextUnstableEnts())
-	r.raftLog.appliedTo(r.raftLog.committed, 0 /* size */)
+	r.raftLog.appliedTo(r.raftLog.committed)
 	r.raftLog.stableTo(r.raftLog.unstable.mark())
 }
 
