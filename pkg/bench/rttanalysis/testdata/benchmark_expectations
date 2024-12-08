@@ -74,7 +74,7 @@ exp,benchmark
 3,Jobs/show_job
 3-5,Jobs/show_jobs
 3,ORMQueries/activerecord_type_introspection_query
-0,ORMQueries/asyncpg_types
+4,ORMQueries/asyncpg_types
 6,ORMQueries/column_descriptions_json_agg
 4,ORMQueries/django_column_introspection_1_table
 4,ORMQueries/django_column_introspection_4_tables
