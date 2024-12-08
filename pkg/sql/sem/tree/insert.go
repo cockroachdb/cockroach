@@ -16,12 +16,13 @@ package tree
 
 // Insert represents an INSERT statement.
 type Insert struct {
-	With       *With
-	Table      TableExpr
-	Columns    NameList
-	Rows       *Select
-	OnConflict *OnConflict
-	Returning  ReturningClause
+	With           *With
+	Table          TableExpr
+	Columns        NameList
+	Rows           *Select
+	OnConflict     *OnConflict
+	Returning      ReturningClause
+	OverridingType OverridingValueType
 }
 
 // Format implements the NodeFormatter interface.
@@ -81,6 +82,15 @@ func (node *Insert) Format(ctx *FmtCtx) {
 func (node *Insert) DefaultValues() bool {
 	return node.Rows.Select == nil
 }
+
+type OverridingValueType int
+
+const (
+	// OverridingValueNone means no OVERRIDING clause is specified for the stmt.
+	OverridingValueNone OverridingValueType = iota
+	OverridingSystemValue
+	OverridingUserValue
+)
 
 // OnConflict represents an `ON CONFLICT (columns) WHERE arbiter DO UPDATE SET
 // exprs WHERE where` clause.
