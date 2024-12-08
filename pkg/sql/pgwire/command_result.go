@@ -197,11 +197,6 @@ func (r *commandResult) Err() error {
 	return r.err
 }
 
-// ErrAllowReleased is part of the sql.RestrictedCommandResult interface.
-func (r *commandResult) ErrAllowReleased() error {
-	return r.err
-}
-
 // SetError is part of the sql.RestrictedCommandResult interface.
 //
 // We're not going to write any bytes to the buffer in order to support future
@@ -490,7 +485,6 @@ func (c *conn) newCommandResult(
 	limit int,
 	portalName string,
 	implicitTxn bool,
-	portalPausability sql.PortalPausablity,
 ) sql.CommandResult {
 	r := c.allocCommandResult()
 	*r = commandResult{
@@ -513,7 +507,7 @@ func (c *conn) newCommandResult(
 		portalName:       portalName,
 		implicitTxn:      implicitTxn,
 		commandResult:    r,
-		portalPausablity: portalPausability,
+		portalPausablity: sql.PausablePortal,
 		resumeCh:         make(chan error),
 		blockCECh:        make(chan blockChPayload),
 	}
@@ -545,6 +539,7 @@ type limitedCommandResult struct {
 	portalPausablity sql.PortalPausablity
 
 	closed    bool
+	exhausted bool
 	resumeCh  chan error
 	blockCECh chan blockChPayload
 }
@@ -558,7 +553,7 @@ type blockChPayload struct {
 var _ sql.RestrictedCommandResult = &limitedCommandResult{}
 
 func (r *limitedCommandResult) SupportsPausing() bool {
-	return true
+	return r.portalPausablity == sql.PausablePortal
 }
 
 func (r *limitedCommandResult) ResumeAfterPause(newLimit int) {
@@ -578,12 +573,17 @@ func (r *limitedCommandResult) WaitForRows() (fsm.Event, fsm.EventPayload, error
 }
 
 func (r *limitedCommandResult) RowsExhausted(ev fsm.Event, payload fsm.EventPayload, err error) {
+	r.exhausted = true
 	r.blockCECh <- blockChPayload{ev: ev, payload: payload, err: err}
 	close(r.blockCECh)
 }
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	if !r.SupportsPausing() {
+		// TODO: check whether we need this.
+		return r.commandResult.AddRow(ctx, row)
+	}
 	if err := r.commandResult.AddRow(ctx, row); err != nil {
 		return err
 	}
@@ -622,7 +622,12 @@ func (r *limitedCommandResult) RevokePortalPausability() error {
 // TODO: think about Discard.
 
 func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
-	if r.closed {
+	if !r.SupportsPausing() {
+		// TODO: check whether we need this.
+		r.commandResult.Close(ctx, t)
+		return
+	}
+	if r.closed || r.exhausted {
 		r.commandResult.Close(ctx, t)
 	}
 }

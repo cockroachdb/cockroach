@@ -281,12 +281,8 @@ func runPlanInsidePlan(
 	defer recv.Release()
 
 	plannerCopy := *params.p
+	plannerCopy.curPlan = &plannerCopy.curPlanAlloc
 	plannerCopy.curPlan.planComponents = *plan
-	// "Pausable portal" execution model is only applicable to the outer
-	// statement since we actually need to execute all inner plans to completion
-	// before we can produce any "outer" rows to be returned to the client, so
-	// we make sure to unset pausablePortal field on the planner.
-	plannerCopy.pausablePortal = nil
 
 	// planner object embeds the extended eval context, so we will modify that
 	// (which won't affect the outer planner's extended eval context), and we'll
