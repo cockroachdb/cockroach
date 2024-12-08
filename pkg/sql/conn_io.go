@@ -733,7 +733,6 @@ type ClientComm interface {
 		limit int,
 		portalName string,
 		implicitTxn bool,
-		portalPausability PortalPausablity,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.
 	CreatePrepareResult(pos CmdPos) ParseResult
@@ -905,11 +904,6 @@ type RestrictedCommandResult interface {
 	// GetBulkJobId returns the id of the job for the query, if the query is
 	// IMPORT, BACKUP or RESTORE.
 	GetBulkJobId() uint64
-
-	// ErrAllowReleased returns the error without asserting the result is not
-	// released yet. It should be used only in clean-up stages of a pausable
-	// portal.
-	ErrAllowReleased() error
 
 	// RevokePortalPausability is to make a portal un-pausable. It is called when
 	// we find the underlying query is not supported for a pausable portal.
@@ -1086,11 +1080,6 @@ type streamingCommandResult struct {
 
 var _ RestrictedCommandResult = &streamingCommandResult{}
 var _ CommandResultClose = &streamingCommandResult{}
-
-// ErrAllowReleased is part of the sql.RestrictedCommandResult interface.
-func (r *streamingCommandResult) ErrAllowReleased() error {
-	return r.err
-}
 
 // RevokePortalPausability is part of the sql.RestrictedCommandResult interface.
 func (r *streamingCommandResult) RevokePortalPausability() error {

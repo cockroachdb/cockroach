@@ -955,15 +955,6 @@ func (p *PlanningCtx) IsLocal() bool {
 	return p.isLocal
 }
 
-// getPortalPauseInfo returns the portal pause info if the current planner is
-// for a pausable portal. Otherwise, returns nil.
-func (p *PlanningCtx) getPortalPauseInfo() *portalPauseInfo {
-	if p.planner != nil && p.planner.pausablePortal != nil && p.planner.pausablePortal.pauseInfo != nil {
-		return p.planner.pausablePortal.pauseInfo
-	}
-	return nil
-}
-
 // setUpForMainQuery updates the PlanningCtx for the main query path.
 func (p *PlanningCtx) setUpForMainQuery(
 	ctx context.Context, planner *planner, recv *DistSQLReceiver,
