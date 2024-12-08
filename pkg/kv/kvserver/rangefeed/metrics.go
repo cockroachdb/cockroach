@@ -38,6 +38,18 @@ var (
 		Measurement: "Registrations",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeFeedBufferedRegistrations = metric.Metadata{
+		Name:        "kv.rangefeed.buffered_registrations",
+		Help:        "Number of active RangeFeed buffered registrations",
+		Measurement: "Registrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedUnbufferedRegistrations = metric.Metadata{
+		Name:        "kv.rangefeed.unbuffered_registrations",
+		Help:        "Number of active RangeFeed unbuffered registrations",
+		Measurement: "Registrations",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeFeedClosedTimestampMaxBehindNanos = metric.Metadata{
 		Name: "kv.rangefeed.closed_timestamp_max_behind_nanos",
 		Help: "Largest latency between realtime and replica max closed timestamp for replicas " +
@@ -91,6 +103,8 @@ type Metrics struct {
 	RangefeedProcessorQueueTimeout         *metric.Counter
 	RangeFeedBudgetBlocked                 *metric.Counter
 	RangeFeedRegistrations                 *metric.Gauge
+	RangeFeedBufferedRegistrations         *metric.Gauge
+	RangeFeedUnbufferedRegistrations       *metric.Gauge
 	RangeFeedClosedTimestampMaxBehindNanos *metric.Gauge
 	RangeFeedSlowClosedTimestampRanges     *metric.Gauge
 	RangeFeedSlowClosedTimestampLogN       log.EveryN
@@ -117,6 +131,8 @@ func NewMetrics() *Metrics {
 		RangeFeedBudgetExhausted:               metric.NewCounter(metaRangeFeedExhausted),
 		RangeFeedBudgetBlocked:                 metric.NewCounter(metaRangeFeedBudgetBlocked),
 		RangeFeedRegistrations:                 metric.NewGauge(metaRangeFeedRegistrations),
+		RangeFeedBufferedRegistrations:         metric.NewGauge(metaRangeFeedBufferedRegistrations),
+		RangeFeedUnbufferedRegistrations:       metric.NewGauge(metaRangeFeedUnbufferedRegistrations),
 		RangeFeedClosedTimestampMaxBehindNanos: metric.NewGauge(metaRangeFeedClosedTimestampMaxBehindNanos),
 		RangeFeedSlowClosedTimestampRanges:     metric.NewGauge(metaRangefeedSlowClosedTimestampRanges),
 		RangeFeedSlowClosedTimestampLogN:       log.Every(5 * time.Second),
