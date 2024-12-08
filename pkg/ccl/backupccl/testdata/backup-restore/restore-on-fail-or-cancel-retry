@@ -40,6 +40,9 @@ RESTORE FROM LATEST IN 'nodelocal://1/cluster_backup';
 ----
 job paused at pausepoint
 
+clear-conn-cache
+----
+
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = '';
 ----
