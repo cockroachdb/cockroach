@@ -362,20 +362,20 @@ func (fp *fixupProcessor) splitPartition(
 	ctx context.Context, parentPartitionKey vecstore.PartitionKey, partitionKey vecstore.PartitionKey,
 ) (err error) {
 	// Run the split within a transaction.
-	txn, err := fp.index.store.BeginTransaction(ctx)
+	txn, err := fp.index.store.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err == nil {
-			err = fp.index.store.CommitTransaction(ctx, txn)
+			err = fp.index.store.Commit(ctx, txn)
 		} else {
-			err = errors.CombineErrors(err, fp.index.store.AbortTransaction(ctx, txn))
+			err = errors.CombineErrors(err, fp.index.store.Abort(ctx, txn))
 		}
 	}()
 
 	// Get the partition to be split from the store.
-	partition, err := fp.index.store.GetPartition(ctx, txn, partitionKey)
+	partition, err := txn.GetPartition(ctx, partitionKey)
 	if errors.Is(err, vecstore.ErrPartitionNotFound) {
 		log.VEventf(ctx, 2, "partition %d no longer exists, do not split", partitionKey)
 		return nil
@@ -392,7 +392,7 @@ func (fp *fixupProcessor) splitPartition(
 	// Load the parent of the partition to split.
 	var parentPartition *vecstore.Partition
 	if partitionKey != vecstore.RootKey {
-		parentPartition, err = fp.index.store.GetPartition(ctx, txn, parentPartitionKey)
+		parentPartition, err = txn.GetPartition(ctx, parentPartitionKey)
 		if errors.Is(err, vecstore.ErrPartitionNotFound) {
 			log.VEventf(ctx, 2, "parent partition %d of partition %d no longer exists, do not split",
 				parentPartitionKey, partitionKey)
@@ -489,11 +489,11 @@ func (fp *fixupProcessor) splitPartition(
 	// Insert the two new partitions into the index. This only adds their data
 	// (and metadata) for the partition - they're not yet linked into the K-means
 	// tree.
-	leftPartitionKey, err := fp.index.store.InsertPartition(ctx, txn, leftSplit.Partition)
+	leftPartitionKey, err := txn.InsertPartition(ctx, leftSplit.Partition)
 	if err != nil {
 		return errors.Wrapf(err, "creating left partition for split of partition %d", partitionKey)
 	}
-	rightPartitionKey, err := fp.index.store.InsertPartition(ctx, txn, rightSplit.Partition)
+	rightPartitionKey, err := txn.InsertPartition(ctx, rightSplit.Partition)
 	if err != nil {
 		return errors.Wrapf(err, "creating right partition for split of partition %d", partitionKey)
 	}
@@ -520,7 +520,7 @@ func (fp *fixupProcessor) splitPartition(
 		}
 		rootPartition := vecstore.NewPartition(
 			fp.index.rootQuantizer, quantizedSet, childKeys, partition.Level()+1)
-		if err = fp.index.store.SetRootPartition(ctx, txn, rootPartition); err != nil {
+		if err = txn.SetRootPartition(ctx, rootPartition); err != nil {
 			return errors.Wrapf(err, "setting new root for split of partition %d", partitionKey)
 		}
 
@@ -548,7 +548,7 @@ func (fp *fixupProcessor) splitPartition(
 		}
 
 		// Delete the old partition.
-		if err = fp.index.store.DeletePartition(ctx, txn, partitionKey); err != nil {
+		if err = txn.DeletePartition(ctx, partitionKey); err != nil {
 			return errors.Wrapf(err, "deleting partition %d for split", partitionKey)
 		}
 	}
@@ -766,8 +766,7 @@ func (fp *fixupProcessor) linkNearbyVectors(
 			// is not allowed, as the K-means tree would not be fully balanced. Add
 			// the vector back to the partition. This is a very rare case and that
 			// partition is likely to be merged away regardless.
-			_, err = fp.index.store.AddToPartition(
-				ctx, txn, result.ParentPartitionKey, vector, result.ChildKey)
+			_, err = txn.AddToPartition(ctx, result.ParentPartitionKey, vector, result.ChildKey)
 			if err != nil {
 				return err
 			}
@@ -793,20 +792,20 @@ func (fp *fixupProcessor) mergePartition(
 	}
 
 	// Run the merge within a transaction.
-	txn, err := fp.index.store.BeginTransaction(ctx)
+	txn, err := fp.index.store.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err == nil {
-			err = fp.index.store.CommitTransaction(ctx, txn)
+			err = fp.index.store.Commit(ctx, txn)
 		} else {
-			err = errors.CombineErrors(err, fp.index.store.AbortTransaction(ctx, txn))
+			err = errors.CombineErrors(err, fp.index.store.Abort(ctx, txn))
 		}
 	}()
 
 	// Get the partition to be merged from the store.
-	partition, err := fp.index.store.GetPartition(ctx, txn, partitionKey)
+	partition, err := txn.GetPartition(ctx, partitionKey)
 	if errors.Is(err, vecstore.ErrPartitionNotFound) {
 		log.VEventf(ctx, 2, "partition %d no longer exists, do not merge", partitionKey)
 		return nil
@@ -821,7 +820,7 @@ func (fp *fixupProcessor) mergePartition(
 	}
 
 	// Load the parent of the partition to merge.
-	parentPartition, err := fp.index.store.GetPartition(ctx, txn, parentPartitionKey)
+	parentPartition, err := txn.GetPartition(ctx, parentPartitionKey)
 	if errors.Is(err, vecstore.ErrPartitionNotFound) {
 		log.VEventf(ctx, 2, "parent partition %d of partition %d no longer exists, do not merge",
 			parentPartitionKey, partitionKey)
@@ -856,7 +855,7 @@ func (fp *fixupProcessor) mergePartition(
 
 	// Delete the merging partition from the store. This actually deletes the
 	// partition's data and metadata.
-	if err = fp.index.store.DeletePartition(ctx, txn, partitionKey); err != nil {
+	if err = txn.DeletePartition(ctx, partitionKey); err != nil {
 		return errors.Wrapf(err, "deleting partition %d", partitionKey)
 	}
 
@@ -873,7 +872,7 @@ func (fp *fixupProcessor) mergePartition(
 		quantizedSet := fp.index.rootQuantizer.Quantize(ctx, &vectors)
 		rootPartition := vecstore.NewPartition(
 			fp.index.rootQuantizer, quantizedSet, partition.ChildKeys(), partition.Level())
-		if err = fp.index.store.SetRootPartition(ctx, txn, rootPartition); err != nil {
+		if err = txn.SetRootPartition(ctx, rootPartition); err != nil {
 			return errors.Wrapf(err, "setting new root for merge of partition %d", partitionKey)
 		}
 
@@ -920,15 +919,15 @@ func (fp *fixupProcessor) deleteVector(
 	ctx context.Context, partitionKey vecstore.PartitionKey, vectorKey vecstore.PrimaryKey,
 ) (err error) {
 	// Run the deletion within a transaction.
-	txn, err := fp.index.store.BeginTransaction(ctx)
+	txn, err := fp.index.store.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if err == nil {
-			err = fp.index.store.CommitTransaction(ctx, txn)
+			err = fp.index.store.Commit(ctx, txn)
 		} else {
-			err = errors.CombineErrors(err, fp.index.store.AbortTransaction(ctx, txn))
+			err = errors.CombineErrors(err, fp.index.store.Abort(ctx, txn))
 		}
 	}()
 
@@ -940,7 +939,7 @@ func (fp *fixupProcessor) deleteVector(
 	childKey := vecstore.ChildKey{PrimaryKey: vectorKey}
 	fp.tempVectorsWithKeys = ensureSliceLen(fp.tempVectorsWithKeys, 1)
 	fp.tempVectorsWithKeys[0] = vecstore.VectorWithKey{Key: childKey}
-	if err = fp.index.store.GetFullVectors(ctx, txn, fp.tempVectorsWithKeys); err != nil {
+	if err = txn.GetFullVectors(ctx, fp.tempVectorsWithKeys); err != nil {
 		return errors.Wrap(err, "getting full vector")
 	}
 	if fp.tempVectorsWithKeys[0].Vector != nil {
@@ -970,7 +969,7 @@ func (fp *fixupProcessor) getFullVectorsForPartition(
 	for i := range childKeys {
 		fp.tempVectorsWithKeys[i] = vecstore.VectorWithKey{Key: childKeys[i]}
 	}
-	err := fp.index.store.GetFullVectors(ctx, txn, fp.tempVectorsWithKeys)
+	err := txn.GetFullVectors(ctx, fp.tempVectorsWithKeys)
 	if err != nil {
 		err = errors.Wrapf(err, "getting full vectors of partition %d to split", partitionKey)
 		return vector.Set{}, err
