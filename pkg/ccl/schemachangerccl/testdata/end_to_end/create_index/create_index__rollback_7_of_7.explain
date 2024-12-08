@@ -8,7 +8,7 @@ CREATE INDEX idx
   PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1));
 EXPLAIN (DDL) rollback at post-commit stage 7 of 7;
 ----
-Schema change plan for rolling back CREATE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›));
+Schema change plan for rolling back CREATE INDEX idx ON defaultdb.public.t (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (‹1›));
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 11 elements transitioning toward ABSENT

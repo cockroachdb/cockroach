@@ -3956,17 +3956,14 @@ func scrubStmtStatKey(vt VirtualTabler, key string, ns eval.ClientNoticeSender) 
 
 // formatStmtKeyAsRedactableString given an AST node this function will fully
 // qualify names using annotations to format it out into a redactable string.
+// Object names are not redacted, but constants and datums are.
 func formatStmtKeyAsRedactableString(
-	vt VirtualTabler,
-	rootAST tree.Statement,
-	ann *tree.Annotations,
-	fs tree.FmtFlags,
-	ns eval.ClientNoticeSender,
+	rootAST tree.Statement, ann *tree.Annotations, fs tree.FmtFlags,
 ) redact.RedactableString {
 	f := tree.NewFmtCtx(
-		tree.FmtAlwaysQualifyTableNames|tree.FmtMarkRedactionNode|fs,
+		tree.FmtAlwaysQualifyTableNames|tree.FmtMarkRedactionNode|tree.FmtOmitNameRedaction|fs,
 		tree.FmtAnnotations(ann),
-		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt, ns)))
+	)
 	f.FormatNode(rootAST)
 	formattedRedactableStatementString := f.CloseAndGetString()
 	return redact.RedactableString(formattedRedactableStatementString)
