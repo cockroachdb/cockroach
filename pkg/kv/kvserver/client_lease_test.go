@@ -1811,6 +1811,23 @@ func TestLeaseRequestFromExpirationToEpochOrLeaderDoesNotRegressExpiration(t *te
 				// Pause n1's node liveness heartbeats, to allow its liveness expiration to
 				// fall behind.
 				l0 := tc.Server(0).NodeLiveness().(*liveness.NodeLiveness)
+
+				// Wait for the node liveness record to have an epoch set. Otherwise,
+				// the test might fail later when attempting to acquire an epoch-based
+				// lease with this error: unable to get liveness record. This can happen
+				// if we pause the node liveness heartbeat before the record is even
+				// created.
+				testutils.SucceedsSoon(t, func() error {
+					l, ok := l0.GetLiveness(tc.Server(0).NodeID())
+					if !ok {
+						return errors.New("liveness not found")
+					}
+					if l.Epoch == 0 {
+						return errors.New("liveness epoch not set")
+					}
+					return nil
+				})
+
 				l0.PauseHeartbeatLoopForTest()
 				l, ok := l0.GetLiveness(tc.Server(0).NodeID())
 				require.True(t, ok)
