@@ -38,6 +38,18 @@ var (
 		Measurement: "Registrations",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeFeedBufferedRegistrations = metric.Metadata{
+		Name:        "kv.rangefeed.buffered_registrations",
+		Help:        "Number of active RangeFeed buffered registrations",
+		Measurement: "Registrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedUnbufferedRegistrations = metric.Metadata{
+		Name:        "kv.rangefeed.unbuffered_registrations",
+		Help:        "Number of active RangeFeed unbuffered registrations",
+		Measurement: "Registrations",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeFeedClosedTimestampMaxBehindNanos = metric.Metadata{
 		Name: "kv.rangefeed.closed_timestamp_max_behind_nanos",
 		Help: "Largest latency between realtime and replica max closed timestamp for replicas " +
@@ -102,6 +114,8 @@ type Metrics struct {
 	RangeFeedClosedTimestampMaxBehindNanos      *metric.Gauge
 	RangeFeedSlowClosedTimestampRanges          *metric.Gauge
 	RangeFeedSlowClosedTimestampLogN            log.EveryN
+	RangeFeedBufferedRegistrations              *metric.Gauge
+	RangeFeedUnbufferedRegistrations            *metric.Gauge
 	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
 	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
 	// limit, but it's here to limit the effect on stability in case something
@@ -132,6 +146,8 @@ func NewMetrics() *Metrics {
 		RangeFeedSlowClosedTimestampNudgeSem:        make(chan struct{}, 1024),
 		RangeFeedProcessorsGO:                       metric.NewGauge(metaRangeFeedProcessorsGO),
 		RangeFeedProcessorsScheduler:                metric.NewGauge(metaRangeFeedProcessorsScheduler),
+		RangeFeedBufferedRegistrations:              metric.NewGauge(metaRangeFeedBufferedRegistrations),
+		RangeFeedUnbufferedRegistrations:            metric.NewGauge(metaRangeFeedUnbufferedRegistrations),
 	}
 }
 
