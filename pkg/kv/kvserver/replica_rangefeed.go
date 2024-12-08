@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -98,7 +99,7 @@ var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
 	"kv.rangefeed.buffered_sender.enabled",
 	"use buffered sender for all range feeds instead of buffering events "+
 		"separately per client per range",
-	false,
+	metamorphic.ConstantWithTestBool("kv.rangefeed.buffered_sender.enabled", false),
 	settings.WithValidateBool(func(_ *settings.Values, b bool) error {
 		if buildutil.CrdbTestBuild || !b {
 			return nil
