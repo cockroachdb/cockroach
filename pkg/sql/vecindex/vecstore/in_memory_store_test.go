@@ -44,9 +44,9 @@ func TestInMemoryStore(t *testing.T) {
 		defer commitTransaction(ctx, t, store, txn)
 
 		vec1 := vector.T{100, 200}
-		store.InsertVector(txn, []byte{11}, vec1)
+		store.InsertVector([]byte{11}, vec1)
 		vec2 := vector.T{300, 400}
-		store.InsertVector(txn, []byte{12}, vec2)
+		store.InsertVector([]byte{12}, vec2)
 
 		// Include primary keys that are cannot be found.
 		results := []VectorWithKey{
@@ -55,7 +55,7 @@ func TestInMemoryStore(t *testing.T) {
 			{Key: ChildKey{PrimaryKey: PrimaryKey{12}}},
 			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
 		}
-		err := store.GetFullVectors(ctx, txn, results)
+		err := txn.GetFullVectors(ctx, results)
 		require.NoError(t, err)
 		require.Equal(t, vec1, results[0].Vector)
 		require.Nil(t, results[1].Vector)
@@ -78,8 +78,8 @@ func TestInMemoryStore(t *testing.T) {
 
 		searchSet := SearchSet{MaxResults: 2}
 		partitionCounts := []int{0}
-		level, err := store.SearchPartitions(
-			ctx, txn, []PartitionKey{RootKey}, vector.T{1, 1}, &searchSet, partitionCounts)
+		level, err := txn.SearchPartitions(
+			ctx, []PartitionKey{RootKey}, vector.T{1, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, LeafLevel, level)
 		require.Nil(t, searchSet.PopResults())
@@ -91,26 +91,26 @@ func TestInMemoryStore(t *testing.T) {
 		defer commitTransaction(ctx, t, store, txn)
 
 		// Add to root partition.
-		count, err := store.AddToPartition(ctx, txn, RootKey, vector.T{1, 2}, childKey10)
+		count, err := txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, childKey10)
 		require.NoError(t, err)
 		require.Equal(t, 1, count)
-		count, err = store.AddToPartition(ctx, txn, RootKey, vector.T{7, 4}, childKey20)
+		count, err = txn.AddToPartition(ctx, RootKey, vector.T{7, 4}, childKey20)
 		require.NoError(t, err)
 		require.Equal(t, 2, count)
-		count, err = store.AddToPartition(ctx, txn, RootKey, vector.T{4, 3}, childKey30)
+		count, err = txn.AddToPartition(ctx, RootKey, vector.T{4, 3}, childKey30)
 		require.NoError(t, err)
 		require.Equal(t, 3, count)
 
 		// Add duplicate and expect value to be overwritten
-		count, err = store.AddToPartition(ctx, txn, RootKey, vector.T{5, 5}, childKey30)
+		count, err = txn.AddToPartition(ctx, RootKey, vector.T{5, 5}, childKey30)
 		require.NoError(t, err)
 		require.Equal(t, 3, count)
 
 		// Search root partition.
 		searchSet := SearchSet{MaxResults: 2}
 		partitionCounts := []int{0}
-		level, err := store.SearchPartitions(
-			ctx, txn, []PartitionKey{RootKey}, vector.T{1, 1}, &searchSet, partitionCounts)
+		level, err := txn.SearchPartitions(
+			ctx, []PartitionKey{RootKey}, vector.T{1, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(1), level)
 		result1 := SearchResult{QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: 1, ChildKey: childKey10}
@@ -128,7 +128,7 @@ func TestInMemoryStore(t *testing.T) {
 
 		// Get root partition.
 		var err error
-		root, err = store.GetPartition(ctx, txn, RootKey)
+		root, err = txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
 		require.Equal(t, Level(1), root.Level())
 		require.Equal(t, []ChildKey{childKey10, childKey20, childKey30}, root.ChildKeys())
@@ -140,7 +140,7 @@ func TestInMemoryStore(t *testing.T) {
 			{Key: ChildKey{PrimaryKey: PrimaryKey{11}}},
 			{Key: ChildKey{PrimaryKey: PrimaryKey{0}}},
 		}
-		err = store.GetFullVectors(ctx, txn, results)
+		err = txn.GetFullVectors(ctx, results)
 		require.NoError(t, err)
 		require.Equal(t, vector.T{0, 0}, results[0].Vector)
 		require.Equal(t, vector.T{100, 200}, results[1].Vector)
@@ -152,21 +152,21 @@ func TestInMemoryStore(t *testing.T) {
 		defer commitTransaction(ctx, t, store, txn)
 
 		// Replace root partition.
-		_, err := store.GetPartition(ctx, txn, RootKey)
+		_, err := txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
 		vectors := vector.T{4, 3}.AsSet()
 		quantizedSet := quantizer.Quantize(ctx, &vectors)
 		newRoot := NewPartition(quantizer, quantizedSet, []ChildKey{childKey2}, 2)
-		require.NoError(t, store.SetRootPartition(ctx, txn, newRoot))
-		newRoot, err = store.GetPartition(ctx, txn, RootKey)
+		require.NoError(t, txn.SetRootPartition(ctx, newRoot))
+		newRoot, err = txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
 		require.Equal(t, Level(2), newRoot.Level())
 		require.Equal(t, []ChildKey{childKey2}, newRoot.ChildKeys())
 
 		searchSet := SearchSet{MaxResults: 2}
 		partitionCounts := []int{0}
-		level, err := store.SearchPartitions(
-			ctx, txn, []PartitionKey{RootKey}, vector.T{2, 2}, &searchSet, partitionCounts)
+		level, err := txn.SearchPartitions(
+			ctx, []PartitionKey{RootKey}, vector.T{2, 2}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(2), level)
 		result3 := SearchResult{QuerySquaredDistance: 5, ErrorBound: 0, CentroidDistance: 0, ParentPartitionKey: 1, ChildKey: childKey2}
@@ -179,32 +179,32 @@ func TestInMemoryStore(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
 		defer commitTransaction(ctx, t, store, txn)
 
-		_, err := store.GetPartition(ctx, txn, RootKey)
+		_, err := txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
-		partitionKey1, err = store.InsertPartition(ctx, txn, root)
+		partitionKey1, err = txn.InsertPartition(ctx, root)
 		require.NoError(t, err)
 		require.Equal(t, PartitionKey(2), partitionKey1)
-		count, err := store.RemoveFromPartition(ctx, txn, partitionKey1, childKey20)
+		count, err := txn.RemoveFromPartition(ctx, partitionKey1, childKey20)
 		require.NoError(t, err)
 		require.Equal(t, 2, count)
 
 		// Try to remove the same key again.
-		count, err = store.RemoveFromPartition(ctx, txn, partitionKey1, childKey20)
+		count, err = txn.RemoveFromPartition(ctx, partitionKey1, childKey20)
 		require.NoError(t, err)
 		require.Equal(t, 2, count)
 
 		// Add an alternate element and add duplicate, expecting value to be overwritten.
-		count, err = store.AddToPartition(ctx, txn, partitionKey1, vector.T{-1, 0}, childKey40)
+		count, err = txn.AddToPartition(ctx, partitionKey1, vector.T{-1, 0}, childKey40)
 		require.NoError(t, err)
 		require.Equal(t, 3, count)
-		count, err = store.AddToPartition(ctx, txn, partitionKey1, vector.T{1, 1}, childKey40)
+		count, err = txn.AddToPartition(ctx, partitionKey1, vector.T{1, 1}, childKey40)
 		require.NoError(t, err)
 		require.Equal(t, 3, count)
 
 		searchSet := SearchSet{MaxResults: 2}
 		partitionCounts := []int{0}
-		level, err := store.SearchPartitions(
-			ctx, txn, []PartitionKey{partitionKey1}, vector.T{1, 1}, &searchSet, partitionCounts)
+		level, err := txn.SearchPartitions(
+			ctx, []PartitionKey{partitionKey1}, vector.T{1, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(1), level)
 		result4 := SearchResult{QuerySquaredDistance: 0, ErrorBound: 0, CentroidDistance: 1.4142, ParentPartitionKey: 2, ChildKey: childKey40}
@@ -217,7 +217,7 @@ func TestInMemoryStore(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
 		defer commitTransaction(ctx, t, store, txn)
 
-		_, err := store.GetPartition(ctx, txn, RootKey)
+		_, err := txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
 
 		vectors := vector.MakeSet(2)
@@ -225,14 +225,14 @@ func TestInMemoryStore(t *testing.T) {
 		vectors.Add(vector.T{2, 8})
 		quantizedSet := quantizer.Quantize(ctx, &vectors)
 		partition := NewPartition(quantizer, quantizedSet, []ChildKey{childKey50, childKey60}, LeafLevel)
-		partitionKey2, err := store.InsertPartition(ctx, txn, partition)
+		partitionKey2, err := txn.InsertPartition(ctx, partition)
 		require.NoError(t, err)
 		require.Equal(t, PartitionKey(3), partitionKey2)
 
 		searchSet := SearchSet{MaxResults: 2}
 		partitionCounts := []int{0, 0}
-		level, err := store.SearchPartitions(
-			ctx, txn, []PartitionKey{partitionKey1, partitionKey2}, vector.T{3, 1}, &searchSet, partitionCounts)
+		level, err := txn.SearchPartitions(
+			ctx, []PartitionKey{partitionKey1, partitionKey2}, vector.T{3, 1}, &searchSet, partitionCounts)
 		require.NoError(t, err)
 		require.Equal(t, Level(1), level)
 		result4 := SearchResult{QuerySquaredDistance: 4, ErrorBound: 0, CentroidDistance: 1.41, ParentPartitionKey: 2, ChildKey: childKey40}
@@ -245,9 +245,9 @@ func TestInMemoryStore(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
 		defer commitTransaction(ctx, t, store, txn)
 
-		store.DeleteVector(txn, []byte{10})
+		store.DeleteVector([]byte{10})
 		refs := []VectorWithKey{{Key: ChildKey{PrimaryKey: PrimaryKey{10}}}}
-		err := store.GetFullVectors(ctx, txn, refs)
+		err := txn.GetFullVectors(ctx, refs)
 		require.NoError(t, err)
 		require.Nil(t, refs[0].Vector)
 	})
@@ -257,10 +257,10 @@ func TestInMemoryStore(t *testing.T) {
 		defer abortTransaction(ctx, t, store, txn)
 
 		// Perform some read-only operations.
-		_, err := store.GetPartition(ctx, txn, RootKey)
+		_, err := txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
 
-		err = store.GetFullVectors(ctx, txn, []VectorWithKey{
+		err = txn.GetFullVectors(ctx, []VectorWithKey{
 			{Key: ChildKey{PrimaryKey: PrimaryKey{11}}},
 		})
 		require.NoError(t, err)
@@ -285,21 +285,22 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 		defer commitTransaction(ctx, t, store, txn)
 
 		// Acquire partition lock.
-		_, err := store.GetPartition(ctx, txn, RootKey)
+		_, err := txn.GetPartition(ctx, RootKey)
 		require.NoError(t, err)
 
 		// Search root partition on background goroutine.
 		go func() {
 			ctx2 := internal.WithWorkspace(context.Background(), &internal.Workspace{})
 
-			// BeginTransaction should block until the outer transaction is complete.
+			// Begin transaction should block until the outer transaction is
+			// complete.
 			txn2 := beginTransaction(ctx, t, store)
 			defer commitTransaction(ctx, t, store, txn2)
 
 			searchSet := SearchSet{MaxResults: 2}
 			partitionCounts := []int{0}
-			_, err := store.SearchPartitions(
-				ctx2, txn2, []PartitionKey{RootKey}, vector.T{0, 0}, &searchSet, partitionCounts)
+			_, err := txn2.SearchPartitions(
+				ctx2, []PartitionKey{RootKey}, vector.T{0, 0}, &searchSet, partitionCounts)
 			require.NoError(t, err)
 			result1 := SearchResult{QuerySquaredDistance: 25, ErrorBound: 0, CentroidDistance: 5, ParentPartitionKey: RootKey, ChildKey: childKey10}
 			require.Equal(t, SearchResults{result1}, searchSet.PopResults())
@@ -311,7 +312,7 @@ func TestInMemoryStoreConcurrency(t *testing.T) {
 		// Add vector to root partition after yielding to the background goroutine.
 		// The add should always happen before the background search.
 		runtime.Gosched()
-		_, err = store.AddToPartition(ctx, txn, RootKey, vector.T{3, 4}, childKey10)
+		_, err = txn.AddToPartition(ctx, RootKey, vector.T{3, 4}, childKey10)
 		require.NoError(t, err)
 	}()
 
@@ -335,9 +336,9 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	childKey30 := ChildKey{PartitionKey: 30}
 	childKey40 := ChildKey{PartitionKey: 40}
 
-	_, err := store.AddToPartition(ctx, txn, RootKey, vector.T{1, 2}, childKey10)
+	_, err := txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, childKey10)
 	require.NoError(t, err)
-	_, err = store.AddToPartition(ctx, txn, RootKey, vector.T{3, 4}, childKey20)
+	_, err = txn.AddToPartition(ctx, RootKey, vector.T{3, 4}, childKey20)
 	require.NoError(t, err)
 
 	// Update stats.
@@ -349,10 +350,10 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	require.Equal(t, []CVStats{}, stats.CVStats)
 
 	// Upsert new root partition with higher level and check stats.
-	root, err := store.GetPartition(ctx, txn, RootKey)
+	root, err := txn.GetPartition(ctx, RootKey)
 	require.NoError(t, err)
 	root.level = 3
-	require.NoError(t, store.SetRootPartition(ctx, txn, root))
+	require.NoError(t, txn.SetRootPartition(ctx, root))
 	stats.CVStats = []CVStats{{Mean: 2.5, Variance: 0.5}, {Mean: 1, Variance: 0.25}}
 	err = store.MergeStats(ctx, &stats, false /* skipMerge */)
 	require.NoError(t, err)
@@ -364,7 +365,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	vectors := vector.MakeSetFromRawData([]float32{5, 6}, 2)
 	quantizedSet := quantizer.Quantize(ctx, &vectors)
 	partition := NewPartition(quantizer, quantizedSet, []ChildKey{childKey30}, 2)
-	partitionKey, err := store.InsertPartition(ctx, txn, partition)
+	partitionKey, err := txn.InsertPartition(ctx, partition)
 	require.NoError(t, err)
 
 	stats.CVStats = []CVStats{{Mean: 8, Variance: 2}, {Mean: 6, Variance: 1}}
@@ -375,7 +376,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	require.Equal(t, []CVStats{{Mean: 2.775, Variance: 0.1}, {Mean: 1.25, Variance: 0.05}}, roundCVStats(stats.CVStats))
 
 	// Add vector to partition and check stats.
-	_, err = store.AddToPartition(ctx, txn, partitionKey, vector.T{7, 8}, childKey40)
+	_, err = txn.AddToPartition(ctx, partitionKey, vector.T{7, 8}, childKey40)
 	require.NoError(t, err)
 
 	stats.CVStats = []CVStats{{Mean: 3, Variance: 1}, {Mean: 1.5, Variance: 0.5}}
@@ -386,7 +387,7 @@ func TestInMemoryStoreUpdateStats(t *testing.T) {
 	require.Equal(t, []CVStats{{Mean: 2.7863, Variance: 0.145}, {Mean: 1.2625, Variance: 0.0725}}, roundCVStats(stats.CVStats))
 
 	// Remove vector from partition and check stats.
-	_, err = store.RemoveFromPartition(ctx, txn, partitionKey, childKey30)
+	_, err = txn.RemoveFromPartition(ctx, partitionKey, childKey30)
 	require.NoError(t, err)
 
 	stats.CVStats = []CVStats{{Mean: 5, Variance: 2}, {Mean: 3, Variance: 1.5}}
@@ -564,18 +565,18 @@ func TestInMemoryLock(t *testing.T) {
 }
 
 func beginTransaction(ctx context.Context, t *testing.T, store Store) Txn {
-	txn, err := store.BeginTransaction(ctx)
+	txn, err := store.Begin(ctx)
 	require.NoError(t, err)
 	return txn
 }
 
 func commitTransaction(ctx context.Context, t *testing.T, store Store, txn Txn) {
-	err := store.CommitTransaction(ctx, txn)
+	err := store.Commit(ctx, txn)
 	require.NoError(t, err)
 }
 
 func abortTransaction(ctx context.Context, t *testing.T, store Store, txn Txn) {
-	err := store.AbortTransaction(ctx, txn)
+	err := store.Abort(ctx, txn)
 	require.NoError(t, err)
 }
 

@@ -310,6 +310,11 @@ func (vi *VectorIndex) Delete(
 
 		// Remove the vector from its partition in the store.
 		_, err = vi.removeFromPartition(ctx, txn, results[0].ParentPartitionKey, results[0].ChildKey)
+		if errors.Is(err, vecstore.ErrRestartOperation) {
+			// If store requested the operation be retried, then re-run the
+			// search and delete.
+			continue
+		}
 		return err
 	}
 }
@@ -404,7 +409,7 @@ func (vi *VectorIndex) addToPartition(
 	vector vector.T,
 	childKey vecstore.ChildKey,
 ) (int, error) {
-	count, err := vi.store.AddToPartition(ctx, txn, partitionKey, vector, childKey)
+	count, err := txn.AddToPartition(ctx, partitionKey, vector, childKey)
 	if err != nil {
 		return 0, errors.Wrapf(err, "adding vector to partition %d", partitionKey)
 	}
@@ -424,7 +429,7 @@ func (vi *VectorIndex) removeFromPartition(
 	partitionKey vecstore.PartitionKey,
 	childKey vecstore.ChildKey,
 ) (int, error) {
-	count, err := vi.store.RemoveFromPartition(ctx, txn, partitionKey, childKey)
+	count, err := txn.RemoveFromPartition(ctx, partitionKey, childKey)
 	if err != nil {
 		return 0, errors.Wrapf(err, "removing vector from partition %d", partitionKey)
 	}
@@ -596,9 +601,8 @@ func (vi *VectorIndex) searchChildPartitions(
 	}
 
 	searchCtx.tempCounts = ensureSliceLen(searchCtx.tempCounts, len(parentResults))
-	level, err = vi.store.SearchPartitions(
-		searchCtx.Ctx, searchCtx.Txn, searchCtx.tempKeys, searchCtx.Randomized,
-		searchSet, searchCtx.tempCounts)
+	level, err = searchCtx.Txn.SearchPartitions(
+		searchCtx.Ctx, searchCtx.tempKeys, searchCtx.Randomized, searchSet, searchCtx.tempCounts)
 	if err != nil {
 		return 0, err
 	}
@@ -712,7 +716,7 @@ func (vi *VectorIndex) getRerankVectors(
 	}
 
 	// The store is expected to fetch the vectors in parallel.
-	err := vi.store.GetFullVectors(searchCtx.Ctx, searchCtx.Txn, searchCtx.tempVectorsWithKeys)
+	err := searchCtx.Txn.GetFullVectors(searchCtx.Ctx, searchCtx.tempVectorsWithKeys)
 	if err != nil {
 		return nil, err
 	}
@@ -818,7 +822,7 @@ func (vi *VectorIndex) Format(
 
 	var helper func(partitionKey vecstore.PartitionKey, parentPrefix string, childPrefix string) error
 	helper = func(partitionKey vecstore.PartitionKey, parentPrefix string, childPrefix string) error {
-		partition, err := vi.store.GetPartition(ctx, txn, partitionKey)
+		partition, err := txn.GetPartition(ctx, partitionKey)
 		if err != nil {
 			return err
 		}
@@ -851,7 +855,7 @@ func (vi *VectorIndex) Format(
 
 			if partition.Level() == vecstore.LeafLevel {
 				refs := []vecstore.VectorWithKey{{Key: childKey}}
-				if err = vi.store.GetFullVectors(ctx, txn, refs); err != nil {
+				if err = txn.GetFullVectors(ctx, refs); err != nil {
 					return err
 				}
 				buf.WriteString(parentPrefix)

@@ -31,6 +31,7 @@ go_library(
         "encoding.go",
         "in_memory_lock.go",
         "in_memory_store.go",
+        "in_memory_txn.go",
         "partition.go",
         "search_set.go",
         "store.go",
