@@ -308,6 +308,20 @@ func applyReplicaUpdate(
 		return PrepareReplicaReport{}, errors.Wrap(err, "updating MVCCStats")
 	}
 
+	// Update the hard state to clear the LeadEpoch if it exists. This is
+	// important for leader leases since without this, if the replica was
+	// fortifying a leader, it would think that the SupportFor() epoch regressed.
+	hs, err := sl.LoadHardState(ctx, readWriter)
+	if err != nil {
+		return PrepareReplicaReport{}, errors.Wrap(err, "loading HardState")
+	}
+
+	hs.LeadEpoch = 0
+
+	if err := sl.SetHardState(ctx, readWriter, hs); err != nil {
+		return PrepareReplicaReport{}, errors.Wrap(err, "setting HardState")
+	}
+
 	return report, nil
 }
 

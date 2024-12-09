@@ -587,7 +587,7 @@ func TestRetrieveApplyStatus(t *testing.T) {
 
 	// We currently don't clear out the LeadEpoch field when recovering from a
 	// loss of quorum, so we can't run with leader leases on in this test.
-	tc, _, _ := prepTestCluster(ctx, t, 5, true /* disableLeaderLease */)
+	tc, _, _ := prepTestCluster(ctx, t, 5, false /* disableLeaderLease */)
 	defer tc.Stopper().Stop(ctx)
 
 	// Use scratch range to ensure we have a range that loses quorum.
