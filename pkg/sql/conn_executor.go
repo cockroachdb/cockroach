@@ -920,6 +920,13 @@ type ConnectionHandler struct {
 	ex *connExecutor
 }
 
+func (h ConnectionHandler) ExecCmdSync(
+	ctx context.Context, cmd Command, pos CmdPos,
+) (retErr error) {
+	h.ex.stmtBuf.WaitNoCurCmd()
+	return h.ex.execCmdSync(ctx, cmd, pos)
+}
+
 // GetParamStatus retrieves the configured value of the session
 // variable identified by varName. This is used for the initial
 // message sent to a client during a session set-up.
@@ -2298,7 +2305,10 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	if err != nil {
 		return err // err could be io.EOF
 	}
+	return ex.execCmdSync(ctx, cmd, pos)
+}
 
+func (ex *connExecutor) execCmdSync(ctx context.Context, cmd Command, pos CmdPos) (retErr error) {
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
 			ex.machine.CurState(), pos, cmd)
@@ -2307,6 +2317,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	var ev fsm.Event
 	var payload fsm.EventPayload
 	var res ResultBase
+	var err error
 	switch tcmd := cmd.(type) {
 	case ExecStmt:
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
@@ -2476,9 +2487,11 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		}
 		// Update the cmd and pos in the stmtBuf as limitedCommandResult will have
 		// advanced the position if the the portal is repeatedly executed with a limit
-		cmd, pos, err = ex.stmtBuf.CurCmd()
-		if err != nil {
-			return err
+		if pos >= 0 {
+			cmd, pos, err = ex.stmtBuf.CurCmd()
+			if err != nil {
+				return err
+			}
 		}
 
 	case PrepareStmt:
@@ -2602,7 +2615,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				log.Warningf(ctx, "error closing cursors: %v", err)
 			}
 		}
-		advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res, pos)
+		advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res)
 		if err != nil {
 			return err
 		}
@@ -2668,69 +2681,88 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	}
 
 	// Move the cursor according to what the state transition told us to do.
-	switch advInfo.code {
-	case advanceOne:
-		ex.stmtBuf.AdvanceOne()
-	case skipBatch:
-		// We'll flush whatever results we have to the network. The last one must
-		// be an error. This flush may seem unnecessary, as we generally only
-		// flush when the client requests it through a Sync or a Flush but without
-		// it the Node.js driver isn't happy. That driver likes to send "flush"
-		// command and only sends Syncs once it received some data. But we ignore
-		// flush commands (just like we ignore any other commands) when skipping
-		// to the next batch.
-		if err := ex.clientComm.Flush(pos); err != nil {
+	if pos >= 0 {
+		switch advInfo.code {
+		case advanceOne:
+			ex.stmtBuf.AdvanceOne()
+		case skipBatch:
+			// We'll flush whatever results we have to the network. The last one must
+			// be an error. This flush may seem unnecessary, as we generally only
+			// flush when the client requests it through a Sync or a Flush but without
+			// it the Node.js driver isn't happy. That driver likes to send "flush"
+			// command and only sends Syncs once it received some data. But we ignore
+			// flush commands (just like we ignore any other commands) when skipping
+			// to the next batch.
+			if err := ex.clientComm.Flush(pos); err != nil {
+				return err
+			}
+			requireSyncFromClient := cmd.isExtendedProtocolCmd()
+			if err := ex.stmtBuf.seekToNextBatch(requireSyncFromClient); err != nil {
+				return err
+			}
+		case rewind:
+			if err := ex.rewindPrepStmtNamespace(ctx); err != nil {
+				return err
+			}
+			ex.extraTxnState.savepoints = ex.extraTxnState.rewindPosSnapshot.savepoints
+			// Note we use the Replace function instead of reassigning, as there are
+			// copies of the ex.sessionDataStack in the iterators and extendedEvalContext.
+			ex.sessionDataStack.Replace(ex.extraTxnState.rewindPosSnapshot.sessionDataStack)
+			advInfo.rewCap.rewindAndUnlock(ctx)
+		case stayInPlace:
+			// Nothing to do. The same statement will be executed again.
+		default:
+			panic(errors.AssertionFailedf("unexpected advance code: %s", advInfo.code))
+		}
+
+		// Special handling for COMMIT/ROLLBACK in PL/pgSQL stored procedures. We
+		// unconditionally reset the StoredProcTxnOp because it has either
+		// successfully set in motion the commit/rollback of the current transaction,
+		// or execution failed and the PL/pgSQL command should be ignored.
+		ex.extraTxnState.storedProcTxnState.txnOp = tree.StoredProcTxnNoOp
+		switch advInfo.code {
+		case stayInPlace, rewind:
+			// Do not reset the "resume" plan. This will allow a sub-transaction
+			// within a stored procedure to be retried individually from any previous or
+			// following transactions within the stored procedure.
+			//
+			// NOTE: we will eventually reach the default case below when the retries
+			// terminate.
+		default:
+			// Finish cleaning up the stored proc state by resetting the "resume" plan
+			// and transaction modes. The stored procedure has finished execution,
+			// either successfully or with an error.
+			ex.extraTxnState.storedProcTxnState.resumeProc = nil
+			ex.extraTxnState.storedProcTxnState.txnModes = nil
+		}
+
+		if err := ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo); err != nil {
 			return err
 		}
-		requireSyncFromClient := cmd.isExtendedProtocolCmd()
-		if err := ex.stmtBuf.seekToNextBatch(requireSyncFromClient); err != nil {
-			return err
+
+		if rewindCapability, canRewind := ex.getRewindTxnCapability(); !canRewind {
+			// Trim statements that cannot be retried to reclaim memory.
+			ex.stmtBuf.Ltrim(ctx, pos)
+		} else {
+			rewindCapability.close()
 		}
-	case rewind:
-		if err := ex.rewindPrepStmtNamespace(ctx); err != nil {
-			return err
-		}
-		ex.extraTxnState.savepoints = ex.extraTxnState.rewindPosSnapshot.savepoints
-		// Note we use the Replace function instead of reassigning, as there are
-		// copies of the ex.sessionDataStack in the iterators and extendedEvalContext.
-		ex.sessionDataStack.Replace(ex.extraTxnState.rewindPosSnapshot.sessionDataStack)
-		advInfo.rewCap.rewindAndUnlock(ctx)
-	case stayInPlace:
-		// Nothing to do. The same statement will be executed again.
-	default:
-		panic(errors.AssertionFailedf("unexpected advance code: %s", advInfo.code))
-	}
-
-	// Special handling for COMMIT/ROLLBACK in PL/pgSQL stored procedures. We
-	// unconditionally reset the StoredProcTxnOp because it has either
-	// successfully set in motion the commit/rollback of the current transaction,
-	// or execution failed and the PL/pgSQL command should be ignored.
-	ex.extraTxnState.storedProcTxnState.txnOp = tree.StoredProcTxnNoOp
-	switch advInfo.code {
-	case stayInPlace, rewind:
-		// Do not reset the "resume" plan. This will allow a sub-transaction
-		// within a stored procedure to be retried individually from any previous or
-		// following transactions within the stored procedure.
-		//
-		// NOTE: we will eventually reach the default case below when the retries
-		// terminate.
-	default:
-		// Finish cleaning up the stored proc state by resetting the "resume" plan
-		// and transaction modes. The stored procedure has finished execution,
-		// either successfully or with an error.
-		ex.extraTxnState.storedProcTxnState.resumeProc = nil
-		ex.extraTxnState.storedProcTxnState.txnModes = nil
-	}
-
-	if err := ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo); err != nil {
-		return err
-	}
-
-	if rewindCapability, canRewind := ex.getRewindTxnCapability(); !canRewind {
-		// Trim statements that cannot be retried to reclaim memory.
-		ex.stmtBuf.Ltrim(ctx, pos)
 	} else {
-		rewindCapability.close()
+		switch advInfo.code {
+		case advanceOne:
+			// Nothing to do.
+		case skipBatch:
+			// TODO: what do we need to do here? Does doing nothing work well enough
+			// for the prototype, where the skipBatch is only encountered during an
+			// Execute, which is directly followed by a Sync?
+			// log.Fatalf(ctx, "unexpected skipBatch in execCmdSync")
+		case rewind:
+			log.Fatalf(ctx, "unexpected rewind in execCmdSync")
+		case stayInPlace:
+			// Hack: recurse.
+			return ex.execCmdSync(ctx, cmd, pos)
+		default:
+			panic(errors.AssertionFailedf("unexpected advance code: %s", advInfo.code))
+		}
 	}
 
 	if ex.server.cfg.TestingKnobs.AfterExecCmd != nil {
@@ -3907,7 +3939,7 @@ func (ex *connExecutor) resetPlanner(
 // Any returned error indicates an unrecoverable error for the session;
 // execution on this connection should be interrupted.
 func (ex *connExecutor) txnStateTransitionsApplyWrapper(
-	ev fsm.Event, payload fsm.EventPayload, res ResultBase, pos CmdPos,
+	ev fsm.Event, payload fsm.EventPayload, res ResultBase,
 ) (advanceInfo, error) {
 
 	var implicitTxn bool

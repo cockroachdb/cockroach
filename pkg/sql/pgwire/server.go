@@ -1185,10 +1185,21 @@ func (s *Server) serveImpl(
 		atomic.StoreInt32(atomicUnqualifiedIntSize, newSize)
 	}
 
+	var exPtr atomic.Pointer[sql.ConnectionHandler]
+	sawBind := false
+	getExPtr := func() *sql.ConnectionHandler {
+		if !sawBind {
+			return nil
+		}
+		return exPtr.Load()
+	}
+
 	if !inTestWithoutSQL {
 		// Spawn the command processing goroutine, which also handles connection
 		// authentication). It will notify us when it's done through procWg, and
 		// we'll also interact with the authentication process through authPipe.
+		//
+		// TODO: prototype. Try to eliminate this goroutine.
 		procWg.Add(1)
 		go func() {
 			// Inform the connection goroutine.
@@ -1201,6 +1212,7 @@ func (s *Server) serveImpl(
 				reserved,
 				onDefaultIntSizeChange,
 				sessionID,
+				&exPtr,
 			)
 		}()
 	} else {
@@ -1347,7 +1359,7 @@ func (s *Server) serveImpl(
 					pgwirebase.ClientMessageType(nextMsgType[0]) == pgwirebase.ClientMsgSync {
 					followedBySync = true
 				}
-				return false, isSimpleQuery, c.handleExecute(ctx, timeReceived, followedBySync)
+				return false, isSimpleQuery, c.handleExecute(ctx, timeReceived, followedBySync, getExPtr())
 
 			case pgwirebase.ClientMsgParse:
 				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
@@ -1359,13 +1371,14 @@ func (s *Server) serveImpl(
 				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
 					return false, isSimpleQuery, err
 				}
-				return false, isSimpleQuery, c.handleDescribe(ctx)
+				return false, isSimpleQuery, c.handleDescribe(ctx, getExPtr())
 
 			case pgwirebase.ClientMsgBind:
 				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
 					return false, isSimpleQuery, err
 				}
-				return false, isSimpleQuery, c.handleBind(ctx)
+				sawBind = true
+				return false, isSimpleQuery, c.handleBind(ctx, getExPtr())
 
 			case pgwirebase.ClientMsgClose:
 				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
@@ -1382,11 +1395,16 @@ func (s *Server) serveImpl(
 				// protocol and encounters an error, everything until the next sync
 				// message has to be skipped. See:
 				// https://www.postgresql.org/docs/current/10/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY
-				return false, isSimpleQuery, c.stmtBuf.Push(ctx, sql.Sync{
+				cmd := sql.Sync{
 					// The client explicitly sent this Sync as part of the extended
 					// protocol.
 					ExplicitFromClient: true,
-				})
+				}
+				if ex := getExPtr(); ex != nil {
+					return false, isSimpleQuery, ex.ExecCmdSync(ctx, cmd, -1)
+				} else {
+					return false, isSimpleQuery, c.stmtBuf.Push(ctx, cmd)
+				}
 
 			case pgwirebase.ClientMsgFlush:
 				return false, isSimpleQuery, c.handleFlush(ctx)

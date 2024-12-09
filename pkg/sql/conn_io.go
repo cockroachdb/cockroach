@@ -553,6 +553,24 @@ func (buf *StmtBuf) CurCmd() (Command, CmdPos, error) {
 	}
 }
 
+// HACK: mostly avoids no concurrency in connExecutor.
+func (buf *StmtBuf) WaitNoCurCmd() {
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+	for {
+		curPos := buf.mu.curPos
+		cmdIdx, err := buf.translatePosLocked(curPos)
+		if err != nil {
+			return
+		}
+		len := buf.mu.data.Len()
+		if cmdIdx == len {
+			return
+		}
+		buf.mu.cond.Wait()
+	}
+}
+
 // translatePosLocked translates an absolute position of a command (counting
 // from the connection start) to the index of the respective command in the
 // buffer (so, it returns an index relative to the start of the buffer).
@@ -601,6 +619,7 @@ func (buf *StmtBuf) AdvanceOne() CmdPos {
 	defer buf.mu.Unlock()
 	prev := buf.mu.curPos
 	buf.mu.curPos++
+	buf.mu.cond.Signal()
 	if buf.PipelineCount != nil {
 		buf.PipelineCount.Dec(1)
 	}
