@@ -151,8 +151,9 @@ func makePostQueryBuilder(b *Builder, mutationWithID opt.WithID) (*postQueryBuil
 // setupCascade fills in an exec.PostQuery struct for the given cascade.
 func (cb *postQueryBuilder) setupCascade(cascade *memo.FKCascade) exec.PostQuery {
 	return exec.PostQuery{
-		FKConstraint: cascade.FKConstraint,
-		Buffer:       cb.mutationBuffer,
+		FKConstraint:             cascade.FKConstraint,
+		CascadeHasBeforeTriggers: cascade.HasBeforeTriggers,
+		Buffer:                   cb.mutationBuffer,
 		PlanFn: func(
 			ctx context.Context,
 			semaCtx *tree.SemaContext,
