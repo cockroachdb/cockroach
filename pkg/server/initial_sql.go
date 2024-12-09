@@ -25,6 +25,10 @@ import (
 func (s *topLevelServer) RunInitialSQL(
 	ctx context.Context, startSingleNode bool, adminUser, adminPassword string,
 ) error {
+	if startSingleNode {
+		s.sqlServer.disableLicenseEnforcement(ctx)
+	}
+
 	newCluster := s.InitialStart() && s.NodeID() == kvstorage.FirstNodeID
 	if !newCluster || s.cfg.DisableSQLServer {
 		// The initial SQL code only runs the first time the cluster is initialized.
@@ -41,9 +45,6 @@ func (s *topLevelServer) RunInitialSQL(
 		}
 		log.Ops.Infof(ctx, "Replication was disabled for this cluster.\n"+
 			"When/if adding nodes in the future, update zone configurations to increase the replication factor.")
-
-		// Disable license enforcement too
-		s.sqlServer.disableLicenseEnforcement(ctx)
 	}
 
 	if adminUser != "" && !s.Insecure() {
