@@ -1191,6 +1191,18 @@ var zipSystemTables = DebugZipTableRegistry{
 			'redacted' AS value
 			FROM system.job_info`,
 	},
+	"system.job_progress": {
+		nonSensitiveCols: NonSensitiveColumns{"job_id", "written", "fraction", "resolved"},
+	},
+	"system.job_progress_history": {
+		nonSensitiveCols: NonSensitiveColumns{"job_id", "written", "fraction", "resolved"},
+	},
+	"system.job_status": {
+		nonSensitiveCols: NonSensitiveColumns{"job_id", "written", "status"},
+	},
+	"system.job_message": {
+		nonSensitiveCols: NonSensitiveColumns{"job_id", "written", "kind", "message"},
+	},
 	"system.lease": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"desc_id",
