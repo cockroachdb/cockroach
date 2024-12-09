@@ -349,16 +349,23 @@ type BatchStreamPoolClient struct {
 	pool *rpc.BatchStreamPool
 }
 
-func maybeWrapInBatchStreamPoolClient(
-	ctx context.Context, st *cluster.Settings, client kvpb.InternalClient, pool *rpc.BatchStreamPool,
-) kvpb.InternalClient {
+func canUseBatchStreamPool(st *cluster.Settings) bool {
 	// NOTE: we use ActiveVersionOrEmpty(ctx).IsActive(...) instead of the more
 	// common IsActive(ctx, ...) to avoid a fatal error if an RPC is made before
 	// the cluster version is initialized.
-	if !st.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.V25_1_BatchStreamRPC) {
-		return client
+	if !st.Version.ActiveVersionOrEmpty(context.Background()).IsActive(clusterversion.V25_1_BatchStreamRPC) {
+		return false
 	}
 	if !batchStreamPoolingEnabled.Get(&st.SV) {
+		return false
+	}
+	return true
+}
+
+func maybeWrapInBatchStreamPoolClient(
+	ctx context.Context, st *cluster.Settings, client kvpb.InternalClient, pool *rpc.BatchStreamPool,
+) kvpb.InternalClient {
+	if !canUseBatchStreamPool(st) {
 		return client
 	}
 	return &BatchStreamPoolClient{InternalClient: client, pool: pool}
