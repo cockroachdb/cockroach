@@ -26,7 +26,7 @@ func migrateDeprecatedFields(
 ) (migrated bool, newTargets []Target) {
 	newTargets = make([]Target, 0)
 	if columnType := target.GetColumnType(); columnType != nil {
-		if columnType.ComputeExpr != nil && version.IsActive(clusterversion.V24_3) {
+		if columnType.ComputeExpr != nil {
 			newTarget := MakeTarget(
 				AsTargetStatus(target.TargetStatus),
 				&ColumnComputeExpression{
