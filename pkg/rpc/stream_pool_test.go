@@ -29,7 +29,7 @@ type mockBatchStreamConstructor struct {
 }
 
 func (m *mockBatchStreamConstructor) newStream(
-	ctx context.Context, conn *grpc.ClientConn, option ...grpc.CallOption,
+	ctx context.Context, conn *grpc.ClientConn,
 ) (BatchStreamClient, error) {
 	m.streamCount++
 	if m.lastStreamCtx != nil {
@@ -153,7 +153,7 @@ func TestStreamPool_SendBeforeBind(t *testing.T) {
 	resp, err := p.Send(ctx, &kvpb.BatchRequest{})
 	require.Nil(t, resp)
 	require.Error(t, err)
-	require.Regexp(t, err, "streamPool not bound to a grpc.ClientConn")
+	require.Regexp(t, err, "streamPool not bound to a client conn")
 	require.Equal(t, 0, conn.streamCount)
 	require.Len(t, p.streams.s, 0)
 }
