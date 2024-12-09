@@ -274,23 +274,7 @@ func countLeasesByRegion(
 		} else {
 			err = queryRegionRows(ctx)
 		}
-		if err != nil {
-			if regionliveness.IsQueryTimeoutErr(err) {
-				// Probe and mark the region potentially.
-				probeErr := prober.ProbeLiveness(ctx, region)
-				if probeErr != nil {
-					err = errors.WithSecondaryError(err, probeErr)
-					return err
-				}
-				return errors.Wrapf(err, "count-lease timed out reading from a region")
-			} else if regionliveness.IsMissingRegionEnumErr(err) {
-				// Skip this region because we were unable to find region in
-				// type descriptor. Since the database regions are cached, they
-				// may be stale and have dropped regions.
-				log.Infof(ctx, "count-lease is skipping region %s because of the "+
-					"following error %v", region, err)
-				return nil
-			}
+		if err := handleRegionLivenessErrors(ctx, prober, region, err); err != nil {
 			return err
 		}
 		if values == nil {
@@ -324,4 +308,31 @@ func getCountLeaseColumns(usesOldSchema bool) string {
 	}
 	sb.WriteString(`, count(distinct sql_instance_id), ifnull(min(sql_instance_id),0)`)
 	return sb.String()
+}
+
+// handleRegionLivenessErrors handles errors that are linked to region liveness
+// timeouts.
+func handleRegionLivenessErrors(
+	ctx context.Context, prober regionliveness.Prober, region string, err error,
+) error {
+	if err != nil {
+		if regionliveness.IsQueryTimeoutErr(err) {
+			// Probe and mark the region potentially.
+			probeErr := prober.ProbeLiveness(ctx, region)
+			if probeErr != nil {
+				err = errors.WithSecondaryError(err, probeErr)
+				return err
+			}
+			return errors.Wrapf(err, "count-lease timed out reading from a region")
+		} else if regionliveness.IsMissingRegionEnumErr(err) {
+			// Skip this region because we were unable to find region in
+			// type descriptor. Since the database regions are cached, they
+			// may be stale and have dropped regions.
+			log.Infof(ctx, "count-lease is skipping region %s because of the "+
+				"following error %v", region, err)
+			return nil
+		}
+		return err
+	}
+	return err
 }
