@@ -383,6 +383,13 @@ var (
 		Usage: "Execute operations indefinitely until the command is terminated, (default false).",
 	})
 
+	WorkloadCluster string = ""
+	_                      = registerRunOpsFlag(&WorkloadCluster, FlagInfo{
+		Name: "workload-cluster",
+		Usage: "Specify the name of the workload cluster. The workload cluster is the one running operations and " +
+			"workloads, such as TPC-C, on the cluster",
+	})
+
 	SideEyeApiToken string = ""
 	_                      = registerRunFlag(&SideEyeApiToken, FlagInfo{
 		Name: "side-eye-token",
