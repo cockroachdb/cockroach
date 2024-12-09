@@ -210,6 +210,13 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.skipValidationOnWrite = false
 }
 
+// GetLeaseGeneration provides an integer which will change whenever new
+// descriptor versions are available. This can be used for fast comparisons
+// to make sure previously looked up information is still valid.
+func (tc *Collection) GetLeaseGeneration() int64 {
+	return tc.leased.lm.GetLeaseGeneration()
+}
+
 // HasUncommittedTables returns true if the Collection contains uncommitted
 // tables.
 func (tc *Collection) HasUncommittedTables() (has bool) {
