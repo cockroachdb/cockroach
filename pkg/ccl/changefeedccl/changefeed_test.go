@@ -1158,7 +1158,6 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 				}
 				continue
 			}
-			numNonTrivialTestRuns++
 			assertedPayloads := make([]string, len(expectedRowIDs))
 			for i, id := range expectedRowIDs {
 				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
@@ -1166,12 +1165,26 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
 			closeFeedIgnoreError(t, seedFeed)
 			if err != nil {
+				code := pgerror.GetPGCode(err)
+				// Skip errors that may come up during SQL execution. If the SQL query
+				// didn't fail with these errors, it's likely because the query was built in
+				// a way that did not have to execute on the row that caused the error, but
+				// the CDC query did.
+				switch code {
+				case pgcode.ConfigFile,
+					pgcode.DatetimeFieldOverflow,
+					pgcode.InvalidEscapeCharacter,
+					pgcode.InvalidEscapeSequence,
+					pgcode.InvalidParameterValue,
+					pgcode.InvalidRegularExpression:
+					t.Logf("Skipping statement %s because it encountered pgerror %s: %s", createStmt, code, err)
+					continue
+				}
 				t.Fatal(err)
 			}
+			numNonTrivialTestRuns++
 		}
-		if n > 100 {
-			require.Greater(t, numNonTrivialTestRuns, 1)
-		}
+		require.Greater(t, numNonTrivialTestRuns, 1)
 		t.Logf("%d predicates checked: all had the same result in SELECT and CHANGEFEED", numNonTrivialTestRuns)
 
 	}
