@@ -457,7 +457,6 @@ func (m *Memo) IsStale(
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
-
 	// Memo is stale if the fingerprint of any object in the memo's metadata has
 	// changed, or if the current user no longer has sufficient privilege to
 	// access the object.
