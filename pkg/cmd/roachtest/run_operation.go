@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -26,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
+	"gopkg.in/yaml.v2"
 )
 
 const baseSleepTime = 15
@@ -35,6 +38,9 @@ type opsRunner struct {
 	clusterName string
 	nodeCount   int
 	opsToRun    []registry.OperationSpec
+
+	workloadClusterName string
+	workloadNodes       int
 
 	seed   int64
 	logger *logger.Logger
@@ -97,6 +103,15 @@ func runOperations(register func(registry.Registry), filter, clusterName string)
 	or.status.running = make(map[string]struct{})
 	or.status.lastRun = make(map[string]time.Time)
 	or.status.operationRunCompleted.L = &or.status
+
+	if roachtestflags.WorkloadCluster != "" {
+		workloadCluster, err := getCachedCluster(roachtestflags.WorkloadCluster)
+		if err != nil {
+			return err
+		}
+		or.workloadClusterName = workloadCluster.Name
+		or.workloadNodes = workloadCluster.VMs.Len()
+	}
 
 	var wg errgroup.Group
 	runForever := roachtestflags.RunForever
@@ -216,9 +231,30 @@ func (r *opsRunner) runOperation(
 		}
 	}()
 
+	config := struct {
+		ClusterSettings install.ClusterSettings
+		StartOpts       option.StartOpts
+		ClusterSpec     spec.ClusterSpec
+	}{
+		ClusterSettings: install.MakeClusterSettings(),
+		StartOpts:       option.NewStartOpts(option.NoBackupSchedule),
+		ClusterSpec:     spec.ClusterSpec{NodeCount: r.nodeCount},
+	}
+
+	if roachtestflags.ConfigPath != "" {
+		r.logger.Printf("Loading operation configuration from: %s", roachtestflags.ConfigPath)
+		configFileData, err := os.ReadFile(roachtestflags.ConfigPath)
+		if err != nil {
+			return errors.Wrap(err, "failed to read config")
+		}
+		if err = yaml.UnmarshalStrict(configFileData, &config); err != nil {
+			return errors.Wrapf(err, "failed to unmarshal config: %s", roachtestflags.ConfigPath)
+		}
+	}
+
 	op := &operationImpl{
-		clusterSettings: install.MakeClusterSettings(),
-		startOpts:       option.NewStartOpts(option.NoBackupSchedule),
+		clusterSettings: config.ClusterSettings,
+		startOpts:       config.StartOpts,
 		l:               r.logger,
 		spec:            opSpec,
 		workerId:        workerIdx,
@@ -238,6 +274,15 @@ func (r *opsRunner) runOperation(
 			},
 			localCertsDir: roachtestflags.CertsDir,
 		},
+	}
+
+	if r.workloadClusterName != "" {
+		op.workLoadCluster = &clusterImpl{
+			name: r.workloadClusterName,
+			spec: spec.ClusterSpec{NodeCount: r.workloadNodes},
+			l:    r.logger,
+			f:    op,
+		}
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
