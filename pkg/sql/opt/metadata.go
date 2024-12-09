@@ -38,7 +38,7 @@ type SchemaID int32
 // 1 << privilege.Kind, so that multiple privileges can be stored.
 type privilegeBitmap uint64
 
-type udfDep struct {
+type routineDep struct {
 	overload        *tree.Overload
 	invocationTypes []*types.T
 }
@@ -122,9 +122,9 @@ type Metadata struct {
 	// dataSourceDeps stores each data source object that the query depends on.
 	dataSourceDeps map[cat.StableID]cat.DataSource
 
-	// udfDeps stores each user-defined function overload (as well as the
-	// invocation signature) that the query depends on.
-	udfDeps map[cat.StableID]udfDep
+	// routineDeps stores each user-defined function and stored procedure overload
+	// (as well as the invocation signature) that the query depends on.
+	routineDeps map[cat.StableID]routineDep
 
 	// objectRefsByName stores each unique name that the query uses to reference
 	// each object. It is needed because changes to the search path may change
@@ -182,12 +182,12 @@ func (md *Metadata) Init() {
 		delete(md.dataSourceDeps, id)
 	}
 
-	udfDeps := md.udfDeps
-	if udfDeps == nil {
-		udfDeps = make(map[cat.StableID]udfDep)
+	routineDeps := md.routineDeps
+	if routineDeps == nil {
+		routineDeps = make(map[cat.StableID]routineDep)
 	}
-	for id := range md.udfDeps {
-		delete(md.udfDeps, id)
+	for id := range md.routineDeps {
+		delete(md.routineDeps, id)
 	}
 
 	objectRefsByName := md.objectRefsByName
@@ -223,7 +223,7 @@ func (md *Metadata) Init() {
 	md.sequences = sequences[:0]
 	md.views = views[:0]
 	md.dataSourceDeps = dataSourceDeps
-	md.udfDeps = udfDeps
+	md.routineDeps = routineDeps
 	md.objectRefsByName = objectRefsByName
 	md.privileges = privileges
 	md.builtinRefsByName = builtinRefsByName
@@ -241,7 +241,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	if len(md.schemas) != 0 || len(md.cols) != 0 || len(md.tables) != 0 ||
 		len(md.sequences) != 0 || len(md.views) != 0 || len(md.userDefinedTypes) != 0 ||
 		len(md.userDefinedTypesSlice) != 0 || len(md.dataSourceDeps) != 0 ||
-		len(md.udfDeps) != 0 || len(md.objectRefsByName) != 0 || len(md.privileges) != 0 ||
+		len(md.routineDeps) != 0 || len(md.objectRefsByName) != 0 || len(md.privileges) != 0 ||
 		len(md.builtinRefsByName) != 0 {
 		panic(errors.AssertionFailedf("CopyFrom requires empty destination"))
 	}
@@ -285,11 +285,11 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 		md.dataSourceDeps[id] = dataSource
 	}
 
-	for id, overload := range from.udfDeps {
-		if md.udfDeps == nil {
-			md.udfDeps = make(map[cat.StableID]udfDep)
+	for id, overload := range from.routineDeps {
+		if md.routineDeps == nil {
+			md.routineDeps = make(map[cat.StableID]routineDep)
 		}
-		md.udfDeps[id] = overload
+		md.routineDeps[id] = overload
 	}
 
 	for id, names := range from.objectRefsByName {
@@ -418,8 +418,9 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
-	// Check that no referenced user defined functions have changed.
-	for id, dep := range md.udfDeps {
+	// Check that no referenced user defined functions or stored procedures have
+	// changed.
+	for id, dep := range md.routineDeps {
 		overload := dep.overload
 		if names, ok := md.objectRefsByName[id]; ok {
 			for _, name := range names {
@@ -503,7 +504,7 @@ func (md *Metadata) CheckDependencies(
 	if err := md.checkDataSourcePrivileges(ctx, optCatalog); err != nil {
 		return false, err
 	}
-	for _, dep := range md.udfDeps {
+	for _, dep := range md.routineDeps {
 		if err := optCatalog.CheckExecutionPrivilege(ctx, dep.overload.Oid, optCatalog.GetCurrentUser()); err != nil {
 			return false, err
 		}
@@ -591,26 +592,37 @@ func (md *Metadata) AllUserDefinedTypes() []*types.T {
 	return md.userDefinedTypesSlice
 }
 
-// HasUserDefinedFunctions returns true if the query references a UDF.
-func (md *Metadata) HasUserDefinedFunctions() bool {
-	return len(md.udfDeps) > 0
+// HasUserDefinedRoutines returns true if the query references a UDF or stored
+// procedure.
+func (md *Metadata) HasUserDefinedRoutines() bool {
+	return len(md.routineDeps) > 0
 }
 
-// AddUserDefinedFunction adds a user-defined function to the metadata for this
-// query. If the function was resolved by name, the name will also be tracked.
-func (md *Metadata) AddUserDefinedFunction(
+// AddUserDefinedRoutine adds a user-defined function or stored procedure to the
+// metadata for this query. If the routine was resolved by name, the name will
+// also be tracked.
+func (md *Metadata) AddUserDefinedRoutine(
 	overload *tree.Overload, invocationTypes []*types.T, name *tree.UnresolvedObjectName,
 ) {
-	if overload.Type != tree.UDFRoutine {
+	if overload.Type == tree.BuiltinRoutine {
 		return
 	}
 	id := cat.StableID(catid.UserDefinedOIDToID(overload.Oid))
-	md.udfDeps[id] = udfDep{
+	md.routineDeps[id] = routineDep{
 		overload:        overload,
 		invocationTypes: invocationTypes,
 	}
 	if name != nil {
 		md.objectRefsByName[id] = append(md.objectRefsByName[id], name)
+	}
+}
+
+// ForEachUserDefinedRoutine executes the given function for each user-defined
+// routine (UDF or stored procedure) overload. The order of iteration is
+// non-deterministic.
+func (md *Metadata) ForEachUserDefinedRoutine(fn func(overload *tree.Overload)) {
+	for _, dep := range md.routineDeps {
+		fn(dep.overload)
 	}
 }
 
@@ -1174,14 +1186,14 @@ func (md *Metadata) TestingDataSourceDeps() map[cat.StableID]cat.DataSource {
 	return md.dataSourceDeps
 }
 
-// TestingUDFDepsEqual returns whether the UDF deps of the other Metadata are
-// equal to the UDF deps of this Metadata.
-func (md *Metadata) TestingUDFDepsEqual(other *Metadata) bool {
-	if len(md.udfDeps) != len(other.udfDeps) {
+// TestingRoutineDepsEqual returns whether the routine deps of the other
+// Metadata are equal to the routine deps of this Metadata.
+func (md *Metadata) TestingRoutineDepsEqual(other *Metadata) bool {
+	if len(md.routineDeps) != len(other.routineDeps) {
 		return false
 	}
-	for id, otherDep := range other.udfDeps {
-		dep, ok := md.udfDeps[id]
+	for id, otherDep := range other.routineDeps {
+		dep, ok := md.routineDeps[id]
 		if !ok {
 			return false
 		}
