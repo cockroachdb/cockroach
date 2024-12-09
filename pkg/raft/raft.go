@@ -19,7 +19,6 @@ package raft
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"fmt"
 	"math"
@@ -705,7 +704,7 @@ func (r *raft) maybeSendAppend(to pb.PeerID) bool {
 
 	last, commit := r.raftLog.lastIndex(), r.raftLog.committed
 	sendEntries := pr.ShouldSendEntries(last, r.lazyReplication)
-	sendProbe := !sendEntries && pr.ShouldSendProbe(last, commit, r.advanceCommitViaMsgAppOnly())
+	sendProbe := !sendEntries && pr.ShouldSendProbe(last, commit, true /* advanceCommit */)
 	if !sendEntries && !sendProbe {
 		return false
 	}
@@ -784,27 +783,16 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 // sendHeartbeat sends a heartbeat RPC to the given peer.
 func (r *raft) sendHeartbeat(to pb.PeerID) {
 	pr := r.trk.Progress(to)
-	// Attach the commit as min(to.matched, r.committed).
-	// When the leader sends out heartbeat message,
-	// the receiver(follower) might not be matched with the leader
-	// or it might not have all the committed entries.
-	// The leader MUST NOT forward the follower's commit to
-	// an unmatched index.
-	// NOTE: Starting from V24_3_AdvanceCommitIndexViaMsgApps, heartbeats do not
-	// advance the commit index. Instead, MsgApp are used for that purpose.
-	// TODO(iskettaneh): Remove the commit from the heartbeat message in versions
-	// >= 25.1.
-	var commit uint64
-	if !r.advanceCommitViaMsgAppOnly() {
-		commit = min(pr.Match, r.raftLog.committed)
-	}
 	r.send(pb.Message{
-		To:     to,
-		Type:   pb.MsgHeartbeat,
-		Commit: commit,
+		To:   to,
+		Type: pb.MsgHeartbeat,
+		// NOTE: Starting from V24_3_AdvanceCommitIndexViaMsgApps, heartbeats do not
+		// advance the commit index. Instead, MsgApp are used for that purpose.
+		// TODO(iskettaneh): Remove the commit from the heartbeat message in versions
+		// >= 25.1.
+		Commit: 0,
 		Match:  pr.Match,
 	})
-	pr.MaybeUpdateSentCommit(commit)
 }
 
 // maybeSendFortify sends a fortification RPC to the given peer if it isn't
@@ -2906,15 +2894,6 @@ func (r *raft) markFortifyingFollowersAsRecentlyActive() {
 			pr.RecentActive = true
 		}
 	})
-}
-
-// advanceCommitViaMsgAppOnly returns true if the commit index is advanced on
-// the followers using MsgApp only. This means that heartbeats are not used to
-// advance the commit index. This function returns true only if all followers
-// communicate their durable commit index back to the leader via MsgAppResp.
-func (r *raft) advanceCommitViaMsgAppOnly() bool {
-	return r.crdbVersion.IsActive(context.Background(),
-		clusterversion.V24_3_AdvanceCommitIndexViaMsgApps)
 }
 
 func (r *raft) testingStepDown() error {

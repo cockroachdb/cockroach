@@ -8,7 +8,6 @@ package scbuildstmt
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
@@ -243,10 +242,6 @@ func validateFunctionToFunctionReferences(
 	b BuildCtx, refProvider ReferenceProvider, parentDBID descpb.ID,
 ) {
 	err := refProvider.ForEachFunctionReference(func(id descpb.ID) error {
-		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V24_1) {
-			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"user defined functions cannot reference other user defined functions")
-		}
 		funcElts := b.QueryByID(id)
 		funcName := funcElts.FilterFunctionName().MustGetOneElement()
 		schemaParent := funcElts.FilterSchemaChild().MustGetOneElement()

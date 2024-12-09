@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -3283,7 +3282,6 @@ func (r *Replica) followerSendSnapshot(
 	// replication, are dealing with a non-system range, are on at
 	// least 24.1, and our store has external files.
 	externalReplicate := !sharedReplicate && nonSystemRange &&
-		r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1) &&
 		externalFileSnapshotting.Get(&r.store.ClusterSettings().SV)
 	if externalReplicate {
 		start := snap.State.Desc.StartKey.AsRawKey()
