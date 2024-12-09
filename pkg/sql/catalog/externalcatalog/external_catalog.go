@@ -102,10 +102,12 @@ func IngestExternalCatalog(
 	databaseID descpb.ID,
 	schemaID descpb.ID,
 	setOffline bool,
-) error {
+) ([]catalog.Descriptor, error) {
+
+	written := make([]catalog.Descriptor, 0, len(externalCatalog.Tables))
 	dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, databaseID)
 	if err != nil {
-		return err
+		return written, err
 	}
 	tablesToWrite := make([]catalog.TableDescriptor, 0, len(externalCatalog.Tables))
 	var originalParentID descpb.ID
@@ -113,11 +115,11 @@ func IngestExternalCatalog(
 		if originalParentID == 0 {
 			originalParentID = table.ParentID
 		} else if originalParentID != table.ParentID {
-			return errors.New("all tables must belong to the same parent")
+			return written, errors.New("all tables must belong to the same parent")
 		}
 		newID, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
-			return err
+			return written, err
 		}
 		// TODO: rewrite the tables to fresh ids.
 		mutTable := tabledesc.NewBuilder(&table).BuildCreatedMutableTable()
@@ -131,8 +133,9 @@ func IngestExternalCatalog(
 		mutTable.Version = 1
 		mutTable.ID = newID
 		tablesToWrite = append(tablesToWrite, mutTable)
+		written = append(written, mutTable)
 	}
-	return ingesting.WriteDescriptors(
+	return written, ingesting.WriteDescriptors(
 		ctx, txn.KV(), user, descsCol, nil, nil, tablesToWrite, nil, nil,
 		tree.RequestedDescriptors, nil /* extra */, "", true,
 	)
