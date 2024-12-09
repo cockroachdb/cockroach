@@ -273,6 +273,8 @@ message LogicalReplicationDetails {
 
   Discard discard = 11;
 
+  bool create_table = 12;
+
   // Next ID: 12.
 }
 
