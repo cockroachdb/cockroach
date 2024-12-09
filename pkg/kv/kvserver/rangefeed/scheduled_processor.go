@@ -335,10 +335,13 @@ func (p *ScheduledProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
+
 	var r registration
-	if _, ok := stream.(BufferedStream); ok {
-		log.Fatalf(context.Background(),
-			"unimplemented: unbuffered registrations for rangefeed, see #126560")
+	bufferedStream, isBufferedStream := stream.(BufferedStream)
+	if isBufferedStream {
+		r = newUnbufferedRegistration(
+			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+			p.Config.EventChanCap, p.Metrics, bufferedStream, p.unregisterClientAsync)
 	} else {
 		r = newBufferedRegistration(
 			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
@@ -374,6 +377,8 @@ func (p *ScheduledProcessor) Register(
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
 			r.Disconnect(kvpb.NewError(err))
+			// Normally, ubr.runOutputLoop is responsible for draining catch up
+			// buffer. If it fails to start, we should drain it here.
 			r.drainAllocations(ctx)
 		}
 		return f

@@ -14,6 +14,12 @@ import (
 )
 
 var (
+	metaRangeFeedOutputLoopNanos = metric.Metadata{
+		Name:        "kv.rangefeed.output_loop_nanos",
+		Help:        "Duration of the Rangefeed O(range) output loop goroutine",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRangeFeedCatchUpScanNanos = metric.Metadata{
 		Name:        "kv.rangefeed.catchup_scan_nanos",
 		Help:        "Time spent in RangeFeed catchup scan",
@@ -35,6 +41,18 @@ var (
 	metaRangeFeedRegistrations = metric.Metadata{
 		Name:        "kv.rangefeed.registrations",
 		Help:        "Number of active RangeFeed registrations",
+		Measurement: "Registrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedBufferedRegistrations = metric.Metadata{
+		Name:        "kv.rangefeed.buffered_registrations",
+		Help:        "Number of active RangeFeed buffered registrations",
+		Measurement: "Registrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedUnbufferedRegistrations = metric.Metadata{
+		Name:        "kv.rangefeed.unbuffered_registrations",
+		Help:        "Number of active RangeFeed unbuffered registrations",
 		Measurement: "Registrations",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -86,11 +104,14 @@ var (
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
+	RangefeedOutputLoopNanos               *metric.Counter
 	RangeFeedCatchUpScanNanos              *metric.Counter
 	RangeFeedBudgetExhausted               *metric.Counter
 	RangefeedProcessorQueueTimeout         *metric.Counter
 	RangeFeedBudgetBlocked                 *metric.Counter
 	RangeFeedRegistrations                 *metric.Gauge
+	RangeFeedBufferedRegistrations         *metric.Gauge
+	RangeFeedUnbufferedRegistrations       *metric.Gauge
 	RangeFeedClosedTimestampMaxBehindNanos *metric.Gauge
 	RangeFeedSlowClosedTimestampRanges     *metric.Gauge
 	RangeFeedSlowClosedTimestampLogN       log.EveryN
@@ -112,11 +133,14 @@ func (*Metrics) MetricStruct() {}
 // NewMetrics makes the metrics for RangeFeeds monitoring.
 func NewMetrics() *Metrics {
 	return &Metrics{
+		RangefeedOutputLoopNanos:               metric.NewCounter(metaRangeFeedOutputLoopNanos),
 		RangeFeedCatchUpScanNanos:              metric.NewCounter(metaRangeFeedCatchUpScanNanos),
 		RangefeedProcessorQueueTimeout:         metric.NewCounter(metaQueueTimeout),
 		RangeFeedBudgetExhausted:               metric.NewCounter(metaRangeFeedExhausted),
 		RangeFeedBudgetBlocked:                 metric.NewCounter(metaRangeFeedBudgetBlocked),
 		RangeFeedRegistrations:                 metric.NewGauge(metaRangeFeedRegistrations),
+		RangeFeedBufferedRegistrations:         metric.NewGauge(metaRangeFeedBufferedRegistrations),
+		RangeFeedUnbufferedRegistrations:       metric.NewGauge(metaRangeFeedUnbufferedRegistrations),
 		RangeFeedClosedTimestampMaxBehindNanos: metric.NewGauge(metaRangeFeedClosedTimestampMaxBehindNanos),
 		RangeFeedSlowClosedTimestampRanges:     metric.NewGauge(metaRangefeedSlowClosedTimestampRanges),
 		RangeFeedSlowClosedTimestampLogN:       log.Every(5 * time.Second),
