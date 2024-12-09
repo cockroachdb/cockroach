@@ -113,6 +113,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 
 func TestAllRegisteredSetup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
 
 	for _, meta := range workload.Registered() {
 		if bigInitialData(meta) {
