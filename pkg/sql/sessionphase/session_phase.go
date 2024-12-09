@@ -5,7 +5,12 @@
 
 package sessionphase
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
+)
 
 // SQL execution is separated in 3+ phases:
 // - parse/prepare
@@ -22,14 +27,10 @@ import "time"
 type SessionPhase int
 
 const (
-	// SessionInit is the SessionPhase the session is created (pgwire). It is used
-	// to compute the session age.
-	SessionInit SessionPhase = iota
-
 	// Executor phases.
 
 	// SessionQueryReceived is the SessionPhase when a query is received.
-	SessionQueryReceived
+	SessionQueryReceived = iota
 
 	// SessionStartParse is the SessionPhase when parsing starts.
 	SessionStartParse
@@ -94,22 +95,29 @@ const (
 // Times is the data structure that keep tracks of the time for each
 // SessionPhase.
 type Times struct {
-	times [SessionNumPhases]time.Time
+	initTime time.Time
+	times    [SessionNumPhases]crtime.Mono
 }
 
 // NewTimes create a new instance of the Times.
 func NewTimes() *Times {
-	return &Times{}
+	return &Times{initTime: timeutil.Now()}
 }
 
 // SetSessionPhaseTime sets the time for a given SessionPhase.
-func (t *Times) SetSessionPhaseTime(sp SessionPhase, time time.Time) {
+func (t *Times) SetSessionPhaseTime(sp SessionPhase, time crtime.Mono) {
 	t.times[sp] = time
 }
 
 // GetSessionPhaseTime retrieves the time for a given SessionPhase.
-func (t *Times) GetSessionPhaseTime(sp SessionPhase) time.Time {
+func (t *Times) GetSessionPhaseTime(sp SessionPhase) crtime.Mono {
 	return t.times[sp]
+}
+
+// InitTime is the time when this Times instance was created (which should
+// coincide with the time the session was initialized).
+func (t *Times) InitTime() time.Time {
+	return t.initTime
 }
 
 // Clone returns a copy of the current PhaseTimes.
@@ -134,8 +142,8 @@ func (t *Times) GetServiceLatencyNoOverhead() time.Duration {
 	// zero, so subtracting the actual time at which the query was received will
 	// produce a negative value which doesn't make sense. Therefore, we "fake"
 	// the received time to be the parsing start time.
-	var queryReceivedTime time.Time
-	if t.times[SessionEndParse].IsZero() {
+	var queryReceivedTime crtime.Mono
+	if t.times[SessionEndParse] == 0 {
 		queryReceivedTime = t.times[SessionStartParse]
 	} else {
 		queryReceivedTime = t.times[SessionQueryReceived]
@@ -144,8 +152,8 @@ func (t *Times) GetServiceLatencyNoOverhead() time.Duration {
 	// If we encounter an error during the logical planning, the
 	// PlannerEndExecStmt phase will not be set, so we need to use the end of
 	// planning phase in the computation of planAndExecuteLatency.
-	var queryEndExecTime time.Time
-	if t.times[PlannerEndExecStmt].IsZero() {
+	var queryEndExecTime crtime.Mono
+	if t.times[PlannerEndExecStmt] == 0 {
 		queryEndExecTime = t.times[PlannerEndLogicalPlan]
 	} else {
 		queryEndExecTime = t.times[PlannerEndExecStmt]
@@ -203,7 +211,7 @@ func (t *Times) GetCommitLatency() time.Duration {
 
 // GetSessionAge returns the age of the current session since initialization.
 func (t *Times) GetSessionAge() time.Duration {
-	return t.times[PlannerEndExecStmt].Sub(t.times[SessionInit])
+	return t.times[PlannerEndExecStmt].Sub(crtime.MonoFromTime(t.InitTime()))
 }
 
 // GetIdleLatency deduces the rough amount of time spent waiting for the client
@@ -211,8 +219,8 @@ func (t *Times) GetSessionAge() time.Duration {
 func (t *Times) GetIdleLatency(previous *Times) time.Duration {
 	queryReceived := t.times[SessionQueryReceived]
 
-	previousQueryReceived := time.Time{}
-	previousQueryServiced := time.Time{}
+	var previousQueryReceived crtime.Mono
+	var previousQueryServiced crtime.Mono
 	if previous != nil {
 		previousQueryReceived = previous.times[SessionQueryReceived]
 		previousQueryServiced = previous.times[SessionQueryServiced]
@@ -232,20 +240,20 @@ func (t *Times) GetIdleLatency(previous *Times) time.Duration {
 	transactionStarted := t.times[SessionTransactionStarted]
 	// Transaction started is not set. Assume it's an implicit
 	// transaction so there is no idle time.
-	if transactionStarted.IsZero() {
+	if transactionStarted == 0 {
 		return 0
 	}
 
 	// Although we really only want to measure idle latency *within*
 	// an open transaction. So if we're in a new transaction, measure
 	// from its start time instead.
-	if transactionStarted.After(waitingSince) {
+	if transactionStarted > waitingSince {
 		waitingSince = transactionStarted
 	}
 
 	// And if we were received before we started waiting for the client,
 	// then there is no idle latency at all.
-	if waitingSince.After(queryReceived) {
+	if waitingSince > queryReceived {
 		return 0
 	}
 

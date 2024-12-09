@@ -785,7 +785,7 @@ func TestTransactionServiceLatencyOnExtendedProtocol(t *testing.T) {
 		// Ensure test case phase times are populated by query txn.
 		require.NotNil(t, tc.phaseTimes)
 		// Ensure SessionTransactionStarted variable is populated.
-		require.False(t, tc.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted).IsZero())
+		require.NotZero(t, tc.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
 		// Ensure compute transaction service latency is within a reasonable threshold.
 		require.Less(t, tc.phaseTimes.GetTransactionServiceLatency(), latencyThreshold)
 	}()
