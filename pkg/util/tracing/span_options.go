@@ -102,6 +102,12 @@ func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
 	return 0
 }
 
+// recordingType computes the resulting recording type of the span
+// based on various settings. Please note that some of this logic is
+// partially duplicates in `Tracer.startSpanFast` which is used for
+// spans without a parent and avoids calling this method for
+// performance reasons. If you modify this method, make sure to modify
+// `startSpanFast` as well.
 func (opts *spanOptions) recordingType() tracingpb.RecordingType {
 	if opts.recordingTypeExplicit {
 		return opts.recordingTypeOpt
