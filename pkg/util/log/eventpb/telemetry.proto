@@ -736,15 +736,6 @@ message HotRangesStats {
 
   double qps = 3 [(gogoproto.jsontag) = ",includeempty"];
 
-  // DatabaseName is the name of the database in which the index was created.
-  string database_name = 4 [(gogoproto.jsontag) = ",omitempty"];
-
-  // TableName is the name of the table on which the index was created.
-  string table_name = 5 [(gogoproto.jsontag) = ",omitempty"];
-
-  // IndexName is the name of the index within the scope of the given table.
-  string index_name = 6 [(gogoproto.jsontag) = ",omitempty"];
-
   // SchemaName is the name of the schema in which the index was created.
   string schema_name = 7 [(gogoproto.jsontag) = ",omitempty"];
 
@@ -769,4 +760,17 @@ message HotRangesStats {
 
   // CPU time per second is the recent cpu usage in nanoseconds of this range.
   double cpu_time_per_second = 13 [(gogoproto.customname) = "CPUTimePerSecond", (gogoproto.jsontag) = ",omitempty"];
+
+  // Databases for the range.
+  repeated string databases = 16;
+  // Tables for the range
+  repeated string tables = 17;
+  // Indexes for the range
+  repeated string indexes = 18;
+
+  // previously used for database, table, and index name
+  // syntax reserved 4 to 6 breaks json encoding checks
+  reserved 4;
+  reserved 5;
+  reserved 6;
 }
