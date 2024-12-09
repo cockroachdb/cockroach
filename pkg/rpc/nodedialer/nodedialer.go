@@ -151,8 +151,10 @@ func (n *Dialer) DialInternalClient(
 	if err != nil {
 		return nil, err
 	}
-	client := kvpb.NewInternalClient(conn)
-	client = maybeWrapInBatchStreamPoolClient(ctx, n.rpcContext.Settings, client, pool)
+	client := newBaseInternalClient(conn)
+	if shouldUseBatchStreamPoolClient(ctx, n.rpcContext.Settings) {
+		client = newBatchStreamPoolClient(pool)
+	}
 	client = maybeWrapInTracingClient(ctx, client)
 	return client, nil
 }
@@ -282,6 +284,35 @@ func (n *Dialer) Latency(nodeID roachpb.NodeID) (time.Duration, error) {
 	return latency, nil
 }
 
+// baseInternalClient is a wrapper around a grpc.ClientConn that implements the
+// RestrictedInternalClient interface. By calling kvpb.NewInternalClient on each
+// RPC invocation, that function can be inlined and the returned internalClient
+// object (which itself is just a wrapper) never needs to be allocated on the
+// heap.
+type baseInternalClient grpc.ClientConn
+
+func newBaseInternalClient(conn *grpc.ClientConn) rpc.RestrictedInternalClient {
+	return (*baseInternalClient)(conn)
+}
+
+func (c *baseInternalClient) asConn() *grpc.ClientConn {
+	return (*grpc.ClientConn)(c)
+}
+
+// Batch implements the RestrictedInternalClient interface.
+func (c *baseInternalClient) Batch(
+	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
+) (*kvpb.BatchResponse, error) {
+	return kvpb.NewInternalClient(c.asConn()).Batch(ctx, ba, opts...)
+}
+
+// MuxRangeFeed implements the RestrictedInternalClient interface.
+func (c *baseInternalClient) MuxRangeFeed(
+	ctx context.Context, opts ...grpc.CallOption,
+) (kvpb.Internal_MuxRangeFeedClient, error) {
+	return kvpb.NewInternalClient(c.asConn()).MuxRangeFeed(ctx, opts...)
+}
+
 var batchStreamPoolingEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"rpc.batch_stream_pool.enabled",
@@ -289,59 +320,72 @@ var batchStreamPoolingEnabled = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("rpc.batch_stream_pool.enabled", true),
 )
 
-// batchStreamPoolClient is a client that sends Batch RPCs using a pooled
-// BatchStream RPC stream. Pooling these streams allows for reuse of gRPC
-// resources, as opposed to native unary RPCs, which create a new stream and
-// throw it away for each unary request (see grpc.invoke).
-type batchStreamPoolClient struct {
-	kvpb.InternalClient
-	pool *rpc.BatchStreamPool
-}
-
-func maybeWrapInBatchStreamPoolClient(
-	ctx context.Context, st *cluster.Settings, client kvpb.InternalClient, pool *rpc.BatchStreamPool,
-) kvpb.InternalClient {
+func shouldUseBatchStreamPoolClient(ctx context.Context, st *cluster.Settings) bool {
 	// NOTE: we use ActiveVersionOrEmpty(ctx).IsActive(...) instead of the more
 	// common IsActive(ctx, ...) to avoid a fatal error if an RPC is made before
 	// the cluster version is initialized.
 	if !st.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.V25_1_BatchStreamRPC) {
-		return client
+		return false
 	}
 	if !batchStreamPoolingEnabled.Get(&st.SV) {
-		return client
+		return false
 	}
-	return &batchStreamPoolClient{InternalClient: client, pool: pool}
+	return true
 }
 
-// Batch overrides the Batch RPC client method to use the BatchStreamPool.
-func (bsc *batchStreamPoolClient) Batch(
+// batchStreamPoolClient is a client that sends Batch RPCs using a pooled
+// BatchStream RPC stream. Pooling these streams allows for reuse of gRPC
+// resources, as opposed to native unary RPCs, which create a new stream and
+// throw it away for each unary request (see grpc.invoke).
+type batchStreamPoolClient rpc.BatchStreamPool
+
+func newBatchStreamPoolClient(pool *rpc.BatchStreamPool) rpc.RestrictedInternalClient {
+	return (*batchStreamPoolClient)(pool)
+}
+
+func (c *batchStreamPoolClient) asPool() *rpc.BatchStreamPool {
+	return (*rpc.BatchStreamPool)(c)
+}
+
+// Batch implements the RestrictedInternalClient interface, using the pooled
+// streams in the BatchStreamPool to issue the Batch RPC.
+func (c *batchStreamPoolClient) Batch(
 	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
 ) (*kvpb.BatchResponse, error) {
 	if len(opts) > 0 {
-		return nil, errors.AssertionFailedf("BatchStreamPoolClient.Batch does not support CallOptions")
+		return nil, errors.AssertionFailedf("batchStreamPoolClient.Batch does not support CallOptions")
 	}
-	return bsc.pool.Send(ctx, ba)
+	return c.asPool().Send(ctx, ba)
 }
 
-// tracingInternalClient wraps an InternalClient and fills in trace information
-// on Batch RPCs.
+// MuxRangeFeed implements the RestrictedInternalClient interface.
+func (c *batchStreamPoolClient) MuxRangeFeed(
+	ctx context.Context, opts ...grpc.CallOption,
+) (kvpb.Internal_MuxRangeFeedClient, error) {
+	return kvpb.NewInternalClient(c.asPool().Conn()).MuxRangeFeed(ctx, opts...)
+}
+
+// tracingInternalClient wraps a RestrictedInternalClient and fills in trace
+// information on Batch RPCs.
 //
 // Note that tracingInternalClient is not used to wrap the internalClientAdapter
 // - local RPCs don't need this tracing functionality.
 type tracingInternalClient struct {
-	kvpb.InternalClient
+	rpc.RestrictedInternalClient
 }
 
-func maybeWrapInTracingClient(ctx context.Context, client kvpb.InternalClient) kvpb.InternalClient {
+func maybeWrapInTracingClient(
+	ctx context.Context, client rpc.RestrictedInternalClient,
+) rpc.RestrictedInternalClient {
 	sp := tracing.SpanFromContext(ctx)
 	if sp != nil && !sp.IsNoop() {
-		client = &tracingInternalClient{InternalClient: client}
+		return &tracingInternalClient{RestrictedInternalClient: client}
 	}
 	return client
 }
 
 // Batch overrides the Batch RPC client method and fills in tracing information.
-func (tic *tracingInternalClient) Batch(
+func (c *tracingInternalClient) Batch(
 	ctx context.Context, ba *kvpb.BatchRequest, opts ...grpc.CallOption,
 ) (*kvpb.BatchResponse, error) {
 	sp := tracing.SpanFromContext(ctx)
@@ -349,5 +393,5 @@ func (tic *tracingInternalClient) Batch(
 		ba = ba.ShallowCopy()
 		ba.TraceInfo = sp.Meta().ToProto()
 	}
-	return tic.InternalClient.Batch(ctx, ba, opts...)
+	return c.RestrictedInternalClient.Batch(ctx, ba, opts...)
 }
