@@ -1,6 +1,4 @@
 zip
 ----
-[cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
-[cluster] retrieving SQL data for crdb_internal.table_indexes... writing output: debug/crdb_internal.table_indexes.txt... done
-[cluster] retrieving SQL data for system.database_role_settings... writing output: debug/system.database_role_settings.txt... done
-[cluster] retrieving SQL data for system.table_statistics... writing output: debug/system.table_statistics.txt... done
+<dumping SQL tables>
+<dumping SQL tables>
