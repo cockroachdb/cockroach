@@ -101,6 +101,13 @@ var (
 		Measurement: "Failure Count",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeFeedOutputLoopNanosUnbufferedRegistration = metric.Metadata{
+		Name: "kv.rangefeed.output_loop_unbuffered_registration_nanos",
+		Help: "Duration of the Rangefeed O(range) output loop goroutine. This is only applicable for " +
+			"unbuffered registrations since buffered registrations spawns long-living goroutines.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // Metrics are for production monitoring of RangeFeeds.
@@ -116,6 +123,7 @@ type Metrics struct {
 	RangeFeedSlowClosedTimestampLogN            log.EveryN
 	RangeFeedBufferedRegistrations              *metric.Gauge
 	RangeFeedUnbufferedRegistrations            *metric.Gauge
+	RangefeedOutputLoopNanosForUnbufferedReg    *metric.Counter
 	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
 	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
 	// limit, but it's here to limit the effect on stability in case something
@@ -148,6 +156,7 @@ func NewMetrics() *Metrics {
 		RangeFeedProcessorsScheduler:                metric.NewGauge(metaRangeFeedProcessorsScheduler),
 		RangeFeedBufferedRegistrations:              metric.NewGauge(metaRangeFeedBufferedRegistrations),
 		RangeFeedUnbufferedRegistrations:            metric.NewGauge(metaRangeFeedUnbufferedRegistrations),
+		RangefeedOutputLoopNanosForUnbufferedReg:    metric.NewCounter(metaRangeFeedOutputLoopNanosUnbufferedRegistration),
 	}
 }
 
