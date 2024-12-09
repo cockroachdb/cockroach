@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "resolvedspan",
+    srcs = [
+        "doc.go",
+        "frontier.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/ccl/changefeedccl/checkpoint",
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/span",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "resolvedspan_test",
+    srcs = ["frontier_test.go"],
+    deps = [
+        ":resolvedspan",
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/span",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
