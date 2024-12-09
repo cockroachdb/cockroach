@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1284,13 +1286,106 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 
 		// Is the lease in the right place?
 		if newLease.Replica.StoreID != dest.StoreID {
+			if newLease.Type() == roachpb.LeaseLeader {
+				// With leader leases, we want to current leader to step down to give
+				// the new leader a chance to acquire the lease.
+				if leaderLeaseErr :=
+					tc.ensureLeaderStepsDown(t, ctx, rangeDesc, manual); leaderLeaseErr != nil {
+					return err
+				}
+			}
 			return errors.Errorf("LeaseInfoRequest succeeded, "+
 				"but lease in wrong location, want %v, got %v", dest, newLease.Replica)
 		}
 		return nil
-	}, 2*testutils.DefaultSucceedsSoonDuration)
+	}, 3*testutils.SucceedsSoonDuration())
 	log.Infof(ctx, "MoveRangeLeaseNonCooperatively: acquired lease: %s. err: %v", newLease, err)
 	return newLease, err
+}
+
+// ensureLeaderStepsDown withdraws store liveness support from the leader, and
+// waits for it to step down.
+func (tc *TestCluster) ensureLeaderStepsDown(
+	t *testing.T,
+	ctx context.Context,
+	rangeDesc roachpb.RangeDescriptor,
+	manual *hlc.HybridManualClock,
+) error {
+	var leaderStore *kvserver.Store
+	var leaderNode serverutils.TestServerInterface
+	var leaderReplica *kvserver.Replica
+
+	// Wait until a leader gets elected.
+	testutils.SucceedsSoon(t, func() error {
+		log.Infof(ctx, "waiting for a leader to step up")
+		for _, s := range tc.Servers {
+			curStore, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+			if err != nil {
+				return err
+			}
+
+			curR, err := curStore.GetReplica(rangeDesc.RangeID)
+			if err != nil {
+				return err
+			}
+
+			if curR.RaftStatus().RaftState == raftpb.StateLeader {
+				log.Infof(ctx, "current leader is %v at term: %d", curR.RaftStatus().ID,
+					curR.RaftStatus().Term)
+				leaderStore = curStore
+				leaderNode = s
+				leaderReplica = curR
+			}
+		}
+		// At this point we have iterated over all nodes in the cluster, if we
+		// haven't found the fortified leader, we should wait for a bit and retry.
+		if leaderStore == nil {
+			return errors.Errorf("no leader found")
+		}
+		return nil
+	})
+
+	// Block store liveness messages to the current leader.
+	leaderNode.StoreLivenessTransport().(*storeliveness.Transport).
+		ListenMessages(leaderStore.StoreID(),
+			&storeliveness.UnreliableHandler{
+				MessageHandler: leaderStore.TestingStoreLivenessSupportManager(),
+				UnreliableHandlerFuncs: storeliveness.UnreliableHandlerFuncs{
+					DropStoreLivenessMsg: func(msg *storelivenesspb.Message) bool {
+						return true
+					},
+				},
+			})
+
+	// Advance the manual clock past the lease's expiration.
+	log.Infof(ctx, "test: advancing clock to lease expiration")
+	manual.Increment(leaderStore.GetStoreConfig().LeaseExpiration())
+
+	// Wait for the leader to step down. Sometimes this might take a while since
+	// the leader might be replicating to other followers, and it won't step down
+	// unless it doesn't receive anything from the followers for a while.
+	// TODO(ibrahim): This could be made faster by blocking Raft messages to
+	// the leader.
+	testutils.SucceedsWithin(t, func() error {
+		if leaderReplica.RaftStatus().RaftState == raftpb.StateLeader {
+			return errors.Errorf("leader hasn't stepped down yet")
+		}
+		return nil
+	}, 2*testutils.SucceedsSoonDuration())
+
+	// Restore store liveness state to normal.
+	leaderNode.StoreLivenessTransport().(*storeliveness.Transport).
+		ListenMessages(leaderStore.StoreID(),
+			&storeliveness.UnreliableHandler{
+				MessageHandler: leaderStore.TestingStoreLivenessSupportManager(),
+				UnreliableHandlerFuncs: storeliveness.UnreliableHandlerFuncs{
+					DropStoreLivenessMsg: func(msg *storelivenesspb.Message) bool {
+						return false
+					},
+				},
+			})
+
+	return nil
 }
 
 // FindRangeLease is similar to FindRangeLeaseHolder but returns a Lease proto
