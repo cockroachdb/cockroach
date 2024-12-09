@@ -12229,7 +12229,6 @@ opt_comma:
 transaction_mode:
   transaction_iso_level
   {
-    /* SKIP DOC */
     $$.val = tree.TransactionModes{Isolation: $1.isoLevel()}
   }
 | transaction_user_priority
