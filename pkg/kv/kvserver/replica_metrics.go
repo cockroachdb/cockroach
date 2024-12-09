@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -57,6 +58,7 @@ type ReplicaMetrics struct {
 	PausedFollowerCount      int64
 	PendingRaftProposalCount int64
 	SlowRaftProposalCount    int64
+	RaftFlowStateCounts      [tracker.StateCount]int64
 
 	QuotaPoolPercentUsed int64 // [0,100]
 
@@ -215,6 +217,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		PausedFollowerCount:      leaderPausedFollowerCount,
 		PendingRaftProposalCount: d.pendingRaftProposalCount,
 		SlowRaftProposalCount:    d.slowRaftProposalCount,
+		RaftFlowStateCounts:      calcRaftFlowStateCounts(d.raftStatus),
 		QuotaPoolPercentUsed:     calcQuotaPoolPercentUsed(d.qpUsed, d.qpCapacity),
 		LatchMetrics:             d.latchMetrics,
 		LockTableMetrics:         d.lockTableMetrics,
@@ -340,6 +343,16 @@ func calcBehindCount(
 	}
 
 	return behindCount
+}
+
+func calcRaftFlowStateCounts(status *raft.SparseStatus) (cnt [tracker.StateCount]int64) {
+	if status.RaftState != raftpb.StateLeader {
+		return cnt
+	}
+	for _, pr := range status.Progress {
+		cnt[pr.State]++
+	}
+	return cnt
 }
 
 func calcDecommissioningCount(
