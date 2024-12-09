@@ -14,6 +14,12 @@ import (
 )
 
 var (
+	metaRangeFeedOutputLoopNanos = metric.Metadata{
+		Name:        "kv.rangefeed.output_loop_nanos",
+		Help:        "Duration of the Rangefeed O(range) output loop goroutine",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRangeFeedCatchUpScanNanos = metric.Metadata{
 		Name:        "kv.rangefeed.catchup_scan_nanos",
 		Help:        "Time spent in RangeFeed catchup scan",
@@ -98,6 +104,7 @@ var (
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
+	RangefeedOutputLoopNanos               *metric.Counter
 	RangeFeedCatchUpScanNanos              *metric.Counter
 	RangeFeedBudgetExhausted               *metric.Counter
 	RangefeedProcessorQueueTimeout         *metric.Counter
@@ -126,6 +133,7 @@ func (*Metrics) MetricStruct() {}
 // NewMetrics makes the metrics for RangeFeeds monitoring.
 func NewMetrics() *Metrics {
 	return &Metrics{
+		RangefeedOutputLoopNanos:               metric.NewCounter(metaRangeFeedOutputLoopNanos),
 		RangeFeedCatchUpScanNanos:              metric.NewCounter(metaRangeFeedCatchUpScanNanos),
 		RangefeedProcessorQueueTimeout:         metric.NewCounter(metaQueueTimeout),
 		RangeFeedBudgetExhausted:               metric.NewCounter(metaRangeFeedExhausted),
