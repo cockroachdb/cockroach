@@ -1932,11 +1932,16 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 
+		startTime := timeutil.FromUnixMicros(sc.job.Payload().StartedMicros)
 		var info logpb.EventPayload
 		if isRollback {
-			info = &eventpb.FinishSchemaChangeRollback{}
+			info = &eventpb.FinishSchemaChangeRollback{
+				LatencyNanos: timeutil.Since(startTime).Nanoseconds(),
+			}
 		} else {
-			info = &eventpb.FinishSchemaChange{}
+			info = &eventpb.FinishSchemaChange{
+				LatencyNanos: timeutil.Since(startTime).Nanoseconds(),
+			}
 		}
 
 		// Log "Finish Schema Change" or "Finish Schema Change Rollback"
@@ -2217,14 +2222,16 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		// Log "Reverse Schema Change" event. Only the causing error and the
 		// mutation ID are logged; this can be correlated with the DDL statement
 		// that initiated the change using the mutation id.
+		startTime := timeutil.FromUnixMicros(sc.job.Payload().StartedMicros)
 		return logEventInternalForSchemaChanges(
 			ctx, sc.execCfg, txn,
 			sc.sqlInstanceID,
 			sc.descID,
 			sc.mutationID,
 			&eventpb.ReverseSchemaChange{
-				Error:    fmt.Sprintf("%+v", causingError),
-				SQLSTATE: pgerror.GetPGCode(causingError).String(),
+				Error:        fmt.Sprintf("%+v", causingError),
+				SQLSTATE:     pgerror.GetPGCode(causingError).String(),
+				LatencyNanos: timeutil.Since(startTime).Nanoseconds(),
 			})
 	})
 	if err != nil || alreadyReversed {

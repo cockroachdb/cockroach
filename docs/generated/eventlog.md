@@ -1522,6 +1522,9 @@ An event of type `finish_schema_change` is recorded when a previously initiated 
 change has completed.
 
 
+| Field | Description | Sensitive |
+|--|--|--|
+| `LatencyNanos` | The amount of time the schema change job took to complete. | no |
 
 
 #### Common fields
@@ -1540,6 +1543,9 @@ An event of type `finish_schema_change_rollback` is recorded when a previously
 initiated schema change rollback has completed.
 
 
+| Field | Description | Sensitive |
+|--|--|--|
+| `LatencyNanos` | The amount of time the schema change job took to rollback. | no |
 
 
 #### Common fields
@@ -1704,6 +1710,7 @@ encounters a problem and is reversed.
 |--|--|--|
 | `Error` | The error encountered that caused the schema change to be reversed. The specific format of the error is variable and can change across releases without warning. | yes |
 | `SQLSTATE` | The SQLSTATE code for the error. | no |
+| `LatencyNanos` | The amount of time the schema change job took before being reverted. | no |
 
 
 #### Common fields
