@@ -51,7 +51,7 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
   // provided list of hot ranges.
   const databaseOptions = useMemo(
     () =>
-      Array.from(new Set(hotRanges.map(r => r.database_name)))
+      Array.from(new Set(hotRanges.map(r => r.databases).flat()))
         .filter(i => !isEmpty(i))
         .sort()
         .map(dbName => ({ label: dbName, value: dbName })),
@@ -149,18 +149,18 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
 
       if (!isEmpty(dbNames)) {
         filtered = filtered.filter(r =>
-          dbNames.some(
-            (f: FilterCheckboxOptionItem) => f.value === r.database_name,
+          dbNames.some((f: FilterCheckboxOptionItem) =>
+            r.databases?.includes(f.value),
           ),
         );
       }
 
       if (!isEmpty(tableName)) {
-        filtered = filtered.filter(r => r.table_name?.includes(tableName));
+        filtered = filtered.filter(r => r.tables?.includes(tableName));
       }
 
       if (!isEmpty(indexName)) {
-        filtered = filtered.filter(r => r.index_name?.includes(indexName));
+        filtered = filtered.filter(r => r.indexes?.includes(indexName));
       }
 
       if (!isEmpty(localities)) {
