@@ -643,11 +643,19 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	h.HashOrderingChoice(val.Ordering)
 	h.HashFloat64(val.LimitHint)
 	h.HashDistribution(val.Distribution)
+	h.HashPheromone(val.Pheromone)
 }
 
 func (h *hasher) HashDistribution(val physical.Distribution) {
 	for _, region := range val.Regions {
 		h.HashString(region)
+	}
+}
+
+func (h *hasher) HashPheromone(val physical.Pheromone) {
+	h.HashInt(int(val.Op))
+	for i := range val.Children {
+		h.HashPheromone(val.Children[i])
 	}
 }
 

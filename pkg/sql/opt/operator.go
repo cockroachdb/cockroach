@@ -30,6 +30,17 @@ func (op Operator) String() string {
 	return opNames[opNameIndexes[op]:opNameIndexes[op+1]]
 }
 
+var opNameReverseMap map[string]Operator
+
+var opNameNotFoundError = errors.New("op name not found")
+
+func OperatorFromString(name string) (Operator, error) {
+	if op, ok := opNameReverseMap[name]; ok {
+		return op, nil
+	}
+	return UnknownOp, opNameNotFoundError
+}
+
 // SyntaxTag returns the name of the operator using the SQL syntax that most
 // closely matches it.
 func (op Operator) SyntaxTag() string {
@@ -512,5 +523,9 @@ type OpaqueMetadata interface {
 func init() {
 	for optOp, treeOp := range ComparisonOpReverseMap {
 		ComparisonOpMap[treeOp] = optOp
+	}
+	opNameReverseMap = make(map[string]Operator, NumOperators)
+	for op := range NumOperators {
+		opNameReverseMap[opNames[opNameIndexes[op]:opNameIndexes[op+1]]] = op
 	}
 }

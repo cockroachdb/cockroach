@@ -57,6 +57,9 @@ type Required struct {
 	// distribution is the root, since data must always be returned to the gateway
 	// region.
 	Distribution Distribution
+
+	// Pheromone specifies the required shape of the plan.
+	Pheromone Pheromone
 }
 
 // MinRequired are the default physical properties that require nothing and
@@ -66,7 +69,7 @@ var MinRequired = &Required{}
 // Defined is true if any physical property is defined. If none is defined, then
 // this is an instance of MinRequired.
 func (p *Required) Defined() bool {
-	return !p.Presentation.Any() || !p.Ordering.Any() || p.LimitHint != 0 || !p.Distribution.Any()
+	return !p.Presentation.Any() || !p.Ordering.Any() || p.LimitHint != 0 || !p.Distribution.Any() || !p.Pheromone.Any()
 }
 
 // ColSet returns the set of columns used by any of the physical properties.
@@ -103,6 +106,9 @@ func (p *Required) String() string {
 	if !p.Distribution.Any() {
 		output("distribution", p.Distribution.format)
 	}
+	if !p.Pheromone.Any() {
+		output("pheromone", p.Pheromone.Format)
+	}
 
 	// Handle empty properties case.
 	if buf.Len() == 0 {
@@ -114,7 +120,8 @@ func (p *Required) String() string {
 // Equals returns true if the two physical properties are identical.
 func (p *Required) Equals(rhs *Required) bool {
 	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering) &&
-		p.LimitHint == rhs.LimitHint && p.Distribution.Equals(rhs.Distribution)
+		p.LimitHint == rhs.LimitHint && p.Distribution.Equals(rhs.Distribution) &&
+		p.Pheromone.Equals(rhs.Pheromone)
 }
 
 // LimitHintInt64 returns the limit hint converted to an int64.
