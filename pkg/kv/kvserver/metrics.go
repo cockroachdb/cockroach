@@ -3707,7 +3707,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		EncryptionAlgorithm: metric.NewGauge(metaEncryptionAlgorithm),
 
 		// RangeFeed counters.
-		RangeFeedMetrics: rangefeed.NewMetrics(),
+		RangeFeedMetrics: rangefeed.NewMetrics(histogramWindow),
 
 		// Concurrency control metrics.
 		Locks:                          metric.NewGauge(metaConcurrencyLocks),

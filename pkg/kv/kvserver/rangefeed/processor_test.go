@@ -526,7 +526,7 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 
 		fb := newTestBudget(40)
-		m := NewMetrics()
+		m := newTestMetrics()
 		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanTimeout(time.Millisecond),
 			withMetrics(m), withRangefeedTestType(rt))
 		ctx := context.Background()
