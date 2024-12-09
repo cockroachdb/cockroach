@@ -677,16 +677,14 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 		}
 
-		cancelQueryCtx := ctx
-		resToPushErr := res
-		logErr = resToPushErr.ErrAllowReleased()
+		logErr = res.Err()
 		// Detect context cancelation and overwrite whatever error might have been
 		// set on the result before. The idea is that once the query's context is
 		// canceled, all sorts of actors can detect the cancelation and set all
 		// sorts of errors on the result. Rather than trying to impose discipline
 		// in that jungle, we just overwrite them all here with an error that's
 		// nicer to look at for the client.
-		if resToPushErr != nil && cancelQueryCtx.Err() != nil && resToPushErr.ErrAllowReleased() != nil {
+		if res != nil && ctx.Err() != nil && res.Err() != nil {
 			// Even in the cases where the error is a retryable error, we want to
 			// intercept the event and payload returned here to ensure that the query
 			// is not retried.
@@ -694,7 +692,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
 			errToPush := cancelchecker.QueryCanceledError
-			resToPushErr.SetError(errToPush)
+			res.SetError(errToPush)
 			retPayload = eventNonRetriableErrPayload{err: errToPush}
 			logErr = errToPush
 			// Cancel the txn if we are inside an implicit txn too.
