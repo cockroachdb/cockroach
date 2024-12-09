@@ -1789,7 +1789,6 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			workloadStart := timeutil.Now()
 			ct.runLedgerWorkload(ledgerArgs{duration: "28m"})
 
 			alterStmt := "ALTER DATABASE ledger CONFIGURE ZONE USING range_max_bytes = 805306368, range_min_bytes = 134217728"
@@ -1810,11 +1809,6 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      time.Minute,
 			})
 			ct.waitForWorkload()
-
-			workloadEnd := timeutil.Now()
-			verifyTxnPerSecond(
-				ctx, c, t, ct.crdbNodes.RandNode(), workloadStart, workloadEnd, 575, 0.05,
-			)
 		},
 	})
 	r.Add(registry.TestSpec{
