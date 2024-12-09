@@ -2454,6 +2454,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 
 	db1 := tc.ServerConn(0)
 	tdb1 := sqlutils.MakeSQLRunner(db1)
+	tdb1.Exec(t, "SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false")
 	db2 := tc.ServerConn(1)
 
 	// Create a couple of descriptors.
