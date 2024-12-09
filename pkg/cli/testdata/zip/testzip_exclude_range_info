@@ -8,75 +8,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info=false /
 [cluster] requesting data for debug/events... received response... writing JSON output: debug/events.json... done
 [cluster] requesting data for debug/rangelog... received response... writing JSON output: debug/rangelog.json... done
 [cluster] requesting data for debug/settings... received response... writing JSON output: debug/settings.json... done
-[cluster] retrieving SQL data for "".crdb_internal.cluster_replication_spans... writing output: debug/crdb_internal.cluster_replication_spans.txt... done
-[cluster] retrieving SQL data for "".crdb_internal.create_function_statements... writing output: debug/crdb_internal.create_function_statements.txt... done
-[cluster] retrieving SQL data for "".crdb_internal.create_procedure_statements... writing output: debug/crdb_internal.create_procedure_statements.txt... done
-[cluster] retrieving SQL data for "".crdb_internal.create_schema_statements... writing output: debug/crdb_internal.create_schema_statements.txt... done
-[cluster] retrieving SQL data for "".crdb_internal.create_statements... writing output: debug/crdb_internal.create_statements.txt... done
-[cluster] retrieving SQL data for "".crdb_internal.create_type_statements... writing output: debug/crdb_internal.create_type_statements.txt... done
-[cluster] retrieving SQL data for "".crdb_internal.logical_replication_spans... writing output: debug/crdb_internal.logical_replication_spans.txt... done
-[cluster] retrieving SQL data for crdb_internal.cluster_contention_events... writing output: debug/crdb_internal.cluster_contention_events.txt... done
-[cluster] retrieving SQL data for crdb_internal.cluster_database_privileges... writing output: debug/crdb_internal.cluster_database_privileges.txt... done
-[cluster] retrieving SQL data for crdb_internal.cluster_distsql_flows... writing output: debug/crdb_internal.cluster_distsql_flows.txt... done
-[cluster] retrieving SQL data for crdb_internal.cluster_locks... writing output: debug/crdb_internal.cluster_locks.txt... done
-[cluster] retrieving SQL data for crdb_internal.cluster_queries... writing output: debug/crdb_internal.cluster_queries.txt... done
-[cluster] retrieving SQL data for crdb_internal.cluster_sessions... writing output: debug/crdb_internal.cluster_sessions.txt... done
-[cluster] retrieving SQL data for crdb_internal.cluster_settings... writing output: debug/crdb_internal.cluster_settings.txt... done
-[cluster] retrieving SQL data for crdb_internal.cluster_transactions... writing output: debug/crdb_internal.cluster_transactions.txt... done
-[cluster] retrieving SQL data for crdb_internal.default_privileges... writing output: debug/crdb_internal.default_privileges.txt... done
-[cluster] retrieving SQL data for crdb_internal.index_usage_statistics... writing output: debug/crdb_internal.index_usage_statistics.txt... done
-[cluster] retrieving SQL data for crdb_internal.invalid_objects... writing output: debug/crdb_internal.invalid_objects.txt... done
-[cluster] retrieving SQL data for crdb_internal.jobs... writing output: debug/crdb_internal.jobs.txt... done
-[cluster] retrieving SQL data for crdb_internal.kv_node_liveness... writing output: debug/crdb_internal.kv_node_liveness.txt... done
-[cluster] retrieving SQL data for crdb_internal.kv_node_status... writing output: debug/crdb_internal.kv_node_status.txt... done
-[cluster] retrieving SQL data for crdb_internal.kv_protected_ts_records... writing output: debug/crdb_internal.kv_protected_ts_records.txt... done
-[cluster] retrieving SQL data for crdb_internal.kv_store_status... writing output: debug/crdb_internal.kv_store_status.txt... done
-[cluster] retrieving SQL data for crdb_internal.kv_system_privileges... writing output: debug/crdb_internal.kv_system_privileges.txt... done
-[cluster] retrieving SQL data for crdb_internal.partitions... writing output: debug/crdb_internal.partitions.txt... done
-[cluster] retrieving SQL data for crdb_internal.probe_ranges_1s_read_limit_100... writing output: debug/crdb_internal.probe_ranges_1s_read_limit_100.txt... done
-[cluster] retrieving SQL data for crdb_internal.regions... writing output: debug/crdb_internal.regions.txt... done
-[cluster] retrieving SQL data for crdb_internal.schema_changes... writing output: debug/crdb_internal.schema_changes.txt... done
-[cluster] retrieving SQL data for crdb_internal.super_regions... writing output: debug/crdb_internal.super_regions.txt... done
-[cluster] retrieving SQL data for crdb_internal.system_jobs... writing output: debug/crdb_internal.system_jobs.txt... done
-[cluster] retrieving SQL data for crdb_internal.table_indexes... writing output: debug/crdb_internal.table_indexes.txt... done
-[cluster] retrieving SQL data for crdb_internal.transaction_contention_events... writing output: debug/crdb_internal.transaction_contention_events.txt... done
-[cluster] retrieving SQL data for crdb_internal.zones... writing output: debug/crdb_internal.zones.txt... done
-[cluster] retrieving SQL data for system.database_role_settings... writing output: debug/system.database_role_settings.txt... done
-[cluster] retrieving SQL data for system.descriptor... writing output: debug/system.descriptor.txt... done
-[cluster] retrieving SQL data for system.eventlog... writing output: debug/system.eventlog.txt... done
-[cluster] retrieving SQL data for system.external_connections... writing output: debug/system.external_connections.txt... done
-[cluster] retrieving SQL data for system.job_info... writing output: debug/system.job_info.txt... done
-[cluster] retrieving SQL data for system.jobs... writing output: debug/system.jobs.txt... done
-[cluster] retrieving SQL data for system.lease... writing output: debug/system.lease.txt... done
-[cluster] retrieving SQL data for system.locations... writing output: debug/system.locations.txt... done
-[cluster] retrieving SQL data for system.migrations... writing output: debug/system.migrations.txt... done
-[cluster] retrieving SQL data for system.namespace... writing output: debug/system.namespace.txt... done
-[cluster] retrieving SQL data for system.privileges... writing output: debug/system.privileges.txt... done
-[cluster] retrieving SQL data for system.protected_ts_meta... writing output: debug/system.protected_ts_meta.txt... done
-[cluster] retrieving SQL data for system.protected_ts_records... writing output: debug/system.protected_ts_records.txt... done
-[cluster] retrieving SQL data for system.rangelog... writing output: debug/system.rangelog.txt... done
-[cluster] retrieving SQL data for system.replication_constraint_stats... writing output: debug/system.replication_constraint_stats.txt... done
-[cluster] retrieving SQL data for system.replication_critical_localities... writing output: debug/system.replication_critical_localities.txt... done
-[cluster] retrieving SQL data for system.replication_stats... writing output: debug/system.replication_stats.txt... done
-[cluster] retrieving SQL data for system.reports_meta... writing output: debug/system.reports_meta.txt... done
-[cluster] retrieving SQL data for system.role_id_seq... writing output: debug/system.role_id_seq.txt... done
-[cluster] retrieving SQL data for system.role_members... writing output: debug/system.role_members.txt... done
-[cluster] retrieving SQL data for system.role_options... writing output: debug/system.role_options.txt... done
-[cluster] retrieving SQL data for system.scheduled_jobs... writing output: debug/system.scheduled_jobs.txt... done
-[cluster] retrieving SQL data for system.settings... writing output: debug/system.settings.txt... done
-[cluster] retrieving SQL data for system.span_configurations... writing output: debug/system.span_configurations.txt... done
-[cluster] retrieving SQL data for system.sql_instances... writing output: debug/system.sql_instances.txt... done
-[cluster] retrieving SQL data for system.sql_stats_cardinality... writing output: debug/system.sql_stats_cardinality.txt... done
-[cluster] retrieving SQL data for system.sqlliveness... writing output: debug/system.sqlliveness.txt... done
-[cluster] retrieving SQL data for system.statement_diagnostics... writing output: debug/system.statement_diagnostics.txt... done
-[cluster] retrieving SQL data for system.statement_diagnostics_requests... writing output: debug/system.statement_diagnostics_requests.txt... done
-[cluster] retrieving SQL data for system.statement_statistics_limit_5000... writing output: debug/system.statement_statistics_limit_5000.txt... done
-[cluster] retrieving SQL data for system.table_statistics... writing output: debug/system.table_statistics.txt... done
-[cluster] retrieving SQL data for system.task_payloads... writing output: debug/system.task_payloads.txt... done
-[cluster] retrieving SQL data for system.tenant_settings... writing output: debug/system.tenant_settings.txt... done
-[cluster] retrieving SQL data for system.tenant_tasks... writing output: debug/system.tenant_tasks.txt... done
-[cluster] retrieving SQL data for system.tenant_usage... writing output: debug/system.tenant_usage.txt... done
-[cluster] retrieving SQL data for system.tenants... writing output: debug/system.tenants.txt... done
+<dumping SQL tables>
 [cluster] requesting nodes... received response... writing JSON output: debug/nodes.json... done
 [cluster] requesting liveness... received response... writing JSON output: debug/liveness.json... done
 [cluster] collecting the inflight traces for jobs... received response... done
@@ -85,33 +17,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info=false /
 [cluster] profile for node 1... writing binary output: debug/nodes/1/cpu.pprof... done
 [node 1] node status... writing JSON output: debug/nodes/1/status.json... done
 [node 1] using SQL connection URL: postgresql://...
-[node 1] retrieving SQL data for crdb_internal.active_range_feeds... writing output: debug/nodes/1/crdb_internal.active_range_feeds.txt... done
-[node 1] retrieving SQL data for crdb_internal.cluster_replication_node_stream_checkpoints... writing output: debug/nodes/1/crdb_internal.cluster_replication_node_stream_checkpoints.txt... done
-[node 1] retrieving SQL data for crdb_internal.cluster_replication_node_stream_spans... writing output: debug/nodes/1/crdb_internal.cluster_replication_node_stream_spans.txt... done
-[node 1] retrieving SQL data for crdb_internal.cluster_replication_node_streams... writing output: debug/nodes/1/crdb_internal.cluster_replication_node_streams.txt... done
-[node 1] retrieving SQL data for crdb_internal.feature_usage... writing output: debug/nodes/1/crdb_internal.feature_usage.txt... done
-[node 1] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/1/crdb_internal.gossip_alerts.txt... done
-[node 1] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/1/crdb_internal.gossip_liveness.txt... done
-[node 1] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/1/crdb_internal.gossip_nodes.txt... done
-[node 1] retrieving SQL data for crdb_internal.kv_session_based_leases... writing output: debug/nodes/1/crdb_internal.kv_session_based_leases.txt... done
-[node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
-[node 1] retrieving SQL data for crdb_internal.logical_replication_node_processors... writing output: debug/nodes/1/crdb_internal.logical_replication_node_processors.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/1/crdb_internal.node_contention_events.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_distsql_flows... writing output: debug/nodes/1/crdb_internal.node_distsql_flows.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_execution_insights... writing output: debug/nodes/1/crdb_internal.node_execution_insights.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_inflight_trace_spans... writing output: debug/nodes/1/crdb_internal.node_inflight_trace_spans.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_memory_monitors... writing output: debug/nodes/1/crdb_internal.node_memory_monitors.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_metrics... writing output: debug/nodes/1/crdb_internal.node_metrics.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_queries... writing output: debug/nodes/1/crdb_internal.node_queries.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_runtime_info... writing output: debug/nodes/1/crdb_internal.node_runtime_info.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_sessions... writing output: debug/nodes/1/crdb_internal.node_sessions.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_statement_statistics... writing output: debug/nodes/1/crdb_internal.node_statement_statistics.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_tenant_capabilities_cache... writing output: debug/nodes/1/crdb_internal.node_tenant_capabilities_cache.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_transaction_statistics... writing output: debug/nodes/1/crdb_internal.node_transaction_statistics.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_transactions... writing output: debug/nodes/1/crdb_internal.node_transactions.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_txn_execution_insights... writing output: debug/nodes/1/crdb_internal.node_txn_execution_insights.txt... done
-[node 1] retrieving SQL data for crdb_internal.node_txn_stats... writing output: debug/nodes/1/crdb_internal.node_txn_stats.txt... done
+<dumping SQL tables>
 [node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
 [node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
 [node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done

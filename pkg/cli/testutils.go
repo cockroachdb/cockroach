@@ -362,6 +362,14 @@ func captureOutput(f func()) (out string, err error) {
 		if x := recover(); x != nil {
 			err = errors.Errorf("panic: %v", x)
 		}
+		// Replace any series of 'retrieving SQL data for ...' messages with a
+		// single '<dumping SQL tables>' message so that these tests are agnostic to
+		// both specific names and total number of system and internal tables that
+		// are exported. The regex matches the rest of the line after the prefix
+		// unless the line contains an uppercase E to avoid trimming "ERROR" message
+		// lines, which are expected (and tested) for certain tables.
+		out = regexp.MustCompile(`(.*retrieving SQL data for ([^E\n])*\n)+`).
+			ReplaceAllString(out, "<dumping SQL tables>\n")
 	}()
 
 	// Run the command. The output will be returned in the defer block.
