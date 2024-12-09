@@ -223,9 +223,13 @@ func (ubr *unbufferedRegistration) IsDisconnected() bool {
 //
 // nolint:deferunlockcheck
 func (ubr *unbufferedRegistration) runOutputLoop(ctx context.Context, forStacks roachpb.RangeID) {
+	start := timeutil.Now()
 	ubr.mu.Lock()
-	// Noop if publishCatchUpBuffer below returns no error.
-	defer ubr.drainAllocations(ctx)
+	defer func() {
+		// Noop if publishCatchUpBuffer below returns no error.
+		ubr.drainAllocations(ctx)
+		ubr.metrics.RangefeedOutputLoopNanos.Inc(timeutil.Since(start).Nanoseconds())
+	}()
 
 	if ubr.mu.disconnected {
 		ubr.mu.Unlock()

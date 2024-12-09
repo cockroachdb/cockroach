@@ -14,6 +14,12 @@ import (
 )
 
 var (
+	metaRangeFeedOutputLoopNanos = metric.Metadata{
+		Name:        "kv.rangefeed.output_loop_nanos",
+		Help:        "Duration of the Rangefeed O(range) output loop goroutine",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaRangeFeedCatchUpScanNanos = metric.Metadata{
 		Name:        "kv.rangefeed.catchup_scan_nanos",
 		Help:        "Time spent in RangeFeed catchup scan",
@@ -116,6 +122,7 @@ type Metrics struct {
 	RangeFeedSlowClosedTimestampLogN            log.EveryN
 	RangeFeedBufferedRegistrations              *metric.Gauge
 	RangeFeedUnbufferedRegistrations            *metric.Gauge
+	RangefeedOutputLoopNanos                    *metric.Counter
 	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
 	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
 	// limit, but it's here to limit the effect on stability in case something
@@ -148,6 +155,7 @@ func NewMetrics() *Metrics {
 		RangeFeedProcessorsScheduler:                metric.NewGauge(metaRangeFeedProcessorsScheduler),
 		RangeFeedBufferedRegistrations:              metric.NewGauge(metaRangeFeedBufferedRegistrations),
 		RangeFeedUnbufferedRegistrations:            metric.NewGauge(metaRangeFeedUnbufferedRegistrations),
+		RangefeedOutputLoopNanos:                    metric.NewCounter(metaRangeFeedOutputLoopNanos),
 	}
 }
 
