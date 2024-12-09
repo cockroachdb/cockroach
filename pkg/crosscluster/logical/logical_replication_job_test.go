@@ -376,6 +376,31 @@ func TestLogicalStreamIngestionJobWithCursor(t *testing.T) {
 	dbB.CheckQueryResults(t, "SELECT * from b.tab", expectedRowsB)
 }
 
+func TestCreateTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc, srv, sqlDBs, _ := setupServerWithNumDBs(t, ctx, testClusterBaseClusterArgs, 1, 1)
+	defer tc.Stopper().Stop(ctx)
+
+	sqlA := sqlDBs[0]
+	sqlA.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
+	aURL, cleanup := srv.PGUrl(t, serverutils.DBName("a"))
+	defer cleanup()
+
+	sqlA.Exec(t, "CREATE DATABASE b")
+	sqlB := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("b")))
+
+	var jobID jobspb.JobID
+	sqlB.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE b.tab FROM TABLE tab ON $1", aURL.String()).Scan(&jobID)
+
+	WaitUntilReplicatedTime(t, srv.Clock().Now(), sqlB, jobID)
+	sqlB.CheckQueryResults(t, "SELECT * FROM tab", [][]string{{"1", "hello"}})
+}
+
 // TestLogicalStreamIngestionAdvancePTS tests that the producer side pts advances
 // as the destination side frontier advances.
 func TestLogicalStreamIngestionAdvancePTS(t *testing.T) {
