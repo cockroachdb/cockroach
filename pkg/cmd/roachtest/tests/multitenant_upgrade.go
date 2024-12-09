@@ -32,7 +32,7 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(7),
 		CompatibleClouds: registry.CloudsWithServiceRegistration,
 		Suites:           registry.Suites(registry.Nightly),
-		Owner:            registry.OwnerDisasterRecovery,
+		Owner:            registry.OwnerServer,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runMultitenantUpgrade(ctx, t, c)
 		},
