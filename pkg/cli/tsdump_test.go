@@ -164,7 +164,7 @@ func parseDDInput(t *testing.T, input string, w *datadogWriter) {
 			(data != nil && data.Metric != metricName ||
 				(data != nil && source != nameValueTimestamp[1])) {
 			if data != nil {
-				err := w.emitDataDogMetrics([]DatadogSeries{*data})
+				_, err := w.emitDataDogMetrics([]DatadogSeries{*data})
 				require.NoError(t, err)
 			}
 			data = &DatadogSeries{
@@ -182,7 +182,7 @@ func parseDDInput(t *testing.T, input string, w *datadogWriter) {
 			Timestamp: ts,
 		})
 	}
-	err := w.emitDataDogMetrics([]DatadogSeries{*data})
+	_, err := w.emitDataDogMetrics([]DatadogSeries{*data})
 	require.NoError(t, err)
 }
 
