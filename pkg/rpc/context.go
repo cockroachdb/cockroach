@@ -1397,6 +1397,10 @@ func (rpcCtx *Context) dialOptsLocal() ([]grpc.DialOption, error) {
 		return nil, err
 	}
 
+	if rpcCtx.rpcCompression {
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
+	}
+
 	dialOpts = append(dialOpts, grpc.WithContextDialer(
 		func(ctx context.Context, _ string) (net.Conn, error) {
 			return rpcCtx.loopbackDialFn(ctx)
