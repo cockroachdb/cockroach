@@ -123,6 +123,7 @@ const (
 	  pad CHAR(60) NOT NULL DEFAULT ''
 	)`
 	sysbenchCreateIndex = `CREATE INDEX k_%[1]d ON sbtest%[1]d(k)` // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_common.lua#L245
+	sysbenchAnalyze     = `ANALYZE sbtest%[1]d`
 
 	sysbenchStmtBegin          = `BEGIN`
 	sysbenchStmtCommit         = `COMMIT`
@@ -272,6 +273,9 @@ func (s *sysbenchSQL) prepSchema(rng *rand.Rand) {
 
 		// Create the secondary index on the table.
 		try(s.conn.Exec(s.ctx, fmt.Sprintf(sysbenchCreateIndex, i)))
+
+		// Collect table statistics.
+		try(s.conn.Exec(s.ctx, fmt.Sprintf(sysbenchAnalyze, i)))
 	}
 }
 
