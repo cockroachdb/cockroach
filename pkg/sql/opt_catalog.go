@@ -2922,3 +2922,7 @@ func mapGeneratedAsIdentityType(inType catpb.GeneratedAsIdentityType) cat.Genera
 func (oc *optCatalog) GetLeaseGeneration() int64 {
 	return oc.planner.Descriptors().GetLeaseGeneration()
 }
+
+func (oc *optCatalog) GetStatsGeneration() int64 {
+	return oc.planner.execCfg.TableStatsCache.GetGeneration()
+}

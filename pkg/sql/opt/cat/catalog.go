@@ -93,6 +93,7 @@ type Catalog interface {
 	LookupDatabaseName(ctx context.Context, flags Flags, name string) (tree.Name, error)
 
 	GetLeaseGeneration() int64
+	GetStatsGeneration() int64
 
 	// ResolveSchema locates a schema with the given name and returns it along
 	// with the resolved SchemaName (which has all components filled in).
