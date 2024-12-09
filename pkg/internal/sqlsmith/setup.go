@@ -133,6 +133,8 @@ func randTablesN(r *rand.Rand, n int, prefix string, isMultiRegion bool) []strin
 	if isMultiRegion {
 		opt |= randgen.TableOptMultiRegion
 	}
+	// TODO(michae2): call randgen.RandCreateTablesWithTypes instead so that we
+	// can use some UDTs in these create table statements.
 	createTableStatements := randgen.RandCreateTables(
 		context.Background(), r, "table", n, opt, randgen.StatisticsMutator,
 		randgen.PartialIndexMutator, randgen.ForeignKeyMutator,
