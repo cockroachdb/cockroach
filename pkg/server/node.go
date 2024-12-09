@@ -1875,12 +1875,20 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 
 // BatchStream implements the kvpb.InternalServer interface.
 func (n *Node) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
+	return n.batchStreamImpl(stream)
+}
+
+func (n *Node) batchStreamImpl(
+	stream interface {
+		Context() context.Context
+		Recv() (*kvpb.BatchRequest, error)
+		Send(response *kvpb.BatchResponse) error
+	},
+) error {
 	ctx := stream.Context()
 	for {
 		args, err := stream.Recv()
 		if err != nil {
-			// From grpc.ServerStream.Recv:
-			// > It returns io.EOF when the client has performed a CloseSend.
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
