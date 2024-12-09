@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -75,6 +76,15 @@ import (
 // numTxnRetryErrors is the number of times an error will be injected if
 // the transaction is retried using SAVEPOINTs.
 const numTxnRetryErrors = 3
+
+// metamorphicForceExecWithPausablePortal is used to force
+// execStmtInOpenStateWithPausablePortal to be used instead of
+// execStmtInOpenState, even for non-pausable portals. This ensures that the
+// behavior of the former does not diverge from the latter.
+var metamorphicForceExecWithPausablePortal = metamorphic.ConstantWithTestBool(
+	"conn-executor-force-exec-with-pausable-portal",
+	false,
+)
 
 // execStmt executes one statement by dispatching according to the current
 // state. Returns an Event to be passed to the state machine, or nil if no
@@ -138,8 +148,11 @@ func (ex *connExecutor) execStmt(
 		if portal != nil {
 			preparedStmt = portal.Stmt
 		}
-		if portal.isPausable() {
-			preparedStmt = portal.Stmt
+		usePausableCodePath := portal.isPausable()
+		if buildutil.CrdbTestBuild && metamorphicForceExecWithPausablePortal {
+			usePausableCodePath = true
+		}
+		if usePausableCodePath {
 			err = ex.execWithProfiling(ctx, ast, preparedStmt, func(ctx context.Context) error {
 				ev, payload, err = ex.execStmtInOpenStateWithPausablePortal(
 					ctx, parserStmt, portal, pinfo, res, canAutoCommit,
