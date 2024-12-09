@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"path"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +55,8 @@ const (
 	AWSTempTokenParam = "AWS_SESSION_TOKEN"
 	// AWSEndpointParam is the query parameter for the 'endpoint' in an AWS URI.
 	AWSEndpointParam = "AWS_ENDPOINT"
+	// AWSEndpointParam is the query parameter for UsePathStyle in S3 options.
+	AWSUsePathStyle = "AWS_USE_PATH_STYLE"
 
 	// AWSServerSideEncryptionMode is the query parameter in an AWS URI, for the
 	// mode to be used for server side encryption. It can either be AES256 or
@@ -193,6 +196,7 @@ func makeRoleProvider(provider cloudpb.ExternalStorage_AssumeRoleProvider) roleP
 type s3ClientConfig struct {
 	// copied from ExternalStorage_S3.
 	endpoint, region, bucket, accessKey, secret, tempToken, auth string
+	usePathStyle                                                 bool
 	assumeRoleProvider                                           roleProvider
 	delegateRoleProviders                                        []roleProvider
 
@@ -227,6 +231,7 @@ func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
 
 	return s3ClientConfig{
 		endpoint:              conf.Endpoint,
+		usePathStyle:          conf.UsePathStyle,
 		region:                conf.Region,
 		bucket:                conf.Bucket,
 		accessKey:             conf.AccessKey,
@@ -272,6 +277,9 @@ func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
 	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
 	setIf(S3StorageClassParam, conf.StorageClass)
+	if conf.UsePathStyle {
+		q.Set(AWSUsePathStyle, "true")
+	}
 	if conf.AssumeRoleProvider.Role != "" {
 		roleProviderStrings := make([]string, 0, len(conf.DelegateRoleProviders)+1)
 		for _, p := range conf.DelegateRoleProviders {
@@ -308,6 +316,16 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	assumeRoleProvider, delegateRoleProviders := cloud.ParseRoleProvidersString(assumeRoleValue)
 	assumeRole, delegateRoles := cloud.ParseRoleString(assumeRoleValue)
 
+	pathStyleStr := s3URL.ConsumeParam(AWSUsePathStyle)
+	pathStyleBool := false
+	if pathStyleStr != "" {
+		var err error
+		pathStyleBool, err = strconv.ParseBool(pathStyleStr)
+		if err != nil {
+			return cloudpb.ExternalStorage{}, errors.Wrapf(err, "cannot parse %s as bool", AWSUsePathStyle)
+		}
+	}
+
 	conf.S3Config = &cloudpb.ExternalStorage_S3{
 		Bucket:                s3URL.Host,
 		Prefix:                s3URL.Path,
@@ -315,6 +333,7 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 		Secret:                s3URL.ConsumeParam(AWSSecretParam),
 		TempToken:             s3URL.ConsumeParam(AWSTempTokenParam),
 		Endpoint:              s3URL.ConsumeParam(AWSEndpointParam),
+		UsePathStyle:          pathStyleBool,
 		Region:                s3URL.ConsumeParam(S3RegionParam),
 		Auth:                  s3URL.ConsumeParam(cloud.AuthParam),
 		ServerEncMode:         s3URL.ConsumeParam(AWSServerSideEncryptionMode),
@@ -611,6 +630,9 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 				if endpointURI != "" {
 					options.BaseEndpoint = aws.String(endpointURI)
 				}
+				if s.opts.usePathStyle {
+					options.UsePathStyle = true
+				}
 			}), s.opts.bucket)
 			return err
 		}); err != nil {
@@ -622,6 +644,9 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 	c := s3.NewFromConfig(cfg, func(options *s3.Options) {
 		if endpointURI != "" {
 			options.BaseEndpoint = aws.String(endpointURI)
+		}
+		if s.opts.usePathStyle {
+			options.UsePathStyle = true
 		}
 	})
 	u := manager.NewUploader(c, func(uploader *manager.Uploader) {

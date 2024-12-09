@@ -62,6 +62,7 @@ message ExternalStorage {
     string secret = 4;
     string temp_token = 5;
     string endpoint = 6;
+    bool use_path_style=16;
     string region = 7;
     string auth = 8;
     string server_enc_mode  = 9;

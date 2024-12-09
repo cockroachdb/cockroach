@@ -8,6 +8,8 @@ package amazon
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
@@ -329,40 +331,112 @@ func TestPutS3AssumeRole(t *testing.T) {
 
 func TestPutS3Endpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	q := make(url.Values)
-	expectedParams := []string{
-		AWSEndpointParam,
-		AWSAccessKeyParam,
-		AWSSecretParam,
-		S3RegionParam}
-	for _, param := range expectedParams {
-		env := NightlyEnvVarS3Params[param]
-		v := os.Getenv(env)
-		if v == "" {
-			skip.IgnoreLintf(t, "%s env var must be set", env)
-		}
-		q.Add(param, v)
-	}
 
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
-	user := username.RootUserName()
-	testID := cloudtestutils.NewTestID()
 
-	u := url.URL{
-		Scheme:   "s3",
-		Host:     bucket,
-		Path:     fmt.Sprintf("backup-test-%d", testID),
-		RawQuery: q.Encode(),
-	}
+	t.Run("default", func(t *testing.T) {
+		q := make(url.Values)
+		expectedParams := []string{
+			AWSEndpointParam,
+			AWSAccessKeyParam,
+			AWSSecretParam,
+			S3RegionParam}
+		for _, param := range expectedParams {
+			env := NightlyEnvVarS3Params[param]
+			v := os.Getenv(env)
+			if v == "" {
+				skip.IgnoreLintf(t, "%s env var must be set", env)
+			}
+			q.Add(param, v)
+		}
 
-	testSettings := cluster.MakeTestingClusterSettings()
+		user := username.RootUserName()
+		testID := cloudtestutils.NewTestID()
 
-	cloudtestutils.CheckExportStore(
-		t, u.String(), false, user, nil /* db */, testSettings,
-	)
+		u := url.URL{
+			Scheme:   "s3",
+			Host:     bucket,
+			Path:     fmt.Sprintf("backup-test-%d", testID),
+			RawQuery: q.Encode(),
+		}
+
+		testSettings := cluster.MakeTestingClusterSettings()
+
+		cloudtestutils.CheckExportStore(
+			t, u.String(), false, user, nil /* db */, testSettings,
+		)
+	})
+	t.Run("use-path-style", func(t *testing.T) {
+		// EngFlow machines have no internet access, and queries even to localhost will time out.
+		// So this test is skipped above.
+		ctx := context.Background()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		defer srv.Close()
+
+		q := make(url.Values)
+		// Convert IP address to `localhost` to exercise the DNS-defining path in the S3 client.
+		localhostURL := strings.Replace(srv.URL, "127.0.0.1", "localhost", -1)
+		q.Add(AWSEndpointParam, localhostURL)
+		q.Add(AWSAccessKeyParam, "key")
+		q.Add(AWSSecretParam, "secret")
+		q.Add(S3RegionParam, "region")
+
+		// To validate the test, firstassert that the call fails without the Path Style param.
+		u := url.URL{
+			Scheme:   "s3",
+			Host:     "bucket",
+			Path:     "subdir1/subdir2",
+			RawQuery: q.Encode(),
+		}
+
+		user := username.RootUserName()
+		ioConf := base.ExternalIODirConfig{}
+
+		conf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Setup a sink for the given args.
+		testSettings := cluster.MakeTestingClusterSettings()
+		clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+
+		storage, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
+			nil, nil, cloud.NilMetrics)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer storage.Close()
+
+		_, _, err = storage.ReadFile(ctx, "test file", cloud.ReadOptions{NoFileSize: true})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "lookup bucket.localhost")
+		require.Contains(t, err.Error(), "no such host")
+
+		// Now add the Path Style param and try again.
+		q.Add(AWSUsePathStyle, "true")
+		u.RawQuery = q.Encode()
+		pathStyleConf, err := cloud.ExternalStorageConfFromURI(u.String(), user)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		pathStyleStorage, err := cloud.MakeExternalStorage(ctx, pathStyleConf, ioConf, testSettings, clientFactory,
+			nil, nil, cloud.NilMetrics)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer pathStyleStorage.Close()
+
+		// Should successfuly return a (empty) response.
+		_, _, err = pathStyleStorage.ReadFile(ctx, "test file", cloud.ReadOptions{NoFileSize: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestS3DisallowCustomEndpoints(t *testing.T) {
