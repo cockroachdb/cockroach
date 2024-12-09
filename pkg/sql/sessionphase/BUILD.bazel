@@ -5,4 +5,8 @@ go_library(
     srcs = ["session_phase.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessionphase",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_crlib//crtime",
+    ],
 )
