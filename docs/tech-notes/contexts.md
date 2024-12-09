@@ -18,7 +18,7 @@ an explanation of Context-related topics.
 Go’s standard library.
 
 The package documentation says: *Package context defines the Context
-type, which carries deadlines, cancelation signals, and other
+type, which carries deadlines, cancellation signals, and other
 request-scoped values across API boundaries and between processes.*
 
 So, the idea is that a `Context` represents an *operation*’s context -
