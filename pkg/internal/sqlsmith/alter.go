@@ -113,7 +113,13 @@ func makeCreateSchema(s *Smither) (tree.Statement, bool) {
 }
 
 func makeCreateTable(s *Smither) (tree.Statement, bool) {
-	table := randgen.RandCreateTable(context.Background(), s.rnd, "", 0, randgen.TableOptNone)
+	seedTypes := randgen.SeedTypes
+	if s.types != nil {
+		seedTypes = s.types.seedTypes
+	}
+	table := randgen.RandCreateTableWithTypes(
+		context.Background(), s.rnd, "", 0, randgen.TableOptNone, seedTypes,
+	)
 	schemaOrd := s.rnd.Intn(len(s.schemas))
 	schema := s.schemas[schemaOrd]
 	table.Table = tree.MakeTableNameWithSchema(tree.Name(s.dbName), schema.SchemaName, s.name("tab"))
@@ -417,10 +423,12 @@ func makeCreateType(s *Smither) (tree.Statement, bool) {
 	name := s.name("typ")
 
 	if s.coin() {
-		return randgen.RandCreateEnumType(s.rnd, string(name), letters), true
+		stmt, _ := randgen.RandCreateEnumType(s.rnd, string(name), letters)
+		return stmt, true
 	}
 
-	return randgen.RandCreateCompositeType(s.rnd, string(name), letters), true
+	stmt, _ := randgen.RandCreateCompositeType(s.rnd, string(name), letters)
+	return stmt, true
 }
 
 func makeDropType(s *Smither) (tree.Statement, bool) {
