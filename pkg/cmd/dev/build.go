@@ -53,7 +53,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 		// TODO(irfansharif): Flesh out the example usage patterns.
 		Example: `
 	dev build cockroach
-	dev build cockroach-{short,oss}
+	dev build cockroach-short
 	dev build {opt,exec}gen`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
