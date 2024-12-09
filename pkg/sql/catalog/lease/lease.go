@@ -907,6 +907,8 @@ type Manager struct {
 	descDelCh chan descpb.ID
 	// rangefeedErrCh receives any terminal errors from the rangefeed.
 	rangefeedErrCh chan error
+
+	leaseGeneration atomic.Int64
 }
 
 const leaseConcurrencyLimit = 5
@@ -1443,6 +1445,10 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 	})
 }
 
+func (m *Manager) GetLeaseGeneration() int64 {
+	return m.leaseGeneration.Load()
+}
+
 // GetSafeReplicationTS gets the timestamp till which the leased descriptors
 // have been synced.
 func (m *Manager) GetSafeReplicationTS() hlc.Timestamp {
@@ -1476,6 +1482,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 			case m.descDelCh <- descpb.ID(id):
+				m.leaseGeneration.Add(1)
 			}
 			return
 		}
@@ -1495,6 +1502,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 		case m.descUpdateCh <- mut:
+			m.leaseGeneration.Add(1)
 		}
 	}
 
@@ -1829,6 +1837,7 @@ func (m *Manager) refreshSomeLeases(ctx context.Context, includeAll bool) {
 		}
 	}
 	wg.Wait()
+	m.leaseGeneration.Add(1)
 }
 
 // DeleteOrphanedLeases releases all orphaned leases created by a prior

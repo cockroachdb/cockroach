@@ -38,6 +38,8 @@ type LeaseManager interface {
 	) (decrAfterWait func())
 
 	GetSafeReplicationTS() hlc.Timestamp
+
+	GetLeaseGeneration() int64
 }
 
 type deadlineHolder interface {

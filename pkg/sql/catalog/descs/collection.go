@@ -210,6 +210,10 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.skipValidationOnWrite = false
 }
 
+func (tc *Collection) GetLeaseGeneration() int64 {
+	return tc.leased.lm.GetLeaseGeneration()
+}
+
 // HasUncommittedTables returns true if the Collection contains uncommitted
 // tables.
 func (tc *Collection) HasUncommittedTables() (has bool) {

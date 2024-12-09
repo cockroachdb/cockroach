@@ -199,6 +199,7 @@ type Memo struct {
 	pushLimitIntoProjectFilteredScan           bool
 	unsafeAllowTriggersModifyingCascades       bool
 
+	leaseGeneration int64
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
 	// memo staleness calculation.
@@ -457,7 +458,9 @@ func (m *Memo) IsStale(
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
-
+	if m.leaseGeneration == catalog.GetLeaseGeneration() {
+		return false, nil
+	}
 	// Memo is stale if the fingerprint of any object in the memo's metadata has
 	// changed, or if the current user no longer has sufficient privilege to
 	// access the object.
@@ -466,6 +469,7 @@ func (m *Memo) IsStale(
 	} else if !depsUpToDate {
 		return true, nil
 	}
+	m.leaseGeneration = catalog.GetLeaseGeneration()
 	return false, nil
 }
 
