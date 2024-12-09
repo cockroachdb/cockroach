@@ -308,6 +308,19 @@ func applyReplicaUpdate(
 		return PrepareReplicaReport{}, errors.Wrap(err, "updating MVCCStats")
 	}
 
+	// Update the HardState to clear the LeadEpoch, as otherwise we may risk
+	// seeing an epoch regression in raft. See #136908 for more details.
+	hs, err := sl.LoadHardState(ctx, readWriter)
+	if err != nil {
+		return PrepareReplicaReport{}, errors.Wrap(err, "loading HardState")
+	}
+
+	hs.LeadEpoch = 0
+
+	if err := sl.SetHardState(ctx, readWriter, hs); err != nil {
+		return PrepareReplicaReport{}, errors.Wrap(err, "setting HardState")
+	}
+
 	return report, nil
 }
 
