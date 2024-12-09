@@ -8,6 +8,7 @@ package storage
 import (
 	"context"
 	"path/filepath"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -75,10 +76,7 @@ func getFileSystemProperties(ctx context.Context, dir string) roachpb.FileStoreP
 	// is typically being deployed are well-behaved in that regard:
 	// Kubernetes mirrors /proc/mount in /etc/mtab.
 	for i := len(fslist.List) - 1; i >= 0; i-- {
-		// filepath.Rel can reliably tell us if a path is relative to
-		// another: if it is not, an error is returned.
-		_, err := filepath.Rel(fslist.List[i].DirName, absPath)
-		if err == nil {
+		if pathIsInside(fslist.List[i].DirName, absPath) {
 			fsInfo = &fslist.List[i]
 			break
 		}
@@ -94,4 +92,21 @@ func getFileSystemProperties(ctx context.Context, dir string) roachpb.FileStoreP
 	fsprops.MountPoint = fsInfo.DirName
 	fsprops.MountOptions = fsInfo.Options
 	return fsprops
+}
+
+// pathIsInside returns true if the absolute target path is inside a base path.
+func pathIsInside(basePath string, absTargetPath string) bool {
+	// filepath.Rel can reliably tell us if a path is relative to
+	// another: if it is not, an error is returned.
+	relPath, err := filepath.Rel(basePath, absTargetPath)
+	if err != nil {
+		return false
+	}
+	if strings.HasPrefix(relPath, "..") {
+		// This check is consistent with internal filepath code (like isLocal).
+		if len(relPath) == 2 || relPath[2] == filepath.Separator {
+			return false
+		}
+	}
+	return true
 }
