@@ -958,7 +958,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	kvpb.RegisterInternalServer(grpcServer.Server, node)
 	if grpcServer.drpc != nil {
-		if err := kvpb.DRPCRegisterDRPCBatchService(grpcServer.drpc.Mux, node); err != nil {
+		if err := kvpb.DRPCRegisterDRPCBatchService(grpcServer.drpc.Mux, node.AsDRPCBatchServer()); err != nil {
 			return nil, err
 		}
 	}

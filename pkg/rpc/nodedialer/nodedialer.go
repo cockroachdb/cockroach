@@ -101,7 +101,7 @@ func (n *Dialer) Dial(
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
 		return nil, err
 	}
-	conn, _, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, true, class)
 	return conn, err
 }
 
@@ -118,7 +118,7 @@ func (n *Dialer) DialNoBreaker(
 	if err != nil {
 		return nil, err
 	}
-	conn, _, _, err := n.dial(ctx, nodeID, addr, locality, false, class)
+	conn, _, _, _, err := n.dial(ctx, nodeID, addr, locality, false, class)
 	return conn, err
 }
 
@@ -148,7 +148,7 @@ func (n *Dialer) DialInternalClient(
 		return nil, errors.Wrap(err, "resolver error")
 	}
 	log.VEventf(ctx, 2, "sending request to %s", addr)
-	conn, pool, dconn, err := n.dial(ctx, nodeID, addr, locality, true, class)
+	conn, pool, dconn, drpcBatchStreamPool, err := n.dial(ctx, nodeID, addr, locality, true, class)
 	if err != nil {
 		return nil, err
 	}
@@ -156,9 +156,13 @@ func (n *Dialer) DialInternalClient(
 
 	const useDRPC = true
 	if useDRPC {
-		client := &unaryDRPCBatchServiceToInternalAdapter{
-			InternalClient: client, // for RangeFeed only
-			drpcClient:     kvpb.NewDRPCDRPCBatchServiceClient(dconn),
+		if canPool := shouldUseBatchStreamPoolClient(ctx, n.rpcContext.Settings); !canPool {
+			drpcBatchStreamPool = nil
+		}
+		client = &unaryDRPCBatchServiceToInternalAdapter{
+			RestrictedInternalClient: client, // for RangeFeed only
+			drpcClient:               kvpb.NewDRPCDRPCBatchServiceClient(dconn),
+			drpcStreamPool:           drpcBatchStreamPool,
 		}
 		return client, nil
 	}
@@ -171,13 +175,20 @@ func (n *Dialer) DialInternalClient(
 }
 
 type unaryDRPCBatchServiceToInternalAdapter struct {
-	kvpb.InternalClient
-	drpcClient kvpb.DRPCDRPCBatchServiceClient
+	rpc.RestrictedInternalClient
+	drpcClient     kvpb.DRPCDRPCBatchServiceClient
+	drpcStreamPool *rpc.DRPCBatchStreamPool
 }
 
 func (a *unaryDRPCBatchServiceToInternalAdapter) Batch(
 	ctx context.Context, in *kvpb.BatchRequest, opts ...grpc.CallOption,
 ) (*kvpb.BatchResponse, error) {
+	if len(opts) > 0 {
+		return nil, errors.New("CallOptions unsupported")
+	}
+	if a.drpcStreamPool != nil {
+		return a.drpcStreamPool.Send(ctx, in)
+	}
 	return a.drpcClient.Batch(ctx, in)
 }
 
@@ -191,11 +202,11 @@ func (n *Dialer) dial(
 	locality roachpb.Locality,
 	checkBreaker bool,
 	class rpc.ConnectionClass,
-) (_ *grpc.ClientConn, _ *rpc.BatchStreamPool, _ drpcpool.Conn, err error) {
+) (*grpc.ClientConn, *rpc.BatchStreamPool, drpcpool.Conn, *rpc.DRPCBatchStreamPool, error) {
 	const ctxWrapMsg = "dial"
 	// Don't trip the breaker if we're already canceled.
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+		return nil, nil, nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
 	}
 	rpcConn := n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class)
 	connect := rpcConn.Connect2
@@ -206,13 +217,14 @@ func (n *Dialer) dial(
 	if err != nil {
 		// If we were canceled during the dial, don't trip the breaker.
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
+			return nil, nil, nil, nil, errors.Wrap(ctxErr, ctxWrapMsg)
 		}
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	pool := rpcConn.BatchStreamPool()
-	return conn, pool, dconn, nil
+	drpcStreamPool := rpcConn.DRPCBatchStreamPool()
+	return conn, pool, dconn, drpcStreamPool, nil
 }
 
 // ConnHealth returns nil if we have an open connection of the request
