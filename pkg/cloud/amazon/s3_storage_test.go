@@ -378,6 +378,26 @@ func TestPutS3Endpoint(t *testing.T) {
 	)
 }
 
+func TestS3UsePathStyle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	q := make(url.Values)
+	q.Add(AWSUsePathStyle, "true")
+	q.Add(cloud.AuthParam, "implicit")
+	u := url.URL{
+		Scheme:   "s3",
+		Host:     "bucket",
+		Path:     "test",
+		RawQuery: q.Encode(),
+	}
+
+	user := username.RootUserName()
+	_, err := cloud.ExternalStorageConfFromURI(u.String(), user)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestS3DisallowCustomEndpoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

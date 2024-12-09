@@ -51,6 +51,8 @@ const (
 	AWSTempTokenParam = "AWS_SESSION_TOKEN"
 	// AWSEndpointParam is the query parameter for the 'endpoint' in an AWS URI.
 	AWSEndpointParam = "AWS_ENDPOINT"
+	// AWSEndpointParam is the query parameter for UsePathStyle in S3 options.
+	AWSUsePathStyle = "AWS_USE_PATH_STYLE"
 
 	// AWSServerSideEncryptionMode is the query parameter in an AWS URI, for the
 	// mode to be used for server side encryption. It can either be AES256 or
@@ -332,6 +334,8 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	// contain spaces. We can convert any space characters we see to +
 	// characters to recover the original secret.
 	conf.S3Config.Secret = strings.Replace(conf.S3Config.Secret, " ", "+", -1)
+
+	s3URL.ConsumeParam(AWSUsePathStyle) // No-op on this CRDB version, but needed for mixed-version clusters with 24.3.
 
 	// Validate that all the passed in parameters are supported.
 	if unknownParams := s3URL.RemainingQueryParams(); len(unknownParams) > 0 {
