@@ -1,5 +1,10 @@
 subtest lost_table_data
 
+# This test will intentionally corrupt descriptors, so the initial version
+# can *never* be acquired.
+statement ok
+SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false
+
 statement ok
 CREATE TABLE corruptdesc (v INT8)
 
