@@ -549,8 +549,6 @@ type rangefeedErrorInfo struct {
 func handleRangefeedError(
 	ctx context.Context, metrics *DistSenderRangeFeedMetrics, err error, spawnedFromManualSplit bool,
 ) (rangefeedErrorInfo, error) {
-	metrics.Errors.RangefeedRestartRanges.Inc(1)
-
 	if err == nil {
 		return rangefeedErrorInfo{}, nil
 	}
