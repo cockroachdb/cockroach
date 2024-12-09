@@ -89,6 +89,7 @@ go_library(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
+        "//pkg/util/debugutil",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/metamorphic",

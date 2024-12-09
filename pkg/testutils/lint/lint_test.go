@@ -2882,4 +2882,35 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestDebugStack", func(t *testing.T) {
+		t.Parallel()
+
+		excludeFiles := []string{
+			":!util/debugutil/debugutil.go",
+			":!server/debug/goroutineui/dump_test.go",
+		}
+
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", append([]string{
+			"grep", "-nE", `debug\.Stack\(`, "--", "*.go",
+		}, excludeFiles...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use 'debugutil.Stack()' instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
 }

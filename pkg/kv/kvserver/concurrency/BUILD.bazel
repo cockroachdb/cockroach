@@ -32,6 +32,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/util/buildutil",
         "//pkg/util/container/list",
+        "//pkg/util/debugutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
