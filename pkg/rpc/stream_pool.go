@@ -223,6 +223,11 @@ func (p *streamPool[Req, Resp]) Bind(ctx context.Context, cc *grpc.ClientConn) {
 	p.ccCtx = ctx
 }
 
+// Conn returns the gRPC connection bound to the streamPool.
+func (p *streamPool[Req, Resp]) Conn() *grpc.ClientConn {
+	return p.cc
+}
+
 // Close closes all streams in the pool.
 func (p *streamPool[Req, Resp]) Close() {
 	p.streams.Lock()
