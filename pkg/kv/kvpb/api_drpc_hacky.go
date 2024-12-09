@@ -60,7 +60,7 @@ type DRPCDRPCBatchServiceClient interface {
 	DRPCConn() drpc.Conn
 
 	Batch(ctx context.Context, in *BatchRequest) (*BatchResponse, error)
-	// BatchStream(ctx context.Context) (DRPCDRPCBatchService_BatchStreamClient, error)
+	BatchStream(ctx context.Context) (DRPCDRPCBatchService_BatchStreamClient, error)
 }
 
 type drpcDRPCBatchServiceClient struct {
@@ -127,7 +127,7 @@ func (x *drpcDRPCBatchService_BatchStreamClient) RecvMsg(m *BatchResponse) error
 
 type DRPCDRPCBatchServiceServer interface {
 	Batch(context.Context, *BatchRequest) (*BatchResponse, error)
-	// BatchStream(DRPCDRPCBatchService_BatchStreamStream) error
+	BatchStream(DRPCDRPCBatchService_BatchStreamStream) error
 }
 
 type DRPCDRPCBatchServiceUnimplementedServer struct{}
@@ -146,7 +146,7 @@ func (s *DRPCDRPCBatchServiceUnimplementedServer) BatchStream(
 
 type DRPCDRPCBatchServiceDescription struct{}
 
-func (DRPCDRPCBatchServiceDescription) NumMethods() int { return 1 /* HACK: was two */ }
+func (DRPCDRPCBatchServiceDescription) NumMethods() int { return 2 }
 
 func (DRPCDRPCBatchServiceDescription) Method(
 	n int,
@@ -161,14 +161,14 @@ func (DRPCDRPCBatchServiceDescription) Method(
 						in1.(*BatchRequest),
 					)
 			}, DRPCDRPCBatchServiceServer.Batch, true
-	//case 1:
-	//	return "/rpctoy.toypb.DRPCBatchService/BatchStream", drpcEncoding_File_echo_gogo_proto{},
-	//		func(srv interface{}, ctx context.Context, in1, in2 interface{}) (drpc.Message, error) {
-	//			return nil, srv.(DRPCDRPCBatchServiceServer).
-	//				BatchStream(
-	//					&drpcDRPCBatchService_BatchStreamStream{in1.(drpc.Stream)},
-	//				)
-	//		}, DRPCDRPCBatchServiceServer.BatchStream, true
+	case 1:
+		return "/rpctoy.toypb.DRPCBatchService/BatchStream", drpcEncoding_File_echo_gogo_proto{},
+			func(srv interface{}, ctx context.Context, in1, in2 interface{}) (drpc.Message, error) {
+				return nil, srv.(DRPCDRPCBatchServiceServer).
+					BatchStream(
+						&drpcDRPCBatchService_BatchStreamStream{in1.(drpc.Stream)},
+					)
+			}, DRPCDRPCBatchServiceServer.BatchStream, true
 	default:
 		return "", nil, nil, nil, false
 	}
