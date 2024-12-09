@@ -1906,6 +1906,22 @@ func (n *Node) batchStreamImpl(
 	}
 }
 
+func (n *Node) AsDRPCBatchServer() kvpb.DRPCDRPCBatchServiceServer {
+	return (*drpcNode)(n)
+}
+
+type drpcNode Node
+
+func (n *drpcNode) Batch(
+	ctx context.Context, request *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
+	return (*Node)(n).Batch(ctx, request)
+}
+
+func (n *drpcNode) BatchStream(stream kvpb.DRPCDRPCBatchService_BatchStreamStream) error {
+	return (*Node)(n).batchStreamImpl(stream)
+}
+
 // spanForRequest is the retval of setupSpanForIncomingRPC. It groups together a
 // few variables needed when finishing an RPC's span.
 //

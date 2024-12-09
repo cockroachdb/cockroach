@@ -40,7 +40,8 @@ type Connection struct {
 	// RPCs.
 	//
 	// The pool is only initialized once the ClientConn is resolved.
-	batchStreamPool BatchStreamPool
+	batchStreamPool     BatchStreamPool
+	drpcBatchStreamPool DRPCBatchStreamPool
 }
 
 // newConnectionToNodeID makes a Connection for the given node, class, and nontrivial Signal
@@ -54,7 +55,8 @@ func newConnectionToNodeID(
 		connFuture: connFuture{
 			ready: make(chan struct{}),
 		},
-		batchStreamPool: makeStreamPool(opts.Stopper, newBatchStream),
+		batchStreamPool:     makeStreamPool(opts.Stopper, newBatchStream),
+		drpcBatchStreamPool: makeStreamPool(opts.Stopper, newDRPCBatchStream),
 	}
 	return c
 }
@@ -178,6 +180,13 @@ func (c *Connection) BatchStreamPool() *BatchStreamPool {
 		panic("BatchStreamPool called on unresolved connection")
 	}
 	return &c.batchStreamPool
+}
+
+func (c *Connection) DRPCBatchStreamPool() *DRPCBatchStreamPool {
+	if !c.connFuture.Resolved() {
+		panic("DRPCBatchStreamPool called on unresolved connection")
+	}
+	return &c.drpcBatchStreamPool
 }
 
 type connFuture struct {
