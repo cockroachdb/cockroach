@@ -734,6 +734,7 @@ func (p *peer) onInitialHeartbeatSucceeded(
 	// ahead of signaling the connFuture, so that the stream pool is ready for use
 	// by the time the connFuture is resolved.
 	p.mu.c.batchStreamPool.Bind(ctx, cc)
+	p.mu.c.drpcBatchStreamPool.Bind(ctx, dc)
 
 	// Close the channel last which is helpful for unit tests that
 	// first waitOrDefault for a healthy conn to then check metrics.
@@ -859,6 +860,7 @@ func (p *peer) onHeartbeatFailed(
 
 	// Close down the stream pool that was bound to this connection.
 	ls.c.batchStreamPool.Close()
+	ls.c.drpcBatchStreamPool.Close()
 
 	// By convention, we stick to updating breaker before updating peer
 	// to make it easier to write non-flaky tests.
