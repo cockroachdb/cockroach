@@ -432,6 +432,10 @@ func TestConcurrentZip(t *testing.T) {
 	lines := strings.Split(out, "\n")
 	sort.Strings(lines)
 	out = strings.TrimSpace(strings.Join(lines, "\n"))
+	// Remove all "dumping SQL tables" messages since non-deterministic order in
+	// which the original messages interleve with other messages mean the number
+	// of them after each series is collapsed is also non-derministic.
+	out = regexp.MustCompile(`<dumping SQL tables>\n`).ReplaceAllString(out, "")
 
 	// We use datadriven simply to read the golden output file; we don't actually
 	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
@@ -635,7 +639,6 @@ func containsAssert(t *testing.T, actual string, expected []string) {
 func baseZipOutput(nodeId int) []string {
 	output := []string{
 		fmt.Sprintf("[node %d] using SQL connection URL", nodeId),
-		fmt.Sprintf("[node %d] retrieving SQL data", nodeId),
 		fmt.Sprintf("[node %d] requesting stacks... received response...", nodeId),
 		fmt.Sprintf("[node %d] requesting stacks with labels... received response...", nodeId),
 		fmt.Sprintf("[node %d] requesting heap profile list... received response...", nodeId),
