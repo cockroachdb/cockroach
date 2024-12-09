@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
@@ -93,6 +94,25 @@ var (
 		Name:        "replicas.uninitialized",
 		Help:        "Number of uninitialized replicas, this does not include uninitialized replicas that can lie dormant in a persistent state.",
 		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaRaftFlowsReplicate = metric.Metadata{
+		Name:        "raft.flows.state-replicate",
+		Help:        "Number of leader->peer flows in StateReplicate",
+		Measurement: "Flows",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftFlowsProbe = metric.Metadata{
+		Name:        "raft.flows.state-probe",
+		Help:        "Number of leader->peer flows in StateProbe",
+		Measurement: "Flows",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftFlowsSnapshot = metric.Metadata{
+		Name:        "raft.flows.state-snapshot",
+		Help:        "Number of leader->peer flows in StateSnapshot",
+		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
 	}
 
@@ -2596,6 +2616,7 @@ type StoreMetrics struct {
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
 	UninitializedCount            *metric.Gauge
+	ReplicationStateCounts        [tracker.StateCount]*metric.Gauge
 
 	// Range metrics.
 	RangeCount                *metric.Gauge
@@ -3298,6 +3319,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
 		UninitializedCount:            metric.NewGauge(metaUninitializedCount),
+
+		// TODO(pav-kv): this subtly depends on the int values of StateProbe,
+		// StateReplicate and StateSnapshot. Make this less subtle.
+		ReplicationStateCounts: [tracker.StateCount]*metric.Gauge{
+			metric.NewGauge(metaRaftFlowsProbe),
+			metric.NewGauge(metaRaftFlowsReplicate),
+			metric.NewGauge(metaRaftFlowsSnapshot),
+		},
 
 		// Range metrics.
 		RangeCount:                metric.NewGauge(metaRangeCount),
