@@ -2798,6 +2798,60 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestNoEnumeratingAllTables", func(t *testing.T) {
+		t.Parallel()
+		const (
+			// sysTableExample and virtTableExample are the names of a system and
+			// virtual tables respectively, that have been chosen to serve as
+			// indicators, if they are detected in a test, that that test may be
+			// enumerating *all* system or virtual tables which is generally
+			// undesirable outside of a few specific allow-listed cases. There is
+			// nothing special about these two tables other than that they are not
+			// directly referenced in tests other than those deliberately enumerating
+			// all tables, so they're well-suited for this purpose. We could add
+			// others here as well if needed, and add exemptions if one of these is
+			// intentionally used in a test.
+			sysTableExample  = "span_stats_buckets"
+			virtTableExample = "logical_replication_node_processors"
+		)
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			"-e", sysTableExample,
+			"-e", virtTableExample,
+			"--",
+			"**testdata**",
+			"**/*_test.go",
+			":!testutils/lint/lint_test.go",     // false-positive: the lint itself.
+			":!sql/tests/testdata/initial_keys", // exempt: deliberate test of bootstrap catalog
+			":!sql/catalog/systemschema_test/testdata/bootstrap*", // exempt: deliberate test of bootstrap catalog.
+			":!sql/catalog/internal/catkv/testdata/",              // TODO(foundations): #137029.
+			":!cli/testdata/doctor/",                              // TODO(foundations): #137030.
+			":!cmd/roachtest/testdata/regression.diffs",           // TODO(queries): #137026.
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- is this test enumerating all system or internal tables? see https://go.crdb.dev/p/overly-broad-test", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	// Test forbidden roachtest imports.
 	t.Run("TestRoachtestForbiddenImports", func(t *testing.T) {
 		t.Parallel()
