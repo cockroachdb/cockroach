@@ -11,6 +11,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -71,6 +72,10 @@ type TableStatisticsCache struct {
 
 	// Used when decoding KV from the range feed.
 	datumAlloc tree.DatumAlloc
+
+	// generation is incremented any time the statistics cache is
+	// modified.
+	generation atomic.Int64
 }
 
 // The cache stores *cacheEntry objects. The fields are protected by the
@@ -135,6 +140,13 @@ func (sc *TableStatisticsCache) Clear() {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	sc.mu.cache.Clear()
+	defer sc.generation.Add(1)
+}
+
+// GetGeneration returns the current generation, which will change if any
+// modifications happen to the cache.
+func (sc *TableStatisticsCache) GetGeneration() int64 {
+	return sc.generation.Load()
 }
 
 // Start begins watching for updates in the stats table.
@@ -325,6 +337,7 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 ) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+	defer sc.generation.Add(1)
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
 		if e.isStale(forecast, udtCols) {
@@ -413,6 +426,7 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 func (sc *TableStatisticsCache) addCacheEntryLocked(
 	ctx context.Context, tableID descpb.ID, forecast bool, typeResolver *descs.DistSQLTypeResolver,
 ) (stats []*TableStatistic, err error) {
+	defer sc.generation.Add(1)
 	// Add a cache entry that other queries can find and wait on until we have the
 	// stats.
 	e := &cacheEntry{
@@ -426,7 +440,6 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	func() {
 		sc.mu.Unlock()
 		defer sc.mu.Lock()
-
 		log.VEventf(ctx, 1, "reading statistics for table %d", tableID)
 		stats, udts, err = sc.getTableStatsFromDB(ctx, tableID, forecast, sc.settings, typeResolver)
 		log.VEventf(ctx, 1, "finished reading statistics for table %d", tableID)
@@ -459,6 +472,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 ) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+	defer sc.generation.Add(1)
 
 	// If the stats don't already exist in the cache, don't bother performing
 	// the refresh. If e.err is not nil, the stats are in the process of being
@@ -532,6 +546,7 @@ func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableI
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	sc.mu.cache.Del(tableID)
+	defer sc.generation.Add(1)
 }
 
 const (
