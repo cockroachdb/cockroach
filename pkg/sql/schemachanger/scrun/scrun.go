@@ -8,6 +8,7 @@ package scrun
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -110,6 +112,7 @@ func RunSchemaChangesInJob(
 	knobs *scexec.TestingKnobs,
 	deps JobRunDependencies,
 	jobID jobspb.JobID,
+	jobStartTime time.Time,
 	descriptorIDs []descpb.ID,
 	rollbackCause error,
 ) error {
@@ -118,7 +121,7 @@ func RunSchemaChangesInJob(
 			return err
 		}
 	}
-	p, err := makePostCommitPlan(ctx, deps, jobID, descriptorIDs, rollbackCause)
+	p, err := makePostCommitPlan(ctx, deps, jobID, jobStartTime, descriptorIDs, rollbackCause)
 	if err != nil {
 		if knobs != nil && knobs.OnPostCommitPlanError != nil {
 			return knobs.OnPostCommitPlanError(err)
@@ -138,9 +141,13 @@ func RunSchemaChangesInJob(
 			if i+1 == len(p.Stages) {
 				var template eventpb.EventWithCommonSchemaChangePayload
 				if p.CurrentState.InRollback {
-					template = &eventpb.FinishSchemaChangeRollback{}
+					template = &eventpb.FinishSchemaChangeRollback{
+						LatencyNanos: timeutil.Since(jobStartTime).Nanoseconds(),
+					}
 				} else {
-					template = &eventpb.FinishSchemaChange{}
+					template = &eventpb.FinishSchemaChange{
+						LatencyNanos: timeutil.Since(jobStartTime).Nanoseconds(),
+					}
 				}
 				if err := logSchemaChangeEvents(ctx, el, p.CurrentState, template); err != nil {
 					return err
@@ -214,6 +221,7 @@ func makePostCommitPlan(
 	ctx context.Context,
 	deps JobRunDependencies,
 	jobID jobspb.JobID,
+	jobStartTime time.Time,
 	descriptorIDs []descpb.ID,
 	rollbackCause error,
 ) (scplan.Plan, error) {
@@ -248,8 +256,9 @@ func makePostCommitPlan(
 			// Revert the schema change and write about it in the event log.
 			state.Rollback()
 			return logSchemaChangeEvents(ctx, eventLogger, state, &eventpb.ReverseSchemaChange{
-				Error:    fmt.Sprintf("%v", rollbackCause),
-				SQLSTATE: pgerror.GetPGCode(rollbackCause).String(),
+				Error:        fmt.Sprintf("%v", rollbackCause),
+				SQLSTATE:     pgerror.GetPGCode(rollbackCause).String(),
+				LatencyNanos: timeutil.Since(jobStartTime).Nanoseconds(),
 			})
 		}
 		return nil
