@@ -243,6 +243,9 @@ func NewTestCluster(
 	if nodes < 1 {
 		t.Fatal("invalid cluster size: ", nodes)
 	}
+	if clusterArgs.StartSingleNode && nodes > 1 {
+		t.Fatal("StartSingleNode implies 1 node only, but asked to create", nodes)
+	}
 
 	if err := checkServerArgsForCluster(
 		clusterArgs.ServerArgs, clusterArgs.ReplicationMode, disallowJoinAddr,
@@ -555,7 +558,10 @@ func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error 
 func (tc *TestCluster) AddServer(
 	serverArgs base.TestServerArgs,
 ) (serverutils.TestServerInterface, error) {
-	serverArgs.PartOfCluster = true
+	if tc.clusterArgs.StartSingleNode && len(tc.Servers) > 0 {
+		return nil, errors.Errorf("already added 1 node to a start-single-node instance")
+	}
+	serverArgs.PartOfCluster = !tc.clusterArgs.StartSingleNode
 	if serverArgs.JoinAddr != "" {
 		serverArgs.NoAutoInitializeCluster = true
 	}
