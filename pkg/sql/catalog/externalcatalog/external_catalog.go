@@ -115,6 +115,10 @@ func IngestExternalCatalog(
 		} else if originalParentID != table.ParentID {
 			return errors.New("all tables must belong to the same parent")
 		}
+		newID, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
+		if err != nil {
+			return err
+		}
 		// TODO: rewrite the tables to fresh ids.
 		mutTable := tabledesc.NewBuilder(&table).BuildCreatedMutableTable()
 		if setOffline {
@@ -125,6 +129,7 @@ func IngestExternalCatalog(
 		mutTable.UnexposedParentSchemaID = schemaID
 		mutTable.ParentID = dbDesc.GetID()
 		mutTable.Version = 1
+		mutTable.ID = newID
 		tablesToWrite = append(tablesToWrite, mutTable)
 	}
 	return ingesting.WriteDescriptors(
