@@ -85,14 +85,10 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	require.Equal(t, "udt", udtCatalog.Types[0].Name)
 	require.Equal(t, "_udt", udtCatalog.Types[1].Name)
 
-	srv2, conn2, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	execCfg2 := srv2.ExecutorConfig().(sql.ExecutorConfig)
-	defer srv2.Stopper().Stop(ctx)
-
+	// Ingest the catalog into defaultdb.
 	var parentID descpb.ID
 	var schemaID descpb.ID
-
-	require.NoError(t, sql.TestingDescsTxn(ctx, srv2, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "defaultdb")
 		require.NoError(t, err)
 		parentID = dbDesc.GetID()
@@ -100,14 +96,12 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 		return err
 	}))
 
-	require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv2, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		return IngestExternalCatalog(ctx, &execCfg2, sqlUser, sadCatalog, txn, col, parentID, schemaID, false)
-	}), "invalid foreign key backreference")
+	require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		return IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, parentID, schemaID, false)
+	}), "invalid inbound foreign key")
 
-	require.NoError(t, sql.TestingDescsTxn(ctx, srv2, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		return IngestExternalCatalog(ctx, &execCfg2, sqlUser, ingestableCatalog, txn, col, parentID, schemaID, false)
+	require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		return IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, parentID, schemaID, false)
 	}))
-
-	sqlDB2 := sqlutils.MakeSQLRunner(conn2)
-	sqlDB2.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2"}})
+	sqlDB.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2"}})
 }
