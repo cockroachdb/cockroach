@@ -61,6 +61,12 @@ SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE
 ----
 distribution: full
 
+# Top K over a large set of rows - distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1] WHERE info LIKE 'distribution%'
+----
+distribution: full
+
 # Now consider the same set of rows small.
 statement ok
 SET distribute_sort_row_count_threshold = 10000;
@@ -68,6 +74,12 @@ SET distribute_sort_row_count_threshold = 10000;
 # Sort of a small table - don't distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE 'distribution%'
+----
+distribution: local
+
+# Top K over a small set of rows - distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1] WHERE info LIKE 'distribution%'
 ----
 distribution: local
 
@@ -115,18 +127,6 @@ distribution: local
 # TODO(yuzefovich): soft limits are currently ignored in scans.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1] WHERE info LIKE 'distribution%'
-----
-distribution: full
-
-# Limit after sort (i.e. top K sort) - don't distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v LIMIT 1] WHERE info LIKE 'distribution%'
-----
-distribution: local
-
-# General sort - distribute.
-query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE 'distribution%'
 ----
 distribution: full
 
