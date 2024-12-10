@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -141,8 +142,15 @@ type Metadata struct {
 	// as a builtin function.
 	builtinRefsByName map[tree.UnresolvedName]struct{}
 
+	mu *metaDataMu
+
 	// NOTE! When adding fields here, update Init (if reusing allocated
 	// data structures is desired), CopyFrom and TestMetadata.
+}
+
+type metaDataMu struct {
+	syncutil.Mutex
+	dependencyDigest cat.DependencyDigest
 }
 
 // Init prepares the metadata for use (or reuse).
@@ -214,6 +222,13 @@ func (md *Metadata) Init() {
 		delete(md.builtinRefsByName, name)
 	}
 
+	// Reset the mutable data
+	oldMu := md.mu
+	if oldMu == nil {
+		oldMu = &metaDataMu{}
+	}
+	oldMu.dependencyDigest.Clear()
+
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*md = Metadata{}
@@ -227,6 +242,7 @@ func (md *Metadata) Init() {
 	md.objectRefsByName = objectRefsByName
 	md.privileges = privileges
 	md.builtinRefsByName = builtinRefsByName
+	md.mu = oldMu
 }
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.
@@ -361,6 +377,14 @@ func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privil
 	}
 }
 
+// checkDependencyDigest checks if the stored dependency digest matches the
+// current dependency digest.
+func (md *Metadata) checkDependencyDigest(currentDigest *cat.DependencyDigest) bool {
+	md.mu.Lock()
+	defer md.mu.Unlock()
+	return currentDigest.Equal(&md.mu.dependencyDigest)
+}
+
 // CheckDependencies resolves (again) each database object on which this
 // metadata depends, in order to check the following conditions:
 //  1. The object has not been modified.
@@ -378,6 +402,16 @@ func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privil
 func (md *Metadata) CheckDependencies(
 	ctx context.Context, evalCtx *eval.Context, optCatalog cat.Catalog,
 ) (upToDate bool, err error) {
+	// If the query is AOST we must check all the dependencies, since the descriptors
+	// may have been different in the past. Otherwise, the dependency digest
+	// is sufficient.
+	currentDigest := optCatalog.GetDependencyDigest()
+	if evalCtx.AsOfSystemTime == nil &&
+		!evalCtx.Txn.ReadTimestampFixed() &&
+		md.checkDependencyDigest(&currentDigest) {
+		return true, nil
+	}
+
 	// Check that no referenced data sources have changed.
 	for id, dataSource := range md.dataSourceDeps {
 		var toCheck cat.DataSource
@@ -510,6 +544,11 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
+	// Update the digest after a full dependency check, since our fast
+	// check did not succeed.
+	md.mu.Lock()
+	md.mu.dependencyDigest = currentDigest
+	md.mu.Unlock()
 	return true, nil
 }
 

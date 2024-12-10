@@ -46,6 +46,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/intsets",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",

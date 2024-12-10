@@ -509,6 +509,29 @@ func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
 	return oc.planner.User()
 }
 
+// GetDependencyDigest is part of the cat.Catalog interface.
+func (oc *optCatalog) GetDependencyDigest() cat.DependencyDigest {
+	// The stats cache may not be setup in some tests like
+	// TestPortalsDestroyedOnTxnFinish.
+	var statsCacheGeneration int64
+	if oc.planner.ExecCfg().TableStatsCache != nil {
+		statsCacheGeneration = oc.planner.execCfg.TableStatsCache.GetGeneration()
+	}
+
+	return cat.DependencyDigest{
+		LeaseGeneration: oc.planner.Descriptors().GetLeaseGeneration(),
+		StatsGeneration: statsCacheGeneration,
+		// Note: If the system config is modified a new SystemConfig structure
+		// is always allocated. Individual fields cannot change on the caller,
+		// so for the purpose of the dependency digest its sufficient to just
+		// compare / store pointers.
+		SystemConfig:    oc.planner.execCfg.SystemConfig.GetSystemConfig(),
+		CurrentDatabase: oc.planner.CurrentDatabase(),
+		SearchPath:      oc.planner.SessionData().SearchPath,
+		CurrentUser:     oc.planner.User(),
+	}
+}
+
 // GetRoutineOwner is part of the cat.Catalog interface.
 func (oc *optCatalog) GetRoutineOwner(
 	ctx context.Context, routineOid oid.Oid,
