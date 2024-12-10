@@ -236,6 +236,8 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 
 	// Check if we are doing a full scan.
+	// TODO(yuzefovich): add better heuristics here so that we always distribute
+	// "large" scans, as controlled by a session variable.
 	if isFullTableOrIndexScan {
 		recommendation = recommendation.compose(shouldDistribute)
 	}

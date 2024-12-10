@@ -3320,6 +3320,14 @@ func (m *sessionDataMutator) SetDistributeSortRowCountThreshold(val uint64) {
 	m.data.DistributeSortRowCountThreshold = val
 }
 
+func (m *sessionDataMutator) SetDistributeScanRowCountThreshold(val uint64) {
+	m.data.DistributeScanRowCountThreshold = val
+}
+
+func (m *sessionDataMutator) SetAlwaysDistributeFullScans(val bool) {
+	m.data.AlwaysDistributeFullScans = val
+}
+
 func (m *sessionDataMutator) SetDisableVecUnionEagerCancellation(val bool) {
 	m.data.DisableVecUnionEagerCancellation = val
 }

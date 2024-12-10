@@ -673,22 +673,23 @@ func checkSupportForPlanNode(
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
 
-		switch {
-		case n.localityOptimized:
+		if n.localityOptimized {
 			// This is a locality optimized scan.
 			return cannotDistribute, nil
-		case n.isFull:
-			// This is a full scan.
-			return shouldDistribute, nil
-		default:
-			// Although we don't yet recommend distributing plans where soft limits
-			// propagate to scan nodes because we don't have infrastructure to only
-			// plan for a few ranges at a time, the propagation of the soft limits
-			// to scan nodes has been added in 20.1 release, so to keep the
-			// previous behavior we continue to ignore the soft limits for now.
-			// TODO(yuzefovich): pay attention to the soft limits.
-			return canDistribute, nil
 		}
+		// TODO(yuzefovich): consider using the soft limit in making a decision
+		// here.
+		scanRec := canDistribute
+		if n.estimatedRowCount != 0 && n.estimatedRowCount >= sd.DistributeScanRowCountThreshold {
+			// This is a large scan, so we choose to distribute it.
+			scanRec = shouldDistribute
+		}
+		if n.isFull && (n.estimatedRowCount == 0 || sd.AlwaysDistributeFullScans) {
+			// In the absence of table stats, we default to always distributing
+			// full scans.
+			scanRec = shouldDistribute
+		}
+		return scanRec, nil
 
 	case *sortNode:
 		rec, err := checkSupportForPlanNode(n.plan, distSQLVisitor, sd)
