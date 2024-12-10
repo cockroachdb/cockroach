@@ -48,10 +48,12 @@ go_test(
     srcs = [
         "commandbuilder_test.go",
         "load_group_test.go",
+        "utils_test.go",
     ],
     embed = [":roachtestutil"],
     deps = [
         "//pkg/cmd/roachtest/option",
+        "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",
     ],
 )

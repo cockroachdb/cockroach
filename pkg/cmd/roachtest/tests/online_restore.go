@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -557,7 +558,6 @@ func runRestore(
 			if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.skip_external_bytes.enabled=true"); err != nil {
 				return err
 			}
-
 		}
 		opts := "WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION"
 		if runOnline {
@@ -567,6 +567,13 @@ func runRestore(
 			return errors.Wrapf(err, "failed to add some empty tables")
 		}
 		restoreStartTime = timeutil.Now()
+		if runOnline && sp.linkPhaseTimeout != 0 {
+			cancel := roachtestutil.GoAfter(ctx, sp.linkPhaseTimeout, func() {
+				c.CaptureSideEyeSnapshot(ctx)
+			})
+			defer cancel()
+		}
+
 		restoreCmd := rd.restoreCmd(fmt.Sprintf("DATABASE %s", sp.backup.workload.DatabaseName()), opts)
 		t.L().Printf("Running %s", restoreCmd)
 		if _, err = db.ExecContext(ctx, restoreCmd); err != nil {

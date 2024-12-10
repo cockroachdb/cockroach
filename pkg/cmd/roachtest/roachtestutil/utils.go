@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/errors"
@@ -294,4 +295,29 @@ func IfLocal(c cluster.Cluster, trueVal, falseVal string) string {
 		return trueVal
 	}
 	return falseVal
+}
+
+// GoAfter runs the function `do` on a goroutine after the duration elapses
+// unless the cleanup function is called first.
+func GoAfter(ctx context.Context, duration time.Duration, do func()) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	g := ctxgroup.WithContext(ctx)
+
+	g.GoCtx(func(ctx context.Context) error {
+		timer := time.NewTimer(duration)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-timer.C:
+			do()
+		}
+		return nil
+	})
+
+	return func() {
+		cancel()
+		_ = g.Wait()
+	}
 }
