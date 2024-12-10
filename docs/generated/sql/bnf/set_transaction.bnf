@@ -1,4 +1,4 @@
-nonpreparable_set_stmt ::=
+set_transaction_stmt ::=
 	'SET' 'TRANSACTION' 'PRIORITY' 'LOW' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
 	| 'SET' 'TRANSACTION' 'PRIORITY' 'NORMAL' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*
 	| 'SET' 'TRANSACTION' 'PRIORITY' 'HIGH' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) | ( 'DEFERRABLE' | 'NOT' 'DEFERRABLE' ) ) ) )*

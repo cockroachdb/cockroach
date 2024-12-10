@@ -627,6 +627,7 @@ var specs = []stmtSpec{
 			"transaction_read_mode",
 			"as_of_clause",
 			"transaction_deferrable_mode",
+			"user_priority",
 		},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'START'"),
