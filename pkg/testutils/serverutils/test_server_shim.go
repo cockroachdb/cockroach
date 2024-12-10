@@ -242,6 +242,7 @@ type TestFataler interface {
 	Fatalf(format string, args ...interface{})
 	Errorf(format string, args ...interface{})
 	FailNow()
+	Cleanup(func())
 }
 
 // StartServerOnlyE is like StartServerOnly() but it lets
