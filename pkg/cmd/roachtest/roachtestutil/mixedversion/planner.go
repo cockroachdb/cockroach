@@ -627,6 +627,10 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 			virtualClusterName: p.tenantName(),
 			systemVisible:      true,
 		}))
+
+		steps = append(steps, p.newSingleStepWithContext(setupContext, disableRateLimitersStep{
+			virtualClusterName: p.tenantName(),
+		}))
 	}
 
 	if shouldGrantCapabilities {
