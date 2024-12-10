@@ -2673,6 +2673,8 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 					require.Equal(t, pgcode.ConfigurationLimitExceeded, pgerror.GetPGCode(pErr.GoError()))
 					if tc.maxSize > 0 {
 						require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByLockSpanBudget.Count())
+					} else {
+						require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByLockCountLimit.Count())
 					}
 
 					// Make sure rolling back the txn works.
