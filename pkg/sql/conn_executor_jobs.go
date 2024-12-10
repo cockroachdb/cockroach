@@ -6,10 +6,13 @@
 package sql
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -51,6 +54,23 @@ func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
 			}
 			return err
 		}
+	}
+	// Detect any tables that have just been created, we will confirm that all
+	// nodes that have leased the schema for them out are aware of the new object.
+	// This guarantees that any cache optimizer memos are discarded once the
+	// user transaction completes.
+	for _, tbl := range ex.extraTxnState.descCollection.GetUncommittedTables() {
+		if tbl.GetVersion() == 1 {
+			_, err := ex.planner.LeaseMgr().WaitForInitialVersion(ex.Ctx(), tbl.GetID(), retry.Options{
+				InitialBackoff: time.Millisecond,
+				MaxBackoff:     time.Second,
+				Multiplier:     1.5,
+			}, cachedRegions)
+			if err != nil {
+				return err
+			}
+		}
+
 	}
 	return nil
 }

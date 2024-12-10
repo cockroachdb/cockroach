@@ -307,7 +307,8 @@ ORDER BY 1
 subtest disable_validation
 
 statement ok
-CREATE TABLE kv (k INT PRIMARY KEY, v STRING);
+CREATE SCHEMA scCorrupt;
+CREATE TABLE scCorrupt.kv (k INT PRIMARY KEY, v STRING);
 
 statement ok
 SELECT
@@ -329,13 +330,13 @@ WHERE
 	name = 'kv'
 
 statement error pgcode XX000 internal error: relation "kv" \(\d+\): column "k" invalid ID \(1\) >= next column ID \(1\)
-ALTER TABLE kv RENAME TO kv
+ALTER TABLE scCorrupt.kv RENAME TO scCorrupt.kv
 
 statement ok
 SET descriptor_validation = off
 
 statement ok
-ALTER TABLE kv RENAME TO kv
+ALTER TABLE scCorrupt.kv RENAME TO scCorrupt.kv
 
 statement ok
 SET descriptor_validation = on
@@ -361,7 +362,7 @@ WHERE
 	name = 'kv'
 
 statement ok
-DROP TABLE kv
+DROP TABLE scCorrupt.kv
 
 # Check that crdb_internal.descriptor_with_post_deserialization_changes
 # performs as expected.
