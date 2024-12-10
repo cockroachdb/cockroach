@@ -40,9 +40,13 @@ if [[ -z "${DRY_RUN}" ]]; then
     # Used for docker login for gcloud
     gcr_hostname="us-docker.pkg.dev"
     gcs_bucket="cockroach-builds-artifacts-prod"
+    metadata_gcs_bucket="cockroach-release-qualification-prod"
+    metadata_google_credentials=$GCS_CREDENTIALS_PROD
   else
     gcs_bucket="cockroach-customized-builds-artifacts-prod"
     gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/cockroach-customized"
+    metadata_gcs_bucket="cockroach-release-qualification-test"
+    metadata_google_credentials=$GCS_CREDENTIALS_DEV
   fi
 else
   gcs_bucket="cockroach-builds-artifacts-dryrun"
@@ -50,6 +54,8 @@ else
   gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
   build_name="${build_name}.dryrun"
   gcr_hostname="us.gcr.io"
+  metadata_gcs_bucket="cockroach-release-qualification-test"
+  metadata_google_credentials=$GCS_CREDENTIALS_DEV
 fi
 
 cat << EOF
@@ -112,3 +118,22 @@ if [[ -n "${is_customized_build}" ]] ; then
   git_wrapped push ssh://git@github.com/cockroachdb/cockroach.git --delete "${TC_BUILD_BRANCH}"
   tc_end_block "Delete custombuild tag"
 fi
+
+# Publish build metadata to a stable location.
+tc_start_block "Metadata"
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+metadata_file="artifacts/metadata.json"
+mkdir -p artifacts
+cat > "$metadata_file" << EOF
+{
+  "sha": "$BUILD_VCS_NUMBER",
+  "timestamp": "$timestamp",
+  "tag": "$build_name"
+}
+EOF
+# Run jq to pretty print and validate JSON
+jq . "$metadata_file"
+google_credentials=$metadata_google_credentials log_into_gcloud
+gsutil cp "$metadata_file" "gs://$metadata_gcs_bucket/builds/$BUILD_VCS_NUMBER.json"
+echo "Published to https://storage.googleapis.com/$metadata_gcs_bucket/builds/$BUILD_VCS_NUMBER.json"
+tc_end_block "Metadata"
