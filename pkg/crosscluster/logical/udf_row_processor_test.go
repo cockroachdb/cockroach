@@ -188,7 +188,8 @@ func TestUDFPreviousValue(t *testing.T) {
 	runnerA.Exec(t, "UPDATE tallies SET v = 15 WHERE pk = 1")
 	WaitUntilReplicatedTime(t, s.Clock().Now(), runnerB, jobBID)
 
-	runnerB.CheckQueryResults(t, "SELECT * FROM tallies", [][]string{
-		{"1", "25"},
+	// At-least-once delivery means it should be at least 25 (might be 30/35/etc).
+	runnerB.CheckQueryResults(t, "SELECT v >= 25 FROM tallies", [][]string{
+		{"true"},
 	})
 }
