@@ -27,7 +27,7 @@ exp,benchmark
 8,AlterTableUnsplit/alter_table_unsplit_at_1_value
 11,AlterTableUnsplit/alter_table_unsplit_at_2_values
 14,AlterTableUnsplit/alter_table_unsplit_at_3_values
-5,Audit/select_from_an_audit_table
+2-4,Audit/select_from_an_audit_table
 26,CreateRole/create_role_with_1_option
 29,CreateRole/create_role_with_2_options
 32,CreateRole/create_role_with_3_options
@@ -52,7 +52,7 @@ exp,benchmark
 17,DropView/drop_2_views
 17,DropView/drop_3_views
 5,GenerateObjects/generate_1000_tables_-_this_test_should_use_the_same_number_of_RTTs_as_for_10_tables
-11,GenerateObjects/generate_100_tables_from_template
+8-10,GenerateObjects/generate_100_tables_from_template
 5,GenerateObjects/generate_10_tables
 16,GenerateObjects/generate_10x10_schemas_and_tables_in_existing_db
 5,GenerateObjects/generate_50000_tables
@@ -125,9 +125,9 @@ exp,benchmark
 20,Truncate/truncate_2_column_0_rows
 20,Truncate/truncate_2_column_1_rows
 20,Truncate/truncate_2_column_2_rows
-3,UDFResolution/select_from_udf
-5,UseManyRoles/use_2_roles
-3,UseManyRoles/use_50_roles
+0,UDFResolution/select_from_udf
+2,UseManyRoles/use_2_roles
+0,UseManyRoles/use_50_roles
 1,VirtualTableQueries/select_crdb_internal.invalid_objects_with_1_fk
 1,VirtualTableQueries/select_crdb_internal.tables_with_1_fk
 5,VirtualTableQueries/virtual_table_cache_with_point_lookups
