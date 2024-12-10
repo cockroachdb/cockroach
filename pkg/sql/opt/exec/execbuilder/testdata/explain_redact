@@ -1156,7 +1156,7 @@ update ab
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
 ----
-memo (optimized, ~13KB, required=[presentation: info:15] [distribution: test])
+memo (optimized, ~14KB, required=[presentation: info:15] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:15] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])

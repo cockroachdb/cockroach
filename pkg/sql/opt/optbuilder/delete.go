@@ -111,6 +111,9 @@ func (mb *mutationBuilder) buildDelete(returning *tree.ReturningExprs) {
 	// Project partial index DEL boolean columns.
 	mb.projectPartialIndexDelCols()
 
+	// Project vector index DEL columns.
+	mb.projectVectorIndexColsForDelete()
+
 	private := mb.makeMutationPrivate(returning != nil)
 	for _, col := range mb.extraAccessibleCols {
 		if col.id != 0 {
