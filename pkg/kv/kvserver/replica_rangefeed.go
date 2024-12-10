@@ -95,7 +95,7 @@ var ErrBufferedSenderNotSupported = unimplemented.NewWithIssue(
 // unimplemented and disabled everywhere (#126560).
 var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kv.rangefeed.buffered_stream_sender.enabled",
+	"kv.rangefeed.buffered_sender.enabled",
 	"use buffered sender for all range feeds instead of buffering events "+
 		"separately per client per range",
 	false,
