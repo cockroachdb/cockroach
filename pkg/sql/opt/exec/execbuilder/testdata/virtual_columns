@@ -286,6 +286,7 @@ vectorized: true
               estimated row count: 333 (missing stats)
               table: t@t_pkey
               spans: /2-
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) DELETE FROM t WHERE v = 1
@@ -336,6 +337,7 @@ vectorized: true
           estimated row count: 333 (missing stats)
           table: t_idx@t_idx_pkey
           spans: /2-
+          locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a > 1 RETURNING v
@@ -363,6 +365,7 @@ vectorized: true
               estimated row count: 333 (missing stats)
               table: t_idx@t_idx_pkey
               spans: /2-
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE v = 1
@@ -387,12 +390,14 @@ vectorized: true
         │ estimated row count: 333 (missing stats)
         │ table: t_idx@t_idx_pkey
         │ key columns: a
+        │ locking strength: for update
         │
         └── • scan
               columns: (a)
               estimated row count: 10 (missing stats)
               table: t_idx@t_idx_v_idx
               spans: /1-/2
+              locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) DELETE FROM t_idx WHERE a + b = 1
@@ -417,12 +422,14 @@ vectorized: true
         │ estimated row count: 333 (missing stats)
         │ table: t_idx@t_idx_pkey
         │ key columns: a
+        │ locking strength: for update
         │
         └── • scan
               columns: (a)
               estimated row count: 10 (missing stats)
               table: t_idx@t_idx_v_idx
               spans: /1-/2
+              locking strength: for update
 
 subtest Update
 

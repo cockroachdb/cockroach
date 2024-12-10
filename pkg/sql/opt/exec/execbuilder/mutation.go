@@ -1131,6 +1131,10 @@ var forUpdateLocking = opt.Locking{
 func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 	mutExpr memo.RelExpr,
 ) (opt.TableID, error) {
+	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
+		return 0, nil
+	}
+
 	switch t := mutExpr.(type) {
 	case *memo.InsertExpr:
 		// Unlike with the other three mutation expressions, it never makes
@@ -1177,10 +1181,6 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 // not worth risking the transformation being a pessimization, so it is only
 // applied when doing so does not risk creating artificial contention.
 func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) opt.TableID {
-	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
-		return 0
-	}
-
 	// Try to match the Update's input expression against the pattern:
 	//
 	//   [Project]* [IndexJoin] Scan
@@ -1201,10 +1201,6 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 // an UPSERT statement. If the builder should lock the initial row scan, it
 // returns the TableID of the scan, otherwise it returns 0.
 func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) opt.TableID {
-	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
-		return 0
-	}
-
 	// Try to match the Upsert's input expression against the pattern:
 	//
 	//   [Project]* (LeftJoin Scan | LookupJoin) [Project]* Values
@@ -1239,10 +1235,19 @@ func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) 
 // should apply a FOR UPDATE row-level locking mode to the initial row scan of a
 // DELETE statement. If the builder should lock the initial row scan, it returns
 // the TableID of the scan, otherwise it returns 0.
-//
-// TODO(nvanbenschoten): implement this method to match on appropriate Delete
-// expression trees and apply a row-level locking mode.
 func (b *Builder) shouldApplyImplicitLockingToDeleteInput(del *memo.DeleteExpr) opt.TableID {
+	// Try to match the Delete's input expression against the pattern:
+	//
+	//   [Project]* [IndexJoin] Scan
+	//
+	input := del.Input
+	input = unwrapProjectExprs(input)
+	if idxJoin, ok := input.(*memo.IndexJoinExpr); ok {
+		input = idxJoin.Input
+	}
+	if scan, ok := input.(*memo.ScanExpr); ok {
+		return scan.Table
+	}
 	return 0
 }
 
