@@ -170,7 +170,7 @@ func (oc *optCatalog) LookupDatabaseName(
 	if name == "" {
 		name = oc.planner.CurrentDatabase()
 	}
-	if err := oc.planner.LookupDatabase(ctx, name); err != nil {
+	if _, err := oc.planner.LookupDatabase(ctx, name); err != nil {
 		return "", err
 	}
 	return tree.Name(name), nil
