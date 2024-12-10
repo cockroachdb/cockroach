@@ -10,11 +10,13 @@ package cat
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -75,6 +77,45 @@ type Flags struct {
 	// like `SHOW RANGES` for which we also want to show valid ranges
 	// when a table is being imported (offline).
 	IncludeNonActiveIndexes bool
+}
+
+// DependencyDigest can be stored and confirm that all catalog objects resolved,
+// at the current point in time will have the same version, stats, valid privileges,
+// and name resolution.
+type DependencyDigest struct {
+	// LeaseGeneration tracks if any new version of descriptors has been published
+	// by the lease manager.
+	LeaseGeneration int64
+
+	// StatsGeneration tracks if any new statistics have been published.
+	StatsGeneration int64
+
+	// SystemConfig tracks the current system config, which is refreshed on
+	// any zone config update.
+	SystemConfig *config.SystemConfig
+
+	CurrentDatabase string
+	SearchPath      sessiondata.SearchPath
+	CurrentUser     username.SQLUsername
+}
+
+// Equal compares if two dependency digests match.
+func (d *DependencyDigest) Equal(other *DependencyDigest) bool {
+	return d.LeaseGeneration == other.LeaseGeneration &&
+		d.StatsGeneration == other.StatsGeneration &&
+		// Note: If the system config is modified a new SystemConfig structure
+		// is always allocated. Individual fields cannot change on the caller,
+		// so for the purpose of the dependency digest its sufficient to just
+		// compare / store pointers.
+		d.SystemConfig == other.SystemConfig &&
+		d.CurrentDatabase == other.CurrentDatabase &&
+		d.SearchPath.Equals(&other.SearchPath) &&
+		d.CurrentUser == other.CurrentUser
+}
+
+// Clear clears a dependency digest.
+func (d *DependencyDigest) Clear() {
+	*d = DependencyDigest{}
 }
 
 // Catalog is an interface to a database catalog, exposing only the information
@@ -209,6 +250,11 @@ type Catalog interface {
 
 	// GetCurrentUser returns the username.SQLUsername of the current session.
 	GetCurrentUser() username.SQLUsername
+
+	// GetDependencyDigest fetches the current dependency digest, which can be
+	// used as a fast comparison to guarantee that all dependencies will resolve
+	// exactly the same.
+	GetDependencyDigest() DependencyDigest
 
 	// GetRoutineOwner returns the username.SQLUsername of the routine's
 	// (specified by routineOid) owner.
