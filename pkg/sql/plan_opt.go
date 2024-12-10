@@ -139,7 +139,7 @@ func (p *planner) prepareUsingOptimizer(
 			if !pm.TypeHints.Identical(p.semaCtx.Placeholders.TypeHints) {
 				opc.log(ctx, "query cache hit but type hints don't match")
 			} else {
-				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog)
+				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog, nil)
 				if err != nil {
 					return 0, err
 				}
@@ -654,7 +654,7 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 			// A generic plan does not yet exist.
 			return nil, nil
 		}
-		isStale, err := prep.GenericMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog)
+		isStale, err := prep.GenericMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog, &prep.GenericGeneration)
 		if err != nil {
 			return nil, err
 		} else if !isStale {
@@ -668,7 +668,7 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 	}
 
 	if prep.BaseMemo != nil {
-		isStale, err := prep.BaseMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog)
+		isStale, err := prep.BaseMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog, &prep.BaseGeneration)
 		if err != nil {
 			return nil, err
 		} else if !isStale {
@@ -793,7 +793,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
 		if ok {
-			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
+			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog, nil); err != nil {
 				return nil, err
 			} else if isStale {
 				opc.log(ctx, "query cache hit but needed update")

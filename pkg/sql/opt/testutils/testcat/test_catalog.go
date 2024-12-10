@@ -453,6 +453,12 @@ func (tc *Catalog) AddSequence(seq *Sequence) {
 	tc.testSchema.dataSources[fq] = seq
 }
 
+// UpdateCatalogGeneration always assume that the generations are changing
+// on us.
+func (tc *Catalog) UpdateCatalogGeneration(g *cat.CatalogGeneration) bool {
+	return false
+}
+
 // ExecuteMultipleDDL parses the given semicolon-separated DDL SQL statements
 // and applies each of them to the test catalog.
 func (tc *Catalog) ExecuteMultipleDDL(sql string) error {
