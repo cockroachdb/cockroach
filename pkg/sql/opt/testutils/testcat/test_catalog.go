@@ -453,6 +453,14 @@ func (tc *Catalog) AddSequence(seq *Sequence) {
 	tc.testSchema.dataSources[fq] = seq
 }
 
+// CompareDataSourcesFingerprint always assume that the fingerprints are changing
+// on us.
+func (tc *Catalog) CompareDataSourcesFingerprint(
+	a *cat.DataSourcesFingerprint, b *cat.DataSourcesFingerprint,
+) bool {
+	return false
+}
+
 // ExecuteMultipleDDL parses the given semicolon-separated DDL SQL statements
 // and applies each of them to the test catalog.
 func (tc *Catalog) ExecuteMultipleDDL(sql string) error {
