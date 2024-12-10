@@ -2325,15 +2325,16 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			return errors.AssertionFailedf("no tenantID for initialized replica %s", rep)
 		}
 
-		// Eagerly unquiesce replicas that use expiration-based leases. We don't
-		// quiesce ranges with expiration leases, and we want to eagerly acquire
-		// leases for them, which happens during Raft ticks. We rely on Raft
-		// pre-vote to avoid disturbing established Raft leaders.
+		// Eagerly unquiece replicas that are using a lease that doesn't support quiescnce.
+		// In practice, this means we'll unquiesce ranges that are using leader leases
+		// or expiration leases. We want to eagerly establish raft leaders for such
+		// ranges and acquire leases on top of this. This happens during Raft ticks.
+		// We rely on Raft pre-vote to avoid disturbance to Raft leaders.
 		//
 		// NB: cluster settings haven't propagated yet, so we have to check the last
-		// known lease instead of relying on shouldUseExpirationLeaseRLocked(). We
-		// also check Sequence > 0 to omit ranges that haven't seen a lease yet.
-		if l, _ := rep.GetLease(); l.Type() == roachpb.LeaseExpiration && l.Sequence > 0 {
+		// known lease instead of desiredLeaseTypeRLocked. We also check Sequence >
+		// 0 to omit ranges that haven't seen a lease yet.
+		if l, _ := rep.GetLease(); !l.SupportsQuiescence() && l.Sequence > 0 {
 			rep.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
 		}
 	}

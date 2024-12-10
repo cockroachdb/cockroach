@@ -300,19 +300,10 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 		}
 		return nil, nil, false
 	}
-	// Fast path: don't quiesce leader leases. A fortified raft leader does not
-	// send raft heartbeats, so quiescence is not needed. All liveness decisions
-	// are based on store liveness communication, which is cheap enough to not
-	// need a notion of quiescence.
-	if leaseStatus.Lease.Type() == roachpb.LeaseLeader {
-		log.VInfof(ctx, 4, "not quiescing: leader lease")
-		return nil, nil, false
-	}
-	// Fast path: don't quiesce expiration-based leases, since they'll likely be
-	// renewed soon. The lease may not be ours, but in that case we wouldn't be
-	// able to quiesce anyway (see leaseholder condition below).
-	if l := leaseStatus.Lease; l.Type() == roachpb.LeaseExpiration {
-		log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
+	// Fast path: if the lease doesn't support quiescence (leader leases and
+	// expiration based leases do not), return early.
+	if !leaseStatus.Lease.SupportsQuiescence() {
+		log.VInfof(ctx, 4, "not quiescing: %s", leaseStatus.Lease.Type())
 		return nil, nil, false
 	}
 	if q.hasPendingProposalsRLocked() {
