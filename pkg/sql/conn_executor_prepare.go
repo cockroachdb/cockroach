@@ -241,7 +241,7 @@ func (ex *connExecutor) prepare(
 					}
 					if types.IsOIDUserDefinedType(rawTypeHints[i]) {
 						var err error
-						placeholderHints[i], err = ex.planner.ResolveTypeByOID(ctx, rawTypeHints[i])
+						placeholderHints[i], err = p.ResolveTypeByOID(ctx, rawTypeHints[i])
 						if err != nil {
 							return err
 						}
@@ -268,7 +268,7 @@ func (ex *connExecutor) prepare(
 		stmt.Prepared = prepared
 
 		if stmt.NumPlaceholders > 0 {
-			if err := tree.ProcessPlaceholderAnnotations(&ex.planner.semaCtx, stmt.AST, placeholderHints); err != nil {
+			if err := tree.ProcessPlaceholderAnnotations(&p.semaCtx, stmt.AST, placeholderHints); err != nil {
 				return err
 			}
 		}
@@ -324,7 +324,7 @@ func (ex *connExecutor) populatePrepared(
 	// transaction, so there's no need to fix the timestamp, unlike how we must
 	// for pgwire- or SQL-level prepared statements.
 	if origin != PreparedStatementOriginSessionMigration {
-		if err := ex.handleAOST(ctx, p.stmt.AST); err != nil {
+		if err := ex.handleAOST(ctx, p, p.stmt.AST); err != nil {
 			return 0, err
 		}
 	}
@@ -461,7 +461,7 @@ func (ex *connExecutor) execBind(
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			p := &ex.planner
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
-			if err := ex.handleAOST(ctx, ps.AST); err != nil {
+			if err := ex.handleAOST(ctx, p, ps.AST); err != nil {
 				return err
 			}
 
@@ -484,7 +484,7 @@ func (ex *connExecutor) execBind(
 							typ = types.JSONArrayForDecodingOnly
 						} else {
 							var err error
-							typ, err = ex.planner.ResolveTypeByOID(ctx, t)
+							typ, err = p.ResolveTypeByOID(ctx, t)
 							if err != nil {
 								return err
 							}
@@ -492,7 +492,7 @@ func (ex *connExecutor) execBind(
 					}
 					d, err := pgwirebase.DecodeDatum(
 						ctx,
-						ex.planner.EvalContext(),
+						p.EvalContext(),
 						typ,
 						qArgFormatCodes[i],
 						arg,

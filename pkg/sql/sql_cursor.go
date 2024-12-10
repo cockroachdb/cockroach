@@ -73,7 +73,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 			stmt := makeStatement(statements.Statement[tree.Statement]{AST: s.Select}, clusterunique.ID{},
 				tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)))
 			pt := planTop{}
-			pt.init(&stmt, &p.instrumentation)
+			pt.init(&stmt, p.instrumentation)
 			opc := &p.optPlanningCtx
 			opc.p.stmt = stmt
 			opc.reset(ctx)

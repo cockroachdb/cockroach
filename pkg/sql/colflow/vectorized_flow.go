@@ -274,37 +274,16 @@ func (f *vectorizedFlow) Setup(
 	return ctx, opChains, nil
 }
 
-// Resume is part of the Flow interface.
-func (f *vectorizedFlow) Resume(recv execinfra.RowReceiver) {
-	if f.batchFlowCoordinator != nil {
-		// Resume is expected to be called only for pausable portals, for which
-		// we must be using limitedCommandResult which currently doesn't
-		// implement the execinfra.BatchReceiver interface, so we shouldn't have
-		// a batch flow coordinator here.
-		recv.Push(
-			nil, /* row */
-			&execinfrapb.ProducerMetadata{
-				Err: errors.AssertionFailedf(
-					"batchFlowCoordinator should be nil for vectorizedFlow",
-				)})
-		recv.ProducerDone()
-		return
-	}
-	f.FlowBase.Resume(recv)
-}
-
 // Run is part of the Flow interface.
-func (f *vectorizedFlow) Run(ctx context.Context, noWait bool) {
+func (f *vectorizedFlow) Run(ctx context.Context) {
 	if f.batchFlowCoordinator == nil {
 		// If we didn't create a BatchFlowCoordinator, then we have a processor
 		// as the root, so we run this flow with the default implementation.
-		f.FlowBase.Run(ctx, noWait)
+		f.FlowBase.Run(ctx)
 		return
 	}
 
-	if !noWait {
-		defer f.Wait()
-	}
+	defer f.Wait()
 
 	if err := f.StartInternal(ctx, nil /* processors */, nil /* outputs */); err != nil {
 		f.GetRowSyncFlowConsumer().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})

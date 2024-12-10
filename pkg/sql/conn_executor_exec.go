@@ -138,10 +138,34 @@ func (ex *connExecutor) execStmt(
 		if portal != nil {
 			preparedStmt = portal.Stmt
 		}
-		err = ex.execWithProfiling(ctx, ast, preparedStmt, func(ctx context.Context) error {
-			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, portal, pinfo, res, canAutoCommit)
-			return err
-		})
+		// TODO(sql-sessions): persist the planner for a pausable portal, and reuse
+		// it for each re-execution.
+		// https://github.com/cockroachdb/cockroach/issues/99625
+		stmtTS := ex.server.cfg.Clock.PhysicalTime()
+		ex.resetPlanner(ctx, &ex.planner, ex.state.mu.txn, stmtTS)
+		if res.SupportsPausing() {
+			plannerCopy := ex.planner
+			// TODO: think through other fields.
+			plannerCopy.instrumentation = &instrumentationHelper{}
+			plannerCopy.curPlan = &planTop{}
+			ex.initPlanner(ctx, &plannerCopy)
+			ex.resetEvalCtx(&plannerCopy.extendedEvalCtx, ex.state.mu.txn, stmtTS)
+			go func() {
+				var e fsm.Event
+				var p fsm.EventPayload
+				err := ex.execWithProfiling(ctx, ast, preparedStmt, func(ctx context.Context) error {
+					e, p, err = ex.execStmtInOpenState(ctx, &plannerCopy, parserStmt, portal, pinfo, res, canAutoCommit)
+					return err
+				})
+				res.RowsExhausted(e, p, err)
+			}()
+			ev, payload, err = res.WaitForRows()
+		} else {
+			err = ex.execWithProfiling(ctx, ast, preparedStmt, func(ctx context.Context) error {
+				ev, payload, err = ex.execStmtInOpenState(ctx, &ex.planner, parserStmt, portal, pinfo, res, canAutoCommit)
+				return err
+			})
+		}
 		switch ev.(type) {
 		case eventNonRetriableErr:
 			ex.recordFailure()
@@ -212,22 +236,6 @@ func (ex *connExecutor) execPortal(
 	pinfo *tree.PlaceholderInfo,
 	canAutoCommit bool,
 ) (ev fsm.Event, payload fsm.EventPayload, retErr error) {
-	defer func() {
-		if portal.isPausable() {
-			if !portal.pauseInfo.exhaustPortal.cleanup.isComplete {
-				portal.pauseInfo.exhaustPortal.cleanup.appendFunc(namedFunc{fName: "exhaust portal", f: func() {
-					ex.exhaustPortal(portalName)
-				}})
-				portal.pauseInfo.exhaustPortal.cleanup.isComplete = true
-			}
-			// If we encountered an error when executing a pausable portal, clean up
-			// the retained resources.
-			if retErr != nil {
-				portal.pauseInfo.cleanupAll()
-			}
-		}
-	}()
-
 	switch ex.machine.CurState().(type) {
 	case stateOpen:
 		// We're about to execute the statement in an open state which
@@ -255,7 +263,7 @@ func (ex *connExecutor) execPortal(
 		// to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
 		// so only exhaust it if it still exists.
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok && !portal.isPausable() {
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok && portal.pausableRes == nil {
 			defer ex.exhaustPortal(portalName)
 		}
 		return ev, payload, retErr
@@ -280,6 +288,7 @@ func (ex *connExecutor) execPortal(
 // The returned event can be nil if no state transition is required.
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context,
+	p *planner,
 	parserStmt statements.Statement[tree.Statement],
 	portal *PreparedPortal,
 	pinfo *tree.PlaceholderInfo,
@@ -298,91 +307,20 @@ func (ex *connExecutor) execStmtInOpenState(
 	// requires only a single heap allocation.
 	var vars localVars
 
-	// updateRetErrAndPayload ensures that the latest event payload and error is
-	// always recorded by portal.pauseInfo.
-	// TODO(janexing): add test for this.
-	updateRetErrAndPayload := func(err error, payload fsm.EventPayload) {
-		retPayload = payload
-		retErr = err
-		if portal.isPausable() {
-			portal.pauseInfo.execStmtInOpenState.retPayload = payload
-			portal.pauseInfo.execStmtInOpenState.retErr = err
-		}
-	}
-	// For pausable portals, we delay the clean-up until closing the portal by
-	// adding the function to the execStmtInOpenStateCleanup.
-	// Otherwise, perform the clean-up step within every execution.
-	processCleanupFunc := func(fName string, f func()) {
-		if !portal.isPausable() {
-			f()
-		} else if !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
-			portal.pauseInfo.execStmtInOpenState.cleanup.appendFunc(namedFunc{
-				fName: fName,
-				f: func() {
-					f()
-					// Some cleanup steps modify the retErr and retPayload. We need to
-					// ensure that cleanup after them can see the update.
-					updateRetErrAndPayload(retErr, retPayload)
-				},
-			})
-		}
-	}
-	defer func() {
-		// This is the first defer, so it will always be called after any cleanup
-		// func being added to the stack from the defers below.
-		if portal.isPausable() && !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
-			portal.pauseInfo.execStmtInOpenState.cleanup.isComplete = true
-		}
-		// If there's any error, do the cleanup right here.
-		if (retErr != nil || payloadHasError(retPayload)) && portal.isPausable() {
-			updateRetErrAndPayload(retErr, retPayload)
-			portal.pauseInfo.resumableFlow.cleanup.run()
-			portal.pauseInfo.dispatchToExecutionEngine.cleanup.run()
-			portal.pauseInfo.execStmtInOpenState.cleanup.run()
-		}
-	}()
-
-	// We need this part so that when we check if we need to increment the count
-	// of executed stmt, we are checking the latest error and payload. Otherwise,
-	// we would be checking the ones evaluated at the portal's first-time
-	// execution.
-	defer func() {
-		if portal.isPausable() {
-			updateRetErrAndPayload(retErr, retPayload)
-		}
-	}()
-
 	vars.ast = parserStmt.AST
 	var sp *tracing.Span
-	if !portal.isPausable() || !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
-		ctx, sp = tracing.ChildSpan(ctx, "sql query")
-		// TODO(andrei): Consider adding the placeholders as tags too.
-		sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
-		ctx = withStatement(ctx, vars.ast)
-		if portal.isPausable() {
-			portal.pauseInfo.execStmtInOpenState.spCtx = ctx
-		}
-		defer func() {
-			processCleanupFunc("cleanup span", sp.Finish)
-		}()
-	} else {
-		ctx = portal.pauseInfo.execStmtInOpenState.spCtx
-	}
+	ctx, sp = tracing.ChildSpan(ctx, "sql query")
+	defer sp.Finish()
+	// TODO(andrei): Consider adding the placeholders as tags too.
+	sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
+	ctx = withStatement(ctx, vars.ast)
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
 		ev, payload := ex.makeErrEvent(err, vars.ast)
 		return ev, payload, nil
 	}
 
-	var queryID clusterunique.ID
-	if portal.isPausable() {
-		if !portal.pauseInfo.isQueryIDSet() {
-			portal.pauseInfo.execStmtInOpenState.queryID = ex.server.cfg.GenerateID()
-		}
-		queryID = portal.pauseInfo.execStmtInOpenState.queryID
-	} else {
-		queryID = ex.server.cfg.GenerateID()
-	}
+	queryID := ex.server.cfg.GenerateID()
 
 	// Update the deadline on the transaction based on the collections.
 	err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
@@ -409,46 +347,22 @@ func (ex *connExecutor) execStmtInOpenState(
 	var queryDoneAfterFunc chan struct{}
 	var txnDoneAfterFunc chan struct{}
 
-	// For pausable portal, the active query needs to be set up only when
-	// the portal is executed for the first time.
-	if !portal.isPausable() || !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
-		ctx, vars.cancelQuery = ctxlog.WithCancel(ctx)
-		ex.incrementStartedStmtCounter(vars.ast)
-		ex.state.mu.Lock()
-		ex.state.mu.stmtCount++
-		ex.state.mu.Unlock()
-		ex.addActiveQuery(parserStmt, pinfo, queryID, vars.cancelQuery)
-		if portal.isPausable() {
-			portal.pauseInfo.execStmtInOpenState.cancelQueryFunc = vars.cancelQuery
-			portal.pauseInfo.execStmtInOpenState.cancelQueryCtx = ctx
+	ctx, vars.cancelQuery = ctxlog.WithCancel(ctx)
+	ex.incrementStartedStmtCounter(vars.ast)
+	ex.state.mu.Lock()
+	ex.state.mu.stmtCount++
+	ex.state.mu.Unlock()
+	ex.addActiveQuery(parserStmt, pinfo, queryID, vars.cancelQuery)
+	defer func() {
+		if retErr == nil && !payloadHasError(retPayload) {
+			ex.incrementExecutedStmtCounter(vars.ast)
 		}
-		defer func() {
-			processCleanupFunc(
-				"increment executed stmt cnt",
-				func() {
-					// We need to check the latest errors rather than the ones evaluated
-					// when this function is created.
-					if portal.isPausable() {
-						retErr = portal.pauseInfo.execStmtInOpenState.retErr
-						retPayload = portal.pauseInfo.execStmtInOpenState.retPayload
-					}
-					if retErr == nil && !payloadHasError(retPayload) {
-						ex.incrementExecutedStmtCounter(vars.ast)
-					}
-				},
-			)
-		}()
-	} else {
-		ctx = portal.pauseInfo.execStmtInOpenState.cancelQueryCtx
-		vars.cancelQuery = portal.pauseInfo.execStmtInOpenState.cancelQueryFunc
-	}
+	}()
 
 	// Make sure that we always unregister the query.
 	defer func() {
-		processCleanupFunc("cancel query", func() {
-			ex.removeActiveQuery(queryID, vars.ast)
-			vars.cancelQuery()
-		})
+		ex.removeActiveQuery(queryID, vars.ast)
+		vars.cancelQuery()
 
 		// Note ex.metrics is Server.Metrics for the connExecutor that serves the
 		// client connection, and is Server.InternalMetrics for internal executors.
@@ -458,8 +372,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	// Special handling for SET TRANSACTION statements within a stored procedure
 	// that uses COMMIT or ROLLBACK. This has to happen before the call to
 	// resetPlanner to ensure that the settings are propagated correctly.
-	if txnModes := ex.planner.storedProcTxnState.getTxnModes(); txnModes != nil {
-		_, err = ex.planner.SetTransaction(ctx, &tree.SetTransaction{Modes: *txnModes})
+	if txnModes := p.storedProcTxnState.getTxnModes(); txnModes != nil {
+		_, err = p.SetTransaction(ctx, &tree.SetTransaction{Modes: *txnModes})
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -469,16 +383,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	// client connection, and is Server.InternalMetrics for internal executors.
 	ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 
-	// TODO(sql-sessions): persist the planner for a pausable portal, and reuse
-	// it for each re-execution.
-	// https://github.com/cockroachdb/cockroach/issues/99625
-	p := &ex.planner
-	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
-	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutatorIterator.paramStatusUpdater = res
 	p.noticeSender = res
-	ih := &p.instrumentation
+	ih := p.instrumentation
 
 	if ex.executorType != executorTypeInternal {
 		// NB: ex.metrics includes internal executor transactions when executorType
@@ -487,7 +395,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		curOpen := ex.metrics.EngineMetrics.SQLTxnsOpen.Value()
 		if maxOpen := maxOpenTransactions.Get(&ex.server.cfg.Settings.SV); maxOpen > 0 {
 			if curOpen > maxOpen {
-				hasAdmin, err := ex.planner.HasAdminRole(ctx)
+				hasAdmin, err := p.HasAdminRole(ctx)
 				if err != nil {
 					return makeErrEvent(err)
 				}
@@ -572,7 +480,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(name)
 
 		var err error
-		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
+		pinfo, err = p.fillInPlaceholders(ctx, ps, name, e.Params)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -591,70 +499,35 @@ func (ex *connExecutor) execStmtInOpenState(
 		vars.ast = vars.stmt.Statement.AST
 	}
 
-	// For pausable portal, the instrumentation helper needs to be set up only
-	// when the portal is executed for the first time.
-	if !portal.isPausable() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
-		ctx = ih.Setup(
-			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-			vars.stmt.StmtNoConstants, os.ImplicitTxn.Get(),
-			// This goroutine is the only one that can modify
-			// txnState.mu.priority, so we don't need to get a mutex here.
-			ex.state.mu.priority,
-			ex.extraTxnState.shouldCollectTxnExecutionStats,
-		)
-	} else {
-		ctx = portal.pauseInfo.execStmtInOpenState.ihWrapper.ctx
-	}
-	// For pausable portals, we need to persist the instrumentationHelper as it
-	// shares the ctx with the underlying flow. If it got cleaned up before we
-	// clean up the flow, we will hit `span used after finished` whenever we log
-	// an event when cleaning up the flow.
-	// We need this seemingly weird wrapper here because we set the planner's ih
-	// with its pointer. However, for pausable portal, we'd like to persist the
-	// ih and reuse it for all re-executions. So the planner's ih and the portal's
-	// ih should never have the same address, otherwise changing the former will
-	// change the latter, and we will never be able to persist it.
-	if portal.isPausable() {
-		if portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
-			portal.pauseInfo.execStmtInOpenState.ihWrapper = &instrumentationHelperWrapper{
-				ctx: ctx,
-				ih:  *ih,
-			}
-		} else {
-			p.instrumentation = portal.pauseInfo.execStmtInOpenState.ihWrapper.ih
-		}
-	}
+	ctx = ih.Setup(
+		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
+		vars.stmt.StmtNoConstants, os.ImplicitTxn.Get(),
+		// This goroutine is the only one that can modify
+		// txnState.mu.priority, so we don't need to get a mutex here.
+		ex.state.mu.priority,
+		ex.extraTxnState.shouldCollectTxnExecutionStats,
+	)
 
 	// Note that here we always unconditionally defer a function that takes care
 	// of finishing the instrumentation helper. This is needed since in order to
 	// support plan-gist-matching of the statement diagnostics we might not know
 	// right now whether Finish needs to happen.
-	defer processCleanupFunc("finish instrumentation helper", func() {
-		// We need this weird thing because we need to make sure we're
-		// closing the correct instrumentation helper for the paused portal.
-		ihToFinish := ih
-		curRes := res
-		if portal.isPausable() {
-			ihToFinish = &portal.pauseInfo.execStmtInOpenState.ihWrapper.ih
-			curRes = portal.pauseInfo.curRes
-			retErr = portal.pauseInfo.execStmtInOpenState.retErr
-			retPayload = portal.pauseInfo.execStmtInOpenState.retPayload
-		}
-		if ihToFinish.needFinish {
-			retErr = ihToFinish.Finish(
+	defer func() {
+		if ih.needFinish {
+			retErr = ih.Finish(
 				ex.server.cfg,
 				ex.statsCollector,
 				&ex.extraTxnState.accumulatedStats,
-				ihToFinish.collectExecStats,
+				ih.collectExecStats,
 				p,
 				vars.ast,
 				vars.stmt.SQL,
-				curRes,
+				res,
 				retPayload,
 				retErr,
 			)
 		}
-	})
+	}()
 
 	if ex.executorType != executorTypeInternal && ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
 		timerDuration :=
@@ -732,10 +605,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	// We must check prior to execution in the case the txn is aborted due to
 	// an error. HasAdminRole can only be checked in a valid txn.
 	if adminAuditLog := adminAuditLogEnabled.Get(
-		&ex.planner.execCfg.Settings.SV,
+		&ex.server.cfg.Settings.SV,
 	); adminAuditLog {
 		if !ex.extraTxnState.hasAdminRoleCache.IsSet {
-			hasAdminRole, err := ex.planner.HasAdminRole(ctx)
+			hasAdminRole, err := p.HasAdminRole(ctx)
 			if err != nil {
 				return makeErrEvent(err)
 			}
@@ -755,11 +628,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	// some special plan initialization for logging.
 	dispatchToExecEngine := false
 
-	defer processCleanupFunc("log statement", func() {
+	defer func() {
 		// If we did not dispatch to the execution engine, we need to initialize
 		// the plan here.
 		if !dispatchToExecEngine {
-			p.curPlan.init(&p.stmt, &p.instrumentation)
+			p.curPlan.init(&p.stmt, p.instrumentation)
 			if p, ok := retPayload.(payloadWithError); ok {
 				vars.logErr = p.errorCause()
 			}
@@ -767,26 +640,14 @@ func (ex *connExecutor) execStmtInOpenState(
 
 		var bulkJobId uint64
 		var rowsAffected int
-		if portal.isPausable() {
-			ppInfo := portal.pauseInfo
-			if p.extendedEvalCtx.Annotations == nil {
-				// This is a safety check in case resetPlanner() was
-				// executed, but then we never set the annotations on
-				// the planner. Formatting the stmt for logging requires
-				// non-nil annotations.
-				p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-			}
-			rowsAffected = ppInfo.dispatchToExecutionEngine.rowsAffected
-		} else {
-			switch p.stmt.AST.(type) {
-			case *tree.Import, *tree.Restore, *tree.Backup:
-				bulkJobId = res.GetBulkJobId()
-			}
-			// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
-			// use this numRows entry. We emit the number of changed rows when the job
-			// completes. (see the usages of logutil.LogJobCompletion()).
-			rowsAffected = res.RowsAffected()
+		switch p.stmt.AST.(type) {
+		case *tree.Import, *tree.Restore, *tree.Backup:
+			bulkJobId = res.GetBulkJobId()
 		}
+		// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
+		// use this numRows entry. We emit the number of changed rows when the job
+		// completes. (see the usages of logutil.LogJobCompletion()).
+		rowsAffected = res.RowsAffected()
 
 		p.maybeLogStatement(
 			ctx,
@@ -802,8 +663,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			ex.server.TelemetryLoggingMetrics,
 			ex.implicitTxn(),
 			ex.statsCollector,
-			ex.extraTxnState.shouldLogToTelemetry)
-	})
+			ex.extraTxnState.shouldLogToTelemetry,
+		)
+	}()
 
 	// Overwrite res.Error to a more user-friendly message in case of query
 	// cancellation.
@@ -823,50 +685,29 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 		}
 
-		processCleanupFunc("set query error", func() {
-			cancelQueryCtx := ctx
-			if portal.isPausable() {
-				cancelQueryCtx = portal.pauseInfo.execStmtInOpenState.cancelQueryCtx
+		vars.logErr = res.Err()
+		// Detect context cancelation and overwrite whatever error might have been
+		// set on the result before. The idea is that once the query's context is
+		// canceled, all sorts of actors can detect the cancelation and set all
+		// sorts of errors on the result. Rather than trying to impose discipline
+		// in that jungle, we just overwrite them all here with an error that's
+		// nicer to look at for the client.
+		if res != nil && ctx.Err() != nil && res.Err() != nil {
+			// Even in the cases where the error is a retryable error, we want to
+			// intercept the event and payload returned here to ensure that the query
+			// is not retried.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(vars.ast)),
 			}
-			resToPushErr := res
-			// For pausable portals, we retain the query but update the result for
-			// each execution. When the query context is cancelled and we're in the
-			// middle of an portal execution, push the error to the current result.
-			if portal.isPausable() {
-				resToPushErr = portal.pauseInfo.curRes
+			errToPush := cancelchecker.QueryCanceledError
+			res.SetError(errToPush)
+			retPayload = eventNonRetriableErrPayload{err: errToPush}
+			vars.logErr = errToPush
+			// Cancel the txn if we are inside an implicit txn too.
+			if ex.implicitTxn() && ex.state.txnCancelFn != nil {
+				ex.state.txnCancelFn()
 			}
-			vars.logErr = resToPushErr.ErrAllowReleased()
-			// Detect context cancelation and overwrite whatever error might have been
-			// set on the result before. The idea is that once the query's context is
-			// canceled, all sorts of actors can detect the cancelation and set all
-			// sorts of errors on the result. Rather than trying to impose discipline
-			// in that jungle, we just overwrite them all here with an error that's
-			// nicer to look at for the client.
-			if resToPushErr != nil && cancelQueryCtx.Err() != nil && resToPushErr.ErrAllowReleased() != nil {
-				// Even in the cases where the error is a retryable error, we want to
-				// intercept the event and payload returned here to ensure that the query
-				// is not retried.
-				retEv = eventNonRetriableErr{
-					IsCommit: fsm.FromBool(isCommit(vars.ast)),
-				}
-				errToPush := cancelchecker.QueryCanceledError
-				// For pausable portal, we can arrive here after encountering a timeout
-				// error and then perform a query-cleanup step. In this case, we don't
-				// want to override the original timeout error with the query-cancelled
-				// error.
-				if portal.isPausable() && (errors.Is(resToPushErr.Err(), sqlerrors.QueryTimeoutError) ||
-					errors.Is(resToPushErr.Err(), sqlerrors.TxnTimeoutError)) {
-					errToPush = resToPushErr.Err()
-				}
-				resToPushErr.SetError(errToPush)
-				retPayload = eventNonRetriableErrPayload{err: errToPush}
-				vars.logErr = errToPush
-				// Cancel the txn if we are inside an implicit txn too.
-				if ex.implicitTxn() && ex.state.txnCancelFn != nil {
-					ex.state.txnCancelFn()
-				}
-			}
-		})
+		}
 
 		// If the query timed out, we intercept the error, payload, and event here
 		// for the same reasons we intercept them for canceled queries above.
@@ -904,7 +745,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		if os.ImplicitTxn.Get() {
 			// When executing the BEGIN, we also need to set any transaction modes
 			// that were specified on the BEGIN statement.
-			if _, err := ex.planner.SetTransaction(ctx, &tree.SetTransaction{Modes: s.Modes}); err != nil {
+			if _, err := p.SetTransaction(ctx, &tree.SetTransaction{Modes: s.Modes}); err != nil {
 				return makeErrEvent(err)
 			}
 			ex.sessionDataStack.PushTopClone()
@@ -967,7 +808,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		if len(s.Types) > 0 {
 			typeHints = make(tree.PlaceholderTypes, numParams)
 			for i, t := range s.Types {
-				resolved, err := tree.ResolveType(ctx, t, ex.planner.semaCtx.GetTypeResolver())
+				resolved, err := tree.ResolveType(ctx, t, p.semaCtx.GetTypeResolver())
 				if err != nil {
 					return makeErrEvent(err)
 				}
@@ -1024,7 +865,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// the statement, and this function is idempotent, we don't need to
 	// call it again during execution.
 	if portal == nil {
-		if err := ex.handleAOST(ctx, vars.ast); err != nil {
+		if err := ex.handleAOST(ctx, p, vars.ast); err != nil {
 			return makeErrEvent(err)
 		}
 	}
@@ -1112,10 +953,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
-	if portal.isPausable() {
-		p.pausablePortal = portal
-	}
-
 	// Auto-commit is disallowed during statement execution if we previously
 	// executed any DDL. This is because may potentially create jobs and do other
 	// operations rather than a KV commit.
@@ -1131,7 +968,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// TODO(sql-sessions): fix the stmtTraceThreshold for pausable portals, so
 	// that it records all executions.
 	// https://github.com/cockroachdb/cockroach/issues/99404
-	stmtTraceThreshold := TraceStmtThreshold.Get(&ex.planner.execCfg.Settings.SV)
+	stmtTraceThreshold := TraceStmtThreshold.Get(&ex.server.cfg.Settings.SV)
 	var stmtCtx context.Context
 	// TODO(andrei): I think we should do this even if alreadyRecording == true.
 	if !alreadyRecording && stmtTraceThreshold > 0 {
@@ -1235,7 +1072,7 @@ func (ex *connExecutor) execStmtInOpenState(
 						"unable to roll back to internal savepoint for enforce_home_region",
 					)
 					setErrorAndRestoreLocality(err)
-				} else if rollbackToSavepointFailed || int(ex.state.mu.autoRetryCounter) == len(ex.planner.EvalContext().RemoteRegions) {
+				} else if rollbackToSavepointFailed || int(ex.state.mu.autoRetryCounter) == len(p.EvalContext().RemoteRegions) {
 					// If rollback to savepoint in the transaction failed (perhaps because
 					// the txn was aborted) and we're in an explicit transaction, or we
 					// have retried the statement using each remote region as a fake
@@ -1310,8 +1147,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 // handleAOST gets the AsOfSystemTime clause from the statement, and sets
 // the timestamps of the transaction accordingly.
-func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) error {
-	p := &ex.planner
+func (ex *connExecutor) handleAOST(ctx context.Context, p *planner, stmt tree.Statement) error {
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
 		if _, ok := stmt.(*tree.ShowCommitTimestamp); ok {
 			return nil
@@ -1603,7 +1439,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 		zoneConfigValidator := newZoneConfigValidator(ex.state.mu.txn,
 			ex.extraTxnState.descCollection,
 			ex.planner.regionsProvider(),
-			ex.planner.execCfg)
+			ex.server.cfg)
 		if err := ex.extraTxnState.descCollection.ValidateUncommittedDescriptors(ctx, ex.state.mu.txn, ex.extraTxnState.validateDbZoneConfig, zoneConfigValidator); err != nil {
 			return err
 		}
@@ -1796,24 +1632,6 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 func (ex *connExecutor) dispatchToExecutionEngine(
 	ctx context.Context, planner *planner, res RestrictedCommandResult,
 ) (retErr error) {
-	getPausablePortalInfo := func() *portalPauseInfo {
-		if planner != nil && planner.pausablePortal != nil {
-			return planner.pausablePortal.pauseInfo
-		}
-		return nil
-	}
-	defer func() {
-		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
-			if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
-				ppInfo.dispatchToExecutionEngine.cleanup.isComplete = true
-			}
-			if retErr != nil || res.Err() != nil {
-				ppInfo.resumableFlow.cleanup.run()
-				ppInfo.dispatchToExecutionEngine.cleanup.run()
-			}
-		}
-	}()
-
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	// TODO(sql-sessions): fix the phase time for pausable portals.
@@ -1827,45 +1645,25 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		}
 	}
 
-	var err error
-
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
-		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
-			err = ex.makeExecPlan(ctx, planner)
-			if flags := planner.curPlan.flags; err == nil && (flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
-				telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
-				// We don't allow mutations in a pausable portal. Set it back to
-				// an un-pausable (normal) portal.
-				planner.pausablePortal.pauseInfo = nil
-				err = res.RevokePortalPausability()
-				defer planner.curPlan.close(ctx)
-			} else {
-				ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
-				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
-					fName: "close planTop",
-					f:     func() { ppInfo.dispatchToExecutionEngine.planTop.close(ctx) },
-				})
-			}
-		} else {
-			planner.curPlan = ppInfo.dispatchToExecutionEngine.planTop
-		}
-	} else {
-		// Prepare the plan. Note, the error is processed below. Everything
-		// between here and there needs to happen even if there's an error.
-		err = ex.makeExecPlan(ctx, planner)
-		defer planner.curPlan.close(ctx)
-	}
+	// Prepare the plan. Note, the error is processed below. Everything between
+	// here and there needs to happen even if there's an error.
+	err := ex.makeExecPlan(ctx, planner)
+	defer planner.curPlan.close(ctx)
+	//if res.SupportsPausing() {
+	//	if flags := planner.curPlan.flags; err == nil && (flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
+	//		telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
+	//		// We don't allow mutations in a pausable portal.
+	//		err = res.RevokePortalPausability()
+	//	}
+	//}
 
 	// Include gist in error reports.
 	planGist := planner.instrumentation.planGist.String()
 	ctx = withPlanGist(ctx, planGist)
-	if ppInfo := getPausablePortalInfo(); ppInfo == nil || !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
-		// If we're not using pausable portals, or it's the first execution of
-		// the pausable portal, and we're not collecting a bundle yet, check
-		// whether we should get a bundle for this particular plan gist.
-		if ih := &planner.instrumentation; !ih.collectBundle && ih.outputMode == unmodifiedOutput {
-			ctx = ih.setupWithPlanGist(ctx, ex.server.cfg, stmt.StmtNoConstants, planGist, &planner.curPlan)
-		}
+	// If we're not collecting a bundle yet, check whether we should get a
+	// bundle for this particular plan gist.
+	if ih := planner.instrumentation; !ih.collectBundle && ih.outputMode == unmodifiedOutput {
+		ctx = ih.setupWithPlanGist(ctx, ex.server.cfg, stmt.StmtNoConstants, planGist, planner.curPlan)
 	}
 
 	if planner.extendedEvalCtx.TxnImplicit {
@@ -1902,29 +1700,22 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 
 	distSQLMode := ex.sessionData().DistSQLMode
-	if planner.pausablePortal != nil {
-		if len(planner.curPlan.subqueryPlans) == 0 &&
-			len(planner.curPlan.cascades) == 0 &&
-			len(planner.curPlan.checkPlans) == 0 &&
-			len(planner.curPlan.triggers) == 0 {
-			// We only allow non-distributed plan for pausable portals.
-			distSQLMode = sessiondatapb.DistSQLOff
-		} else {
-			telemetry.Inc(sqltelemetry.SubOrPostQueryStmtsTriedWithPausablePortals)
-			// We don't allow sub / post queries for pausable portal. Set it back to an
-			// un-pausable (normal) portal.
-			// With pauseInfo is nil, no cleanup function will be added to the stack
-			// and all clean-up steps will be performed as for normal portals.
-			// TODO(#115887): We may need to move resetting pauseInfo before we add
-			// the pausable portal cleanup step above.
-			planner.pausablePortal.pauseInfo = nil
-			// We need this so that the result consumption for this portal cannot be
-			// paused either.
-			if err := res.RevokePortalPausability(); err != nil {
-				res.SetError(err)
-				return nil
-			}
-		}
+	if res.SupportsPausing() {
+		//if len(planner.curPlan.subqueryPlans) == 0 &&
+		//	len(planner.curPlan.cascades) == 0 &&
+		//	len(planner.curPlan.checkPlans) == 0 &&
+		//	len(planner.curPlan.triggers) == 0 {
+		// We only allow non-distributed plan for pausable portals.
+		distSQLMode = sessiondatapb.DistSQLOff
+		//} else {
+		//	telemetry.Inc(sqltelemetry.SubOrPostQueryStmtsTriedWithPausablePortals)
+		//	// We don't allow sub / post queries for pausable portal. Set it back to an
+		//	// un-pausable (normal) portal.
+		//	if err := res.RevokePortalPausability(); err != nil {
+		//		res.SetError(err)
+		//		return nil
+		//	}
+		//}
 	}
 	distributePlan, distSQLProhibitedErr := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
@@ -1982,11 +1773,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	stats, err := ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic, distSQLProhibitedErr,
 	)
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
-		// For pausable portals, we log the stats when closing the portal, so we need
-		// to aggregate the stats for all executions.
-		ppInfo.dispatchToExecutionEngine.queryStats.add(&stats)
-	}
 
 	if res.Err() == nil {
 		isSetOrShow := stmt.AST.StatementTag() == "SET" || stmt.AST.StatementTag() == "SHOW"
@@ -2009,27 +1795,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
-		// We need to ensure that we're using the planner bound to the first-time
-		// execution of a portal.
-		curPlanner := *planner
-		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
-			fName: "populate query level stats and regions",
-			f: func() {
-				populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
-				ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
-					ctx, &curPlanner,
-					int(ex.state.mu.autoRetryCounter), ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(), *ppInfo.dispatchToExecutionEngine.queryStats,
-				)
-			},
-		})
-	} else {
-		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
-		ex.recordStatementSummary(
-			ctx, planner,
-			int(ex.state.mu.autoRetryCounter), res.RowsAffected(), res.Err(), stats,
-		)
-	}
+	populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
+	ex.recordStatementSummary(
+		ctx, planner,
+		int(ex.state.mu.autoRetryCounter), res.RowsAffected(), res.Err(), stats,
+	)
 
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), ex.executorType == executorTypeInternal, res.Err())
@@ -2084,7 +1854,7 @@ func populateQueryLevelStats(
 	topLevelStats *topLevelQueryStats,
 	cpuStats *multitenantcpu.CPUUsageHelper,
 ) {
-	ih := &p.instrumentation
+	ih := p.instrumentation
 	ih.topLevelStats = *topLevelStats
 
 	if _, ok := ih.Tracing(); !ok {
@@ -2404,37 +2174,33 @@ func (ex *connExecutor) execWithDistSQLEngine(
 
 	var err error
 
-	if planner.hasFlowForPausablePortal() {
-		err = planner.resumeFlowForPausablePortal(recv)
-	} else {
-		evalCtx := planner.ExtendedEvalContext()
-		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
-		planCtx.setUpForMainQuery(ctx, planner, recv)
-		planCtx.distSQLProhibitedErr = distSQLProhibitedErr
+	evalCtx := planner.ExtendedEvalContext()
+	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
+	planCtx.setUpForMainQuery(ctx, planner, recv)
+	planCtx.distSQLProhibitedErr = distSQLProhibitedErr
 
-		var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
-		if len(planner.curPlan.subqueryPlans) != 0 ||
-			len(planner.curPlan.cascades) != 0 ||
-			len(planner.curPlan.checkPlans) != 0 ||
-			len(planner.curPlan.triggers) != 0 {
-			var serialEvalCtx extendedEvalContext
-			ex.initEvalCtx(ctx, &serialEvalCtx, planner)
-			evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
-				// Reuse the same object if this factory is not used concurrently.
-				factoryEvalCtx := &serialEvalCtx
-				if usedConcurrently {
-					factoryEvalCtx = &extendedEvalContext{}
-					ex.initEvalCtx(ctx, factoryEvalCtx, planner)
-				}
-				ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
-				factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
-				factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
-				factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
-				return factoryEvalCtx
+	var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
+	if len(planner.curPlan.subqueryPlans) != 0 ||
+		len(planner.curPlan.cascades) != 0 ||
+		len(planner.curPlan.checkPlans) != 0 ||
+		len(planner.curPlan.triggers) != 0 {
+		var serialEvalCtx extendedEvalContext
+		ex.initEvalCtx(ctx, &serialEvalCtx, planner)
+		evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
+			// Reuse the same object if this factory is not used concurrently.
+			factoryEvalCtx := &serialEvalCtx
+			if usedConcurrently {
+				factoryEvalCtx = &extendedEvalContext{}
+				ex.initEvalCtx(ctx, factoryEvalCtx, planner)
 			}
+			ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
+			factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
+			factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
+			factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
+			return factoryEvalCtx
 		}
-		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
 	}
+	err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
 	return recv.stats, err
 }
 
@@ -2524,7 +2290,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 		p.extendedEvalCtx.Placeholders = &tree.PlaceholderInfo{}
-		p.curPlan.init(&p.stmt, &p.instrumentation)
+		p.curPlan.init(&p.stmt, p.instrumentation)
 		var execErr error
 		if p, ok := payload.(payloadWithError); ok {
 			execErr = p.errorCause()

@@ -441,9 +441,8 @@ Execute {"Portal": "p2", "MaxRows": 1}
 Sync
 ----
 
-until crdb_only keepErrMessage
+until crdb_only
 ReadyForQuery
-ErrorResponse
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
@@ -454,20 +453,27 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"1"}]}
-{"Type":"PortalSuspended"}
 {"Type":"DataRow","Values":[{"text":"2"}]}
-{"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
-{"Type":"ReadyForQuery","TxStatus":"E"}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
 
 send crdb_only
 Query {"String": "COMMIT"}
 ----
 
-until crdb_only
+until
 ReadyForQuery
 ----
-{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -491,9 +497,8 @@ Execute {"Portal": "p2", "MaxRows": 1}
 Sync
 ----
 
-until crdb_only keepErrMessage
+until crdb_only
 ReadyForQuery
-ErrorResponse
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
@@ -503,9 +508,10 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"f"}]}
-{"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
-{"Type":"ReadyForQuery","TxStatus":"E"}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"DataRow","Values":[{"text":"f"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
 
 send crdb_only
 Query {"String": "COMMIT"}
@@ -514,7 +520,7 @@ Query {"String": "COMMIT"}
 until crdb_only
 ReadyForQuery
 ----
-{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -538,9 +544,8 @@ Execute {"Portal": "p1", "MaxRows": 1}
 Sync
 ----
 
-until crdb_only keepErrMessage
+until crdb_only
 ReadyForQuery
-ErrorResponse
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
@@ -552,9 +557,18 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"10"}]}
-{"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
-{"Type":"ReadyForQuery","TxStatus":"E"}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"CommandComplete","CommandTag":"UPDATE 3"}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"CommandComplete","CommandTag":"UPDATE 3"}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"CommandComplete","CommandTag":"UPDATE 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
 
 send crdb_only
 Query {"String": "COMMIT"}
@@ -563,7 +577,7 @@ Query {"String": "COMMIT"}
 until crdb_only
 ReadyForQuery
 ----
-{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 send
@@ -588,9 +602,8 @@ Sync
 ----
 
 
-until crdb_only keepErrMessage
+until crdb_only
 ReadyForQuery
-ErrorResponse
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
@@ -601,9 +614,18 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"1"}]}
-{"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/dev"}
-{"Type":"ReadyForQuery","TxStatus":"E"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
 
 send crdb_only
 Query {"String": "COMMIT"}
@@ -612,11 +634,10 @@ Query {"String": "COMMIT"}
 until crdb_only
 ReadyForQuery
 ----
-{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 subtest end
-
 
 subtest query_timeout
 # https://github.com/cockroachdb/cockroach/issues/99140

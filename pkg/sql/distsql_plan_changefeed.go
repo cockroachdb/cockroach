@@ -84,7 +84,7 @@ func PlanCDCExpression(
 		tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
 	)
 
-	p.curPlan.init(&p.stmt, &p.instrumentation)
+	p.curPlan.init(&p.stmt, p.instrumentation)
 	opc := &p.optPlanningCtx
 	opc.init(p)
 	opc.reset(ctx)
@@ -117,7 +117,7 @@ func PlanCDCExpression(
 
 	const allowAutoCommit = false
 	if err := opc.runExecBuilder(
-		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.SemaCtx(), p.EvalContext(), allowAutoCommit,
+		ctx, p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.SemaCtx(), p.EvalContext(), allowAutoCommit,
 	); err != nil {
 		return cdcPlan, err
 	}

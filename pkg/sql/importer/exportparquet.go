@@ -248,11 +248,6 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context, output execinfra.RowR
 	execinfra.DrainAndClose(ctx, sp.flowCtx, sp.input, output, err)
 }
 
-// Resume is part of the execinfra.Processor interface.
-func (sp *parquetWriterProcessor) Resume(output execinfra.RowReceiver) {
-	panic("not implemented")
-}
-
 // Close is part of the execinfra.Processor interface.
 func (*parquetWriterProcessor) Close(context.Context) {}
 

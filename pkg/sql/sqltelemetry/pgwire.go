@@ -64,12 +64,6 @@ var CloseRequestCounter = telemetry.GetCounterOnce("pgwire.command.close")
 // is made.
 var FlushRequestCounter = telemetry.GetCounterOnce("pgwire.command.flush")
 
-// StmtsTriedWithPausablePortals is to be incremented every time there's a
-// not-internal statement executed with a pgwire portal and the session variable
-// multiple_active_portals_enabled has been set to true.
-// The statement might not satisfy the restriction for a pausable portal.
-var StmtsTriedWithPausablePortals = telemetry.GetCounterOnce("pgwire.pausable_portal_stmts")
-
 // NotReadOnlyStmtsTriedWithPausablePortals is to be incremented every time
 // there's a not-internal not-read-only statement executed with a pgwire portal
 // and the session variable multiple_active_portals_enabled has been set to true.

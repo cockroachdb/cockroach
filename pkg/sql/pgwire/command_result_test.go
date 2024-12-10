@@ -60,7 +60,6 @@ func TestTruncateCommandResult(t *testing.T) {
 		0,    /* limit */
 		"",   /* portalName */
 		true, /* implicitTxn */
-		sql.PortalPausabilityDisabled,
 	)
 	r := cr.(*commandResult)
 	r.SetColumns(ctx, []colinfo.ResultColumn{{Name: "a", Typ: types.Int}})

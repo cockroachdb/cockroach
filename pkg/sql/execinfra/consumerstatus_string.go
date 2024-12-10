@@ -14,17 +14,14 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[NeedMoreRows-0]
-	_ = x[SwitchToAnotherPortal-1]
-	_ = x[DrainRequested-2]
-	_ = x[ConsumerClosed-3]
+	_ = x[DrainRequested-1]
+	_ = x[ConsumerClosed-2]
 }
 
 func (i ConsumerStatus) String() string {
 	switch i {
 	case NeedMoreRows:
 		return "NeedMoreRows"
-	case SwitchToAnotherPortal:
-		return "SwitchToAnotherPortal"
 	case DrainRequested:
 		return "DrainRequested"
 	case ConsumerClosed:

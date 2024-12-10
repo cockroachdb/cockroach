@@ -68,7 +68,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			defer cleanup()
 			p := internalPlanner.(*planner)
 
-			ih := &p.instrumentation
+			ih := p.instrumentation
 			ih.codec = execCfg.Codec
 			ih.collectBundle = true
 			ih.savePlanForStats = true

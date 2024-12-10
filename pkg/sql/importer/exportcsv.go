@@ -300,11 +300,6 @@ func (sp *csvWriter) Run(ctx context.Context, output execinfra.RowReceiver) {
 	execinfra.DrainAndClose(ctx, sp.flowCtx, sp.input, output, err)
 }
 
-// Resume is part of the execinfra.Processor interface.
-func (sp *csvWriter) Resume(output execinfra.RowReceiver) {
-	panic("not implemented")
-}
-
 // Close is part of the execinfra.Processor interface.
 func (*csvWriter) Close(context.Context) {}
 

@@ -506,11 +506,6 @@ func (ibm *IndexBackfillMerger) shrinkBoundAccount(ctx context.Context, shrinkBy
 	ibm.muBoundAccount.boundAccount.Shrink(ctx, shrinkBy)
 }
 
-// Resume is part of the execinfra.Processor interface.
-func (ibm *IndexBackfillMerger) Resume(output execinfra.RowReceiver) {
-	panic("not implemented")
-}
-
 // Close is part of the execinfra.Processor interface.
 func (*IndexBackfillMerger) Close(context.Context) {}
 
