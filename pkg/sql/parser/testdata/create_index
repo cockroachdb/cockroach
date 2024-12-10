@@ -468,3 +468,60 @@ CREATE INDEX ON t (a) VISIBILITY 0.00 -- normalized!
 CREATE INDEX ON t (a) VISIBILITY 0.00 -- fully parenthesized
 CREATE INDEX ON t (a) VISIBILITY 0.00 -- literals removed
 CREATE INDEX ON _ (_) VISIBILITY 0.00 -- identifiers removed
+
+parse
+CREATE VECTOR INDEX ON t(v)
+----
+CREATE VECTOR INDEX ON t (v) -- normalized!
+CREATE VECTOR INDEX ON t (v) -- fully parenthesized
+CREATE VECTOR INDEX ON t (v) -- literals removed
+CREATE VECTOR INDEX ON _ (_) -- identifiers removed
+
+parse
+CREATE VECTOR INDEX a ON b (c)
+----
+CREATE VECTOR INDEX a ON b (c)
+CREATE VECTOR INDEX a ON b (c) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE VECTOR INDEX a ON b.c (d)
+----
+CREATE VECTOR INDEX a ON b.c (d)
+CREATE VECTOR INDEX a ON b.c (d) -- fully parenthesized
+CREATE VECTOR INDEX a ON b.c (d) -- literals removed
+CREATE VECTOR INDEX _ ON _._ (_) -- identifiers removed
+
+parse
+CREATE VECTOR INDEX a ON b (c) STORING (d)
+----
+CREATE VECTOR INDEX a ON b (c) STORING (d)
+CREATE VECTOR INDEX a ON b (c) STORING (d) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) STORING (d) -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) STORING (_) -- identifiers removed
+
+
+parse
+CREATE VECTOR INDEX a ON b (c) WHERE d > 3
+----
+CREATE VECTOR INDEX a ON b (c) WHERE d > 3
+CREATE VECTOR INDEX a ON b (c) WHERE ((d) > (3)) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) WHERE d > _ -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) WHERE _ > 3 -- identifiers removed
+
+parse
+CREATE VECTOR INDEX IF NOT EXISTS a ON b (c) WHERE d > 3
+----
+CREATE VECTOR INDEX IF NOT EXISTS a ON b (c) WHERE d > 3
+CREATE VECTOR INDEX IF NOT EXISTS a ON b (c) WHERE ((d) > (3)) -- fully parenthesized
+CREATE VECTOR INDEX IF NOT EXISTS a ON b (c) WHERE d > _ -- literals removed
+CREATE VECTOR INDEX IF NOT EXISTS _ ON _ (_) WHERE _ > 3 -- identifiers removed
+
+parse
+CREATE INDEX a ON b USING CSPANN (c)
+----
+CREATE VECTOR INDEX a ON b (c) -- normalized!
+CREATE VECTOR INDEX a ON b (c) -- fully parenthesized
+CREATE VECTOR INDEX a ON b (c) -- literals removed
+CREATE VECTOR INDEX _ ON _ (_) -- identifiers removed

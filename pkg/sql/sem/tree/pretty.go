@@ -1628,7 +1628,7 @@ func (node *ShardedIndexDef) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
-	// CREATE [UNIQUE] [INVERTED] INDEX [name]
+	// CREATE [UNIQUE] [INVERTED | VECTOR] INDEX [name]
 	//    ON tbl (cols...)
 	//    [STORING ( ... )]
 	//    [INTERLEAVE ...]
@@ -1644,6 +1644,8 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	}
 	if node.Inverted {
 		title = append(title, pretty.Keyword("INVERTED"))
+	} else if node.Vector {
+		title = append(title, pretty.Keyword("VECTOR"))
 	}
 	title = append(title, pretty.Keyword("INDEX"))
 	if node.Concurrently {
@@ -1724,7 +1726,7 @@ func (node *LikeTableDef) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
-	// [INVERTED] INDEX [name] (columns...)
+	// [INVERTED | VECTOR] INDEX [name] (columns...)
 	//    [STORING ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
@@ -1737,6 +1739,8 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	}
 	if node.Inverted {
 		title = pretty.ConcatSpace(pretty.Keyword("INVERTED"), title)
+	} else if node.Vector {
+		title = pretty.ConcatSpace(pretty.Keyword("VECTOR"), title)
 	}
 	title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))
 
