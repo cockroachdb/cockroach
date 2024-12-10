@@ -25,6 +25,7 @@ go_library(
         "restricted_internal_client.go",
         "settings.go",
         "snappy.go",
+        "stream_pool.go",
         "tls.go",
     ],
     embed = [":rpc_go_proto"],
@@ -72,6 +73,15 @@ go_library(
         "@com_github_montanaflynn_stats//:stats",
         "@com_github_vividcortex_ewma//:ewma",
         "@io_opentelemetry_go_otel//attribute",
+        "@io_storj_drpc//:drpc",
+        "@io_storj_drpc//drpcconn",
+        "@io_storj_drpc//drpcmanager",
+        "@io_storj_drpc//drpcmigrate",
+        "@io_storj_drpc//drpcmux",
+        "@io_storj_drpc//drpcpool",
+        "@io_storj_drpc//drpcserver",
+        "@io_storj_drpc//drpcstream",
+        "@io_storj_drpc//drpcwire",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//backoff",
         "@org_golang_google_grpc//codes",
@@ -90,7 +100,10 @@ go_library(
 gomock(
     name = "mock_rpc",
     out = "mocks_generated_test.go",
-    interfaces = ["Dialbacker"],
+    interfaces = [
+        "BatchStreamClient",
+        "Dialbacker",
+    ],
     library = ":rpc",
     package = "rpc",
     self_package = "github.com/cockroachdb/cockroach/pkg/rpc",
@@ -116,6 +129,7 @@ go_test(
         "metrics_test.go",
         "peer_test.go",
         "snappy_test.go",
+        "stream_pool_test.go",
         "tls_test.go",
         ":mock_rpc",  # keep
     ],
@@ -173,6 +187,7 @@ go_test(
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//peer",
         "@org_golang_google_grpc//status",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 

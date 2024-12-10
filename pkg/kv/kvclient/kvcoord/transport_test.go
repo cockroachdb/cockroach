@@ -255,6 +255,12 @@ func (m *mockInternalClient) Batch(
 	return br, nil
 }
 
+func (m *mockInternalClient) BatchStream(
+	ctx context.Context, opts ...grpc.CallOption,
+) (kvpb.Internal_BatchStreamClient, error) {
+	return nil, fmt.Errorf("unsupported BatchStream call")
+}
+
 // RangeLookup implements the kvpb.InternalClient interface.
 func (m *mockInternalClient) RangeLookup(
 	ctx context.Context, rl *kvpb.RangeLookupRequest, _ ...grpc.CallOption,

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"sort"
@@ -1870,6 +1871,55 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
 	}
 	return br, nil
+}
+
+// BatchStream implements the kvpb.InternalServer interface.
+func (n *Node) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
+	return n.batchStreamImpl(stream)
+}
+
+func (n *Node) batchStreamImpl(
+	stream interface {
+		Context() context.Context
+		Recv() (*kvpb.BatchRequest, error)
+		Send(response *kvpb.BatchResponse) error
+	},
+) error {
+	ctx := stream.Context()
+	for {
+		args, err := stream.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return err
+		}
+
+		br, err := n.Batch(ctx, args)
+		if err != nil {
+			return err
+		}
+		err = stream.Send(br)
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func (n *Node) AsDRPCBatchServer() kvpb.DRPCDRPCBatchServiceServer {
+	return (*drpcNode)(n)
+}
+
+type drpcNode Node
+
+func (n *drpcNode) Batch(
+	ctx context.Context, request *kvpb.BatchRequest,
+) (*kvpb.BatchResponse, error) {
+	return (*Node)(n).Batch(ctx, request)
+}
+
+func (n *drpcNode) BatchStream(stream kvpb.DRPCDRPCBatchService_BatchStreamStream) error {
+	return (*Node)(n).batchStreamImpl(stream)
 }
 
 // spanForRequest is the retval of setupSpanForIncomingRPC. It groups together a
