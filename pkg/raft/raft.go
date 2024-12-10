@@ -1333,15 +1333,26 @@ func (r *raft) becomeLeader() {
 	r.tick = r.tickHeartbeat
 	r.setLead(r.id)
 	r.state = pb.StateLeader
-	// Followers enter replicate mode when they've been successfully probed
-	// (perhaps after having received a snapshot as a result). The leader is
-	// trivially in this state. Note that r.reset() has initialized this
-	// progress with the last index already.
-	pr := r.trk.Progress(r.id)
-	r.becomeReplicate(pr)
-	// The leader always has RecentActive == true; MsgCheckQuorum makes sure to
-	// preserve this.
-	pr.RecentActive = true
+	// TODO(pav-kv): r.reset already scans the peers. Try avoiding another scan.
+	r.trk.Visit(func(id pb.PeerID, pr *tracker.Progress) {
+		if id == r.id {
+			// Followers enter replicate mode when they've been successfully probed
+			// (perhaps after having received a snapshot as a result). The leader is
+			// trivially in this state. Note that r.reset() has initialized this
+			// progress with the last index already.
+			r.becomeReplicate(pr)
+			// The leader always has RecentActive == true; MsgCheckQuorum makes sure
+			// to preserve this.
+			pr.RecentActive = true
+			return
+		}
+		// All peer flows, except the leader's own, are initially in StateProbe.
+		// Account the probe state entering in metrics here. All subsequent flow
+		// state changes, while we are the leader, are counted in the corresponding
+		// methods: becomeProbe, becomeReplicate, becomeSnapshot.
+		assertTrue(pr.State == tracker.StateProbe, "peers must be in StateProbe on leader step up")
+		r.metrics.FlowsEnteredStateProbe.Inc(1)
+	})
 
 	// Conservatively set the pendingConfIndex to the last index in the
 	// log. There may or may not be a pending config change, but it's
