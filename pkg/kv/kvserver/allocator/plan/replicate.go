@@ -149,6 +149,11 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	conf *roachpb.SpanConfig,
 	opts PlannerOptions,
 ) (shouldPlanChange bool, priority float64) {
+	if repl.GetRangeID() == 69 {
+		log.Infof(ctx,
+			"TBG computing range action desc=%s config=%s",
+			desc, conf.String())
+	}
 
 	log.KvDistribution.VEventf(ctx, 6,
 		"computing range action desc=%s config=%s",
