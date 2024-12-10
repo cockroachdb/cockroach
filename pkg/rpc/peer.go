@@ -260,7 +260,7 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 		},
 	})
 	p.b = b
-	c := newConnectionToNodeID(k, b.Signal)
+	c := newConnectionToNodeID(p.opts, k, b.Signal)
 	p.mu.PeerSnap = PeerSnap{c: c}
 
 	return p
@@ -361,7 +361,7 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 		func() {
 			p.mu.Lock()
 			defer p.mu.Unlock()
-			p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
+			p.mu.c = newConnectionToNodeID(p.opts, p.k, p.mu.c.breakerSignalFn)
 		}()
 
 		if p.snap().deleteAfter != 0 {
@@ -582,6 +582,11 @@ func (p *peer) onInitialHeartbeatSucceeded(
 	p.ConnectionHeartbeats.Inc(1)
 	// ConnectionFailures is not updated here.
 
+	// Bind the connection's stream pool to the active gRPC connection. Do this
+	// ahead of signaling the connFuture, so that the stream pool is ready for use
+	// by the time the connFuture is resolved.
+	p.mu.c.batchStreamPool.Bind(ctx, cc)
+
 	// Close the channel last which is helpful for unit tests that
 	// first waitOrDefault for a healthy conn to then check metrics.
 	p.mu.c.connFuture.Resolve(cc, nil /* err */)
@@ -703,6 +708,10 @@ func (p *peer) onHeartbeatFailed(
 		err = &netutil.InitialHeartbeatFailedError{WrappedErr: err}
 		ls.c.connFuture.Resolve(nil /* cc */, err)
 	}
+
+	// Close down the stream pool that was bound to this connection.
+	ls.c.batchStreamPool.Close()
+
 	// By convention, we stick to updating breaker before updating peer
 	// to make it easier to write non-flaky tests.
 	report(err)
