@@ -224,7 +224,7 @@ func MakeComputedExprs(
 		return nil, catalog.TableColSet{}, err
 	}
 
-	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, sourceColumns)
+	nr := newNameResolver(tableDesc.GetID(), tn, sourceColumns)
 	nr.addIVarContainerToSemaCtx(semaCtx)
 
 	var txCtx transform.ExprTransformContext
