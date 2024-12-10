@@ -12,6 +12,7 @@ go_library(
         "client.go",
         "clock_offset.go",
         "codec.go",
+        "codec_gob.go",
         "connection.go",
         "connection_class.go",
         "context.go",
