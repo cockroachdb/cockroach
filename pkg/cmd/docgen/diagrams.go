@@ -637,8 +637,6 @@ var specs = []stmtSpec{
 			"as_of_clause",
 			"transaction_deferrable_mode",
 			"user_priority",
-			"transaction_iso_level",
-			"iso_level",
 		},
 	},
 	{
@@ -1429,8 +1427,6 @@ var specs = []stmtSpec{
 			"as_of_clause",
 			"opt_comma",
 			"transaction_deferrable_mode",
-			"transaction_iso_level",
-			"iso_level",
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")},
 	},

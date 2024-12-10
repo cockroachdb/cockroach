@@ -2155,8 +2155,7 @@ typename ::=
 	| simple_typename 'ARRAY'
 
 transaction_mode ::=
-	transaction_iso_level
-	| transaction_user_priority
+	transaction_user_priority
 	| transaction_read_mode
 	| as_of_clause
 	| transaction_deferrable_mode
@@ -2960,9 +2959,6 @@ opt_array_bounds ::=
 	'[' ']'
 	| 
 
-transaction_iso_level ::=
-	'ISOLATION' 'LEVEL' iso_level
-
 transaction_user_priority ::=
 	'PRIORITY' user_priority
 
@@ -3486,13 +3482,6 @@ interval_type ::=
 	'INTERVAL'
 	| 'INTERVAL' interval_qualifier
 	| 'INTERVAL' '(' iconst32 ')'
-
-iso_level ::=
-	'READ' 'UNCOMMITTED'
-	| 'READ' 'COMMITTED'
-	| 'SNAPSHOT'
-	| 'REPEATABLE' 'READ'
-	| 'SERIALIZABLE'
 
 user_priority ::=
 	'LOW'
