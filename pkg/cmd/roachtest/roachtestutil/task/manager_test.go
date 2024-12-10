@@ -135,6 +135,55 @@ func TestTerminate(t *testing.T) {
 	require.Equal(t, uint32(numTasks), counter.Load())
 }
 
+func TestGroups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	m := NewManager(ctx, nilLogger())
+
+	numTasks := 10
+	g := m.NewGroup()
+	channels := make([]chan struct{}, numTasks)
+
+	// Start tasks.
+	for i := 0; i < numTasks; i++ {
+		channels[i] = make(chan struct{})
+		g.Go(func(ctx context.Context, l *logger.Logger) error {
+			<-channels[i]
+			return nil
+		})
+	}
+
+	// Start a goroutine that waits for all tasks in the group to complete.
+	done := make(chan struct{})
+	go func() {
+		g.Wait()
+		close(done)
+	}()
+
+	// Close channels one by one to complete all tasks, and ensure the group is
+	// not done yet.
+	for i := 0; i < numTasks; i++ {
+		select {
+		case <-done:
+			t.Fatal("group should not be done yet")
+		default:
+		}
+		// Close the channel and wait for the completed event.
+		close(channels[i])
+		<-m.CompletedEvents()
+	}
+
+	// Ensure the group is done.
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("group should be done")
+	}
+
+	m.Terminate(nilLogger())
+	<-done
+}
+
 func nilLogger() *logger.Logger {
 	lcfg := logger.Config{
 		Stdout: io.Discard,
