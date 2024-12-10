@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,9 +66,32 @@ func TestGetRecordedMetricNames(t *testing.T) {
 	metricsMetadata, _, _ := s.MetricsRecorder().GetMetricsMetadata(true /* combine */)
 	recordedNames := s.MetricsRecorder().GetRecordedMetricNames(metricsMetadata)
 
-	require.Equal(t, len(metricsMetadata), len(recordedNames))
 	for _, v := range recordedNames {
 		require.True(t, strings.HasPrefix(v, "cr.node") || strings.HasPrefix(v, "cr.store"))
+	}
+}
+
+func TestGetRecordedMetricNames_histogram(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	metricName := "my.metric"
+	metricsMetadata := map[string]metric.Metadata{
+		metricName: {
+			Name:        metricName,
+			Help:        "help text",
+			Measurement: "measurement",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  prometheusgo.MetricType_HISTOGRAM,
+		},
+	}
+
+	recordedNames := s.MetricsRecorder().GetRecordedMetricNames(metricsMetadata)
+	require.Equal(t, len(metric.HistogramMetricComputers), len(recordedNames))
+	for _, histogramMetric := range metric.HistogramMetricComputers {
+		_, ok := recordedNames[metricName+histogramMetric.Suffix]
+		require.True(t, ok)
 	}
 }
 

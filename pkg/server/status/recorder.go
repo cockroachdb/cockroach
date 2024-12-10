@@ -498,13 +498,20 @@ func (mr *MetricsRecorder) GetRecordedMetricNames(
 	storeMetricsMap := make(map[string]metric.Metadata)
 	tsDbMetricNames := make(map[string]string, len(allMetadata))
 	mr.writeStoreMetricsMetadata(storeMetricsMap)
-	for k := range allMetadata {
+	for metricName, metadata := range allMetadata {
 		prefix := nodeTimeSeriesPrefix
-		if _, ok := storeMetricsMap[k]; ok {
+		if _, ok := storeMetricsMap[metricName]; ok {
 			prefix = storeTimeSeriesPrefix
 		}
+		if metadata.MetricType == prometheusgo.MetricType_HISTOGRAM {
+			for _, metricComputer := range metric.HistogramMetricComputers {
+				computedMetricName := metricName + metricComputer.Suffix
+				tsDbMetricNames[computedMetricName] = fmt.Sprintf(prefix, computedMetricName)
+			}
+		} else {
+			tsDbMetricNames[metricName] = fmt.Sprintf(prefix, metricName)
+		}
 
-		tsDbMetricNames[k] = fmt.Sprintf(prefix, k)
 	}
 	return tsDbMetricNames
 }
@@ -711,18 +718,15 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 			return errors.Newf(`extractValue called on histogram metric %q that does not implement the
 				CumulativeHistogram interface. All histogram metrics are expected to implement this interface`, name)
 		}
-		count, sum := cumulative.CumulativeSnapshot().Total()
-		fn(name+"-count", float64(count))
-		fn(name+"-sum", sum)
+		cumulativeSnapshot := cumulative.CumulativeSnapshot()
 		// Use windowed stats for avg and quantiles
 		windowedSnapshot := mtr.WindowedSnapshot()
-		avg := windowedSnapshot.Mean()
-		if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
-			avg = 0
-		}
-		fn(name+"-avg", avg)
-		for _, pt := range metric.RecordHistogramQuantiles {
-			fn(name+pt.Suffix, windowedSnapshot.ValueAtQuantile(pt.Quantile))
+		for _, c := range metric.HistogramMetricComputers {
+			if c.IsSummaryMetric {
+				fn(name+c.Suffix, c.ComputedMetric(windowedSnapshot))
+			} else {
+				fn(name+c.Suffix, c.ComputedMetric(cumulativeSnapshot))
+			}
 		}
 	case metric.PrometheusExportable:
 		// NB: this branch is intentionally at the bottom since all metrics implement it.
