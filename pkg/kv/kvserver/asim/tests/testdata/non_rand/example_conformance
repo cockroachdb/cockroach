@@ -4,20 +4,7 @@
 gen_cluster nodes=5
 ----
 
-# TODO(kvoli): Update gen_cluster to take in localities for this purpose.
-set_locality node=1 locality=region=a
-----
-
-set_locality node=2 locality=region=a
-----
-
-set_locality node=3 locality=region=b
-----
-
-set_locality node=4 locality=region=b
-----
-
-set_locality node=5 locality=region=b
+gen_cluster_with_locality regions=(a, b) nodes_per_region=(2,3)
 ----
 
 # Generate 10 ranges, one replica will be placed on each node initially.
@@ -49,8 +36,10 @@ OK
 topology
 ----
 a
-  └── [1 2]
+  a1
+  │ └── [1 2]
 b
-  └── [3 4 5]
+  b1
+    └── [3 4 5]
 
 # vim:ft=sh
