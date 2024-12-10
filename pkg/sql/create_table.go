@@ -1857,6 +1857,9 @@ func NewTableDesc(
 			// pass, handled above.
 
 		case *tree.IndexTableDef:
+			if d.Vector {
+				return nil, unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported")
+			}
 			// If the index is named, ensure that the name is unique. Unnamed
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.

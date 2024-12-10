@@ -28,6 +28,9 @@ func (tc *Catalog) CreateIndex(stmt *tree.CreateIndex, version descpb.IndexDescr
 	} else {
 		view = tc.View(&tn)
 	}
+	if stmt.Vector {
+		panic("VECTOR indexes are not yet supported by the test catalog")
+	}
 
 	// Convert stmt to a tree.IndexTableDef so that Table.addIndex can be used
 	// to add the index to the table.

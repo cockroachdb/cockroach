@@ -937,6 +937,9 @@ func (u *sqlSymUnion) triggerTransitions() []*tree.TriggerTransition {
 func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
   return u.val.(tree.TriggerForEach)
 }
+func (u *sqlSymUnion) indexType() tree.IndexType {
+  return u.val.(tree.IndexType)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -1530,6 +1533,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <[]*tree.Order> sortby_list sortby_no_index_list
 %type <tree.IndexElemList> index_params create_as_params
 %type <tree.IndexInvisibility> opt_index_visible alter_index_visible
+%type <tree.IndexType> opt_index_access_method
 %type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
 %type <*tree.Batch> opt_batch_clause
@@ -1581,7 +1585,6 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <*tree.TenantSpec> virtual_cluster_spec virtual_cluster_spec_opt_all
 
 %type <bool> opt_unique opt_concurrently opt_cluster opt_without_index
-%type <bool> opt_index_access_method
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
 %type <tree.Expr> select_fetch_first_value
@@ -10451,7 +10454,7 @@ alter_schema_stmt:
 //
 // Table elements:
 //    <name> <type> [<qualifiers...>]
-//    [UNIQUE | INVERTED] INDEX [<name>] ( <colname> [ASC | DESC] [, ...] )
+//    [UNIQUE | INVERTED | VECTOR] INDEX [<name>] ( <colname> [ASC | DESC] [, ...] )
 //                            [USING HASH] [{STORING | INCLUDE | COVERING} ( <colnames...> )]
 //    FAMILY [<name>] ( <colnames...> )
 //    [CONSTRAINT <name>] <constraint>
@@ -11102,6 +11105,30 @@ index_def:
       Name:             tree.Name($3),
       Columns:          $5.idxElems(),
       Inverted:         true,
+      PartitionByIndex: $7.partitionByIndex(),
+      StorageParams:    $8.storageParams(),
+      Predicate:        $9.expr(),
+      Invisibility:     $10.indexInvisibility(),
+    }
+  }
+| VECTOR INDEX_BEFORE_PAREN '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+  {
+    $$.val = &tree.IndexTableDef{
+      Name:             "",
+      Columns:          $4.idxElems(),
+      Vector:           true,
+      PartitionByIndex: $6.partitionByIndex(),
+      StorageParams:    $7.storageParams(),
+      Predicate:        $8.expr(),
+      Invisibility:     $9.indexInvisibility(),
+    }
+  }
+| VECTOR INDEX_BEFORE_NAME_THEN_PAREN name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+  {
+    $$.val = &tree.IndexTableDef{
+      Name:             tree.Name($3),
+      Columns:          $5.idxElems(),
+      Vector:           true,
       PartitionByIndex: $7.partitionByIndex(),
       StorageParams:    $8.storageParams(),
       Predicate:        $9.expr(),
@@ -12015,7 +12042,7 @@ composite_type_list:
 // %Help: CREATE INDEX - create a new index
 // %Category: DDL
 // %Text:
-// CREATE [UNIQUE | INVERTED] INDEX [CONCURRENTLY] [IF NOT EXISTS] [<idxname>]
+// CREATE [UNIQUE | INVERTED | VECTOR] INDEX [CONCURRENTLY] [IF NOT EXISTS] [<idxname>]
 //        ON <tablename> ( <colname> [ASC | DESC] [, ...] )
 //        [USING HASH] [STORING ( <colnames...> )]
 //        [PARTITION BY <partition params>]
@@ -12027,6 +12054,7 @@ create_index_stmt:
   CREATE opt_unique INDEX opt_concurrently opt_index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
   {
     table := $7.unresolvedObjectName().ToTableName()
+    indexType := $8.indexType()
     $$.val = &tree.CreateIndex{
       Name:             tree.Name($5),
       Table:            table,
@@ -12037,7 +12065,8 @@ create_index_stmt:
       PartitionByIndex: $14.partitionByIndex(),
       StorageParams:    $15.storageParams(),
       Predicate:        $16.expr(),
-      Inverted:         $8.bool(),
+      Inverted:         indexType == tree.IndexTypeInverted,
+      Vector:           indexType == tree.IndexTypeVector,
       Concurrently:     $4.bool(),
       Invisibility:     $17.indexInvisibility(),
     }
@@ -12045,6 +12074,7 @@ create_index_stmt:
 | CREATE opt_unique INDEX opt_concurrently IF NOT EXISTS index_name ON table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
   {
     table := $10.unresolvedObjectName().ToTableName()
+    indexType := $11.indexType()
     $$.val = &tree.CreateIndex{
       Name:             tree.Name($8),
       Table:            table,
@@ -12054,7 +12084,8 @@ create_index_stmt:
       Sharded:          $15.shardedIndexDef(),
       Storing:          $16.nameList(),
       PartitionByIndex: $17.partitionByIndex(),
-      Inverted:         $11.bool(),
+      Inverted:         indexType == tree.IndexTypeInverted,
+      Vector:           indexType == tree.IndexTypeVector,
       StorageParams:    $18.storageParams(),
       Predicate:        $19.expr(),
       Concurrently:     $4.bool(),
@@ -12096,27 +12127,66 @@ create_index_stmt:
       Invisibility:     $19.indexInvisibility(),
     }
   }
+| CREATE opt_unique VECTOR INDEX opt_concurrently opt_index_name ON table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+  {
+    table := $8.unresolvedObjectName().ToTableName()
+    $$.val = &tree.CreateIndex{
+      Name:             tree.Name($6),
+      Table:            table,
+      Unique:           $2.bool(),
+      Vector:           true,
+      Columns:          $10.idxElems(),
+      Storing:          $12.nameList(),
+      PartitionByIndex: $13.partitionByIndex(),
+      StorageParams:    $14.storageParams(),
+      Predicate:        $15.expr(),
+      Concurrently:     $5.bool(),
+      Invisibility:     $16.indexInvisibility(),
+    }
+  }
+| CREATE opt_unique VECTOR INDEX opt_concurrently IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+  {
+    table := $11.unresolvedObjectName().ToTableName()
+    $$.val = &tree.CreateIndex{
+      Name:             tree.Name($9),
+      Table:            table,
+      Unique:           $2.bool(),
+      Vector:           true,
+      IfNotExists:      true,
+      Columns:          $13.idxElems(),
+      Storing:          $15.nameList(),
+      PartitionByIndex: $16.partitionByIndex(),
+      StorageParams:    $17.storageParams(),
+      Predicate:        $18.expr(),
+      Concurrently:     $5.bool(),
+      Invisibility:     $19.indexInvisibility(),
+    }
+  }
 | CREATE opt_unique INDEX error // SHOW HELP: CREATE INDEX
 
 opt_index_access_method:
   USING name
   {
     /* FORCE DOC */
+    var val tree.IndexType
     switch $2 {
       case "gin", "gist":
-        $$.val = true
+        val = tree.IndexTypeInverted
       case "btree":
-        $$.val = false
+        val = tree.IndexTypeForward
+      case "cspann":
+        val = tree.IndexTypeVector
       case "hash", "spgist", "brin":
         return unimplemented(sqllex, "index using " + $2)
       default:
         sqllex.Error("unrecognized access method: " + $2)
         return 1
     }
+    $$.val = val
   }
 | /* EMPTY */
   {
-    $$.val = false
+    $$.val = tree.IndexTypeForward
   }
 
 opt_concurrently:
