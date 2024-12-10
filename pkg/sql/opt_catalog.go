@@ -508,6 +508,10 @@ func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
 	return oc.planner.User()
 }
 
+func (oc *optCatalog) GetCurrentDatabase() string {
+	return oc.planner.CurrentDatabase()
+}
+
 // GetRoutineOwner is part of the cat.Catalog interface.
 func (oc *optCatalog) GetRoutineOwner(
 	ctx context.Context, routineOid oid.Oid,
