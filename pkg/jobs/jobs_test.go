@@ -19,6 +19,7 @@ import (
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
+	_ "github.com/cockroachdb/cockroach/pkg/backup" // we use backup jobs as placeholders.
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
