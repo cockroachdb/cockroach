@@ -12,11 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -130,6 +132,7 @@ WHERE id = $1
 	if progress, err = UnmarshalProgress(row[2]); err != nil {
 		return err
 	}
+	beforeProgress := *progress
 	if j.session != nil {
 		if row[3] == tree.DNull {
 			return errors.Errorf(
@@ -260,6 +263,48 @@ WHERE id = $1
 			return errors.Errorf(
 				"expected exactly one row affected, but %d rows affected by job update", n,
 			)
+		}
+	}
+
+	v, err := u.txn.GetSystemSchemaVersion(ctx)
+	if err != nil {
+		return err
+	}
+	if v.AtLeast(clusterversion.V25_1_AddJobsTables.Version()) {
+		if ju.md.Status != "" && ju.md.Status != status {
+			if err := j.Messages().Record(ctx, u.txn, "state", string(ju.md.Status)); err != nil {
+				return err
+			}
+			// If we are changing state, we should clear out "running status", unless
+			// we are about to set it to something instead.
+			if progress == nil || progress.RunningStatus == "" {
+				if err := j.StatusStorage().Clear(ctx, u.txn); err != nil {
+					return err
+				}
+			}
+		}
+
+		if progress != nil {
+			var ts hlc.Timestamp
+			if hwm := progress.GetHighWater(); hwm != nil {
+				ts = *hwm
+			}
+
+			if err := j.ProgressStorage().Set(ctx, u.txn, float64(progress.GetFractionCompleted()), ts); err != nil {
+				return err
+			}
+
+			if progress.RunningStatus != beforeProgress.RunningStatus {
+				if err := j.StatusStorage().Set(ctx, u.txn, progress.RunningStatus); err != nil {
+					return err
+				}
+			}
+
+			if progress.TraceID != beforeProgress.TraceID {
+				if err := j.Messages().Record(ctx, u.txn, "trace-id", fmt.Sprintf("%d", progress.TraceID)); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
