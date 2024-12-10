@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"math"
+	"math/rand"
 	"reflect"
 	"sort"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"github.com/kr/pretty"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +31,7 @@ func testMarshal(t *testing.T, m json.Marshaler, exp string) {
 	}
 }
 
-var emptyMetadata = Metadata{Name: ""}
+var emptyMetadata = Metadata{Name: "my.metric"}
 
 func TestGauge(t *testing.T) {
 	g := NewGauge(emptyMetadata)
@@ -918,4 +920,93 @@ func TestHistogramVec(t *testing.T) {
 		require.Equal(t, uint64(1), *metrics[1].Histogram.SampleCount)
 		require.Equal(t, float64(1), *metrics[1].Histogram.SampleSum)
 	})
+}
+
+func BenchmarkHistogramVec(b *testing.B) {
+	b.StopTimer()
+	testCases := []struct {
+		name         string
+		labelValLen  int
+		uniqueLabels int
+	}{
+		{"1000 unique labels of 10 characters", 10, 1000},
+		{"1000 unique labels of 100 characters", 100, 1000},
+		{"1000 unique labels of 1000 characters", 1000, 1000},
+		{"300 unique labels of 10 characters", 10, 300},
+		{"300 unique labels of 100 characters", 100, 300},
+		{"300 unique labels of 1000 characters", 1000, 300},
+		{"70 unique labels of 10 characters", 10, 70},
+		{"70 unique labels of 100 characters", 100, 70},
+		{"70 unique labels of 1000 characters", 1000, 70},
+		{"10 unique labels of 10 characters", 10, 10},
+		{"10 unique labels of 100 characters", 100, 10},
+		{"10 unique labels of 1000 characters", 1000, 10},
+	}
+
+	for _, tc := range testCases {
+		b.StopTimer()
+		labelVals := []string{}
+		randomNum := []float64{}
+		for i := 0; i < tc.uniqueLabels; i++ {
+			labelVals = append(labelVals, randSeq(tc.labelValLen))
+			randomNum = append(randomNum, rand.Float64()*IOLatencyBuckets.max)
+		}
+		b.Run(tc.name+" histogramOnly", func(b *testing.B) {
+			b.StartTimer()
+			for i := 0; i < b.N; i++ {
+				generateHistogramAndObserve(labelVals, randomNum)
+			}
+			b.StopTimer()
+		})
+
+		b.Run(tc.name+" ScrapeRegistry", func(b *testing.B) {
+			exporter := MakePrometheusExporter()
+			registry := generateHistogramAndObserve(labelVals, randomNum)
+			b.StartTimer()
+			for i := 0; i < b.N; i++ {
+				exporter.ScrapeRegistry(registry, false)
+			}
+			b.StopTimer()
+		})
+
+		b.Run(tc.name+" ScrapeAndPrintAsText", func(b *testing.B) {
+			exporter := MakePrometheusExporter()
+			registry := generateHistogramAndObserve(labelVals, randomNum)
+			b.StartTimer()
+			for i := 0; i < b.N; i++ {
+				var buf bytes.Buffer
+				err := exporter.ScrapeAndPrintAsText(&buf, expfmt.FmtText, func(exporter *PrometheusExporter) {
+					exporter.ScrapeRegistry(registry, false)
+				})
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.StopTimer()
+		})
+	}
+}
+
+func generateHistogramAndObserve(labels []string, values []float64) *Registry {
+	registry := NewRegistry()
+	h := NewExportedHistogramVec(emptyMetadata, IOLatencyBuckets, []string{"label1"})
+	registry.AddMetric(h)
+	for j, num := range values {
+
+		h.Observe(map[string]string{
+			"label1": labels[j],
+		}, num)
+	}
+
+	return registry
+}
+
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func randSeq(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
