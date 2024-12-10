@@ -136,7 +136,6 @@ go_test(
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_errors//assert",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",

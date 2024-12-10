@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/assert"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
@@ -1266,14 +1265,14 @@ func TestDescriptorErrorWrap(t *testing.T) {
 					return err
 				}
 
-				require.False(t, assert.IsAssertionFailure(tc.err))
+				require.False(t, errors.HasAssertionFailure(tc.err))
 				err = descs.DecorateDescriptorError(mut, tc.err)
 				// Ensure err is still an error
 				require.Error(t, err)
 				// Ensure descriptor info is wrapped in the error
 				require.Contains(t, err.Error(), mut.GetName())
 				// Ensure error is promoted to assertion as expected
-				require.Equal(t, tc.isAssertion, assert.IsAssertionFailure(err))
+				require.Equal(t, tc.isAssertion, errors.HasAssertionFailure(err))
 				return nil
 			}))
 		})

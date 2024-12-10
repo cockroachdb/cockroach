@@ -44,6 +44,8 @@ go_test(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/isql",
         "//pkg/sql/sessiondata",
+        "//pkg/storage/fs",
+        "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

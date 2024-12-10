@@ -42,7 +42,8 @@ type TestServerArgs struct {
 	// If not set (and hence the server is the only one in the cluster), the
 	// default zone config will be overridden to disable all replication - so that
 	// tests don't get log spam about ranges not being replicated enough. This
-	// is always set to true when the server is started via a TestCluster.
+	// is always set to true when the server is started via a TestCluster, unless
+	// the StartSingleNode TestClusterArgs is set.
 	PartOfCluster bool
 
 	// Listener (if nonempty) is the listener to use for all incoming RPCs.
@@ -180,6 +181,10 @@ type TestClusterArgs struct {
 	// IDs unpredictable. Even in ParallelStart mode, StartTestCluster
 	// waits for all nodes to start before returning.
 	ParallelStart bool
+	// StartSingleNode will initialize the cluster like 'cockroach
+	// start-single-node'. Attempts to add more than one node to the cluster will
+	// fail.
+	StartSingleNode bool
 
 	// ServerArgsPerNode override the default ServerArgs with the value in this
 	// map. The map's key is an index within TestCluster.Servers. If there is
