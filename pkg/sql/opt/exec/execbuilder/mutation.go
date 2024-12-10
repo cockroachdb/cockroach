@@ -1131,6 +1131,10 @@ var forUpdateLocking = opt.Locking{
 func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 	mutExpr memo.RelExpr,
 ) (opt.TableID, error) {
+	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
+		return 0, nil
+	}
+
 	switch t := mutExpr.(type) {
 	case *memo.InsertExpr:
 		// Unlike with the other three mutation expressions, it never makes
@@ -1140,23 +1144,23 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 		return 0, nil
 
 	case *memo.UpdateExpr:
-		return b.shouldApplyImplicitLockingToUpdateInput(t), nil
+		return shouldApplyImplicitLockingToUpdateOrDeleteInput(t), nil
 
 	case *memo.UpsertExpr:
-		return b.shouldApplyImplicitLockingToUpsertInput(t), nil
+		return shouldApplyImplicitLockingToUpsertInput(t), nil
 
 	case *memo.DeleteExpr:
-		return b.shouldApplyImplicitLockingToDeleteInput(t), nil
+		return shouldApplyImplicitLockingToUpdateOrDeleteInput(t), nil
 
 	default:
 		return 0, errors.AssertionFailedf("unexpected mutation expression %T", t)
 	}
 }
 
-// shouldApplyImplicitLockingToUpdateInput determines whether or not the builder
-// should apply a FOR UPDATE row-level locking mode to the initial row scan of
-// an UPDATE statement. If the builder should lock the initial row scan, it
-// returns the TableID of the scan, otherwise it returns 0.
+// shouldApplyImplicitLockingToUpdateOrDeleteInput determines whether the
+// builder should apply a FOR UPDATE row-level locking mode to the initial row
+// scan of an UPDATE statement or a DELETE. If the builder should lock the
+// initial row scan, it returns the TableID of the scan, otherwise it returns 0.
 //
 // Conceptually, if we picture an UPDATE statement as the composition of a
 // SELECT statement and an INSERT statement (with loosened semantics around
@@ -1176,16 +1180,15 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 // is strictly a performance optimization for contended writes. Therefore, it is
 // not worth risking the transformation being a pessimization, so it is only
 // applied when doing so does not risk creating artificial contention.
-func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) opt.TableID {
-	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
-		return 0
-	}
-
-	// Try to match the Update's input expression against the pattern:
+//
+// UPDATEs and DELETEs happen to have exactly the same matching pattern, so we
+// reuse this function for both.
+func shouldApplyImplicitLockingToUpdateOrDeleteInput(mutExpr memo.RelExpr) opt.TableID {
+	// Try to match the mutation's input expression against the pattern:
 	//
 	//   [Project]* [IndexJoin] Scan
 	//
-	input := upd.Input
+	input := mutExpr.Child(0).(memo.RelExpr)
 	input = unwrapProjectExprs(input)
 	if idxJoin, ok := input.(*memo.IndexJoinExpr); ok {
 		input = idxJoin.Input
@@ -1200,11 +1203,7 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 // should apply a FOR UPDATE row-level locking mode to the initial row scan of
 // an UPSERT statement. If the builder should lock the initial row scan, it
 // returns the TableID of the scan, otherwise it returns 0.
-func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) opt.TableID {
-	if !b.evalCtx.SessionData().ImplicitSelectForUpdate {
-		return 0
-	}
-
+func shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) opt.TableID {
 	// Try to match the Upsert's input expression against the pattern:
 	//
 	//   [Project]* (LeftJoin Scan | LookupJoin) [Project]* Values
@@ -1232,17 +1231,6 @@ func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) 
 	if _, ok := input.(*memo.ValuesExpr); ok {
 		return toLock
 	}
-	return 0
-}
-
-// tryApplyImplicitLockingToDeleteInput determines whether or not the builder
-// should apply a FOR UPDATE row-level locking mode to the initial row scan of a
-// DELETE statement. If the builder should lock the initial row scan, it returns
-// the TableID of the scan, otherwise it returns 0.
-//
-// TODO(nvanbenschoten): implement this method to match on appropriate Delete
-// expression trees and apply a row-level locking mode.
-func (b *Builder) shouldApplyImplicitLockingToDeleteInput(del *memo.DeleteExpr) opt.TableID {
 	return 0
 }
 
