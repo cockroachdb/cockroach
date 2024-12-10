@@ -49,6 +49,7 @@ Plan:
 │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (12) [stage=system:init;tenant:upgrading-system]
 │   ├── upgrade nodes :1-4 from "v22.1.8" to "v22.2.3"
 │   │   ├── restart system server on node 1 with binary version v22.2.3 (13) [stage=system:last-upgrade;tenant:upgrading-system]
+<<<<<<< Updated upstream
 │   │   ├── restart system server on node 3 with binary version v22.2.3 (14) [stage=system:last-upgrade;tenant:upgrading-system]
 │   │   ├── restart system server on node 4 with binary version v22.2.3 (15) [stage=system:last-upgrade;tenant:upgrading-system]
 │   │   ├── wait for 5m0s (16) [stage=system:last-upgrade;tenant:upgrading-system]
@@ -58,6 +59,17 @@ Plan:
 ├── start separate process virtual cluster mixed-version-tenant-cyvju with binary version v22.2.3 (20) [stage=system:tenant-setup;tenant:tenant-setup]
 ├── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on mixed-version-tenant-cyvju tenant (21) [stage=system:tenant-setup;tenant:tenant-setup]
 ├── set cluster setting "spanconfig.tenant_limit" to '50000' on mixed-version-tenant-cyvju tenant (22) [stage=system:tenant-setup;tenant:tenant-setup]
+=======
+│   │   ├── restart system server on node 2 with binary version v22.2.3 (14) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   ├── restart system server on node 3 with binary version v22.2.3 (15) [stage=system:last-upgrade;tenant:upgrading-system]
+│   │   └── wait for 1m0s (16) [stage=system:last-upgrade;tenant:upgrading-system]
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (17) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+│   └── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on system tenant (18) [stage=system:running-upgrade-migrations;tenant:upgrading-system,finalizing]
+├── start separate process virtual cluster mixed-version-tenant-cyvju with binary version v22.2.3 (19) [stage=system:tenant-setup;tenant:tenant-setup]
+├── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on mixed-version-tenant-cyvju tenant (20) [stage=system:tenant-setup;tenant:tenant-setup]
+├── set cluster setting "spanconfig.tenant_limit" to '50000' on mixed-version-tenant-cyvju tenant (21) [stage=system:tenant-setup;tenant:tenant-setup]
+├── disable KV and tenant(SQL) rate limiter on mixed-version-tenant-cyvju tenant (22) [stage=system:tenant-setup;tenant:tenant-setup]
+>>>>>>> Stashed changes
 ├── set cluster setting "server.secondary_tenants.authorization.mode" to 'allow-all' on system tenant (23) [stage=system:tenant-setup;tenant:tenant-setup]
 ├── delete all-tenants override for the `version` key (24) [stage=system:tenant-setup;tenant:tenant-setup]
 ├── run startup hooks concurrently

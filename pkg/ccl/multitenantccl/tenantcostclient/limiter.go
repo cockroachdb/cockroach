@@ -292,6 +292,10 @@ func (req *waitRequest) Acquire(
 	l := res.(*limiter)
 	now := l.qp.TimeSource().Now()
 
+	if l.qp.tb.available < req.needed {
+		log.Errorf(ctx, "darryl: not enough tokens available. needed: %f, available: %f", req.needed, l.qp.tb.available)
+	}
+
 	fulfilled, tryAgainAfter = l.qp.tb.TryToFulfill(now, req.needed)
 	if !fulfilled {
 		// This request will now be blocked (or is already blocked if it was

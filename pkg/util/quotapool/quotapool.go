@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -318,8 +319,13 @@ func (qp *AbstractPool) acquireFastPath(
 	}
 	if qp.mu.q.len == 0 {
 		if fulfilled, tryAgainAfter = r.Acquire(ctx, qp.mu.quota); fulfilled {
+			log.Error(ctx, "darryl: fast path succeeded")
 			return true, nil, tryAgainAfter, nil
+		} else {
+			log.Errorf(ctx, "darryl: fast path failed: %+v\n", r)
 		}
+	} else {
+		log.Errorf(ctx, "darryl: fast path failed, queue non empty: %+v\n", r)
 	}
 	if !r.ShouldWait() {
 		return false, nil, 0, ErrNotEnoughQuota
