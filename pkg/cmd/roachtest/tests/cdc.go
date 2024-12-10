@@ -1371,9 +1371,10 @@ func registerCDC(r registry.Registry) {
 				sinkType:   pubsubSink,
 				assumeRole: "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
 				targets:    allTpccTargets,
+				opts:       map[string]string{"initial_scan": "'no'"},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 30 * time.Minute,
+				initialScanLatency: 5 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
 			ct.waitForWorkload()
@@ -1407,9 +1408,10 @@ func registerCDC(r registry.Registry) {
 				sinkType:   cloudStorageSink,
 				assumeRole: "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
 				targets:    allTpccTargets,
+				opts:       map[string]string{"initial_scan": "'no'"},
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 30 * time.Minute,
+				initialScanLatency: 5 * time.Minute,
 				steadyLatency:      time.Minute,
 			})
 			ct.waitForWorkload()
