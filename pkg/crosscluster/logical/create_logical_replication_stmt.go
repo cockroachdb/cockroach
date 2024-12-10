@@ -227,8 +227,8 @@ func createLogicalReplicationStreamPlanHook(
 			}
 		}()
 
-		sourceTypes := make([]*descpb.TypeDescriptor, len(spec.TypeDescriptors))
-		for i, desc := range spec.TypeDescriptors {
+		sourceTypes := make([]*descpb.TypeDescriptor, len(spec.ExternalCatalog.Types))
+		for i, desc := range spec.ExternalCatalog.Types {
 			sourceTypes[i] = &desc
 		}
 		crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(sourceTypes)
@@ -238,8 +238,7 @@ func createLogicalReplicationStreamPlanHook(
 		// is used for filtering; if not, they probably forgot that step.
 		throwNoTTLWithCDCIgnoreError := discard == jobspb.LogicalReplicationDetails_DiscardCDCIgnoredTTLDeletes
 
-		for i, name := range srcTableNames {
-			td := spec.TableDescriptors[name]
+		for i, td := range spec.ExternalCatalog.Tables {
 			cpy := tabledesc.NewBuilder(&td).BuildCreatedMutableTable()
 			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, crossClusterResolver); err != nil {
 				return err

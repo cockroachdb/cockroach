@@ -19,6 +19,7 @@ import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 import "roachpb/span_config.proto";
 import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/externalcatalog/externalpb/external.proto";
 
 // ReplicationProducerSpec is the specification returned by the replication
 // producer job when it is created.
@@ -44,15 +45,10 @@ message ReplicationProducerSpec {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "SourceTenantID"
   ];
-
-  // TableDescriptors are the descriptors for the tables in the
-  // ReplicationProducerRequest.
-  //
-  // TODO(ssd): We likely want to remove this one-time table
-  // descriptor fetch with a schemafeed that the consumer starts.
-  map<string, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 7 [(gogoproto.nullable) = false];
-
-  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 8 [(gogoproto.nullable) = false];
+  
+  reserved 7;
+  reserved 8;
+  sql.catalog.externalcatalog.externalpb.ExternalCatalog external_catalog = 9 [(gogoproto.nullable) = false];
 }
 
 // ReplicationProducerRequest is sent by the consuming cluster when

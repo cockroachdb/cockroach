@@ -13,5 +13,6 @@ import "sql/catalog/descpb/structured.proto";
 
 message ExternalCatalog {
   repeated cockroach.sql.sqlbase.TableDescriptor tables = 1 [(gogoproto.nullable) = false];
+  repeated cockroach.sql.sqlbase.TypeDescriptor types = 2 [(gogoproto.nullable) = false];
 
 }
