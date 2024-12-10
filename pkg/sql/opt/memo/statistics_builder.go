@@ -495,6 +495,12 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.LockOp:
 		return sb.colStatLock(colSet, e.(*LockExpr))
 
+	case opt.VectorSearchOp:
+		return sb.colStatVectorSearch(colSet, e.(*VectorSearchExpr))
+
+	case opt.VectorPartitionSearchOp:
+		return sb.colStatVectorPartitionSearch(colSet, e.(*VectorPartitionSearchExpr))
+
 	case opt.BarrierOp:
 		return sb.colStatBarrier(colSet, e.(*BarrierExpr))
 
@@ -2829,6 +2835,100 @@ func (sb *statisticsBuilder) colStatLock(colSet opt.ColSet, lock *LockExpr) *pro
 	s := lock.Relational().Statistics()
 
 	inColStat := sb.colStatFromChild(colSet, lock, 0 /* childIdx */)
+
+	// Construct colstat using the corresponding input stats.
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = inColStat.DistinctCount
+	colStat.NullCount = inColStat.NullCount
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
+// +--------------+
+// | VectorSearch |
+// +--------------+
+
+func (sb *statisticsBuilder) buildVectorSearch(
+	search *VectorSearchExpr, relProps *props.Relational,
+) {
+	s := relProps.Statistics()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	inputStats := sb.makeTableStatistics(search.Table)
+	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
+
+	// Expect the number of candidates to be at most 2 times the number of
+	// neighbors requested.
+	// TODO(drewk, mw5h): determine if we need to adjust this multiplier or do
+	// something more sophisticated. Maybe we should also expect that at most some
+	// fraction of the table is returned as candidates?
+	const candidateMultiplier = 2
+	expectedCandidates := float64(candidateMultiplier * search.TargetNeighborCount)
+	if s.RowCount > expectedCandidates {
+		s.RowCount = expectedCandidates
+	}
+
+	// TODO(drewk, mw5h): consider adding stats for the PrefixConstraint.
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatVectorSearch(
+	colSet opt.ColSet, search *VectorSearchExpr,
+) *props.ColumnStatistic {
+	relProps := search.Relational()
+	s := relProps.Statistics()
+
+	inputColStat := sb.colStatTable(search.Table, colSet)
+	colStat := sb.copyColStat(colSet, s, inputColStat)
+
+	if sb.shouldUseHistogram(relProps) {
+		colStat.Histogram = inputColStat.Histogram
+	}
+
+	if s.Selectivity != props.OneSelectivity {
+		tableStats := sb.makeTableStatistics(search.Table)
+		colStat.ApplySelectivity(s.Selectivity, tableStats.RowCount)
+	}
+
+	if colSet.Intersects(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
+
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
+// +-----------------------+
+// | VectorPartitionSearch |
+// +-----------------------+
+
+func (sb *statisticsBuilder) buildVectorPartitionSearch(
+	search *VectorPartitionSearchExpr, relProps *props.Relational,
+) {
+	s := relProps.Statistics()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(search)
+
+	inputStats := search.Input.Relational().Statistics()
+
+	// VectorPartitionSearch operators do not change the cardinality of the input.
+	s.RowCount = inputStats.RowCount
+	s.VirtualCols.UnionWith(inputStats.VirtualCols)
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatVectorPartitionSearch(
+	colSet opt.ColSet, search *VectorPartitionSearchExpr,
+) *props.ColumnStatistic {
+	s := search.Relational().Statistics()
+
+	inColStat := sb.colStatFromChild(colSet, search, 0 /* childIdx */)
 
 	// Construct colstat using the corresponding input stats.
 	colStat, _ := s.ColStats.Add(colSet)

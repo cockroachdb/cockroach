@@ -1429,6 +1429,90 @@ define RecursiveCTEPrivate {
     Deduplicate bool
 }
 
+# VectorSearch is used to perform an approximate K-nearest-neighbor search for a
+# single query vector on a vector index. It returns a set of candidate primary
+# keys which should be used in a re-ranking step that computes the exact
+# distances to the query vector, and applies the NN limit.
+[Relational, Telemetry]
+define VectorSearch {
+    # QueryVector is the scalar query vector. It is either a constant or a
+    # placeholder.
+    QueryVector ScalarExpr
+    _ VectorSearchPrivate
+}
+
+[Private]
+define VectorSearchPrivate {
+    # Table identifies the table to search. It is an id that can be passed to
+    # the Metadata.Table method in order to fetch cat.Table metadata.
+    Table TableID
+
+    # Index identifies the vector index to search. It can be passed to the
+    # cat.Table.Index() method in order to fetch the cat.Index metadata.
+    Index IndexOrdinal
+
+    # Cols is the set of columns produced by the vector search operator. This
+    # is currently always the set of primary key columns.
+    Cols ColSet
+
+    # PrefixConstraint is set iff the vector index has a prefix of non-vector
+    # columns. It contains one or more spans that each constrain every prefix
+    # column to a single value. The vector search will be conducted within each
+    # span independently.
+    PrefixConstraint Constraint
+
+    # TargetNeighborCount is the number of nearest neighbors to search for.
+    # The set of candidates returning will generally be larger than this number.
+    TargetNeighborCount int64
+}
+
+# VectorPartitionSearch is used to determine the vector-index partition that
+# contains (or should contain) each vector from the input. It is used in the
+# input of mutation operators. It always produces exactly one row for each
+# input row, containing the partition key and optionally the centroid of the
+# partition. If the input query vector is NULL, no vector search is performed,
+# and the projected output columns are NULL.
+[Relational]
+define VectorPartitionSearch {
+    Input RelExpr
+    _ VectorPartitionSearchPrivate
+}
+
+[Private]
+define VectorPartitionSearchPrivate {
+    # Table identifies the table to perform the search in.
+    Table TableID
+
+    # Index is the vector index that is used to perform the search.
+    Index IndexOrdinal
+
+    # PrefixKeyCols are the columns (produced by the input) used to create
+    # lookup keys for the non-vector prefix columns if the index is a
+    # multi-column vector index. There must be a key column for each prefix
+    # column.
+    PrefixKeyCols ColList
+
+    # QueryVectorCol is the input column that contains the query vectors.
+    # When the query vector is NULL, the partition and centroid output columns
+    # will be NULL.
+    QueryVectorCol ColumnID
+
+    # PrimaryKeyCols is the optional set of input columns used to constrain
+    # the search to a specific row. This is used for deletion from the index.
+    # In rare cases it is possible not to find the requested row, in which case
+    # the partition key will be NULL.
+    PrimaryKeyCols ColSet
+
+    # PartitionCol is the output column that contains the partition key for each
+    # vector. It is always set.
+    PartitionCol ColumnID
+
+    # CentroidCol is the output column that contains the centroid of the
+    # partition. It is only set for inserts into the index (including those
+    # performed for a SQL UPDATE or UPSERT).
+    CentroidCol ColumnID
+}
+
 # Barrier is a relational operator that simply passes through its input columns
 # with no changes. It serves as an optimization barrier, and is not included in
 # the final execution plan.
