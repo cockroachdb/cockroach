@@ -774,7 +774,7 @@ func (r *raft) maybeSendSnapshot(to pb.PeerID, pr *tracker.Progress) bool {
 	sindex, sterm := snapshot.Metadata.Index, snapshot.Metadata.Term
 	r.logger.Debugf("%x [firstindex: %d, commit: %d] sent snapshot[index: %d, term: %d] to %x [%s]",
 		r.id, r.raftLog.firstIndex(), r.raftLog.committed, sindex, sterm, to, pr)
-	pr.BecomeSnapshot(sindex)
+	r.becomeSnapshot(pr, sindex)
 	r.logger.Debugf("%x paused sending replication messages to %x [%s]", r.id, to, pr)
 
 	r.send(pb.Message{To: to, Type: pb.MsgSnap, Snapshot: &snapshot})
@@ -1372,7 +1372,7 @@ func (r *raft) becomeLeader() {
 	// trivially in this state. Note that r.reset() has initialized this
 	// progress with the last index already.
 	pr := r.trk.Progress(r.id)
-	pr.BecomeReplicate()
+	r.becomeReplicate(pr)
 	// The leader always has RecentActive == true. The checkQuorumActive method
 	// makes sure to preserve this.
 	pr.RecentActive = true
@@ -1394,6 +1394,21 @@ func (r *raft) becomeLeader() {
 	// quota of the new leader. In other words, after the call to appendEntry,
 	// r.uncommittedSize is still 0.
 	r.logger.Infof("%x became leader at term %d", r.id, r.Term)
+}
+
+func (r *raft) becomeProbe(pr *tracker.Progress) {
+	r.metrics.FlowsEnteredStateProbe.Inc(1)
+	pr.BecomeProbe()
+}
+
+func (r *raft) becomeReplicate(pr *tracker.Progress) {
+	r.metrics.FlowsEnteredStateReplicate.Inc(1)
+	pr.BecomeReplicate()
+}
+
+func (r *raft) becomeSnapshot(pr *tracker.Progress, index uint64) {
+	r.metrics.FlowsEnteredStateSnapshot.Inc(1)
+	pr.BecomeSnapshot(index)
 }
 
 func (r *raft) hup(t CampaignType) {
@@ -2047,7 +2062,7 @@ func stepLeader(r *raft, m pb.Message) error {
 			if pr.MaybeDecrTo(m.Index, nextProbeIdx) {
 				r.logger.Debugf("%x decreased progress of %x to [%s]", r.id, m.From, pr)
 				if pr.State == tracker.StateReplicate {
-					pr.BecomeProbe()
+					r.becomeProbe(pr)
 				}
 				r.maybeSendAppend(m.From)
 			}
@@ -2063,7 +2078,7 @@ func stepLeader(r *raft, m pb.Message) error {
 			if pr.MaybeUpdate(m.Index) || (pr.Match == m.Index && pr.State == tracker.StateProbe) {
 				switch {
 				case pr.State == tracker.StateProbe:
-					pr.BecomeReplicate()
+					r.becomeReplicate(pr)
 				case pr.State == tracker.StateSnapshot && pr.Match+1 >= r.raftLog.firstIndex():
 					// Note that we don't take into account PendingSnapshot to
 					// enter this branch. No matter at which index a snapshot
@@ -2077,8 +2092,8 @@ func stepLeader(r *raft, m pb.Message) error {
 					// move to replicating state, that would only happen with
 					// the next round of appends (but there may not be a next
 					// round for a while, exposing an inconsistent RaftStatus).
-					pr.BecomeProbe()
-					pr.BecomeReplicate()
+					r.becomeProbe(pr)
+					r.becomeReplicate(pr)
 				case pr.State == tracker.StateReplicate:
 					pr.Inflights.FreeLE(m.Index)
 				}
@@ -2123,13 +2138,13 @@ func stepLeader(r *raft, m pb.Message) error {
 			return nil
 		}
 		if !m.Reject {
-			pr.BecomeProbe()
+			r.becomeProbe(pr)
 			r.logger.Debugf("%x snapshot succeeded, resumed sending replication messages to %x [%s]", r.id, m.From, pr)
 		} else {
 			// NB: the order here matters or we'll be probing erroneously from
 			// the snapshot index, but the snapshot never applied.
 			pr.PendingSnapshot = 0
-			pr.BecomeProbe()
+			r.becomeProbe(pr)
 			r.logger.Debugf("%x snapshot failed, resumed sending replication messages to %x [%s]", r.id, m.From, pr)
 		}
 		// If snapshot finish, wait for the MsgAppResp from the remote node before sending
@@ -2140,7 +2155,7 @@ func stepLeader(r *raft, m pb.Message) error {
 		// During optimistic replication, if the remote becomes unreachable,
 		// there is huge probability that a MsgApp is lost.
 		if pr.State == tracker.StateReplicate {
-			pr.BecomeProbe()
+			r.becomeProbe(pr)
 		}
 		r.logger.Debugf("%x failed to send message to %x because it is unreachable [%s]", r.id, m.From, pr)
 	case pb.MsgTransferLeader:
