@@ -193,9 +193,6 @@ var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &UniqueCounter{}
 var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
-var _ json.Marshaler = &GaugeVec{}
-var _ json.Marshaler = &CounterVec{}
-var _ json.Marshaler = &HistogramVec{}
 
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
@@ -1349,11 +1346,6 @@ func (gv *GaugeVec) GetMetadata() Metadata {
 // Inspect implements Iterable.
 func (gv *GaugeVec) Inspect(f func(interface{})) { f(gv) }
 
-// MarshalJSON implements JSONMarshaler.
-func (gv *GaugeVec) MarshalJSON() ([]byte, error) {
-	return json.Marshal(gv)
-}
-
 // GetType implements PrometheusExportable.
 func (gv *GaugeVec) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_GAUGE.Enum()
@@ -1450,11 +1442,6 @@ func (cv *CounterVec) GetMetadata() Metadata {
 // Inspect implements Iterable.
 func (cv *CounterVec) Inspect(f func(interface{})) { f(cv) }
 
-// MarshalJSON implements JSONMarshaler.
-func (cv *CounterVec) MarshalJSON() ([]byte, error) {
-	return json.Marshal(cv)
-}
-
 // GetType implements PrometheusExportable.
 func (cv *CounterVec) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_COUNTER.Enum()
@@ -1529,11 +1516,6 @@ func (hv *HistogramVec) GetMetadata() Metadata {
 
 // Inspect implements Iterable.
 func (hv *HistogramVec) Inspect(f func(interface{})) { f(hv) }
-
-// MarshalJSON implements JSONMarshaler.
-func (hv *HistogramVec) MarshalJSON() ([]byte, error) {
-	return json.Marshal(hv)
-}
 
 // GetType implements PrometheusExportable.
 func (hv *HistogramVec) GetType() *prometheusgo.MetricType {
