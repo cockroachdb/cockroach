@@ -594,6 +594,13 @@ func (s disableRateLimitersStep) Run(
 		s.virtualClusterName, availableTokens, refillRate, maxBurstTokens,
 	)
 
+	if h.System.FromVersion.AtLeast(updateTenantResourceLimitsDeprecatedArgsVersion) {
+		stmt = fmt.Sprintf(
+			"SELECT crdb_internal.update_tenant_resource_limits('%s', %v, %v, %d);",
+			s.virtualClusterName, availableTokens, refillRate, maxBurstTokens,
+		)
+	}
+
 	return h.System.Exec(rng, stmt)
 }
 
