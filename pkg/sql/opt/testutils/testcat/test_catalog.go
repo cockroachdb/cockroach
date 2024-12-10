@@ -51,8 +51,9 @@ type Catalog struct {
 	counter    int
 	enumTypes  map[string]*types.T
 
-	udfs           map[string]*tree.ResolvedFunctionDefinition
-	revokedUDFOids intsets.Fast
+	udfs                  map[string]*tree.ResolvedFunctionDefinition
+	revokedUDFOids        intsets.Fast
+	uniqueLeaseGeneration int64
 }
 
 type dataSource interface {
@@ -451,6 +452,14 @@ func (tc *Catalog) AddSequence(seq *Sequence) {
 			"sequence %q already exists", tree.ErrString(&seq.SeqName)))
 	}
 	tc.testSchema.dataSources[fq] = seq
+}
+
+// CompareDataSourcesFingerprint always assume that the fingerprints are changing
+// on us.
+func (tc *Catalog) CompareDataSourcesFingerprint(
+	a *cat.DataSourcesFingerprint, b *cat.DataSourcesFingerprint,
+) bool {
+	return false
 }
 
 // ExecuteMultipleDDL parses the given semicolon-separated DDL SQL statements
