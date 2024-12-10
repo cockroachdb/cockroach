@@ -135,16 +135,6 @@ const rangeTableDisplayList: RangeTableRow[] = [
     compareToLeader: false,
   },
   {
-    variable: "truncatedIndex",
-    display: "Truncated Index",
-    compareToLeader: true,
-  },
-  {
-    variable: "truncatedTerm",
-    display: "Truncated Term",
-    compareToLeader: true,
-  },
-  {
     variable: "mvccLastUpdate",
     display: "MVCC Last Update",
     compareToLeader: true,
@@ -826,12 +816,6 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
           FixLong(info.state.num_dropped).greaterThan(0)
             ? "range-table__cell--warning"
             : "",
-        ),
-        truncatedIndex: this.createContent(
-          FixLong(info.state.state.truncated_state.index),
-        ),
-        truncatedTerm: this.createContent(
-          FixLong(info.state.state.truncated_state.term),
         ),
         mvccLastUpdate: this.contentNanos(FixLong(mvcc.last_update_nanos)),
         mvccLiveBytesCount: this.contentMVCC(
