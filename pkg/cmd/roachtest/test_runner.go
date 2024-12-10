@@ -338,7 +338,7 @@ func (r *testRunner) Run(
 
 	clusterFactory := newClusterFactory(
 		clustersOpt.user, clustersOpt.clusterID, lopt.artifactsDir,
-		r.cr, numConcurrentClusterCreations(),
+		r.cr, numConcurrentClusterCreations(), r.sideEyeClient,
 	)
 
 	n := len(tests)
@@ -1546,11 +1546,7 @@ func (r *testRunner) teardownTest(
 	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
 		snapURL := ""
 		if timedOut {
-			// If the Side-Eye integration was configured, capture a snapshot of the
-			// cluster to help with debugging.
-			if r.sideEyeClient != nil {
-				snapURL = c.CaptureSideEyeSnapshot(ctx, t.L(), r.sideEyeClient)
-			}
+			snapURL = c.CaptureSideEyeSnapshot(ctx)
 		}
 
 		err := r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
