@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -273,6 +274,7 @@ func createTestStoreWithoutStart(
 	}, ds)
 	require.Nil(t, cfg.DB)
 	cfg.DB = kv.NewDB(cfg.AmbientCtx, txnCoordSenderFactory, cfg.Clock, stopper)
+	cfg.NodeLiveness = liveness.NewTestNodeLiveness(stopper, cfg.Clock, cfg.Settings)
 	store := NewStore(ctx, *cfg, eng, nodeDesc)
 	storeSender.Sender = store
 
