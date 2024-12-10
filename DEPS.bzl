@@ -2405,10 +2405,10 @@ def go_deps():
         name = "com_github_dataexmachina_dev_side_eye_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/DataExMachina-dev/side-eye-go",
-        sha256 = "8702e7d34a166207ca2329d9780681edfb18ef6a5a9120d35fe33526d418bc4f",
-        strip_prefix = "github.com/DataExMachina-dev/side-eye-go@v0.0.0-20240528211710-5eb9c7a69e1d",
+        sha256 = "6fb443dab28dff78ee369ffbed2a5a52571d4c551a6a413ee2522a30e51ce8e6",
+        strip_prefix = "github.com/DataExMachina-dev/side-eye-go@v0.0.0-20241205202932-fd550e38f35e",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataExMachina-dev/side-eye-go/com_github_dataexmachina_dev_side_eye_go-v0.0.0-20240528211710-5eb9c7a69e1d.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataExMachina-dev/side-eye-go/com_github_dataexmachina_dev_side_eye_go-v0.0.0-20241205202932-fd550e38f35e.zip",
         ],
     )
     go_repository(
@@ -6503,6 +6503,16 @@ def go_deps():
         strip_prefix = "github.com/minio/c2goasm@v0.0.0-20190812172519-36a3d3bbc4f3",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/c2goasm/com_github_minio_c2goasm-v0.0.0-20190812172519-36a3d3bbc4f3.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_minio_highwayhash",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/minio/highwayhash",
+        sha256 = "3ab23da1595a6b8543edf3de80e31afacfba2b1bc9e9f4cf60c6f54ce3f66fa9",
+        strip_prefix = "github.com/minio/highwayhash@v1.0.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/highwayhash/com_github_minio_highwayhash-v1.0.2.zip",
         ],
     )
     go_repository(
@@ -11463,6 +11473,16 @@ def go_deps():
         strip_prefix = "google.golang.org/genproto@v0.0.0-20230410155749-daa745c078e1",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/genproto/org_golang_google_genproto-v0.0.0-20230410155749-daa745c078e1.zip",
+        ],
+    )
+    go_repository(
+        name = "org_golang_google_genproto_googleapis_rpc",
+        build_file_proto_mode = "disable_global",
+        importpath = "google.golang.org/genproto/googleapis/rpc",
+        sha256 = "5520055455146fd452a014e10bfa069a5e132f30f8fea905431333dabb24c394",
+        strip_prefix = "google.golang.org/genproto/googleapis/rpc@v0.0.0-20240401170217-c3f982113cda",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/genproto/googleapis/rpc/org_golang_google_genproto_googleapis_rpc-v0.0.0-20240401170217-c3f982113cda.zip",
         ],
     )
     go_repository(
