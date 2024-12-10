@@ -341,6 +341,9 @@ type Replica struct {
 		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.Message
 		// Scratch for populating rac2.RaftEvent.ReplicaSateInfo for flowContrlV2.
 		replicaStateScratchForFlowControl map[roachpb.ReplicaID]rac2.ReplicaStateInfo
+
+		// TODO(kvoli): Find a better home for this.
+		rangeFeedExtremelyBehindStartTime time.Time
 	}
 
 	// localMsgs contains a collection of raftpb.Message that target the local
