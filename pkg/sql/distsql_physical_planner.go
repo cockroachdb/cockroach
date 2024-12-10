@@ -708,8 +708,13 @@ func checkSupportForPlanNode(
 		if err != nil {
 			return cannotDistribute, err
 		}
-		// If we have a top K sort, we can distribute the query.
-		return rec.compose(canDistribute), nil
+		topKRec := shouldDistribute
+		if n.estimatedInputRowCount != 0 && sd.DistributeSortRowCountThreshold > n.estimatedInputRowCount {
+			// Don't force distribution if we expect to process small number of
+			// rows.
+			topKRec = canDistribute
+		}
+		return rec.compose(topKRec), nil
 
 	case *unaryNode:
 		return canDistribute, nil
