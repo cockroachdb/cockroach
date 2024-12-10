@@ -168,166 +168,172 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "slow under deadlock")
-
-	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
-
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
 	})
 	defer c.Cleanup()
 
-	// Test cluster contains 3 nodes that we would turn into a single node
-	// cluster using loss of quorum recovery. After it is stopped, single node
-	// would not be able to progress, but we will apply recovery procedure and
-	// mark on replicas on node 1 as designated survivors. After that, starting
-	// single node should succeed.
-	st := cluster.MakeTestingClusterSettings()
-	// We currently don't clear out the LeadEpoch field when recovering from a
-	// loss of quorum, so we can't run with leader leases on in this test.
-	kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
-	tcBefore := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			// This logic is specific to the storage layer.
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-			Settings:          st,
-		},
-		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {Settings: st, StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
-		},
-	})
-	tcBefore.Start(t)
-	s := sqlutils.MakeSQLRunner(tcBefore.Conns[0])
-	s.Exec(t, "SET CLUSTER SETTING cluster.organization = 'remove dead replicas test'")
-	defer tcBefore.Stopper().Stop(ctx)
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(),
+		func(t *testing.T, leaseType roachpb.LeaseType) {
+			ctx := context.Background()
+			dirWithLeaseType := dir + leaseType.String()
+			// Test cluster contains 3 nodes that we would turn into a single node
+			// cluster using loss of quorum recovery. After it is stopped, single node
+			// would not be able to progress, but we will apply recovery procedure and
+			// mark on replicas on node 1 as designated survivors. After that, starting
+			// single node should succeed.
+			st := cluster.MakeTestingClusterSettings()
+			kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
+			tcBefore := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Settings: st,
+					// This logic is specific to the storage layer.
+					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				},
+				ServerArgsPerNode: map[int]base.TestServerArgs{
+					0: {
+						Settings:   st,
+						StoreSpecs: []base.StoreSpec{{Path: dirWithLeaseType + "/store-1"}},
+					},
+				},
+			})
+			tcBefore.Start(t)
+			s := sqlutils.MakeSQLRunner(tcBefore.Conns[0])
+			s.Exec(t, "SET CLUSTER SETTING cluster.organization = 'remove dead replicas test'")
+			defer tcBefore.Stopper().Stop(ctx)
 
-	// We use scratch range to test special case for pending update on the
-	// descriptor which has to be cleaned up before recovery could proceed.
-	// For that we'll ensure it is not empty and then put an intent. After
-	// recovery, we'll check that the range is still accessible for writes as
-	// normal.
-	sk := tcBefore.ScratchRange(t)
-	// The LOQ tooling does not work when a node fails during a split/merge
-	// operation. Make sure that splitting the scratch range fully completes.
-	require.NoError(t, tcBefore.WaitForSplitAndInitialization(sk))
-	require.NoError(t,
-		tcBefore.Server(0).DB().Put(ctx, testutils.MakeKey(sk, []byte{1}), "value"),
-		"failed to write value to scratch range")
+			// We use scratch range to test special case for pending update on the
+			// descriptor which has to be cleaned up before recovery could proceed.
+			// For that we'll ensure it is not empty and then put an intent. After
+			// recovery, we'll check that the range is still accessible for writes as
+			// normal.
+			sk := tcBefore.ScratchRange(t)
+			// The LOQ tooling does not work when a node fails during a split/merge
+			// operation. Make sure that splitting the scratch range fully completes.
+			require.NoError(t, tcBefore.WaitForSplitAndInitialization(sk))
+			require.NoError(t,
+				tcBefore.Server(0).DB().Put(ctx, testutils.MakeKey(sk, []byte{1}), "value"),
+				"failed to write value to scratch range")
 
-	createIntentOnRangeDescriptor(ctx, t, tcBefore, sk)
+			createIntentOnRangeDescriptor(ctx, t, tcBefore, sk)
 
-	node1ID := tcBefore.Servers[0].NodeID()
-	// Now that stores are prepared and replicated we can shut down cluster
-	// and perform store manipulations.
-	tcBefore.Stopper().Stop(ctx)
+			node1ID := tcBefore.Servers[0].NodeID()
+			// Now that stores are prepared and replicated we can shut down cluster
+			// and perform store manipulations.
+			tcBefore.Stopper().Stop(ctx)
 
-	server1StoreDir := dir + "/store-1"
-	replicaInfoFileName := dir + "/node-1.json"
-	c.RunWithArgs(
-		[]string{"debug", "recover", "collect-info", "--store=" + server1StoreDir,
-			replicaInfoFileName})
+			server1StoreDir := dirWithLeaseType + "/store-1"
+			replicaInfoFileName := dirWithLeaseType + "/node-1.json"
+			c.RunWithArgs(
+				[]string{"debug", "recover", "collect-info", "--store=" + server1StoreDir,
+					replicaInfoFileName})
 
-	// Generate recovery plan and try to verify that plan file was generated and contains
-	// meaningful data. This is not strictly necessary for verifying end-to-end flow, but
-	// having assertions on generated data helps to identify which stage of pipeline broke
-	// if test fails.
-	planFile := dir + "/recovery-plan.json"
-	out, err := c.RunWithCaptureArgs(
-		[]string{"debug", "recover", "make-plan", "--confirm=y", "--plan=" + planFile,
-			replicaInfoFileName})
-	require.NoError(t, err, "failed to run make-plan")
-	require.Contains(t, out, fmt.Sprintf("- node n%d", node1ID),
-		"planner didn't provide correct apply instructions")
-	require.FileExists(t, planFile, "generated plan file")
-	planFileContent, err := os.ReadFile(planFile)
-	require.NoError(t, err, "test infra failed, can't open created plan file")
-	plan := loqrecoverypb.ReplicaUpdatePlan{}
-	jsonpb := protoutil.JSONPb{}
-	require.NoError(t, jsonpb.Unmarshal(planFileContent, &plan),
-		"failed to deserialize replica recovery plan")
-	require.NotEmpty(t, plan.Updates, "resulting plan contains no updates")
+			// Generate recovery plan and try to verify that plan file was generated and contains
+			// meaningful data. This is not strictly necessary for verifying end-to-end flow, but
+			// having assertions on generated data helps to identify which stage of pipeline broke
+			// if test fails.
+			planFile := dirWithLeaseType + "/recovery-plan.json"
+			out, err := c.RunWithCaptureArgs(
+				[]string{"debug", "recover", "make-plan", "--confirm=y", "--plan=" + planFile,
+					replicaInfoFileName})
+			require.NoError(t, err, "failed to run make-plan")
+			require.Contains(t, out, fmt.Sprintf("- node n%d", node1ID),
+				"planner didn't provide correct apply instructions")
+			require.FileExists(t, planFile, "generated plan file")
+			planFileContent, err := os.ReadFile(planFile)
+			require.NoError(t, err, "test infra failed, can't open created plan file")
+			plan := loqrecoverypb.ReplicaUpdatePlan{}
+			jsonpb := protoutil.JSONPb{}
+			require.NoError(t, jsonpb.Unmarshal(planFileContent, &plan),
+				"failed to deserialize replica recovery plan")
+			require.NotEmpty(t, plan.Updates, "resulting plan contains no updates")
 
-	out, err = c.RunWithCaptureArgs(
-		[]string{"debug", "recover", "apply-plan", "--confirm=y", "--store=" + server1StoreDir,
-			planFile})
-	require.NoError(t, err, "failed to run apply plan")
-	// Check that there were at least one mention of replica being promoted.
-	require.Contains(t, out, "will be updated", "no replica updates were recorded")
-	require.Contains(t, out, fmt.Sprintf("Updated store(s): s%d", node1ID),
-		"apply plan was not executed on requested node")
+			out, err = c.RunWithCaptureArgs(
+				[]string{"debug", "recover", "apply-plan", "--confirm=y", "--store=" + server1StoreDir,
+					planFile})
+			require.NoError(t, err, "failed to run apply plan")
+			// Check that there were at least one mention of replica being promoted.
+			require.Contains(t, out, "will be updated", "no replica updates were recorded")
+			require.Contains(t, out, fmt.Sprintf("Updated store(s): s%d", node1ID),
+				"apply plan was not executed on requested node")
 
-	tcAfter := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			// This logic is specific to the storage layer.
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-			Settings:          st,
-		},
-		ReplicationMode: base.ReplicationManual,
-		ServerArgsPerNode: map[int]base.TestServerArgs{
-			0: {Settings: st, StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
-		},
-	})
-	// NB: If recovery is not performed, new cluster will just hang on startup.
-	// This is caused by liveness range becoming unavailable and preventing any
-	// progress. So it is likely that test will timeout if basic workflow fails.
-	tcAfter.Start(t)
-	defer tcAfter.Stopper().Stop(ctx)
+			tcAfter := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Settings: st,
+					// This logic is specific to the storage layer.
+					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				},
+				ReplicationMode: base.ReplicationManual,
+				ServerArgsPerNode: map[int]base.TestServerArgs{
+					0: {
+						Settings:   st,
+						StoreSpecs: []base.StoreSpec{{Path: dirWithLeaseType + "/store-1"}},
+					},
+				},
+			})
+			// NB: If recovery is not performed, new cluster will just hang on startup.
+			// This is caused by liveness range becoming unavailable and preventing any
+			// progress. So it is likely that test will timeout if basic workflow fails.
+			tcAfter.Start(t)
+			defer tcAfter.Stopper().Stop(ctx)
 
-	// In the new cluster, we will still have nodes 2 and 3 remaining from the first
-	// attempt. That would increase number of replicas on system ranges to 5 and we
-	// would not be able to upreplicate properly. So we need to decommission old nodes
-	// first before proceeding.
-	adminClient := tcAfter.Server(0).GetAdminClient(t)
+			// In the new cluster, we will still have nodes 2 and 3 remaining from the first
+			// attempt. That would increase number of replicas on system ranges to 5 and we
+			// would not be able to upreplicate properly. So we need to decommission old nodes
+			// first before proceeding.
+			adminClient := tcAfter.Server(0).GetAdminClient(t)
 
-	require.NoError(t, runDecommissionNodeImpl(
-		ctx, adminClient, nodeDecommissionWaitNone, nodeDecommissionChecksSkip, false,
-		[]roachpb.NodeID{roachpb.NodeID(2), roachpb.NodeID(3)}, tcAfter.Server(0).NodeID()),
-		"Failed to decommission removed nodes")
+			require.NoError(t, runDecommissionNodeImpl(
+				ctx, adminClient, nodeDecommissionWaitNone, nodeDecommissionChecksSkip, false,
+				[]roachpb.NodeID{roachpb.NodeID(2), roachpb.NodeID(3)}, tcAfter.Server(0).NodeID()),
+				"Failed to decommission removed nodes")
 
-	for i := 0; i < len(tcAfter.Servers); i++ {
-		require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			store.TestingSetReplicateQueueActive(true)
-			return nil
-		}), "Failed to activate replication queue")
-	}
-	require.NoError(t, tcAfter.WaitForZoneConfigPropagation(),
-		"Failed to ensure zone configs are propagated")
-	require.NoError(t, tcAfter.WaitForFullReplication(), "Failed to perform full replication")
+			for i := 0; i < len(tcAfter.Servers); i++ {
+				require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+					store.TestingSetReplicateQueueActive(true)
+					return nil
+				}), "Failed to activate replication queue")
+			}
+			require.NoError(t, tcAfter.WaitForZoneConfigPropagation(),
+				"Failed to ensure zone configs are propagated")
+			require.NoError(t, tcAfter.WaitForFullReplication(), "Failed to perform full replication")
 
-	for i := 0; i < len(tcAfter.Servers); i++ {
-		require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			return store.ForceConsistencyQueueProcess()
-		}), "Failed to force replicas to consistency queue")
-	}
+			for i := 0; i < len(tcAfter.Servers); i++ {
+				require.NoError(t, tcAfter.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+					return store.ForceConsistencyQueueProcess()
+				}), "Failed to force replicas to consistency queue")
+			}
 
-	// As a validation step we will just pick one range and get its replicas to see
-	// if they were up-replicated to the new nodes.
-	s = sqlutils.MakeSQLRunner(tcAfter.Conns[0])
-	r := s.QueryRow(t, "select replicas from crdb_internal.ranges limit 1")
-	var replicas string
-	r.Scan(&replicas)
-	require.Equal(t, "{1,4,5}", replicas, "Replicas after loss of quorum recovery")
+			// As a validation step we will just pick one range and get its replicas to see
+			// if they were up-replicated to the new nodes.
+			s = sqlutils.MakeSQLRunner(tcAfter.Conns[0])
+			r := s.QueryRow(t, "select replicas from crdb_internal.ranges limit 1")
+			var replicas string
+			r.Scan(&replicas)
+			require.Equal(t, "{1,4,5}", replicas, "Replicas after loss of quorum recovery")
 
-	// Validate that rangelog is updated by recovery records after cluster restarts.
-	testutils.SucceedsSoon(t, func() error {
-		r := s.QueryRow(t,
-			`select count(*) from system.rangelog where "eventType" = 'unsafe_quorum_recovery'`)
-		var recoveries int
-		r.Scan(&recoveries)
-		if recoveries != len(plan.Updates) {
-			return errors.Errorf("found %d recovery events while expecting %d", recoveries,
-				len(plan.Updates))
-		}
-		return nil
-	})
+			// Validate that rangelog is updated by recovery records after cluster restarts.
+			testutils.SucceedsSoon(t, func() error {
+				r := s.QueryRow(t,
+					`select count(*) from system.rangelog where "eventType" = 'unsafe_quorum_recovery'`)
+				var recoveries int
+				r.Scan(&recoveries)
+				if recoveries != len(plan.Updates) {
+					return errors.Errorf("found %d recovery events while expecting %d", recoveries,
+						len(plan.Updates))
+				}
+				return nil
+			})
 
-	// We were using scratch range to test cleanup of pending transaction on
-	// rangedescriptor key. We want to verify that after recovery, range is still
-	// writable e.g. recovery succeeded.
-	require.NoError(t,
-		tcAfter.Server(0).DB().Put(ctx, testutils.MakeKey(sk, []byte{1}), "value2"),
-		"failed to write value to scratch range after recovery")
+			// We were using scratch range to test cleanup of pending transaction on
+			// rangedescriptor key. We want to verify that after recovery, range is still
+			// writable e.g. recovery succeeded.
+			require.NoError(t,
+				tcAfter.Server(0).DB().Put(ctx, testutils.MakeKey(sk, []byte{1}), "value2"),
+				"failed to write value to scratch range after recovery")
+		})
 }
 
 // TestStageVersionCheck verifies that we can force plan with different internal
