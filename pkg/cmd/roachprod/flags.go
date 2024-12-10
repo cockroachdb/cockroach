@@ -311,11 +311,6 @@ func initFlags() {
 	logsCmd.Flags().StringVar(&logsProgramFilter,
 		"logs-program", "^cockroach$", "regular expression of the name of program in log files to search")
 
-	monitorCmd.Flags().BoolVar(&monitorOpts.IgnoreEmptyNodes,
-		"ignore-empty-nodes", false,
-		"Automatically detect the (subset of the given) nodes which to monitor "+
-			"based on the presence of a nontrivial data directory.")
-
 	monitorCmd.Flags().BoolVar(&monitorOpts.OneShot,
 		"oneshot", false,
 		"Report the status of all targeted nodes once, then exit. The exit "+
