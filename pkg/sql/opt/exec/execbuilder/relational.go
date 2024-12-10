@@ -2028,12 +2028,18 @@ func (b *Builder) buildTopK(e *memo.TopKExpr) (_ execPlan, outputCols colOrdMap,
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+	var inputRowCount uint64
+	if inputRelProps := e.Input.Relational(); inputRelProps.Statistics().Available {
+		inputRowCount = uint64(math.Ceil(inputRelProps.Statistics().RowCount))
+	}
 	var ep execPlan
 	ep.root, err = b.factory.ConstructTopK(
 		input.root,
 		e.K,
 		exec.OutputOrdering(sqlOrdering),
-		alreadyOrderedPrefix)
+		alreadyOrderedPrefix,
+		inputRowCount,
+	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
