@@ -10,11 +10,13 @@ package cat
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -75,6 +77,25 @@ type Flags struct {
 	// like `SHOW RANGES` for which we also want to show valid ranges
 	// when a table is being imported (offline).
 	IncludeNonActiveIndexes bool
+}
+
+// DataSourcesFingerprint can be stored and confirm that all data sources resolved,
+// at the current point in time will have the same version, stats, and name
+// resolution.
+type DataSourcesFingerprint struct {
+	// LeaseGeneration tracks if any new version of descriptors has been published
+	// by the lease manager.
+	LeaseGeneration int64
+
+	// StatsGeneration tracks if any new statistics have been published.
+	StatsGeneration int64
+
+	// SystemConfig tracks the current system config, which is refreshed on
+	// any zone config update.
+	SystemConfig *config.SystemConfig
+
+	CurrentDatabase string
+	SearchPath      sessiondata.SearchPath
 }
 
 // Catalog is an interface to a database catalog, exposing only the information
@@ -209,6 +230,13 @@ type Catalog interface {
 
 	// GetCurrentUser returns the username.SQLUsername of the current session.
 	GetCurrentUser() username.SQLUsername
+
+	// CompareDataSourcesFingerprint compares a data source fingerprint to see if
+	// any data sources could have changed. A new fingerprint is returned if they
+	// have changed
+	CompareDataSourcesFingerprint(
+		f *DataSourcesFingerprint, new *DataSourcesFingerprint,
+	) bool
 
 	// GetRoutineOwner returns the username.SQLUsername of the routine's
 	// (specified by routineOid) owner.

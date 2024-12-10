@@ -396,7 +396,10 @@ func (m *Memo) HasPlaceholders() bool {
 // perform KV operations on behalf of the transaction associated with the
 // provided catalog, and those errors are required to be propagated.
 func (m *Memo) IsStale(
-	ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	catalog cat.Catalog,
+	dataSourcesFingerprint *cat.DataSourcesFingerprint,
 ) (bool, error) {
 	// Memo is stale if fields from SessionData that can affect planning have
 	// changed.
@@ -457,6 +460,17 @@ func (m *Memo) IsStale(
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
+
+	// If the query is AOST we must check all the dependencies, since the descriptors
+	// may have been different in the past. Otherwise, the data sources fingerprint
+	// is sufficient.
+	var newFP cat.DataSourcesFingerprint
+	if evalCtx.AsOfSystemTime == nil &&
+		dataSourcesFingerprint != nil &&
+		catalog.CompareDataSourcesFingerprint(dataSourcesFingerprint, &newFP) {
+		return false, nil
+	}
+
 	// Memo is stale if the fingerprint of any object in the memo's metadata has
 	// changed, or if the current user no longer has sufficient privilege to
 	// access the object.
@@ -464,6 +478,10 @@ func (m *Memo) IsStale(
 		return true, err
 	} else if !depsUpToDate {
 		return true, nil
+	}
+
+	if evalCtx.AsOfSystemTime == nil && dataSourcesFingerprint != nil {
+		*dataSourcesFingerprint = newFP
 	}
 	return false, nil
 }
