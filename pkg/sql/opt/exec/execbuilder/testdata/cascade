@@ -900,6 +900,7 @@ vectorized: true
 │             missing stats
 │             table: self@self_pkey
 │             spans: [/4 - /4]
+│             locking strength: for update
 │
 └── • fk-cascade
     │ fk: self_b_fkey
@@ -984,6 +985,7 @@ vectorized: true
 │             missing stats
 │             table: loop_a@loop_a_pkey
 │             spans: [/'loop_a-pk1' - /'loop_a-pk1']
+│             locking strength: for update
 │
 └── • fk-cascade
     │ fk: loop_b_cascade_delete_fkey
@@ -1085,6 +1087,7 @@ quality of service: regular
 │             missing stats
 │             table: loop_a@loop_a_pkey
 │             spans: [/'loop_a-pk1' - /'loop_a-pk1']
+│             locking strength: for update
 │
 └── • fk-cascade
     │ fk: loop_b_cascade_delete_fkey
@@ -1235,6 +1238,7 @@ vectorized: true
 │             missing stats
 │             table: t3@t3_pkey
 │             spans: [/1 - /1]
+│             locking strength: for update
 │
 ├── • fk-cascade
 │   │ fk: fk1

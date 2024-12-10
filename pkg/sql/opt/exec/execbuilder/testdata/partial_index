@@ -265,7 +265,7 @@ InitPut /Table/113/2/3/2/0 -> /BYTES/
 query T kvtrace
 DELETE FROM t WHERE a = 5
 ----
-Scan /Table/112/1/5/0
+Scan /Table/112/1/5/0 lock Exclusive (Block, Unreplicated)
 Del /Table/112/2/4/5/0
 Del /Table/112/1/5/0
 
@@ -273,7 +273,7 @@ Del /Table/112/1/5/0
 query T kvtrace
 DELETE FROM t WHERE a = 6
 ----
-Scan /Table/112/1/6/0
+Scan /Table/112/1/6/0 lock Exclusive (Block, Unreplicated)
 Del /Table/112/2/11/6/0
 Del /Table/112/3/11/6/0
 Del /Table/112/1/6/0
@@ -282,7 +282,7 @@ Del /Table/112/1/6/0
 query T kvtrace
 DELETE FROM t WHERE a = 12
 ----
-Scan /Table/112/1/12/0
+Scan /Table/112/1/12/0 lock Exclusive (Block, Unreplicated)
 Del /Table/112/2/11/12/0
 Del /Table/112/3/11/12/0
 Del /Table/112/4/"foo"/12/0
@@ -293,7 +293,7 @@ Del /Table/112/1/12/0
 query T kvtrace
 DELETE FROM u WHERE k = 1
 ----
-Scan /Table/113/1/1/0
+Scan /Table/113/1/1/0 lock Exclusive (Block, Unreplicated)
 Del /Table/113/1/1/0
 
 # Deleted row matches partial index with predicate column that is not
@@ -301,7 +301,7 @@ Del /Table/113/1/1/0
 query T kvtrace
 DELETE FROM u WHERE k = 2
 ----
-Scan /Table/113/1/2/0
+Scan /Table/113/1/2/0 lock Exclusive (Block, Unreplicated)
 Del /Table/113/2/3/2/0
 Del /Table/113/1/2/0
 
@@ -890,7 +890,7 @@ CPut /Table/107/1/2/0 -> /TUPLE/
 query T kvtrace
 DELETE FROM inv WHERE a = 1
 ----
-Scan /Table/107/1/1/0
+Scan /Table/107/1/1/0 lock Exclusive (Block, Unreplicated)
 Del /Table/107/2/"num"/1/1/0
 Del /Table/107/2/"x"/"y"/1/0
 Del /Table/107/1/1/0
@@ -898,7 +898,7 @@ Del /Table/107/1/1/0
 query T kvtrace
 DELETE FROM inv WHERE a = 2
 ----
-Scan /Table/107/1/2/0
+Scan /Table/107/1/2/0 lock Exclusive (Block, Unreplicated)
 Del /Table/107/1/2/0
 
 # ---------------------------------------------------------

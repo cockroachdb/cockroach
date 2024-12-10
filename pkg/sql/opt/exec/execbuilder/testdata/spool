@@ -68,6 +68,7 @@ vectorized: true
                   missing stats
                   table: t@t_pkey
                   spans: FULL SCAN
+                  locking strength: for update
 
 
 query T
@@ -196,6 +197,7 @@ vectorized: true
                   missing stats
                   table: t@t_pkey
                   spans: FULL SCAN
+                  locking strength: for update
 
 query T
 EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1

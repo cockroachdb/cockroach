@@ -710,6 +710,7 @@ explain(shape):
 └── • scan
       table: foo@foo_pkey
       spans: FULL SCAN
+      locking strength: for update
 explain(gist):
 • delete
 │ from: foo
@@ -733,6 +734,7 @@ explain(shape):
 └── • scan
       table: foo@foo_pkey
       spans: 1+ spans
+      locking strength: for update
 explain(gist):
 • delete
 │ from: foo
