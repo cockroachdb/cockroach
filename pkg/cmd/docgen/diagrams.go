@@ -615,7 +615,7 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
-		name: "begin_stmt",
+		name: "legacy_begin_stmt",
 		inline: []string{
 			"opt_transaction",
 			"begin_transaction",
@@ -628,9 +628,7 @@ var specs = []stmtSpec{
 			"transaction_read_mode",
 			"as_of_clause",
 			"transaction_deferrable_mode",
-		},
-		exclude: []*regexp.Regexp{
-			regexp.MustCompile("'START'"),
+			"user_priority",
 		},
 	},
 	{
@@ -1320,7 +1318,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name: "set_transaction",
-		stmt: "nonpreparable_set_stmt",
+		stmt: "set_transaction_stmt",
 		inline: []string{
 			"set_transaction_stmt",
 			"transaction_mode",
