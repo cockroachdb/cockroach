@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -34,7 +33,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, conn, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -51,19 +50,24 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	require.NoError(t, err)
 
 	extractCatalog := func() externalpb.ExternalCatalog {
-		opName := redact.SafeString("extractCatalog")
-		planner, close := sql.NewInternalPlanner(
-			opName,
-			kv.NewTxn(ctx, kvDB, 0),
-			sqlUser,
-			&sql.MemoryMetrics{},
-			&execCfg,
-			sql.NewInternalSessionData(ctx, execCfg.Settings, opName),
-		)
-		defer close()
+		var catalog externalpb.ExternalCatalog
+		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			opName := redact.SafeString("extractCatalog")
+			planner, close := sql.NewInternalPlanner(
+				opName,
+				txn.KV(),
+				sqlUser,
+				&sql.MemoryMetrics{},
+				&execCfg,
+				sql.NewInternalSessionData(ctx, execCfg.Settings, opName),
+			)
+			defer close()
 
-		catalog, err := ExtractExternalCatalog(ctx, planner.(resolver.SchemaResolver), "db1.sc1.tab1", "db1.sc1.tab2")
-		require.NoError(t, err)
+			catalog, err = ExtractExternalCatalog(ctx, planner.(resolver.SchemaResolver), txn, col, "db1.sc1.tab1", "db1.sc1.tab2")
+			require.NoError(t, err)
+			return nil
+		}))
+
 		return catalog
 	}
 
@@ -75,14 +79,17 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	sqlDB.Exec(t, "CREATE TABLE db1.sc1.tab3 (a INT PRIMARY KEY, b INT REFERENCES db1.sc1.tab2(a))")
 	sadCatalog := extractCatalog()
 
-	srv2, conn2, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	execCfg2 := srv2.ExecutorConfig().(sql.ExecutorConfig)
-	defer srv2.Stopper().Stop(ctx)
+	// Modify table 1 to have a udt column
+	sqlDB.Exec(t, "CREATE TYPE db1.sc1.udt AS ENUM ('a', 'b', 'c')")
+	sqlDB.Exec(t, "ALTER TABLE db1.sc1.tab1 ADD COLUMN c db1.sc1.udt")
+	udtCatalog := extractCatalog()
+	require.Equal(t, "udt", udtCatalog.Types[0].Name)
+	require.Equal(t, "_udt", udtCatalog.Types[1].Name)
 
+	// Ingest the catalog into defaultdb.
 	var parentID descpb.ID
 	var schemaID descpb.ID
-
-	require.NoError(t, sql.TestingDescsTxn(ctx, srv2, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "defaultdb")
 		require.NoError(t, err)
 		parentID = dbDesc.GetID()
@@ -90,14 +97,12 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 		return err
 	}))
 
-	require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv2, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		return IngestExternalCatalog(ctx, &execCfg2, sqlUser, sadCatalog, txn, col, parentID, schemaID, false)
-	}), "invalid foreign key backreference")
+	require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		return IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, parentID, schemaID, false)
+	}), "invalid inbound foreign key")
 
-	require.NoError(t, sql.TestingDescsTxn(ctx, srv2, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		return IngestExternalCatalog(ctx, &execCfg2, sqlUser, ingestableCatalog, txn, col, parentID, schemaID, false)
+	require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		return IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, parentID, schemaID, false)
 	}))
-
-	sqlDB2 := sqlutils.MakeSQLRunner(conn2)
-	sqlDB2.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2"}})
+	sqlDB.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2"}})
 }
