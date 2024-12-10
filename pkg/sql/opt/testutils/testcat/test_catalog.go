@@ -47,9 +47,10 @@ const (
 
 // Catalog implements the cat.Catalog interface for testing purposes.
 type Catalog struct {
-	testSchema Schema
-	counter    int
-	enumTypes  map[string]*types.T
+	testSchema       Schema
+	counter          int
+	dependencyDigest int64
+	enumTypes        map[string]*types.T
 
 	udfs           map[string]*tree.ResolvedFunctionDefinition
 	revokedUDFOids intsets.Fast
@@ -451,6 +452,15 @@ func (tc *Catalog) AddSequence(seq *Sequence) {
 			"sequence %q already exists", tree.ErrString(&seq.SeqName)))
 	}
 	tc.testSchema.dataSources[fq] = seq
+}
+
+// GetDependencyDigest always assume that the generations are changing
+// on us.
+func (tc *Catalog) GetDependencyDigest() cat.DependencyDigest {
+	tc.dependencyDigest++
+	return cat.DependencyDigest{
+		LeaseGeneration: tc.dependencyDigest,
+	}
 }
 
 // ExecuteMultipleDDL parses the given semicolon-separated DDL SQL statements
