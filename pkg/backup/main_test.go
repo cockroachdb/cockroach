@@ -16,14 +16,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestMain(m *testing.M) {
+	start := timeutil.Now()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-	os.Exit(m.Run())
+	exit := m.Run()
+	testcluster.PrintTimings(timeutil.Since(start))
+	os.Exit(exit)
 }
 
 //go:generate ../../util/leaktest/add-leaktest.sh *_test.go

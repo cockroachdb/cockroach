@@ -10,10 +10,12 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net"
+	"os"
 	"reflect"
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -224,6 +226,29 @@ func (tc *TestCluster) stopServerLocked(idx int) {
 	}
 }
 
+var debugTimings = struct {
+	StartCalls, StartDuration atomic.Int64
+	WaitForRepDuration        atomic.Int64
+}{}
+
+// PrintTimings summarizes time spent across invocations of testcluster methods.
+func PrintTimings(testMain time.Duration) {
+	setupTime := time.Duration(debugTimings.StartDuration.Load())
+
+	if setupTime > 0 {
+		tcStartCalls := debugTimings.StartCalls.Load()
+		setupTime += time.Duration(debugTimings.WaitForRepDuration.Load())
+
+		// We could break out WaitForReplication time, but the point here is just to
+		// show total time spent setting up tests vs testing, so lumping it in to a
+		// single more concise number is arguably better.
+		fmt.Fprintf(os.Stderr,
+			"Setting up %d TestClusters took %s, %.1f%% of TestMain\n",
+			tcStartCalls, setupTime.Round(time.Millisecond), float64(setupTime)/float64(testMain)*100,
+		)
+	}
+}
+
 // StartTestCluster creates and starts up a TestCluster made up of `nodes`
 // in-memory testing servers.
 // The cluster should be stopped using TestCluster.Stopper().Stop().
@@ -382,7 +407,10 @@ func NewTestCluster(
 // on waiting for init for the first server).
 func (tc *TestCluster) Start(t serverutils.TestFataler) {
 	ctx := context.Background()
+	begin := timeutil.Now()
 	defer func() {
+		debugTimings.StartCalls.Add(1)
+		debugTimings.StartDuration.Add(timeutil.Since(begin).Nanoseconds())
 		if r := recover(); r != nil {
 			// Avoid a stopper leak.
 			tc.Stopper().Stop(ctx)
@@ -1416,8 +1444,9 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	log.Infof(context.TODO(), "WaitForFullReplication")
 	start := timeutil.Now()
 	defer func() {
-		end := timeutil.Now()
-		log.Infof(context.TODO(), "WaitForFullReplication took: %s", end.Sub(start))
+		took := timeutil.Since(start)
+		debugTimings.WaitForRepDuration.Add(took.Nanoseconds())
+		log.Infof(context.TODO(), "WaitForFullReplication took: %s", took)
 	}()
 
 	if len(tc.Servers) < 3 {
