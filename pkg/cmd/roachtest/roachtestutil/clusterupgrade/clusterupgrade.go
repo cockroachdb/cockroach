@@ -101,11 +101,22 @@ func CurrentVersion() *Version {
 // MustParseVersion parses the version string given (with or without
 // leading 'v') and returns the corresponding `Version` object.
 func MustParseVersion(v string) *Version {
+	parsedVersion, err := ParseVersion(v)
+	if err != nil {
+		panic(err)
+	}
+	return parsedVersion
+}
+
+// ParseVersion parses the version string given (with or without
+// leading 'v') and returns the corresponding `Version` object. Returns
+// an error if the version string is not valid.
+func ParseVersion(v string) (*Version, error) {
 	// The current version is rendered differently (see String()
 	// implementation). If the user passed that string representation,
 	// return the current version object.
 	if currentVersion := CurrentVersion(); v == currentVersion.String() {
-		return currentVersion
+		return currentVersion, nil
 	}
 
 	versionStr := v
@@ -113,7 +124,26 @@ func MustParseVersion(v string) *Version {
 		versionStr = "v" + v
 	}
 
-	return &Version{*version.MustParse(versionStr)}
+	parsedVersion, err := version.Parse(versionStr)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Version{*parsedVersion}, nil
+}
+
+// LatestPatchRelease returns the latest patch release version for a given
+// release series.
+func LatestPatchRelease(series string) (*Version, error) {
+	seriesStr := strings.TrimPrefix(series, "v")
+	versionStr, err := release.LatestPatch(seriesStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// release.LatestPatch uses mustParseVersion internally, so the returned
+	// version is guaranteed to be valid.
+	return MustParseVersion(versionStr), nil
 }
 
 // BinaryVersion returns the binary version running on the node
