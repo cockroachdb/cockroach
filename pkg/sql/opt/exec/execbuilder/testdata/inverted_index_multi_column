@@ -65,7 +65,7 @@ InitPut /Table/106/3/333/"foo"/Arr/"a"/"b"/3/0 -> /BYTES/
 query T kvtrace
 DELETE FROM t WHERE k = 2
 ----
-Scan /Table/106/1/2/0
+Scan /Table/106/1/2/0 lock Exclusive (Block, Unreplicated)
 Del /Table/106/2/333/Arr/0/2/0
 Del /Table/106/2/333/Arr/7/2/0
 Del /Table/106/3/333/"foo"/Arr/0/2/0
@@ -75,7 +75,7 @@ Del /Table/106/1/2/0
 query T kvtrace
 DELETE FROM t WHERE k = 3
 ----
-Scan /Table/106/1/3/0
+Scan /Table/106/1/3/0 lock Exclusive (Block, Unreplicated)
 Del /Table/106/2/333/Arr/3/3/0
 Del /Table/106/2/333/Arr/"a"/"b"/3/0
 Del /Table/106/3/333/"foo"/Arr/3/3/0
@@ -110,7 +110,7 @@ Del /Table/106/3/333/"foo"/Arr/1/4/0
 query T kvtrace
 DELETE FROM t WHERE k = 4
 ----
-Scan /Table/106/1/4/0
+Scan /Table/106/1/4/0 lock Exclusive (Block, Unreplicated)
 Del /Table/106/1/4/0
 
 # Insert NULL non-inverted value.
@@ -147,7 +147,7 @@ InitPut /Table/106/3/NULL/"foo"/"a"/"b"/5/0 -> /BYTES/
 query T kvtrace
 DELETE FROM t WHERE k = 5
 ----
-Scan /Table/106/1/5/0
+Scan /Table/106/1/5/0 lock Exclusive (Block, Unreplicated)
 Del /Table/106/2/NULL/"a"/"b"/5/0
 Del /Table/106/3/NULL/"foo"/"a"/"b"/5/0
 Del /Table/106/1/5/0

@@ -418,6 +418,7 @@ vectorized: true
 │             missing stats
 │             table: parent@parent_pkey
 │             spans: [/3 - /3]
+│             locking strength: for update
 │
 ├── • constraint-check
 │   │
@@ -464,6 +465,7 @@ vectorized: true
 │             missing stats
 │             table: parent@parent_pkey
 │             spans: [/3 - /3]
+│             locking strength: for update
 │
 ├── • constraint-check
 │   │
@@ -511,6 +513,7 @@ vectorized: true
 │             missing stats
 │             table: parent@parent_pkey
 │             spans: [/3 - /3]
+│             locking strength: for update
 │
 ├── • constraint-check
 │   │
@@ -575,6 +578,7 @@ vectorized: true
 │             missing stats
 │             table: doubleparent@doubleparent_pkey
 │             spans: [/10 - /10]
+│             locking strength: for update
 │
 └── • constraint-check
     │
@@ -1982,6 +1986,7 @@ vectorized: true
 │             estimated row count: 1 (100% of the table; stats collected <hidden> ago)
 │             table: p@p_pkey
 │             spans: [/1 - ]
+│             locking strength: for update
 │
 └── • constraint-check
     │
@@ -2071,6 +2076,7 @@ vectorized: true
 │             estimated row count: 1 (100% of the table; stats collected <hidden> ago)
 │             table: p@p_pkey
 │             spans: [/1 - ]
+│             locking strength: for update
 │
 └── • constraint-check
     │
@@ -2181,6 +2187,7 @@ vectorized: true
 │             missing stats
 │             table: partial_parent@partial_parent_pkey
 │             spans: [/1 - /1]
+│             locking strength: for update
 │
 └── • constraint-check
     │
