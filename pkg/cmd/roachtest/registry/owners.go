@@ -25,7 +25,7 @@ const (
 	OwnerAdmissionControl   Owner = `admission-control`
 	OwnerObservability      Owner = `obs-prs`
 	OwnerObservabilityIndia Owner = `obs-india-prs`
-	OwnerServer             Owner = `server` // not currently staffed
+	OwnerServer             Owner = `server`
 	OwnerSQLFoundations     Owner = `sql-foundations`
 	OwnerMigrations         Owner = `migrations`
 	OwnerProductSecurity    Owner = `product-security`
