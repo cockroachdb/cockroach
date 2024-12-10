@@ -3286,7 +3286,23 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	key := tc.ScratchRange(t)
 	desc := tc.AddVotersOrFatal(t, key, tc.Target(1))
 	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
-	tc.WaitForLeaseUpgrade(ctx, t, desc)
+
+	// Wait for the lease transfer to be applied on the new leaseholder and then
+	// to be upgraded from an expiration-based lease.
+	testutils.SucceedsSoon(t, func() error {
+		repl, err := s.GetReplica(desc.RangeID)
+		if err != nil {
+			return err
+		}
+		l, _ := repl.GetLease()
+		if !l.OwnedBy(s.StoreID()) {
+			return errors.Errorf("lease transfer not applied on leaseholder")
+		}
+		if l.Type() == roachpb.LeaseExpiration {
+			return errors.Errorf("lease still an expiration based lease")
+		}
+		return nil
+	})
 
 	cap, err := s.Capacity(ctx, false /* useCached */)
 	if err != nil {
