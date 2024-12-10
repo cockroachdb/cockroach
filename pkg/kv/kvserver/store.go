@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -3333,6 +3334,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		ioOverload                float64
 		pendingRaftProposalCount  int64
 		slowRaftProposalCount     int64
+		replicationStateCounts    [tracker.StateCount]int64
 
 		locks                          int64
 		totalLockHoldDurationNanos     int64
@@ -3379,6 +3381,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 			if metrics.LeaderNotFortified {
 				raftLeaderNotFortifiedCount++
+			}
+			for state, cnt := range metrics.ReplicationStateCounts {
+				replicationStateCounts[state] += cnt
 			}
 			kvflowSendStats.Clear()
 			rep.SendStreamStats(&kvflowSendStats)
@@ -3480,6 +3485,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseLivenessCount.Update(leaseLivenessCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
 	s.metrics.UninitializedCount.Update(uninitializedCount)
+	for state, cnt := range replicationStateCounts {
+		s.metrics.ReplicationStateCounts[state].Update(cnt)
+	}
 	s.metrics.AverageQueriesPerSecond.Update(averageQueriesPerSecond)
 	s.metrics.AverageRequestsPerSecond.Update(averageRequestsPerSecond)
 	s.metrics.AverageWritesPerSecond.Update(averageWritesPerSecond)
