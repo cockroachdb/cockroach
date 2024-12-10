@@ -41,6 +41,10 @@ type groupNode struct {
 	// estimatedRowCount, when set, is the estimated number of rows that this
 	// groupNode will output.
 	estimatedRowCount uint64
+
+	// estimatedInputRowCount, when set, is the estimated number of rows that
+	// this groupNode will read from its input.
+	estimatedInputRowCount uint64
 }
 
 func (n *groupNode) startExec(params runParams) error {

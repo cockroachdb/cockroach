@@ -20,6 +20,9 @@ type sortNode struct {
 	// When alreadyOrderedPrefix is non-zero, the input is already ordered on
 	// the prefix ordering[:alreadyOrderedPrefix].
 	alreadyOrderedPrefix int
+	// estimatedInputRowCount, when set, is the estimated number of rows that
+	// this sortNode will read from its input.
+	estimatedInputRowCount uint64
 }
 
 func (n *sortNode) startExec(runParams) error {

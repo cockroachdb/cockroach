@@ -1828,8 +1828,8 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	mustUseLeafTxn bool,
 ) error {
 	subqueryDistribution, distSQLProhibitedErr := getPlanDistribution(
-		ctx, planner.Descriptors().HasUncommittedTypes(),
-		planner.SessionData().DistSQLMode, subqueryPlan.plan, &planner.distSQLVisitor,
+		ctx, planner.Descriptors().HasUncommittedTypes(), planner.SessionData().DistSQLMode,
+		subqueryPlan.plan, &planner.distSQLVisitor, planner.SessionData(),
 	)
 	distribute := DistributionType(LocalDistribution)
 	if subqueryDistribution.WillDistribute() {
@@ -2439,8 +2439,8 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
 ) error {
 	postqueryDistribution, distSQLProhibitedErr := getPlanDistribution(
-		ctx, planner.Descriptors().HasUncommittedTypes(),
-		planner.SessionData().DistSQLMode, postqueryPlan, &planner.distSQLVisitor,
+		ctx, planner.Descriptors().HasUncommittedTypes(), planner.SessionData().DistSQLMode,
+		postqueryPlan, &planner.distSQLVisitor, planner.SessionData(),
 	)
 	distribute := DistributionType(LocalDistribution)
 	if postqueryDistribution.WillDistribute() {
