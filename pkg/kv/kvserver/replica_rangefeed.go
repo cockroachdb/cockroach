@@ -869,9 +869,64 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 	// If the closed timestamp is sufficiently stale, signal that we want an
 	// update to the leaseholder so that it will eventually begin to progress
 	// again.
-	behind := r.Clock().PhysicalTime().Sub(closedTS.GoTime())
-	slowClosedTSThresh := 5 * closedts.TargetDuration.Get(&r.store.cfg.Settings.SV)
+	now := r.Clock().PhysicalTime()
+	behind := now.Sub(closedTS.GoTime())
+	targetDuration := closedts.TargetDuration.Get(&r.store.cfg.Settings.SV)
+	slowClosedTSThresh := 5 * targetDuration
 	exceedsSlowLagThresh = behind > slowClosedTSThresh
+
+	// If the closed timestamp is more than 20x behind the target duration for
+	// the first time now, then record the time. This is used to detect when the
+	// replica is chronically behind and should not be used as a rangefeed
+	// source. If the closed timestamp catches up past the
+	// extremelySlowLagThresh, then the time is reset. In theory, this could lead
+	// to a pathalogical case where the closed timestamp is always behind by 20x
+	// the target duration, but this seems unlikely to happen in practice, it
+	// would be an unlikely steady state to emerge.
+	//
+	// When the closed timestamp lag exceeds the extremelySlowLagThresh for at
+	// least 10 times the target duration, then the rangefeed is cancelled.
+	//
+	// NOTE: These heuristic thresholds are pulled out of thin air and should be
+	// scruntized and almost certainly adjusted. Likewise, the signal (heuristic)
+	// itself could be refined. The goal of this current signal is to ensure that
+	// when it fires:
+	// - The closed timestamp is not making progress consistently over a
+	//   noticable perod.
+	// - The closed timestamp is sufficiently behind that it is likely to be
+	//   causing problems for rangefeeds.
+	// - Most importantly, following from the above points, the signal is
+	//   supposed to indicate that the replica is not a good source for
+	//   rangefeeds and another replica may be better.
+	//
+	// NOTE: The default target duration is 3s, therefore the default
+	// exceedsSlowLagThresh is 60s.
+	//
+	// TODO(kvoli): This all needs to be gated behind a cluster setting.
+	// TODO(kvoli): This also all needs to be re-written to be more robust, have observability
+	// and be more easily understood.
+	// TODO(kvoli): Check that the mux rangefeed is not cancelling every
+	// rangefeed on a node when the signal fires, returning an error.
+	extremelySlowLagThresh := 20 * slowClosedTSThresh
+	extremelySlowCloseThresh := 10 * slowClosedTSThresh
+	shouldCancelTooFarBehind := false
+	extremelyFarBehindStartTime := time.Time{}
+	if behind > extremelySlowLagThresh {
+		if r.raftMu.rangeFeedExtremelyBehindStartTime.IsZero() {
+			r.raftMu.rangeFeedExtremelyBehindStartTime = now
+		}
+		extremelyFarBehindStartTime = r.raftMu.rangeFeedExtremelyBehindStartTime
+		if now.Sub(extremelyFarBehindStartTime) > extremelySlowCloseThresh {
+			// The rangefeed was lagging behind by greater than the
+			// extremelySlowLagThresh (=default 60s) for at least 10 times the
+			// slowClosedTSThresh (x10=default 30s). Signal that the rangefeed is not
+			// tennable on this replica.
+			shouldCancelTooFarBehind = true
+		}
+	} else if behind < extremelySlowLagThresh && !r.raftMu.rangeFeedExtremelyBehindStartTime.IsZero() {
+		r.raftMu.rangeFeedExtremelyBehindStartTime = time.Time{}
+	}
+
 	if exceedsSlowLagThresh {
 		m := r.store.metrics.RangeFeedMetrics
 		if m.RangeFeedSlowClosedTimestampLogN.ShouldLog() {
@@ -906,6 +961,16 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 				defer func() { <-m.RangeFeedSlowClosedTimestampNudgeSem }()
 				if err := r.ensureClosedTimestampStarted(ctx); err != nil {
 					log.Infof(ctx, `RangeFeed failed to nudge: %s`, err)
+				} else if shouldCancelTooFarBehind {
+					log.Infof(ctx,
+						`RangeFeed is too far behind, cancelling [behind=%v behind_threshold=%v behind_start=%v behind_duration_threshold=%v]`,
+						behind, extremelySlowLagThresh, extremelyFarBehindStartTime, extremelySlowCloseThresh)
+					// TODO(kvoli): We should be using a new retry error reason, which
+					// has similar retry behavior to the replica removed reason, but is
+					// more specific to this case.
+					//
+					// See https://github.com/cockroachdb/cockroach/blob/b4280f7c6613f362791478696adbdf2cc67dd874/pkg/kv/kvclient/kvcoord/dist_sender_rangefeed.go#L555-L555.
+					r.disconnectRangefeedWithReason(kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
 				}
 				return nil, nil
 			})
