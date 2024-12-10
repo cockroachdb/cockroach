@@ -47,12 +47,6 @@ func runImportMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster,
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
 		// Only use the latest version of each release to work around #127029.
 		mixedversion.AlwaysUseLatestPredecessors,
-		// This test sometimes flake on separate-process
-		// deployments. Needs investigation.
-		mixedversion.EnabledDeploymentModes(
-			mixedversion.SystemOnlyDeployment,
-			mixedversion.SharedProcessDeployment,
-		),
 	)
 	runImport := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		if err := h.Exec(r, "DROP DATABASE IF EXISTS tpcc CASCADE;"); err != nil {
