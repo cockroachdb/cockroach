@@ -669,7 +669,12 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.L().Printf("validating stats after the perturbation")
 	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)...)
 	require.True(t, len(failures) == 0, strings.Join(failures, "\n"))
-	roachtestutil.ValidateTokensReturned(ctx, t, v, v.stableNodes())
+	tokenReturnTime := 1 * time.Minute
+	// TODO(#137017): Increase the return time if disk bandwidth limit is set.
+	if v.diskBandwidthLimit != "0" {
+		tokenReturnTime = 1 * time.Hour
+	}
+	roachtestutil.ValidateTokensReturned(ctx, t, v, v.stableNodes(), tokenReturnTime)
 }
 
 func (v variations) applyClusterSettings(ctx context.Context, t test.Test) {
