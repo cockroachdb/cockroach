@@ -827,7 +827,11 @@ func (e *distSQLSpecExecFactory) ConstructLimit(
 }
 
 func (e *distSQLSpecExecFactory) ConstructTopK(
-	input exec.Node, k int64, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
+	input exec.Node,
+	k int64,
+	ordering exec.OutputOrdering,
+	alreadyOrderedPrefix int,
+	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
 	if k <= 0 {

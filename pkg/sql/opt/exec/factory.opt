@@ -402,6 +402,10 @@ define TopK {
     K int64
     Ordering exec.OutputOrdering
     AlreadyOrderedPrefix int
+
+    # If set, the estimated number of rows that this TopK sorter will read from
+    # its input (rounded up).
+    estimatedInputRowCount uint64
 }
 
 # Max1Row permits at most one row from the given input node, causing an error
