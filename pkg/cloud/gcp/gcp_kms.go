@@ -151,6 +151,16 @@ func (k *gcsKMS) MasterKeyID() string {
 	return k.customerMasterKeyID
 }
 
+// MasterKeyID24_3Compatible implements the KMS interface.
+func (k *gcsKMS) MasterKeyID24_3Compatible() string {
+	return k.customerMasterKeyID
+}
+
+// ReplicaIDs implements the KMS interface.
+func (k *gcsKMS) ReplicaIDs() []string {
+	return []string{k.customerMasterKeyID}
+}
+
 // Encrypt implements the KMS interface.
 func (k *gcsKMS) Encrypt(ctx context.Context, data []byte) ([]byte, error) {
 	// Optional but recommended by GCS.
