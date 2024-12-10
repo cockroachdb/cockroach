@@ -1,0 +1,69 @@
+parse
+DROP POLICY p ON xy
+----
+DROP POLICY p ON xy
+DROP POLICY p ON xy -- fully parenthesized
+DROP POLICY p ON xy -- literals removed
+DROP POLICY _ ON _ -- identifiers removed
+
+parse
+DROP POLICY IF EXISTS p ON xy
+----
+DROP POLICY IF EXISTS p ON xy
+DROP POLICY IF EXISTS p ON xy -- fully parenthesized
+DROP POLICY IF EXISTS p ON xy -- literals removed
+DROP POLICY IF EXISTS _ ON _ -- identifiers removed
+
+parse
+DROP POLICY p ON xy CASCADE
+----
+DROP POLICY p ON xy CASCADE
+DROP POLICY p ON xy CASCADE -- fully parenthesized
+DROP POLICY p ON xy CASCADE -- literals removed
+DROP POLICY _ ON _ CASCADE -- identifiers removed
+
+parse
+DROP POLICY p ON xy RESTRICT
+----
+DROP POLICY p ON xy RESTRICT
+DROP POLICY p ON xy RESTRICT -- fully parenthesized
+DROP POLICY p ON xy RESTRICT -- literals removed
+DROP POLICY _ ON _ RESTRICT -- identifiers removed
+
+parse
+DROP POLICY p ON db.schema.xy RESTRICT
+----
+DROP POLICY p ON db.schema.xy RESTRICT
+DROP POLICY p ON db.schema.xy RESTRICT -- fully parenthesized
+DROP POLICY p ON db.schema.xy RESTRICT -- literals removed
+DROP POLICY _ ON _._._ RESTRICT -- identifiers removed
+
+# Must specify the table name
+error
+DROP POLICY p;
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+DROP POLICY p
+             ^
+HINT: try \h DROP POLICY
+
+# Cannot use dot notation for policy name and must specify the table name
+error
+DROP POLICY db.schema.xy;
+----
+at or near ".": syntax error
+DETAIL: source SQL:
+DROP POLICY db.schema.xy
+              ^
+HINT: try \h DROP POLICY
+
+# Cannot use dot notation for policy name
+error
+DROP POLICY foo.p1 on xy;
+----
+at or near ".": syntax error
+DETAIL: source SQL:
+DROP POLICY foo.p1 on xy
+               ^
+HINT: try \h DROP POLICY
