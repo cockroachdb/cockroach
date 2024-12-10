@@ -82,6 +82,7 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_guptarohit_asciigraph//:asciigraph",

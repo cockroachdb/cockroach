@@ -101,7 +101,7 @@ t1/s3: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[2,3) send_queue=[3,3) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+2.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -114,7 +114,7 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[2,3) send_queue=[3,3) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+2.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -155,7 +155,7 @@ kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     : 0
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[2,3) send_queue=[3,3) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+2.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -168,7 +168,7 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[2,3) send_queue=[3,3) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+2.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -207,7 +207,7 @@ t1/s3: eval reg=-2.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[2,3) send_queue=[3,3) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+2.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -220,7 +220,7 @@ eval original in send-q: reg=+1.0 MiB ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[2,3) send_queue=[3,3) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+2.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:

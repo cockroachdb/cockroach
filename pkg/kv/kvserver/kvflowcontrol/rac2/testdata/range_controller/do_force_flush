@@ -164,7 +164,7 @@ t1/s3: eval reg=-4.5 MiB/+16 MiB ela=-4.5 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[4,7) send_queue=[7,7) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,7) send_queue=[7,7) precise_q_size=+0 B
 eval deducted: reg=+7.5 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -183,7 +183,7 @@ LowPri:
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[4,7) send_queue=[7,7) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,7) send_queue=[7,7) precise_q_size=+0 B
 eval deducted: reg=+4.5 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -247,7 +247,7 @@ NormalPri:
   term=1 index=5  tokens=1572864
   term=1 index=6  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[4,6) send_queue=[6,7) precise_q_size=+1.5 MiB force-flushing
+(n2,s2):2: state=replicate closed=false inflight=[1,6) send_queue=[6,7) precise_q_size=+1.5 MiB force-flushing
 eval deducted: reg=+0 B ela=+7.5 MiB
 eval original in send-q: reg=+1.5 MiB ela=+0 B
 LowPri:
@@ -279,7 +279,7 @@ NormalPri:
   term=1 index=5  tokens=1572864
   term=1 index=6  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[6,7) send_queue=[7,7) precise_q_size=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[1,7) send_queue=[7,7) precise_q_size=+0 B
 eval deducted: reg=+0 B ela=+7.5 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
