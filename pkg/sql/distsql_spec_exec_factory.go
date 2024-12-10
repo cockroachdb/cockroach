@@ -499,10 +499,17 @@ func (e *distSQLSpecExecFactory) constructAggregators(
 	reqOrdering exec.OutputOrdering,
 	isScalar bool,
 	estimatedRowCount uint64,
+	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
 	// planAggregators() itself decides whether to distribute the aggregation.
-	planCtx := e.getPlanCtx(shouldDistribute)
+	aggRec := shouldDistribute
+	if estimatedInputRowCount != 0 && e.planner.SessionData().DistributeGroupByRowCountThreshold > estimatedInputRowCount {
+		// Don't force distribution if we expect to process small number of
+		// rows.
+		aggRec = canDistribute
+	}
+	planCtx := e.getPlanCtx(aggRec)
 	aggregationSpecs := make([]execinfrapb.AggregatorSpec_Aggregation, len(groupCols)+len(aggregations))
 	argumentsColumnTypes := make([][]*types.T, len(groupCols)+len(aggregations))
 	var err error
@@ -562,6 +569,7 @@ func (e *distSQLSpecExecFactory) ConstructGroupBy(
 	reqOrdering exec.OutputOrdering,
 	groupingOrderType exec.GroupingOrderType,
 	estimatedRowCount uint64,
+	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
 	return e.constructAggregators(
 		input,
@@ -571,11 +579,12 @@ func (e *distSQLSpecExecFactory) ConstructGroupBy(
 		reqOrdering,
 		false, /* isScalar */
 		estimatedRowCount,
+		estimatedInputRowCount,
 	)
 }
 
 func (e *distSQLSpecExecFactory) ConstructScalarGroupBy(
-	input exec.Node, aggregations []exec.AggInfo,
+	input exec.Node, aggregations []exec.AggInfo, estimatedInputRowCount uint64,
 ) (exec.Node, error) {
 	return e.constructAggregators(
 		input,
@@ -585,6 +594,7 @@ func (e *distSQLSpecExecFactory) ConstructScalarGroupBy(
 		exec.OutputOrdering{}, /* reqOrdering */
 		true,                  /* isScalar */
 		1,                     /* estimatedRowCount */
+		estimatedInputRowCount,
 	)
 }
 
@@ -635,7 +645,10 @@ func (e *distSQLSpecExecFactory) ConstructUnionAll(
 }
 
 func (e *distSQLSpecExecFactory) ConstructSort(
-	input exec.Node, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
+	input exec.Node,
+	ordering exec.OutputOrdering,
+	alreadyOrderedPrefix int,
+	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(input)
 	e.dsp.addSorters(e.ctx, physPlan, colinfo.ColumnOrdering(ordering), alreadyOrderedPrefix, 0 /* limit */)

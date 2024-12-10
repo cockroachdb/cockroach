@@ -1926,8 +1926,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		}
 	}
 	distributePlan, distSQLProhibitedErr := getPlanDistribution(
-		ctx, planner.Descriptors().HasUncommittedTypes(),
-		distSQLMode, planner.curPlan.main, &planner.distSQLVisitor,
+		ctx, planner.Descriptors().HasUncommittedTypes(), distSQLMode,
+		planner.curPlan.main, &planner.distSQLVisitor, ex.sessionData(),
 	)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 

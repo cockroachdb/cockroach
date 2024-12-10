@@ -36,9 +36,10 @@ type explainVecNode struct {
 func (n *explainVecNode) startExec(params runParams) error {
 	n.run.values = make(tree.Datums, 1)
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
+	sd := params.extendedEvalCtx.SessionData()
 	distribution, _ := getPlanDistribution(
 		params.ctx, params.p.Descriptors().HasUncommittedTypes(),
-		params.extendedEvalCtx.SessionData().DistSQLMode, n.plan.main, &params.p.distSQLVisitor,
+		sd.DistSQLMode, n.plan.main, &params.p.distSQLVisitor, sd,
 	)
 	outerSubqueries := params.p.curPlan.subqueryPlans
 	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.plan.subqueryPlans, distribution)
