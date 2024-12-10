@@ -257,6 +257,11 @@
                         ProjectSet |
                         Sort |
                         TopK |
+                        VectorSearch |
+                        VectorPartitionSearch |
+                        VectorDistance |
+                        VectorCosVectorDistance |
+                        VectorNegInnerProduct |
                         Insert |
                         Update |
                         Upsert |

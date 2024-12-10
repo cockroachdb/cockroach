@@ -57,6 +57,8 @@ syn keyword operator DistinctOn EnsureDistinctOn UpsertDistinctOn EnsureUpsertDi
 syn keyword operator Union SetPrivate Intersect Except UnionAll IntersectAll ExceptAll
 syn keyword operator Let Limit Offset Max1Row Explain ExplainPrivate
 syn keyword operator ShowTraceForSession ShowTracePrivate Root RowNumber RowNumberPrivate ProjectSet
-syn keyword operator Sort TopK Insert Update Upsert Delete CreateTable OpName
+syn keyword operator Sort TopK VectorSearch VectorPartitionSearch
+syn keyword operator VectorDistance VectorCosDistance VectorNegInnerProduct
+syn keyword operator Insert Update Upsert Delete CreateTable OpName
 
 let b:current_syntax = "cropt"
