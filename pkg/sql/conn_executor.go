@@ -1974,17 +1974,6 @@ func (ns *prepStmtNamespace) closeAllPortals(
 	}
 }
 
-func (ns *prepStmtNamespace) closeAllPausablePortals(
-	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount,
-) {
-	for name, p := range ns.portals {
-		if p.pauseInfo != nil {
-			p.close(ctx, prepStmtsNamespaceMemAcc, name)
-			delete(ns.portals, name)
-		}
-	}
-}
-
 // MigratablePreparedStatements returns a mapping of all prepared statements.
 func (ns *prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
 	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))
@@ -2331,7 +2320,6 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				0,  /* limit */
 				"", /* portalName */
 				ex.implicitTxn(),
-				PortalPausabilityDisabled, /* portalPausability */
 			)
 			res = stmtRes
 
@@ -2427,38 +2415,48 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				tcmd.Limit = 0
 			}
 
-			// If this is the first-time execution of a portal without a limit set,
-			// it means all rows will be exhausted, so no need to pause this portal.
-			if tcmd.Limit == 0 && portal.pauseInfo != nil && portal.pauseInfo.curRes == nil {
-				portal.pauseInfo = nil
+			if tcmd.Limit == 0 || portal.pausableRes == nil {
+				stmtRes := ex.clientComm.CreateStatementResult(
+					portal.Stmt.AST,
+					// The client is using the extended protocol, so no row description is
+					// needed.
+					DontNeedRowDesc,
+					pos, portal.OutFormats,
+					ex.sessionData().DataConversionConfig,
+					ex.sessionData().GetLocation(),
+					tcmd.Limit,
+					portalName,
+					ex.implicitTxn(),
+				)
+				res = stmtRes
+				if tcmd.Limit != 0 {
+					portal.pausableRes = stmtRes
+					ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
+					//defer func() {
+					//	// Check if pausability was revoked.
+					//	if !stmtRes.SupportsPausing() {
+					//		if portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
+					//			portal.pausableRes = nil
+					//			ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
+					//		}
+					//	}
+					//}()
+				}
+
+				// In the extended protocol, autocommit is not always allowed. The postgres
+				// docs say that commands in the extended protocol are all treated as an
+				// implicit transaction that does not get committed until a Sync message is
+				// received. However, if we are executing a statement that is immediately
+				// followed by Sync (which is the common case), then we still can auto-commit,
+				// which allows the 1PC txn fast path to be used.
+				canAutoCommit := ex.implicitTxn() && tcmd.FollowedBySync
+				ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo, canAutoCommit)
+				return err
 			}
 
-			stmtRes := ex.clientComm.CreateStatementResult(
-				portal.Stmt.AST,
-				// The client is using the extended protocol, so no row description is
-				// needed.
-				DontNeedRowDesc,
-				pos, portal.OutFormats,
-				ex.sessionData().DataConversionConfig,
-				ex.sessionData().GetLocation(),
-				tcmd.Limit,
-				portalName,
-				ex.implicitTxn(),
-				portal.portalPausablity,
-			)
-			if portal.pauseInfo != nil {
-				portal.pauseInfo.curRes = stmtRes
-			}
-			res = stmtRes
-
-			// In the extended protocol, autocommit is not always allowed. The postgres
-			// docs say that commands in the extended protocol are all treated as an
-			// implicit transaction that does not get committed until a Sync message is
-			// received. However, if we are executing a statement that is immediately
-			// followed by Sync (which is the common case), then we still can auto-commit,
-			// which allows the 1PC txn fast path to be used.
-			canAutoCommit := ex.implicitTxn() && tcmd.FollowedBySync
-			ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo, canAutoCommit)
+			res = portal.pausableRes
+			portal.pausableRes.ResumeAfterPause(tcmd.Limit)
+			ev, payload, err = portal.pausableRes.WaitForRows()
 			return err
 		}()
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
@@ -2470,12 +2468,6 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// TODO(sql-sessions): fix the phase time for pausable portals.
 		// https://github.com/cockroachdb/cockroach/issues/99410
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, crtime.NowMono())
-		if err != nil {
-			return err
-		}
-		// Update the cmd and pos in the stmtBuf as limitedCommandResult will have
-		// advanced the position if the the portal is repeatedly executed with a limit
-		cmd, pos, err = ex.stmtBuf.CurCmd()
 		if err != nil {
 			return err
 		}
@@ -2578,9 +2570,9 @@ func (ex *connExecutor) execCmd() (retErr error) {
 
 	var advInfo advanceInfo
 
-	// We close all pausable portals and cursors when we encounter err payload,
-	// otherwise there will be leftover bytes.
-	shouldClosePausablePortalsAndCursors := func(payload fsm.EventPayload) bool {
+	// We close all cursors when we encounter err payload, otherwise there will
+	// be leftover bytes.
+	shouldCloseCursors := func(payload fsm.EventPayload) bool {
 		switch payload.(type) {
 		case eventNonRetriableErrPayload, eventRetriableErrPayload:
 			return true
@@ -2592,11 +2584,10 @@ func (ex *connExecutor) execCmd() (retErr error) {
 	// If an event was generated, feed it to the state machine.
 	if ev != nil {
 		var err error
-		if shouldClosePausablePortalsAndCursors(payload) {
+		if shouldCloseCursors(payload) {
 			// We need this as otherwise, there'll be leftover bytes when
 			// txnState.finishSQLTxn() is being called, as the underlying resources of
 			// pausable portals hasn't been cleared yet.
-			ex.extraTxnState.prepStmtsNamespace.closeAllPausablePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 			if err := ex.extraTxnState.sqlCursors.closeAll(cursorCloseForTxnRollback); err != nil {
 				log.Warningf(ctx, "error closing cursors: %v", err)
 			}
@@ -2649,16 +2640,6 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			ex.sessionEventf(ctx, "execution error: %s", pe.errorCause())
 			if resErr == nil {
 				res.SetError(pe.errorCause())
-			}
-		}
-		// For a pausable portal, we don't log the affected rows until we close the
-		// portal. However, we update the result for each execution. Thus, we need
-		// to accumulate the number of affected rows before closing the result.
-		if tcmd, ok := cmd.(*ExecPortal); ok {
-			if portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[tcmd.Name]; ok {
-				if portal.pauseInfo != nil {
-					portal.pauseInfo.dispatchToExecutionEngine.rowsAffected += res.(RestrictedCommandResult).RowsAffected()
-				}
 			}
 		}
 		res.Close(ctx, stateToTxnStatusIndicator(ex.machine.CurState()))
@@ -3109,7 +3090,7 @@ func (ex *connExecutor) setCopyLoggingFields(stmt statements.Statement[tree.Stat
 	ann := tree.MakeAnnotations(stmt.NumAnnotations)
 	ex.planner.extendedEvalCtx.Context.Annotations = &ann
 	ex.planner.extendedEvalCtx.Context.Placeholders = &tree.PlaceholderInfo{}
-	ex.planner.curPlan.init(&ex.planner.stmt, &ex.planner.instrumentation)
+	ex.planner.curPlan.init(&ex.planner.stmt, ex.planner.instrumentation)
 }
 
 // We handle the CopyFrom statement by creating a copyMachine and handing it
@@ -4425,7 +4406,7 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 			// Initiate a run of CREATE STATISTICS. We use a large number
 			// for rowsAffected because we want to make sure that stats always get
 			// created/refreshed here.
-			ex.planner.execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
+			ex.server.cfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
 		}
 	}
 }

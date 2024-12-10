@@ -7,7 +7,6 @@ package pgwire
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -197,11 +197,6 @@ func (r *commandResult) Err() error {
 	return r.err
 }
 
-// ErrAllowReleased is part of the sql.RestrictedCommandResult interface.
-func (r *commandResult) ErrAllowReleased() error {
-	return r.err
-}
-
 // SetError is part of the sql.RestrictedCommandResult interface.
 //
 // We're not going to write any bytes to the buffer in order to support future
@@ -253,6 +248,26 @@ func (r *commandResult) beforeAdd() error {
 // JobIdColIdx is based on jobs.BulkJobExecutionResultHeader and
 // jobs.DetachedJobExecutionResultHeader.
 var JobIdColIdx int
+
+func (r *commandResult) SupportsPausing() bool {
+	return false
+}
+
+func (r *commandResult) ResumeAfterPause(newLimit int) {
+	panic("unimplemented")
+}
+
+func (r *commandResult) CloseAfterPause() {
+	panic("unimplemented")
+}
+
+func (r *commandResult) WaitForRows() (fsm.Event, fsm.EventPayload, error) {
+	panic("unimplemented")
+}
+
+func (r *commandResult) RowsExhausted(ev fsm.Event, payload fsm.EventPayload, err error) {
+	panic("unimplemented")
+}
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
@@ -470,7 +485,6 @@ func (c *conn) newCommandResult(
 	limit int,
 	portalName string,
 	implicitTxn bool,
-	portalPausability sql.PortalPausablity,
 ) sql.CommandResult {
 	r := c.allocCommandResult()
 	*r = commandResult{
@@ -493,7 +507,9 @@ func (c *conn) newCommandResult(
 		portalName:       portalName,
 		implicitTxn:      implicitTxn,
 		commandResult:    r,
-		portalPausablity: portalPausability,
+		portalPausablity: sql.PausablePortal,
+		resumeCh:         make(chan error),
+		blockCECh:        make(chan blockChPayload),
 	}
 }
 
@@ -520,39 +536,75 @@ type limitedCommandResult struct {
 	// If set, an error will be sent to the client if more rows are produced than
 	// this limit.
 	limit            int
-	reachedLimit     bool
 	portalPausablity sql.PortalPausablity
+
+	closed    bool
+	exhausted bool
+	resumeCh  chan error
+	blockCECh chan blockChPayload
+}
+
+type blockChPayload struct {
+	ev      fsm.Event
+	payload fsm.EventPayload
+	err     error
 }
 
 var _ sql.RestrictedCommandResult = &limitedCommandResult{}
 
+func (r *limitedCommandResult) SupportsPausing() bool {
+	return r.portalPausablity == sql.PausablePortal
+}
+
+func (r *limitedCommandResult) ResumeAfterPause(newLimit int) {
+	r.seenTuples = 0
+	r.limit = newLimit
+	r.resumeCh <- nil
+}
+
+func (r *limitedCommandResult) CloseAfterPause() {
+	r.closed = true
+	r.resumeCh <- sql.ErrLimitedResultClosed
+}
+
+func (r *limitedCommandResult) WaitForRows() (fsm.Event, fsm.EventPayload, error) {
+	p := <-r.blockCECh
+	return p.ev, p.payload, p.err
+}
+
+func (r *limitedCommandResult) RowsExhausted(ev fsm.Event, payload fsm.EventPayload, err error) {
+	r.exhausted = true
+	r.blockCECh <- blockChPayload{ev: ev, payload: payload, err: err}
+	close(r.blockCECh)
+}
+
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	if !r.SupportsPausing() {
+		// TODO: check whether we need this.
+		return r.commandResult.AddRow(ctx, row)
+	}
 	if err := r.commandResult.AddRow(ctx, row); err != nil {
 		return err
 	}
 	r.seenTuples++
-
-	if r.seenTuples == r.limit {
-		// If we've seen up to the limit of rows, send a "portal suspended" message
-		// and wait for another exec portal message.
-		r.conn.bufferPortalSuspended()
-		if err := r.conn.Flush(r.pos); err != nil {
-			return err
-		}
-		if r.portalPausablity == sql.PausablePortal {
-			r.reachedLimit = true
-			return sql.ErrPortalLimitHasBeenReached
-		} else {
-			// TODO(janexing): we keep using the logic from before we added
-			// multiple-active-portals support to avoid bring too many bugs. Eventually
-			// we should remove them and use the "return the control to connExecutor"
-			// logic for all portals.
-			r.seenTuples = 0
-			return r.moreResultsNeeded(ctx)
-		}
+	if r.seenTuples < r.limit {
+		return nil
 	}
-	return nil
+
+	// If we've seen up to the limit of rows, send a "portal suspended" message
+	// and block until we're told to resume.
+	r.conn.bufferPortalSuspended()
+	if err := r.conn.Flush(r.pos); err != nil {
+		return err
+	}
+	r.blockCECh <- blockChPayload{}
+	select {
+	case err := <-r.resumeCh:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
@@ -567,172 +619,17 @@ func (r *limitedCommandResult) RevokePortalPausability() error {
 	return nil
 }
 
-// moreResultsNeeded is a restricted connection handler that waits for more
-// requests for rows from the active portal, during the "execute portal" flow
-// when a limit has been specified.
-func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
-	errBasedOnPausability := func(pausablity sql.PortalPausablity) error {
-		switch pausablity {
-		case sql.PortalPausabilityDisabled:
-			return sql.ErrLimitedResultNotSupported
-		case sql.NotPausablePortalForUnsupportedStmt:
-			return sql.ErrStmtNotSupportedForPausablePortal
-		default:
-			return errors.AssertionFailedf("unsupported pausability type for a portal")
-		}
-	}
-
-	// Keep track of the previous CmdPos so we can rewind if needed.
-	prevPos := r.conn.stmtBuf.AdvanceOne()
-	for {
-		cmd, curPos, err := r.conn.stmtBuf.CurCmd()
-		if err != nil {
-			return err
-		}
-		switch c := cmd.(type) {
-		case sql.DeletePreparedStmt:
-			// The client wants to close a portal or statement. We support the case
-			// where it is exactly this portal. We are in effect peeking to see if the
-			// next message is a delete portal.
-			if c.Type != pgwirebase.PreparePortal || c.Name != r.portalName {
-				telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-				return errors.WithDetail(errBasedOnPausability(r.portalPausablity),
-					"cannot close a portal while a different one is open")
-			}
-			return r.rewindAndClosePortal(ctx, prevPos)
-		case sql.ExecPortal:
-			// The happy case: the client wants more rows from the portal.
-			if c.Name != r.portalName {
-				telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-				return errors.WithDetail(errBasedOnPausability(r.portalPausablity),
-					"cannot execute a portal while a different one is open")
-			}
-			r.limit = c.Limit
-			// In order to get the correct command tag, we need to reset the seen rows.
-			r.rowsAffected = 0
-			return nil
-		case sql.Sync:
-			if r.implicitTxn {
-				// Implicit transactions should treat a Sync as an auto-commit. This
-				// needs to be handled in conn_executor.
-				return r.rewindAndClosePortal(ctx, prevPos)
-			}
-			// The client wants to see a ready for query message
-			// back. Send it then run the for loop again.
-			r.conn.stmtBuf.AdvanceOne()
-			// Trim old statements to reclaim memory. We need to perform this clean up
-			// here as the conn_executor cleanup is not executed because of the
-			// limitedCommandResult side state machine.
-			r.conn.stmtBuf.Ltrim(ctx, prevPos)
-			// We can hard code InTxnBlock here because implicit transactions are
-			// handled above.
-			r.conn.bufferReadyForQuery(byte(sql.InTxnBlock))
-			if err := r.conn.Flush(r.pos); err != nil {
-				return err
-			}
-		case sql.Flush:
-			// Flush has no client response, so just advance the position and flush
-			// any existing results.
-			r.conn.stmtBuf.AdvanceOne()
-			if err := r.conn.Flush(r.pos); err != nil {
-				return err
-			}
-		default:
-			// If the portal is immediately followed by a COMMIT, we can proceed and
-			// let the portal be destroyed at the end of the transaction.
-			if isCommit, err := r.isCommit(); err != nil {
-				return err
-			} else if isCommit {
-				return r.rewindAndClosePortal(ctx, prevPos)
-			}
-			// We got some other message, but we only support executing to completion.
-			telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-			return errors.WithDetail(errBasedOnPausability(r.portalPausablity),
-				fmt.Sprintf("cannot perform operation %T while a different portal is open", c))
-		}
-		prevPos = curPos
-	}
-}
-
-// isCommit checks if the statement buffer has a COMMIT at the current
-// position. It may either be (1) a COMMIT in the simple protocol, or (2) a
-// Parse/Bind/Execute sequence for a COMMIT query.
-func (r *limitedCommandResult) isCommit() (bool, error) {
-	cmd, _, err := r.conn.stmtBuf.CurCmd()
-	if err != nil {
-		return false, err
-	}
-	// Case 1: Check if cmd is a simple COMMIT statement.
-	if execStmt, ok := cmd.(sql.ExecStmt); ok {
-		if _, isCommit := execStmt.AST.(*tree.CommitTransaction); isCommit {
-			return true, nil
-		}
-	}
-
-	commitStmtName := ""
-	commitPortalName := ""
-	// Case 2a: Check if cmd is a prepared COMMIT statement.
-	if prepareStmt, ok := cmd.(sql.PrepareStmt); ok {
-		if _, isCommit := prepareStmt.AST.(*tree.CommitTransaction); isCommit {
-			commitStmtName = prepareStmt.Name
-		} else {
-			return false, nil
-		}
-	} else {
-		return false, nil
-	}
-
-	r.conn.stmtBuf.AdvanceOne()
-	cmd, _, err = r.conn.stmtBuf.CurCmd()
-	if err != nil {
-		return false, err
-	}
-	// Case 2b: The next cmd must be a bind command.
-	if bindStmt, ok := cmd.(sql.BindStmt); ok {
-		// This bind command must be for the COMMIT statement that we just saw.
-		if bindStmt.PreparedStatementName == commitStmtName {
-			commitPortalName = bindStmt.PortalName
-		} else {
-			return false, nil
-		}
-	} else {
-		return false, nil
-	}
-
-	r.conn.stmtBuf.AdvanceOne()
-	cmd, _, err = r.conn.stmtBuf.CurCmd()
-	if err != nil {
-		return false, err
-	}
-	// Case 2c: The next cmd must be an exec portal command.
-	if execPortal, ok := cmd.(sql.ExecPortal); ok {
-		// This exec command must be for the portal that was just bound.
-		if execPortal.Name == commitPortalName {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// rewindAndClosePortal closes the portal in the same way implicit transactions
-// do, but also rewinds the stmtBuf to still point to the portal close so that
-// the state machine can do its part of the cleanup.
-func (r *limitedCommandResult) rewindAndClosePortal(
-	ctx context.Context, rewindTo sql.CmdPos,
-) error {
-	// Don't send an CommandComplete for the portal; it got suspended.
-	r.typ = noCompletionMsg
-	// Rewind to before the delete so the AdvanceOne in connExecutor.execCmd ends
-	// up back on it.
-	r.conn.stmtBuf.Rewind(ctx, rewindTo)
-	return sql.ErrLimitedResultClosed
-}
+// TODO: think about Discard.
 
 func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
-	if r.reachedLimit {
-		r.commandResult.typ = noCompletionMsg
+	if !r.SupportsPausing() {
+		// TODO: check whether we need this.
+		r.commandResult.Close(ctx, t)
+		return
 	}
-	r.commandResult.Close(ctx, t)
+	if r.closed || r.exhausted {
+		r.commandResult.Close(ctx, t)
+	}
 }
 
 // Get the column index for job id based on the result header defined in

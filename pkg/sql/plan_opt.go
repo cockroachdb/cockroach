@@ -252,7 +252,7 @@ func (p *planner) prepareUsingOptimizer(
 func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	ctx, sp := tracing.ChildSpan(ctx, "optimizer")
 	defer sp.Finish()
-	p.curPlan.init(&p.stmt, &p.instrumentation)
+	p.curPlan.init(&p.stmt, p.instrumentation)
 
 	opc := &p.optPlanningCtx
 	opc.reset(ctx)
@@ -273,7 +273,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		}
 		err := opc.runExecBuilder(
 			ctx,
-			&p.curPlan,
+			p.curPlan,
 			&p.stmt,
 			newDistSQLSpecExecFactory(ctx, p, planningMode),
 			execMemo,
@@ -309,7 +309,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 				// execFactory.
 				err = opc.runExecBuilder(
 					ctx,
-					&p.curPlan,
+					p.curPlan,
 					&p.stmt,
 					newDistSQLSpecExecFactory(ctx, p, distSQLLocalOnlyPlanning),
 					execMemo,
@@ -331,7 +331,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	// If we got here, we did not create a plan above.
 	return opc.runExecBuilder(
 		ctx,
-		&p.curPlan,
+		p.curPlan,
 		&p.stmt,
 		newExecFactory(ctx, p),
 		execMemo,

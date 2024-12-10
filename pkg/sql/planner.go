@@ -210,10 +210,8 @@ type planner struct {
 	// home region is being enforced.
 	StmtNoConstantsWithHomeRegionEnforced string
 
-	// pausablePortal is set when the query is from a pausable portal.
-	pausablePortal *PreparedPortal
-
-	instrumentation instrumentationHelper
+	instrumentation      *instrumentationHelper
+	instrumentationAlloc instrumentationHelper
 
 	// Contexts for different stages of planning and execution.
 	semaCtx         tree.SemaContext
@@ -252,7 +250,8 @@ type planner struct {
 	// curPlan collects the properties of the current plan being prepared. This state
 	// is undefined at the beginning of the planning of each new statement, and cannot
 	// be reused for an old prepared statement after a new statement has been prepared.
-	curPlan planTop
+	curPlan      *planTop
+	curPlanAlloc planTop
 
 	// Avoid allocations by embedding commonly used objects and visitors.
 	txCtx     transform.ExprTransformContext
@@ -286,28 +285,6 @@ type planner struct {
 
 	// datumAlloc is used when decoding datums and running subqueries.
 	datumAlloc *tree.DatumAlloc
-}
-
-// hasFlowForPausablePortal returns true if the planner is for re-executing a
-// portal. We reuse the flow stored in p.pausablePortal.pauseInfo.
-func (p *planner) hasFlowForPausablePortal() bool {
-	return p.pausablePortal != nil && p.pausablePortal.pauseInfo != nil && p.pausablePortal.pauseInfo.resumableFlow.flow != nil
-}
-
-// resumeFlowForPausablePortal is called when re-executing a portal. We reuse
-// the flow with a new receiver, without re-generating the physical plan.
-func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
-	if !p.hasFlowForPausablePortal() {
-		return errors.AssertionFailedf("no flow found for pausable portal")
-	}
-	recv.discardRows = p.instrumentation.ShouldDiscardRows()
-	recv.outputTypes = p.pausablePortal.pauseInfo.resumableFlow.outputTypes
-	flow := p.pausablePortal.pauseInfo.resumableFlow.flow
-	finishedSetupFn, cleanup := getFinishedSetupFn(p)
-	finishedSetupFn(flow)
-	defer cleanup()
-	flow.Resume(recv)
-	return recv.commErr
 }
 
 // internalPlannerParams encapsulates configurable planner fields. The defaults
@@ -889,7 +866,12 @@ func (p *planner) resetPlanner(
 ) {
 	p.txn = txn
 	p.stmt = Statement{}
-	p.instrumentation = instrumentationHelper{}
+
+	p.instrumentationAlloc = instrumentationHelper{}
+	p.instrumentation = &p.instrumentationAlloc
+	p.curPlanAlloc = planTop{}
+	p.curPlan = &p.curPlanAlloc
+
 	p.monitor = plannerMon
 	p.sessionMonitor = sessionMon
 
@@ -909,7 +891,6 @@ func (p *planner) resetPlanner(
 	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
-	p.pausablePortal = nil
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.

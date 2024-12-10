@@ -874,29 +874,15 @@ func (dsp *DistSQLPlanner) Run(
 
 	var flow flowinfra.Flow
 	var err error
-	if i := planCtx.getPortalPauseInfo(); i != nil && i.resumableFlow.flow != nil {
-		flow = i.resumableFlow.flow
-	} else {
-		ctx, flow, err = dsp.setupFlows(
-			ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
-		)
-		if i != nil {
-			// TODO(yuzefovich): add a check that this flow runs in a single goroutine.
-			i.resumableFlow.flow = flow
-			i.resumableFlow.outputTypes = plan.GetResultTypes()
-		}
-	}
+	ctx, flow, err = dsp.setupFlows(
+		ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
+	)
 
 	if flow != nil {
 		// Make sure that the local flow is always cleaned up if it was created.
-		// If the flow is not for retained portal, we clean the flow up here.
-		// Otherwise, we delay the clean up via portalPauseInfo.flowCleanup until
-		// the portal is closed.
-		if planCtx.getPortalPauseInfo() == nil {
-			defer func() {
-				flow.Cleanup(ctx)
-			}()
-		}
+		defer func() {
+			flow.Cleanup(ctx)
+		}()
 	}
 	if err != nil {
 		recv.SetError(err)
@@ -923,8 +909,7 @@ func (dsp *DistSQLPlanner) Run(
 		return
 	}
 
-	noWait := planCtx.getPortalPauseInfo() != nil
-	flow.Run(ctx, noWait)
+	flow.Run(ctx)
 }
 
 // DistSQLReceiver is an execinfra.RowReceiver and execinfra.BatchReceiver that
@@ -1385,13 +1370,6 @@ func (r *DistSQLReceiver) checkConcurrentError() {
 	if r.skipConcurrentErrorCheck || r.status != execinfra.NeedMoreRows {
 		// If the status already is not NeedMoreRows, then it doesn't matter if
 		// there was a concurrent error set.
-		if buildutil.CrdbTestBuild {
-			// SwitchToAnotherPortal is only reachable with local execution when
-			// skipConcurrentErrorCheck should be set to true.
-			if !r.skipConcurrentErrorCheck && r.status == execinfra.SwitchToAnotherPortal {
-				r.SetError(errors.AssertionFailedf("DistSQLReceiver's status is SwitchToAnotherPortal when skipConcurrentErrorCheck is false"))
-			}
-		}
 		return
 	}
 	select {
@@ -1460,8 +1438,6 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 	} else if errors.Is(commErr, errIEResultChannelClosed) {
 		log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
 		r.status = execinfra.DrainRequested
-	} else if errors.Is(commErr, ErrPortalLimitHasBeenReached) {
-		r.status = execinfra.SwitchToAnotherPortal
 	} else {
 		// Set the error on the resultWriter to notify the consumer about
 		// it. Most clients don't care to differentiate between
@@ -1653,8 +1629,7 @@ var (
 	)
 	// ErrLimitedResultClosed is a sentinel error produced by pgwire
 	// indicating the portal should be closed without error.
-	ErrLimitedResultClosed       = errors.New("row count limit closed")
-	ErrPortalLimitHasBeenReached = errors.New("limit has been reached")
+	ErrLimitedResultClosed = errors.New("row count limit closed")
 )
 
 // ProducerDone is part of the execinfra.RowReceiver interface.
@@ -1698,14 +1673,6 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	recv *DistSQLReceiver,
 	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
 ) (retErr error) {
-	defer func() {
-		if ppInfo := planCtx.getPortalPauseInfo(); ppInfo != nil && !ppInfo.resumableFlow.cleanup.isComplete {
-			ppInfo.resumableFlow.cleanup.isComplete = true
-		}
-		if retErr != nil && planCtx.getPortalPauseInfo() != nil {
-			planCtx.getPortalPauseInfo().resumableFlow.cleanup.run()
-		}
-	}()
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
@@ -1735,24 +1702,6 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 			ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv, finishedSetupFn,
 		)
 	}()
-
-	if p := planCtx.getPortalPauseInfo(); p != nil {
-		if buildutil.CrdbTestBuild && p.resumableFlow.flow == nil {
-			checkErr := errors.AssertionFailedf("flow for portal %s cannot be found", planner.pausablePortal.Name)
-			if recv.commErr != nil {
-				recv.commErr = errors.CombineErrors(recv.commErr, checkErr)
-			} else {
-				return checkErr
-			}
-		}
-		if !p.resumableFlow.cleanup.isComplete {
-			p.resumableFlow.cleanup.appendFunc(namedFunc{
-				fName: "cleanup flow", f: func() {
-					p.resumableFlow.flow.Cleanup(ctx)
-				},
-			})
-		}
-	}
 
 	if recv.commErr != nil || recv.resultWriter.Err() != nil {
 		return recv.commErr

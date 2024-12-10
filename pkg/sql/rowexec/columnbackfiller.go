@@ -100,11 +100,6 @@ func (cb *columnBackfiller) Run(ctx context.Context, output execinfra.RowReceive
 	output.ProducerDone()
 }
 
-// Resume is part of the execinfra.Processor interface.
-func (*columnBackfiller) Resume(output execinfra.RowReceiver) {
-	panic("not implemented")
-}
-
 // Close is part of the execinfra.Processor interface.
 func (*columnBackfiller) Close(context.Context) {}
 

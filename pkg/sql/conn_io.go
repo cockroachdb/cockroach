@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -733,7 +734,6 @@ type ClientComm interface {
 		limit int,
 		portalName string,
 		implicitTxn bool,
-		portalPausability PortalPausablity,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.
 	CreatePrepareResult(pos CmdPos) ParseResult
@@ -856,6 +856,12 @@ type RestrictedCommandResult interface {
 	// data in the provided column when sending messages to the client.
 	GetFormatCode(colIdx int) (pgwirebase.FormatCode, error)
 
+	SupportsPausing() bool
+	ResumeAfterPause(newLimit int)
+	CloseAfterPause()
+	WaitForRows() (fsm.Event, fsm.EventPayload, error)
+	RowsExhausted(ev fsm.Event, payload fsm.EventPayload, err error)
+
 	// AddRow accumulates a result row.
 	//
 	// The implementation cannot hold on to the row slice; it needs to make a
@@ -899,11 +905,6 @@ type RestrictedCommandResult interface {
 	// GetBulkJobId returns the id of the job for the query, if the query is
 	// IMPORT, BACKUP or RESTORE.
 	GetBulkJobId() uint64
-
-	// ErrAllowReleased returns the error without asserting the result is not
-	// released yet. It should be used only in clean-up stages of a pausable
-	// portal.
-	ErrAllowReleased() error
 
 	// RevokePortalPausability is to make a portal un-pausable. It is called when
 	// we find the underlying query is not supported for a pausable portal.
@@ -1081,11 +1082,6 @@ type streamingCommandResult struct {
 var _ RestrictedCommandResult = &streamingCommandResult{}
 var _ CommandResultClose = &streamingCommandResult{}
 
-// ErrAllowReleased is part of the sql.RestrictedCommandResult interface.
-func (r *streamingCommandResult) ErrAllowReleased() error {
-	return r.err
-}
-
 // RevokePortalPausability is part of the sql.RestrictedCommandResult interface.
 func (r *streamingCommandResult) RevokePortalPausability() error {
 	return errors.AssertionFailedf("RevokePortalPausability is for limitedCommandResult only")
@@ -1130,6 +1126,26 @@ func (r *streamingCommandResult) GetFormatCode(colIdx int) (pgwirebase.FormatCod
 	// Rows aren't serialized in the streamingCommandResult, so this format code
 	// doesn't really matter - return the default.
 	return pgwirebase.FormatText, nil
+}
+
+func (r *streamingCommandResult) SupportsPausing() bool {
+	return false
+}
+
+func (r *streamingCommandResult) ResumeAfterPause(newLimit int) {
+	panic("unimplemented")
+}
+
+func (r *streamingCommandResult) CloseAfterPause() {
+	panic("unimplemented")
+}
+
+func (r *streamingCommandResult) WaitForRows() (fsm.Event, fsm.EventPayload, error) {
+	panic("unimplemented")
+}
+
+func (r *streamingCommandResult) RowsExhausted(ev fsm.Event, payload fsm.EventPayload, err error) {
+	panic("unimplemented")
 }
 
 // AddRow is part of the RestrictedCommandResult interface.

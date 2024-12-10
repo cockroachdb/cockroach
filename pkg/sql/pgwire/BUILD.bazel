@@ -65,6 +65,7 @@ go_library(
         "//pkg/util/duration",
         "//pkg/util/envutil",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/fsm",
         "//pkg/util/humanizeutil",
         "//pkg/util/ipaddr",
         "//pkg/util/json",

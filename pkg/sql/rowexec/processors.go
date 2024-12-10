@@ -65,12 +65,6 @@ func emitHelper(
 	switch consumerStatus {
 	case execinfra.NeedMoreRows:
 		return true
-	case execinfra.SwitchToAnotherPortal:
-		output.Push(nil /* row */, &execinfrapb.ProducerMetadata{
-			Err: errors.AssertionFailedf("not allowed to pause and switch to another portal"),
-		})
-		log.Fatalf(ctx, "not allowed to pause and switch to another portal")
-		return false
 	case execinfra.DrainRequested:
 		log.VEventf(ctx, 1, "no more rows required. drain requested.")
 		execinfra.DrainAndClose(ctx, flowCtx, input, output, nil /* cause */)
