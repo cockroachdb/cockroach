@@ -645,11 +645,11 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 			RemoteUser:  remoteUser,
 			VPC:         "global",
 			MachineType: string(found.HardwareProfile.VMSize),
-			CPUArch:     CpuArchFromAzureMachineType(string(found.HardwareProfile.VMSize)),
 			// We add a fake availability-zone suffix since other roachprod
 			// code assumes particular formats. For example, "eastus2z".
 			Zone: *found.Location + "z",
 		}
+		m.CPUArch, _ = p.GetVMArchitecture(l, &m)
 
 		if createdPtr := found.Tags[vm.TagCreated]; createdPtr == nil {
 			m.Errors = append(m.Errors, vm.ErrNoExpiration)
@@ -762,6 +762,10 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 	}
 
 	return ret, nil
+}
+
+func (p *Provider) GetVMArchitecture(l *logger.Logger, v *vm.VM) (vm.CPUArch, error) {
+	return CpuArchFromAzureMachineType(v.MachineType), nil
 }
 
 // Name implements vm.Provider.

@@ -592,16 +592,29 @@ func Stage(
 	}
 
 	os := "linux"
-	arch := "amd64"
-
 	if c.IsLocal() {
 		os = runtime.GOOS
-		arch = runtime.GOARCH
 	}
+
+	// Default arch to the CPU architecture of the cluster's firt VM
+	// Architecture is determined using:
+	// - AWS & GCP: provider's cloud APIs (a.k.a machine-type describe)
+	// - Azure: hardcoded ARM64 machine-types
+	// - Local: runtime.GOARCH
+	detectedArch, err := c.GetCPUArchitecture(l)
+	if err != nil {
+		l.Printf("WARN: unable to detect remote architecture: %s", err)
+	}
+	arch := string(detectedArch)
+
 	if stageOS != "" {
 		os = stageOS
 	}
 	if stageArch != "" {
+		if stageArch != arch {
+			// Warn if requested arch != cluster arch; should we error out?
+			l.Printf("WARN: specified arch (%s) != cluster arch (%s)", stageArch, arch)
+		}
 		arch = stageArch
 	}
 	// N.B. it's technically possible to stage a binary for a different OS/arch; e.g., emulated amd64 on mac silicon.

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -174,6 +175,10 @@ func (p *Provider) AttachVolume(*logger.Logger, vm.Volume, *vm.VM) (string, erro
 	return "", nil
 }
 
+func (p *Provider) GetVMArchitecture(l *logger.Logger, v *vm.VM) (vm.CPUArch, error) {
+	return vm.ParseArch(runtime.GOARCH), nil
+}
+
 // No-op implementation of vm.ProviderOpts
 type providerOpts struct{}
 
@@ -235,6 +240,7 @@ func (p *Provider) createVM(clusterName string, index int, creationTime time.Tim
 		MachineType:      ProviderName,
 		Zone:             ProviderName,
 		LocalClusterName: clusterName,
+		CPUArch:          vm.ParseArch(runtime.GOARCH),
 	}
 	path := VMDir(clusterName, index+1)
 	err := os.MkdirAll(path, 0755)

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -259,6 +260,10 @@ type Provider struct {
 
 	// aws accounts to perform action in, used by gcCmd only as it clean ups multiple aws accounts
 	AccountIDs []string
+
+	// MachineType specs cache is used to cache specs about machine types;
+	// primary use case is to get CPU architecture from cloud provider
+	machineTypeSpecsCache ProviderMachineTypeSpecsCache
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
@@ -670,6 +675,37 @@ func (p *Provider) Create(
 	}
 	if len(regions) < 1 {
 		return errors.Errorf("Please specify a valid region.")
+	}
+
+	// Auto-detect architecture from machine-type, check that it's compatible
+	// with the requested arch (if any), and stores the value in opts.Arch
+	machineTypeArch, err := p.getCPUArchFromMachineType(l, machineType, regions[0], NarrowCacheKey)
+	if err != nil {
+		return errors.Newf(
+			"Unable to infer architecture based on machine type %s in region %s",
+			providerOpts.MachineType,
+			regions[0],
+		)
+	}
+	switch opts.Arch {
+	case "":
+		// No arch requested, default to the one from the machine type
+		opts.Arch = string(machineTypeArch)
+	case string(vm.ArchFIPS):
+		// FIPS requested, this is only supported for x86_64 arch
+		if machineTypeArch != vm.ArchAMD64 {
+			return errors.Errorf(
+				vm.IncompatibleArchRequestError,
+				p.Name(), providerOpts.MachineType, machineTypeArch, opts.Arch,
+			)
+		}
+	default:
+		if machineTypeArch != vm.ParseArch(opts.Arch) {
+			return errors.Errorf(
+				vm.IncompatibleArchRequestError,
+				p.Name(), providerOpts.MachineType, machineTypeArch, opts.Arch,
+			)
+		}
 	}
 
 	// Distribute the nodes amongst availability zones.
@@ -1151,11 +1187,15 @@ func (p *Provider) listRegion(
 				RemoteUser:             opts.RemoteUserName,
 				VPC:                    in.VpcID,
 				MachineType:            in.InstanceType,
-				CPUArch:                vm.ParseArch(in.Architecture),
 				Zone:                   in.Placement.AvailabilityZone,
 				NonBootAttachedVolumes: nonBootableVolumes,
 				Preemptible:            in.InstanceLifecycle == "spot",
 			}
+			cpuArch, err := p.GetVMArchitecture(l, &m)
+			if err != nil {
+				return nil, errors.Wrap(err, "unable to determine the VM CPU architecture")
+			}
+			m.CPUArch = cpuArch
 			ret = append(ret, m)
 		}
 	}
@@ -1254,13 +1294,7 @@ func (p *Provider) runInstance(
 		return *fl
 	}
 	imageID := withFlagOverride(az.Region.AMI_X86_64, &providerOpts.ImageAMI)
-	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "6gd.") == 1 ||
-		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1
-	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
-		return errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
-	}
-	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
-	if useArmAMI {
+	if opts.Arch == string(vm.ArchARM64) {
 		imageID = withFlagOverride(az.Region.AMI_ARM64, &providerOpts.ImageAMI)
 		// N.B. use arbitrary instanceIdx to suppress the same info for every other instance being created.
 		if instanceIdx == 0 {
@@ -1736,4 +1770,140 @@ func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
 func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {
 	// This Provider has no concept of load balancers yet, return an empty list.
 	return nil, nil
+}
+
+func (p *Provider) GetVMArchitecture(l *logger.Logger, v *vm.VM) (vm.CPUArch, error) {
+
+	// If VM is tagged with arch FIPS, we use it
+	archLabel, ok := v.Labels["arch"]
+	if ok && archLabel == "fips" {
+		return vm.ArchFIPS, nil
+	}
+
+	// Otherwise, we query the CPU architecture from the machine type
+	az, ok := p.Config.AZByName[v.Zone]
+	if !ok {
+		return vm.ArchUnknown, fmt.Errorf("no region in %v corresponds to availability zone %v",
+			p.Config.regionNames(), v.Zone)
+	}
+
+	return p.getCPUArchFromMachineType(l, v.MachineType, az.Region.Name, WideCacheKey)
+}
+
+func (p *Provider) getCPUArchFromMachineType(
+	l *logger.Logger, machineType, region string, ckl CacheKeyLookup,
+) (vm.CPUArch, error) {
+
+	specs, err := p.getMachineTypeSpecs(l, machineType, region, ckl)
+	if err != nil {
+		return vm.ArchUnknown, errors.Wrapf(err, "unable to get aws instance type specs for %s ", machineType)
+	}
+
+	// If architecture is specified in machine-type struct, let' s use it
+	if len(specs.ProcessorInfo.SupportedArchitectures) == 0 {
+		return vm.ArchUnknown, errors.New("CPU architecture not provided by AWS API")
+	}
+
+	// Some AWS instance types state they support multiple architectures
+	// (e.g. c3 returns 'i386' and 'x86_64'), we gently discard whatever is
+	// unknown, and grab the first one that we manage ('x86_64', in the example)
+	for _, supportedArch := range specs.ProcessorInfo.SupportedArchitectures {
+		parsed := vm.ParseArch(string(supportedArch))
+		if parsed != vm.ArchUnknown {
+			return parsed, nil
+		}
+	}
+
+	return vm.ArchUnknown, nil
+}
+
+func (p *Provider) getMachineTypeSpecs(
+	l *logger.Logger, machineType, region string, ckl CacheKeyLookup,
+) (*MachineTypeSpecs, error) {
+	return p.machineTypeSpecsCache.get(l, p, machineType, region, ckl)
+}
+
+type ProviderMachineTypeSpecsCache struct {
+	syncutil.Mutex
+	cache map[string]*MachineTypeSpecs
+}
+
+type MachineTypeSpecs ec2types.InstanceTypeInfo
+
+type CacheKeyLookup string
+
+const (
+	NarrowCacheKey CacheKeyLookup = "NARROW_CACHE_KEY"
+	WideCacheKey   CacheKeyLookup = "WIDE_CACHE_KEY"
+)
+
+func (mts *ProviderMachineTypeSpecsCache) get(
+	l *logger.Logger, p *Provider, machineType, region string, ckl CacheKeyLookup,
+) (*MachineTypeSpecs, error) {
+
+	mts.Lock()
+	defer mts.Unlock()
+
+	if mts.cache == nil {
+		mts.cache = make(map[string]*MachineTypeSpecs)
+	}
+
+	// We require an "{instance-type}-{region} combination to describe
+	// the instance type (as required by AWS), but store the cached results
+	// under two different keys:
+	// - a narrow one "{instance-type}-{region}"
+	// - a wide one "{instance-type}"
+	// The justification behind this is that instance types are homogeneous
+	// across all regions, so we can increase cache hits when we don't actually
+	// care about the region, but we can also request a narrow cache key when
+	// we want to ensure that this instance type is available in a specific
+	// region
+	buildCacheKeys := func(machineType, region string) map[CacheKeyLookup]string {
+		return map[CacheKeyLookup]string{
+			WideCacheKey:   machineType,
+			NarrowCacheKey: machineType + "-" + region,
+		}
+	}
+	cacheKeys := buildCacheKeys(machineType, region)
+
+	if cachedSpecs, ok := mts.cache[cacheKeys[ckl]]; ok {
+		return cachedSpecs, nil
+	}
+
+	// We require an "{instance-type}-{region} combination to describe the
+	// instance type (as required by AWS), but store the cached results
+	// under "{instance-type}" only to increase the cache hits.
+	// The justification behind this choice is that this operation takes time,
+	// and that machine type architectures are homogeneous across all regions
+	if specs, ok := mts.cache[machineType]; ok {
+		return specs, nil
+	}
+
+	// Query awscli to get machine-type specs:
+	// Running:
+	// 		aws ec2 describe-instance-types
+	//			--instance-types t4g.medium --region us-east-1
+
+	specs := struct {
+		InstanceTypes []*MachineTypeSpecs
+	}{}
+	args := []string{
+		"ec2",
+		"describe-instance-types",
+		"--instance-types", machineType,
+		"--region", region,
+	}
+	if err := p.runJSONCommand(l, args, &specs); err != nil {
+		return nil, err
+	}
+
+	if len(specs.InstanceTypes) == 0 {
+		return nil, fmt.Errorf("unable to describe instance type %s", machineType)
+	}
+
+	for _, cacheKey := range cacheKeys {
+		mts.cache[cacheKey] = specs.InstanceTypes[0]
+	}
+
+	return specs.InstanceTypes[0], nil
 }

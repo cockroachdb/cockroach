@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -110,6 +111,8 @@ func Init() error {
 	providerInstance.defaultProject = defaultDefaultProject
 	providerInstance.metadataProject = defaultMetadataProject
 	providerInstance.defaultServiceAccount = defaultDefaultServiceAccount
+
+	providerInstance.machineTypeSpecsCache = &ProviderMachineTypeSpecsCache{}
 
 	initialized = true
 	vm.Providers[ProviderName] = providerInstance
@@ -285,8 +288,8 @@ func (jsonVM *jsonVM) toVM(
 		RemoteUser:             remoteUser,
 		VPC:                    vpc,
 		MachineType:            machineType,
-		CPUArch:                vm.ParseArch(cpuPlatform),
 		CPUFamily:              strings.Replace(strings.ToLower(cpuPlatform), "intel ", "", 1),
+		CPUArch:                vm.ArchUnknown, /* Filled in by caller func with the VM struct */
 		Zone:                   zone,
 		Project:                project,
 		NonBootAttachedVolumes: volumes,
@@ -373,6 +376,10 @@ type Provider struct {
 	// The service account to use if the default project is in use and no
 	// ServiceAccount was specified.
 	defaultServiceAccount string
+
+	// MachineType specs cache is used to cache specs about machine types;
+	// primary use case is to get CPU architecture from cloud provider
+	machineTypeSpecsCache *ProviderMachineTypeSpecsCache
 }
 
 // LogEntry represents a single log entry from the gcloud logging(stack driver)
@@ -471,6 +478,164 @@ func (p *Provider) GetVMSpecs(
 		vmSpecs[name] = vmSpec
 	}
 	return vmSpecs, nil
+}
+
+func (p *Provider) GetVMArchitecture(l *logger.Logger, v *vm.VM) (vm.CPUArch, error) {
+
+	// If VM is tagged with arch FIPS, we use it
+	archLabel, ok := v.Labels["arch"]
+	if ok && archLabel == "fips" {
+		return vm.ArchFIPS, nil
+	}
+
+	// Otherwise, we query the CPU architecture from the machine type
+	return p.getCPUArchFromMachineType(v.MachineType, v.Zone, WideCacheKey)
+}
+
+func (p *Provider) getCPUArchFromMachineType(
+	machineType, zone string, ckl CacheKeyLookup,
+) (vm.CPUArch, error) {
+
+	// Note: zone is specified as an empty string as machine type architectures are the same
+	// across all zones and we want to have as many cache hits as possible
+	metadata, err := p.getMachineTypeSpecs(machineType, p.GetProject(), zone, ckl)
+	if err != nil {
+		return vm.ArchUnknown, err
+	}
+
+	// If arch is unspecified, GCP's default is amd64
+	if metadata.Architecture == "" {
+		return vm.ParseArch(string(vm.ArchAMD64)), nil
+	}
+
+	// Sanitize returned arch and return
+	return vm.ParseArch(metadata.Architecture), nil
+}
+
+func (p *Provider) getMachineTypeSpecs(
+	machineType, project, zone string, ckl CacheKeyLookup,
+) (*MachineTypeSpecs, error) {
+	return p.machineTypeSpecsCache.get(machineType, project, zone, ckl)
+}
+
+type ProviderMachineTypeSpecsCache struct {
+	syncutil.Mutex
+	cache map[string]*MachineTypeSpecs
+}
+
+type MachineTypeSpecs struct {
+	Architecture                 string
+	Description                  string
+	GuestCpus                    int
+	Kind                         string
+	MaximumPersistentDisks       int
+	MaximumPersistentDisksSizeGb string
+	MemoryMb                     int
+	Name                         string
+	Zone                         string
+}
+
+type CacheKeyLookup string
+
+const (
+	NarrowCacheKey CacheKeyLookup = "NARROW_CACHE_KEY"
+	WideCacheKey   CacheKeyLookup = "WIDE_CACHE_KEY"
+)
+
+func (mts *ProviderMachineTypeSpecsCache) get(
+	machineType, project, zone string, ckl CacheKeyLookup,
+) (*MachineTypeSpecs, error) {
+
+	mts.Lock()
+	defer mts.Unlock()
+
+	if mts.cache == nil {
+		mts.cache = make(map[string]*MachineTypeSpecs)
+	}
+
+	// We require an "{instance-type}-{project}-{zone} combination to describe
+	// the instance type (as required by GCP), but store the cached results
+	// under two different keys:
+	// - a narrow one "{instance-type}-{project}-{zone}"
+	// - a wide one "{instance-type}-{project}"
+	// The justification behind this is that instance types are homogeneous
+	// across all zones, so we can increase cache hits when we don't actually
+	// care about the zone, but we can also request a narrow cache key when
+	// we want to ensure that this instance type is available in a specific zone
+	buildCacheKeys := func(machineType, project, zone string) map[CacheKeyLookup]string {
+		return map[CacheKeyLookup]string{
+			WideCacheKey:   machineType + "-" + project,
+			NarrowCacheKey: machineType + "-" + project + "-" + zone,
+		}
+	}
+	cacheKeys := buildCacheKeys(machineType, project, zone)
+
+	if cachedSpecs, ok := mts.cache[cacheKeys[ckl]]; ok {
+		return cachedSpecs, nil
+	}
+
+	// Query GCP to get machine type specs:
+	// Running:
+	// 		gcloud compute machine-types describe t2a-standard-4 \
+	//  		--project cockroach-ephemeral --zone us-east1-b \
+	// 			--format json
+	//
+	// Note: GCP requires a zone to describe a machine type, though during
+	// cluster creation, roachprod's takes a `--gce-machine-type` as input and
+	// guesses the CPU architecture from it. Only then, the zone is inferred
+	// from an hardcoded CPU architecture/zone mapping.
+	// As we're want to know the architecture from the machine type before
+	// knowing the zone, we try the default zone for both amd64 and arm64
+	// architectures.
+	//
+	// In cases where we know the zone already (e.g. `roachprod list`), we use
+	// the supplied zone to query, making sure that we won't hit a zone in which
+	// the instance type is not available.
+
+	var zonesIteration []string
+	if zone != "" {
+		zonesIteration = []string{zone}
+	} else {
+		zonesIteration = []string{
+			DefaultZones(string(vm.ArchAMD64))[0],
+			DefaultZones(string(vm.ArchARM64))[0],
+		}
+	}
+
+	found := false
+	specs := &MachineTypeSpecs{}
+	for _, zone := range zonesIteration {
+		args := []string{
+			"compute",
+			"machine-types",
+			"describe",
+			machineType,
+			"--project", project,
+			"--zone", zone,
+			"--format", "json",
+		}
+		if err := runJSONCommand(args, &specs); err != nil {
+			if strings.Contains(err.Error(), "was not found") {
+				continue
+			}
+			return nil, err
+		}
+		found = true
+		break
+	}
+	if !found {
+		return nil, fmt.Errorf(
+			"machine type '%s' not found in any of the following zones: %s",
+			machineType,
+			strings.Join(zonesIteration, ","),
+		)
+	}
+
+	for _, cacheKey := range cacheKeys {
+		mts.cache[cacheKey] = specs
+	}
+
+	return specs, nil
 }
 
 func buildFilterCliArgs(
@@ -660,6 +825,8 @@ type describeVolumeCommandResponse struct {
 	PhysicalBlockSizeBytes string            `json:"physicalBlockSizeBytes"`
 	SelfLink               string            `json:"selfLink"`
 	SizeGB                 string            `json:"sizeGb"`
+	SourceImage            string            `json:"sourceImage"`
+	SourceImageID          string            `json:"sourceImageId"`
 	Status                 string            `json:"status"`
 	Type                   string            `json:"type"`
 	Zone                   string            `json:"zone"`
@@ -873,16 +1040,17 @@ type instanceDisksResponse struct {
 	Disks []attachDiskCmdDisk `json:"disks"`
 }
 type attachDiskCmdDisk struct {
-	AutoDelete bool   `json:"autoDelete"`
-	Boot       bool   `json:"boot"`
-	DeviceName string `json:"deviceName"`
-	DiskSizeGB string `json:"diskSizeGb"`
-	Index      int    `json:"index"`
-	Interface  string `json:"interface"`
-	Kind       string `json:"kind"`
-	Mode       string `json:"mode"`
-	Source     string `json:"source"`
-	Type       string `json:"type"`
+	Architecture string `json:"architecture"`
+	AutoDelete   bool   `json:"autoDelete"`
+	Boot         bool   `json:"boot"`
+	DeviceName   string `json:"deviceName"`
+	DiskSizeGB   string `json:"diskSizeGb"`
+	Index        int    `json:"index"`
+	Interface    string `json:"interface"`
+	Kind         string `json:"kind"`
+	Mode         string `json:"mode"`
+	Source       string `json:"source"`
+	Type         string `json:"type"`
 }
 
 func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (string, error) {
@@ -1144,11 +1312,6 @@ func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, opt vm.Multip
 	)
 }
 
-// useArmAMI returns true if the machine type is an arm64 machine type.
-func (o *ProviderOpts) useArmAMI() bool {
-	return strings.HasPrefix(strings.ToLower(o.MachineType), "t2a-")
-}
-
 // ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
 func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
 }
@@ -1270,7 +1433,7 @@ func computeLabelsArg(opts vm.CreateOpts, providerOpts *ProviderOpts) (string, e
 // computeZones computes the zones to be passed to the gcloud commands during
 // cluster creation. It's possible that only a subset of the zones get used
 // depending on how many nodes are requested.
-func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, error) {
+func (p *Provider) computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, error) {
 	zones, err := vm.ExpandZonesFlag(providerOpts.Zones)
 	if err != nil {
 		return nil, err
@@ -1282,13 +1445,16 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 			zones = []string{DefaultZones(opts.Arch)[0]}
 		}
 	}
-	if providerOpts.useArmAMI() {
-		if len(providerOpts.Zones) == 0 {
-			zones = []string{"us-central1-a"}
-		}
 
-		if !IsSupportedT2AZone(providerOpts.Zones) {
-			return nil, errors.Newf("T2A instances are not supported outside of [%s]", strings.Join(SupportedT2AZones, ","))
+	// For each zone, check that the instance type is supported
+	for _, zone := range providerOpts.Zones {
+		if _, err := p.getMachineTypeSpecs(
+			providerOpts.MachineType, p.GetProject(), zone, NarrowCacheKey,
+		); err != nil {
+			return nil, errors.Newf(
+				"Instance type %s is not supported in zone %s. Available zones for arch %s: [%s]",
+				providerOpts.MachineType, zone, opts.Arch, strings.Join(DefaultZones(opts.Arch), ","),
+			)
 		}
 	}
 	return zones, nil
@@ -1308,22 +1474,15 @@ func (p *Provider) computeInstanceArgs(
 	image := providerOpts.Image
 	imageProject := defaultImageProject
 
-	if opts.Arch == string(vm.ArchARM64) && !providerOpts.useArmAMI() {
-		return nil, cleanUpFn, errors.Errorf("Requested arch is arm64, but machine type is %s. Do specify a t2a VM", providerOpts.MachineType)
-	}
-
-	if providerOpts.useArmAMI() && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
-		return nil, cleanUpFn, errors.Errorf("machine type %s is arm64, but requested arch is %s", providerOpts.MachineType, opts.Arch)
-	}
-	if providerOpts.useArmAMI() && opts.SSDOpts.UseLocalSSD {
-		return nil, cleanUpFn, errors.New("local SSDs are not supported with T2A instances, use --local-ssd=false")
-	}
-	if providerOpts.useArmAMI() {
+	if opts.Arch == string(vm.ArchARM64) {
+		if opts.SSDOpts.UseLocalSSD {
+			return nil, cleanUpFn, errors.New("local SSDs are not supported with T2A instances, use --local-ssd=false")
+		}
 		if providerOpts.MinCPUPlatform != "" {
 			l.Printf("WARNING: --gce-min-cpu-platform is ignored for T2A instances")
 			providerOpts.MinCPUPlatform = ""
 		}
-		// TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
+
 		image = ARM64Image
 		l.Printf("Using ARM64 AMI: %s for machine type: %s", image, providerOpts.MachineType)
 	}
@@ -1568,6 +1727,36 @@ func (p *Provider) Create(
 		}
 	}
 
+	// Auto-detect architecture from machine-type, check that it's compatible
+	// with the requested arch (if any), and stores the value in opts.Arch
+	machineTypeArch, err := p.getCPUArchFromMachineType(providerOpts.MachineType, "", WideCacheKey)
+	if err != nil {
+		return errors.Newf(
+			"Unable to infer architecture based on machine type %s",
+			providerOpts.MachineType,
+		)
+	}
+	switch opts.Arch {
+	case "":
+		// No arch requested, default to the one from the machine type
+		opts.Arch = string(machineTypeArch)
+	case string(vm.ArchFIPS):
+		// FIPS requested, this is only supported for x86_64 arch
+		if machineTypeArch != vm.ArchAMD64 {
+			return errors.Errorf(
+				vm.IncompatibleArchRequestError,
+				p.Name(), providerOpts.MachineType, machineTypeArch, opts.Arch,
+			)
+		}
+	default:
+		if machineTypeArch != vm.ParseArch(opts.Arch) {
+			return errors.Errorf(
+				vm.IncompatibleArchRequestError,
+				p.Name(), providerOpts.MachineType, machineTypeArch, opts.Arch,
+			)
+		}
+	}
+
 	instanceArgs, cleanUpFn, err := p.computeInstanceArgs(l, opts, providerOpts)
 	if cleanUpFn != nil {
 		defer cleanUpFn()
@@ -1575,7 +1764,7 @@ func (p *Provider) Create(
 	if err != nil {
 		return err
 	}
-	zones, err := computeZones(opts, providerOpts)
+	zones, err := p.computeZones(opts, providerOpts)
 	if err != nil {
 		return err
 	}
@@ -2665,7 +2854,13 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 				// The former is a subset of the latter. Some information like `Labels` will be missing.
 				disks = toDescribeVolumeCommandResponse(jsonVM.Disks, jsonVM.Zone)
 			}
-			vms = append(vms, *jsonVM.toVM(prj, disks, defaultOpts, p.publicDomain))
+			v := jsonVM.toVM(prj, disks, defaultOpts, p.publicDomain)
+			vmArch, err := p.GetVMArchitecture(l, v)
+			if err != nil {
+				return nil, errors.Wrap(err, "unable to determine the VM CPU architecture")
+			}
+			v.CPUArch = vmArch
+			vms = append(vms, *v)
 		}
 	}
 

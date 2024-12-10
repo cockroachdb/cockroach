@@ -337,19 +337,16 @@ hosts file.
 				return clusterVMs[0].MachineType
 			}
 			cpuArch := func(clusterVMs vm.List) string {
-				// Display CPU architecture and family.
-				if clusterVMs[0].CPUArch == "" {
-					// N.B. Either a local cluster or unsupported cloud provider.
-					return ""
-				}
+				// Building CPU info column to displays "CPU family (CPU arch)"
+				// Arch AMD64 is the default, so don't display it
+				var archParts []string
 				if clusterVMs[0].CPUFamily != "" {
-					return clusterVMs[0].CPUFamily
+					archParts = append(archParts, clusterVMs[0].CPUFamily)
 				}
 				if clusterVMs[0].CPUArch != vm.ArchAMD64 {
-					return string(clusterVMs[0].CPUArch)
+					archParts = append(archParts, fmt.Sprintf("(%s)", clusterVMs[0].CPUArch))
 				}
-				// AMD64 is the default, so don't display it.
-				return ""
+				return strings.Join(archParts, " ")
 			}
 			// Align columns right and separate with at least two spaces.
 			tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', tabwriter.AlignRight)
