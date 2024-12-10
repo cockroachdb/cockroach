@@ -491,6 +491,9 @@
 <tr><td>STORAGE</td><td>raft.entrycache.hits</td><td>Number of successful cache lookups in the Raft entry cache</td><td>Hits</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>raft.entrycache.read_bytes</td><td>Counter of bytes in entries returned from the Raft entry cache</td><td>Bytes</td><td>COUNTER</td><td>BYTES</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>raft.entrycache.size</td><td>Number of Raft entries in the Raft entry cache</td><td>Entry Count</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>STORAGE</td><td>raft.flows.entered.state_probe</td><td>The number of leader-&gt;peer flows transitioned to StateProbe</td><td>Flows</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>STORAGE</td><td>raft.flows.entered.state_replicate</td><td>The number of leader-&gt;peer flows transitioned to StateReplicate</td><td>Flows</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>STORAGE</td><td>raft.flows.entered.state_snapshot</td><td>The number of of leader-&gt;peer flows transitioned to StateSnapshot</td><td>Flows</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>STORAGE</td><td>raft.flows.state_probe</td><td>Number of leader-&gt;peer flows in StateProbe</td><td>Flows</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>raft.flows.state_replicate</td><td>Number of leader-&gt;peer flows in StateReplicate</td><td>Flows</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>raft.flows.state_snapshot</td><td>Number of leader-&gt;peer flows in StateSnapshot</td><td>Flows</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
