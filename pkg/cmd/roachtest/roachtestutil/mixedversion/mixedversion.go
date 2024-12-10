@@ -210,6 +210,11 @@ var (
 	// would *not* make the tenant auto upgrade.
 	tenantSupportsAutoUpgradeVersion = clusterupgrade.MustParseVersion("v24.2.0-alpha.00000000")
 
+	// updateTenantResourceLimitsDeprecatedArgsVersion is the lowest version
+	// after which the "as_of" and "as_of_consumed_tokens" arguments were removed when
+	// using the `tenant_name` overload.
+	updateTenantResourceLimitsDeprecatedArgsVersion = clusterupgrade.MustParseVersion("v24.2.1")
+
 	// Catch divergences between `stepFunc` and `Run`'s signature in
 	// `singleStepProtocol` at compile time.
 	_ = func() stepFunc {
