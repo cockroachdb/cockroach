@@ -10,9 +10,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type AST interface {
-}
-
 // Statement is the result of parsing a single statement. It contains the AST
 // node along with other information.
 type Statement[T any] struct {
