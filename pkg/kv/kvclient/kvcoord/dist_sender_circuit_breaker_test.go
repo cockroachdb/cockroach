@@ -45,7 +45,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 		// The lease won't move unless we use expiration-based leases. We also
 		// speed up the test by reducing various intervals and timeouts.
 		st := cluster.MakeTestingClusterSettings()
-		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
+		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseExpiration)
 		kvcoord.CircuitBreakersMode.Override(
 			ctx, &st.SV, kvcoord.DistSenderCircuitBreakersAllRanges,
 		)

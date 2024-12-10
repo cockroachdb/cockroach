@@ -25,6 +25,7 @@ go_library(
         "restricted_internal_client.go",
         "settings.go",
         "snappy.go",
+        "stream_pool.go",
         "tls.go",
     ],
     embed = [":rpc_go_proto"],
@@ -90,7 +91,10 @@ go_library(
 gomock(
     name = "mock_rpc",
     out = "mocks_generated_test.go",
-    interfaces = ["Dialbacker"],
+    interfaces = [
+        "BatchStreamClient",
+        "Dialbacker",
+    ],
     library = ":rpc",
     package = "rpc",
     self_package = "github.com/cockroachdb/cockroach/pkg/rpc",
@@ -116,6 +120,7 @@ go_test(
         "metrics_test.go",
         "peer_test.go",
         "snappy_test.go",
+        "stream_pool_test.go",
         "tls_test.go",
         ":mock_rpc",  # keep
     ],
@@ -175,6 +180,7 @@ go_test(
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//peer",
         "@org_golang_google_grpc//status",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 

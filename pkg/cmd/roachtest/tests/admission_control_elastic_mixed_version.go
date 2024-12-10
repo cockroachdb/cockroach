@@ -133,7 +133,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 			mvt.Run()
 			// TODO(pav-kv): also validate that the write throughput was kept under
 			// control, and the foreground traffic was not starved.
-			roachtestutil.ValidateTokensReturned(ctx, t, c, c.CRDBNodes())
+			roachtestutil.ValidateTokensReturned(ctx, t, c, c.CRDBNodes(), time.Minute)
 		},
 	})
 }

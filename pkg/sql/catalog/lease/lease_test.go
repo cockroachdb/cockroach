@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -949,14 +950,16 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 			},
 		},
 	}
+	params.Settings = cluster.MakeTestingClusterSettings()
+	// Disable the automatic stats collection, which could interfere with
+	// the lease acquisition counts in this test.
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &params.Settings.SV, false)
+	// Set a long lease duration so that the periodic task to refresh leases does
+	// not run.
+	lease.LeaseDuration.Override(ctx, &params.Settings.SV, 24*time.Hour)
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
-	// Disable the automatic stats collection, which could interfere with
-	// the lease acquisition counts in this test.
-	if _, err := sqlDB.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false"); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.foo (v INT);

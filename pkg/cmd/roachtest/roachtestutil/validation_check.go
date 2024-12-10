@@ -128,7 +128,11 @@ func CheckInvalidDescriptors(ctx context.Context, db *gosql.DB) error {
 // validateTokensReturned ensures that all RACv2 tokens are returned to the pool
 // at the end of the test.
 func ValidateTokensReturned(
-	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	waitTime time.Duration,
 ) {
 	t.L().Printf("validating all tokens returned")
 	for _, node := range nodes {
@@ -163,10 +167,10 @@ func ValidateTokensReturned(
 				}
 			}
 			return nil
-			// We wait up to 10 minutes for the tokens to be returned. In tests which
+			// We wait up to waitTime for the tokens to be returned. In tests which
 			// purposefully create a send queue towards a node, the queue may take a
 			// while to drain. The tokens will not be returned until the queue is
 			// empty and there are no inflight requests.
-		}, 10*time.Minute)
+		}, waitTime)
 	}
 }
