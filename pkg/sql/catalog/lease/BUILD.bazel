@@ -134,6 +134,7 @@ go_test(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/sqlliveness/slprovider",
+        "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",
