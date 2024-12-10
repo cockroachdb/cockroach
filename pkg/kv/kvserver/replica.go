@@ -1705,6 +1705,12 @@ func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ri.ReplicaState = *(protoutil.Clone(&r.shMu.state)).(*kvserverpb.ReplicaState)
+	// TODO(#97613): add a dedicated TruncatedState field to RangeInfo when the
+	// TruncatedState field is removed from ReplicaState. We can't do it right now
+	// because the ReplicaState is embedded into RangeInfo, and this confuses the
+	// proto compiler.
+	ri.TruncatedState = (protoutil.Clone(&r.shMu.raftTruncState)).(*kvserverpb.RaftTruncatedState)
+
 	ri.LastIndex = r.shMu.lastIndexNotDurable
 	ri.NumPending = uint64(r.numPendingProposalsRLocked())
 	ri.RaftLogSize = r.shMu.raftLogSize
