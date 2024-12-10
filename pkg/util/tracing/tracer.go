@@ -313,12 +313,7 @@ type Tracer struct {
 	// explicitly requested.
 	_activeSpansRegistryEnabled int32 // accessed atomically
 
-	forceVerboseMu struct {
-		syncutil.RWMutex
-		// opNameRegexp is matched against during span initialization. If the span
-		// operation name matches, then the span is forced to a VERBOSE recording mode.
-		opNameRegexp *regexp.Regexp
-	}
+	opNameRegexp atomic.Pointer[regexp.Regexp]
 
 	// activeSpans is a map that references all non-Finish'ed local root spans,
 	// i.e. those for which no WithParent(<non-nil>) option was supplied.
@@ -774,17 +769,15 @@ func WithUseAfterFinishOpt(panicOnUseAfterFinish, debugUseAfterFinish bool) Trac
 }
 
 func (t *Tracer) setVerboseOpNameRegexp(s string) error {
-	t.forceVerboseMu.Lock()
-	defer t.forceVerboseMu.Unlock()
 	if s == "" {
-		t.forceVerboseMu.opNameRegexp = nil
+		t.opNameRegexp.Store(nil)
 		return nil
 	}
 	compiled, err := regexp.Compile(s)
 	if err != nil {
 		return err
 	}
-	t.forceVerboseMu.opNameRegexp = compiled
+	t.opNameRegexp.Store(compiled)
 	return nil
 }
 
@@ -1078,14 +1071,14 @@ func (t *Tracer) StartSpanCtx(
 	// NB: apply takes and returns a value to avoid forcing
 	// `opts` on the heap here.
 	var opts spanOptions
-	for _, o := range os {
-		if o == nil {
+	for i := range os {
+		if os[i] == nil {
 			continue
 		}
-		opts = o.apply(opts)
+		opts = os[i].apply(opts)
 	}
 
-	return t.startSpanGeneric(ctx, operationName, opts)
+	return t.startSpanFast(ctx, operationName, opts)
 }
 
 // AlwaysTrace returns true if operations should be traced regardless of the
@@ -1099,12 +1092,44 @@ func (t *Tracer) AlwaysTrace() bool {
 }
 
 func (t *Tracer) forceOpNameVerbose(opName string) bool {
-	t.forceVerboseMu.RLock()
-	defer t.forceVerboseMu.RUnlock()
-	if t.forceVerboseMu.opNameRegexp == nil {
-		return false
+	if r := t.opNameRegexp.Load(); r != nil {
+		return r.MatchString(opName)
 	}
-	return t.forceVerboseMu.opNameRegexp.MatchString(opName)
+	return false
+}
+
+func (t *Tracer) startSpanFast(
+	ctx context.Context, opName string, opts spanOptions,
+) (context.Context, *Span) {
+	if opts.RefType != childOfRef && opts.RefType != followsFromRef {
+		panic(errors.AssertionFailedf("unexpected RefType %v", opts.RefType))
+	}
+
+	// This is a fast path for the common case where there's no parent
+	// span. This contains duplicated logic from
+	// `(*spanOptions).recordingType()`. Specifically, we are aiming to
+	// avoid creating local copies of `opts.Parent` and
+	// `opts.RemoteParent` hence conditional logic is being inlined and
+	// checked locally. This logic should only change if
+	// `recordingType()` is being modified.
+	if opts.Parent.Span == nil && opts.RemoteParent.Empty() {
+		var recordingType tracingpb.RecordingType
+
+		if opts.recordingTypeExplicit {
+			recordingType = opts.recordingTypeOpt
+		}
+
+		if recordingType < opts.minRecordingTypeOpt {
+			recordingType = opts.minRecordingTypeOpt
+		}
+
+		shouldBeNoopSpan := !(t.AlwaysTrace() || opts.ForceRealSpan || recordingType != tracingpb.RecordingOff)
+		forceVerbose := t.forceOpNameVerbose(opName)
+		if shouldBeNoopSpan && !forceVerbose && !opts.Sterile {
+			return maybeWrapCtx(ctx, t.noopSpan)
+		}
+	}
+	return t.startSpanGeneric(ctx, opName, opts)
 }
 
 // startSpanGeneric is the implementation of StartSpanCtx and StartSpan. In
