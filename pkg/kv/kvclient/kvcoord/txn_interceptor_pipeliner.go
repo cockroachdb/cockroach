@@ -417,6 +417,7 @@ func (tp *txnPipeliner) maybeRejectOverBudget(
 	// adding additional encoding and decoding for a backport. We could consider
 	// splitting this error message in the future.
 	if rejectTxnMaxCount > 0 && estimateCount > rejectTxnMaxCount {
+		tp.txnMetrics.TxnsRejectedByCountLimit.Inc(1)
 		bErr := newLockSpansOverBudgetError(estimateCount, rejectTxnMaxCount, ba)
 		return pgerror.WithCandidateCode(bErr, pgcode.ConfigurationLimitExceeded)
 	}
