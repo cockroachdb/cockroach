@@ -1579,6 +1579,7 @@ func NewStore(
 		(*racV2Scheduler)(s.scheduler),
 		s.cfg.KVFlowSendTokenWatcher,
 		s.cfg.KVFlowWaitForEvalConfig,
+		s.cfg.RaftMaxInflightBytes,
 		s.TestingKnobs().FlowControlTestingKnobs,
 	)
 

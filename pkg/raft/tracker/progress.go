@@ -447,4 +447,7 @@ type BasicProgress struct {
 	Next uint64
 	// State corresponds to Progress.State.
 	State StateType
+	// InflightBytes are the bytes that have been sent but not yet persisted. It
+	// corresponds to tracker.Inflights.bytes.
+	InflightBytes uint64
 }
