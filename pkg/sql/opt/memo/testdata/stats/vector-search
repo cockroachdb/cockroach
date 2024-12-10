@@ -84,3 +84,104 @@ insert t
            └── projections
                 └── assignment-cast: VECTOR(3) [as=v_cast:7, type=vector, outer=(6), immutable]
                      └── column2:6 [type=vector]
+
+# VectorSearch operators produce more candidates than requested by the LIMIT
+# clause.
+opt
+SELECT * FROM t@t_v_idx ORDER BY v <-> '[1, 2, 3]' LIMIT 1;
+----
+top-k
+ ├── columns: x:1(int!null) v:2(vector)  [hidden: column5:5(float)]
+ ├── internal-ordering: +5
+ ├── k: 1
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1,2,5)
+ └── project
+      ├── columns: column5:5(float) x:1(int!null) v:2(vector)
+      ├── immutable
+      ├── stats: [rows=10]
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(5)
+      ├── index-join t
+      │    ├── columns: x:1(int!null) v:2(vector)
+      │    ├── stats: [rows=10]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── vector-search t@t_v_idx,vector
+      │         ├── columns: x:1(int!null)
+      │         ├── target nearest neighbors: 1
+      │         ├── stats: [rows=10]
+      │         ├── key: (1)
+      │         └── '[1,2,3]' [type=vector]
+      └── projections
+           └── v:2 <-> '[1,2,3]' [as=column5:5, type=float, outer=(2), immutable]
+
+opt
+SELECT * FROM t@t_v_idx ORDER BY v <-> '[1, 2, 3]' LIMIT 5;
+----
+top-k
+ ├── columns: x:1(int!null) v:2(vector)  [hidden: column5:5(float)]
+ ├── internal-ordering: +5
+ ├── k: 5
+ ├── cardinality: [0 - 5]
+ ├── immutable
+ ├── stats: [rows=5]
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)-->(5)
+ ├── ordering: +5
+ └── project
+      ├── columns: column5:5(float) x:1(int!null) v:2(vector)
+      ├── immutable
+      ├── stats: [rows=50]
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(5)
+      ├── index-join t
+      │    ├── columns: x:1(int!null) v:2(vector)
+      │    ├── stats: [rows=50]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── vector-search t@t_v_idx,vector
+      │         ├── columns: x:1(int!null)
+      │         ├── target nearest neighbors: 5
+      │         ├── stats: [rows=50]
+      │         ├── key: (1)
+      │         └── '[1,2,3]' [type=vector]
+      └── projections
+           └── v:2 <-> '[1,2,3]' [as=column5:5, type=float, outer=(2), immutable]
+
+# Test a limit that is higher than the number of rows in the table.
+opt
+SELECT * FROM t@t_v_idx ORDER BY v <-> '[1, 2, 3]' LIMIT 10000;
+----
+top-k
+ ├── columns: x:1(int!null) v:2(vector)  [hidden: column5:5(float)]
+ ├── internal-ordering: +5
+ ├── k: 10000
+ ├── cardinality: [0 - 10000]
+ ├── immutable
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)-->(5)
+ ├── ordering: +5
+ └── project
+      ├── columns: column5:5(float) x:1(int!null) v:2(vector)
+      ├── immutable
+      ├── stats: [rows=1000]
+      ├── key: (1)
+      ├── fd: (1)-->(2), (2)-->(5)
+      ├── index-join t
+      │    ├── columns: x:1(int!null) v:2(vector)
+      │    ├── stats: [rows=1000]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── vector-search t@t_v_idx,vector
+      │         ├── columns: x:1(int!null)
+      │         ├── target nearest neighbors: 10000
+      │         ├── stats: [rows=1000]
+      │         ├── key: (1)
+      │         └── '[1,2,3]' [type=vector]
+      └── projections
+           └── v:2 <-> '[1,2,3]' [as=column5:5, type=float, outer=(2), immutable]

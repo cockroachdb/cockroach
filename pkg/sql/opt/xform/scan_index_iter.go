@@ -39,6 +39,12 @@ const (
 	// rejectNonPartialIndexes excludes any non-partial indexes during
 	// iteration.
 	rejectNonPartialIndexes
+
+	// rejectVectorIndexes excludes any vector indexes during iteration.
+	rejectVectorIndexes
+
+	// rejectNonVectorIndexes excludes any non-vector indexes during iteration.
+	rejectNonVectorIndexes
 )
 
 // scanIndexIter is a helper struct that facilitates iteration over the indexes
@@ -234,6 +240,16 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 
 		// Skip over non-inverted indexes if rejectNonInvertedIndexes is set.
 		if it.hasRejectFlags(rejectNonInvertedIndexes) && !index.IsInverted() {
+			continue
+		}
+
+		// Skip over vector indexes if rejectVectorIndexes is set.
+		if it.hasRejectFlags(rejectVectorIndexes) && index.IsVector() {
+			continue
+		}
+
+		// Skip over non-vector indexes if rejectNonVectorIndexes is set.
+		if it.hasRejectFlags(rejectNonVectorIndexes) && !index.IsVector() {
 			continue
 		}
 
