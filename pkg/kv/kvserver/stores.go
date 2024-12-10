@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -325,4 +326,15 @@ func (ls *Stores) CloseDiskMonitors() {
 		}
 		return nil
 	})
+}
+
+// GetStoreMetricRegistryMap returns a map of storeIDs and their metric
+// registries.
+func (ls *Stores) GetStoreMetricRegistryMap() map[roachpb.StoreID]*metric.Registry {
+	registryMap := map[roachpb.StoreID]*metric.Registry{}
+	_ = ls.VisitStores(func(s *Store) error {
+		registryMap[s.StoreID()] = s.Registry()
+		return nil
+	})
+	return registryMap
 }
