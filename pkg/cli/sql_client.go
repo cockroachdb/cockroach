@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -77,6 +76,7 @@ func (c *cliContext) makeTenantSQLClient(
 	ctx context.Context, appName string, defaultMode defaultSQLDb, tenantName string,
 ) (clisqlclient.Conn, error) {
 	baseURL, err := c.makeClientConnURL()
+	baseURL = baseURL.WithUsername("david")
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func makeSQLClientForBaseURL(
 	}
 
 	// If there is no user in the URL already, fill in the default user.
-	sqlCtx.User = username.RootUser
+	sqlCtx.User = "david"
 
 	// If there is no application name already, use the provided one.
 	sqlCtx.ApplicationName = catconstants.ReportableAppNamePrefix + appName
