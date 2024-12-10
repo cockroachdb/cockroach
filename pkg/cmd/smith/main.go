@@ -51,6 +51,7 @@ Options:
 var (
 	flags      = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	expr       = flags.Bool("expr", false, "generate expressions instead of statements")
+	udfs       = flags.Bool("udfs", false, "generate only CREATE FUNCTION statements")
 	num        = flags.Int("num", 1, "number of statements / expressions to generate")
 	url        = flags.String("url", "", "database to fetch schema from")
 	execStmts  = flags.Bool("exec-stmts", false, "execute each generated statement against the db specified by url")
@@ -194,6 +195,10 @@ func main() {
 		fmt.Println("-- expr")
 		for i := 0; i < *num; i++ {
 			fmt.Print(sep, smither.GenerateExpr(), "\n")
+		}
+	} else if *udfs {
+		for i := 0; i < *num; i++ {
+			fmt.Print(sep, smither.GenerateUDF(), ";\n")
 		}
 	} else {
 		for i := 0; i < *num; i++ {
