@@ -7,9 +7,11 @@ package rpc
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/grpcutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
@@ -35,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 	gogostatus "github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -2229,4 +2233,118 @@ func TestInitialHeartbeatFailedError(t *testing.T) {
 		}
 		return err
 	})
+}
+
+func BenchmarkGRPCPing(b *testing.B) {
+	for _, bytes := range []int{1, 1 << 8, 1 << 10, 1 << 11, 1 << 12, 1 << 13, 1 << 14, 1 << 15, 1 << 16, 1 << 18, 1 << 20} {
+		bstr := fmt.Sprintf("%d", bytes)
+		bname := strings.Repeat("_", 7-len(bstr)) + bstr
+		b.Run("bytes="+bname, func(b *testing.B) {
+			stopper := stop.NewStopper()
+			ctx := context.Background()
+			defer stopper.Stop(ctx)
+
+			clock := &timeutil.DefaultTimeSource{}
+			maxOffset := 250 * time.Millisecond
+			srvRPCCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
+			const serverNodeID = 1
+			srvRPCCtx.NodeID.Set(ctx, serverNodeID)
+			s := newTestServer(b, srvRPCCtx)
+
+			randBytes := make([]byte, bytes)
+			_, err := rand.Read(randBytes)
+			require.NoError(b, err)
+
+			req := &PingRequest{Ping: string(randBytes)}
+			resp := &PingResponse{Pong: string(randBytes)}
+			anyreq, err := types.MarshalAny(req)
+			require.NoError(b, err)
+			anyresp, err := types.MarshalAny(resp)
+			require.NoError(b, err)
+
+			require.NoError(b, err)
+			b.Logf("marshaled request size: %d bytes (%d bytes of overhead)", req.Size(), req.Size()-bytes)
+
+			tsi := &grpcutils.TestServerImpl{
+				UU: func(ctx context.Context, req *types.Any) (*types.Any, error) {
+					return anyresp, nil
+				},
+				SU: func(srv grpcutils.GRPCTest_StreamUnaryServer) error {
+					for {
+						_, err := srv.Recv()
+						if err != nil {
+							return err
+						}
+					}
+				},
+				SS: func(srv grpcutils.GRPCTest_StreamStreamServer) error {
+					for {
+						if _, err := srv.Recv(); err != nil {
+							return err
+						}
+						if err := srv.Send(anyresp); err != nil {
+							return err
+						}
+					}
+				},
+			}
+
+			grpcutils.RegisterGRPCTestServer(s, tsi)
+
+			ln, err := netutil.ListenAndServeGRPC(srvRPCCtx.Stopper, s, util.TestAddr)
+			if err != nil {
+				b.Fatal(err)
+			}
+			remoteAddr := ln.Addr().String()
+
+			cliRPCCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
+			cliRPCCtx.NodeID.Set(ctx, 2)
+			cc, err := cliRPCCtx.grpcDialRaw(ctx, remoteAddr, DefaultClass)
+			require.NoError(b, err)
+
+			for _, tc := range []struct {
+				name   string
+				invoke func(c grpcutils.GRPCTestClient, N int) error
+			}{
+				{"UnaryUnary", func(c grpcutils.GRPCTestClient, N int) error {
+					for i := 0; i < N; i++ {
+						_, err := c.UnaryUnary(ctx, anyreq)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				}},
+				{
+					"StreamStream", func(c grpcutils.GRPCTestClient, N int) error {
+						sc, err := c.StreamStream(ctx)
+						if err != nil {
+							return err
+						}
+						for i := 0; i < N; i++ {
+							if err := sc.Send(anyreq); err != nil {
+								return err
+							}
+							if _, err := sc.Recv(); err != nil {
+								return err
+							}
+						}
+						return nil
+					}},
+			} {
+
+				b.Run("rpc="+tc.name, func(b *testing.B) {
+
+					c := grpcutils.NewGRPCTestClient(cc)
+
+					b.SetBytes(int64(req.Size() + resp.Size()))
+					b.ResetTimer()
+					defer b.StopTimer()
+					if err := tc.invoke(c, b.N); err != nil {
+						b.Fatal(err)
+					}
+				})
+			}
+		})
+	}
 }
