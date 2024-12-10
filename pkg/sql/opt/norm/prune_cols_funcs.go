@@ -68,6 +68,9 @@ func (c *CustomFuncs) neededMutationCols(
 		addCols(private.PartialIndexPutCols)
 		addCols(private.PartialIndexDelCols)
 	}
+	addCols(private.VectorIndexPutPartitionCols)
+	addCols(private.VectorIndexPutCentroidCols)
+	addCols(private.VectorIndexDelPartitionCols)
 	addCols(private.ReturnCols)
 	addCols(opt.OptionalColList(private.PassthroughCols))
 	if private.CanaryCol != 0 {
