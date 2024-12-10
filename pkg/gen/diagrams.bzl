@@ -72,6 +72,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:analyze.html",
     "//docs/generated/sql/bnf:backup.html",
     "//docs/generated/sql/bnf:backup_options.html",
+    "//docs/generated/sql/bnf:begin.html",
     "//docs/generated/sql/bnf:begin_transaction.html",
     "//docs/generated/sql/bnf:call.html",
     "//docs/generated/sql/bnf:cancel.html",
