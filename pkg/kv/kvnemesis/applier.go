@@ -145,7 +145,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		// epochs of the same transaction to avoid waiting while holding locks.
 		retryOnAbort := retry.StartWithCtx(ctx, retry.Options{
 			InitialBackoff: 1 * time.Millisecond,
-			MaxBackoff:     250 * time.Millisecond,
+			MaxBackoff:     10 * time.Second,
 		})
 		var savedTxn *kv.Txn
 		txnErr := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
