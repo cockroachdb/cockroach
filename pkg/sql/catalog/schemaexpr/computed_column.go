@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -252,6 +253,28 @@ func MakeComputedExprs(
 		if err != nil {
 			return nil, catalog.TableColSet{}, err
 		}
+
+		// If the expression has a type that is not identical to the
+		// column's type, wrap the computed column expression in an assignment cast.
+		if !typedExpr.ResolvedType().Identical(col.GetType()) {
+			const fnName = "crdb_internal.assignment_cast"
+			funcRef := tree.WrapFunction(fnName)
+			props, overloads := builtinsregistry.GetBuiltinProperties(fnName)
+			if typedExpr, err = tree.TypeCheck(ctx, tree.NewTypedFuncExpr(
+				funcRef,
+				0, /* aggQualifier */
+				tree.TypedExprs{typedExpr, tree.NewTypedCastExpr(tree.DNull, col.GetType())},
+				nil, /* filter */
+				nil, /* windowDef */
+				col.GetType(),
+				props,
+				&overloads[0],
+			), semaCtx, col.GetType()); err != nil {
+				return nil, catalog.TableColSet{}, errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to type check the cast of %v to %v", expr, col.GetType())
+			}
+		}
+
 		if typedExpr, err = txCtx.NormalizeExpr(ctx, evalCtx, typedExpr); err != nil {
 			return nil, catalog.TableColSet{}, err
 		}
