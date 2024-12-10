@@ -167,7 +167,9 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	require.EqualValues(t, [][]string{{"1"}}, results)
 	const eventLogErrorQuery = `SELECT (info::JSONB)->>'Error' FROM system.eventlog WHERE "eventType" = 'reverse_schema_change'`
 	results = tdb.QueryStr(t, eventLogErrorQuery)
-	require.EqualValues(t, [][]string{{"boom"}}, results)
+	require.Equal(t, 1, len(results))
+	require.Equal(t, 1, len(results[0]))
+	require.Regexp(t, `^boom`, results[0][0])
 }
 
 func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {

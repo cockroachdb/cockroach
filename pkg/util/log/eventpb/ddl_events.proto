@@ -34,7 +34,7 @@ message CreateDatabase {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the new database.
-  string database_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string database_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // DropDatabase is recorded when a database is dropped.
@@ -42,9 +42,9 @@ message DropDatabase {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected database.
-  string database_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string database_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The names of the schemas dropped by a cascade operation.
-  repeated string dropped_schema_objects = 4 [(gogoproto.jsontag) = ",omitempty"];
+  repeated string dropped_schema_objects = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // AlterDatabaseAddRegion is recorded when a region is added to a database.
@@ -52,9 +52,9 @@ message AlterDatabaseAddRegion {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the database.
-  string database_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string database_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The region being added.
-  string region_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string region_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // AlterDatabaseAddRegion is recorded when a region is added to a database.
@@ -62,9 +62,9 @@ message AlterDatabaseDropRegion {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the database.
-  string database_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string database_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The region being dropped.
-  string region_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string region_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // AlterDatabasePrimaryRegion is recorded when a primary region is added/modified.
@@ -72,9 +72,9 @@ message AlterDatabasePrimaryRegion {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the database.
-  string database_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string database_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new primary region.
-  string primary_region_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string primary_region_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // AlterDatabaseSurvivalGoal is recorded when the survival goal is modified.
@@ -82,9 +82,9 @@ message AlterDatabaseSurvivalGoal {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the database.
-  string database_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string database_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new survival goal
-  string survival_goal = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string survival_goal = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // AlterDatabasePlacement is recorded when the database placement is modified.
@@ -92,9 +92,9 @@ message AlterDatabasePlacement {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the database.
-  string database_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string database_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new placement policy.
-  string placement = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string placement = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // RenameDatabase is recorded when a database is renamed.
@@ -102,9 +102,9 @@ message RenameDatabase {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The old name of the affected database.
-  string database_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string database_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new name of the affected database.
-  string new_database_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string new_database_name = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CreateSchema is recorded when a schema is created.
@@ -112,9 +112,9 @@ message CreateSchema {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the new schema.
-  string schema_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string schema_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the owner for the new schema.
-  string owner = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string owner = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // DropSchema is recorded when a schema is dropped.
@@ -122,7 +122,7 @@ message DropSchema {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected schema.
-  string schema_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string schema_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // RenameSchema is recorded when a schema is renamed.
@@ -130,9 +130,9 @@ message RenameSchema {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The old name of the affected schema.
-  string schema_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string schema_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new name of the affected schema.
-  string new_schema_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string new_schema_name = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // SetSchema is recorded when a table, view, sequence or type's schema is changed.
@@ -140,11 +140,11 @@ message SetSchema {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The old name of the affected descriptor.
-  string descriptor_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string descriptor_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new name of the affected descriptor.
-  string new_descriptor_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string new_descriptor_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The descriptor type being changed (table, view, sequence, type).
-  string descriptor_type = 5 [(gogoproto.jsontag) = ",omitempty"];
+  string descriptor_type = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CreateTable is recorded when a table is created.
@@ -152,9 +152,9 @@ message CreateTable {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the new table.
-  string table_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the owner for the new table.
-  string owner = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string owner = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // DropTable is recorded when a table is dropped.
@@ -162,9 +162,9 @@ message DropTable {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected table.
-  string table_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The names of the views dropped as a result of a cascade operation.
-  repeated string cascade_dropped_views = 4  [(gogoproto.jsontag) = ",omitempty"];
+  repeated string cascade_dropped_views = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // RenameTable is recorded when a table, sequence or view is renamed.
@@ -172,9 +172,9 @@ message RenameTable {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The old name of the affected table.
-  string table_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new name of the affected table.
-  string new_table_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string new_table_name = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // TruncateTable is recorded when a table is truncated.
@@ -182,7 +182,7 @@ message TruncateTable {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected table.
-  string table_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // AlterTable is recorded when a table is altered.
@@ -190,11 +190,11 @@ message AlterTable {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected table.
-  string table_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The mutation ID for the asynchronous job that is processing the index update, if any.
   uint32 mutation_id = 4 [(gogoproto.customname) = "MutationID", (gogoproto.jsontag) = ",omitempty"];
   // The names of the views dropped as a result of a cascade operation.
-  repeated string cascade_dropped_views = 5  [(gogoproto.jsontag) = ",omitempty"];
+  repeated string cascade_dropped_views = 5  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CommentOnColumn is recorded when a column is commented.
@@ -202,9 +202,9 @@ message CommentOnColumn {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the table containing the affected column.
-  string table_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The affected column.
-  string column_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string column_name = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new comment.
   string comment = 5  [(gogoproto.jsontag) = ",omitempty"];
   // Set to true if the comment was removed entirely.
@@ -216,7 +216,7 @@ message CommentOnDatabase {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected database.
-  string database_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string database_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new comment.
   string comment = 4  [(gogoproto.jsontag) = ",omitempty"];
   // Set to true if the comment was removed entirely.
@@ -227,7 +227,7 @@ message CommentOnSchema {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // Name of the affected schema.
-  string schema_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string schema_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new comment.
   string comment = 4 [(gogoproto.jsontag) = ",omitempty"];
   // Set to true if the comment was removed entirely.
@@ -239,7 +239,7 @@ message CommentOnTable {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected table.
-  string table_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new comment.
   string comment = 4  [(gogoproto.jsontag) = ",omitempty"];
   // Set to true if the comment was removed entirely.
@@ -251,7 +251,7 @@ message CommentOnType {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected type.
-  string type_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string type_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new comment.
   string comment = 4  [(gogoproto.jsontag) = ",omitempty"];
   // Set to true if the comment was removed entirely.
@@ -263,9 +263,9 @@ message CommentOnIndex {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the table containing the affected index.
-  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the affected index.
-  string index_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string index_name = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new comment.
   string comment = 5 [(gogoproto.jsontag) = ",omitempty"];
   // Set to true if the comment was removed entirely.
@@ -277,9 +277,9 @@ message CommentOnConstraint {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the table containing the affected constraint.
-  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the affected constraint.
-  string constraint_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string constraint_name = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new comment.
   string comment = 5 [(gogoproto.jsontag) = ",omitempty"];
   // Set to true if the comment was removed entirely.
@@ -291,9 +291,9 @@ message CreateIndex {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the table containing the new index.
-  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the new index.
-  string index_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string index_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The mutation ID for the asynchronous job that is processing the index update.
   uint32 mutation_id = 5 [(gogoproto.customname) = "MutationID", (gogoproto.jsontag) = ",omitempty"];
 }
@@ -303,13 +303,13 @@ message DropIndex {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the table containing the affected index.
-  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the affected index.
-  string index_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string index_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The mutation ID for the asynchronous job that is processing the index update.
   uint32 mutation_id = 5 [(gogoproto.customname) = "MutationID", (gogoproto.jsontag) = ",omitempty"];
   // The names of the views dropped as a result of a cascade operation.
-  repeated string cascade_dropped_views = 6;
+  repeated string cascade_dropped_views = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // AlterIndex is recorded when an index is altered.
@@ -317,9 +317,9 @@ message AlterIndex {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the table containing the affected index.
-  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the affected index.
-  string index_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string index_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The mutation ID for the asynchronous job that is processing the index update.
   uint32 mutation_id = 5 [(gogoproto.customname) = "MutationID", (gogoproto.jsontag) = ",omitempty"];
 }
@@ -329,9 +329,9 @@ message AlterIndexVisible {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the table containing the affected index.
-  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the affected index.
-  string index_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string index_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // Set true if index is not visible.
   // NOTE: THIS FIELD IS DEPRECATED in favor of invisibility.
   bool not_visible = 5 [(gogoproto.jsontag) = ",omitempty", deprecated = true];
@@ -345,9 +345,9 @@ message CreateView {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the new view.
-  string view_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string view_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the owner of the new view.
-  string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string owner = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The SQL selection clause used to define the view.
   string view_query = 5 [(gogoproto.jsontag) = ",omitempty"];
 }
@@ -357,9 +357,9 @@ message DropView {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected view.
-  string view_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string view_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The names of the views dropped as a result of a cascade operation.
-  repeated string cascade_dropped_views = 4 [(gogoproto.jsontag) = ",omitempty"];
+  repeated string cascade_dropped_views = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 
@@ -368,9 +368,9 @@ message CreateSequence {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the new sequence.
-  string sequence_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string sequence_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the owner for the new sequence.
-  string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string owner = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // DropSequence is recorded when a sequence is dropped.
@@ -378,7 +378,7 @@ message DropSequence {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected sequence.
-  string sequence_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string sequence_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // AlterSequence is recorded when a sequence is altered.
@@ -386,7 +386,7 @@ message AlterSequence {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected sequence.
-  string sequence_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string sequence_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CommonSchemaChangeDetails contains the fields common to all
@@ -418,7 +418,7 @@ message ReverseSchemaChange {
   CommonSchemaChangeEventDetails sc = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The error encountered that caused the schema change to be reversed.
   // The specific format of the error is variable and can change across releases without warning.
-  string error = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string error = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.moretags) = "redact:\"mixed\""];
   // The SQLSTATE code for the error.
   string sqlstate = 5 [(gogoproto.customname) = "SQLSTATE", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The amount of time the schema change job took before being reverted.
@@ -449,9 +449,9 @@ message CreateType {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the new type.
-  string type_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string type_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The name of the owner for the new type.
-  string owner = 5 [(gogoproto.jsontag) = ",omitempty"];
+  string owner = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // DropType is recorded when a user-defined type is dropped.
@@ -459,7 +459,7 @@ message DropType {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected type.
-  string type_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string type_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // EventAlterType is recorded when a user-defined type is altered.
@@ -467,7 +467,7 @@ message AlterType {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the affected type.
-  string type_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string type_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // RenameType is recorded when a user-defined type is renamed.
@@ -475,9 +475,9 @@ message RenameType {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The old name of the affected type.
-  string type_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string type_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new name of the affected type.
-  string new_type_name = 4 [(gogoproto.jsontag) = ",omitempty"];
+  string new_type_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CreateStatistics is recorded when statistics are collected for a
@@ -489,7 +489,7 @@ message CreateStatistics {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The name of the table for which the statistics were created.
-  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // UnsafeUpsertDescriptor is recorded when a descriptor is written
@@ -514,7 +514,7 @@ message UnsafeDeleteDescriptor {
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   uint32 parent_id = 3 [(gogoproto.customname) = "ParentID", (gogoproto.jsontag) = ",omitempty"];
   uint32 parent_schema_id = 4 [(gogoproto.customname) = "ParentSchemaID", (gogoproto.jsontag) = ",omitempty"];
-  string name = 5 [(gogoproto.jsontag) = ",omitempty"];
+  string name = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   bool force = 6 [(gogoproto.jsontag) = ",omitempty"];
   string force_notice = 7 [(gogoproto.jsontag) = ",omitempty"];
 }
@@ -530,7 +530,7 @@ message UnsafeUpsertNamespaceEntry {
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   uint32 parent_id = 3 [(gogoproto.customname) = "ParentID", (gogoproto.jsontag) = ",omitempty"];
   uint32 parent_schema_id = 4 [(gogoproto.customname) = "ParentSchemaID", (gogoproto.jsontag) = ",omitempty"];
-  string name = 5 [(gogoproto.jsontag) = ",omitempty"];
+  string name = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   uint32 previous_id = 6 [(gogoproto.customname) = "PreviousID", (gogoproto.jsontag) = ",omitempty"];
   bool force = 7 [(gogoproto.jsontag) = ",omitempty"];
   bool failed_validation = 8 [(gogoproto.jsontag) = ",omitempty"];
@@ -548,7 +548,7 @@ message UnsafeDeleteNamespaceEntry {
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   uint32 parent_id = 3 [(gogoproto.customname) = "ParentID", (gogoproto.jsontag) = ",omitempty"];
   uint32 parent_schema_id = 4 [(gogoproto.customname) = "ParentSchemaID", (gogoproto.jsontag) = ",omitempty"];
-  string name = 5 [(gogoproto.jsontag) = ",omitempty"];
+  string name = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   bool force = 6 [(gogoproto.jsontag) = ",omitempty"];
   string force_notice = 7 [(gogoproto.jsontag) = ",omitempty"];
 }
@@ -571,7 +571,7 @@ message CreateFunction {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // Name of the created function.
-  string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string function_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // If the new function is a replace of an existing function.
   bool is_replace = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
@@ -581,7 +581,7 @@ message DropFunction {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // Name of the dropped function.
-  string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string function_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // RenameFunction is recorded when a user-defined function is renamed.
@@ -589,9 +589,9 @@ message RenameFunction {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // The old name of the affected function.
-  string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string function_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new name of the affected function.
-  string new_function_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string new_function_name = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // AlterFunctionOptions is recorded when a user-defined function's options are
@@ -600,7 +600,7 @@ message AlterFunctionOptions {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // Name of the affected function.
-  string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  string function_name = 3  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // CreateTrigger is recorded when a trigger is created.
@@ -608,9 +608,9 @@ message CreateTrigger {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // Name of the trigger's table.
-  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // Name of the created trigger.
-  string trigger_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string trigger_name = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // DropTrigger is recorded when a trigger is dropped.
@@ -618,7 +618,7 @@ message DropTrigger {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   // Name of the trigger's table.
-  string table_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // Name of the dropped trigger.
-  string trigger_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+  string trigger_name = 4  [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }

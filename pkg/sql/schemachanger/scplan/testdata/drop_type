@@ -178,7 +178,7 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
       Statements:
       - statement: DROP TYPE defaultdb.typ
-        redactedstatement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
+        redactedstatement: DROP TYPE defaultdb.public.typ
         statementtag: DROP TYPE
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
@@ -505,7 +505,7 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
       Statements:
       - statement: DROP TYPE defaultdb.ctyp
-        redactedstatement: DROP TYPE ‹defaultdb›.‹public›.‹ctyp›
+        redactedstatement: DROP TYPE defaultdb.public.ctyp
         statementtag: DROP TYPE
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:

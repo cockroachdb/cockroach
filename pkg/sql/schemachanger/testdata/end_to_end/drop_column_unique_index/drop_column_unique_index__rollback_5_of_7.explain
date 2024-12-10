@@ -8,7 +8,7 @@ ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0);
 ALTER TABLE t.test DROP pi;
 EXPLAIN (DDL) rollback at post-commit stage 5 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP COLUMN ‹pi›;
+Schema change plan for rolling back ALTER TABLE t.public.test DROP COLUMN pi;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward PUBLIC
