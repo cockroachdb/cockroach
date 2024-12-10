@@ -879,6 +879,9 @@ func (tt *Table) addIndexWithVersion(
 	if def.Sharded != nil {
 		panic("hash-sharded indexes are not supported by the test catalog")
 	}
+	if def.Vector {
+		panic("VECTOR indexes are not yet supported by the test catalog")
+	}
 
 	idx := &Index{
 		IdxName:      tt.makeIndexName(def.Name, def.Columns, typ),
