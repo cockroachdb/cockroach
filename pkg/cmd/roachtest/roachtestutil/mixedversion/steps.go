@@ -8,6 +8,7 @@ package mixedversion
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"time"
@@ -212,6 +213,66 @@ func (s restartVirtualClusterStep) Run(
 	startOpts := option.StartVirtualClusterOpts(s.virtualCluster, node, startStopOpts()...)
 	settings := install.MakeClusterSettings(append(s.settings, install.BinaryOption(binaryPath))...)
 	return h.runner.cluster.StartServiceForVirtualClusterE(ctx, l, startOpts, settings)
+}
+
+// disableSeparateProcessThrottlingStep disables all throttling (KV
+// and tenant-side) for the virtual cluster of the given name. Since
+// shared-process virtual clusters already opt-out of this behaviour,
+// this step should only be scheduled in separate-process deployments.
+type disableSeparateProcessThrottlingStep struct {
+	virtualClusterName string
+}
+
+func (s disableSeparateProcessThrottlingStep) Background() shouldStop { return nil }
+
+func (s disableSeparateProcessThrottlingStep) Description() string {
+	return fmt.Sprintf("disable throttling for virtual cluster %s", s.virtualClusterName)
+}
+
+func (s disableSeparateProcessThrottlingStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	l.Printf("setting KV rate limit")
+
+	var err error
+	setClusterSetting := func(name string, value interface{}, virtualCluster string, systemVisible bool) {
+		if err != nil {
+			return
+		}
+
+		step := setClusterSettingStep{
+			name:               name,
+			value:              value,
+			virtualClusterName: virtualCluster,
+			systemVisible:      systemVisible,
+		}
+
+		err = step.Run(ctx, l, rng, h)
+	}
+
+	const (
+		system = install.SystemInterfaceName
+		// spanConfigTenantLimit is the value assigned to the
+		// `spanconfig.tenant_limit` cluster setting, controling the number
+		// of spans that a separate-process tenant can create. The value of
+		// 50k chosen here matches Serverless deployments and helps tests
+		// that perform lots of schema changes.
+		spanConfigTenantLimit = 50000
+	)
+
+	setClusterSetting("kv.tenant_rate_limiter.rate_limit", math.MaxFloat64, system, false)
+	setClusterSetting("kvadmission.flow_control.enabled", false, system, false)
+	setClusterSetting("spanconfig.tenant_limit", spanConfigTenantLimit, s.virtualClusterName, true)
+
+	if err != nil {
+		return err
+	}
+
+	stmt := fmt.Sprintf(
+		"ALTER TENANT %q GRANT CAPABILITY exempt_from_rate_limiting = true",
+		s.virtualClusterName,
+	)
+	return h.System.Exec(rng, stmt)
 }
 
 // waitForStableClusterVersionStep implements the process of waiting
