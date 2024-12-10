@@ -247,14 +247,14 @@ NormalPri:
   term=1 index=2  tokens=6291456
   term=1 index=3  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[2,3) send_queue=[3,4) precise_q_size=+6.0 MiB watching-for-tokens
+(n2,s2):2: state=replicate closed=false inflight=[1,3) send_queue=[3,4) precise_q_size=+6.0 MiB watching-for-tokens
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+6.0 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=6291456
   term=1 index=2  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[2,3) send_queue=[3,4) precise_q_size=+6.0 MiB force-flushing
+(n3,s3):3: state=replicate closed=false inflight=[1,3) send_queue=[3,4) precise_q_size=+6.0 MiB force-flushing
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+6.0 MiB ela=+0 B
 LowPri:
@@ -300,14 +300,14 @@ NormalPri:
   term=1 index=2  tokens=6291456
   term=1 index=3  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[2,3) send_queue=[3,4) precise_q_size=+6.0 MiB watching-for-tokens
+(n2,s2):2: state=replicate closed=false inflight=[1,3) send_queue=[3,4) precise_q_size=+6.0 MiB watching-for-tokens
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+6.0 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=6291456
   term=1 index=2  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[2,3) send_queue=[3,4) precise_q_size=+6.0 MiB force-flushing
+(n3,s3):3: state=replicate closed=false inflight=[1,3) send_queue=[3,4) precise_q_size=+6.0 MiB force-flushing
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+6.0 MiB ela=+0 B
 LowPri:
@@ -328,14 +328,14 @@ NormalPri:
   term=1 index=2  tokens=6291456
   term=1 index=3  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[2,3) send_queue=[3,4) precise_q_size=+6.0 MiB watching-for-tokens
+(n2,s2):2: state=replicate closed=false inflight=[1,3) send_queue=[3,4) precise_q_size=+6.0 MiB watching-for-tokens
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+6.0 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=6291456
   term=1 index=2  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[3,4) send_queue=[4,4) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
