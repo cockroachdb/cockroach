@@ -70,8 +70,10 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -134,6 +136,14 @@ const (
 	SystemOnlyDeployment      = DeploymentMode("system-only")
 	SharedProcessDeployment   = DeploymentMode("shared-process")
 	SeparateProcessDeployment = DeploymentMode("separate-process")
+
+	// These env vars are used to the planner to generate plans with
+	// certain specs regardless of the seed. This can be useful for
+	// forcing certain plans to be generated for debugging without needing
+	// trial and error.
+	deploymentModeOverrideEnv = "MVT_DEPLOYMENT_MODE"
+	numUpgradesOverrideEnv    = "MVT_NUM_UPGRADES"
+	skipVersionOverrideEnv    = "MVT_SKIP_VERSION_ENABLED"
 )
 
 var (
@@ -785,7 +795,7 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 
 	// Pick a random deployment mode to use in this test run among the
 	// list of enabled deployment modes enabled for this test.
-	deploymentMode := t.options.enabledDeploymentModes[t.prng.Intn(len(t.options.enabledDeploymentModes))]
+	deploymentMode := t.deploymentMode()
 	t.updateOptionsForDeploymentMode(deploymentMode)
 
 	previousReleases, err := t.choosePreviousReleases()
@@ -843,7 +853,8 @@ func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) stepFunc 
 // certain cluster architecture. Specifically, ARM64 builds are
 // only available on v22.2.0+.
 func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
-	skipVersions := t.prng.Float64() < t.options.skipVersionProbability
+	skipVersions := t.skipVersions()
+
 	isAvailable := func(v *clusterupgrade.Version) bool {
 		if t.clusterArch() != vm.ArchARM64 {
 			return true
@@ -930,9 +941,42 @@ func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
 // in this test run. Returns a number in the [minUpgrades, maxUpgrades]
 // range.
 func (t *Test) numUpgrades() int {
+	if numUpgradesOverride := os.Getenv(numUpgradesOverrideEnv); numUpgradesOverride != "" {
+		upgrades, err := strconv.Atoi(numUpgradesOverride)
+		if err != nil {
+			t.logger.Printf("failed to parse %s override %s: %s", numUpgradesOverrideEnv, numUpgradesOverride, err)
+		} else {
+			t.logger.Printf("%s override set: %s", numUpgradesOverrideEnv, numUpgradesOverride, err)
+			return upgrades
+		}
+	}
 	return t.prng.Intn(
 		t.options.maxUpgrades-t.options.minUpgrades+1,
 	) + t.options.minUpgrades
+}
+
+func (t *Test) skipVersions() bool {
+	skipVersions := t.prng.Float64() < t.options.skipVersionProbability
+	if skipVersionOverride := os.Getenv(skipVersionOverrideEnv); skipVersionOverride != "" {
+		skipVersionEnabled, err := strconv.ParseBool(skipVersionOverride)
+		if err != nil {
+			t.logger.Printf("failed to parse %s override %s: %s", numUpgradesOverrideEnv, skipVersionOverride, err)
+		} else {
+			t.logger.Printf("%s override set: %s", numUpgradesOverrideEnv, skipVersionOverride, err)
+			skipVersions = skipVersionEnabled
+		}
+	}
+
+	return skipVersions
+}
+
+func (t *Test) deploymentMode() DeploymentMode {
+	deploymentMode := t.options.enabledDeploymentModes[t.prng.Intn(len(t.options.enabledDeploymentModes))]
+	if deploymentModeOverride := os.Getenv(deploymentModeOverrideEnv); deploymentModeOverride != "" {
+		deploymentMode = DeploymentMode(deploymentModeOverride)
+		t.logger.Printf("%s override set: %s", deploymentModeOverrideEnv, deploymentModeOverride)
+	}
+	return deploymentMode
 }
 
 // latestPredecessor is an implementation of `predecessorFunc` that
