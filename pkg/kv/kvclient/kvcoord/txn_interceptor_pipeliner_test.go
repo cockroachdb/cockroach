@@ -2782,6 +2782,9 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 					if tc.maxSize > 0 {
 						require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByLockSpanBudget.Count())
 					}
+					if tc.maxCount > 0 {
+						require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByCountLimit.Count())
+					}
 
 					// Make sure rolling back the txn works.
 					rollback := &kvpb.BatchRequest{}
