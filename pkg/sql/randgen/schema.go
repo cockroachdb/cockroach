@@ -142,8 +142,15 @@ func RandCreateTables(
 func RandCreateTable(
 	ctx context.Context, rng *rand.Rand, prefix string, tableIdx int, opt TableOpt,
 ) *tree.CreateTable {
-	return RandCreateTableWithColumnIndexNumberGenerator(
-		ctx, rng, prefix, tableIdx, opt, nil, /* generateColumnIndexNumber */
+	return RandCreateTableWithTypes(ctx, rng, prefix, tableIdx, opt, SeedTypes)
+}
+
+// RandCreateTable creates a random CreateTable definition.
+func RandCreateTableWithTypes(
+	ctx context.Context, rng *rand.Rand, prefix string, tableIdx int, opt TableOpt, typs []*types.T,
+) *tree.CreateTable {
+	return randCreateTableWithColumnIndexNumberGeneratorAndTypes(
+		ctx, rng, prefix, tableIdx, opt, nil /* generateColumnIndexNumber */, typs,
 	)
 }
 
@@ -163,6 +170,20 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	opt TableOpt,
 	generateColumnIndexSuffix func() string,
 ) *tree.CreateTable {
+	return randCreateTableWithColumnIndexNumberGeneratorAndTypes(
+		ctx, rng, prefix, tableIdx, opt, generateColumnIndexSuffix, SeedTypes,
+	)
+}
+
+func randCreateTableWithColumnIndexNumberGeneratorAndTypes(
+	ctx context.Context,
+	rng *rand.Rand,
+	prefix string,
+	tableIdx int,
+	opt TableOpt,
+	generateColumnIndexSuffix func() string,
+	typs []*types.T,
+) *tree.CreateTable {
 	var name string
 	if opt.IsSet(TableOptCrazyNames) {
 		g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
@@ -171,7 +192,7 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 		name = fmt.Sprintf("%s%d", prefix, tableIdx)
 	}
 	return randCreateTableWithColumnIndexNumberGeneratorAndName(
-		ctx, rng, name, tableIdx, opt, generateColumnIndexSuffix,
+		ctx, rng, name, tableIdx, opt, generateColumnIndexSuffix, typs,
 	)
 }
 
@@ -179,7 +200,7 @@ func RandCreateTableWithName(
 	ctx context.Context, rng *rand.Rand, tableName string, tableIdx int, opt TableOpt,
 ) *tree.CreateTable {
 	return randCreateTableWithColumnIndexNumberGeneratorAndName(
-		ctx, rng, tableName, tableIdx, opt, nil, /* generateColumnIndexSuffix */
+		ctx, rng, tableName, tableIdx, opt, nil /* generateColumnIndexSuffix */, SeedTypes,
 	)
 }
 
@@ -190,6 +211,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	tableIdx int,
 	opt TableOpt,
 	generateColumnIndexSuffix func() string,
+	typs []*types.T,
 ) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
@@ -210,7 +232,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	nComputedColumns := randutil.RandIntInRange(rng, 0, (nColumns+1)/2)
 	nNormalColumns := nColumns - nComputedColumns
 	for i := 0; i < nNormalColumns; i++ {
-		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i), opt)
+		columnDef := randColumnTableDef(rng, tableIdx, colSuffix(i), opt, typs)
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -218,7 +240,7 @@ func randCreateTableWithColumnIndexNumberGeneratorAndName(
 	// Make defs for computed columns.
 	normalColDefs := columnDefs
 	for i := nNormalColumns; i < nColumns; i++ {
-		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i), opt)
+		columnDef := randComputedColumnTableDef(rng, normalColDefs, tableIdx, colSuffix(i), opt, typs)
 		columnDefs = append(columnDefs, columnDef)
 		defs = append(defs, columnDef)
 	}
@@ -377,7 +399,12 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 // handle this table's schema. Consider increasing numInserts or filing a bug.
 // TODO(harding): Populate data in partitions.
 func PopulateTableWithRandData(
-	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int, inserts *[]string,
+	rng *rand.Rand,
+	db *gosql.DB,
+	tableName string,
+	numInserts int,
+	inserts *[]string,
+	typeResolver tree.TypeReferenceResolver,
 ) (numRowsInserted int, err error) {
 	var createStmtSQL string
 	res := db.QueryRow(fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tree.NameString(tableName)))
@@ -388,6 +415,19 @@ func PopulateTableWithRandData(
 	createStmt, err := parseCreateStatement(createStmtSQL)
 	if err != nil {
 		return 0, errors.Wrapf(err, "failed to determine table schema")
+	}
+
+	// Resolve user-defined types.
+	if typeResolver != nil {
+		for _, def := range createStmt.Defs {
+			if col, ok := def.(*tree.ColumnTableDef); ok {
+				typ, err := tree.ResolveType(context.Background(), col.Type, typeResolver)
+				if err != nil {
+					return 0, err
+				}
+				col.Type = typ
+			}
+		}
 	}
 
 	// Find columns subject to a foreign key constraint
@@ -429,8 +469,9 @@ func PopulateTableWithRandData(
 				// them to the list of columns to insert data into.
 				continue
 			}
+			// Skip columns with unresolved types.
 			if _, ok := col.Type.(*types.T); !ok {
-				return 0, errors.Newf("No type for %v", col)
+				continue
 			}
 			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type))
 			nullable = append(nullable, col.Nullable.Nullability == tree.Null)
@@ -461,7 +502,7 @@ func PopulateTableWithRandData(
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
 // column, with a random type and nullability.
 func randColumnTableDef(
-	rng *rand.Rand, tableIdx int, colSuffix string, opt TableOpt,
+	rng *rand.Rand, tableIdx int, colSuffix string, opt TableOpt, typs []*types.T,
 ) *tree.ColumnTableDef {
 	var colName tree.Name
 	if opt.IsSet(TableOptCrazyNames) {
@@ -474,7 +515,7 @@ func randColumnTableDef(
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		Name: colName,
-		Type: RandColumnType(rng),
+		Type: RandColumnTypeFromSlice(rng, typs),
 	}
 	// Slightly prefer non-nullable columns
 	if columnDef.Type.(*types.T).Family() == types.OidFamily {
@@ -500,8 +541,9 @@ func randComputedColumnTableDef(
 	tableIdx int,
 	colSuffix string,
 	opt TableOpt,
+	typs []*types.T,
 ) *tree.ColumnTableDef {
-	newDef := randColumnTableDef(rng, tableIdx, colSuffix, opt)
+	newDef := randColumnTableDef(rng, tableIdx, colSuffix, opt, typs)
 	newDef.Computed.Computed = true
 	newDef.Computed.Virtual = rng.Intn(2) == 0
 
