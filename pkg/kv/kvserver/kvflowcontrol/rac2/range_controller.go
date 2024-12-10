@@ -189,6 +189,9 @@ type ReplicaStateInfo struct {
 	// (Match, Next) is in-flight.
 	Match uint64
 	Next  uint64
+	// InflightBytes are the bytes that have been sent but not yet persisted. It
+	// corresponds to tracker.Inflights.bytes.
+	InflightBytes uint64
 }
 
 // sendQueueStatRefreshInterval is the interval at which the send queue stats
