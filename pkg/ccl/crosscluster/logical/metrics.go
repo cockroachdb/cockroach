@@ -136,13 +136,13 @@ var (
 	}
 	metaScanningRanges = metric.Metadata{
 		Name:        "logical_replication.scanning_ranges",
-		Help:        "Source side ranges undergoing an initial scan (innacurate with multiple LDR jobs)",
+		Help:        "Source side ranges undergoing an initial scan (inaccurate with multiple LDR jobs)",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaCatchupRanges = metric.Metadata{
 		Name:        "logical_replication.catchup_ranges",
-		Help:        "Source side ranges undergoing catch up scans (innacurate with multiple LDR jobs)",
+		Help:        "Source side ranges undergoing catch up scans (inaccurate with multiple LDR jobs)",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
