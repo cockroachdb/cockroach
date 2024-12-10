@@ -94,15 +94,6 @@ func registerRebalanceLoad(r registry.Registry) {
 				mixedversion.ClusterSettingOption(
 					install.ClusterSettingsOption(settings.ClusterSettings),
 				),
-				// This test does not currently work with shared-process
-				// deployments (#129389), so we do not run it in
-				// separate-process mode either to reduce noise. We should
-				// reevaluate once the test works in shared-process.
-				mixedversion.EnabledDeploymentModes(
-					mixedversion.SystemOnlyDeployment,
-					mixedversion.SharedProcessDeployment,
-				),
-
 				// Only use the latest version of each release to work around #127029.
 				mixedversion.AlwaysUseLatestPredecessors,
 			)
