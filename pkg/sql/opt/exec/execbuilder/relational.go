@@ -755,6 +755,10 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		return execPlan{}, colOrdMap{},
 			errors.AssertionFailedf("expected inverted index scan to have a constraint")
 	}
+	if idx.IsVector() {
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+			"only VectorSearch operators can use vector indexes")
+	}
 	b.IndexesUsed.add(tab.ID(), idx.ID())
 
 	// Save if we planned a full (large) table/index scan on the builder so that

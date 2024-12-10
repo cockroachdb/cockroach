@@ -1652,6 +1652,11 @@ func (oi *optIndex) IsInverted() bool {
 	return oi.idx.GetType() == descpb.IndexDescriptor_INVERTED
 }
 
+// IsVector is part of the cat.Index interface.
+func (oi *optIndex) IsVector() bool {
+	return false
+}
+
 // GetInvisibility is part of the cat.Index interface.
 func (oi *optIndex) GetInvisibility() float64 {
 	return oi.idx.GetInvisibility()
@@ -1685,6 +1690,14 @@ func (oi *optIndex) NonInvertedPrefixColumnCount() int {
 	return oi.idx.NumKeyColumns() - 1
 }
 
+// NonVectorPrefixColumnCount is part of the cat.Index interface.
+func (oi *optIndex) NonVectorPrefixColumnCount() int {
+	if !oi.IsVector() {
+		panic("non-vector indexes do not have vector prefix columns")
+	}
+	return oi.idx.NumKeyColumns() - 1
+}
+
 // Column is part of the cat.Index interface.
 func (oi *optIndex) Column(i int) cat.IndexColumn {
 	ord := oi.columnOrds[i]
@@ -1700,6 +1713,15 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 func (oi *optIndex) InvertedColumn() cat.IndexColumn {
 	if !oi.IsInverted() {
 		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted columns"))
+	}
+	ord := oi.idx.NumKeyColumns() - 1
+	return oi.Column(ord)
+}
+
+// VectorColumn is part of the cat.Index interface.
+func (oi *optIndex) VectorColumn() cat.IndexColumn {
+	if !oi.IsVector() {
+		panic(errors.AssertionFailedf("non-vector indexes do not have inverted columns"))
 	}
 	ord := oi.idx.NumKeyColumns() - 1
 	return oi.Column(ord)
@@ -2573,6 +2595,11 @@ func (oi *optVirtualIndex) IsInverted() bool {
 	return false
 }
 
+// IsVector is part of the cat.Index interface.
+func (oi *optVirtualIndex) IsVector() bool {
+	return false
+}
+
 // GetInvisibility is part of the cat.Index interface.
 func (oi *optVirtualIndex) GetInvisibility() float64 {
 	return 0.0
@@ -2609,6 +2636,11 @@ func (oi *optVirtualIndex) LaxKeyColumnCount() int {
 // NonInvertedPrefixColumnCount is part of the cat.Index interface.
 func (oi *optVirtualIndex) NonInvertedPrefixColumnCount() int {
 	panic("virtual indexes are not inverted")
+}
+
+// NonVectorPrefixColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) NonVectorPrefixColumnCount() int {
+	panic("virtual indexes cannot be vector indexes")
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
@@ -2649,6 +2681,11 @@ func (oi *optVirtualIndex) Column(i int) cat.IndexColumn {
 // InvertedColumn is part of the cat.Index interface.
 func (oi *optVirtualIndex) InvertedColumn() cat.IndexColumn {
 	panic(errors.AssertionFailedf("virtual indexes are not inverted"))
+}
+
+// VectorColumn is part of the cat.Index interface.
+func (oi *optVirtualIndex) VectorColumn() cat.IndexColumn {
+	panic(errors.AssertionFailedf("virtual indexes cannot be vector indexes"))
 }
 
 // Predicate is part of the cat.Index interface.

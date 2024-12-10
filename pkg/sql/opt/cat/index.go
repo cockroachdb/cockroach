@@ -51,6 +51,9 @@ type Index interface {
 	// IsInverted returns true if this is an inverted index.
 	IsInverted() bool
 
+	// IsVector returns true if this is a vector index.
+	IsVector() bool
+
 	// GetInvisibility returns index invisibility.
 	GetInvisibility() float64
 
@@ -131,6 +134,13 @@ type Index interface {
 	// index is not an inverted index.
 	NonInvertedPrefixColumnCount() int
 
+	// NonVectorPrefixColumnCount returns the number of non-vector columns
+	// in the vector index. A vector index only has non-vector columns if it is a
+	// multi-column vector index. Therefore, a non-zero value is only returned for
+	// multi-column vector indexes. This function panics if the index is not an
+	// vector index.
+	NonVectorPrefixColumnCount() int
+
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
 	Column(i int) IndexColumn
@@ -138,6 +148,10 @@ type Index interface {
 	// InvertedColumn returns the inverted IndexColumn of the index. Panics if
 	// the index is not an inverted index.
 	InvertedColumn() IndexColumn
+
+	// VectorColumn returns the vector IndexColumn of the index. Panics if the
+	// index is not a vector index.
+	VectorColumn() IndexColumn
 
 	// Predicate returns the partial index predicate expression and true if the
 	// index is a partial index. If it is not a partial index, the empty string
