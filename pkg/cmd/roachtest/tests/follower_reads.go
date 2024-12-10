@@ -765,6 +765,12 @@ func verifySQLLatency(
 // follower reads) for all but a few nodes (toleratedNodes). We tolerate a few
 // wacky quantas because, around leaseholder changes, the one node's ratio drops
 // to zero (the new leaseholder), and another one's rises (the old leaseholder).
+//
+// TODO(darrylwong): This check is broken for multi-tenant. `follower_reads.success_count`
+// is a storage level metric while `sql.select.count` is application level metric but both
+// are queried through the system tenant. On shared-process mode, this means `sql.select.count`
+// returns the number of selects across all tenants, not just the tenant the test is run on.
+// On separate-process mode, `sql.select.count` returns only the system tenant's selects.
 func verifyHighFollowerReadRatios(
 	ctx context.Context,
 	t test.Test,
@@ -980,10 +986,10 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 ) {
 	topology := topologySpec{multiRegion: false}
 	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
-		// This test does not currently work with shared-process
-		// deployments (#129546), so we do not run it in separate-process
-		// mode either to reduce noise. We should reevaluate once the test
-		// works in shared-process.
+		// This test fails on separate process mode due to follower reads not
+		// properly increasing. We should investigate this to determine if
+		// it's a problem with how we are querying the metrics or if it's an
+		// actual problem with follower reads.
 		mixedversion.EnabledDeploymentModes(
 			mixedversion.SystemOnlyDeployment,
 			mixedversion.SharedProcessDeployment,
@@ -1016,10 +1022,10 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// this issue.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
 
-		// This test does not currently work with shared-process
-		// deployments (#129167), so we do not run it in separate-process
-		// mode either to reduce noise. We should reevaluate once the test
-		// works in shared-process.
+		// This test fails on separate process mode due to follower reads not
+		// properly increasing. We should investigate this to determine if
+		// it's a problem with how we are querying the metrics or if it's an
+		// actual problem with follower reads.
 		mixedversion.EnabledDeploymentModes(
 			mixedversion.SystemOnlyDeployment,
 			mixedversion.SharedProcessDeployment,
