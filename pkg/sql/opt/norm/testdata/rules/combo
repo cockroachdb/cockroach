@@ -1085,7 +1085,7 @@ Final best expression
              └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
 
 # Decorrelation pattern using ANY function.
-optsteps
+optsteps disable=EliminateGroupBy
 SELECT 5=ANY(SELECT i FROM a WHERE k=x) AS r FROM xy
 ----
 ================================================================================

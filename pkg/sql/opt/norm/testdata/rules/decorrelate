@@ -897,7 +897,7 @@ semi-join-apply
 # --------------------------------------------------
 
 # Left join caused by correlated ANY clause.
-norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
+norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy) disable=EliminateGroupBy
 SELECT 5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -980,7 +980,7 @@ project
            └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Any clause with constant.
-norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
+norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy) disable=EliminateGroupBy
 SELECT 5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -1023,7 +1023,7 @@ project
       └── CASE WHEN bool_or:14 THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(14)]
 
 # Any clause with variable.
-norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
+norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy) disable=EliminateGroupBy
 SELECT i=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -1064,7 +1064,7 @@ project
       └── CASE WHEN bool_or:14 AND (i:2 IS NOT NULL) THEN true WHEN bool_or:14 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=r:12, outer=(2,14)]
 
 # Any clause with more complex expression that must be cached.
-norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
+norm expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy) disable=EliminateGroupBy
 SELECT i*i/5=ANY(SELECT y FROM xy WHERE x=k) AS r FROM a
 ----
 project
@@ -1308,7 +1308,7 @@ project
 # --------------------------------------------------
 # TryDecorrelateProjectInnerJoin
 # --------------------------------------------------
-norm expect=TryDecorrelateProjectInnerJoin
+norm expect=TryDecorrelateProjectInnerJoin disable=EliminateGroupBy
 SELECT (SELECT sum(y + v) FROM xy, uv WHERE x=u AND x=k) FROM a
 ----
 project
@@ -1775,7 +1775,7 @@ group-by (hash)
            └── j:5
 
 # Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY.
-norm expect=TryDecorrelateGroupBy
+norm expect=TryDecorrelateGroupBy disable=EliminateGroupBy
 SELECT *
 FROM xy, uv
 WHERE x<v AND u=(SELECT max(i) FROM a WHERE k=x)
@@ -1836,7 +1836,7 @@ project
 
 # Indirectly decorrelate GROUP BY after decorrelating scalar GROUP BY. Use
 # IS DISTINCT FROM to retain left join.
-norm expect=TryDecorrelateGroupBy
+norm expect=TryDecorrelateGroupBy disable=EliminateGroupBy
 SELECT *
 FROM xy, uv
 WHERE x<v AND (SELECT max(i) FROM a WHERE k=x) IS DISTINCT FROM u
@@ -1890,7 +1890,7 @@ project
            └── u:5 IS DISTINCT FROM max:16 [outer=(5,16)]
 
 # Synthesize key when one is not present.
-norm expect=TryDecorrelateGroupBy
+norm expect=TryDecorrelateGroupBy disable=EliminateGroupBy
 SELECT *
 FROM
 (
@@ -2223,7 +2223,7 @@ group-by (hash)
            └── j:5
 
 # Synthesize key when one is not present.
-norm expect=TryDecorrelateScalarGroupBy
+norm expect=TryDecorrelateScalarGroupBy disable=EliminateGroupBy
 SELECT * FROM (SELECT i, 'foo' AS cst FROM a) WHERE 5=(SELECT max(y) FROM xy WHERE x=i)
 ----
 project
@@ -2547,7 +2547,7 @@ project
       └── filters
            └── array_agg:9 = ARRAY[] [outer=(9), constraints=(/9: [/ARRAY[] - /ARRAY[]]; tight), fd=()-->(9)]
 
-norm expect=TryDecorrelateScalarGroupBy
+norm expect=TryDecorrelateScalarGroupBy disable=EliminateGroupBy
 SELECT * FROM a WHERE 'foo'=(SELECT concat_agg(y::string) FROM xy WHERE x=k)
 ----
 project
@@ -2614,7 +2614,7 @@ project
            └── concat_agg:13 = 'foo' [outer=(13), constraints=(/13: [/'foo' - /'foo']; tight), fd=()-->(13)]
 
 # With a multi-argument aggregate.
-norm expect=TryDecorrelateScalarGroupBy
+norm expect=TryDecorrelateScalarGroupBy disable=EliminateGroupBy
 SELECT k, (SELECT string_agg(a.s, ',') FROM a WHERE a.k = a2.i) FROM a AS a2
 ----
 project
@@ -4478,7 +4478,7 @@ project
            └── (i:2 = 1) OR (canary_agg:13 IS NOT NULL) [outer=(2,13)]
 
 # Any with IS NULL.
-norm expect=HoistSelectSubquery
+norm expect=HoistSelectSubquery disable=EliminateGroupBy
 SELECT * FROM a WHERE (i = ANY(SELECT y FROM xy WHERE x=k)) IS NULL
 ----
 project
@@ -4538,7 +4538,7 @@ project
 
 # Any with tuple comparison should use IS NOT NULL (i.e., IsTupleNotNull
 # expression) instead of IS DISTINCT FROM NULL.
-norm expect=HoistSelectSubquery
+norm expect=HoistSelectSubquery disable=EliminateGroupBy
 SELECT * FROM a WHERE ((k, i) = ANY(SELECT (x, y) FROM xy WHERE x=k)) IS NULL
 ----
 project
@@ -4646,7 +4646,7 @@ select
            └── NULL
 
 # ALL with non-trivial expression on left.
-norm
+norm disable=EliminateGroupBy
 SELECT i*i/100 < ALL(SELECT y FROM xy WHERE x=k) AS r, s FROM a
 ----
 project
@@ -5127,7 +5127,7 @@ project
       └── xy.x:8 [as=x:12, outer=(8)]
 
 # Mixed correlated and uncorrelated subqueries.
-norm expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery disable=EliminateGroupBy
 SELECT
     5 AS a,
     (SELECT x FROM xy WHERE x=k),
@@ -5331,7 +5331,7 @@ project
                           └── (1 / y:9)::INT8 [as=int8:12, outer=(9), immutable]
 
 # Exists in projection list.
-norm expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery disable=EliminateGroupBy
 SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a
 ----
 project
@@ -5362,7 +5362,7 @@ project
       └── canary_agg:14 IS NOT NULL [as=exists:13, outer=(14)]
 
 # Any in projection list.
-norm expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery disable=EliminateGroupBy
 SELECT 5 < ANY(SELECT y FROM xy WHERE y=i) AS r FROM a
 ----
 project
@@ -5400,7 +5400,7 @@ project
 
 # Any in projection list with tuple comparison should use IS NOT NULL
 # (i.e., IsTupleNotNull expression) instead of IS DISTINCT FROM NULL.
-norm expect=HoistProjectSubquery
+norm expect=HoistProjectSubquery disable=EliminateGroupBy
 SELECT (5, 50) < ANY(SELECT x, y FROM xy WHERE y=i) AS r FROM a
 ----
 project
@@ -5680,7 +5680,7 @@ project
            └── exists:18 OR (k:1 = x:8) [outer=(1,8,18)]
 
 # Any in Join filter disjunction.
-norm expect=HoistJoinSubquery
+norm expect=HoistJoinSubquery disable=EliminateGroupBy
 SELECT j, y FROM a INNER JOIN xy ON x IN (SELECT v FROM uv WHERE u=y AND v=i) OR x IS NULL
 ----
 project
@@ -5744,7 +5744,7 @@ project
 # semi-join when constructin the Project expression. The opt directive is used
 # here because the SplitDisjunctionOfJoinTerms exploration rule must fire to
 # trigger HoistJoinSubquery.
-opt expect=HoistJoinSubquery
+opt expect=HoistJoinSubquery disable=EliminateGroupBy
 SELECT EXISTS(
   SELECT 1
   FROM a
@@ -5812,7 +5812,7 @@ union
            └── true [as=bool:43]
 
 # This is a more synthetic regression test for #130398.
-exprnorm expect=HoistJoinSubquery disable=PushFilterIntoJoinLeft
+exprnorm expect=HoistJoinSubquery disable=(PushFilterIntoJoinLeft, EliminateGroupBy)
 (SemiJoin
     (Scan [ (Table "xy") (Cols "x,y") ])
     (Select
@@ -6005,7 +6005,7 @@ project
       └── x:8 IS NOT NULL [as=column1:16, outer=(8)]
 
 # Any in values row.
-norm expect=HoistValuesSubquery
+norm expect=HoistValuesSubquery disable=EliminateGroupBy
 SELECT (VALUES (5 IN (SELECT y FROM xy WHERE x=k))) FROM a
 ----
 project
@@ -6079,7 +6079,7 @@ project
            └── generate_series(1, v:6) [outer=(6), immutable]
 
 # Zip correlation within EXISTS.
-norm expect=(HoistProjectSetSubquery,TryDecorrelateSemiJoin,TryDecorrelateProjectSet)
+norm expect=(HoistProjectSetSubquery,TryDecorrelateSemiJoin,TryDecorrelateProjectSet) disable=EliminateGroupBy
 SELECT * FROM xy WHERE EXISTS(SELECT * FROM generate_series(1, (SELECT v FROM uv WHERE u=x)))
 ----
 group-by (hash)

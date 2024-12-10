@@ -1316,7 +1316,7 @@ limit
  └── 1
 
 # Push down only conditions that do not depend on aggregations.
-norm expect=PushSelectIntoGroupBy
+norm expect=PushSelectIntoGroupBy disable=EliminateGroupBy
 SELECT * FROM (SELECT k, i, max(s) m FROM a GROUP BY k, i) a WHERE i=k AND m='foo'
 ----
 select
