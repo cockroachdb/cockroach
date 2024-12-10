@@ -705,8 +705,6 @@ func (s *deprecatedWebhookSink) EmitResolvedTimestamp(
 }
 
 func (s *deprecatedWebhookSink) Flush(ctx context.Context) error {
-	s.metrics.recordFlushRequestCallback()()
-
 	// Send flush request.
 	select {
 	case <-ctx.Done():
