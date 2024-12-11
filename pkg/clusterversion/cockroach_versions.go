@@ -296,8 +296,19 @@ const DevelopmentBranch = true
 // TestFinalVersion).
 const finalVersion Key = -1
 
+// TestingExtraVersions may be set to true in tests which will intentionally use
+// Keys greater than Latest, which typically would crash and/or cause errors.
+// Test packages that utilize this may encounter odd behavior. Resetting it is
+// not required.
+var TestingExtraVersions = false
+
 // Version returns the roachpb.Version corresponding to a key.
 func (k Key) Version() roachpb.Version {
+	if TestingExtraVersions && k > Latest {
+		v := versionTable[Latest]
+		v.Internal += int32(k-Latest) * 2
+		return maybeApplyDevOffset(k, v)
+	}
 	version := versionTable[k]
 	return maybeApplyDevOffset(k, version)
 }
