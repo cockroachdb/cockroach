@@ -26,7 +26,7 @@ var bufferedWritesEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.buffered_writes.enabled",
 	"if enabled, transactional writes are buffered on the gateway",
-	false,
+	true,
 	settings.WithPublic,
 )
 
