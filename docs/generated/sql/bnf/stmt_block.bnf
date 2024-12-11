@@ -1823,6 +1823,7 @@ create_sequence_stmt ::=
 
 create_func_stmt ::=
 	'CREATE' opt_or_replace 'FUNCTION' routine_create_name '(' opt_routine_param_with_default_list ')' 'RETURNS' opt_return_set routine_return_type opt_create_routine_opt_list opt_routine_body
+	| 'CREATE' opt_or_replace 'FUNCTION' routine_create_name '(' opt_routine_param_with_default_list ')' 'RETURNS' 'TABLE' '(' table_func_column_list ')' opt_create_routine_opt_list opt_routine_body
 	| 'CREATE' opt_or_replace 'FUNCTION' routine_create_name '(' opt_routine_param_with_default_list ')' opt_create_routine_opt_list opt_routine_body
 
 create_proc_stmt ::=
@@ -2630,6 +2631,9 @@ opt_routine_body ::=
 	| 'BEGIN' 'ATOMIC' routine_body_stmt_list 'END'
 	| 
 
+table_func_column_list ::=
+	( table_func_column ) ( ( ',' table_func_column ) )*
+
 trigger_action_time ::=
 	'BEFORE'
 	| 'AFTER'
@@ -3276,6 +3280,9 @@ routine_return_stmt ::=
 routine_body_stmt_list ::=
 	(  ) ( ( routine_body_stmt ';' ) )*
 
+table_func_column ::=
+	param_name routine_param_type
+
 trigger_event ::=
 	'INSERT'
 	| 'DELETE'
@@ -3697,6 +3704,9 @@ create_routine_opt_item ::=
 routine_body_stmt ::=
 	stmt_without_legacy_transaction
 	| routine_return_stmt
+
+param_name ::=
+	type_function_name
 
 trigger_transition ::=
 	transition_is_new transition_is_row opt_as table_alias_name
@@ -4657,9 +4667,6 @@ routine_param_class ::=
 	| 'OUT'
 	| 'INOUT'
 	| 'IN' 'OUT'
-
-param_name ::=
-	type_function_name
 
 opt_float ::=
 	'(' 'ICONST' ')'
