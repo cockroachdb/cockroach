@@ -403,6 +403,11 @@ func (s *sysbenchKV) IndexUpdate(t tableNum, id rowID) {
 	b.Del(oldIndexKey)
 	b.Put(newIndexKey, newIndexValue)
 	try0(s.txn.Run(s.ctx, &b))
+
+	// Verify that the old secondary index key was found and deleted.
+	if len(b.Results[1].Keys) != 1 {
+		panic(errors.New("key not found and deleted"))
+	}
 }
 
 func (s *sysbenchKV) NonIndexUpdate(t tableNum, id rowID, _ cValue) {
@@ -434,15 +439,21 @@ func (s *sysbenchKV) DeleteInsert(t tableNum, id rowID, newK kValue, _ cValue, _
 	b1.Del(oldIndexKey)
 	try0(s.txn.Run(s.ctx, &b1))
 
+	// Verify that both keys were found and deleted.
+	for _, res := range b1.Results {
+		if len(res.Keys) != 1 {
+			panic(errors.New("key not found and deleted"))
+		}
+	}
+
 	// Insert the new row.
 	s.encodePKValue(pkValue, newK)
 	newIndexKey := s.indexKey(t, newK, id)
 	newIndexValue := s.indexValue()
-	_ = newIndexKey // avoid unused warning, until next commit
 
 	var b2 kv.Batch
 	b2.CPut(pkKey, pkValue, nil /* expValue */)
-	b2.InitPut(oldIndexKey, newIndexValue, false /* failOnTombstones */)
+	b2.InitPut(newIndexKey, newIndexValue, false /* failOnTombstones */)
 	try0(s.txn.Run(s.ctx, &b2))
 }
 
