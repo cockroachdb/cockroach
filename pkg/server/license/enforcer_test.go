@@ -13,11 +13,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -427,4 +430,36 @@ func TestThrottleErrorMsg(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestLicenseDisabledAfterRestart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	listenerReg := listenerutil.NewListenerRegistry()
+	defer listenerReg.Close()
+	stickyVFSRegistry := fs.NewStickyRegistry()
+
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					// Sticky vfs is needed for restart
+					StickyVFSRegistry: stickyVFSRegistry,
+				},
+			},
+		},
+		// A listener is required for restart
+		ReusableListenerReg: listenerReg,
+		StartSingleNode:     true,
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	enforcer := tc.SystemLayer(0).ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer
+	require.Equal(t, true, enforcer.GetIsDisabled(), "expected license enforcement to be disabled")
+
+	require.NoError(t, tc.Restart())
+
+	enforcer = tc.SystemLayer(0).ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer
+	require.Equal(t, true, enforcer.GetIsDisabled(), "expected license enforcement to be disabled")
 }
