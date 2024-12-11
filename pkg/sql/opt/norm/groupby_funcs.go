@@ -442,7 +442,7 @@ func canEliminateGroupByJoin(
 
 // AreAllPassThroughAggs returns true if all the given aggregate functions are
 // pass-through when there is only one row argument,
-// meaning they are effictively no-ops that preserve type, this also includes
+// meaning they are effictively no-ops. This also includes
 // aggregate functions that have "any not null" semantics,
 // which select the first encountered non-null input value.
 // Example aggregate functions include ConstAgg, ConstNotNullAgg, AnyNotNullAgg,
