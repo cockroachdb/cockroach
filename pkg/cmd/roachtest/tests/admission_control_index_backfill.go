@@ -46,9 +46,8 @@ func registerIndexBackfill(r registry.Registry) {
 		// TODO(aaditya): Revisit this as part of #111614.
 		//Suites:           registry.Suites(registry.Weekly),
 		//Tags:             registry.Tags(`weekly`),
-		Cluster:         clusterSpec,
-		RequiresLicense: true,
-		SnapshotPrefix:  "index-backfill-tpce-100k",
+		Cluster:        clusterSpec,
+		SnapshotPrefix: "index-backfill-tpce-100k",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
 				// TODO(irfansharif): Search by taking in the other parts of the

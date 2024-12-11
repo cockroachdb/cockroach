@@ -399,7 +399,6 @@ func registerMultiTenantMultiregion(r registry.Registry) {
 		),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
-		RequiresLicense:   true,
 		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Nightly, registry.Quick),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

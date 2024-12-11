@@ -34,7 +34,6 @@ func registerTLP(r registry.Registry) {
 		Name:             "tlp",
 		Owner:            registry.OwnerSQLQueries,
 		Timeout:          time.Hour * 1,
-		RequiresLicense:  true,
 		Cluster:          r.MakeClusterSpec(1),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
