@@ -38,10 +38,9 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAzure,
 		// TODO(aaditya): change to weekly once the test stabilizes.
-		Suites:          registry.ManualOnly,
-		Cluster:         r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode(), spec.ReuseNone()),
-		RequiresLicense: true,
-		Leases:          registry.MetamorphicLeases,
+		Suites:  registry.ManualOnly,
+		Cluster: r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode(), spec.ReuseNone()),
+		Leases:  registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount != 2 {
 				t.Fatalf("expected 2 nodes, found %d", c.Spec().NodeCount)

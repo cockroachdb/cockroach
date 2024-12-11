@@ -50,9 +50,8 @@ func registerFollowerReads(r registry.Registry) {
 			name = name + "/insufficient-quorum"
 		}
 		r.Add(registry.TestSpec{
-			Name:            name,
-			Owner:           registry.OwnerKV,
-			RequiresLicense: true,
+			Name:  name,
+			Owner: registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(
 				6, /* nodeCount */
 				spec.CPU(4),
@@ -120,9 +119,8 @@ func registerFollowerReads(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:            "follower-reads/mixed-version/single-region",
-		Owner:           registry.OwnerKV,
-		RequiresLicense: true,
+		Name:  "follower-reads/mixed-version/single-region",
+		Owner: registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(
 			4, /* nodeCount */
 			spec.CPU(2),
@@ -134,9 +132,8 @@ func registerFollowerReads(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:            "follower-reads/mixed-version/survival=region/locality=global/reads=strong",
-		Owner:           registry.OwnerKV,
-		RequiresLicense: true,
+		Name:  "follower-reads/mixed-version/survival=region/locality=global/reads=strong",
+		Owner: registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(
 			6, /* nodeCount */
 			spec.CPU(4),

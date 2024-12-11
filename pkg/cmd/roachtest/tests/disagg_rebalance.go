@@ -28,7 +28,6 @@ func registerDisaggRebalance(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly),
 		Owner:             registry.OwnerStorage,
 		Cluster:           disaggRebalanceSpec,
-		RequiresLicense:   true,
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Timeout:           4 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

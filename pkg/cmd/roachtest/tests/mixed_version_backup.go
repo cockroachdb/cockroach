@@ -2649,7 +2649,6 @@ func registerBackupMixedVersion(r registry.Registry) {
 		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           r.MakeClusterSpec(5, spec.WorkloadNode()),
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		RequiresLicense:   true,
 		NativeLibs:        registry.LibGEOS,
 		// Uses gs://cockroach-fixtures-us-east1. See:
 		// https://github.com/cockroachdb/cockroach/issues/105968

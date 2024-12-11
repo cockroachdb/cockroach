@@ -39,7 +39,6 @@ func registerCDCFiltering(r registry.Registry) {
 			Cluster:          r.MakeClusterSpec(3),
 			CompatibleClouds: registry.AllClouds,
 			Suites:           registry.Suites(registry.Nightly),
-			RequiresLicense:  true,
 			Run:              runCDCSessionFiltering(ignoreFiltering),
 		})
 		r.Add(registry.TestSpec{
@@ -48,7 +47,6 @@ func registerCDCFiltering(r registry.Registry) {
 			Cluster:          r.MakeClusterSpec(3),
 			CompatibleClouds: registry.AllClouds,
 			Suites:           registry.Suites(registry.Nightly),
-			RequiresLicense:  true,
 			Run:              runCDCTTLFiltering(ttlFilteringClusterSetting, ignoreFiltering),
 		})
 		r.Add(registry.TestSpec{
@@ -57,7 +55,6 @@ func registerCDCFiltering(r registry.Registry) {
 			Cluster:          r.MakeClusterSpec(3),
 			CompatibleClouds: registry.AllClouds,
 			Suites:           registry.Suites(registry.Nightly),
-			RequiresLicense:  true,
 			Run:              runCDCTTLFiltering(ttlFilteringTableStorageParam, ignoreFiltering),
 		})
 	}
