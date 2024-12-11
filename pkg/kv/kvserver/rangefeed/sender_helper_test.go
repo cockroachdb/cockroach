@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -19,39 +18,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// testRangefeedCounter mocks rangefeed metrics for testing.
-type testRangefeedCounter struct {
-	count atomic.Int32
-}
-
-var _ RangefeedMetricsRecorder = &testRangefeedCounter{}
-
-func newTestRangefeedCounter() *testRangefeedCounter {
-	return &testRangefeedCounter{}
-}
-
-func (c *testRangefeedCounter) UpdateMetricsOnRangefeedConnect() {
-	c.count.Add(1)
-}
-
-func (c *testRangefeedCounter) UpdateMetricsOnRangefeedDisconnect() {
-	c.UpdateMetricsOnRangefeedDisconnectBy(1)
-}
-
-func (c *testRangefeedCounter) UpdateMetricsOnRangefeedDisconnectBy(num int64) {
-	c.count.Add(int32(-num))
-}
-
-func (c *testRangefeedCounter) get() int {
-	return int(c.count.Load())
-}
-
-func (c *testRangefeedCounter) waitForRangefeedCount(t *testing.T, count int) {
+func waitForRangefeedCount(t *testing.T, smm *StreamManagerMetrics, count int) {
 	testutils.SucceedsSoon(t, func() error {
-		if c.get() == count {
+		v := smm.ActiveMuxRangeFeed.Value()
+		if v == int64(count) {
 			return nil
 		}
-		return errors.Newf("expected %d rangefeeds, found %d", count, c.get())
+		return errors.Newf("expected %d rangefeeds, found %d", count, v)
 	})
 }
 
