@@ -5,16 +5,20 @@
 
 package serverident
 
-import "context"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
+)
 
 // SystemTenantID is the string representation of
 // roachpb.SystemTenantID. Injected at initialization to avoid
 // an import dependency cycle. See SetSystemTenantID.
 var SystemTenantID string
 
-// serverIdentificationContextKey is the type of a context.Value key
-// used to carry ServerIdentificationPayload values.
-type serverIdentificationContextKey struct{}
+// ServerIdentificationContextKey is the fast value key used to annotate a
+// context with a ServerIdentificationPayload.
+var ServerIdentificationContextKey = ctxutil.RegisterFastValueKey()
 
 // ContextWithServerIdentification returns a context annotated with the provided
 // server identity. Use ServerIdentificationFromContext(ctx) to retrieve it from
@@ -22,16 +26,18 @@ type serverIdentificationContextKey struct{}
 func ContextWithServerIdentification(
 	ctx context.Context, serverID ServerIdentificationPayload,
 ) context.Context {
-	return context.WithValue(ctx, serverIdentificationContextKey{}, serverID)
+	return ctxutil.WithFastValue(ctx, ServerIdentificationContextKey, serverID)
 }
 
 // ServerIdentificationFromContext retrieves the server identity put in the
 // context by ContextWithServerIdentification.
 func ServerIdentificationFromContext(ctx context.Context) ServerIdentificationPayload {
-	r := ctx.Value(serverIdentificationContextKey{})
+	r := ctxutil.FastValue(ctx, ServerIdentificationContextKey)
 	if r == nil {
 		return nil
 	}
+	// TODO(radu): an interface-to-interface conversion is not great in a hot
+	// path. Maybe the type should be just a func instead of an interface.
 	return r.(ServerIdentificationPayload)
 }
 
@@ -57,7 +63,7 @@ const (
 	IdentifyInstanceID
 	// IdentifyTenantID retrieves the tenant ID of the server.
 	IdentifyTenantID
-	// IdentifyTenantLabel retrieves the tenant name of the server.
+	// IdentifyTenantName retrieves the tenant name of the server.
 	IdentifyTenantName
 )
 

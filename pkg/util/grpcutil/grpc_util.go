@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
@@ -24,19 +25,19 @@ var ErrConnectionInterrupted = errors.New(errConnectionInterruptedMsg)
 
 const errConnectionInterruptedMsg = "connection interrupted (did the remote node shut down or are there networking issues?)"
 
-type localRequestKey struct{}
+var localRequestKey = ctxutil.RegisterFastValueKey()
 
 // NewLocalRequestContext returns a Context that can be used for local
 // (in-process) RPC requests performed by the InternalClientAdapter. The ctx
 // carries information about what tenant (if any) is the client of the RPC. The
 // auth interceptor uses this information to authorize the tenant.
 func NewLocalRequestContext(ctx context.Context, tenantID roachpb.TenantID) context.Context {
-	return context.WithValue(ctx, localRequestKey{}, tenantID)
+	return ctxutil.WithFastValue(ctx, localRequestKey, tenantID)
 }
 
 // IsLocalRequestContext returns true if this context is marked for local (in-process) use.
 func IsLocalRequestContext(ctx context.Context) (roachpb.TenantID, bool) {
-	val := ctx.Value(localRequestKey{})
+	val := ctxutil.FastValue(ctx, localRequestKey)
 	if val == nil {
 		return roachpb.TenantID{}, false
 	}
