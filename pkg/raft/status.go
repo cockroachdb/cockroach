@@ -101,23 +101,7 @@ func getBasicStatus(r *raft) BasicStatus {
 	s.HardState = r.hardState()
 	s.SoftState = r.softState()
 	s.Applied = r.raftLog.applied
-	if s.RaftState == pb.StateFollower && s.Lead == r.id {
-		// A raft leader's term ends when it is shut down. It'll rejoin its peers as
-		// a follower when it comes back up, but its Lead and Term field may still
-		// correspond to its pre-restart leadership term. We expect this to quickly
-		// be updated when it hears from the new leader, if one was elected in its
-		// absence, or when it campaigns.
-		//
-		// The layers above raft (in particular kvserver) do not handle the case
-		// where a raft node's state is StateFollower but its lead field points to
-		// itself. They expect the Lead field to correspond to the current leader,
-		// which we know we are not. For their benefit, we overwrite the Lead field
-		// to None.
-		//
-		// TODO(arul): the layers above should not conflate Lead with current
-		// leader. Fix that and get rid of this overwrite.
-		s.HardState.Lead = None
-	}
+	assertTrue((s.RaftState == pb.StateLeader) == (s.Lead == r.id), "inconsistent lead / raft state")
 	return s
 }
 
