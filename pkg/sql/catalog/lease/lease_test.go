@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -921,6 +922,13 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 			},
 		},
 	}
+	params.Settings = cluster.MakeTestingClusterSettings()
+	// Disable the automatic stats collection, which could interfere with
+	// the lease acquisition counts in this test.
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &params.Settings.SV, false)
+	// Set a long lease duration so that the periodic task to refresh leases does
+	// not run.
+	lease.LeaseDuration.Override(ctx, &params.Settings.SV, 24*time.Hour)
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
