@@ -27,15 +27,6 @@ build --flag_alias=dev=//build/toolchains:dev_flag
 build --flag_alias=force_build_cdeps=//build/toolchains:force_build_cdeps_flag
 build --flag_alias=heavy=//build/toolchains:heavy_flag
 
-build --linkopt="-L/usr/local/lib"
-build --linkopt="-L/usr/lib/x86_64-linux-gnu"
-build --linkopt="-lkrb5"
-build --linkopt="-lk5crypto"
-build --linkopt="-lcom_err"
-build --linkopt="-lkrb5support"
-build --linkopt="-lresolv"
-build --linkopt="-lm"
-
 build:crdb_test_off --crdb_test_off
 build:cross --cross
 build:dev --dev
