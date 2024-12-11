@@ -195,6 +195,20 @@ func NewServerEx(
 
 	s = grpc.NewServer(grpcOpts...)
 	dmux := drpcmux.New()
+	// NB: any server middleware (server interceptors in gRPC parlance) would go
+	// here:
+	//     dmux = whateverMiddleware1(dmux)
+	//     dmux = whateverMiddleware2(dmux)
+	//     ...
+	//
+	// Each middleware must implement the Handler interface:
+	//
+	//   HandleRPC(stream Stream, rpc string) error
+	//
+	// where Stream
+	// See here for an example:
+	// https://github.com/bryk-io/pkg/blob/4da5fbfef47770be376e4022eab5c6c324984bf7/net/drpc/server.go#L91-L101
+
 	dsrv := drpcserver.NewWithOptions(dmux, drpcserver.Options{
 		Log: func(err error) {
 			log.Warningf(context.Background(), "drpc server error %v", err)
