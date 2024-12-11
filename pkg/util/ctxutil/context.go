@@ -7,10 +7,10 @@ package ctxutil
 
 import (
 	"context"
+	"fmt"
 	_ "unsafe" // Must import unsafe to enable linkname.
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // WhenDoneFunc is the callback invoked by context when it becomes done.
@@ -49,7 +49,7 @@ func WhenDone(parent context.Context, done WhenDoneFunc) bool {
 	// But, be safe and loudly fail tests in case somebody introduces strange
 	// context implementation.
 	if buildutil.CrdbTestBuild && !CanDirectlyDetectCancellation(parent) {
-		log.Fatalf(parent, "expected context that supports direct cancellation detection, found %T", parent)
+		panic(fmt.Sprintf("expected context that supports direct cancellation detection, found %T", parent))
 	}
 
 	propagateCancel(parent, done)

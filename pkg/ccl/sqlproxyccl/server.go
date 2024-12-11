@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -453,20 +454,20 @@ func (s *Server) shouldLogError(
 	return limiter.ShouldLog()
 }
 
-// requestTagsContextKey is the type of a context.Value key used to carry the
-// request tags map in a context.Context object.
-type requestTagsContextKey struct{}
+// requestTagsContextKey is the fast value key used to carry the request tags
+// map in a context.Context object.
+var requestTagsContextKey = ctxutil.RegisterFastValueKey()
 
 // contextWithRequestTags returns a context annotated with the provided request
 // tags map. Use requestTagsFromContext(ctx) to retrieve it back.
 func contextWithRequestTags(ctx context.Context, reqTags map[string]interface{}) context.Context {
-	return context.WithValue(ctx, requestTagsContextKey{}, reqTags)
+	return ctxutil.WithFastValue(ctx, requestTagsContextKey, reqTags)
 }
 
 // requestTagsFromContext retrieves the request tags map stored in the context
 // via contextWithRequestTags.
 func requestTagsFromContext(ctx context.Context) map[string]interface{} {
-	r := ctx.Value(requestTagsContextKey{})
+	r := ctxutil.FastValue(ctx, requestTagsContextKey)
 	if r == nil {
 		return nil
 	}
