@@ -215,8 +215,11 @@ func (m *Manager) WaitForInitialVersion(
 	id descpb.ID,
 	retryOpts retry.Options,
 	regions regionliveness.CachedDatabaseRegions,
-) (desc catalog.Descriptor, _ error) {
-
+) error {
+	if m.testingKnobs.DisableAcquisitionOfInitialVersion {
+		return nil
+	}
+	var desc catalog.Descriptor
 	wsTracker := startWaitStatsTracker(ctx)
 	defer wsTracker.end()
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
@@ -240,13 +243,13 @@ func (m *Manager) WaitForInitialVersion(
 			}
 			return nil
 		}); err != nil {
-			return nil, err
+			return err
 		}
 		// Only tables require us to wait for the initial version.
 		if desc.DescriptorType() != catalog.Table ||
 			desc.Dropped() ||
 			desc.Adding() {
-			return desc, nil
+			return nil
 		}
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
@@ -260,7 +263,7 @@ SELECT DISTINCT session_id FROM system.lease AS OF SYSTEM TIME '%s' WHERE desc_i
 				desc.GetModificationTime().AsOfSystemTime(),
 				desc.GetParentSchemaID()))
 		if err != nil {
-			return nil, err
+			return err
 		}
 		b := strings.Builder{}
 		for i, row := range rows {
@@ -298,7 +301,7 @@ SELECT DISTINCT session_id FROM system.lease AS OF SYSTEM TIME '%s' WHERE desc_i
 				return nil
 			}
 		}); err != nil {
-			return nil, err
+			return err
 		}
 		if count == len(rows) {
 			break
@@ -307,7 +310,7 @@ SELECT DISTINCT session_id FROM system.lease AS OF SYSTEM TIME '%s' WHERE desc_i
 		log.Infof(ctx, "waiting for %d to appear on %d nodes. Last count was %d", desc.GetID(), len(rows), lastCount)
 
 	}
-	return desc, nil
+	return nil
 }
 
 // WaitForOneVersion returns once there are no unexpired leases on the
@@ -1480,6 +1483,7 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 				// Descriptor is marked as deleted, so mark it for deletion or
 				// remove it if it's no longer in use.
 				_ = s.RunAsyncTask(ctx, "purge deleted descriptor", func(ctx context.Context) {
+					defer m.leaseGeneration.Add(1)
 					state := m.findNewest(id)
 					if state != nil {
 						if err := purgeOldVersions(ctx, db, id, true /* dropped */, state.GetVersion(), m); err != nil {
@@ -1519,10 +1523,12 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (dropped %v)",
 					desc.GetID(), desc.GetVersion(), dropped)
 				purge := func(ctx context.Context) {
+					defer m.leaseGeneration.Add(1)
 					// For new tables always create their state, this will force
 					// them to get leased, only if the parent schema is already
 					// checked out.
-					if (!desc.Adding() && !desc.Dropped()) &&
+					if !m.testingKnobs.DisableAcquisitionOfInitialVersion &&
+						(!desc.Adding() && !desc.Dropped()) &&
 						desc.GetParentSchemaID() != descpb.InvalidID &&
 						(m.isDescriptorStateEmpty(desc.GetID())) &&
 						m.findDescriptorState(desc.GetParentSchemaID(), false) != nil {
@@ -1608,7 +1614,6 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 			case m.descDelCh <- descpb.ID(id):
-				m.leaseGeneration.Add(1)
 			}
 			return
 		}
@@ -1628,7 +1633,6 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 		case m.descUpdateCh <- mut:
-			m.leaseGeneration.Add(1)
 		}
 	}
 

@@ -56,6 +56,10 @@ type ManagerTestingKnobs struct {
 	// DisableRangeFeedCheckpoint is used to disable rangefeed checkpoints.
 	DisableRangeFeedCheckpoint bool
 
+	// DisableAcquisitionOfInitialVersion is used to disable acquisition of
+	// initial version.
+	DisableAcquisitionOfInitialVersion bool
+
 	// RangeFeedReset channel is closed to indicate that the range feed
 	// has been reset.
 	RangeFeedResetChannel chan struct{}

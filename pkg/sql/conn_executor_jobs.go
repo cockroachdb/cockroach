@@ -61,7 +61,7 @@ func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
 	// user transaction completes.
 	for _, tbl := range ex.extraTxnState.descCollection.GetUncommittedTables() {
 		if tbl.GetVersion() == 1 {
-			_, err := ex.planner.LeaseMgr().WaitForInitialVersion(ex.Ctx(), tbl.GetID(), retry.Options{
+			err := ex.planner.LeaseMgr().WaitForInitialVersion(ex.Ctx(), tbl.GetID(), retry.Options{
 				InitialBackoff: time.Millisecond,
 				MaxBackoff:     time.Second,
 				Multiplier:     1.5,
