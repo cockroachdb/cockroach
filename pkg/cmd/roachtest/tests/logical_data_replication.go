@@ -199,7 +199,7 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			Name:             sp.name,
 			Owner:            registry.OwnerDisasterRecovery,
 			Timeout:          60 * time.Minute,
-			CompatibleClouds: registry.AllClouds,
+			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Nightly),
 			Cluster:          sp.clusterSpec.ToSpec(r),
 			Leases:           registry.MetamorphicLeases,
