@@ -146,11 +146,12 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
 		}
 		// Override the return types so that we do return type validation and SHOW
-		// CREATE correctly.
-		retType = outParamType
-		c.ReturnType = &tree.RoutineReturnType{
-			Type: outParamType,
+		// CREATE correctly. Make sure not to override the SetOf value if it is set.
+		if c.ReturnType == nil {
+			c.ReturnType = &tree.RoutineReturnType{}
 		}
+		c.ReturnType.Type = outParamType
+		retType = outParamType
 	} else if retType == nil {
 		if c.IsProcedure {
 			// A procedure doesn't need a return type. Use a VOID return type to avoid
