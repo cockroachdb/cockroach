@@ -1,0 +1,21 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# This test verifies that we can upgrade from an older version. It runs with all
+# supported versions (so it tests "skip" upgrades too).
+
+# The initial version should be a final release.
+query T
+SELECT crdb_internal.active_version()->'internal'
+----
+0
+
+upgrade all
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# Verify that the cluster is upgrading.
+query T
+SELECT crdb_internal.release_series(version) FROM [SHOW CLUSTER SETTING version]
+----
+25.1

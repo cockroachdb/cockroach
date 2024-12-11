@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-24.3
+# LogicTest: cockroach-go-testserver-configs
 
 
 # This test verifies that when a cluster is upgraded, it preserves the TTL
