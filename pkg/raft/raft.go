@@ -1262,31 +1262,9 @@ func (r *raft) tickHeartbeat() {
 	}
 }
 
-// TODO(arul): Consider removing the lead argument from this function. Instead,
-// for all the methods that want to set the leader explicitly (the ones that are
-// passing in m.From for this field), we can instead have them use an assignLead
-// function instead; in there, we can add safety checks to ensure we're not
-// overwriting the leader.
 func (r *raft) becomeFollower(term uint64, lead pb.PeerID) {
-	if r.leadEpoch == 0 && lead == r.id {
-		// A non-zero lead epoch indicates that the leader fortified its term.
-		// Fortification promises should hold true even if the leader steps down, so
-		// as the leader, we remember that we were the leader even after we step
-		// down.
-		//
-		// In cases where the leader wasn't fortified prior to stepping down, we
-		// eschew remembering that we were the leader. This maintains parity with
-		// the behavior of leaders stepping down before the fortification protocol
-		// was introduced. This gives us time to stabilize the following state as
-		// the v24.3 release is rolled out:
-		//
-		//   r.state = StateFollower && r.lead = r.id
-		//
-		// Once this state is stabilized (within and above pkg/raft), we can remove
-		// this special case.
-		r.lead = None
-		lead = None
-	}
+	assertTrue(lead != r.id, "should not be stepping down to a follower when the lead field points to us")
+
 	r.state = pb.StateFollower
 	r.step = stepFollower
 	r.tick = r.tickElection
@@ -2900,7 +2878,10 @@ func (r *raft) testingStepDown() error {
 	if r.lead != r.id {
 		return errors.New("cannot step down if not the leader")
 	}
-	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
+	// De-fortify ourselves before stepping down to forget the lead epoch.
+	// Otherwise, the leadEpoch may be set when the lead field isn't.
+	r.deFortify(r.id, r.Term)
+	r.becomeFollower(r.Term, None)
 	return nil
 }
 
