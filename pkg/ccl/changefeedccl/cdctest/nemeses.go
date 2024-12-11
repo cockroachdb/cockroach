@@ -6,13 +6,15 @@
 package cdctest
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -124,7 +126,15 @@ func RunNemesis(
 	}
 
 	// Create the table and set up some initial splits.
-	if _, err := db.Exec(`CREATE TABLE foo (id INT PRIMARY KEY, ts STRING DEFAULT '0')`); err != nil {
+	createTblStmt := randgen.RandCreateTableWithName(
+		ctx,
+		rng,
+		"foo",
+		1,
+		randgen.TableOptSkipColumnFamilyMutations,
+	)
+	stmt := tree.SerializeForDisplay(createTblStmt)
+	if _, err := db.Exec(stmt); err != nil {
 		return nil, err
 	}
 	if _, err := db.Exec(`SET CLUSTER SETTING kv.range_merge.queue.enabled = false`); err != nil {
@@ -171,9 +181,13 @@ func RunNemesis(
 	// Create scratch table with a pre-specified set of test columns to avoid having to
 	// accommodate schema changes on-the-fly.
 	scratchTableName := `fprint`
-	var createFprintStmtBuf bytes.Buffer
-	fmt.Fprintf(&createFprintStmtBuf, `CREATE TABLE %s (id INT PRIMARY KEY, ts STRING)`, scratchTableName)
-	if _, err := db.Exec(createFprintStmtBuf.String()); err != nil {
+	re := regexp.MustCompile(`\bfoo\b`)
+	// Hacky way to create the same table. See if there is a more elegant way to
+	// do this.
+	result := re.ReplaceAllStringFunc(stmt, func(match string) string {
+		return scratchTableName
+	})
+	if _, err := db.Exec(result); err != nil {
 		return nil, err
 	}
 	baV, err := NewBeforeAfterValidator(db, `foo`)
