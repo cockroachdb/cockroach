@@ -4,9 +4,10 @@ echo
 -- We will exhaust the tokens across all streams while admission is blocked on
 -- n3, using a single 4 MiB (deduction, the write itself is small) write. Then,
 -- we will write a 1 MiB put to the range, split it, write a 1 MiB put to the
--- LHS range, merge the ranges, and write a 1 MiB put to the merged range. We
--- expect that at each stage where a send queue develops n1->s3, the send queue
--- will be flushed by the range merge and range split range operations.
+-- LHS range, and a 1MiB put to the RHS range, merge the ranges, and write a 1
+-- MiB put to the merged range. We expect that at each stage where a send
+-- queue develops n1->s3, the send queue will be flushed by the range merge
+-- and range split range operations.
 
 
 -- Start by exhausting the tokens from n1->s3 and blocking admission on s3.
@@ -115,6 +116,12 @@ SELECT store_id,
 (Sent 1 MiB put request to post-split LHS range)
 
 
+(Sending 1 MiB put request to post-split RHS range)
+
+
+(Sent 1 MiB put request to post-split RHS range)
+
+
 -- Send queue and flow token metrics from n1, post-split and 1 MiB put on
 -- each side.
 SELECT name, crdb_internal.humanize_bytes(value::INT8)
@@ -123,7 +130,7 @@ SELECT name, crdb_internal.humanize_bytes(value::INT8)
      AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY name ASC;
 
-  kvflowcontrol.send_queue.bytes                                    | 1.0 MiB  
+  kvflowcontrol.send_queue.bytes                                    | 2.0 MiB  
   kvflowcontrol.send_queue.prevent.count                            | 0 B      
   kvflowcontrol.send_queue.scheduled.deducted_bytes                 | 0 B      
   kvflowcontrol.send_queue.scheduled.force_flush                    | 0 B      
@@ -142,7 +149,7 @@ SELECT store_id,
 -----------+------------------------+------------------------+------------------------+-------------------------
   1        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
   2        | 4.0 MiB                | 2.0 MiB                | 4.0 MiB                | 2.0 MiB                 
-  3        | 0 B                    | -4.0 MiB               | 0 B                    | -3.0 MiB                
+  3        | 0 B                    | -5.0 MiB               | 0 B                    | -3.0 MiB                
 
 
 -- (Merging ranges.)
@@ -160,7 +167,7 @@ ORDER BY name ASC;
   kvflowcontrol.send_queue.prevent.count                            | 0 B      
   kvflowcontrol.send_queue.scheduled.deducted_bytes                 | 0 B      
   kvflowcontrol.send_queue.scheduled.force_flush                    | 0 B      
-  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 2.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 3.0 MiB  
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
 SELECT store_id,
@@ -196,7 +203,7 @@ ORDER BY name ASC;
   kvflowcontrol.send_queue.prevent.count                            | 0 B      
   kvflowcontrol.send_queue.scheduled.deducted_bytes                 | 0 B      
   kvflowcontrol.send_queue.scheduled.force_flush                    | 0 B      
-  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 2.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 3.0 MiB  
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
 SELECT store_id,
@@ -228,7 +235,7 @@ ORDER BY name ASC;
   kvflowcontrol.send_queue.prevent.count                            | 0 B      
   kvflowcontrol.send_queue.scheduled.deducted_bytes                 | 0 B      
   kvflowcontrol.send_queue.scheduled.force_flush                    | 0 B      
-  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 2.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 3.0 MiB  
   kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
   kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
 SELECT store_id,

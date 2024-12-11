@@ -881,7 +881,39 @@ func (r *Replica) AdminMerge(
 		// Intents have been placed, so the merge is now in its critical phase. Get
 		// a consistent view of the data from the right-hand range. If the merge
 		// commits, we'll write this data to the left-hand range in the merge
-		// trigger.
+		// trigger. This consistent view is dependent on two things (a) the
+		// SubsumeRequest is evaluated at a leaseholder that is at least as recent
+		// as the leaseholder that evaluated the deletion intent placed on the RHS
+		// RangeDescriptor, (b) the SubsumeRequest freezes the range for new reads
+		// and writes at the leaseholder, and freezes the closed timestamp so
+		// follower reads cannot occur at a timestamp beyond what is accounted for
+		// in SubsumeResponse.ClosedTimestamp (see batcheval.Subsume for more
+		// details).
+		//
+		// When SubsumeRequest does a write (on newer cluster versions), (a) is
+		// guaranteed by the fact that this request needs to be replicated and so
+		// cannot be successfully processed by a stale leaseholder (due to the
+		// protection in RaftCommand.ProposerLeaseSequence). When SubsumeRequest
+		// is a read, it may seem that (a) is not guaranteed since the request
+		// below is sent outside the txn, and does not set a timestamp, so could
+		// be assigned a timestamp lower than the txn timestamp, and routed to an
+		// older leaseholder. The reason this doesn't happen is subtle:
+		// - Say the txn (whose txn coordinator is this node) got assigned a
+		//   timestamp t1.
+		// - The intent put went to the RHS leaseholder which was ahead, at
+		//   timestamp t2. The response to the intent put will bump up the local
+		//   hlc.Timestamp to t2.
+		// - This SubsumeRequest does not set kvpb.Header.Timestamp, but it will
+		//   include in kvpb.Header.Now a value that is >= t2. When this request
+		//   is received by an old leaseholder (the aforementioned hazard), the
+		//   old leaseholder will bump its hlc.Clock to >= t2 and stop being the
+		//   leaseholder, and reject the request. The request will get eventually
+		//   (successfully) retried at a leaseholder that has the lease at
+		//   timestamp >= t2.
+		//
+		// This must be a single request in a BatchRequest: there are multiple
+		// places that do special logic (needed for safety) that rely on
+		// BatchRequest.IsSingleSubsumeRequest() returning true.
 		br, pErr := kv.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
 			&kvpb.SubsumeRequest{
 				RequestHeader: kvpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
@@ -958,7 +990,7 @@ func (r *Replica) AdminMerge(
 		}
 		if !errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
 			if err != nil {
-				return reply, kvpb.NewErrorf("merge failed: %s", err)
+				return reply, kvpb.NewError(errors.Wrap(err, "merge failed"))
 			}
 			return reply, nil
 		}
