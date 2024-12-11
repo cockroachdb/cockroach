@@ -1128,7 +1128,6 @@ func c2cRegisterWrapper(
 		CompatibleClouds:          sp.clouds,
 		Suites:                    sp.suites,
 		TestSelectionOptOutSuites: sp.suites,
-		RequiresLicense:           true,
 		Run:                       run,
 	})
 }

@@ -29,7 +29,6 @@ func registerAcceptance(r registry.Registry) {
 		timeout            time.Duration
 		encryptionSupport  registry.EncryptionSupport
 		defaultLeases      bool
-		requiresLicense    bool
 		randomized         bool
 		workloadNode       bool
 		incompatibleClouds registry.CloudSet
@@ -148,7 +147,6 @@ func registerAcceptance(r registry.Registry) {
 				CompatibleClouds:  registry.AllClouds.Remove(tc.incompatibleClouds),
 				Suites:            registry.Suites(registry.Nightly, registry.Quick, registry.Acceptance),
 				Randomized:        tc.randomized,
-				RequiresLicense:   tc.requiresLicense,
 			}
 
 			if tc.timeout != 0 {

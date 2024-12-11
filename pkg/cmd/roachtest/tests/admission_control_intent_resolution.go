@@ -41,7 +41,6 @@ func registerIntentResolutionOverload(r registry.Registry) {
 		// Tags:      registry.Tags(`weekly`),
 		// Second node is solely for Prometheus.
 		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode()),
-		RequiresLicense:  true,
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),

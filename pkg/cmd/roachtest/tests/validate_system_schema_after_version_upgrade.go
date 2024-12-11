@@ -228,7 +228,6 @@ func registerValidateSystemSchemaAfterVersionUpgradeSeparateProcess(r registry.R
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Cluster:          r.MakeClusterSpec(3),
-		RequiresLicense:  false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runValidateSystemSchemaAfterVersionUpgradeSeparateProcess(ctx, t, c)
 		},
