@@ -264,3 +264,92 @@ exec-sql
 DROP TYPE d.farewell
 ----
 pq: cannot drop type "farewell" because other objects ([d.public.t3]) still depend on it
+
+# Regression test for #137106: check that we correctly remap oids in table
+# statistics histograms for user-defined types.
+
+new-cluster name=c1
+----
+
+exec-sql cluster=c1
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off
+----
+
+exec-sql
+CREATE DATABASE mydb
+----
+
+exec-sql
+CREATE TYPE mydb.public.e AS ENUM ('x', 'y', 'z')
+----
+
+exec-sql
+CREATE TABLE mydb.public.t (e mydb.public.e PRIMARY KEY, a mydb.public.e[], INDEX (a))
+----
+
+exec-sql
+INSERT INTO mydb.public.t VALUES ('x', '{y,z}')
+----
+
+exec-sql
+ANALYZE mydb.public.t
+----
+
+exec-sql
+BACKUP DATABASE mydb INTO 'nodelocal://1/mydb'
+----
+
+new-cluster name=c2 share-io-dir=c1
+----
+
+exec-sql cluster=c2
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off
+----
+
+# Before restoring, create a few tables such that one of them uses the
+# descriptor ID used by UDT mydb.public.e in the other cluster.
+
+exec-sql
+CREATE DATABASE foo
+----
+
+exec-sql
+CREATE TABLE foo.public.j (j UUID PRIMARY KEY)
+----
+
+exec-sql
+CREATE TABLE foo.public.k (k UUID PRIMARY KEY)
+----
+
+exec-sql
+CREATE TABLE foo.public.l (l UUID PRIMARY KEY)
+----
+
+exec-sql
+CREATE TABLE foo.public.m (m UUID PRIMARY KEY)
+----
+
+exec-sql
+CREATE TABLE foo.public.n (n UUID PRIMARY KEY)
+----
+
+exec-sql
+RESTORE DATABASE mydb FROM LATEST IN 'nodelocal://1/mydb'
+----
+
+# Check that we can decode the histograms in the restored statistics.
+
+query-sql
+SELECT stat->'columns', stat->'histo_col_type', stat->'histo_buckets'->0->'upper_bound'
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE mydb.public.t]
+)
+----
+["e"] "mydb.public.e" "x"
+["a"] "public.e[]" "ARRAY['y':::public.e,'z':::public.e]"
+
+query-sql cluster=c2
+SELECT * FROM mydb.public.t
+----
+x {y,z}
