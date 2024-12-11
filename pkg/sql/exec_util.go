@@ -1932,7 +1932,7 @@ func shouldDistributeGivenRecAndMode(
 func getPlanDistribution(
 	ctx context.Context,
 	txnHasUncommittedTypes bool,
-	distSQLMode sessiondatapb.DistSQLExecMode,
+	sd *sessiondata.SessionData,
 	plan planMaybePhysical,
 	distSQLVisitor *distSQLExprCheckVisitor,
 ) (_ physicalplan.PlanDistribution, distSQLProhibitedErr error) {
@@ -1949,7 +1949,7 @@ func getPlanDistribution(
 		return physicalplan.LocalPlan, nil
 	}
 
-	if distSQLMode == sessiondatapb.DistSQLOff {
+	if sd.DistSQLMode == sessiondatapb.DistSQLOff {
 		return physicalplan.LocalPlan, nil
 	}
 
@@ -1958,14 +1958,14 @@ func getPlanDistribution(
 		return physicalplan.LocalPlan, nil
 	}
 
-	rec, err := checkSupportForPlanNode(plan.planNode, distSQLVisitor)
+	rec, err := checkSupportForPlanNode(plan.planNode, distSQLVisitor, sd)
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
 		return physicalplan.LocalPlan, err
 	}
 
-	if shouldDistributeGivenRecAndMode(rec, distSQLMode) {
+	if shouldDistributeGivenRecAndMode(rec, sd.DistSQLMode) {
 		return physicalplan.FullyDistributedPlan, nil
 	}
 	return physicalplan.LocalPlan, nil
@@ -3310,6 +3310,22 @@ func (m *sessionDataMutator) SetExperimentalDistSQLPlanning(
 
 func (m *sessionDataMutator) SetPartiallyDistributedPlansDisabled(val bool) {
 	m.data.PartiallyDistributedPlansDisabled = val
+}
+
+func (m *sessionDataMutator) SetDistributeGroupByRowCountThreshold(val uint64) {
+	m.data.DistributeGroupByRowCountThreshold = val
+}
+
+func (m *sessionDataMutator) SetDistributeSortRowCountThreshold(val uint64) {
+	m.data.DistributeSortRowCountThreshold = val
+}
+
+func (m *sessionDataMutator) SetDistributeScanRowCountThreshold(val uint64) {
+	m.data.DistributeScanRowCountThreshold = val
+}
+
+func (m *sessionDataMutator) SetAlwaysDistributeFullScans(val bool) {
+	m.data.AlwaysDistributeFullScans = val
 }
 
 func (m *sessionDataMutator) SetDisableVecUnionEagerCancellation(val bool) {

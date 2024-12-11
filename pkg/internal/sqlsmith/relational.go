@@ -1194,7 +1194,7 @@ func (s *Smither) makeRoutineBodySQL(
 	stmts := make([]string, 0, stmtCnt)
 	var stmt tree.Statement
 	for i := 0; i < stmtCnt-1; i++ {
-		stmt, ok = s.makeSQLStmtForRoutine(vol, refs)
+		stmt, ok = s.makeSQLStmtForRoutine(vol, refs, nil /* desiredTypes */)
 		if !ok {
 			continue
 		}
@@ -1203,45 +1203,57 @@ func (s *Smither) makeRoutineBodySQL(
 	// The return type of the last statement should match the function return
 	// type.
 	// If mutations are enabled, also use anything from mutatingTableExprs -- needs returning
+	desiredTypes := []*types.T{rTyp}
 	if s.disableMutations || vol != tree.RoutineVolatile || s.coin() {
-		stmt, lastStmtRefs, ok = s.makeSelect([]*types.T{rTyp}, refs)
+		stmt, lastStmtRefs, ok = s.makeSelect(desiredTypes, refs)
 		if !ok {
 			return "", nil, false
 		}
 	} else {
-		var expr tree.TableExpr
 		switch s.d6() {
 		case 1, 2:
-			expr, lastStmtRefs, ok = s.makeInsertReturning(refs)
+			stmt, lastStmtRefs, ok = s.makeInsertReturning(desiredTypes, refs)
 		case 3, 4:
-			expr, lastStmtRefs, ok = s.makeDeleteReturning(refs)
+			stmt, lastStmtRefs, ok = s.makeDeleteReturning(desiredTypes, refs)
 		case 5, 6:
-			expr, lastStmtRefs, ok = s.makeUpdateReturning(refs)
+			stmt, lastStmtRefs, ok = s.makeUpdateReturning(desiredTypes, refs)
 		}
 		if !ok {
 			return "", nil, false
 		}
-		stmt = expr.(*tree.StatementSource).Statement
 	}
 	stmts = append(stmts, tree.AsStringWithFlags(stmt, tree.FmtParsable))
 	return "\n" + strings.Join(stmts, ";\n") + "\n", lastStmtRefs, true
 }
 
 func (s *Smither) makeSQLStmtForRoutine(
-	vol tree.RoutineVolatility, refs colRefs,
+	vol tree.RoutineVolatility, refs colRefs, desiredTypes []*types.T,
 ) (stmt tree.Statement, ok bool) {
 	const numRetries = 5
 	for i := 0; i < numRetries; i++ {
 		if s.disableMutations || vol != tree.RoutineVolatile || s.coin() {
-			stmt, _, ok = s.makeSelect(nil /* desiredTypes */, refs)
+			stmt, _, ok = s.makeSelect(desiredTypes, refs)
 		} else {
-			switch s.d6() {
-			case 1, 2:
-				stmt, _, ok = s.makeInsert(refs)
-			case 3, 4:
-				stmt, _, ok = s.makeDelete(refs)
-			case 5, 6:
-				stmt, _, ok = s.makeUpdate(refs)
+			if len(desiredTypes) == 0 && s.coin() {
+				// If the caller didn't request particular result types, in 50%
+				// cases use the "vanilla" mutation stmts.
+				switch s.d6() {
+				case 1, 2:
+					stmt, _, ok = s.makeInsert(refs)
+				case 3, 4:
+					stmt, _, ok = s.makeDelete(refs)
+				case 5, 6:
+					stmt, _, ok = s.makeUpdate(refs)
+				}
+			} else {
+				switch s.d6() {
+				case 1, 2:
+					stmt, _, ok = s.makeInsertReturning(desiredTypes, refs)
+				case 3, 4:
+					stmt, _, ok = s.makeDeleteReturning(desiredTypes, refs)
+				case 5, 6:
+					stmt, _, ok = s.makeUpdateReturning(desiredTypes, refs)
+				}
 			}
 		}
 		if ok {
@@ -1309,19 +1321,23 @@ func makeDeleteReturning(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr
 	if forJoin {
 		return nil, nil, false
 	}
-	return s.makeDeleteReturning(refs)
+	del, returningRefs, ok := s.makeDeleteReturning(nil /* desiredTypes */, refs)
+	if !ok {
+		return nil, nil, false
+	}
+	return &tree.StatementSource{Statement: del}, returningRefs, true
 }
 
-func (s *Smither) makeDeleteReturning(refs colRefs) (tree.TableExpr, colRefs, bool) {
+func (s *Smither) makeDeleteReturning(
+	desiredTypes []*types.T, refs colRefs,
+) (*tree.Delete, colRefs, bool) {
 	del, delRef, ok := s.makeDelete(refs)
 	if !ok {
 		return nil, nil, false
 	}
 	var returningRefs colRefs
-	del.Returning, returningRefs = s.makeReturning(delRef)
-	return &tree.StatementSource{
-		Statement: del,
-	}, returningRefs, true
+	del.Returning, returningRefs = s.makeReturning(desiredTypes, delRef)
+	return del, returningRefs, true
 }
 
 func makeUpdate(s *Smither) (tree.Statement, bool) {
@@ -1417,19 +1433,23 @@ func makeUpdateReturning(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr
 	if forJoin {
 		return nil, nil, false
 	}
-	return s.makeUpdateReturning(refs)
+	update, returningRefs, ok := s.makeUpdateReturning(nil /* desiredTypes */, refs)
+	if !ok {
+		return nil, nil, false
+	}
+	return &tree.StatementSource{Statement: update}, returningRefs, true
 }
 
-func (s *Smither) makeUpdateReturning(refs colRefs) (tree.TableExpr, colRefs, bool) {
+func (s *Smither) makeUpdateReturning(
+	desiredTypes []*types.T, refs colRefs,
+) (*tree.Update, colRefs, bool) {
 	update, updateRef, ok := s.makeUpdate(refs)
 	if !ok {
 		return nil, nil, false
 	}
 	var returningRefs colRefs
-	update.Returning, returningRefs = s.makeReturning(updateRef)
-	return &tree.StatementSource{
-		Statement: update,
-	}, returningRefs, true
+	update.Returning, returningRefs = s.makeReturning(desiredTypes, updateRef)
+	return update, returningRefs, true
 }
 
 func makeInsert(s *Smither) (tree.Statement, bool) {
@@ -1590,19 +1610,23 @@ func makeInsertReturning(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr
 	if forJoin {
 		return nil, nil, false
 	}
-	return s.makeInsertReturning(refs)
+	insert, returningRefs, ok := s.makeInsertReturning(nil /* desiredTypes */, refs)
+	if !ok {
+		return nil, nil, false
+	}
+	return &tree.StatementSource{Statement: insert}, returningRefs, true
 }
 
-func (s *Smither) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bool) {
+func (s *Smither) makeInsertReturning(
+	desiredTypes []*types.T, refs colRefs,
+) (*tree.Insert, colRefs, bool) {
 	insert, insertRef, ok := s.makeInsert(refs)
 	if !ok {
 		return nil, nil, false
 	}
 	var returningRefs colRefs
-	insert.Returning, returningRefs = s.makeReturning([]*tableRef{insertRef})
-	return &tree.StatementSource{
-		Statement: insert,
-	}, returningRefs, true
+	insert.Returning, returningRefs = s.makeReturning(desiredTypes, []*tableRef{insertRef})
+	return insert, returningRefs, true
 }
 
 func makeValuesTable(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -1800,8 +1824,12 @@ func makeLimit(s *Smither) *tree.Limit {
 	return nil
 }
 
-func (s *Smither) makeReturning(tables []*tableRef) (*tree.ReturningExprs, colRefs) {
-	desiredTypes := s.makeDesiredTypes()
+func (s *Smither) makeReturning(
+	desiredTypes []*types.T, tables []*tableRef,
+) (*tree.ReturningExprs, colRefs) {
+	if len(desiredTypes) == 0 {
+		desiredTypes = s.makeDesiredTypes()
+	}
 
 	var refs colRefs
 	for _, table := range tables {

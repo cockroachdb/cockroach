@@ -2897,6 +2897,7 @@ name                                                       setting             c
 allow_ordinal_column_references                            off                 NULL      NULL        NULL        string
 allow_role_memberships_to_change_during_transaction        off                 NULL      NULL        NULL        string
 alter_primary_region_super_region_override                 off                 NULL      NULL        NULL        string
+always_distribute_full_scans                               off                 NULL      NULL        NULL        string
 application_name                                           ·                   NULL      NULL        NULL        string
 authentication_method                                      cert-password       NULL      NULL        NULL        string
 autocommit_before_ddl                                      off                 NULL      NULL        NULL        string
@@ -2935,6 +2936,9 @@ disable_partially_distributed_plans                        off                 N
 disable_plan_gists                                         off                 NULL      NULL        NULL        string
 disable_vec_union_eager_cancellation                       off                 NULL      NULL        NULL        string
 disallow_full_table_scans                                  off                 NULL      NULL        NULL        string
+distribute_group_by_row_count_threshold                    1000                NULL      NULL        NULL        string
+distribute_scan_row_count_threshold                        10000               NULL      NULL        NULL        string
+distribute_sort_row_count_threshold                        1000                NULL      NULL        NULL        string
 distsql                                                    off                 NULL      NULL        NULL        string
 distsql_plan_gateway_bias                                  2                   NULL      NULL        NULL        string
 enable_auto_rehoming                                       off                 NULL      NULL        NULL        string
@@ -3094,6 +3098,7 @@ name                                                       setting             u
 allow_ordinal_column_references                            off                 NULL  user     NULL      off                 off
 allow_role_memberships_to_change_during_transaction        off                 NULL  user     NULL      off                 off
 alter_primary_region_super_region_override                 off                 NULL  user     NULL      off                 off
+always_distribute_full_scans                               off                 NULL  user     NULL      off                 off
 application_name                                           ·                   NULL  user     NULL      ·                   ·
 authentication_method                                      cert-password       NULL  user     NULL      cert-password       cert-password
 autocommit_before_ddl                                      off                 NULL  user     NULL      off                 off
@@ -3132,6 +3137,9 @@ disable_partially_distributed_plans                        off                 N
 disable_plan_gists                                         off                 NULL  user     NULL      off                 off
 disable_vec_union_eager_cancellation                       off                 NULL  user     NULL      off                 off
 disallow_full_table_scans                                  off                 NULL  user     NULL      off                 off
+distribute_group_by_row_count_threshold                    1000                NULL  user     NULL      1000                1000
+distribute_scan_row_count_threshold                        10000               NULL  user     NULL      10000               10000
+distribute_sort_row_count_threshold                        1000                NULL  user     NULL      1000                1000
 distsql                                                    off                 NULL  user     NULL      off                 off
 distsql_plan_gateway_bias                                  2                   NULL  user     NULL      2                   2
 enable_auto_rehoming                                       off                 NULL  user     NULL      off                 off
@@ -3284,6 +3292,7 @@ name                                                       source  min_val  max_
 allow_ordinal_column_references                            NULL    NULL     NULL     NULL        NULL
 allow_role_memberships_to_change_during_transaction        NULL    NULL     NULL     NULL        NULL
 alter_primary_region_super_region_override                 NULL    NULL     NULL     NULL        NULL
+always_distribute_full_scans                               NULL    NULL     NULL     NULL        NULL
 application_name                                           NULL    NULL     NULL     NULL        NULL
 authentication_method                                      NULL    NULL     NULL     NULL        NULL
 autocommit_before_ddl                                      NULL    NULL     NULL     NULL        NULL
@@ -3325,6 +3334,9 @@ disable_partially_distributed_plans                        NULL    NULL     NULL
 disable_plan_gists                                         NULL    NULL     NULL     NULL        NULL
 disable_vec_union_eager_cancellation                       NULL    NULL     NULL     NULL        NULL
 disallow_full_table_scans                                  NULL    NULL     NULL     NULL        NULL
+distribute_group_by_row_count_threshold                    NULL    NULL     NULL     NULL        NULL
+distribute_scan_row_count_threshold                        NULL    NULL     NULL     NULL        NULL
+distribute_sort_row_count_threshold                        NULL    NULL     NULL     NULL        NULL
 distsql                                                    NULL    NULL     NULL     NULL        NULL
 distsql_plan_gateway_bias                                  NULL    NULL     NULL     NULL        NULL
 distsql_workmem                                            NULL    NULL     NULL     NULL        NULL
