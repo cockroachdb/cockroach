@@ -2900,7 +2900,10 @@ func (r *raft) testingStepDown() error {
 	if r.lead != r.id {
 		return errors.New("cannot step down if not the leader")
 	}
-	r.becomeFollower(r.Term, r.id) // mirror the logic in how we step down when CheckQuorum fails
+	// De-fortify ourselves before stepping down to forget the lead epoch.
+	// Otherwise, the leadEpoch may be set when the lead field isn't.
+	r.deFortify(r.id, r.Term)
+	r.becomeFollower(r.Term, None)
 	return nil
 }
 
