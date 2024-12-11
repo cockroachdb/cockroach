@@ -1877,7 +1877,14 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 func (n *Node) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
 	ctx := stream.Context()
 	for {
-		args, err := stream.Recv()
+		argsAlloc := new(struct {
+			args kvpb.BatchRequest
+			reqs [1]kvpb.RequestUnion
+		})
+		args := &argsAlloc.args
+		args.Requests = argsAlloc.reqs[:0]
+
+		err := stream.RecvMsg(args)
 		if err != nil {
 			// From grpc.ServerStream.Recv:
 			// > It returns io.EOF when the client has performed a CloseSend.
