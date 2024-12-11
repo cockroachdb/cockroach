@@ -234,3 +234,35 @@ func newSchedulerShardMetrics(name string, histogramWindow time.Duration) *Shard
 		QueueSize: metric.NewGauge(expandTemplate(metaQueueSizeTemplate)),
 	}
 }
+
+// StreamManagerMetrics are for monitoring of a StreamManager. Used by both
+// buffered and unbuffered sender.
+type StreamManagerMetrics struct {
+	NumMuxRangeFeed    *metric.Counter
+	ActiveMuxRangeFeed *metric.Gauge
+}
+
+var (
+	metaActiveMuxRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.active",
+		Help:        `Number of currently running MuxRangeFeed streams`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTotalMuxRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.recv",
+		Help:        `Total number of MuxRangeFeed streams`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+func (*StreamManagerMetrics) MetricStruct() {}
+
+// NewStreamManagerMetrics creates new metrics for StreamManager.
+func NewStreamManagerMetrics() *StreamManagerMetrics {
+	return &StreamManagerMetrics{
+		ActiveMuxRangeFeed: metric.NewGauge(metaActiveMuxRangeFeed),
+		NumMuxRangeFeed:    metric.NewCounter(metaTotalMuxRangeFeed),
+	}
+}
