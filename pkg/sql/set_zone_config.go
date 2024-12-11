@@ -749,12 +749,14 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 
 		// Bump the version on the descriptor that had its zone config modified.
-		mutTbl, err := params.p.Descriptors().MutableByID(params.p.Txn()).Table(params.ctx, table.GetID())
-		if err != nil {
-			return err
-		}
-		if err := params.p.writeTableDesc(params.ctx, mutTbl); err != nil {
-			return err
+		if table != nil {
+			mutTbl, err := params.p.Descriptors().MutableByID(params.p.Txn()).Table(params.ctx, table.GetID())
+			if err != nil {
+				return err
+			}
+			if err := params.p.writeTableDesc(params.ctx, mutTbl); err != nil {
+				return err
+			}
 		}
 
 		// Record that the change has occurred for auditing.
