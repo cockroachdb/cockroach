@@ -466,8 +466,8 @@ func (c *CustomFuncs) AreAllPassThroughAggs(aggs memo.AggregationsExpr) bool {
 	return true
 }
 
-// ConvertPassThroughAggsToProjections builds a projection for each ConstAgg,
-// ConstNotNullAgg, or AnyNotNullAgg which returns a different output column ID
+// ConvertPassThroughAggsToProjections builds a projection for each
+// pass-through aggregate function which returns a different output column ID
 // than its input column ID.
 func (c *CustomFuncs) ConvertPassThroughAggsToProjections(
 	aggs memo.AggregationsExpr,
