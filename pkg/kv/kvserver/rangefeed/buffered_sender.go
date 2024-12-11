@@ -64,11 +64,19 @@ type BufferedSender struct {
 	// are events to send. Channel is initialised with a buffer of 1 and all writes to it
 	// are non-blocking.
 	notifyDataC chan struct{}
+
+	// metrics is used to track the set of BufferedSender related metrics for a
+	// given node. Note that there could be multiple buffered senders in a node,
+	// sharing the metrics.
+	metrics *BufferedSenderMetrics
 }
 
-func NewBufferedSender(sender ServerStreamSender) *BufferedSender {
+func NewBufferedSender(
+	sender ServerStreamSender, bsMetrics *BufferedSenderMetrics,
+) *BufferedSender {
 	bs := &BufferedSender{
-		sender: sender,
+		sender:  sender,
+		metrics: bsMetrics,
 	}
 	bs.queueMu.buffer = newEventQueue()
 	bs.notifyDataC = make(chan struct{}, 1)
@@ -90,6 +98,7 @@ func (bs *BufferedSender) sendBuffered(
 	// TODO(wenyihu6): pass an actual context here
 	alloc.Use(context.Background())
 	bs.queueMu.buffer.pushBack(sharedMuxEvent{ev, alloc})
+	bs.metrics.BufferedSenderQueueSize.Inc(1)
 	select {
 	case bs.notifyDataC <- struct{}{}:
 	default:
@@ -122,6 +131,7 @@ func (bs *BufferedSender) run(
 		case <-bs.notifyDataC:
 			for {
 				e, success := bs.popFront()
+				bs.metrics.BufferedSenderQueueSize.Dec(1)
 				if !success {
 					break
 				}
@@ -153,7 +163,9 @@ func (bs *BufferedSender) cleanup(ctx context.Context) {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	bs.queueMu.stopped = true
+	remaining := bs.queueMu.buffer.len()
 	bs.queueMu.buffer.drain(ctx)
+	bs.metrics.BufferedSenderQueueSize.Dec(remaining)
 }
 
 // Used for testing only.
