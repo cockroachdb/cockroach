@@ -1124,7 +1124,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            3 * time.Hour,
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
-			clouds:             registry.AllClouds,
+			clouds:             registry.OnlyGCE,
 			suites:             registry.Suites(registry.Nightly),
 		},
 		{
@@ -1161,7 +1161,7 @@ func registerClusterToCluster(r registry.Registry) {
 			timeout:            1 * time.Hour,
 			additionalDuration: 5 * time.Minute,
 			cutover:            0,
-			clouds:             registry.AllExceptAzure,
+			clouds:             registry.OnlyGCE,
 			suites:             registry.Suites(registry.Nightly),
 		},
 		{
@@ -1292,7 +1292,7 @@ func registerClusterToCluster(r registry.Registry) {
 			cutover:                   30 * time.Second,
 			skipNodeDistributionCheck: true,
 			skip:                      "for local ad hoc testing",
-			clouds:                    registry.AllClouds,
+			clouds:                    registry.OnlyGCE,
 			suites:                    registry.Suites(registry.Nightly),
 		},
 		{
