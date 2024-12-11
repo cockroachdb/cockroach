@@ -39,7 +39,7 @@ func registerC2CMixedVersions(r registry.Registry) {
 		additionalDuration:        0 * time.Minute,
 		cutover:                   30 * time.Second,
 		skipNodeDistributionCheck: true,
-		clouds:                    registry.AllClouds,
+		clouds:                    registry.OnlyGCE,
 		suites:                    registry.Suites(registry.Nightly),
 	}
 
