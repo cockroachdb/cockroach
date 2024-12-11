@@ -563,6 +563,21 @@ message LocalOnlySessionData {
   // RecursionDepthLimit is the maximum depth that nested trigger-function calls
   // can reach.
   int64 recursion_depth_limit = 144;
+  // DistributeGroupByRowCountThreshold is the minimum number of rows estimated
+  // to be processed by the GroupBy operator so that we choose to distribute the
+  // plan because of this aggregator stage of DistSQL processors.
+  uint64 distribute_group_by_row_count_threshold = 145;
+  // DistributeSortRowCountThreshold is the minimum number of rows estimated
+  // to be processed by the Sort operator so that we choose to distribute the
+  // plan because of this sorter stage of DistSQL processors.
+  uint64 distribute_sort_row_count_threshold = 146;
+  // DistributeScanRowCountThreshold is the minimum number of rows estimated to
+  // be read by the Scan operator so that we choose to distribute the plan
+  // because of this TableReader stage of DistSQL processors.
+  uint64 distribute_scan_row_count_threshold = 147;
+  // AlwaysDistributeFullScans determines whether full table scans always force
+  // the plan to be distributed, regardless of the estimated row count.
+  bool always_distribute_full_scans = 148;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

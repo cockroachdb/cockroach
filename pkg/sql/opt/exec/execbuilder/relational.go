@@ -1704,7 +1704,12 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (_ execPlan, outputCols col
 
 	var ep execPlan
 	if groupBy.Op() == opt.ScalarGroupByOp {
-		ep.root, err = b.factory.ConstructScalarGroupBy(input.root, aggInfos)
+		scalarGroupBy := groupBy.(*memo.ScalarGroupByExpr)
+		var inputRowCount uint64
+		if inputRelProps := scalarGroupBy.Input.Relational(); inputRelProps.Statistics().Available {
+			inputRowCount = uint64(math.Ceil(inputRelProps.Statistics().RowCount))
+		}
+		ep.root, err = b.factory.ConstructScalarGroupBy(input.root, aggInfos, inputRowCount)
 	} else {
 		groupBy := groupBy.(*memo.GroupByExpr)
 		var groupingColOrder colinfo.ColumnOrdering
@@ -1720,12 +1725,15 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (_ execPlan, outputCols col
 			return execPlan{}, colOrdMap{}, err
 		}
 		orderType := exec.GroupingOrderType(groupBy.GroupingOrderType(&groupBy.RequiredPhysical().Ordering))
-		var rowCount uint64
+		var rowCount, inputRowCount uint64
 		if relProps := groupBy.Relational(); relProps.Statistics().Available {
 			rowCount = uint64(math.Ceil(relProps.Statistics().RowCount))
 		}
+		if inputRelProps := groupBy.Input.Relational(); inputRelProps.Statistics().Available {
+			inputRowCount = uint64(math.Ceil(inputRelProps.Statistics().RowCount))
+		}
 		ep.root, err = b.factory.ConstructGroupBy(
-			input.root, groupingColIdx, groupingColOrder, aggInfos, reqOrd, orderType, rowCount,
+			input.root, groupingColIdx, groupingColOrder, aggInfos, reqOrd, orderType, rowCount, inputRowCount,
 		)
 	}
 	if err != nil {
@@ -2020,12 +2028,18 @@ func (b *Builder) buildTopK(e *memo.TopKExpr) (_ execPlan, outputCols colOrdMap,
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+	var inputRowCount uint64
+	if inputRelProps := e.Input.Relational(); inputRelProps.Statistics().Available {
+		inputRowCount = uint64(math.Ceil(inputRelProps.Statistics().RowCount))
+	}
 	var ep execPlan
 	ep.root, err = b.factory.ConstructTopK(
 		input.root,
 		e.K,
 		exec.OutputOrdering(sqlOrdering),
-		alreadyOrderedPrefix)
+		alreadyOrderedPrefix,
+		inputRowCount,
+	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -2079,11 +2093,18 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (_ execPlan, outputCols colOrdM
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+
+	var inputRowCount uint64
+	if inputRelProps := sort.Input.Relational(); inputRelProps.Statistics().Available {
+		inputRowCount = uint64(math.Ceil(inputRelProps.Statistics().RowCount))
+	}
+
 	var ep execPlan
 	ep.root, err = b.factory.ConstructSort(
 		input.root,
 		exec.OutputOrdering(sqlOrdering),
 		alreadyOrderedPrefix,
+		inputRowCount,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err

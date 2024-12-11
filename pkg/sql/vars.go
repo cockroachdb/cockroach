@@ -633,6 +633,92 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`distribute_group_by_row_count_threshold`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatUint(evalCtx.SessionData().DistributeGroupByRowCountThreshold, 10), nil
+		},
+		GetStringVal: makeIntGetStringValFn(`distribute_group_by_row_count_threshold`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if i < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set distribute_group_by_row_count_threshold to a negative value: %d", i)
+			}
+			m.SetDistributeGroupByRowCountThreshold(uint64(i))
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatUint(1000, 10)
+		},
+	},
+
+	// CockroachDB extension.
+	`distribute_sort_row_count_threshold`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatUint(evalCtx.SessionData().DistributeSortRowCountThreshold, 10), nil
+		},
+		GetStringVal: makeIntGetStringValFn(`distribute_sort_row_count_threshold`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if i < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set distribute_sort_row_count_threshold to a negative value: %d", i)
+			}
+			m.SetDistributeSortRowCountThreshold(uint64(i))
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatUint(1000, 10)
+		},
+	},
+
+	// CockroachDB extension.
+	`distribute_scan_row_count_threshold`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatUint(evalCtx.SessionData().DistributeScanRowCountThreshold, 10), nil
+		},
+		GetStringVal: makeIntGetStringValFn(`distribute_scan_row_count_threshold`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if i < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set distribute_scan_row_count_threshold to a negative value: %d", i)
+			}
+			m.SetDistributeScanRowCountThreshold(uint64(i))
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatUint(10000, 10)
+		},
+	},
+
+	// CockroachDB extension.
+	`always_distribute_full_scans`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`always_distribute_full_scans`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("always_distribute_full_scans", s)
+			if err != nil {
+				return err
+			}
+			m.SetAlwaysDistributeFullScans(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AlwaysDistributeFullScans), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`disable_vec_union_eager_cancellation`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`disable_vec_union_eager_cancellation`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

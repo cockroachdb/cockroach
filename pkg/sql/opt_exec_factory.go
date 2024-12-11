@@ -491,7 +491,7 @@ func (ef *execFactory) ConstructMergeJoin(
 
 // ConstructScalarGroupBy is part of the exec.Factory interface.
 func (ef *execFactory) ConstructScalarGroupBy(
-	input exec.Node, aggregations []exec.AggInfo,
+	input exec.Node, aggregations []exec.AggInfo, estimatedInputRowCount uint64,
 ) (exec.Node, error) {
 	// There are no grouping columns with scalar GroupBy, so we create empty
 	// arguments upfront to be passed into getResultColumnsForGroupBy call
@@ -499,10 +499,12 @@ func (ef *execFactory) ConstructScalarGroupBy(
 	var inputCols colinfo.ResultColumns
 	var groupCols []exec.NodeColumnOrdinal
 	n := &groupNode{
-		plan:     input.(planNode),
-		funcs:    make([]*aggregateFuncHolder, 0, len(aggregations)),
-		columns:  getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
-		isScalar: true,
+		plan:                   input.(planNode),
+		funcs:                  make([]*aggregateFuncHolder, 0, len(aggregations)),
+		columns:                getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
+		isScalar:               true,
+		estimatedRowCount:      1,
+		estimatedInputRowCount: estimatedInputRowCount,
 	}
 	if err := ef.addAggregations(n, aggregations); err != nil {
 		return nil, err
@@ -519,20 +521,22 @@ func (ef *execFactory) ConstructGroupBy(
 	reqOrdering exec.OutputOrdering,
 	groupingOrderType exec.GroupingOrderType,
 	estimatedRowCount uint64,
+	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
 	inputPlan := input.(planNode)
 	inputCols := planColumns(inputPlan)
 	// TODO(harding): Use groupingOrder to determine when to use a hash
 	// aggregator.
 	n := &groupNode{
-		plan:              inputPlan,
-		funcs:             make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
-		columns:           getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
-		groupCols:         groupCols,
-		groupColOrdering:  groupColOrdering,
-		isScalar:          false,
-		reqOrdering:       ReqOrdering(reqOrdering),
-		estimatedRowCount: estimatedRowCount,
+		plan:                   inputPlan,
+		funcs:                  make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
+		columns:                getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
+		groupCols:              groupCols,
+		groupColOrdering:       groupColOrdering,
+		isScalar:               false,
+		reqOrdering:            ReqOrdering(reqOrdering),
+		estimatedRowCount:      estimatedRowCount,
+		estimatedInputRowCount: estimatedInputRowCount,
 	}
 	for _, col := range n.groupCols {
 		// TODO(radu): only generate the grouping columns we actually need.
@@ -635,12 +639,16 @@ func (ef *execFactory) ConstructUnionAll(
 
 // ConstructSort is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSort(
-	input exec.Node, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
+	input exec.Node,
+	ordering exec.OutputOrdering,
+	alreadyOrderedPrefix int,
+	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
 	return &sortNode{
-		plan:                 input.(planNode),
-		ordering:             colinfo.ColumnOrdering(ordering),
-		alreadyOrderedPrefix: alreadyOrderedPrefix,
+		plan:                   input.(planNode),
+		ordering:               colinfo.ColumnOrdering(ordering),
+		alreadyOrderedPrefix:   alreadyOrderedPrefix,
+		estimatedInputRowCount: estimatedInputRowCount,
 	}, nil
 }
 
@@ -1066,15 +1074,20 @@ func (ef *execFactory) ConstructLimit(
 	}, nil
 }
 
-// ConstructTopK is part of the execFactory interface.
+// ConstructTopK is part of the exec.Factory interface.
 func (ef *execFactory) ConstructTopK(
-	input exec.Node, k int64, ordering exec.OutputOrdering, alreadyOrderedPrefix int,
+	input exec.Node,
+	k int64,
+	ordering exec.OutputOrdering,
+	alreadyOrderedPrefix int,
+	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
 	return &topKNode{
-		plan:                 input.(planNode),
-		k:                    k,
-		ordering:             colinfo.ColumnOrdering(ordering),
-		alreadyOrderedPrefix: alreadyOrderedPrefix,
+		plan:                   input.(planNode),
+		k:                      k,
+		ordering:               colinfo.ColumnOrdering(ordering),
+		alreadyOrderedPrefix:   alreadyOrderedPrefix,
+		estimatedInputRowCount: estimatedInputRowCount,
 	}, nil
 }
 

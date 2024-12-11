@@ -1901,14 +1901,18 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 
-	distSQLMode := ex.sessionData().DistSQLMode
+	var afterGetPlanDistribution func()
 	if planner.pausablePortal != nil {
 		if len(planner.curPlan.subqueryPlans) == 0 &&
 			len(planner.curPlan.cascades) == 0 &&
 			len(planner.curPlan.checkPlans) == 0 &&
 			len(planner.curPlan.triggers) == 0 {
-			// We only allow non-distributed plan for pausable portals.
-			distSQLMode = sessiondatapb.DistSQLOff
+			// We don't allow a distributed plan for pausable portals.
+			origDistSQLMode := ex.sessionData().DistSQLMode
+			ex.sessionData().DistSQLMode = sessiondatapb.DistSQLOff
+			afterGetPlanDistribution = func() {
+				ex.sessionData().DistSQLMode = origDistSQLMode
+			}
 		} else {
 			telemetry.Inc(sqltelemetry.SubOrPostQueryStmtsTriedWithPausablePortals)
 			// We don't allow sub / post queries for pausable portal. Set it back to an
@@ -1928,8 +1932,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	distributePlan, distSQLProhibitedErr := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
-		distSQLMode, planner.curPlan.main, &planner.distSQLVisitor,
+		ex.sessionData(), planner.curPlan.main, &planner.distSQLVisitor,
 	)
+	if afterGetPlanDistribution != nil {
+		afterGetPlanDistribution()
+	}
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {

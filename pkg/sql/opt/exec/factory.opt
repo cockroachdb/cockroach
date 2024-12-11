@@ -146,6 +146,10 @@ define GroupBy {
     # If set, the estimated number of rows that this GroupBy will output
     # (rounded up).
     estimatedRowCount uint64
+
+    # If set, the estimated number of rows that this GroupBy will read from its
+    # input (rounded up).
+    estimatedInputRowCount uint64
 }
 
 # ScalarGroupBy runs a scalar aggregation, i.e.  one which performs a set of
@@ -155,6 +159,10 @@ define GroupBy {
 define ScalarGroupBy {
     Input exec.Node
     Aggregations []exec.AggInfo
+
+    # If set, the estimated number of rows that this GroupBy will read from its
+    # input (rounded up).
+    estimatedInputRowCount uint64
 }
 
 # Distinct filters out rows such that only the first row is kept for each set of
@@ -241,6 +249,10 @@ define Sort {
     Input exec.Node
     Ordering exec.OutputOrdering
     AlreadyOrderedPrefix int
+
+    # If set, the estimated number of rows that this sorter will read from its
+    # input (rounded up).
+    estimatedInputRowCount uint64
 }
 
 # Ordinality appends an ordinality column to each row in the input node.
@@ -390,6 +402,10 @@ define TopK {
     K int64
     Ordering exec.OutputOrdering
     AlreadyOrderedPrefix int
+
+    # If set, the estimated number of rows that this TopK sorter will read from
+    # its input (rounded up).
+    estimatedInputRowCount uint64
 }
 
 # Max1Row permits at most one row from the given input node, causing an error

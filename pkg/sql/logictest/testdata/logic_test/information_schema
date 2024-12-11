@@ -3891,6 +3891,7 @@ variable                                                   value
 allow_ordinal_column_references                            off
 allow_role_memberships_to_change_during_transaction        off
 alter_primary_region_super_region_override                 off
+always_distribute_full_scans                               off
 application_name                                           ·
 authentication_method                                      cert-password
 avoid_buffering                                            off
@@ -3927,6 +3928,9 @@ disable_partially_distributed_plans                        off
 disable_plan_gists                                         off
 disable_vec_union_eager_cancellation                       off
 disallow_full_table_scans                                  off
+distribute_group_by_row_count_threshold                    1000
+distribute_scan_row_count_threshold                        10000
+distribute_sort_row_count_threshold                        1000
 distsql_plan_gateway_bias                                  2
 enable_auto_rehoming                                       off
 enable_create_stats_using_extremes                         on

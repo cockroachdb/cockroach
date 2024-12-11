@@ -228,6 +228,16 @@ func (s *Smither) GenerateExpr() tree.TypedExpr {
 	return makeScalar(s, s.randScalarType(), nil)
 }
 
+// GenerateUDF returns a random CREATE FUNCTION statement.
+func (s *Smither) GenerateUDF() tree.Statement {
+	for {
+		routine, ok := s.makeCreateFunc()
+		if ok {
+			return routine
+		}
+	}
+}
+
 type nameGenInfo struct {
 	g     randident.NameGenerator
 	count int
