@@ -197,8 +197,10 @@ func NewServerEx(
 	dmux := drpcmux.New()
 	dsrv := drpcserver.NewWithOptions(dmux, drpcserver.Options{
 		Log: func(err error) {
-			log.Errorf(context.Background(), "TBG server error %v", err)
+			log.Warningf(context.Background(), "drpc server error %v", err)
 		},
+		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
+		// as happens with AddSSTable) the RPCs fail.
 		Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
 	})
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
