@@ -233,3 +233,32 @@ func newSchedulerShardMetrics(name string, histogramWindow time.Duration) *Shard
 		QueueSize: metric.NewGauge(expandTemplate(metaQueueSizeTemplate)),
 	}
 }
+
+type StreamManagerMetrics struct {
+	NumMuxRangeFeed    *metric.Counter
+	ActiveMuxRangeFeed *metric.Gauge
+}
+
+var (
+	metaActiveMuxRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.active",
+		Help:        `Number of currently running MuxRangeFeed streams`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTotalMuxRangeFeed = metric.Metadata{
+		Name:        "rpc.streams.mux_rangefeed.recv",
+		Help:        `Total number of MuxRangeFeed streams`,
+		Measurement: "Streams",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+func (*StreamManagerMetrics) MetricStruct() {}
+
+func NewStreamManagerMetrics() *StreamManagerMetrics {
+	return &StreamManagerMetrics{
+		ActiveMuxRangeFeed: metric.NewGauge(metaActiveMuxRangeFeed),
+		NumMuxRangeFeed:    metric.NewCounter(metaTotalMuxRangeFeed),
+	}
+}
