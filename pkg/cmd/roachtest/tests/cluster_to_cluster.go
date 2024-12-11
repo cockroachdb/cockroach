@@ -1607,6 +1607,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			timeout:                              20 * time.Minute,
 			additionalDuration:                   6 * time.Minute,
 			cutover:                              3 * time.Minute,
+			maxAcceptedLatency:                   4 * time.Minute,
 			expectedNodeDeaths:                   1,
 			sometimesTestFingerprintMismatchCode: true,
 			clouds:                               registry.AllExceptAWS,
