@@ -66,7 +66,7 @@ func init() {
 
 	registerDepRule(
 		"column type dependents removed right before column type, except if part of a column type alteration ",
-		scgraph.SameStagePrecedence,
+		scgraph.Precedence,
 		"dependent", "column-type",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
