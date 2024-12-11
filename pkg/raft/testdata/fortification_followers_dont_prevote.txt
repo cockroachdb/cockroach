@@ -373,18 +373,8 @@ raft-state
 
 # Lastly, ensure that even the leader is not able to campaign at a higher term.
 # We'll need to step down to set this up properly, as otherwise attempts to
-# campaign will no-op.
-step-down 2
-----
-INFO 2 became follower at term 2
-DEBUG 2 reset election elapsed to 0
-
-campaign 2
-----
-DEBUG 2 ignoring MsgHup due to leader fortification
-
-# Have 2 withdraw support from itself so it can move past the fortification
-# for MsgHup. This allows it to campaign, but it will not be able to win the
+# campaign will no-op. Have the leader withdraw support from itself before
+# stepping down. This allows it to campaign, but it will not be able to win the
 # election as {1,3} still support the fortified leader. This simulates the case
 # where 2's store experiences a disk stall, as a result of which its store
 # liveness epoch expires, but any maxLeaderSupported value returned to the
@@ -395,6 +385,12 @@ withdraw-support 2 2
 1 1 1 1
 2 x x 1
 3 x 1 1
+
+step-down 2
+----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
+INFO 2 became follower at term 2
+DEBUG 2 reset election elapsed to 0
 
 campaign 2
 ----
