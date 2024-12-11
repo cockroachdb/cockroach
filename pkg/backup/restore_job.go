@@ -724,8 +724,21 @@ func remapAndFilterRelevantStatistics(
 		if statShouldBeIncludedInBackupRestore(stat) {
 			tableHasStatsInBackup[stat.TableID] = struct{}{}
 			if tableRewrite, ok := descriptorRewrites[stat.TableID]; ok {
-				// Statistics imported only when table re-write is present.
+				// We only restore statistics when all necessary descriptor rewrites are
+				// present in the rewrite map.
 				stat.TableID = tableRewrite.ID
+				// We also need to remap the type OID in the histogram for UDTs.
+				if stat.HistogramData != nil && stat.HistogramData.ColumnType != nil {
+					if typ := stat.HistogramData.ColumnType; typ.UserDefined() {
+						typDescID := typedesc.GetUserDefinedTypeDescID(typ)
+						if _, ok := descriptorRewrites[typDescID]; !ok {
+							continue
+						}
+						if err := rewrite.RewriteIDsInTypesT(typ, descriptorRewrites); err != nil {
+							continue
+						}
+					}
+				}
 				relevantTableStatistics = append(relevantTableStatistics, stat)
 			}
 		}
