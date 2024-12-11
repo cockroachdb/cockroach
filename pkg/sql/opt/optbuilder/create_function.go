@@ -296,11 +296,12 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
 		}
 		// Override the return types so that we do return type validation and SHOW
-		// CREATE correctly.
-		funcReturnType = outParamType
-		cf.ReturnType = &tree.RoutineReturnType{
-			Type: outParamType,
+		// CREATE correctly. Take care not to override the SetOf value if it is set.
+		if cf.ReturnType == nil {
+			cf.ReturnType = &tree.RoutineReturnType{}
 		}
+		cf.ReturnType.Type = outParamType
+		funcReturnType = outParamType
 	} else if funcReturnType == nil {
 		if cf.IsProcedure {
 			// A procedure doesn't need a return type. Use a VOID return type to avoid
