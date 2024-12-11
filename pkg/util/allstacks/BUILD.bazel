@@ -5,4 +5,5 @@ go_library(
     srcs = ["allstacks.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/allstacks",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/debugutil"],
 )

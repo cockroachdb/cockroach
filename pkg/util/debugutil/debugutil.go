@@ -45,6 +45,9 @@ func init() {
 	}(os.Getppid()))
 }
 
+// SafeStack is an alias for []byte that handles redaction. Use this type
+// instead of []byte when you are sure that the stack trace does not contain
+// sensitive information.
 type SafeStack []byte
 
 func (s SafeStack) SafeValue() {}
@@ -57,5 +60,5 @@ func (s SafeStack) SafeValue() {}
 // frequently, even if called only in error-handling pathways. Use sporadically
 // and only when necessary.
 func Stack() SafeStack {
-	return SafeStack(debug.Stack())
+	return debug.Stack()
 }
