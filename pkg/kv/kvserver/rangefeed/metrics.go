@@ -225,11 +225,6 @@ func newSchedulerShardMetrics(name string, histogramWindow time.Duration) *Shard
 	}
 }
 
-type StreamManagerMetrics struct {
-	NumMuxRangeFeed    *metric.Counter
-	ActiveMuxRangeFeed *metric.Gauge
-}
-
 var (
 	metaActiveMuxRangeFeed = metric.Metadata{
 		Name:        "rpc.streams.mux_rangefeed.active",
@@ -245,11 +240,37 @@ var (
 	}
 )
 
+type StreamManagerMetrics struct {
+	NumMuxRangeFeed    *metric.Counter
+	ActiveMuxRangeFeed *metric.Gauge
+}
+
 func (*StreamManagerMetrics) MetricStruct() {}
 
 func NewStreamManagerMetrics() *StreamManagerMetrics {
 	return &StreamManagerMetrics{
 		ActiveMuxRangeFeed: metric.NewGauge(metaActiveMuxRangeFeed),
 		NumMuxRangeFeed:    metric.NewCounter(metaTotalMuxRangeFeed),
+	}
+}
+
+var (
+	metaBufferedSenderQueueSize = metric.Metadata{
+		Name:        "kv.rangefeed.buffered_sender.queue_size",
+		Help:        `Number of entries in the buffered sender queue`,
+		Measurement: "Pending Events",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+type BufferedSenderMetrics struct {
+	BufferedSenderQueueSize *metric.Gauge
+}
+
+func (*BufferedSenderMetrics) MetricStruct() {}
+
+func NewBufferedSenderMetrics() *BufferedSenderMetrics {
+	return &BufferedSenderMetrics{
+		BufferedSenderQueueSize: metric.NewGauge(metaBufferedSenderQueueSize),
 	}
 }
