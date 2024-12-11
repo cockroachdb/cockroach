@@ -10,8 +10,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"math"
-	"net"
-	"runtime/debug"
 	"runtime/pprof"
 	"time"
 
@@ -31,7 +29,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
-	"storj.io/drpc"
 	"storj.io/drpc/drpcconn"
 	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
@@ -217,78 +214,6 @@ func (p *peer) snap() PeerSnap {
 	return p.mu.PeerSnap
 }
 
-type closeEntirePoolConn struct {
-	drpcpool.Conn
-	pool *drpcpool.Pool[struct{}, drpcpool.Conn]
-}
-
-func (c *closeEntirePoolConn) Close() error {
-	_ = c.Conn.Close()
-	return c.pool.Close()
-}
-
-// closeConnOnWriteFailure is an attempt to work around deficiencies in drpc.
-// Concretely, I believe I've seen multiple times a case in which a connection
-// in the pool does not work[1]. Observability into drpc isn't great, so I am
-// not sure why the `drpcmanager.Manager` didn't notice, but one potential
-// reason is that the manager only _reads_ from the conn. So if the conn
-// breaks in some way that is slow to notice on the read path - say it needs
-// a timeout of multiple hours - then the conn will be useless. However, drpcpool
-// unconditionally returns the conn to the pool; it doesn't have an option to
-// elide that should writes return an error. So we wrap the connections that are
-// in the drpcpool with this wrapper, which closes the conn should an Invoke call
-// fail. Closed conns _are_ removed from the pool.
-//
-// TODO: also do this for the NewStream method.
-//
-// [1]: https://gist.github.com/tbg/de373e478593e070881035616f1e76f5
-type closeConnOnWriteFailureConn struct {
-	*drpcconn.Conn
-}
-
-func (c *closeConnOnWriteFailureConn) Invoke(
-	ctx context.Context, rpc string, enc drpc.Encoding, in,
-	out drpc.Message,
-) error {
-	// HACK: I think something might go wrong if incoming ctx is canceled
-	// while Invoke is inflight.
-	nonCancelCtx := context.Background()
-	err := c.Conn.Invoke(nonCancelCtx, rpc, enc, in, out)
-	if err != nil {
-		var closed bool
-		select {
-		case <-c.Conn.Closed():
-			closed = true
-		default:
-		}
-		log.Errorf(ctx, "TBG Invoke err (conn closed: %t): %v", closed, err)
-	}
-	return err
-}
-
-func (c *closeConnOnWriteFailureConn) Close() error {
-	log.Errorf(context.Background(), "TBG drpcconn.Close() called: %v", string(debug.Stack()))
-	return c.Conn.Close()
-}
-
-/*
-Not doing this for streams just yet since it's a bit more typing.
-
-func (c closeConnOnWriteFailureConn) NewStream(ctx context.Context, rpc string, enc drpc.Encoding) (drpc.Stream, error) {
-	//TODO implement me
-	panic("implement me")
-}
-*/
-
-type logOnCloseNetConn struct {
-	net.Conn
-}
-
-func (c *logOnCloseNetConn) Close() error {
-	log.Errorf(context.Background(), "TBG net.Conn.Close() called: %v", string(debug.Stack()))
-	return c.Conn.Close()
-}
-
 // newPeer returns circuit breaker that trips when connection (associated
 // with provided peerKey) is failed. The breaker's probe *is* the heartbeat loop
 // and is thus running at all times. The exception is a decommissioned node, for
@@ -334,47 +259,43 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 			pool := drpcpool.New[struct{}, drpcpool.Conn](drpcpool.Options{})
 			pooledConn := pool.Get(context.Background() /* unused */, struct{}{}, func(ctx context.Context,
 				_ struct{}) (drpcpool.Conn, error) {
-				var rawconn *logOnCloseNetConn
-				{
-					netConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
-					if err != nil {
-						return nil, err
-					}
-					rawconn = &logOnCloseNetConn{netConn}
+
+				netConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
+				if err != nil {
+					return nil, err
 				}
 
 				opts := drpcconn.Options{
 					Manager: drpcmanager.Options{
-						WriterBufferSize: 0,
 						Reader: drpcwire.ReaderOptions{
 							MaximumBufferSize: math.MaxInt,
 						},
 						Stream: drpcstream.Options{
-							SplitSize:         0,
-							ManualFlush:       false,
-							MaximumBufferSize: 0,
+							MaximumBufferSize: 0, // unlimited
 						},
-						SoftCancel:        false,
-						InactivityTimeout: 0,
 					},
 				}
 				var conn *drpcconn.Conn
 				if rpcCtx.ContextOptions.Insecure {
-					conn = drpcconn.NewWithOptions(rawconn, opts)
+					conn = drpcconn.NewWithOptions(netConn, opts)
 				} else {
 					tlsConfig, err := rpcCtx.GetClientTLSConfig()
 					if err != nil {
 						return nil, err
 					}
+					// TODO(server): at least with testing certs, we get: manager closed:
+					// tls: either ServerName or InsecureSkipVerify must be specified in
+					// the tls.Config from drpcmanager.(*Manager).manageReader:234
+					//
+					// This is possibly avoided in gRPC by setting ServerName in
+					// (*tlsCreds).ClientHandshake.
+					tlsConfig = tlsConfig.Clone()
 					tlsConfig.InsecureSkipVerify = true // HACK
-					tlsConn := tls.Client(rawconn, tlsConfig)
+					tlsConn := tls.Client(netConn, tlsConfig)
 					conn = drpcconn.NewWithOptions(tlsConn, opts)
 				}
-				// TODO(tbg): if we remove gRPC, this is where we'd do an initial ping
-				// to ascertain that the peer is compatible with us before returning
-				// the conn for general use.
 
-				return &closeConnOnWriteFailureConn{conn}, nil
+				return conn, nil
 			})
 			// `pooledConn.Close` doesn't tear down any of the underlying TCP
 			// connections but simply marks the pooledConn handle as returning
@@ -1085,4 +1006,14 @@ func launchConnStateWatcher(
 			}
 		}
 	})
+}
+
+type closeEntirePoolConn struct {
+	drpcpool.Conn
+	pool *drpcpool.Pool[struct{}, drpcpool.Conn]
+}
+
+func (c *closeEntirePoolConn) Close() error {
+	_ = c.Conn.Close()
+	return c.pool.Close()
 }
