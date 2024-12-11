@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"slices"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -461,19 +460,12 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// We're going to be migrating from the MinSupportedVersion to a few newer
-	// versions.
+	// We're going to be migrating from the Latest to newer, fake versions.
+	clusterversion.TestingExtraVersions = true
 	var versions []roachpb.Version
-	for i := 0; i < 4; i++ {
-		v := clusterversion.Latest - clusterversion.Key(i)
-		if v == clusterversion.MinSupported {
-			break
-		}
-		versions = append(versions, v.Version())
+	for i := clusterversion.Latest; i < clusterversion.Latest+4; i++ {
+		versions = append(versions, i.Version())
 	}
-	versions = append(versions, clusterversion.MinSupported.Version())
-	slices.Reverse(versions)
-	// versions is ordered and starts with MinSupported. For example: {24.3, 24.3-2, 24.3-4}.
 
 	// RegisterKVMigration the upgrades to update the map with run counts.
 	// There should definitely not be any concurrency of execution, so the race
@@ -682,7 +674,8 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 1
 		return version
 	}
-	v0 := clusterversion.MinSupported.Version()
+	clusterversion.TestingExtraVersions = true
+	v0 := clusterversion.Latest.Version()
 	v0_fence := fence(v0)
 	v1 := next(v0)
 	v1_fence := fence(v1)
