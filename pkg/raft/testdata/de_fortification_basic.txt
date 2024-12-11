@@ -295,6 +295,7 @@ print-fortification-state 1
 
 step-down 1
 ----
+DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 1 became follower at term 1
 DEBUG 1 reset election elapsed to 0
 
@@ -315,17 +316,23 @@ ok
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   State:StateFollower
+  HardState Term:1 Vote:1 Commit:3 Lead:0 LeadEpoch:0
   Messages:
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
+  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1
 > 2 receiving messages
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 > 3 receiving messages
   1->3 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 3 is not fortifying 1; de-fortification is a no-op
+> 1 processing append thread
+  Processing:
+  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1
+  Responses:
 > 2 handling Ready
   Ready MustSync=true:
   HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0
@@ -345,7 +352,7 @@ print-fortification-state 1
 # case if we look at the raft-state for 2.
 raft-state
 ----
-1: StateFollower (Voter) Term:1 Lead:0 LeadEpoch:3
+1: StateFollower (Voter) Term:1 Lead:0 LeadEpoch:0
 2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
 3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
 
@@ -355,26 +362,21 @@ send-de-fortify 1 2
 ----
 ok
 
-# De-fortifying ourselves should also work as expected.
+# De-fortifying ourselves should also be a no-op because we de-fortified when
+# stepping down.
 send-de-fortify 1 1
 ----
-DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
+ok
 
 stabilize
 ----
 > 1 handling Ready
-  Ready MustSync=true:
-  HardState Term:1 Vote:1 Commit:3 Lead:1 LeadEpoch:0
+  Ready MustSync=false:
   Messages:
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
-  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1 Lead:1
 > 2 receiving messages
   1->2 MsgDeFortifyLeader Term:1 Log:0/0
   DEBUG 2 is not fortifying 1; de-fortification is a no-op
-> 1 processing append thread
-  Processing:
-  1->AppendThread MsgStorageAppend Term:1 Log:0/0 Commit:3 Vote:1 Lead:1
-  Responses:
 
 print-fortification-state 1
 ----
@@ -639,6 +641,7 @@ DEBUG 3 ignoring MsgHup due to leader fortification
 
 step-down 2
 ----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
 INFO 2 became follower at term 2
 DEBUG 2 reset election elapsed to 0
 
@@ -653,13 +656,19 @@ ok
 stabilize
 ----
 > 2 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   State:StateFollower
+  HardState Term:2 Vote:2 Commit:4 Lead:0 LeadEpoch:0
   Messages:
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
+  2->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2
 > 3 receiving messages
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
   DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
+> 2 processing append thread
+  Processing:
+  2->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2
+  Responses:
 > 3 handling Ready
   Ready MustSync=true:
   HardState Term:2 Vote:2 Commit:4 Lead:2 LeadEpoch:0
@@ -673,7 +682,7 @@ stabilize
 raft-state
 ----
 1: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:1
-2: StateFollower (Voter) Term:2 Lead:0 LeadEpoch:1
+2: StateFollower (Voter) Term:2 Lead:0 LeadEpoch:0
 3: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:0
 
 # Now that 3 has is no longer fortifying 2, it's able to campaign.
@@ -684,8 +693,8 @@ INFO 3 became candidate at term 3
 INFO 3 [logterm: 2, index: 4] sent MsgVote request to 1 at term 3
 INFO 3 [logterm: 2, index: 4] sent MsgVote request to 2 at term 3
 
-# However, it shouldn't be able to win the election, because a quorum is still
-# fortifying the leader (2).
+# It should be able to win the election as a quorum is no longer fortifying the
+# leader at this point.
 stabilize
 ----
 > 3 handling Ready
@@ -703,281 +712,218 @@ stabilize
   INFO 1 [logterm: 2, index: 4, vote: 2] ignored MsgVote from 3 [logterm: 2, index: 4] at term 2: supporting fortified leader 2 at epoch 1
 > 2 receiving messages
   3->2 MsgVote Term:3 Log:2/4
-  INFO 2 [logterm: 2, index: 4, vote: 2] ignored MsgVote from 3 [logterm: 2, index: 4] at term 2: supporting fortified leader 2 at epoch 1
+  INFO 2 [term: 2] received a MsgVote message with higher term from 3 [term: 3], advancing term
+  INFO 2 became follower at term 3
+  DEBUG 2 reset election elapsed to 0
+  INFO 2 [logterm: 2, index: 4, vote: 0] cast MsgVote for 3 [logterm: 2, index: 4] at term 3
 > 3 processing append thread
   Processing:
   3->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:4 Vote:3
   Responses:
   3->3 MsgVoteResp Term:3 Log:0/0
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:3 Vote:3 Commit:4 Lead:0 LeadEpoch:0
+  Messages:
+  2->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:4 Vote:3 Responses:[
+    2->3 MsgVoteResp Term:3 Log:0/0
+  ]
 > 3 receiving messages
   3->3 MsgVoteResp Term:3 Log:0/0
   INFO 3 received MsgVoteResp from 3 at term 3
   INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
-
-send-de-fortify 2 1
-----
-ok
-
-stabilize
-----
-> 2 handling Ready
-  Ready MustSync=false:
-  Messages:
-  2->1 MsgDeFortifyLeader Term:2 Log:0/0
-> 1 receiving messages
-  2->1 MsgDeFortifyLeader Term:2 Log:0/0
-  DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
-> 1 handling Ready
-  Ready MustSync=true:
-  HardState Term:2 Vote:2 Commit:4 Lead:2 LeadEpoch:0
-  Messages:
-  1->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2
-> 1 processing append thread
+> 2 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:4 Vote:2 Lead:2
+  2->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:4 Vote:3
   Responses:
-
-raft-state
-----
-1: StateFollower (Voter) Term:2 Lead:2 LeadEpoch:0
-2: StateFollower (Voter) Term:2 Lead:0 LeadEpoch:1
-3: StateCandidate (Voter) Term:3 Lead:0 LeadEpoch:0
-
-campaign 3
-----
-INFO 3 is starting a new election at term 3
-INFO 3 became candidate at term 4
-INFO 3 [logterm: 2, index: 4] sent MsgVote request to 1 at term 4
-INFO 3 [logterm: 2, index: 4] sent MsgVote request to 2 at term 4
-
-stabilize
-----
-> 3 handling Ready
-  Ready MustSync=true:
-  HardState Term:4 Vote:3 Commit:4 Lead:0 LeadEpoch:0
-  Messages:
-  3->1 MsgVote Term:4 Log:2/4
-  3->2 MsgVote Term:4 Log:2/4
-  3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:4 Vote:3 Responses:[
-    3->3 MsgVoteResp Term:4 Log:0/0
-  ]
-> 1 receiving messages
-  3->1 MsgVote Term:4 Log:2/4
-  INFO 1 [term: 2] received a MsgVote message with higher term from 3 [term: 4], advancing term
-  INFO 1 became follower at term 4
-  DEBUG 1 reset election elapsed to 0
-  INFO 1 [logterm: 2, index: 4, vote: 0] cast MsgVote for 3 [logterm: 2, index: 4] at term 4
-> 2 receiving messages
-  3->2 MsgVote Term:4 Log:2/4
-  INFO 2 [logterm: 2, index: 4, vote: 2] ignored MsgVote from 3 [logterm: 2, index: 4] at term 2: supporting fortified leader 2 at epoch 1
-> 3 processing append thread
-  Processing:
-  3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:4 Vote:3
-  Responses:
-  3->3 MsgVoteResp Term:4 Log:0/0
-> 1 handling Ready
-  Ready MustSync=true:
-  HardState Term:4 Vote:3 Commit:4 Lead:0 LeadEpoch:0
-  Messages:
-  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:4 Vote:3 Responses:[
-    1->3 MsgVoteResp Term:4 Log:0/0
-  ]
+  2->3 MsgVoteResp Term:3 Log:0/0
 > 3 receiving messages
-  3->3 MsgVoteResp Term:4 Log:0/0
-  INFO 3 received MsgVoteResp from 3 at term 4
-  INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
-> 1 processing append thread
-  Processing:
-  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:4 Vote:3
-  Responses:
-  1->3 MsgVoteResp Term:4 Log:0/0
-> 3 receiving messages
-  1->3 MsgVoteResp Term:4 Log:0/0
-  INFO 3 received MsgVoteResp from 1 at term 4
+  2->3 MsgVoteResp Term:3 Log:0/0
+  INFO 3 received MsgVoteResp from 2 at term 3
   INFO 3 has received 2 MsgVoteResp votes and 0 vote rejections
-  INFO 3 became leader at term 4
+  INFO 3 became leader at term 3
 > 3 handling Ready
   Ready MustSync=true:
   State:StateLeader
-  HardState Term:4 Vote:3 Commit:4 Lead:3 LeadEpoch:1
+  HardState Term:3 Vote:3 Commit:4 Lead:3 LeadEpoch:1
   Entries:
-  4/5 EntryNormal ""
+  3/5 EntryNormal ""
   Messages:
-  3->1 MsgFortifyLeader Term:4 Log:0/0
-  3->2 MsgFortifyLeader Term:4 Log:0/0
-  3->1 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
-  3->2 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
-  3->AppendThread MsgStorageAppend Term:4 Log:4/5 Commit:4 Vote:3 Lead:3 LeadEpoch:1 Entries:[4/5 EntryNormal ""] Responses:[
-    3->3 MsgAppResp Term:4 Log:0/5 Commit:4
-    3->3 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
-    AppendThread->3 MsgStorageAppendResp Term:0 Log:4/5
+  3->1 MsgFortifyLeader Term:3 Log:0/0
+  3->2 MsgFortifyLeader Term:3 Log:0/0
+  3->1 MsgApp Term:3 Log:2/4 Commit:4 Entries:[3/5 EntryNormal ""]
+  3->2 MsgApp Term:3 Log:2/4 Commit:4 Entries:[3/5 EntryNormal ""]
+  3->AppendThread MsgStorageAppend Term:3 Log:3/5 Commit:4 Vote:3 Lead:3 LeadEpoch:1 Entries:[3/5 EntryNormal ""] Responses:[
+    3->3 MsgAppResp Term:3 Log:0/5 Commit:4
+    3->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+    AppendThread->3 MsgStorageAppendResp Term:0 Log:3/5
   ]
 > 1 receiving messages
-  3->1 MsgFortifyLeader Term:4 Log:0/0
-  3->1 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
+  3->1 MsgFortifyLeader Term:3 Log:0/0
+  INFO 1 [term: 2] received a MsgFortifyLeader message with higher term from 3 [term: 3], new leader indicated, advancing term
+  DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
+  INFO 1 became follower at term 3
+  DEBUG 1 reset election elapsed to 0
+  3->1 MsgApp Term:3 Log:2/4 Commit:4 Entries:[3/5 EntryNormal ""]
 > 2 receiving messages
-  3->2 MsgFortifyLeader Term:4 Log:0/0
-  INFO 2 [term: 2] received a MsgFortifyLeader message with higher term from 3 [term: 4], new leader indicated, advancing term
-  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
-  INFO 2 became follower at term 4
-  DEBUG 2 reset election elapsed to 0
-  3->2 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
+  3->2 MsgFortifyLeader Term:3 Log:0/0
+  3->2 MsgApp Term:3 Log:2/4 Commit:4 Entries:[3/5 EntryNormal ""]
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:4 Log:4/5 Commit:4 Vote:3 Lead:3 LeadEpoch:1 Entries:[4/5 EntryNormal ""]
+  3->AppendThread MsgStorageAppend Term:3 Log:3/5 Commit:4 Vote:3 Lead:3 LeadEpoch:1 Entries:[3/5 EntryNormal ""]
   Responses:
-  3->3 MsgAppResp Term:4 Log:0/5 Commit:4
-  3->3 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:4/5
+  3->3 MsgAppResp Term:3 Log:0/5 Commit:4
+  3->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:3/5
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:4 Vote:3 Commit:4 Lead:3 LeadEpoch:1
+  HardState Term:3 Commit:4 Lead:3 LeadEpoch:1
   Entries:
-  4/5 EntryNormal ""
+  3/5 EntryNormal ""
   Messages:
-  1->AppendThread MsgStorageAppend Term:4 Log:4/5 Commit:4 Vote:3 Lead:3 LeadEpoch:1 Entries:[4/5 EntryNormal ""] Responses:[
-    1->3 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
-    1->3 MsgAppResp Term:4 Log:0/5 Commit:4
-    AppendThread->1 MsgStorageAppendResp Term:0 Log:4/5
+  1->AppendThread MsgStorageAppend Term:3 Log:3/5 Commit:4 Lead:3 LeadEpoch:1 Entries:[3/5 EntryNormal ""] Responses:[
+    1->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+    1->3 MsgAppResp Term:3 Log:0/5 Commit:4
+    AppendThread->1 MsgStorageAppendResp Term:0 Log:3/5
   ]
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:4 Commit:4 Lead:3 LeadEpoch:1
+  HardState Term:3 Vote:3 Commit:4 Lead:3 LeadEpoch:1
   Entries:
-  4/5 EntryNormal ""
+  3/5 EntryNormal ""
   Messages:
-  2->AppendThread MsgStorageAppend Term:4 Log:4/5 Commit:4 Lead:3 LeadEpoch:1 Entries:[4/5 EntryNormal ""] Responses:[
-    2->3 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
-    2->3 MsgAppResp Term:4 Log:0/5 Commit:4
-    AppendThread->2 MsgStorageAppendResp Term:0 Log:4/5
+  2->AppendThread MsgStorageAppend Term:3 Log:3/5 Commit:4 Vote:3 Lead:3 LeadEpoch:1 Entries:[3/5 EntryNormal ""] Responses:[
+    2->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+    2->3 MsgAppResp Term:3 Log:0/5 Commit:4
+    AppendThread->2 MsgStorageAppendResp Term:0 Log:3/5
   ]
 > 3 receiving messages
-  3->3 MsgAppResp Term:4 Log:0/5 Commit:4
-  3->3 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:4/5
+  3->3 MsgAppResp Term:3 Log:0/5 Commit:4
+  3->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:3/5
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:4 Log:4/5 Commit:4 Vote:3 Lead:3 LeadEpoch:1 Entries:[4/5 EntryNormal ""]
+  1->AppendThread MsgStorageAppend Term:3 Log:3/5 Commit:4 Lead:3 LeadEpoch:1 Entries:[3/5 EntryNormal ""]
   Responses:
-  1->3 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
-  1->3 MsgAppResp Term:4 Log:0/5 Commit:4
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:4/5
+  1->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  1->3 MsgAppResp Term:3 Log:0/5 Commit:4
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:3/5
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:4 Log:4/5 Commit:4 Lead:3 LeadEpoch:1 Entries:[4/5 EntryNormal ""]
+  2->AppendThread MsgStorageAppend Term:3 Log:3/5 Commit:4 Vote:3 Lead:3 LeadEpoch:1 Entries:[3/5 EntryNormal ""]
   Responses:
-  2->3 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
-  2->3 MsgAppResp Term:4 Log:0/5 Commit:4
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:4/5
+  2->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  2->3 MsgAppResp Term:3 Log:0/5 Commit:4
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:3/5
 > 1 receiving messages
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:4/5
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:3/5
 > 2 receiving messages
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:4/5
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:3/5
 > 3 receiving messages
-  1->3 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
-  1->3 MsgAppResp Term:4 Log:0/5 Commit:4
-  2->3 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
-  2->3 MsgAppResp Term:4 Log:0/5 Commit:4
+  1->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  1->3 MsgAppResp Term:3 Log:0/5 Commit:4
+  2->3 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  2->3 MsgAppResp Term:3 Log:0/5 Commit:4
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:4 Vote:3 Commit:5 Lead:3 LeadEpoch:1
+  HardState Term:3 Vote:3 Commit:5 Lead:3 LeadEpoch:1
   CommittedEntries:
-  4/5 EntryNormal ""
+  3/5 EntryNormal ""
   Messages:
-  3->1 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
-  3->1 MsgApp Term:4 Log:4/5 Commit:5
-  3->2 MsgApp Term:4 Log:2/4 Commit:5 Entries:[4/5 EntryNormal ""]
-  3->2 MsgApp Term:4 Log:4/5 Commit:5
-  3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1
-  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/5 EntryNormal ""] Responses:[
-    ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  3->1 MsgApp Term:3 Log:2/4 Commit:4 Entries:[3/5 EntryNormal ""]
+  3->1 MsgApp Term:3 Log:3/5 Commit:5
+  3->2 MsgApp Term:3 Log:2/4 Commit:5 Entries:[3/5 EntryNormal ""]
+  3->2 MsgApp Term:3 Log:3/5 Commit:5
+  3->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1
+  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[3/5 EntryNormal ""] Responses:[
+    ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
   ]
 > 1 receiving messages
-  3->1 MsgApp Term:4 Log:2/4 Commit:4 Entries:[4/5 EntryNormal ""]
-  3->1 MsgApp Term:4 Log:4/5 Commit:5
+  3->1 MsgApp Term:3 Log:2/4 Commit:4 Entries:[3/5 EntryNormal ""]
+  3->1 MsgApp Term:3 Log:3/5 Commit:5
 > 2 receiving messages
-  3->2 MsgApp Term:4 Log:2/4 Commit:5 Entries:[4/5 EntryNormal ""]
-  3->2 MsgApp Term:4 Log:4/5 Commit:5
+  3->2 MsgApp Term:3 Log:2/4 Commit:5 Entries:[3/5 EntryNormal ""]
+  3->2 MsgApp Term:3 Log:3/5 Commit:5
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1
+  3->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1
   Responses:
 > 3 processing apply thread
   Processing:
-  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
   Responses:
-  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:4 Vote:3 Commit:5 Lead:3 LeadEpoch:1
+  HardState Term:3 Commit:5 Lead:3 LeadEpoch:1
   CommittedEntries:
-  4/5 EntryNormal ""
+  3/5 EntryNormal ""
   Messages:
-  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1 Responses:[
-    1->3 MsgAppResp Term:4 Log:0/5 Commit:4
-    1->3 MsgAppResp Term:4 Log:0/5 Commit:5
+  1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:5 Lead:3 LeadEpoch:1 Responses:[
+    1->3 MsgAppResp Term:3 Log:0/5 Commit:4
+    1->3 MsgAppResp Term:3 Log:0/5 Commit:5
   ]
-  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/5 EntryNormal ""] Responses:[
-    ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[3/5 EntryNormal ""] Responses:[
+    ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
   ]
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:4 Commit:5 Lead:3 LeadEpoch:1
+  HardState Term:3 Vote:3 Commit:5 Lead:3 LeadEpoch:1
   CommittedEntries:
-  4/5 EntryNormal ""
+  3/5 EntryNormal ""
   Messages:
-  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Lead:3 LeadEpoch:1 Responses:[
-    2->3 MsgAppResp Term:4 Log:0/5 Commit:5
-    2->3 MsgAppResp Term:4 Log:0/5 Commit:5
+  2->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1 Responses:[
+    2->3 MsgAppResp Term:3 Log:0/5 Commit:5
+    2->3 MsgAppResp Term:3 Log:0/5 Commit:5
   ]
-  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/5 EntryNormal ""] Responses:[
-    ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[3/5 EntryNormal ""] Responses:[
+    ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
   ]
 > 3 receiving messages
-  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1
+  1->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:5 Lead:3 LeadEpoch:1
   Responses:
-  1->3 MsgAppResp Term:4 Log:0/5 Commit:4
-  1->3 MsgAppResp Term:4 Log:0/5 Commit:5
+  1->3 MsgAppResp Term:3 Log:0/5 Commit:4
+  1->3 MsgAppResp Term:3 Log:0/5 Commit:5
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Lead:3 LeadEpoch:1
+  2->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:5 Vote:3 Lead:3 LeadEpoch:1
   Responses:
-  2->3 MsgAppResp Term:4 Log:0/5 Commit:5
-  2->3 MsgAppResp Term:4 Log:0/5 Commit:5
+  2->3 MsgAppResp Term:3 Log:0/5 Commit:5
+  2->3 MsgAppResp Term:3 Log:0/5 Commit:5
 > 1 processing apply thread
   Processing:
-  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
   Responses:
-  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
 > 2 processing apply thread
   Processing:
-  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
   Responses:
-  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
 > 1 receiving messages
-  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
 > 2 receiving messages
-  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/5 EntryNormal ""]
+  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[3/5 EntryNormal ""]
 > 3 receiving messages
-  1->3 MsgAppResp Term:4 Log:0/5 Commit:4
-  1->3 MsgAppResp Term:4 Log:0/5 Commit:5
-  2->3 MsgAppResp Term:4 Log:0/5 Commit:5
-  2->3 MsgAppResp Term:4 Log:0/5 Commit:5
+  1->3 MsgAppResp Term:3 Log:0/5 Commit:4
+  1->3 MsgAppResp Term:3 Log:0/5 Commit:5
+  2->3 MsgAppResp Term:3 Log:0/5 Commit:5
+  2->3 MsgAppResp Term:3 Log:0/5 Commit:5
 
 raft-state
 ----
-1: StateFollower (Voter) Term:4 Lead:3 LeadEpoch:1
-2: StateFollower (Voter) Term:4 Lead:3 LeadEpoch:1
-3: StateLeader (Voter) Term:4 Lead:3 LeadEpoch:1
+1: StateFollower (Voter) Term:3 Lead:3 LeadEpoch:1
+2: StateFollower (Voter) Term:3 Lead:3 LeadEpoch:1
+3: StateLeader (Voter) Term:3 Lead:3 LeadEpoch:1
 
 # Ensure that the leader sends out MsgDeFortifyLeader messages for the correct
 # term. In particular, the term from its leadership stint (2), not the term
 # currently known to it.
 
-# 2 was the leader above.
+# 2 was the leader before 3 was elected.
 print-fortification-state 2
 ----
 1 : 1
@@ -1001,10 +947,10 @@ stabilize
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
 > 1 receiving messages
   2->1 MsgDeFortifyLeader Term:2 Log:0/0
-  INFO 1 [term: 4] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
+  INFO 1 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
 > 3 receiving messages
   2->3 MsgDeFortifyLeader Term:2 Log:0/0
-  INFO 3 [term: 4] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
+  INFO 3 [term: 3] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 2]
 
 # Ensure that when 2 steps up, steps down, and then de-fortifies again, it does
 # so at the correct term.
@@ -1017,266 +963,251 @@ bump-epoch 3
 
 campaign 2
 ----
-INFO 2 is starting a new election at term 4
-INFO 2 became candidate at term 5
-INFO 2 [logterm: 4, index: 5] sent MsgVote request to 1 at term 5
-INFO 2 [logterm: 4, index: 5] sent MsgVote request to 3 at term 5
+INFO 2 is starting a new election at term 3
+INFO 2 became candidate at term 4
+INFO 2 [logterm: 3, index: 5] sent MsgVote request to 1 at term 4
+INFO 2 [logterm: 3, index: 5] sent MsgVote request to 3 at term 4
 
 stabilize
 ----
 > 2 handling Ready
   Ready MustSync=true:
   State:StateCandidate
-  HardState Term:5 Vote:2 Commit:5 Lead:0 LeadEpoch:0
+  HardState Term:4 Vote:2 Commit:5 Lead:0 LeadEpoch:0
   Messages:
-  2->1 MsgVote Term:5 Log:4/5
-  2->3 MsgVote Term:5 Log:4/5
-  2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:5 Vote:2 Responses:[
-    2->2 MsgVoteResp Term:5 Log:0/0
+  2->1 MsgVote Term:4 Log:3/5
+  2->3 MsgVote Term:4 Log:3/5
+  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:2 Responses:[
+    2->2 MsgVoteResp Term:4 Log:0/0
   ]
 > 1 receiving messages
-  2->1 MsgVote Term:5 Log:4/5
+  2->1 MsgVote Term:4 Log:3/5
   DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
-  INFO 1 [term: 4] received a MsgVote message with higher term from 2 [term: 5], advancing term
-  INFO 1 became follower at term 5
+  INFO 1 [term: 3] received a MsgVote message with higher term from 2 [term: 4], advancing term
+  INFO 1 became follower at term 4
   DEBUG 1 reset election elapsed to 0
-  INFO 1 [logterm: 4, index: 5, vote: 0] cast MsgVote for 2 [logterm: 4, index: 5] at term 5
+  INFO 1 [logterm: 3, index: 5, vote: 0] cast MsgVote for 2 [logterm: 3, index: 5] at term 4
 > 3 receiving messages
-  2->3 MsgVote Term:5 Log:4/5
+  2->3 MsgVote Term:4 Log:3/5
   DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
-  INFO 3 [term: 4] received a MsgVote message with higher term from 2 [term: 5], advancing term
-  INFO 3 became follower at term 5
+  INFO 3 [term: 3] received a MsgVote message with higher term from 2 [term: 4], advancing term
+  INFO 3 became follower at term 4
   DEBUG 3 reset election elapsed to 0
-  INFO 3 [logterm: 4, index: 5, vote: 0] cast MsgVote for 2 [logterm: 4, index: 5] at term 5
+  INFO 3 [logterm: 3, index: 5, vote: 0] cast MsgVote for 2 [logterm: 3, index: 5] at term 4
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:5 Vote:2
+  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:2
   Responses:
-  2->2 MsgVoteResp Term:5 Log:0/0
+  2->2 MsgVoteResp Term:4 Log:0/0
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:5 Vote:2 Commit:5 Lead:0 LeadEpoch:0
+  HardState Term:4 Vote:2 Commit:5 Lead:0 LeadEpoch:0
   Messages:
-  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:5 Vote:2 Responses:[
-    1->2 MsgVoteResp Term:5 Log:0/0
+  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:2 Responses:[
+    1->2 MsgVoteResp Term:4 Log:0/0
   ]
 > 3 handling Ready
   Ready MustSync=true:
   State:StateFollower
-  HardState Term:5 Vote:2 Commit:5 Lead:0 LeadEpoch:0
+  HardState Term:4 Vote:2 Commit:5 Lead:0 LeadEpoch:0
   Messages:
-  3->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:5 Vote:2 Responses:[
-    3->2 MsgVoteResp Term:5 Log:0/0
+  3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:2 Responses:[
+    3->2 MsgVoteResp Term:4 Log:0/0
   ]
 > 2 receiving messages
-  2->2 MsgVoteResp Term:5 Log:0/0
-  INFO 2 received MsgVoteResp from 2 at term 5
+  2->2 MsgVoteResp Term:4 Log:0/0
+  INFO 2 received MsgVoteResp from 2 at term 4
   INFO 2 has received 1 MsgVoteResp votes and 0 vote rejections
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:5 Vote:2
+  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:2
   Responses:
-  1->2 MsgVoteResp Term:5 Log:0/0
+  1->2 MsgVoteResp Term:4 Log:0/0
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:5 Vote:2
+  3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:5 Vote:2
   Responses:
-  3->2 MsgVoteResp Term:5 Log:0/0
+  3->2 MsgVoteResp Term:4 Log:0/0
 > 2 receiving messages
-  1->2 MsgVoteResp Term:5 Log:0/0
-  INFO 2 received MsgVoteResp from 1 at term 5
+  1->2 MsgVoteResp Term:4 Log:0/0
+  INFO 2 received MsgVoteResp from 1 at term 4
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
-  INFO 2 became leader at term 5
-  3->2 MsgVoteResp Term:5 Log:0/0
+  INFO 2 became leader at term 4
+  3->2 MsgVoteResp Term:4 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
   State:StateLeader
-  HardState Term:5 Vote:2 Commit:5 Lead:2 LeadEpoch:1
+  HardState Term:4 Vote:2 Commit:5 Lead:2 LeadEpoch:1
   Entries:
-  5/6 EntryNormal ""
+  4/6 EntryNormal ""
   Messages:
-  2->1 MsgFortifyLeader Term:5 Log:0/0
-  2->3 MsgFortifyLeader Term:5 Log:0/0
-  2->1 MsgApp Term:5 Log:4/5 Commit:5 Entries:[5/6 EntryNormal ""]
-  2->3 MsgApp Term:5 Log:4/5 Commit:5 Entries:[5/6 EntryNormal ""]
-  2->AppendThread MsgStorageAppend Term:5 Log:5/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[5/6 EntryNormal ""] Responses:[
-    2->2 MsgAppResp Term:5 Log:0/6 Commit:5
-    2->2 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:1
-    AppendThread->2 MsgStorageAppendResp Term:0 Log:5/6
+  2->1 MsgFortifyLeader Term:4 Log:0/0
+  2->3 MsgFortifyLeader Term:4 Log:0/0
+  2->1 MsgApp Term:4 Log:3/5 Commit:5 Entries:[4/6 EntryNormal ""]
+  2->3 MsgApp Term:4 Log:3/5 Commit:5 Entries:[4/6 EntryNormal ""]
+  2->AppendThread MsgStorageAppend Term:4 Log:4/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[4/6 EntryNormal ""] Responses:[
+    2->2 MsgAppResp Term:4 Log:0/6 Commit:5
+    2->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
+    AppendThread->2 MsgStorageAppendResp Term:0 Log:4/6
   ]
 > 1 receiving messages
-  2->1 MsgFortifyLeader Term:5 Log:0/0
-  2->1 MsgApp Term:5 Log:4/5 Commit:5 Entries:[5/6 EntryNormal ""]
+  2->1 MsgFortifyLeader Term:4 Log:0/0
+  2->1 MsgApp Term:4 Log:3/5 Commit:5 Entries:[4/6 EntryNormal ""]
 > 3 receiving messages
-  2->3 MsgFortifyLeader Term:5 Log:0/0
-  2->3 MsgApp Term:5 Log:4/5 Commit:5 Entries:[5/6 EntryNormal ""]
+  2->3 MsgFortifyLeader Term:4 Log:0/0
+  2->3 MsgApp Term:4 Log:3/5 Commit:5 Entries:[4/6 EntryNormal ""]
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:5 Log:5/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[5/6 EntryNormal ""]
+  2->AppendThread MsgStorageAppend Term:4 Log:4/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[4/6 EntryNormal ""]
   Responses:
-  2->2 MsgAppResp Term:5 Log:0/6 Commit:5
-  2->2 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:1
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:5/6
+  2->2 MsgAppResp Term:4 Log:0/6 Commit:5
+  2->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:4/6
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:5 Vote:2 Commit:5 Lead:2 LeadEpoch:1
+  HardState Term:4 Vote:2 Commit:5 Lead:2 LeadEpoch:1
   Entries:
-  5/6 EntryNormal ""
+  4/6 EntryNormal ""
   Messages:
-  1->AppendThread MsgStorageAppend Term:5 Log:5/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[5/6 EntryNormal ""] Responses:[
-    1->2 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:1
-    1->2 MsgAppResp Term:5 Log:0/6 Commit:5
-    AppendThread->1 MsgStorageAppendResp Term:0 Log:5/6
+  1->AppendThread MsgStorageAppend Term:4 Log:4/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[4/6 EntryNormal ""] Responses:[
+    1->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
+    1->2 MsgAppResp Term:4 Log:0/6 Commit:5
+    AppendThread->1 MsgStorageAppendResp Term:0 Log:4/6
   ]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:5 Vote:2 Commit:5 Lead:2 LeadEpoch:1
+  HardState Term:4 Vote:2 Commit:5 Lead:2 LeadEpoch:1
   Entries:
-  5/6 EntryNormal ""
+  4/6 EntryNormal ""
   Messages:
-  3->AppendThread MsgStorageAppend Term:5 Log:5/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[5/6 EntryNormal ""] Responses:[
-    3->2 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:1
-    3->2 MsgAppResp Term:5 Log:0/6 Commit:5
-    AppendThread->3 MsgStorageAppendResp Term:0 Log:5/6
+  3->AppendThread MsgStorageAppend Term:4 Log:4/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[4/6 EntryNormal ""] Responses:[
+    3->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
+    3->2 MsgAppResp Term:4 Log:0/6 Commit:5
+    AppendThread->3 MsgStorageAppendResp Term:0 Log:4/6
   ]
 > 2 receiving messages
-  2->2 MsgAppResp Term:5 Log:0/6 Commit:5
-  2->2 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:1
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:5/6
+  2->2 MsgAppResp Term:4 Log:0/6 Commit:5
+  2->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:4/6
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:5 Log:5/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[5/6 EntryNormal ""]
+  1->AppendThread MsgStorageAppend Term:4 Log:4/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[4/6 EntryNormal ""]
   Responses:
-  1->2 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:1
-  1->2 MsgAppResp Term:5 Log:0/6 Commit:5
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:5/6
+  1->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
+  1->2 MsgAppResp Term:4 Log:0/6 Commit:5
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:4/6
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:5 Log:5/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[5/6 EntryNormal ""]
+  3->AppendThread MsgStorageAppend Term:4 Log:4/6 Commit:5 Vote:2 Lead:2 LeadEpoch:1 Entries:[4/6 EntryNormal ""]
   Responses:
-  3->2 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:1
-  3->2 MsgAppResp Term:5 Log:0/6 Commit:5
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:5/6
+  3->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
+  3->2 MsgAppResp Term:4 Log:0/6 Commit:5
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:4/6
 > 1 receiving messages
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:5/6
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:4/6
 > 2 receiving messages
-  1->2 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:1
-  1->2 MsgAppResp Term:5 Log:0/6 Commit:5
-  3->2 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:1
-  3->2 MsgAppResp Term:5 Log:0/6 Commit:5
+  1->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
+  1->2 MsgAppResp Term:4 Log:0/6 Commit:5
+  3->2 MsgFortifyLeaderResp Term:4 Log:0/0 LeadEpoch:1
+  3->2 MsgAppResp Term:4 Log:0/6 Commit:5
 > 3 receiving messages
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:5/6
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:4/6
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:5 Vote:2 Commit:6 Lead:2 LeadEpoch:1
+  HardState Term:4 Vote:2 Commit:6 Lead:2 LeadEpoch:1
   CommittedEntries:
-  5/6 EntryNormal ""
+  4/6 EntryNormal ""
   Messages:
-  2->1 MsgApp Term:5 Log:4/5 Commit:5 Entries:[5/6 EntryNormal ""]
-  2->1 MsgApp Term:5 Log:5/6 Commit:6
-  2->3 MsgApp Term:5 Log:4/5 Commit:6 Entries:[5/6 EntryNormal ""]
-  2->3 MsgApp Term:5 Log:5/6 Commit:6
-  2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
-  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/6 EntryNormal ""] Responses:[
-    ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  2->1 MsgApp Term:4 Log:3/5 Commit:5 Entries:[4/6 EntryNormal ""]
+  2->1 MsgApp Term:4 Log:4/6 Commit:6
+  2->3 MsgApp Term:4 Log:3/5 Commit:6 Entries:[4/6 EntryNormal ""]
+  2->3 MsgApp Term:4 Log:4/6 Commit:6
+  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
+  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/6 EntryNormal ""] Responses:[
+    ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
   ]
 > 1 receiving messages
-  2->1 MsgApp Term:5 Log:4/5 Commit:5 Entries:[5/6 EntryNormal ""]
-  2->1 MsgApp Term:5 Log:5/6 Commit:6
+  2->1 MsgApp Term:4 Log:3/5 Commit:5 Entries:[4/6 EntryNormal ""]
+  2->1 MsgApp Term:4 Log:4/6 Commit:6
 > 3 receiving messages
-  2->3 MsgApp Term:5 Log:4/5 Commit:6 Entries:[5/6 EntryNormal ""]
-  2->3 MsgApp Term:5 Log:5/6 Commit:6
+  2->3 MsgApp Term:4 Log:3/5 Commit:6 Entries:[4/6 EntryNormal ""]
+  2->3 MsgApp Term:4 Log:4/6 Commit:6
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
+  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
   Responses:
 > 2 processing apply thread
   Processing:
-  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
   Responses:
-  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:5 Vote:2 Commit:6 Lead:2 LeadEpoch:1
+  HardState Term:4 Vote:2 Commit:6 Lead:2 LeadEpoch:1
   CommittedEntries:
-  5/6 EntryNormal ""
+  4/6 EntryNormal ""
   Messages:
-  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1 Responses:[
-    1->2 MsgAppResp Term:5 Log:0/6 Commit:5
-    1->2 MsgAppResp Term:5 Log:0/6 Commit:6
+  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1 Responses:[
+    1->2 MsgAppResp Term:4 Log:0/6 Commit:5
+    1->2 MsgAppResp Term:4 Log:0/6 Commit:6
   ]
-  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/6 EntryNormal ""] Responses:[
-    ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/6 EntryNormal ""] Responses:[
+    ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
   ]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:5 Vote:2 Commit:6 Lead:2 LeadEpoch:1
+  HardState Term:4 Vote:2 Commit:6 Lead:2 LeadEpoch:1
   CommittedEntries:
-  5/6 EntryNormal ""
+  4/6 EntryNormal ""
   Messages:
-  3->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1 Responses:[
-    3->2 MsgAppResp Term:5 Log:0/6 Commit:6
-    3->2 MsgAppResp Term:5 Log:0/6 Commit:6
+  3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1 Responses:[
+    3->2 MsgAppResp Term:4 Log:0/6 Commit:6
+    3->2 MsgAppResp Term:4 Log:0/6 Commit:6
   ]
-  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/6 EntryNormal ""] Responses:[
-    ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/6 EntryNormal ""] Responses:[
+    ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
   ]
 > 2 receiving messages
-  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
+  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
   Responses:
-  1->2 MsgAppResp Term:5 Log:0/6 Commit:5
-  1->2 MsgAppResp Term:5 Log:0/6 Commit:6
+  1->2 MsgAppResp Term:4 Log:0/6 Commit:5
+  1->2 MsgAppResp Term:4 Log:0/6 Commit:6
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
+  3->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2 LeadEpoch:1
   Responses:
-  3->2 MsgAppResp Term:5 Log:0/6 Commit:6
-  3->2 MsgAppResp Term:5 Log:0/6 Commit:6
+  3->2 MsgAppResp Term:4 Log:0/6 Commit:6
+  3->2 MsgAppResp Term:4 Log:0/6 Commit:6
 > 1 processing apply thread
   Processing:
-  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
   Responses:
-  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
 > 3 processing apply thread
   Processing:
-  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
   Responses:
-  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
 > 1 receiving messages
-  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
 > 2 receiving messages
-  1->2 MsgAppResp Term:5 Log:0/6 Commit:5
-  1->2 MsgAppResp Term:5 Log:0/6 Commit:6
-  3->2 MsgAppResp Term:5 Log:0/6 Commit:6
-  3->2 MsgAppResp Term:5 Log:0/6 Commit:6
+  1->2 MsgAppResp Term:4 Log:0/6 Commit:5
+  1->2 MsgAppResp Term:4 Log:0/6 Commit:6
+  3->2 MsgAppResp Term:4 Log:0/6 Commit:6
+  3->2 MsgAppResp Term:4 Log:0/6 Commit:6
 > 3 receiving messages
-  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/6 EntryNormal ""]
+  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[4/6 EntryNormal ""]
 
 raft-state
 ----
-1: StateFollower (Voter) Term:5 Lead:2 LeadEpoch:1
-2: StateLeader (Voter) Term:5 Lead:2 LeadEpoch:1
-3: StateFollower (Voter) Term:5 Lead:2 LeadEpoch:1
+1: StateFollower (Voter) Term:4 Lead:2 LeadEpoch:1
+2: StateLeader (Voter) Term:4 Lead:2 LeadEpoch:1
+3: StateFollower (Voter) Term:4 Lead:2 LeadEpoch:1
 
-step-down 2
-----
-INFO 2 became follower at term 5
-DEBUG 2 reset election elapsed to 0
-
-send-de-fortify 2 1
-----
-ok
-
-# NB: 2 won't vote for someone else, because even though it has stepped down, it
-# still remembers the lead/leadEpoch from its leadership stint. This is fine, as
-# typically, we'll freeze the LeadSupportUntil on leader step down, and use this
-# to determine whether we can vote or not. For now, manually withdraw support
-# for 2 from 2.
-# TODO(arul): ^ needs to be done.
-
+# Have 2 withdraw support from itself before stepping down.
 withdraw-support 2 2
 ----
   1 2 3
@@ -1284,255 +1215,270 @@ withdraw-support 2 2
 2 3 x 2
 3 x 1 2
 
+step-down 2
+----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
+INFO 2 became follower at term 4
+DEBUG 2 reset election elapsed to 0
+
+send-de-fortify 2 1
+----
+ok
+
 stabilize
 ----
 > 2 handling Ready
-  Ready MustSync=false:
+  Ready MustSync=true:
   State:StateFollower
+  HardState Term:4 Vote:2 Commit:6 Lead:0 LeadEpoch:0
   Messages:
-  2->1 MsgDeFortifyLeader Term:5 Log:0/0
+  2->1 MsgDeFortifyLeader Term:4 Log:0/0
+  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2
 > 1 receiving messages
-  2->1 MsgDeFortifyLeader Term:5 Log:0/0
+  2->1 MsgDeFortifyLeader Term:4 Log:0/0
   DEBUG 1 setting election elapsed to start from 3 ticks after store liveness support expired
+> 2 processing append thread
+  Processing:
+  2->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2
+  Responses:
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:5 Vote:2 Commit:6 Lead:2 LeadEpoch:0
+  HardState Term:4 Vote:2 Commit:6 Lead:2 LeadEpoch:0
   Messages:
-  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2
+  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:2 Lead:2
+  1->AppendThread MsgStorageAppend Term:4 Log:0/0 Commit:6 Vote:2 Lead:2
   Responses:
 
 raft-state
 ----
-1: StateFollower (Voter) Term:5 Lead:2 LeadEpoch:0
-2: StateFollower (Voter) Term:5 Lead:0 LeadEpoch:1
-3: StateFollower (Voter) Term:5 Lead:2 LeadEpoch:1
+1: StateFollower (Voter) Term:4 Lead:2 LeadEpoch:0
+2: StateFollower (Voter) Term:4 Lead:0 LeadEpoch:0
+3: StateFollower (Voter) Term:4 Lead:2 LeadEpoch:1
 
 campaign 1
 ----
-INFO 1 is starting a new election at term 5
-INFO 1 became candidate at term 6
-INFO 1 [logterm: 5, index: 6] sent MsgVote request to 2 at term 6
-INFO 1 [logterm: 5, index: 6] sent MsgVote request to 3 at term 6
+INFO 1 is starting a new election at term 4
+INFO 1 became candidate at term 5
+INFO 1 [logterm: 4, index: 6] sent MsgVote request to 2 at term 5
+INFO 1 [logterm: 4, index: 6] sent MsgVote request to 3 at term 5
 
 stabilize
 ----
 > 1 handling Ready
   Ready MustSync=true:
   State:StateCandidate
-  HardState Term:6 Vote:1 Commit:6 Lead:0 LeadEpoch:0
+  HardState Term:5 Vote:1 Commit:6 Lead:0 LeadEpoch:0
   Messages:
-  1->2 MsgVote Term:6 Log:5/6
-  1->3 MsgVote Term:6 Log:5/6
-  1->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:6 Vote:1 Responses:[
-    1->1 MsgVoteResp Term:6 Log:0/0
+  1->2 MsgVote Term:5 Log:4/6
+  1->3 MsgVote Term:5 Log:4/6
+  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:1 Responses:[
+    1->1 MsgVoteResp Term:5 Log:0/0
   ]
 > 2 receiving messages
-  1->2 MsgVote Term:6 Log:5/6
-  DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
-  INFO 2 [term: 5] received a MsgVote message with higher term from 1 [term: 6], advancing term
-  INFO 2 became follower at term 6
+  1->2 MsgVote Term:5 Log:4/6
+  INFO 2 [term: 4] received a MsgVote message with higher term from 1 [term: 5], advancing term
+  INFO 2 became follower at term 5
   DEBUG 2 reset election elapsed to 0
-  INFO 2 [logterm: 5, index: 6, vote: 0] cast MsgVote for 1 [logterm: 5, index: 6] at term 6
+  INFO 2 [logterm: 4, index: 6, vote: 0] cast MsgVote for 1 [logterm: 4, index: 6] at term 5
 > 3 receiving messages
-  1->3 MsgVote Term:6 Log:5/6
-  INFO 3 [logterm: 5, index: 6, vote: 2] ignored MsgVote from 1 [logterm: 5, index: 6] at term 5: supporting fortified leader 2 at epoch 1
+  1->3 MsgVote Term:5 Log:4/6
+  INFO 3 [logterm: 4, index: 6, vote: 2] ignored MsgVote from 1 [logterm: 4, index: 6] at term 4: supporting fortified leader 2 at epoch 1
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:6 Vote:1
+  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:1
   Responses:
-  1->1 MsgVoteResp Term:6 Log:0/0
+  1->1 MsgVoteResp Term:5 Log:0/0
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:6 Vote:1 Commit:6 Lead:0 LeadEpoch:0
+  HardState Term:5 Vote:1 Commit:6 Lead:0 LeadEpoch:0
   Messages:
-  2->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:6 Vote:1 Responses:[
-    2->1 MsgVoteResp Term:6 Log:0/0
+  2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:1 Responses:[
+    2->1 MsgVoteResp Term:5 Log:0/0
   ]
 > 1 receiving messages
-  1->1 MsgVoteResp Term:6 Log:0/0
-  INFO 1 received MsgVoteResp from 1 at term 6
+  1->1 MsgVoteResp Term:5 Log:0/0
+  INFO 1 received MsgVoteResp from 1 at term 5
   INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:6 Vote:1
+  2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:6 Vote:1
   Responses:
-  2->1 MsgVoteResp Term:6 Log:0/0
+  2->1 MsgVoteResp Term:5 Log:0/0
 > 1 receiving messages
-  2->1 MsgVoteResp Term:6 Log:0/0
-  INFO 1 received MsgVoteResp from 2 at term 6
+  2->1 MsgVoteResp Term:5 Log:0/0
+  INFO 1 received MsgVoteResp from 2 at term 5
   INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
-  INFO 1 became leader at term 6
+  INFO 1 became leader at term 5
 > 1 handling Ready
   Ready MustSync=true:
   State:StateLeader
-  HardState Term:6 Vote:1 Commit:6 Lead:1 LeadEpoch:3
+  HardState Term:5 Vote:1 Commit:6 Lead:1 LeadEpoch:3
   Entries:
-  6/7 EntryNormal ""
+  5/7 EntryNormal ""
   Messages:
-  1->2 MsgFortifyLeader Term:6 Log:0/0
-  1->2 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
-  1->3 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
-  1->AppendThread MsgStorageAppend Term:6 Log:6/7 Commit:6 Vote:1 Lead:1 LeadEpoch:3 Entries:[6/7 EntryNormal ""] Responses:[
-    1->1 MsgAppResp Term:6 Log:0/7 Commit:6
-    1->1 MsgFortifyLeaderResp Term:6 Log:0/0 LeadEpoch:3
-    AppendThread->1 MsgStorageAppendResp Term:0 Log:6/7
+  1->2 MsgFortifyLeader Term:5 Log:0/0
+  1->2 MsgApp Term:5 Log:4/6 Commit:6 Entries:[5/7 EntryNormal ""]
+  1->3 MsgApp Term:5 Log:4/6 Commit:6 Entries:[5/7 EntryNormal ""]
+  1->AppendThread MsgStorageAppend Term:5 Log:5/7 Commit:6 Vote:1 Lead:1 LeadEpoch:3 Entries:[5/7 EntryNormal ""] Responses:[
+    1->1 MsgAppResp Term:5 Log:0/7 Commit:6
+    1->1 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:3
+    AppendThread->1 MsgStorageAppendResp Term:0 Log:5/7
   ]
 > 2 receiving messages
-  1->2 MsgFortifyLeader Term:6 Log:0/0
-  1->2 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
+  1->2 MsgFortifyLeader Term:5 Log:0/0
+  1->2 MsgApp Term:5 Log:4/6 Commit:6 Entries:[5/7 EntryNormal ""]
 > 3 receiving messages
-  1->3 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
-  INFO 3 [term: 5] received a MsgApp message with higher term from 1 [term: 6], new leader indicated, advancing term
+  1->3 MsgApp Term:5 Log:4/6 Commit:6 Entries:[5/7 EntryNormal ""]
+  INFO 3 [term: 4] received a MsgApp message with higher term from 1 [term: 5], new leader indicated, advancing term
   DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
-  INFO 3 became follower at term 6
+  INFO 3 became follower at term 5
   DEBUG 3 reset election elapsed to 0
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:6 Log:6/7 Commit:6 Vote:1 Lead:1 LeadEpoch:3 Entries:[6/7 EntryNormal ""]
+  1->AppendThread MsgStorageAppend Term:5 Log:5/7 Commit:6 Vote:1 Lead:1 LeadEpoch:3 Entries:[5/7 EntryNormal ""]
   Responses:
-  1->1 MsgAppResp Term:6 Log:0/7 Commit:6
-  1->1 MsgFortifyLeaderResp Term:6 Log:0/0 LeadEpoch:3
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:6/7
+  1->1 MsgAppResp Term:5 Log:0/7 Commit:6
+  1->1 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:3
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:5/7
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:6 Vote:1 Commit:6 Lead:1 LeadEpoch:3
+  HardState Term:5 Vote:1 Commit:6 Lead:1 LeadEpoch:3
   Entries:
-  6/7 EntryNormal ""
+  5/7 EntryNormal ""
   Messages:
-  2->AppendThread MsgStorageAppend Term:6 Log:6/7 Commit:6 Vote:1 Lead:1 LeadEpoch:3 Entries:[6/7 EntryNormal ""] Responses:[
-    2->1 MsgFortifyLeaderResp Term:6 Log:0/0 LeadEpoch:3
-    2->1 MsgAppResp Term:6 Log:0/7 Commit:6
-    AppendThread->2 MsgStorageAppendResp Term:0 Log:6/7
+  2->AppendThread MsgStorageAppend Term:5 Log:5/7 Commit:6 Vote:1 Lead:1 LeadEpoch:3 Entries:[5/7 EntryNormal ""] Responses:[
+    2->1 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:3
+    2->1 MsgAppResp Term:5 Log:0/7 Commit:6
+    AppendThread->2 MsgStorageAppendResp Term:0 Log:5/7
   ]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:6 Commit:6 Lead:1 LeadEpoch:0
+  HardState Term:5 Commit:6 Lead:1 LeadEpoch:0
   Entries:
-  6/7 EntryNormal ""
+  5/7 EntryNormal ""
   Messages:
-  3->AppendThread MsgStorageAppend Term:6 Log:6/7 Commit:6 Lead:1 Entries:[6/7 EntryNormal ""] Responses:[
-    3->1 MsgAppResp Term:6 Log:0/7 Commit:6
-    AppendThread->3 MsgStorageAppendResp Term:0 Log:6/7
+  3->AppendThread MsgStorageAppend Term:5 Log:5/7 Commit:6 Lead:1 Entries:[5/7 EntryNormal ""] Responses:[
+    3->1 MsgAppResp Term:5 Log:0/7 Commit:6
+    AppendThread->3 MsgStorageAppendResp Term:0 Log:5/7
   ]
 > 1 receiving messages
-  1->1 MsgAppResp Term:6 Log:0/7 Commit:6
-  1->1 MsgFortifyLeaderResp Term:6 Log:0/0 LeadEpoch:3
-  AppendThread->1 MsgStorageAppendResp Term:0 Log:6/7
+  1->1 MsgAppResp Term:5 Log:0/7 Commit:6
+  1->1 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:3
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:5/7
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:6 Log:6/7 Commit:6 Vote:1 Lead:1 LeadEpoch:3 Entries:[6/7 EntryNormal ""]
+  2->AppendThread MsgStorageAppend Term:5 Log:5/7 Commit:6 Vote:1 Lead:1 LeadEpoch:3 Entries:[5/7 EntryNormal ""]
   Responses:
-  2->1 MsgFortifyLeaderResp Term:6 Log:0/0 LeadEpoch:3
-  2->1 MsgAppResp Term:6 Log:0/7 Commit:6
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:6/7
+  2->1 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:3
+  2->1 MsgAppResp Term:5 Log:0/7 Commit:6
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:5/7
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:6 Log:6/7 Commit:6 Lead:1 Entries:[6/7 EntryNormal ""]
+  3->AppendThread MsgStorageAppend Term:5 Log:5/7 Commit:6 Lead:1 Entries:[5/7 EntryNormal ""]
   Responses:
-  3->1 MsgAppResp Term:6 Log:0/7 Commit:6
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:6/7
+  3->1 MsgAppResp Term:5 Log:0/7 Commit:6
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:5/7
 > 1 receiving messages
-  2->1 MsgFortifyLeaderResp Term:6 Log:0/0 LeadEpoch:3
-  2->1 MsgAppResp Term:6 Log:0/7 Commit:6
-  3->1 MsgAppResp Term:6 Log:0/7 Commit:6
+  2->1 MsgFortifyLeaderResp Term:5 Log:0/0 LeadEpoch:3
+  2->1 MsgAppResp Term:5 Log:0/7 Commit:6
+  3->1 MsgAppResp Term:5 Log:0/7 Commit:6
 > 2 receiving messages
-  AppendThread->2 MsgStorageAppendResp Term:0 Log:6/7
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:5/7
 > 3 receiving messages
-  AppendThread->3 MsgStorageAppendResp Term:0 Log:6/7
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:5/7
 > 1 handling Ready
   Ready MustSync=true:
-  HardState Term:6 Vote:1 Commit:7 Lead:1 LeadEpoch:3
+  HardState Term:5 Vote:1 Commit:7 Lead:1 LeadEpoch:3
   CommittedEntries:
-  6/7 EntryNormal ""
+  5/7 EntryNormal ""
   Messages:
-  1->2 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
-  1->2 MsgApp Term:6 Log:6/7 Commit:7
-  1->3 MsgApp Term:6 Log:6/7 Commit:7
-  1->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3
-  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[6/7 EntryNormal ""] Responses:[
-    ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  1->2 MsgApp Term:5 Log:4/6 Commit:6 Entries:[5/7 EntryNormal ""]
+  1->2 MsgApp Term:5 Log:5/7 Commit:7
+  1->3 MsgApp Term:5 Log:5/7 Commit:7
+  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3
+  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/7 EntryNormal ""] Responses:[
+    ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
   ]
 > 2 receiving messages
-  1->2 MsgApp Term:6 Log:5/6 Commit:6 Entries:[6/7 EntryNormal ""]
-  1->2 MsgApp Term:6 Log:6/7 Commit:7
+  1->2 MsgApp Term:5 Log:4/6 Commit:6 Entries:[5/7 EntryNormal ""]
+  1->2 MsgApp Term:5 Log:5/7 Commit:7
 > 3 receiving messages
-  1->3 MsgApp Term:6 Log:6/7 Commit:7
+  1->3 MsgApp Term:5 Log:5/7 Commit:7
 > 1 processing append thread
   Processing:
-  1->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3
+  1->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3
   Responses:
 > 1 processing apply thread
   Processing:
-  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  1->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
   Responses:
-  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
 > 2 handling Ready
   Ready MustSync=true:
-  HardState Term:6 Vote:1 Commit:7 Lead:1 LeadEpoch:3
+  HardState Term:5 Vote:1 Commit:7 Lead:1 LeadEpoch:3
   CommittedEntries:
-  6/7 EntryNormal ""
+  5/7 EntryNormal ""
   Messages:
-  2->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3 Responses:[
-    2->1 MsgAppResp Term:6 Log:0/7 Commit:6
-    2->1 MsgAppResp Term:6 Log:0/7 Commit:7
+  2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3 Responses:[
+    2->1 MsgAppResp Term:5 Log:0/7 Commit:6
+    2->1 MsgAppResp Term:5 Log:0/7 Commit:7
   ]
-  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[6/7 EntryNormal ""] Responses:[
-    ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/7 EntryNormal ""] Responses:[
+    ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
   ]
 > 3 handling Ready
   Ready MustSync=true:
-  HardState Term:6 Commit:7 Lead:1 LeadEpoch:0
+  HardState Term:5 Commit:7 Lead:1 LeadEpoch:0
   CommittedEntries:
-  6/7 EntryNormal ""
+  5/7 EntryNormal ""
   Messages:
-  3->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:7 Lead:1 Responses:[
-    3->1 MsgAppResp Term:6 Log:0/7 Commit:7
+  3->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:7 Lead:1 Responses:[
+    3->1 MsgAppResp Term:5 Log:0/7 Commit:7
   ]
-  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[6/7 EntryNormal ""] Responses:[
-    ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/7 EntryNormal ""] Responses:[
+    ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
   ]
 > 1 receiving messages
-  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  ApplyThread->1 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
 > 2 processing append thread
   Processing:
-  2->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3
+  2->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:7 Vote:1 Lead:1 LeadEpoch:3
   Responses:
-  2->1 MsgAppResp Term:6 Log:0/7 Commit:6
-  2->1 MsgAppResp Term:6 Log:0/7 Commit:7
+  2->1 MsgAppResp Term:5 Log:0/7 Commit:6
+  2->1 MsgAppResp Term:5 Log:0/7 Commit:7
 > 3 processing append thread
   Processing:
-  3->AppendThread MsgStorageAppend Term:6 Log:0/0 Commit:7 Lead:1
+  3->AppendThread MsgStorageAppend Term:5 Log:0/0 Commit:7 Lead:1
   Responses:
-  3->1 MsgAppResp Term:6 Log:0/7 Commit:7
+  3->1 MsgAppResp Term:5 Log:0/7 Commit:7
 > 2 processing apply thread
   Processing:
-  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  2->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
   Responses:
-  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
 > 3 processing apply thread
   Processing:
-  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  3->ApplyThread MsgStorageApply Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
   Responses:
-  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
 > 1 receiving messages
-  2->1 MsgAppResp Term:6 Log:0/7 Commit:6
-  2->1 MsgAppResp Term:6 Log:0/7 Commit:7
-  3->1 MsgAppResp Term:6 Log:0/7 Commit:7
+  2->1 MsgAppResp Term:5 Log:0/7 Commit:6
+  2->1 MsgAppResp Term:5 Log:0/7 Commit:7
+  3->1 MsgAppResp Term:5 Log:0/7 Commit:7
 > 2 receiving messages
-  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  ApplyThread->2 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
 > 3 receiving messages
-  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[6/7 EntryNormal ""]
+  ApplyThread->3 MsgStorageApplyResp Term:0 Log:0/0 Entries:[5/7 EntryNormal ""]
 
 raft-state
 ----
-1: StateLeader (Voter) Term:6 Lead:1 LeadEpoch:3
-2: StateFollower (Voter) Term:6 Lead:1 LeadEpoch:3
-3: StateFollower (Voter) Term:6 Lead:1 LeadEpoch:0
+1: StateLeader (Voter) Term:5 Lead:1 LeadEpoch:3
+2: StateFollower (Voter) Term:5 Lead:1 LeadEpoch:3
+3: StateFollower (Voter) Term:5 Lead:1 LeadEpoch:0
 
-# Ensure 2 sends a MsgDeFortifyLeader at term 5 (not term 2).
+# Ensure 2 sends a MsgDeFortifyLeader at term 4 (not term 2).
 send-de-fortify 2 1
 ----
 ok
@@ -1542,7 +1488,7 @@ stabilize
 > 2 handling Ready
   Ready MustSync=false:
   Messages:
-  2->1 MsgDeFortifyLeader Term:5 Log:0/0
+  2->1 MsgDeFortifyLeader Term:4 Log:0/0
 > 1 receiving messages
-  2->1 MsgDeFortifyLeader Term:5 Log:0/0
-  INFO 1 [term: 6] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 5]
+  2->1 MsgDeFortifyLeader Term:4 Log:0/0
+  INFO 1 [term: 5] ignored a MsgDeFortifyLeader message with lower term from 2 [term: 4]

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/stretchr/testify/require"
 )
@@ -69,6 +70,7 @@ type testingRCState struct {
 	setTokenCounters     map[kvflowcontrol.Stream]struct{}
 	initialRegularTokens kvflowcontrol.Tokens
 	initialElasticTokens kvflowcontrol.Tokens
+	maxInflightBytes     uint64
 }
 
 func (s *testingRCState) init(t *testing.T, ctx context.Context) {
@@ -235,10 +237,21 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 		rss.mu.Lock()
 		defer rss.mu.Unlock()
 
+		var inflightBytesStr string
+		// NB: inflightBytes is retrieved from the state of replicaSendStream,
+		// while the starting index of inflight (match + 1) is retrieved from
+		// testRepl. If the change in testRepl state has not been communicated to
+		// replicaSendStream, these can look inconsistent, which is completely
+		// explainable. Typically, test code that advances match (via admit)
+		// should also send an empty raft event so that replicaSendStream is aware
+		// of the change in match.
+		if rss.mu.inflightBytes != 0 {
+			inflightBytesStr = fmt.Sprintf(" (%s)", humanize.IBytes(rss.mu.inflightBytes))
+		}
 		fmt.Fprintf(&b,
-			"state=%v closed=%v inflight=[%v,%v) send_queue=[%v,%v) precise_q_size=%v",
+			"state=%v closed=%v inflight=[%v,%v)%s send_queue=[%v,%v) precise_q_size=%v",
 			rss.mu.connectedState, rss.mu.closed,
-			testRepl.info.Match+1, rss.mu.sendQueue.indexToSend,
+			testRepl.info.Match+1, rss.mu.sendQueue.indexToSend, inflightBytesStr,
 			rss.mu.sendQueue.indexToSend,
 			rss.mu.sendQueue.nextRaftIndex, rss.mu.sendQueue.preciseSizeSum)
 		if rss.mu.sendQueue.forceFlushStopIndex.active() {
@@ -355,6 +368,7 @@ func (s *testingRCState) getOrInitRange(
 			EvalWaitMetrics:        s.evalMetrics,
 			RangeControllerMetrics: s.rcMetrics,
 			WaitForEvalConfig:      s.waitForEvalConfig,
+			RaftMaxInflightBytes:   s.maxInflightBytes,
 			ReplicaMutexAsserter:   makeTestMutexAsserter(),
 			Knobs:                  &kvflowcontrol.TestingKnobs{},
 		}
@@ -1140,6 +1154,13 @@ func TestRangeController(t *testing.T) {
 					elasticInit, err := humanizeutil.ParseBytes(elasticInitString)
 					require.NoError(t, err)
 					state.initialElasticTokens = kvflowcontrol.Tokens(elasticInit)
+				}
+				var maxInflightBytesString string
+				d.MaybeScanArgs(t, "max_inflight_bytes", &maxInflightBytesString)
+				if maxInflightBytesString != "" {
+					maxInflightBytes, err := humanizeutil.ParseBytes(maxInflightBytesString)
+					require.NoError(t, err)
+					state.maxInflightBytes = uint64(maxInflightBytes)
 				}
 
 				for _, r := range scanRanges(t, d.Input) {
