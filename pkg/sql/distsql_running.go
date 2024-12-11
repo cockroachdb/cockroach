@@ -1829,7 +1829,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 ) error {
 	subqueryDistribution, distSQLProhibitedErr := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
-		planner.SessionData().DistSQLMode, subqueryPlan.plan, &planner.distSQLVisitor,
+		planner.SessionData(), subqueryPlan.plan, &planner.distSQLVisitor,
 	)
 	distribute := DistributionType(LocalDistribution)
 	if subqueryDistribution.WillDistribute() {
@@ -2440,7 +2440,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 ) error {
 	postqueryDistribution, distSQLProhibitedErr := getPlanDistribution(
 		ctx, planner.Descriptors().HasUncommittedTypes(),
-		planner.SessionData().DistSQLMode, postqueryPlan, &planner.distSQLVisitor,
+		planner.SessionData(), postqueryPlan, &planner.distSQLVisitor,
 	)
 	distribute := DistributionType(LocalDistribution)
 	if postqueryDistribution.WillDistribute() {

@@ -38,7 +38,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution, _ := getPlanDistribution(
 		params.ctx, params.p.Descriptors().HasUncommittedTypes(),
-		params.extendedEvalCtx.SessionData().DistSQLMode, n.plan.main, &params.p.distSQLVisitor,
+		params.extendedEvalCtx.SessionData(), n.plan.main, &params.p.distSQLVisitor,
 	)
 	outerSubqueries := params.p.curPlan.subqueryPlans
 	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.plan.subqueryPlans, distribution)

@@ -457,7 +457,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 			planDistribution, _ := getPlanDistribution(
 				ctx, localPlanner.Descriptors().HasUncommittedTypes(),
-				localPlanner.extendedEvalCtx.SessionData().DistSQLMode,
+				localPlanner.extendedEvalCtx.SessionData(),
 				localPlanner.curPlan.main, &localPlanner.distSQLVisitor,
 			)
 			isLocal := !planDistribution.WillDistribute()
