@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -205,7 +204,7 @@ func TestGetPlanStagingState(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, planStores := prepTestCluster(ctx, t, 3, false /* disableLeaderLease */)
+	tc, _, planStores := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -265,7 +264,7 @@ func TestStageRecoveryPlans(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(ctx, t, 3, false /* disableLeaderLease */)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -308,7 +307,7 @@ func TestStageBadVersions(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(ctx, t, 1, false /* disableLeaderLease */)
+	tc, _, _ := prepTestCluster(ctx, t, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -344,7 +343,7 @@ func TestStageConflictingPlans(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(ctx, t, 3, false /* disableLeaderLease */)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -390,7 +389,7 @@ func TestForcePlanUpdate(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(ctx, t, 3, false /* disableLeaderLease */)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -438,7 +437,7 @@ func TestNodeDecommissioned(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(ctx, t, 3, false /* disableLeaderLease */)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -472,7 +471,7 @@ func TestRejectDecommissionReachableNode(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(ctx, t, 3, false /* disableLeaderLease */)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -494,7 +493,7 @@ func TestStageRecoveryPlansToWrongCluster(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(ctx, t, 3, false /* disableLeaderLease */)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -528,7 +527,7 @@ func TestRetrieveRangeStatus(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(ctx, t, 5, false /* disableLeaderLease */)
+	tc, _, _ := prepTestCluster(ctx, t, 5)
 	defer tc.Stopper().Stop(ctx)
 
 	// Use scratch range to ensure we have a range that loses quorum.
@@ -585,9 +584,7 @@ func TestRetrieveApplyStatus(t *testing.T) {
 
 	ctx := context.Background()
 
-	// We currently don't clear out the LeadEpoch field when recovering from a
-	// loss of quorum, so we can't run with leader leases on in this test.
-	tc, _, _ := prepTestCluster(ctx, t, 5, false /* disableLeaderLease */)
+	tc, _, _ := prepTestCluster(ctx, t, 5)
 	defer tc.Stopper().Stop(ctx)
 
 	// Use scratch range to ensure we have a range that loses quorum.
@@ -689,7 +686,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, pss := prepTestCluster(ctx, t, 3, false /* disableLeaderLease */)
+	tc, _, pss := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -725,7 +722,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 }
 
 func prepTestCluster(
-	ctx context.Context, t *testing.T, nodes int, disableLeaderLease bool,
+	ctx context.Context, t *testing.T, nodes int,
 ) (*testcluster.TestCluster, fs.StickyRegistry, map[int]loqrecovery.PlanStore) {
 	skip.UnderRace(t, "cluster frequently fails to start under stress race")
 
@@ -739,9 +736,6 @@ func prepTestCluster(
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	if disableLeaderLease {
-		kvserver.OverrideLeaderLeaseMetamorphism(ctx, &st.SV)
-	}
 	for i := 0; i < nodes; i++ {
 		args.ServerArgsPerNode[i] = base.TestServerArgs{
 			Settings: st,
