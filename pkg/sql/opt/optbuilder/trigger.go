@@ -8,7 +8,6 @@ package optbuilder
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -41,7 +40,7 @@ func (mb *mutationBuilder) buildRowLevelBeforeTriggers(
 ) bool {
 	var eventsToMatch tree.TriggerEventTypeSet
 	eventsToMatch.Add(eventType)
-	triggers := mb.getRowLevelTriggers(tree.TriggerActionTimeBefore, eventsToMatch)
+	triggers := cat.GetRowLevelTriggers(mb.tab, tree.TriggerActionTimeBefore, eventsToMatch)
 	if len(triggers) == 0 {
 		return false
 	}
@@ -389,7 +388,7 @@ func (mb *mutationBuilder) recomputeComputedColsForTrigger(eventType tree.Trigge
 // so after the mutation executes.
 func (mb *mutationBuilder) buildRowLevelAfterTriggers(mutation opt.Operator) {
 	eventsToMatch := mb.getEventsToMatchForMutation(mutation)
-	triggers := mb.getRowLevelTriggers(tree.TriggerActionTimeAfter, eventsToMatch)
+	triggers := cat.GetRowLevelTriggers(mb.tab, tree.TriggerActionTimeAfter, eventsToMatch)
 	if len(triggers) == 0 {
 		return
 	}
@@ -884,61 +883,4 @@ func (b *Builder) buildTriggerWhen(
 		memo.ScalarListExpr{b.factory.ConstructWhen(whenExpr, triggerFn)},
 		elseExpr,
 	)
-}
-
-// getRowLevelTriggers returns the set of row-level triggers for the table and
-// given trigger event type and timing. The triggers are returned in the order
-// in which they should be executed.
-func (mb *mutationBuilder) getRowLevelTriggers(
-	actionTime tree.TriggerActionTime, eventsToMatch tree.TriggerEventTypeSet,
-) []cat.Trigger {
-	var neededTriggers intsets.Fast
-	for i := 0; i < mb.tab.TriggerCount(); i++ {
-		trigger := mb.tab.Trigger(i)
-		if !trigger.Enabled() || !trigger.ForEachRow() ||
-			trigger.ActionTime() != actionTime {
-			continue
-		}
-		for j := 0; j < trigger.EventCount(); j++ {
-			if eventsToMatch.Contains(trigger.Event(j).EventType) {
-				// The conditions have been met for this trigger to fire.
-				neededTriggers.Add(i)
-				break
-			}
-		}
-	}
-	if neededTriggers.Empty() {
-		return nil
-	}
-	triggers := make([]cat.Trigger, 0, neededTriggers.Len())
-	for i, ok := neededTriggers.Next(0); ok; i, ok = neededTriggers.Next(i + 1) {
-		triggers = append(triggers, mb.tab.Trigger(i))
-	}
-	// Triggers fire in alphabetical order of the name. The names are always
-	// unique within a given table, so a stable sort is not necessary.
-	less := func(i, j int) bool {
-		return triggers[i].Name() < triggers[j].Name()
-	}
-	sort.Slice(triggers, less)
-	return triggers
-}
-
-// hasRowLevelTriggers returns true if the table has any row-level triggers that
-// match the given action time and event type.
-func (mb *mutationBuilder) hasRowLevelTriggers(
-	actionTime tree.TriggerActionTime, eventToMatch tree.TriggerEventType,
-) bool {
-	for i := 0; i < mb.tab.TriggerCount(); i++ {
-		trigger := mb.tab.Trigger(i)
-		if !trigger.Enabled() || !trigger.ForEachRow() ||
-			trigger.ActionTime() != actionTime {
-			continue
-		}
-		for j := 0; j < trigger.EventCount(); j++ {
-			if eventToMatch == trigger.Event(j).EventType {
-				return true
-			}
-		}
-	}
-	return false
 }

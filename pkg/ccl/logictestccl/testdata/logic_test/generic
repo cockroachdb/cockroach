@@ -1,10 +1,5 @@
 # LogicTest: local
 
-# Disable stats collection to prevent automatic stats collection from
-# invalidating plans.
-statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
-
 statement ok
 CREATE TABLE t (
   k INT PRIMARY KEY,

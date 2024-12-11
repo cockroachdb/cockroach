@@ -1560,7 +1560,7 @@ func (mb *mutationBuilder) buildCheckInputScan(
 	// We also do not inline constants for checks that have row-level triggers
 	// because the triggers may modify the values that are being checked.
 	if !isFK && mb.insertExpr != nil &&
-		!mb.hasRowLevelTriggers(tree.TriggerActionTimeBefore, tree.TriggerEventInsert) {
+		!cat.HasRowLevelTriggers(mb.tab, tree.TriggerActionTimeBefore, tree.TriggerEventInsert) {
 		// Find the constant columns produced by the insert expression. All
 		// input columns must be constant in order to inline them.
 		constCols := memo.FindInlinableConstants(mb.insertExpr)
