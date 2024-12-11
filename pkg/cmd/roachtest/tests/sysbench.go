@@ -240,12 +240,13 @@ func registerSysbench(r registry.Registry) {
 			}
 
 			r.Add(registry.TestSpec{
-				Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, d.n, d.cpus, conc),
-				Benchmark:        true,
-				Owner:            registry.OwnerTestEng,
-				Cluster:          r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
-				CompatibleClouds: registry.OnlyGCE,
-				Suites:           registry.Suites(registry.Nightly),
+				Name:                      fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, d.n, d.cpus, conc),
+				Benchmark:                 true,
+				Owner:                     registry.OwnerTestEng,
+				Cluster:                   r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
+				CompatibleClouds:          registry.OnlyGCE,
+				Suites:                    registry.Suites(registry.Nightly),
+				TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runSysbench(ctx, t, c, opts)
 				},
