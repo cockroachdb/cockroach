@@ -257,6 +257,7 @@ type nodeMetrics struct {
 	CrossZoneBatchRequestBytes    *metric.Counter
 	CrossZoneBatchResponseBytes   *metric.Counter
 	StreamManagerMetrics          *rangefeed.StreamManagerMetrics
+	BufferedSenderMetrics         *rangefeed.BufferedSenderMetrics
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeMetrics {
@@ -277,6 +278,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeM
 		CrossZoneBatchRequestBytes:    metric.NewCounter(metaCrossZoneBatchRequest),
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
 		StreamManagerMetrics:          rangefeed.NewStreamManagerMetrics(),
+		BufferedSenderMetrics:         rangefeed.NewBufferedSenderMetrics(),
 	}
 
 	for i := range nm.MethodCounts {
@@ -2190,7 +2192,7 @@ func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 
 	sm := &rangefeed.StreamManager{}
 	if kvserver.RangefeedUseBufferedSender.Get(&n.storeCfg.Settings.SV) {
-		sm = rangefeed.NewStreamManager(rangefeed.NewBufferedSender(lockedMuxStream),
+		sm = rangefeed.NewStreamManager(rangefeed.NewBufferedSender(lockedMuxStream, n.metrics.BufferedSenderMetrics),
 			n.metrics.StreamManagerMetrics)
 	} else {
 		sm = rangefeed.NewStreamManager(rangefeed.NewUnbufferedSender(lockedMuxStream), n.metrics.StreamManagerMetrics)

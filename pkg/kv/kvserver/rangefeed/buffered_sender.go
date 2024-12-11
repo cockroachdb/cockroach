@@ -64,11 +64,16 @@ type BufferedSender struct {
 	// are events to send. Channel is initialised with a buffer of 1 and all writes to it
 	// are non-blocking.
 	notifyDataC chan struct{}
+
+	metrics *BufferedSenderMetrics
 }
 
-func NewBufferedSender(sender ServerStreamSender) *BufferedSender {
+func NewBufferedSender(
+	sender ServerStreamSender, bsMetrics *BufferedSenderMetrics,
+) *BufferedSender {
 	bs := &BufferedSender{
-		sender: sender,
+		sender:  sender,
+		metrics: bsMetrics,
 	}
 	bs.queueMu.buffer = newEventQueue()
 	bs.notifyDataC = make(chan struct{}, 1)
@@ -121,7 +126,8 @@ func (bs *BufferedSender) run(
 			return nil
 		case <-bs.notifyDataC:
 			for {
-				e, success := bs.popFront()
+				e, success, remaining := bs.popFront()
+				bs.metrics.BufferedSenderQueueSize.Update(remaining)
 				if !success {
 					break
 				}
@@ -140,11 +146,11 @@ func (bs *BufferedSender) run(
 
 // popFront pops the front event from the buffer queue. It returns the event and
 // a boolean indicating if the event was successfully popped.
-func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
+func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool, remaining int64) {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	event, ok := bs.queueMu.buffer.popFront()
-	return event, ok
+	return event, ok, bs.queueMu.buffer.len()
 }
 
 // cleanup is called when the sender is stopped. It is expected to free up
