@@ -2924,9 +2924,19 @@ func mapGeneratedAsIdentityType(inType catpb.GeneratedAsIdentityType) cat.Genera
 }
 
 func (oc *optCatalog) GetLeaseGeneration() int64 {
+	// This can only be hit in tests that don't set up a full
+	// executor config.
+	if oc.planner.execCfg.LeaseManager == nil {
+		return 0
+	}
 	return oc.planner.Descriptors().GetLeaseGeneration()
 }
 
 func (oc *optCatalog) GetStatsGeneration() int64 {
+	// This can only be hit in tests that don't set up a full
+	// executor config.
+	if oc.planner.execCfg.TableStatsCache == nil {
+		return 0
+	}
 	return oc.planner.execCfg.TableStatsCache.GetGeneration()
 }
