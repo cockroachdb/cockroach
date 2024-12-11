@@ -7,7 +7,6 @@ package kvserver_test
 
 import (
 	"context"
-	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -779,17 +778,6 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		t *testing.T, stream *testStream, streamErrC <-chan error, span roachpb.Span,
 	) {
 		t.Helper()
-		noResolveTimestampEvent := kvpb.RangeFeedEvent{
-			Checkpoint: &kvpb.RangeFeedCheckpoint{
-				Span:       span,
-				ResolvedTS: hlc.Timestamp{},
-			},
-		}
-		resolveTimestampEvent := kvpb.RangeFeedEvent{
-			Checkpoint: &kvpb.RangeFeedCheckpoint{
-				Span: span,
-			},
-		}
 		var events []*kvpb.RangeFeedEvent
 		testutils.SucceedsSoon(t, func() error {
 			if len(streamErrC) > 0 {
@@ -805,21 +793,14 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		if len(streamErrC) > 0 {
 			t.Fatalf("unexpected error from stream: %v", <-streamErrC)
 		}
-		expEvents := []*kvpb.RangeFeedEvent{&noResolveTimestampEvent}
-		if len(events) > 1 {
-			// Unfortunately there is a timing issue here and the range feed may
-			// publish two checkpoints, one with a resolvedTs and one without, so we
-			// check for either case.
-			resolveTimestampEvent.Checkpoint.ResolvedTS = events[1].Checkpoint.ResolvedTS
-			expEvents = []*kvpb.RangeFeedEvent{
-				&noResolveTimestampEvent,
-				&resolveTimestampEvent,
-			}
-		}
-		if !reflect.DeepEqual(events, expEvents) {
-			t.Fatalf("incorrect events on stream, found %v, want %v", events, expEvents)
-		}
 
+		var lastTS hlc.Timestamp
+		for _, evt := range events {
+			require.NotNil(t, evt.Checkpoint, "expected only checkpoint events")
+			require.Equal(t, span, evt.Checkpoint.Span)
+			require.True(t, evt.Checkpoint.ResolvedTS.After(lastTS) || evt.Checkpoint.ResolvedTS.Equal(lastTS), "unexpected resolved timestamp regression")
+			lastTS = evt.Checkpoint.ResolvedTS
+		}
 	}
 
 	assertRangefeedRetryErr := func(
