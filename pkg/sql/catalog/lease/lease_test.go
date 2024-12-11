@@ -2414,6 +2414,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	})
 	descUpdateChan := make(chan *descpb.Descriptor)
 	args.Knobs.SQLLeaseManager = &lease.ManagerTestingKnobs{
+		DisableAcquisitionOfInitialVersion: true,
 		TestingDescriptorUpdateEvent: func(descriptor *descpb.Descriptor) error {
 			// Use this testing knob to ensure that we see an update for the desc
 			// in question. We don't care about events to refresh the first version

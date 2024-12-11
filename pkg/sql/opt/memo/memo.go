@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
@@ -199,6 +200,10 @@ type Memo struct {
 	pushLimitIntoProjectFilteredScan           bool
 	unsafeAllowTriggersModifyingCascades       bool
 
+	leaseGeneration int64
+	statsGeneration int64
+	currentDatabase string
+	searchPath      sessiondata.SearchPath
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
 	// memo staleness calculation.
@@ -458,6 +463,16 @@ func (m *Memo) IsStale(
 		return true, nil
 	}
 
+	// If the query is AOST we must check all the dependencies, since the descriptors
+	// may have been different in the past.
+	if evalCtx.AsOfSystemTime == nil &&
+		m.leaseGeneration == catalog.GetLeaseGeneration() &&
+		m.statsGeneration == catalog.GetStatsGeneration() &&
+		m.currentDatabase == catalog.GetCurrentDatabase() &&
+		m.searchPath.Equals(&evalCtx.SessionData().SearchPath) {
+		return false, nil
+	}
+
 	// Memo is stale if the fingerprint of any object in the memo's metadata has
 	// changed, or if the current user no longer has sufficient privilege to
 	// access the object.
@@ -465,6 +480,16 @@ func (m *Memo) IsStale(
 		return true, err
 	} else if !depsUpToDate {
 		return true, nil
+	}
+	// Track the current version of the lease catalog, stats, search_path, and
+	// current database. If everything matches we can short circuit checking any
+	// descriptors. Since there is no risk of the name resolution changing on us.
+	if evalCtx.AsOfSystemTime == nil {
+		m.leaseGeneration = catalog.GetLeaseGeneration()
+		m.statsGeneration = catalog.GetStatsGeneration()
+		m.currentDatabase = catalog.GetCurrentDatabase()
+		// Search paths are immutable, so it's safe to store the reference here.
+		m.searchPath = evalCtx.SessionData().SearchPath
 	}
 	return false, nil
 }
