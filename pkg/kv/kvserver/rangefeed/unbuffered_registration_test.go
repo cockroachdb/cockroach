@@ -34,7 +34,7 @@ func TestUnbufferedRegWithStreamManager(t *testing.T) {
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
 	smMetrics := NewStreamManagerMetrics()
-	bs := NewBufferedSender(testServerStream)
+	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
 	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 
@@ -106,7 +106,7 @@ func TestUnbufferedRegCorrectnessOnDisconnect(t *testing.T) {
 	defer stopper.Stop(ctx)
 	testServerStream := newTestServerStream()
 	smMetrics := NewStreamManagerMetrics()
-	bs := NewBufferedSender(testServerStream)
+	bs := NewBufferedSender(testServerStream, NewBufferedSenderMetrics())
 	sm := NewStreamManager(bs, smMetrics)
 	require.NoError(t, sm.Start(ctx, stopper))
 	defer sm.Stop(ctx)
