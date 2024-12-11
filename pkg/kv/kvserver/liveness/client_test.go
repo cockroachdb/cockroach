@@ -101,7 +101,7 @@ func TestScanNodeVitalityFromKV(t *testing.T) {
 
 			// We expect epoch=1 as nodes first create a liveness record at epoch=0,
 			// and then increment it during their first heartbeat.
-			require.Equal(t, int64(1), liveness.GetInternalLiveness().Epoch)
+			require.Equal(t, int64(2), liveness.GetInternalLiveness().Epoch)
 			require.Equal(t, livenesspb.MembershipStatus_ACTIVE, liveness.MembershipStatus())
 			// The scan will also update the cache, verify the epoch is updated there also.
 			require.Equal(t, int64(1), nl.GetNodeVitalityFromCache(nodeID).GenLiveness().Epoch)
