@@ -10,6 +10,12 @@ CREATE OR REPLACE PROCEDURE foo() AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
+statement error pq: unimplemented: set-returning PL/pgSQL functions
+CREATE OR REPLACE FUNCTION bar() RETURNS SETOF INT LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEXT 100; END $$;
+
+statement error pq: unimplemented: set-returning PL/pgSQL functions
+CREATE OR REPLACE FUNCTION bar() RETURNS TABLE (x INT) LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEXT 100; END $$;
+
 subtest error_detail
 
 # Regression test for #123672 - annotate "unsupported" errors with the
