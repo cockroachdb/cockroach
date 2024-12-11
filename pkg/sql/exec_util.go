@@ -1932,7 +1932,7 @@ func shouldDistributeGivenRecAndMode(
 func getPlanDistribution(
 	ctx context.Context,
 	txnHasUncommittedTypes bool,
-	distSQLMode sessiondatapb.DistSQLExecMode,
+	sd *sessiondata.SessionData,
 	plan planMaybePhysical,
 	distSQLVisitor *distSQLExprCheckVisitor,
 ) (_ physicalplan.PlanDistribution, distSQLProhibitedErr error) {
@@ -1949,7 +1949,7 @@ func getPlanDistribution(
 		return physicalplan.LocalPlan, nil
 	}
 
-	if distSQLMode == sessiondatapb.DistSQLOff {
+	if sd.DistSQLMode == sessiondatapb.DistSQLOff {
 		return physicalplan.LocalPlan, nil
 	}
 
@@ -1965,7 +1965,7 @@ func getPlanDistribution(
 		return physicalplan.LocalPlan, err
 	}
 
-	if shouldDistributeGivenRecAndMode(rec, distSQLMode) {
+	if shouldDistributeGivenRecAndMode(rec, sd.DistSQLMode) {
 		return physicalplan.FullyDistributedPlan, nil
 	}
 	return physicalplan.LocalPlan, nil
