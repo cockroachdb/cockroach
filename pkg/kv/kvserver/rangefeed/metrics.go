@@ -266,3 +266,26 @@ func NewStreamManagerMetrics() *StreamManagerMetrics {
 		NumMuxRangeFeed:    metric.NewCounter(metaTotalMuxRangeFeed),
 	}
 }
+
+// BufferedSenderMetrics are for monitoring of BufferedSender.
+type BufferedSenderMetrics struct {
+	BufferedSenderQueueSize *metric.Gauge
+}
+
+var (
+	metaBufferedSenderQueueSize = metric.Metadata{
+		Name:        "kv.rangefeed.buffered_sender.queue_size",
+		Help:        `Number of entries in the buffered sender queue`,
+		Measurement: "Pending Events",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+func (*BufferedSenderMetrics) MetricStruct() {}
+
+// NewBufferedSenderMetrics makes the metrics for BufferedSender.
+func NewBufferedSenderMetrics() *BufferedSenderMetrics {
+	return &BufferedSenderMetrics{
+		BufferedSenderQueueSize: metric.NewGauge(metaBufferedSenderQueueSize),
+	}
+}
