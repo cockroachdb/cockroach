@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,9 +39,8 @@ func TestSQLStatsRegions(t *testing.T) {
 	// and a secondary tenant, ensuring that a distsql query across multiple
 	// regions sees those regions reported in sqlstats.
 	ctx := context.Background()
-	rng, _ := randutil.NewPseudoRand()
 
-	numServers := 3
+	numServers := 9
 	regionNames := []string{
 		"gcp-us-west1",
 		"gcp-us-central1",
@@ -86,6 +83,9 @@ func TestSQLStatsRegions(t *testing.T) {
 	}()
 
 	tdb := sqlutils.MakeSQLRunner(host.ServerConn(0))
+
+	// Max out rate limit for replica rebalances.
+	tdb.Exec(t, `set cluster setting kv.snapshot_rebalance.max_rate = '1g'`)
 
 	// Shorten the closed timestamp target duration so that span configs
 	// propagate more rapidly.
@@ -144,99 +144,68 @@ func TestSQLStatsRegions(t *testing.T) {
 			db := tc.db
 			db.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 1;`)
 
-			// In order to ensure that ranges are replicated across all regions, following
-			// SucceedsWithin block performs following:
-			// - wait for full replication, which doesn't guarantee that there's no
-			// more splits should happen
-			// - query `show ranges` to check that at least one leaseholder is present
-			// in every locality.
-			// - if localitiesMap has localities for all regions defined in regionNames then
-			// it means we have leaseholders in every region.
-			// - otherwise enqueue replica split for all ranges to speed up splits and
-			// try again with new cycle.
-			testutils.SucceedsWithin(t, func() error {
-				require.NoError(t, host.WaitForFullReplication())
-				rows := db.QueryStr(t, `select range_id, lease_holder, lease_holder_locality from [show ranges from table test with details]`)
-
-				localitiesMap := map[string] /*locality*/ []string /*leaseholderNodeID*/ {}
-				for _, row := range rows {
-					leaseholderNodeID := row[1]
-					leaseholderLocality := row[2]
-					localitiesMap[leaseholderLocality] = append(localitiesMap[leaseholderLocality], leaseholderNodeID)
-				}
-
-				if len(localitiesMap) < len(regionNames) {
-					for _, row := range rows {
-						rangeID, err := strconv.Atoi(row[0])
-						require.NoError(t, err)
-						lhID, err := strconv.Atoi(row[1])
-						require.NoError(t, err)
-						systemSqlDb := host.SystemLayer(lhID-1).SQLConn(t, serverutils.DBName(tc.dbName))
-						// ignore errors of enqueued splits to make sure it doesn't affect test execution.
-						_, _ = systemSqlDb.Exec(`SELECT crdb_internal.kv_enqueue_replica($1, 'split', true)`, rangeID)
-					}
-					return fmt.Errorf("expected leaseholders in following %s localities, but got %s", regionNames, localitiesMap)
-				}
-				return nil
-			}, 5*time.Minute)
-
-			// It takes a while for the region replication to complete.
-			testutils.SucceedsWithin(t, func() error {
-				var expectedRegions []string
-				_, err := db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
-				if err != nil {
-					return err
-				}
-
-				if rng.Float64() < 0.5 {
-					// In half of the cases disable DistSQL in order to check
-					// that KV regions information is propagated correctly.
-					_, err = db.DB.ExecContext(ctx, "SET distsql = off;")
+			testutils.RunTrueAndFalse(t, "distsql", func(t *testing.T, distsql bool) {
+				testutils.SucceedsWithin(t, func() (err error) {
+					var expectedRegions []string
+					_, err = db.DB.ExecContext(ctx, fmt.Sprintf(`USE %s`, tc.dbName))
 					if err != nil {
 						return err
 					}
-				}
 
-				// Use EXPLAIN ANALYSE (DISTSQL) to get the accurate list of nodes.
-				explainInfo, err := db.DB.QueryContext(ctx, `EXPLAIN ANALYSE (DISTSQL) SELECT * FROM test`)
-				if err != nil {
-					return err
-				}
-				for explainInfo.Next() {
-					var explainStr string
-					if err := explainInfo.Scan(&explainStr); err != nil {
-						t.Fatal(err)
+					if distsql {
+						_, err = db.DB.ExecContext(ctx, "SET distsql = on;")
+						if err != nil {
+							return err
+						}
+					} else {
+						_, err = db.DB.ExecContext(ctx, "SET distsql = off;")
+						if err != nil {
+							return err
+						}
+
 					}
 
-					explainStr = strings.ReplaceAll(explainStr, " ", "")
-					// Example str "  regions: cp-us-central1,gcp-us-east1,gcp-us-west1"
-					if strings.HasPrefix(explainStr, "regions:") {
-						explainStr = strings.ReplaceAll(explainStr, "regions:", "")
+					// Use EXPLAIN ANALYSE (DISTSQL) to get the accurate list of nodes.
+					explainInfo, err := db.DB.QueryContext(ctx, `EXPLAIN ANALYSE (DISTSQL) SELECT * FROM test`)
+					if err != nil {
+						return err
+					}
+					for explainInfo.Next() {
+						var explainStr string
+						if err := explainInfo.Scan(&explainStr); err != nil {
+							t.Fatal(err)
+						}
+
 						explainStr = strings.ReplaceAll(explainStr, " ", "")
-						expectedRegions = strings.Split(explainStr, ",")
-						if len(expectedRegions) < len(regionNames) {
-							return fmt.Errorf("rows are not replicated to all regions."+
-								" Expected replication to following regions %s but got %s\n", regionNames, expectedRegions)
+						// Example str "  regions: cp-us-central1,gcp-us-east1,gcp-us-west1"
+						if strings.HasPrefix(explainStr, "regions:") {
+							explainStr = strings.ReplaceAll(explainStr, "regions:", "")
+							explainStr = strings.ReplaceAll(explainStr, " ", "")
+							expectedRegions = strings.Split(explainStr, ",")
+							if len(expectedRegions) < len(regionNames) {
+								return fmt.Errorf("rows are not replicated to all regions."+
+									" Expected replication to following regions %s but got %s\n", regionNames, expectedRegions)
+							}
 						}
 					}
-				}
 
-				// Select from the table and see what statement statistics were written.
-				db.Exec(t, "SET application_name = $1", t.Name())
-				db.Exec(t, "SELECT * FROM test")
-				row := db.QueryRow(t, `
+					// Select from the table and see what statement statistics were written.
+					db.Exec(t, "SET application_name = $1", t.Name())
+					db.Exec(t, "SELECT * FROM test")
+					row := db.QueryRow(t, `
 				SELECT statistics->>'statistics'
 				  FROM crdb_internal.statement_statistics
 				 WHERE app_name = $1`, t.Name())
 
-				var actualJSON string
-				row.Scan(&actualJSON)
-				var actual appstatspb.StatementStatistics
-				err = json.Unmarshal([]byte(actualJSON), &actual)
-				require.NoError(t, err)
-				require.Equal(t, expectedRegions, actual.Regions)
-				return nil
-			}, 3*time.Minute)
+					var actualJSON string
+					row.Scan(&actualJSON)
+					var actual appstatspb.StatementStatistics
+					err = json.Unmarshal([]byte(actualJSON), &actual)
+					require.NoError(t, err)
+					require.Equal(t, expectedRegions, actual.Regions)
+					return nil
+				}, 3*time.Minute)
+			})
 		})
 	}
 }
