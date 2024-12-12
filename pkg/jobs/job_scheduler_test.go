@@ -63,7 +63,7 @@ func TestJobSchedulerReschedulesRunning(t *testing.T) {
 			details := j.ScheduleDetails()
 			details.Wait = wait
 			j.SetScheduleDetails(*details)
-			require.NoError(t, j.SetSchedule("@hourly"))
+			require.NoError(t, j.SetScheduleAndNextRun("@hourly"))
 
 			require.NoError(t,
 				h.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -120,7 +120,7 @@ func TestJobSchedulerExecutesAfterTerminal(t *testing.T) {
 			// Create job that waits for the previous runs to finish.
 			j := h.newScheduledJob(t, "j", "SELECT 42 AS meaning_of_life;")
 			j.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{Wait: wait}))
-			require.NoError(t, j.SetSchedule("@hourly"))
+			require.NoError(t, j.SetScheduleAndNextRun("@hourly"))
 
 			require.NoError(t,
 				h.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -164,7 +164,7 @@ func TestJobSchedulerExecutesAndSchedulesNextRun(t *testing.T) {
 
 	// Create job that waits for the previous runs to finish.
 	j := h.newScheduledJob(t, "j", "SELECT 42 AS meaning_of_life;")
-	require.NoError(t, j.SetSchedule("@hourly"))
+	require.NoError(t, j.SetScheduleAndNextRun("@hourly"))
 
 	require.NoError(t,
 		h.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -558,7 +558,7 @@ func TestJobSchedulerRetriesFailed(t *testing.T) {
 		t.Run(tc.onError.String(), func(t *testing.T) {
 			h.env.SetTime(startTime)
 			schedule.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{OnError: tc.onError}))
-			require.NoError(t, schedule.SetSchedule("@hourly"))
+			require.NoError(t, schedule.SetScheduleAndNextRun("@hourly"))
 			require.NoError(t, schedules.Update(ctx, schedule))
 
 			h.env.SetTime(execTime)

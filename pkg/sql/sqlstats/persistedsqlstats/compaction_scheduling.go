@@ -47,7 +47,7 @@ func CreateSQLStatsCompactionScheduleIfNotYetExist(
 	schedule := scheduledjobs.MaybeRewriteCronExpr(
 		clusterID, SQLStatsCleanupRecurrence.Get(&st.SV),
 	)
-	if err := compactionSchedule.SetSchedule(schedule); err != nil {
+	if err := compactionSchedule.SetScheduleAndNextRun(schedule); err != nil {
 		return nil, err
 	}
 

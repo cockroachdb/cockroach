@@ -178,7 +178,7 @@ func (j *jobMonitor) updateSchedule(ctx context.Context, cronExpr string) {
 			if sj.ScheduleExpr() == cronExpr {
 				return nil
 			}
-			if err := sj.SetSchedule(cronExpr); err != nil {
+			if err := sj.SetScheduleAndNextRun(cronExpr); err != nil {
 				return err
 			}
 			sj.SetScheduleStatus(string(jobs.StatusPending))

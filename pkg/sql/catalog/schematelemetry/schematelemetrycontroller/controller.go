@@ -159,7 +159,7 @@ func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clust
 			if sj.ScheduleExpr() == cronExpr {
 				return nil
 			}
-			if err := sj.SetSchedule(cronExpr); err != nil {
+			if err := sj.SetScheduleAndNextRun(cronExpr); err != nil {
 				return err
 			}
 			sj.SetScheduleStatus(string(jobs.StatusPending))
@@ -219,7 +219,7 @@ func CreateSchemaTelemetrySchedule(
 	scheduledJob := jobs.NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 
 	schedule := SchemaTelemetryRecurrence.Get(&st.SV)
-	if err := scheduledJob.SetSchedule(schedule); err != nil {
+	if err := scheduledJob.SetScheduleAndNextRun(schedule); err != nil {
 		return nil, err
 	}
 
