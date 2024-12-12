@@ -664,6 +664,7 @@ go_test(
         "err_count_test.go",
         "event_log_test.go",
         "exec_util_test.go",
+        "executor_statement_metrics_test.go",
         "explain_bundle_test.go",
         "explain_test.go",
         "explain_tree_test.go",

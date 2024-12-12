@@ -8,6 +8,7 @@ package metric
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math"
 	"reflect"
 	"sort"
@@ -124,6 +125,22 @@ func TestCounter(t *testing.T) {
 	}
 
 	testMarshal(t, c, "90")
+}
+
+func TestUniqueCounter(t *testing.T) {
+	c := NewUniqueCounter(emptyMetadata)
+	expected := int64(10_000)
+	for i := int64(0); i < expected; i++ {
+		c.Add([]byte(fmt.Sprintf("test-%d", i)))
+	}
+	// UniqueCounter is an approximation
+	margin := float64(expected) * 0.005
+	actual := c.Count()
+	if math.Abs(float64(actual-expected)) > margin {
+		t.Fatalf("unexpected value: %d", actual)
+	}
+
+	testMarshal(t, c, fmt.Sprintf("%d", actual))
 }
 
 func TestCounterFloat64(t *testing.T) {

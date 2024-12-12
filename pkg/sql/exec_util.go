@@ -756,6 +756,13 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	MetaSQLExecLatencyDetail = metric.Metadata{
+		Name:        "sql.exec.latency.detail",
+		Help:        "Latency of SQL statement execution, by statement fingerprint",
+		Measurement: "Latency",
+		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	MetaSQLServiceLatency = metric.Metadata{
 		Name:        "sql.service.latency",
 		Help:        "Latency of SQL request execution",
@@ -796,13 +803,21 @@ var (
 		Name:        "sql.distsql.exec.latency",
 		Help:        "Latency of DistSQL statement execution",
 		Measurement: "Latency",
+		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	MetaDistSQLServiceLatency = metric.Metadata{
 		Name:        "sql.distsql.service.latency",
 		Help:        "Latency of DistSQL request execution",
 		Measurement: "Latency",
+		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	MetaUniqueStatementCount = metric.Metadata{
+		Name:        "sql.query.unique.count",
+		Help:        "Cardinality estimate of the set of statement fingerprints",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaTxnAbort = metric.Metadata{
 		Name:        "sql.txn.abort.count",
