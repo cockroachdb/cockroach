@@ -35,6 +35,7 @@ type TxnMetrics struct {
 	TxnsWithCondensedIntentsGauge       *metric.Gauge
 	TxnsRejectedByLockSpanBudget        *metric.Counter
 	TxnsRejectedByCountLimit            *metric.Counter
+	TxnsResponseOverCountLimit          *metric.Counter
 	TxnsInFlightLocksOverTrackingBudget *metric.Counter
 
 	// Restarts is the number of times we had to restart the transaction.
@@ -182,6 +183,12 @@ var (
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaTxnsResponseOverCountLimit = metric.Metadata{
+		Name:        "txn.count_limit_on_response",
+		Help:        "KV transactions that have exceeded the count limit on a response",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaTxnsInflightLocksOverTrackingBudget = metric.Metadata{
 		Name: "txn.inflight_locks_over_tracking_budget",
 		Help: "KV transactions whose in-flight writes and locking reads have exceeded " +
@@ -312,6 +319,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		TxnsWithCondensedIntentsGauge:       metric.NewGauge(metaTxnsWithCondensedIntentSpansGauge),
 		TxnsRejectedByLockSpanBudget:        metric.NewCounter(metaTxnsRejectedByLockSpanBudget),
 		TxnsRejectedByCountLimit:            metric.NewCounter(metaTxnsRejectedByCountLimit),
+		TxnsResponseOverCountLimit:          metric.NewCounter(metaTxnsResponseOverCountLimit),
 		TxnsInFlightLocksOverTrackingBudget: metric.NewCounter(metaTxnsInflightLocksOverTrackingBudget),
 		Restarts: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaRestartsHistogram,
