@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
@@ -821,32 +822,58 @@ func (r *Replica) GetRangeLeaseDuration() time.Duration {
 // shouldUseExpirationLeaseRLocked. We can merge these once there are no more
 // callers: when expiration leases don't quiesce and are always eagerly renewed.
 func (r *Replica) requiresExpirationLeaseRLocked() bool {
-	return r.store.cfg.NodeLiveness == nil ||
-		r.shMu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
+	return requiresExpirationLease(r.store.cfg.NodeLiveness, r.descRLocked())
+}
+
+// requiresExpirationLease returns whether the supplied range requires the use
+// of expiration based leases or not.
+func requiresExpirationLease(
+	nodeLiveness *liveness.NodeLiveness, desc *roachpb.RangeDescriptor,
+) bool {
+	return nodeLiveness == nil || desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))
 }
 
 // shouldUseExpirationLeaseRLocked returns true if this range should be using an
 // expiration-based lease.
 func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
-	return r.desiredLeaseTypeRLocked() == roachpb.LeaseExpiration
+	return shouldUseExpirationLease(
+		r.store.cfg.NodeLiveness, r.descRLocked(), r.store.ClusterSettings(), r.store.getNodeRangeCount(),
+	)
 }
 
-// desiredLeaseTypeRLocked returns the desired lease type for this replica.
-func (r *Replica) desiredLeaseTypeRLocked() roachpb.LeaseType {
-	// Use an expiration-based lease if the range requires one or if the
-	// kv.expiration_leases_only.enabled setting is enabled and the number of ranges
-	// (replicas) per node is fewer than kv.expiration_leases.max_replicas_per_node.
-	expirationLeaseRequired := r.requiresExpirationLeaseRLocked()
+// shouldUseExpirationLeaseRLocked returns whether the supplied range should use
+// an expiration-based lease or not.
+//
+// We should use an expiration-based lease if the range requires one or if the
+// kv.expiration_leases_only.enabled setting is enabled and the number of ranges
+// (replicas) per node is fewer than kv.expiration_leases.max_replicas_per_node.
+func shouldUseExpirationLease(
+	nodeLiveness *liveness.NodeLiveness,
+	desc *roachpb.RangeDescriptor,
+	settings *cluster.Settings,
+	nodeRangeCount int64,
+) bool {
+	expirationLeaseRequired := requiresExpirationLease(nodeLiveness, desc)
 	expirationLeaseOnly := func() bool {
-		settingEnabled := ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) && !DisableExpirationLeasesOnly
-		maxAllowedReplicas := ExpirationLeasesMaxReplicasPerNode.Get(&r.ClusterSettings().SV)
+		settingEnabled := ExpirationLeasesOnly.Get(&settings.SV) && !DisableExpirationLeasesOnly
+		maxAllowedReplicas := ExpirationLeasesMaxReplicasPerNode.Get(&settings.SV)
 		// Disable the setting if there are too many replicas.
-		if settingEnabled && maxAllowedReplicas > 0 && r.store.getNodeRangeCount() > maxAllowedReplicas {
+		if settingEnabled && maxAllowedReplicas > 0 && nodeRangeCount > maxAllowedReplicas {
 			settingEnabled = false
 		}
 		return settingEnabled
 	}()
 	if expirationLeaseRequired || expirationLeaseOnly {
+		return true
+	}
+	return false
+}
+
+// desiredLeaseTypeRLocked returns the desired lease type for this replica.
+func (r *Replica) desiredLeaseTypeRLocked() roachpb.LeaseType {
+	if shouldUseExpirationLease(
+		r.store.cfg.NodeLiveness, r.descRLocked(), r.store.ClusterSettings(), r.store.getNodeRangeCount(),
+	) {
 		return roachpb.LeaseExpiration
 	}
 
