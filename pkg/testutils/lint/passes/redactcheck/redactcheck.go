@@ -190,6 +190,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb": {
 						"ForeignKeyAction": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop": {
+						"Phase": {},
+						"Type":  {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph": {
 						"RuleName": {},
 					},

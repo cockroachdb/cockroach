@@ -6,6 +6,8 @@
 // Package scop describes ops within a schema change.
 package scop
 
+import "github.com/cockroachdb/redact"
+
 // Op represents an action to be taken on a single descriptor.
 type Op interface {
 	Type() Type
@@ -14,6 +16,11 @@ type Op interface {
 // Type represents the type of operation for an Op. Ops can be grouped into the
 // same Stage only if they share a type.
 type Type int
+
+var _ redact.SafeValue = Type(0)
+
+// SafeValue implements the redact.SafeValue interface.
+func (t Type) SafeValue() {}
 
 //go:generate stringer -type=Type
 
