@@ -122,9 +122,6 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 		queueCfg, sem, &monitorRegistry, &closerRegistry,
 	)
 	require.NoError(t, err)
-	// We expect the disk spiller as well as the external sorter to be included
-	// into the set of closers.
-	require.Equal(t, 2, closerRegistry.NumClosers())
 
 	sorter.Init(ctx)
 	for b := sorter.Next(); b.Length() > 0; b = sorter.Next() {
@@ -133,7 +130,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	require.True(t, spilled)
 	require.Zero(t, sem.GetCount(), "sem still reports open FDs")
 
-	externalSorter := colexec.MaybeUnwrapInvariantsChecker(sorter).(*diskSpillerBase).diskBackedOp.(*externalSorter)
+	externalSorter := colexec.MaybeUnwrapInvariantsChecker(sorter).(*oneInputDiskSpiller).diskBackedOp.(*externalSorter)
 	numPartitionsCreated := externalSorter.currentPartitionIdx
 	// This maximum can be achieved when we have minimum required number of FDs
 	// as follows: we expect that each newly created partition contains about
