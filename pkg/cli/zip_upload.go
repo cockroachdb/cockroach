@@ -332,7 +332,7 @@ func newProfileUploadReq(
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, makeDDURL(datadogProfileUploadURLTmpl), &body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, makeDDURL(datadogProfileUploadURLTmpl, debugZipUploadOpts.ddSite), &body)
 	if err != nil {
 		return nil, err
 	}
@@ -655,7 +655,7 @@ func setupDDArchive(ctx context.Context, pathPrefix, archiveName string) error {
 	}
 
 	req, err := http.NewRequestWithContext(
-		ctx, http.MethodPost, makeDDURL(datadogCreateArchiveURLTmpl), bytes.NewReader(rawPayload),
+		ctx, http.MethodPost, makeDDURL(datadogCreateArchiveURLTmpl, debugZipUploadOpts.ddSite), bytes.NewReader(rawPayload),
 	)
 	if err != nil {
 		return err
@@ -798,18 +798,18 @@ func ddLogUpload(ctx context.Context, sig logUploadSig) (int, error) {
 	buf.Write(bytes.Join(sig.logLines, []byte(",")))
 	buf.WriteByte(']')
 
-	return uploadLogsToDatadog(ctx, buf.Bytes())
+	return uploadLogsToDatadog(buf.Bytes(), debugZipUploadOpts.ddAPIKey, debugZipUploadOpts.ddSite)
 }
 
 // uploadLogsToDatadog is a generic function that uploads the given payload of
 // logs to datadog. This exists because artifacts other than logs might also
 // need to be uploaded to datadog in the form of logs (example: table dumps,
 // events etc.).
-func uploadLogsToDatadog(ctx context.Context, payload []byte) (int, error) {
+func uploadLogsToDatadog(payload []byte, ddApiKey string, ddSite string) (int, error) {
 	var (
 		compressedLogs      bytes.Buffer
 		compressedlogWriter = gzip.NewWriter(&compressedLogs)
-		url                 = makeDDURL(datadogLogIntakeURLTmpl)
+		url                 = makeDDURL(datadogLogIntakeURLTmpl, ddSite)
 	)
 
 	if _, err := compressedlogWriter.Write(payload); err != nil {
@@ -832,7 +832,7 @@ func uploadLogsToDatadog(ctx context.Context, payload []byte) (int, error) {
 
 		req.Header.Set(httputil.ContentTypeHeader, httputil.JSONContentType)
 		req.Header.Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
-		req.Header.Set(datadogAPIKeyHeader, debugZipUploadOpts.ddAPIKey)
+		req.Header.Set(datadogAPIKeyHeader, ddApiKey)
 
 		if _, err = doUploadReq(req); err == nil {
 			break
@@ -1077,8 +1077,8 @@ You will receive an email notification once the rehydration is complete.
 // placeholder in the template. This is a simple convenience
 // function. It assumes that the site is valid. This assumption is
 // fine because we are validating the site early on in the flow.
-func makeDDURL(tmpl string) string {
-	return fmt.Sprintf(tmpl, ddSiteToHostMap[debugZipUploadOpts.ddSite])
+func makeDDURL(tmpl string, ddSite string) string {
+	return fmt.Sprintf(tmpl, ddSiteToHostMap[ddSite])
 }
 
 // humanReadableSize converts the given number of bytes to a human readable
