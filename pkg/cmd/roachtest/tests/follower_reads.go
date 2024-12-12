@@ -980,14 +980,6 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 ) {
 	topology := topologySpec{multiRegion: false}
 	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
-		// This test does not currently work with shared-process
-		// deployments (#129546), so we do not run it in separate-process
-		// mode either to reduce noise. We should reevaluate once the test
-		// works in shared-process.
-		mixedversion.EnabledDeploymentModes(
-			mixedversion.SystemOnlyDeployment,
-			mixedversion.SharedProcessDeployment,
-		),
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
 	)
 }
@@ -1015,15 +1007,6 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// to tenant health checks since then which appear to have addressed
 		// this issue.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
-
-		// This test does not currently work with shared-process
-		// deployments (#129167), so we do not run it in separate-process
-		// mode either to reduce noise. We should reevaluate once the test
-		// works in shared-process.
-		mixedversion.EnabledDeploymentModes(
-			mixedversion.SystemOnlyDeployment,
-			mixedversion.SharedProcessDeployment,
-		),
 	)
 }
 
