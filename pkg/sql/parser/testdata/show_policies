@@ -1,0 +1,33 @@
+parse
+SHOW POLICIES FOR xy
+----
+SHOW POLICIES FOR xy
+SHOW POLICIES FOR xy -- fully parenthesized
+SHOW POLICIES FOR xy -- literals removed
+SHOW POLICIES FOR _ -- identifiers removed
+
+parse
+SHOW POLICIES FOR schema.xy
+----
+SHOW POLICIES FOR schema.xy
+SHOW POLICIES FOR schema.xy -- fully parenthesized
+SHOW POLICIES FOR schema.xy -- literals removed
+SHOW POLICIES FOR _._ -- identifiers removed
+
+parse
+SHOW POLICIES FOR db.schema.xy
+----
+SHOW POLICIES FOR db.schema.xy
+SHOW POLICIES FOR db.schema.xy -- fully parenthesized
+SHOW POLICIES FOR db.schema.xy -- literals removed
+SHOW POLICIES FOR _._._ -- identifiers removed
+
+# Must specify table name
+error
+SHOW POLICIES
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW POLICIES
+             ^
+HINT: try \h SHOW POLICIES

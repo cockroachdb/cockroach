@@ -114,6 +114,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterIndex(ctx, n)
 	case *tree.AlterIndexVisible:
 		return p.AlterIndexVisible(ctx, n)
+	case *tree.AlterPolicy:
+		return p.AlterPolicy(ctx, n)
 	case *tree.AlterSchema:
 		return p.AlterSchema(ctx, n)
 	case *tree.AlterTable:
@@ -165,6 +167,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.CreateDatabase(ctx, n)
 	case *tree.CreateIndex:
 		return p.CreateIndex(ctx, n)
+	case *tree.CreatePolicy:
+		return p.CreatePolicy(ctx, n)
 	case *tree.CreateSchema:
 		return p.CreateSchema(ctx, n)
 	case *tree.CreateTrigger:
@@ -197,6 +201,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropIndex(ctx, n)
 	case *tree.DropOwnedBy:
 		return p.DropOwnedBy(ctx)
+	case *tree.DropPolicy:
+		return p.DropPolicy(ctx, n)
 	case *tree.DropRole:
 		return p.DropRole(ctx, n)
 	case *tree.DropSchema:
@@ -267,6 +273,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowExternalConnection(ctx, n)
 	case *tree.ShowHistogram:
 		return p.ShowHistogram(ctx, n)
+	case *tree.ShowPolicies:
+		return p.ShowPolicies(ctx, n)
 	case *tree.ShowTableStats:
 		return p.ShowTableStats(ctx, n)
 	case *tree.ShowTenant:
@@ -326,6 +334,7 @@ func init() {
 		&tree.AlterFunctionDepExtension{},
 		&tree.AlterIndex{},
 		&tree.AlterIndexVisible{},
+		&tree.AlterPolicy{},
 		&tree.AlterSchema{},
 		&tree.AlterTable{},
 		&tree.AlterTableLocality{},
@@ -353,6 +362,7 @@ func init() {
 		&tree.CreateExternalConnection{},
 		&tree.CreateTenant{},
 		&tree.CreateIndex{},
+		&tree.CreatePolicy{},
 		&tree.CreateSchema{},
 		&tree.CreateSequence{},
 		&tree.CreateTrigger{},
@@ -367,6 +377,7 @@ func init() {
 		&tree.DropTrigger{},
 		&tree.DropIndex{},
 		&tree.DropOwnedBy{},
+		&tree.DropPolicy{},
 		&tree.DropRole{},
 		&tree.DropSchema{},
 		&tree.DropSequence{},
@@ -401,6 +412,7 @@ func init() {
 		&tree.ShowCreateExternalConnections{},
 		&tree.ShowExternalConnections{},
 		&tree.ShowHistogram{},
+		&tree.ShowPolicies{},
 		&tree.ShowTableStats{},
 		&tree.ShowTenant{},
 		&tree.ShowTraceForSession{},

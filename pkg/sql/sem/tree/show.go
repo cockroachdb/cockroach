@@ -1331,6 +1331,19 @@ func (node *ShowPartitions) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowPolicies represents a SHOW POLICIES statement.
+type ShowPolicies struct {
+	Table *UnresolvedObjectName
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowPolicies) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW POLICIES FOR ")
+	ctx.FormatNode(node.Table)
+}
+
+var _ Statement = &ShowPolicies{}
+
 // ScheduledJobExecutorType is a type identifying the names of
 // the supported scheduled job executors.
 type ScheduledJobExecutorType int

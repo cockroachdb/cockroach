@@ -601,6 +601,13 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE TRIGGER foo ??`, `CREATE TRIGGER`},
 		{`CREATE TRIGGER foo AFTER INSERT ON bar ??`, `CREATE TRIGGER`},
 		{`DROP TRIGGER ??`, `DROP TRIGGER`},
+
+		{`CREATE POLICY ??`, `CREATE POLICY`},
+		{`CREATE POLICY p1 on ??`, `CREATE POLICY`},
+		{`ALTER POLICY ??`, `ALTER POLICY`},
+		{`ALTER POLICY p1 on t1 RENAME ??`, `ALTER POLICY`},
+		{`DROP POLICY ??`, `DROP POLICY`},
+		{`SHOW POLICIES ??`, `SHOW POLICIES`},
 	}
 
 	// The following checks that the test definition above exercises all
