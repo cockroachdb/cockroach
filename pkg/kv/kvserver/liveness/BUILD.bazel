@@ -50,8 +50,8 @@ go_test(
     ],
     embed = [":liveness"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "large"},
-        "//conditions:default": {"test.Pool": "default"},
+        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
+        "//conditions:default": {"test.Pool": "large"},
     }),
     deps = [
         "//pkg/base",
