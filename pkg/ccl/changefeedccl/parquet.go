@@ -52,9 +52,18 @@ func newParquetSchemaDefintion(
 ) (*parquet.SchemaDefinition, error) {
 	var columnNames []string
 	var columnTypes []*types.T
+	seenColumnNames := make(map[string]bool)
 
 	numCols := 0
 	if err := row.ForAllColumns().Col(func(col cdcevent.ResultColumn) error {
+		if _, ok := seenColumnNames[col.Name]; ok {
+			// If a column is both the primary key and one of the selected columns in
+			// a cdc query, we do not want to duplicate it in the parquet output. We
+			// deduplicate that here and where we populate the datums (see
+			// populateDatums).
+			return nil
+		}
+		seenColumnNames[col.Name] = true
 		columnNames = append(columnNames, col.Name)
 		columnTypes = append(columnTypes, col.Typ)
 		numCols += 1
@@ -164,7 +173,16 @@ func (w *parquetWriter) populateDatums(
 ) error {
 	datums := w.datumAlloc[:0]
 
-	if err := updatedRow.ForAllColumns().Datum(func(d tree.Datum, _ cdcevent.ResultColumn) error {
+	seenColumnNames := make(map[string]bool)
+	if err := updatedRow.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		if _, ok := seenColumnNames[col.Name]; ok {
+			// If a column is both the primary key and one of the selected columns in
+			// a cdc query, we do not want to duplicate it in the parquet output. We
+			// deduplicate that here and in the schema definition (see
+			// newParquetSchemaDefintion).
+			return nil
+		}
+		seenColumnNames[col.Name] = true
 		datums = append(datums, d)
 		return nil
 	}); err != nil {
@@ -229,7 +247,7 @@ func addParquetTestMetadata(
 ) ([]parquet.Option, error) {
 	// NB: Order matters. When iterating using ForAllColumns, which is used when
 	// writing datums and defining the schema, the order of columns usually
-	// matches the underlying table. If a composite keys defined, the order in
+	// matches the underlying table. If a composite key is defined, the order in
 	// ForEachKeyColumn may not match. In tests, we want to use the latter
 	// order when printing the keys.
 	keyCols := map[string]int{}
@@ -262,7 +280,16 @@ func addParquetTestMetadata(
 	// cdcevent.ResultColumn. The Ordinal() method may return an invalid
 	// number for virtual columns.
 	idx := 0
+	seenColumnNames := make(map[string]bool)
 	if err := row.ForAllColumns().Col(func(col cdcevent.ResultColumn) error {
+		if _, ok := seenColumnNames[col.Name]; ok {
+			// Since we deduplicate columns with the same name in the parquet output,
+			// we should not even increment our index for columns we've seen before.
+			// Since we have already seen this column name we have also already found
+			// the relevant index.
+			return nil
+		}
+		seenColumnNames[col.Name] = true
 		if _, colIsInKey := keyCols[col.Name]; colIsInKey {
 			keyCols[col.Name] = idx
 		}

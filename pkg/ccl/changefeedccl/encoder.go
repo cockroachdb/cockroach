@@ -22,7 +22,7 @@ type Encoder interface {
 	// `TableDescriptor`, but only the primary key fields will be used. The
 	// returned bytes are only valid until the next call to Encode*.
 	EncodeKey(context.Context, cdcevent.Row) ([]byte, error)
-	// EncodeValue encodes the primary key of the given row. The columns of the
+	// EncodeValue encodes the values of the given row. The columns of the
 	// datums are expected to match 1:1 with the `Columns` field of the
 	// `TableDescriptor`. The returned bytes are only valid until the next call
 	// to Encode*.
