@@ -153,6 +153,9 @@ transaction_stmt ::=
 	| commit_stmt
 	| rollback_stmt
 	| abort_stmt
+	| prepare_transaction_stmt
+	| commit_prepared_stmt
+	| rollback_prepared_stmt
 
 close_cursor_stmt ::=
 	'CLOSE' 'ALL'
@@ -469,6 +472,15 @@ rollback_stmt ::=
 
 abort_stmt ::=
 	'ABORT' opt_abort_mod
+
+prepare_transaction_stmt ::=
+	'PREPARE' 'TRANSACTION' 'SCONST'
+
+commit_prepared_stmt ::=
+	'COMMIT' 'PREPARED' 'SCONST'
+
+rollback_prepared_stmt ::=
+	'ROLLBACK' 'PREPARED' 'SCONST'
 
 cursor_name ::=
 	name
@@ -1337,6 +1349,7 @@ unreserved_keyword ::=
 	| 'POLYGONZM'
 	| 'PRECEDING'
 	| 'PREPARE'
+	| 'PREPARED'
 	| 'PRESERVE'
 	| 'PRIOR'
 	| 'PRIORITY'
@@ -4074,6 +4087,7 @@ bare_label_keywords ::=
 	| 'POSITION'
 	| 'PRECEDING'
 	| 'PREPARE'
+	| 'PREPARED'
 	| 'PRESERVE'
 	| 'PRIMARY'
 	| 'PRIOR'

@@ -105,9 +105,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 4.0 MiB               
-  74       | 2        | 4.0 MiB               
-  74       | 3        | 4.0 MiB               
+  75       | 1        | 4.0 MiB               
+  75       | 2        | 4.0 MiB               
+  75       | 3        | 4.0 MiB               
 
 
 -- And, the per-store tokens available post-write from n1.
@@ -136,9 +136,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 0 B                   
-  74       | 2        | 0 B                   
-  74       | 3        | 4.0 MiB               
+  75       | 1        | 0 B                   
+  75       | 2        | 0 B                   
+  75       | 3        | 4.0 MiB               
 
 
 -- Per-store tokens available from n1.
@@ -253,8 +253,8 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 0 B                   
-  74       | 3        | 5.0 MiB               
+  75       | 1        | 0 B                   
+  75       | 3        | 5.0 MiB               
 
 
 -- Per-store tokens available from n1, these should reflect the deducted 
@@ -306,8 +306,8 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 0 B                   
-  74       | 3        | 6.0 MiB               
+  75       | 1        | 0 B                   
+  75       | 3        | 6.0 MiB               
 
 
 -- (Allowing below-raft admission to proceed on n1, n2, and n3. Note that n2 is still down.)
@@ -372,7 +372,7 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  74       | 3             
+  75       | 3             
 
 
 -- (Adding VOTER to n4 and n5.)
@@ -387,7 +387,7 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  74       | 5             
+  75       | 5             
 
 
 -- Per-store tokens available from n1.
@@ -434,11 +434,11 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 0 B                   
-  74       | 2        | 0 B                   
-  74       | 3        | 0 B                   
-  74       | 4        | 4.0 MiB               
-  74       | 5        | 4.0 MiB               
+  75       | 1        | 0 B                   
+  75       | 2        | 0 B                   
+  75       | 3        | 0 B                   
+  75       | 4        | 4.0 MiB               
+  75       | 5        | 4.0 MiB               
 
 
 -- (Issuing 1x1MiB regular, 5x replicated write that's not admitted.)
@@ -557,11 +557,11 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 0 B                   
-  74       | 2        | 4.0 MiB               
-  74       | 3        | 4.0 MiB               
-  74       | 4        | 5.0 MiB               
-  74       | 5        | 5.0 MiB               
+  75       | 1        | 0 B                   
+  75       | 2        | 4.0 MiB               
+  75       | 3        | 4.0 MiB               
+  75       | 4        | 5.0 MiB               
+  75       | 5        | 5.0 MiB               
 
 
 -- Send queue and flow token metrics from n1.

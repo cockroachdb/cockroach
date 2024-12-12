@@ -3,7 +3,7 @@ set-time unixSecs=1610000000
 
 update-cache injectSpanStatsErrors=error1
 ----
-updatedTables: 61, errors: 4, run #: 1, duration > 0: true
+updatedTables: 62, errors: 4, run #: 1, duration > 0: true
 
 # Since this is the first update and we encountered an error we should see the zero value for
 # the non nullable columns, except for the last updated time which is set to the current time.
@@ -22,7 +22,7 @@ set-time unixSecs=1710000000
 
 update-cache
 ----
-updatedTables: 61, errors: 0, run #: 2, duration > 0: true
+updatedTables: 62, errors: 0, run #: 2, duration > 0: true
 
 # Now the last_update_error column should be nil and data
 # should be updated.
@@ -57,7 +57,7 @@ set-time unixSecs=1711000000
 # including the last_updated time.
 update-cache injectSpanStatsErrors=error2,error3
 ----
-updatedTables: 61, errors: 4, run #: 3, duration > 0: true
+updatedTables: 62, errors: 4, run #: 3, duration > 0: true
 
 query
 SELECT
@@ -86,7 +86,7 @@ set-time unixSecs=1810010000
 
 update-cache injectSpanStatsErrors=error4 spanStatsErrBatch=1
 ----
-updatedTables: 61, errors: 1, run #: 4, duration > 0: true
+updatedTables: 62, errors: 1, run #: 4, duration > 0: true
 
 query
 SELECT

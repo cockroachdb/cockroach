@@ -1008,7 +1008,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PER PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
-%token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
+%token <str> POSITION PRECEDING PRECISION PREPARE PREPARED PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PROCEDURE PROCEDURES PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY QUOTE
@@ -1293,6 +1293,9 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> abort_stmt
 %type <tree.Statement> rollback_stmt
 %type <tree.Statement> savepoint_stmt
+%type <tree.Statement> prepare_transaction_stmt
+%type <tree.Statement> commit_prepared_stmt
+%type <tree.Statement> rollback_prepared_stmt
 
 %type <tree.Statement> preparable_set_stmt nonpreparable_set_stmt
 %type <tree.Statement> set_local_stmt
@@ -12501,12 +12504,15 @@ savepoint_stmt:
   }
 | SAVEPOINT error // SHOW HELP: SAVEPOINT
 
-// BEGIN / START / COMMIT / END / ROLLBACK / ...
+// BEGIN / START / COMMIT / END / ROLLBACK / PREPARE TRANSACTION / COMMIT PREPARED / ROLLBACK PREPARED / ...
 transaction_stmt:
-  begin_stmt    // EXTEND WITH HELP: BEGIN
-| commit_stmt   // EXTEND WITH HELP: COMMIT
-| rollback_stmt // EXTEND WITH HELP: ROLLBACK
-| abort_stmt    /* SKIP DOC */
+  begin_stmt               // EXTEND WITH HELP: BEGIN
+| commit_stmt              // EXTEND WITH HELP: COMMIT
+| rollback_stmt            // EXTEND WITH HELP: ROLLBACK
+| abort_stmt               /* SKIP DOC */
+| prepare_transaction_stmt // EXTEND WITH HELP: PREPARE TRANSACTION
+| commit_prepared_stmt     // EXTEND WITH HELP: COMMIT PREPARED
+| rollback_prepared_stmt   // EXTEND WITH HELP: ROLLBACK PREPARED
 
 // %Help: BEGIN - start a transaction
 // %Category: Txn
@@ -12690,6 +12696,36 @@ transaction_deferrable_mode:
 | NOT DEFERRABLE
   {
     $$.val = tree.NotDeferrable
+  }
+
+// %Help: PREPARE TRANSACTION - prepare the current transaction for two-phase commit
+// %Category: Txn
+// %Text: PREPARE TRANSACTION <transaction-id>
+// %SeeAlso: COMMIT PREPARED, ROLLBACK PREPARED
+prepare_transaction_stmt:
+  PREPARE TRANSACTION SCONST
+  {
+    $$.val = &tree.PrepareTransaction{Transaction: tree.NewStrVal($3)}
+  }
+
+// %Help: COMMIT PREPARED - commit the named transaction as part of two-phase commit
+// %Category: Txn
+// %Text: COMMIT PREPARED <transaction-id>
+// %SeeAlso: PREPARE TRANSACTION, ROLLBACK PREPARED
+commit_prepared_stmt:
+  COMMIT PREPARED SCONST
+  {
+    $$.val = &tree.CommitPrepared{Transaction: tree.NewStrVal($3)}
+  }
+
+// %Help: ROLLBACK PREPARED - rollback the named transaction as part of two-phase commit
+// %Category: Txn
+// %Text: ROLLBACK PREPARED <transaction-id>
+// %SeeAlso: PREPARE TRANSACTION, COMMIT PREPARED
+rollback_prepared_stmt:
+  ROLLBACK PREPARED SCONST
+  {
+    $$.val = &tree.RollbackPrepared{Transaction: tree.NewStrVal($3)}
   }
 
 // %Help: CREATE DATABASE - create a new database
@@ -17763,6 +17799,7 @@ unreserved_keyword:
 | POLYGONZM
 | PRECEDING
 | PREPARE
+| PREPARED
 | PRESERVE
 | PRIOR
 | PRIORITY
@@ -18333,6 +18370,7 @@ bare_label_keywords:
 | POSITION
 | PRECEDING
 | PREPARE
+| PREPARED
 | PRESERVE
 | PRIMARY
 | PRIOR

@@ -1132,21 +1132,22 @@ func (c *stmtEnvCollector) PrintTableStats(
 // explicitly excluded from env.sql of the bundle (they were deemed unlikely to
 // be useful in investigations).
 var skipReadOnlySessionVar = map[string]struct{}{
-	"crdb_version":          {}, // version is included separately
-	"integer_datetimes":     {},
-	"lc_collate":            {},
-	"lc_ctype":              {},
-	"max_connections":       {},
-	"max_identifier_length": {},
-	"max_index_keys":        {},
-	"server_encoding":       {},
-	"server_version":        {},
-	"server_version_num":    {},
-	"session_authorization": {},
-	"session_user":          {},
-	"system_identity":       {},
-	"tracing":               {},
-	"virtual_cluster_name":  {},
+	"crdb_version":              {}, // version is included separately
+	"integer_datetimes":         {},
+	"lc_collate":                {},
+	"lc_ctype":                  {},
+	"max_connections":           {},
+	"max_identifier_length":     {},
+	"max_index_keys":            {},
+	"max_prepared_transactions": {},
+	"server_encoding":           {},
+	"server_version":            {},
+	"server_version_num":        {},
+	"session_authorization":     {},
+	"session_user":              {},
+	"system_identity":           {},
+	"tracing":                   {},
+	"virtual_cluster_name":      {},
 }
 
 // sessionVarNeedsQuotes contains all writable session variables that have

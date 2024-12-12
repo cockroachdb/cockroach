@@ -79,8 +79,8 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  74       | 3             
   75       | 3             
+  76       | 3             
 
 
 -- (Merging ranges.)
@@ -127,7 +127,7 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  74       | 3             
+  75       | 3             
 ----
 ----
 

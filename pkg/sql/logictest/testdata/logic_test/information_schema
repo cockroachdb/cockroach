@@ -1532,6 +1532,11 @@ system              public             29_71_1_not_null                         
 system              public             29_71_2_not_null                                                                                                written IS NOT NULL
 system              public             29_71_3_not_null                                                                                                kind IS NOT NULL
 system              public             29_71_4_not_null                                                                                                message IS NOT NULL
+system              public             29_72_1_not_null                                                                                                global_id IS NOT NULL
+system              public             29_72_2_not_null                                                                                                transaction_id IS NOT NULL
+system              public             29_72_4_not_null                                                                                                prepared IS NOT NULL
+system              public             29_72_5_not_null                                                                                                owner IS NOT NULL
+system              public             29_72_6_not_null                                                                                                database IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
@@ -1848,6 +1853,11 @@ system              public             29_71_1_not_null                         
 system              public             29_71_2_not_null                                                                                                written IS NOT NULL
 system              public             29_71_3_not_null                                                                                                kind IS NOT NULL
 system              public             29_71_4_not_null                                                                                                message IS NOT NULL
+system              public             29_72_1_not_null                                                                                                global_id IS NOT NULL
+system              public             29_72_2_not_null                                                                                                transaction_id IS NOT NULL
+system              public             29_72_4_not_null                                                                                                prepared IS NOT NULL
+system              public             29_72_5_not_null                                                                                                owner IS NOT NULL
+system              public             29_72_6_not_null                                                                                                database IS NOT NULL
 system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_9_1_not_null                                                                                                 crdb_region IS NOT NULL
@@ -3984,6 +3994,7 @@ log_timezone                                               UTC
 max_connections                                            -1
 max_identifier_length                                      128
 max_index_keys                                             32
+max_prepared_transactions                                  2147483647
 max_retries_for_read_committed                             10
 node_id                                                    1
 null_ordered_last                                          off

@@ -26,7 +26,7 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  74       | 3             
+  75       | 3             
 
 
 -- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)
@@ -85,9 +85,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 1.0 MiB               
-  74       | 2        | 1.0 MiB               
-  74       | 3        | 1.0 MiB               
+  75       | 1        | 1.0 MiB               
+  75       | 2        | 1.0 MiB               
+  75       | 3        | 1.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -116,9 +116,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 0 B                   
-  74       | 2        | 0 B                   
-  74       | 3        | 0 B                   
+  75       | 1        | 0 B                   
+  75       | 2        | 0 B                   
+  75       | 3        | 0 B                   
 
 
 -- (Block below-raft admission again.)
@@ -133,9 +133,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 1.0 MiB               
-  74       | 2        | 1.0 MiB               
-  74       | 3        | 1.0 MiB               
+  75       | 1        | 1.0 MiB               
+  75       | 2        | 1.0 MiB               
+  75       | 3        | 1.0 MiB               
 
 
 --------------------------------------------------------------------------------
@@ -153,7 +153,7 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  74       | 3             
+  75       | 3             
 
 
 -- There should also now be no connected streams for the v1 protocol,
@@ -226,9 +226,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 2.0 MiB               
-  74       | 2        | 2.0 MiB               
-  74       | 3        | 2.0 MiB               
+  75       | 1        | 2.0 MiB               
+  75       | 2        | 2.0 MiB               
+  75       | 3        | 2.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -278,9 +278,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 1.0 MiB               
-  74       | 2        | 1.0 MiB               
-  74       | 3        | 1.0 MiB               
+  75       | 1        | 1.0 MiB               
+  75       | 2        | 1.0 MiB               
+  75       | 3        | 1.0 MiB               
 
 
 -- There should also be a corresponding elastic token deduction (not regular),
@@ -358,7 +358,7 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  74       | 3             
+  75       | 3             
 
 
 -- (Issuing 1 x 3MiB elastic, 3x replicated write that's not admitted.)
@@ -370,9 +370,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 3.0 MiB               
-  74       | 2        | 3.0 MiB               
-  74       | 3        | 3.0 MiB               
+  75       | 1        | 3.0 MiB               
+  75       | 2        | 3.0 MiB               
+  75       | 3        | 3.0 MiB               
 
 
 -- Corresponding v1 token metrics on the new leader n2.
@@ -476,9 +476,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 4.0 MiB               
-  74       | 2        | 4.0 MiB               
-  74       | 3        | 4.0 MiB               
+  75       | 1        | 4.0 MiB               
+  75       | 2        | 4.0 MiB               
+  75       | 3        | 4.0 MiB               
 
 
 -- Corresponding v1 token metrics.
@@ -541,7 +541,7 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  74       | 3             
+  75       | 3             
 
 
 -- Corresponding v2 token metrics on the new leader n2. The most recent 
@@ -629,9 +629,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 1.0 MiB               
-  74       | 2        | 1.0 MiB               
-  74       | 3        | 1.0 MiB               
+  75       | 1        | 1.0 MiB               
+  75       | 2        | 1.0 MiB               
+  75       | 3        | 1.0 MiB               
 
 
 --------------------------------------------------------------------------------
@@ -645,9 +645,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 1.0 MiB               
-  74       | 2        | 1.0 MiB               
-  74       | 3        | 1.0 MiB               
+  75       | 1        | 1.0 MiB               
+  75       | 2        | 1.0 MiB               
+  75       | 3        | 1.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -659,9 +659,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 0 B                   
-  74       | 2        | 0 B                   
-  74       | 3        | 0 B                   
+  75       | 1        | 0 B                   
+  75       | 2        | 0 B                   
+  75       | 3        | 0 B                   
 
 
 -- Corresponding v2 token metrics on n2. All tokens should be returned.
@@ -785,7 +785,7 @@ ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  74       | 3             
+  75       | 3             
 
 
 -- (Issuing 1x1MiB regular, 3x replicated write that's not admitted.)
@@ -797,9 +797,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 1.0 MiB               
-  74       | 2        | 1.0 MiB               
-  74       | 3        | 1.0 MiB               
+  75       | 1        | 1.0 MiB               
+  75       | 2        | 1.0 MiB               
+  75       | 3        | 1.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -881,9 +881,9 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  74       | 1        | 1.0 MiB               
-  74       | 2        | 1.0 MiB               
-  74       | 3        | 1.0 MiB               
+  75       | 1        | 1.0 MiB               
+  75       | 2        | 1.0 MiB               
+  75       | 3        | 1.0 MiB               
 
 
 -- The v1 tracked tokens per-stream on n1. 
