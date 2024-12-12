@@ -242,6 +242,35 @@ func TestAlterBackupScheduleDoesNotResumePausedSchedules(t *testing.T) {
 	})
 }
 
+func TestAlterBackupSchedulePausesIncrementalForNewCollection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newAlterSchedulesTestHelper(t, nil)
+	defer cleanup()
+
+	createCmd := "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup/alter-schedule' RECURRING '@hourly' FULL BACKUP '@daily';"
+	rows := th.sqlDB.QueryStr(t, createCmd)
+	require.Len(t, rows, 2)
+	incID, err := strconv.Atoi(rows[0][0])
+	require.NoError(t, err)
+	fullID, err := strconv.Atoi(rows[1][0])
+	require.NoError(t, err)
+
+	// Artificially resume inc schedule to test if it gets paused after the alter
+	th.sqlDB.Exec(t, `RESUME SCHEDULE $1`, incID)
+
+	alterCmd := fmt.Sprintf(`ALTER BACKUP SCHEDULE %d SET INTO 'nodelocal://1/backup/alter-schedule-2';`, fullID)
+	th.sqlDB.Exec(t, alterCmd)
+
+	incStatus, incRecurrence := scheduleStatusAndRecurrence(t, th, incID)
+	require.Equal(t, "PAUSED", incStatus)
+	require.Equal(t, "@hourly", incRecurrence)
+	fullStatus, fullRecurrence := scheduleStatusAndRecurrence(t, th, fullID)
+	require.Equal(t, "ACTIVE", fullStatus)
+	require.Equal(t, "@daily", fullRecurrence)
+}
+
 func scheduleStatusAndRecurrence(
 	t *testing.T, th *alterSchedulesTestHelper, id int,
 ) (status string, recurrence string) {
