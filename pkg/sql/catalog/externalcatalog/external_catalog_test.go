@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/externalcatalog/externalpb"
@@ -98,11 +99,15 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	}))
 
 	require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		return IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, parentID, schemaID, false)
+		_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, parentID, schemaID, false)
+		return err
 	}), "invalid inbound foreign key")
 
+	var written []catalog.Descriptor
 	require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		return IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, parentID, schemaID, false)
+		written, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, parentID, schemaID, false)
+		return err
 	}))
+	require.Equal(t, 2, len(written))
 	sqlDB.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2"}})
 }
