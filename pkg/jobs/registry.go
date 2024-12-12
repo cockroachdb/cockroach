@@ -1758,6 +1758,10 @@ func (r *Registry) stepThroughStateMachine(
 			// mark the job as failed because it can be resumed by another node.
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
+		if IsPermanentJobError(err) {
+			// If there was a permanent error while reverting, then give up on reverting.
+			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusRevertFailed, err)
+		}
 		return onExecutionFailed(err)
 	case StatusFailed:
 		if jobErr == nil {
@@ -1775,9 +1779,6 @@ func (r *Registry) stepThroughStateMachine(
 		r.removeFromWaitingSets(job.ID())
 		return jobErr
 	case StatusRevertFailed:
-		// TODO(sajjad): Remove StatusRevertFailed and related code in other places in v22.1.
-		// v21.2 modified all reverting jobs to retry instead of go to revert-failed. Therefore,
-		// revert-failed state is not reachable after 21.2.
 		if jobErr == nil {
 			return errors.AssertionFailedf("job %d: has StatusRevertFailed but no error was provided",
 				job.ID())
