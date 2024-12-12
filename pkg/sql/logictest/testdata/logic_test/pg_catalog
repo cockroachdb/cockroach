@@ -1191,6 +1191,7 @@ indexrelid  indrelid  indnatts  indisunique  indnullsnotdistinct  indisprimary  
 2055313241  53        1         true         false                true          false           true          false           true        false         false       true       false           1                    3403232968                 0              2              NULL      NULL                                                                                                                          1
 2101708905  5         1         true         false                true          false           true          false           true        false         false       true       false           1                    0                          0              2              NULL      NULL                                                                                                                          1
 2148104569  21        2         true         false                true          false           true          false           true        false         false       true       false           1 2                  3403232968 3403232968      0 0            2 2            NULL      NULL                                                                                                                          2
+2175862516  72        1         true         false                true          false           true          false           true        false         false       true       false           1                    3403232968                 0              2              NULL      NULL                                                                                                                          1
 2268653844  40        4         true         false                true          false           true          false           true        false         false       true       false           1 2 3 4              0 0 0 0                    0 0 0 0        2 2 2 2        NULL      NULL                                                                                                                          4
 2315049508  56        1         true         false                true          false           true          false           true        false         false       true       false           1                    0                          0              2              NULL      NULL                                                                                                                          1
 2315049511  56        1         false        false                false         false           false         false           true        false         false       true       false           2                    0                          0              2              NULL      NULL                                                                                                                          1
@@ -1385,6 +1386,7 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 2101708905  0                           1
 2148104569  0                           1
 2148104569  0                           2
+2175862516  0                           1
 2268653844  0                           1
 2268653844  0                           2
 2268653844  0                           3
@@ -2993,6 +2995,7 @@ log_timezone                                               UTC                 N
 max_connections                                            -1                  NULL      NULL        NULL        string
 max_identifier_length                                      128                 NULL      NULL        NULL        string
 max_index_keys                                             32                  NULL      NULL        NULL        string
+max_prepared_transactions                                  2147483647          NULL      NULL        NULL        string
 max_retries_for_read_committed                             10                  NULL      NULL        NULL        string
 node_id                                                    1                   NULL      NULL        NULL        string
 null_ordered_last                                          off                 NULL      NULL        NULL        string
@@ -3194,6 +3197,7 @@ log_timezone                                               UTC                 N
 max_connections                                            -1                  NULL  user     NULL      -1                  -1
 max_identifier_length                                      128                 NULL  user     NULL      128                 128
 max_index_keys                                             32                  NULL  user     NULL      32                  32
+max_prepared_transactions                                  2147483647          NULL  user     NULL      2147483647          2147483647
 max_retries_for_read_committed                             10                  NULL  user     NULL      10                  10
 node_id                                                    1                   NULL  user     NULL      1                   1
 null_ordered_last                                          off                 NULL  user     NULL      off                 off
@@ -3392,6 +3396,7 @@ log_timezone                                               NULL    NULL     NULL
 max_connections                                            NULL    NULL     NULL     NULL        NULL
 max_identifier_length                                      NULL    NULL     NULL     NULL        NULL
 max_index_keys                                             NULL    NULL     NULL     NULL        NULL
+max_prepared_transactions                                  NULL    NULL     NULL     NULL        NULL
 max_retries_for_read_committed                             NULL    NULL     NULL     NULL        NULL
 multiple_active_portals_enabled                            NULL    NULL     NULL     NULL        NULL
 node_id                                                    NULL    NULL     NULL     NULL        NULL

@@ -179,17 +179,17 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-,settings"
-join_tokens
-namespace
-spa  n_stats                 _buckets
-span_stats_unique_ke\\x86ys
-statement_statistiCs
+prepared_transactions
+protected_ts_reco"rds
+ro😪l|e_options
+set                             tings
+span_stats'_bucke ts
+statement_diagnostics_requests
+statement_statisti😍cs
 sta😣tement_statistics
-task_payloads
-tenant_usage
-user                         s
-web_sessio ns
+tenant_tasks
+tran\\u9A2Esaction_statistics
+us ers
 
 # Again, the column names are randomized.
 query TTT
@@ -198,26 +198,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-",settings"""  "lastUpdated"     timestamp without time zone
-",settings"""  "name?"           text
-",settings"""  rowid             bigint
-",settings"""  value             text
-",settings"""  "valueType"       text
-join_tokens    expiration        timestamp with time zone
-join_tokens    "iD"              uuid
-join_tokens    rowid             bigint
-join_tokens    secret            bytea
-namespace      ")id"             bigint
-namespace      name              text
-namespace      "parentSChemaID"  bigint
-namespace      "pa̐rentID"       bigint
-namespace      rowid             bigint
-"spa  n_stats  _buckets"         end_key_id                   uuid
-"spa  n_stats  _buckets"         "i""d"                       uuid
-"spa  n_stats  _buckets"         "req%puests"                 bigint
-"spa  n_stats  _buckets"         rowid                        bigint
-"spa  n_stats  _buckets"         "sample_Id"                  uuid
-"spa  n_stats  _buckets"         start_key_id                 uuid
+prepared_transactions     database         text
+prepared_transactions     global_id        text
+prepared_transactions     heuristic        text
+prepared_transactions     prepared         timestamp with time zone
+prepared_transactions     rowid            bigint
+prepared_transactions     transaction_id_  uuid
+prepared_transactions     transaction_key  bytea
+prepared_transactions     "😠owne\gr"       text
+"protected_ts_reco""rds"  "*meta"          bytea
+"protected_ts_reco""rds"  id               uuid
+"protected_ts_reco""rds"  "meta_typ%ve"    text
+"protected_ts_reco""rds"  num_spans        bigint
+"protected_ts_reco""rds"  rowid            bigint
+"protected_ts_reco""rds"  spans            bytea
+"protected_ts_reco""rds"  target           bytea
+"protected_ts_reco""rds"  ts               numeric
+"protected_ts_reco""rds"  "veri!fied"      boolean
+"ro😪l|e_options"          option           text
+"ro😪l|e_options"          rowid            bigint
+"ro😪l|e_options"          "u\\xe6s̠er_id"  oid
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +235,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt_1"  public  "c̈́om""ments%"
-"d%qbt_1"  public  descriptor_id_seq
-"d%qbt_1"  public  tenant_id_seq
-"d%qbt_2"  public  jobs
-"d%qbt_2"  public  join_tokens
-"d%qbt_2"  public  namespace
-dbt_3      public  "job_progress_his""tory"
-dbt_3      public  jobs😳
-dbt_3      public  "scheduled_ j obs"
+"d%qbt_1"  public  "external_connect ions"
+"d%qbt_1"  public  reports_meta
+"d%qbt_1"  public  "sta""tement_bundle_chunks"
+"d%qbt_2"  public  "job_progres s"
+"d%qbt_2"  public  web_sessions
+"d%qbt_2"  public  zones
+dbt_3      public  "namespa ce"
+dbt_3      public  "rolE_members"
+dbt_3      public  span_stats_tenant_boundaries
 
 
 statement ok

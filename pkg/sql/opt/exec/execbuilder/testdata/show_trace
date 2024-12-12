@@ -228,7 +228,7 @@ SET tracing = off
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 EndTxn%' AND message NOT LIKE e'%proposing command%'
 ----
-r75: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+r76: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 node received request: 1 CPut, 1 EndTxn
 
 # Check that we can run set tracing regardless of the current tracing state.
@@ -312,9 +312,9 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r75: sending batch 1 CPut to (n1,s1):1
-dist sender send  r75: sending batch 1 EndTxn to (n1,s1):1
-dist sender send  r75: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r76: sending batch 1 CPut to (n1,s1):1
+dist sender send  r76: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r76: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
 # Make another session trace.
 statement ok
@@ -343,9 +343,9 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r75: sending batch 4 CPut, 1 EndTxn to (n1,s1):1
-dist sender send  r75: sending batch 5 CPut to (n1,s1):1
-dist sender send  r75: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r76: sending batch 4 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r76: sending batch 5 CPut to (n1,s1):1
+dist sender send  r76: sending batch 1 EndTxn to (n1,s1):1
 
 # make a table with some big strings in it.
 statement ok
@@ -366,11 +366,11 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r75: sending batch 6 CPut to (n1,s1):1
-dist sender send  r75: sending batch 6 CPut to (n1,s1):1
-dist sender send  r75: sending batch 6 CPut to (n1,s1):1
-dist sender send  r75: sending batch 6 CPut to (n1,s1):1
-dist sender send  r75: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r76: sending batch 6 CPut to (n1,s1):1
+dist sender send  r76: sending batch 6 CPut to (n1,s1):1
+dist sender send  r76: sending batch 6 CPut to (n1,s1):1
+dist sender send  r76: sending batch 6 CPut to (n1,s1):1
+dist sender send  r76: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
 CREATE TABLE streamer (pk INT PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute), FAMILY (pk, attribute, blob));
@@ -399,4 +399,4 @@ WHERE message     LIKE '%r$rangeid: sending batch 42 Get%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r75: sending batch 42 Get to (n1,s1):1
+dist sender send  r76: sending batch 42 Get to (n1,s1):1
