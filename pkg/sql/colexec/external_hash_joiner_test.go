@@ -65,23 +65,41 @@ func TestExternalHashJoiner(t *testing.T) {
 				log.Infof(ctx, "spillForced=%t/numRepartitions=%d/%s/delegateFDAcquisitions=%t",
 					spillForced, numForcedRepartitions, tc.description, delegateFDAcquisitions)
 				var semsToCheck []semaphore.Semaphore
+				// Since RunTests harness internally performs multiple runs with
+				// each invoking the constructor, we want to capture how many
+				// closers were created on the first run (with batchSize=1).
+				var numClosersAfterFirstRun int
 				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
-					numOldClosers := closerRegistry.NumClosers()
+					if numClosersAfterFirstRun == 0 {
+						numClosersAfterFirstRun = closerRegistry.NumClosers()
+					}
 					sem := colexecop.NewTestingSemaphore(colexecop.ExternalHJMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
 					spec := createSpecForHashJoiner(tc)
-					hjOp, err := createDiskBackedHashJoiner(
+					return createDiskBackedHashJoiner(
 						ctx, flowCtx, spec, sources, func() {}, queueCfg,
 						numForcedRepartitions, delegateFDAcquisitions, sem,
 						&monitorRegistry, &closerRegistry,
 					)
-					// Expect six closers:
-					// - 1 for the disk spiller
-					// - 1 for the external hash joiner
-					// - 2 for each of the external sorts (4 total here).
-					require.Equal(t, 6, closerRegistry.NumClosers()-numOldClosers)
-					return hjOp, err
 				})
+				if spillForced {
+					// We expect to see the following closers:
+					// - the disk spiller (1) for the disk-backed hash joiner
+					// - the hash-based partitioner (2) for the external hash
+					// joiner
+					// - the disk spiller (3), (4) and the external sort (5),
+					// (6) for both of the inputs to the merge join which is
+					// used in the fallback strategy.
+					//
+					// However, in some cases either one or both disk-backed
+					// sorts don't actually spill to disk, so the external sorts
+					// (5) and (6) might not be created.
+					//
+					// We use only the first run's number for simplicity (which
+					// should be sufficient to ensure all closers are captured).
+					require.LessOrEqual(t, 4, numClosersAfterFirstRun)
+					require.GreaterOrEqual(t, 6, numClosersAfterFirstRun)
+				}
 				// Close all closers manually (in production this is done on the
 				// flow cleanup).
 				closerRegistry.Close(ctx)

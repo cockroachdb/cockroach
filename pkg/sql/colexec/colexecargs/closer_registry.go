@@ -11,21 +11,45 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type CloserRegistry struct {
-	toClose colexecop.Closers
+	optionalMu *syncutil.Mutex
+	toClose    colexecop.Closers
+}
+
+// SetMutex makes the CloserRegistry concurrency-safe via the provided mutex.
+// It is a no-op if the mutex has already been set on the registry.
+//
+// Note that Close and Reset are not protected.
+func (r *CloserRegistry) SetMutex(mu *syncutil.Mutex) {
+	if r.optionalMu == nil {
+		r.optionalMu = mu
+	}
 }
 
 func (r *CloserRegistry) NumClosers() int {
+	if r.optionalMu != nil {
+		r.optionalMu.Lock()
+		defer r.optionalMu.Unlock()
+	}
 	return len(r.toClose)
 }
 
 func (r *CloserRegistry) AddCloser(closer colexecop.Closer) {
+	if r.optionalMu != nil {
+		r.optionalMu.Lock()
+		defer r.optionalMu.Unlock()
+	}
 	r.toClose = append(r.toClose, closer)
 }
 
 func (r *CloserRegistry) AddClosers(closers colexecop.Closers) {
+	if r.optionalMu != nil {
+		r.optionalMu.Lock()
+		defer r.optionalMu.Unlock()
+	}
 	r.toClose = append(r.toClose, closers...)
 }
 
@@ -42,6 +66,7 @@ func (r *CloserRegistry) Close(ctx context.Context) {
 }
 
 func (r *CloserRegistry) Reset() {
+	r.optionalMu = nil
 	for i := range r.toClose {
 		r.toClose[i] = nil
 	}

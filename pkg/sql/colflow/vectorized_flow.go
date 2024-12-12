@@ -609,6 +609,7 @@ type vectorizedFlowCreator struct {
 	// used these objects must have exited by the time Cleanup() is called -
 	// Flow.Wait() ensures that.
 	closerRegistry colexecargs.CloserRegistry
+	registriesMu   syncutil.Mutex
 	diskQueueCfg   colcontainer.DiskQueueCfg
 	fdSemaphore    semaphore.Semaphore
 }
@@ -1177,6 +1178,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				Factory:              factory,
 				MonitorRegistry:      &s.monitorRegistry,
 				CloserRegistry:       &s.closerRegistry,
+				RegistriesMu:         &s.registriesMu,
 				TypeResolver:         &s.typeResolver,
 			}
 			numOldMonitors := len(s.monitorRegistry.GetMonitors())

@@ -52,6 +52,11 @@ func TestExternalHashAggregator(t *testing.T) {
 	var closerRegistry colexecargs.CloserRegistry
 	defer closerRegistry.Close(ctx)
 
+	var diskSpillingState = struct {
+		numRuns                    int
+		numRunsWithExpectedClosers int
+	}{}
+
 	rng, _ := randutil.NewTestRand()
 	numForcedRepartitions := rng.Intn(5)
 	for _, cfg := range []struct {
@@ -107,24 +112,9 @@ func TestExternalHashAggregator(t *testing.T) {
 			} else if len(tc.orderedCols) > 0 {
 				verifier = colexectestutils.PartialOrderedVerifier
 			}
-			var numExpectedClosers int
-			if cfg.diskSpillingEnabled {
-				// The external sorter (accounting for two closers), the disk
-				// spiller, and the external hash aggregator should be added as
-				// Closers.
-				numExpectedClosers = 4
-				if len(tc.spec.OutputOrdering.Columns) > 0 {
-					// When the output ordering is required, we also plan
-					// another external sort which accounts for two closers.
-					numExpectedClosers += 2
-				}
-			} else {
-				// Only the in-memory hash aggregator should be added.
-				numExpectedClosers = 1
-			}
 			var semsToCheck []semaphore.Semaphore
+			var numRuns int
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
-				numOldClosers := closerRegistry.NumClosers()
 				// ehaNumRequiredFDs is the minimum number of file descriptors
 				// that are needed for the machinery of the external aggregator
 				// (plus 1 is needed for the in-memory hash aggregator in order
@@ -132,6 +122,7 @@ func TestExternalHashAggregator(t *testing.T) {
 				ehaNumRequiredFDs := 1 + colexecop.ExternalSorterMinPartitions
 				sem := colexecop.NewTestingSemaphore(ehaNumRequiredFDs)
 				semsToCheck = append(semsToCheck, sem)
+				numRuns++
 				op, err := createExternalHashAggregator(
 					ctx, flowCtx, &colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
@@ -145,7 +136,6 @@ func TestExternalHashAggregator(t *testing.T) {
 					},
 					queueCfg, sem, numForcedRepartitions, &monitorRegistry, &closerRegistry,
 				)
-				require.Equal(t, numExpectedClosers, closerRegistry.NumClosers()-numOldClosers)
 				if !cfg.diskSpillingEnabled {
 					// Sanity check that indeed only the in-memory hash
 					// aggregator was created.
@@ -154,6 +144,34 @@ func TestExternalHashAggregator(t *testing.T) {
 				}
 				return op, err
 			})
+			if cfg.diskSpillingEnabled {
+				diskSpillingState.numRuns++
+				// We always have the root diskSpiller (1) added to the closers.
+				// Then, when it spills to disk, _most commonly_ we will see the
+				// following:
+				// - the hash-based partitioner (2) for the external hash
+				// aggregator
+				// - the diskSpiller (3) and the external sort (4) that we use
+				// in the fallback strategy of the external hash aggregator
+				// - the diskSpiller (5) and the external sort (6) that we plan
+				// on top of the hash-based partitioner to maintain the output
+				// ordering.
+				expectedNumClosersPerRun := 6
+				if numForcedRepartitions == 0 {
+					// In this case we won't create the external sort (4) in the
+					// fallback strategy.
+					expectedNumClosersPerRun--
+				}
+				if len(tc.spec.OutputOrdering.Columns) == 0 {
+					// In this case we won't create the diskSpiller (5) and the
+					// external sort (6).
+					expectedNumClosersPerRun -= 2
+				}
+
+				if expectedNumClosersPerRun*numRuns == closerRegistry.NumClosers() {
+					diskSpillingState.numRunsWithExpectedClosers++
+				}
+			}
 			// Close all closers manually (in production this is done on the
 			// flow cleanup).
 			closerRegistry.Close(ctx)
@@ -163,6 +181,17 @@ func TestExternalHashAggregator(t *testing.T) {
 			}
 		}
 	}
+	// We have this sanity check to ensure that all expected closers in the
+	// _most common_ scenario were added as closers. Coming up with an exact
+	// formula for expected number of closers for each case proved quite
+	// difficult.
+	lowerBound := 0.5
+	if numForcedRepartitions == 1 || numForcedRepartitions == 2 {
+		// In these scenarios more internal operations might not spill to disk,
+		// so lower the bound.
+		lowerBound = 0.3
+	}
+	require.Less(t, lowerBound, float64(diskSpillingState.numRunsWithExpectedClosers)/float64(diskSpillingState.numRuns))
 }
 
 func BenchmarkExternalHashAggregator(b *testing.B) {
