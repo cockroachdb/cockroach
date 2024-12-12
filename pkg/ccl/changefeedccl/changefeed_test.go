@@ -471,13 +471,19 @@ func TestChangefeedIdleness(t *testing.T) {
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		currentlyIdle := registry.MetricsStruct().JobMetrics[jobspb.TypeChangefeed].CurrentlyIdle
+		// Use a wait group for cases when the number of idle changefeeds temporarily
+		// decreases, to avoid a race condition where the changefeed becomes idle
+		// before the idleness is checked.
+		var wg sync.WaitGroup
 		waitForIdleCount := func(numIdle int64) {
+			wg.Add(1)
 			testutils.SucceedsSoon(t, func() error {
 				if currentlyIdle.Value() != numIdle {
 					return fmt.Errorf("expected (%+v) idle changefeeds, found (%+v)", numIdle, currentlyIdle.Value())
 				}
 				return nil
 			})
+			wg.Done()
 		}
 
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
@@ -486,9 +492,13 @@ func TestChangefeedIdleness(t *testing.T) {
 		cf2 := feed(t, f, "CREATE CHANGEFEED FOR TABLE bar WITH resolved='10ms'")
 		defer closeFeed(t, cf1)
 
+		// Changefeed should run after the insert, but start the check before it
+		// because the changefeed may become idle again before the next
+		// opportunity to check occurs.
+		go waitForIdleCount(0)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
 		sqlDB.Exec(t, `INSERT INTO bar VALUES (0)`)
-		waitForIdleCount(0)
+		wg.Wait()
 		waitForIdleCount(2) // Both should eventually be considered idle
 
 		jobFeed := cf2.(cdctest.EnterpriseTestFeed)
@@ -501,8 +511,12 @@ func TestChangefeedIdleness(t *testing.T) {
 		closeFeed(t, cf2)
 		waitForIdleCount(1) // The cancelled changefeed isn't considered idle
 
+		// Changefeed should run after the insert, but start the check before it
+		// because the changefeed may become idle again before the next
+		// opportunity to check occurs.
+		go waitForIdleCount(0)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
-		waitForIdleCount(0)
+		wg.Wait()
 		waitForIdleCount(1)
 
 		assertPayloads(t, cf1, []string{
