@@ -43,7 +43,6 @@ func registerDatabaseDrop(r registry.Registry) {
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Cluster:          clusterSpec,
-		RequiresLicense:  true,
 		SnapshotPrefix:   "droppable-database-tpce-100k",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
