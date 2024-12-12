@@ -148,6 +148,7 @@ go_test(
         "read_as_of_iterator_test.go",
         "sst_test.go",
         "sst_writer_test.go",
+        "store_properties_test.go",
         "temp_engine_test.go",
     ],
     data = glob(["testdata/**"]),
