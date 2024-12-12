@@ -1015,12 +1015,13 @@ func newOptTable(
 				canUseTombstones := idx.ImplicitPartitioningColumnCount() == 1 &&
 					partitionColumn.GetType().Family() == types.EnumFamily
 				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-					name:             idx.GetName(),
-					table:            ot.ID(),
-					columns:          idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
-					withoutIndex:     true,
-					canUseTombstones: canUseTombstones,
-					predicate:        idx.GetPredicate(),
+					name:                  idx.GetName(),
+					table:                 ot.ID(),
+					columns:               idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
+					withoutIndex:          true,
+					canUseTombstones:      canUseTombstones,
+					tombstoneIndexOrdinal: idx.Ordinal(),
+					predicate:             idx.GetPredicate(),
 					// TODO(rytaft): will we ever support an unvalidated unique constraint
 					// here?
 					validity: descpb.ConstraintValidity_Validated,
@@ -2007,9 +2008,10 @@ type optUniqueConstraint struct {
 	columns   []descpb.ColumnID
 	predicate string
 
-	withoutIndex     bool
-	canUseTombstones bool
-	validity         descpb.ConstraintValidity
+	withoutIndex          bool
+	canUseTombstones      bool
+	tombstoneIndexOrdinal int
+	validity              descpb.ConstraintValidity
 
 	uniquenessGuaranteedByAnotherIndex bool
 }
@@ -2054,8 +2056,11 @@ func (u *optUniqueConstraint) WithoutIndex() bool {
 	return u.withoutIndex
 }
 
-func (u *optUniqueConstraint) CanUseTombstones() bool {
-	return u.canUseTombstones
+func (u *optUniqueConstraint) TombstoneIndexOrdinal() int {
+	if u.canUseTombstones {
+		return u.tombstoneIndexOrdinal
+	}
+	return -1
 }
 
 // Validated is part of the cat.UniqueConstraint interface.
