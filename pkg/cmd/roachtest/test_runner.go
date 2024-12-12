@@ -1482,7 +1482,7 @@ func (r *testRunner) postTestAssertions(
 
 		// We collect all the admin health endpoints in parallel,
 		// and select the first one that succeeds to run the validation queries
-		statuses, err := c.HealthStatus(ctx, t.L(), c.All())
+		statuses, err := c.HealthStatus(ctx, t.L(), c.CRDBNodes())
 		if err != nil {
 			postAssertionErr(errors.WithDetail(err, "Unable to check health status"))
 		}
