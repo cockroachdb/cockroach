@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/util/ctxutil",
         "//pkg/util/log",
         "//pkg/util/log/severity",
         "//pkg/util/netutil",

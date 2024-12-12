@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -4714,38 +4715,34 @@ func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
 	)
 }
 
-// contextStatementKey is an empty type for the handle associated with the
-// statement value (see context.Value).
-type contextStatementKey struct{}
+var contextStatementKey = ctxutil.RegisterFastValueKey()
 
 // withStatement adds a SQL statement to the provided context. The statement
 // will then be included in crash reports which use that context.
 func withStatement(ctx context.Context, stmt tree.Statement) context.Context {
-	return context.WithValue(ctx, contextStatementKey{}, stmt)
+	return ctxutil.WithFastValue(ctx, contextStatementKey, stmt)
 }
 
 // statementFromCtx returns the statement value from a context, or nil if unset.
 func statementFromCtx(ctx context.Context) tree.Statement {
-	stmt := ctx.Value(contextStatementKey{})
+	stmt := ctxutil.FastValue(ctx, contextStatementKey)
 	if stmt == nil {
 		return nil
 	}
 	return stmt.(tree.Statement)
 }
 
-// contextGistKey is an empty type for the handle associated with the
-// gist value (see context.Value).
-type contextPlanGistKey struct{}
+var contextPlanGistKey = ctxutil.RegisterFastValueKey()
 
 func withPlanGist(ctx context.Context, gist string) context.Context {
 	if gist == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, contextPlanGistKey{}, gist)
+	return ctxutil.WithFastValue(ctx, contextPlanGistKey, gist)
 }
 
 func planGistFromCtx(ctx context.Context) string {
-	val := ctx.Value(contextPlanGistKey{})
+	val := ctxutil.FastValue(ctx, contextPlanGistKey)
 	if val != nil {
 		return val.(string)
 	}
