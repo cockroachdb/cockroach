@@ -182,27 +182,22 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		// verifier.
 		colexectestutils.UnorderedVerifier,
 		func(input []colexecop.Operator) (colexecop.Operator, error) {
-			numOldClosers := closerRegistry.NumClosers()
 			// Since we're giving very low memory limit to the operator, in
 			// order to make the test run faster, we'll use an unlimited number
 			// of file descriptors.
 			sem := colexecop.NewTestingSemaphore(0 /* limit */)
 			semsToCheck = append(semsToCheck, sem)
-			var outputOrdering execinfrapb.Ordering
-			distinct, err := createExternalDistinct(
+			numRuns++
+			return createExternalDistinct(
 				ctx, flowCtx, input, typs, distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
-				outputOrdering, queueCfg, sem, func() { numSpills++ }, numForcedRepartitions,
+				execinfrapb.Ordering{}, queueCfg, sem, func() { numSpills++ }, numForcedRepartitions,
 				&monitorRegistry, &closerRegistry,
 			)
-			require.NoError(t, err)
-			// Check that the disk spiller, the external distinct, and the
-			// disk-backed sort (which accounts for two) were added as Closers.
-			numExpectedClosers := 4
-			require.Equal(t, numExpectedClosers, closerRegistry.NumClosers()-numOldClosers)
-			numRuns++
-			return distinct, nil
 		},
 	)
+	// We expect to see the disk spiller for each run, and the external distinct
+	// and the disk-backed sort for every time we spilled.
+	require.Equal(t, numRuns+2*numSpills, closerRegistry.NumClosers())
 	for i, sem := range semsToCheck {
 		require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 	}

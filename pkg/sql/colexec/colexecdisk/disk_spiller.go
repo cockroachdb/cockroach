@@ -72,6 +72,10 @@ import (
 //     be freed when spilling to disk to allow for lower memory footprint.
 //   - spillingCallbackFn will be called when the spilling from in-memory to disk
 //     backed operator occurs. It should only be set in tests.
+//
+// WARNING: diskBackedOpConstructor will be called lazily, when the operator
+// spills to disk for the first time, and it will never be called if the
+// spilling never occurs.
 func NewOneInputDiskSpiller(
 	input colexecop.Operator,
 	inMemoryOp colexecop.BufferingInMemoryOperator,
@@ -80,14 +84,30 @@ func NewOneInputDiskSpiller(
 	diskBackedReuseMode colexecop.BufferingOpReuseMode,
 	spillingCallbackFn func(),
 ) colexecop.ClosableOperator {
-	diskBackedOpInput := newBufferExportingOperator(inMemoryOp, input, diskBackedReuseMode)
-	return &diskSpillerBase{
+	op := &oneInputDiskSpiller{
+		diskBackedOpConstructor: diskBackedOpConstructor,
+		diskBackedReuseMode:     diskBackedReuseMode,
+	}
+	op.diskSpillerBase = diskSpillerBase{
 		inputs:                  []colexecop.Operator{input},
 		inMemoryOp:              inMemoryOp,
 		inMemoryMemMonitorNames: []string{string(inMemoryMemMonitorName)},
-		diskBackedOp:            diskBackedOpConstructor(diskBackedOpInput),
+		diskBackedOpConstructor: op.constructDiskBackedOp,
 		spillingCallbackFn:      spillingCallbackFn,
 	}
+	return op
+}
+
+type oneInputDiskSpiller struct {
+	diskSpillerBase
+
+	diskBackedOpConstructor func(colexecop.Operator) colexecop.Operator
+	diskBackedReuseMode     colexecop.BufferingOpReuseMode
+}
+
+func (d *oneInputDiskSpiller) constructDiskBackedOp() colexecop.Operator {
+	diskBackedOpInput := newBufferExportingOperator(d.inMemoryOp, d.inputs[0], d.diskBackedReuseMode)
+	return d.diskBackedOpConstructor(diskBackedOpInput)
 }
 
 // twoInputDiskSpiller is an Operator that manages the fallback from a two
@@ -140,6 +160,10 @@ func NewOneInputDiskSpiller(
 //     exporting operators that serves as inputs to the disk-backed operator.
 //   - spillingCallbackFn will be called when the spilling from in-memory to disk
 //     backed operator occurs. It should only be set in tests.
+//
+// WARNING: diskBackedOpConstructor will be called lazily, when the operator
+// spills to disk for the first time, and it will never be called if the
+// spilling never occurs.
 func NewTwoInputDiskSpiller(
 	inputOne, inputTwo colexecop.Operator,
 	inMemoryOp colexecop.BufferingInMemoryOperator,
@@ -147,23 +171,37 @@ func NewTwoInputDiskSpiller(
 	diskBackedOpConstructor func(inputOne, inputTwo colexecop.Operator) colexecop.Operator,
 	spillingCallbackFn func(),
 ) colexecop.ClosableOperator {
-	// We currently support two operator types that have two inputs and could
-	// spill to disk (hash joiner and hash group joiner), and neither of them
-	// can be reused.
-	const reuseMode = colexecop.BufferingOpNoReuse
-	diskBackedOpInputOne := newBufferExportingOperator(inMemoryOp, inputOne, reuseMode)
-	diskBackedOpInputTwo := newBufferExportingOperator(inMemoryOp, inputTwo, reuseMode)
+	op := &twoInputDiskSpiller{
+		diskBackedOpConstructor: diskBackedOpConstructor,
+	}
 	names := make([]string, len(inMemoryMemMonitorNames))
 	for i := range names {
 		names[i] = string(inMemoryMemMonitorNames[i])
 	}
-	return &diskSpillerBase{
+	op.diskSpillerBase = diskSpillerBase{
 		inputs:                  []colexecop.Operator{inputOne, inputTwo},
 		inMemoryOp:              inMemoryOp,
 		inMemoryMemMonitorNames: names,
-		diskBackedOp:            diskBackedOpConstructor(diskBackedOpInputOne, diskBackedOpInputTwo),
+		diskBackedOpConstructor: op.constructDiskBackedOp,
 		spillingCallbackFn:      spillingCallbackFn,
 	}
+	return op
+}
+
+type twoInputDiskSpiller struct {
+	diskSpillerBase
+
+	diskBackedOpConstructor func(colexecop.Operator, colexecop.Operator) colexecop.Operator
+}
+
+func (d *twoInputDiskSpiller) constructDiskBackedOp() colexecop.Operator {
+	// We currently support two operator types that have two inputs and could
+	// spill to disk (hash joiner and hash group joiner), and neither of them
+	// can be reused.
+	const reuseMode = colexecop.BufferingOpNoReuse
+	diskBackedOpInputOne := newBufferExportingOperator(d.inMemoryOp, d.inputs[0], reuseMode)
+	diskBackedOpInputTwo := newBufferExportingOperator(d.inMemoryOp, d.inputs[1], reuseMode)
+	return d.diskBackedOpConstructor(diskBackedOpInputOne, diskBackedOpInputTwo)
 }
 
 // diskSpillerBase is the common base for the one-input and two-input disk
@@ -178,7 +216,10 @@ type diskSpillerBase struct {
 
 	inMemoryOp              colexecop.BufferingInMemoryOperator
 	inMemoryMemMonitorNames []string
+	// diskBackedOp is created lazily when the diskSpillerBase spills to disk
+	// for the first time throughout its lifetime.
 	diskBackedOp            colexecop.Operator
+	diskBackedOpConstructor func() colexecop.Operator
 	diskBackedOpInitialized bool
 	spillingCallbackFn      func()
 }
@@ -220,6 +261,10 @@ func (d *diskSpillerBase) Next() coldata.Batch {
 				d.spilled = true
 				if d.spillingCallbackFn != nil {
 					d.spillingCallbackFn()
+				}
+				if d.diskBackedOp == nil {
+					// Create the disk-backed operator lazily.
+					d.diskBackedOp = d.diskBackedOpConstructor()
 				}
 				// It is ok if we call Init() multiple times (once after every
 				// Reset) since all calls except for the first one are noops.
@@ -280,7 +325,11 @@ func (d *diskSpillerBase) Close(ctx context.Context) error {
 
 func (d *diskSpillerBase) ChildCount(verbose bool) int {
 	if verbose {
-		return len(d.inputs) + 2
+		num := len(d.inputs) + 1
+		if d.diskBackedOp != nil {
+			num++
+		}
+		return num
 	}
 	return 1
 }
