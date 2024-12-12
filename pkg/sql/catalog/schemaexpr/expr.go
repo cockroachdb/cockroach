@@ -384,7 +384,6 @@ func deserializeExprForFormatting(
 // nameResolver is used to replace unresolved names in expressions with
 // IndexedVars.
 type nameResolver struct {
-	evalCtx    *eval.Context
 	tableID    descpb.ID
 	source     *colinfo.DataSourceInfo
 	nrc        *nameResolverIVarContainer
@@ -392,9 +391,7 @@ type nameResolver struct {
 }
 
 // newNameResolver creates and returns a nameResolver.
-func newNameResolver(
-	evalCtx *eval.Context, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
-) *nameResolver {
+func newNameResolver(tableID descpb.ID, tn *tree.TableName, cols []catalog.Column) *nameResolver {
 	source := colinfo.NewSourceInfoForSingleTable(
 		*tn,
 		colinfo.ResultColumnsFromColumns(tableID, cols),
@@ -403,7 +400,6 @@ func newNameResolver(
 	ivarHelper := tree.MakeIndexedVarHelper(nrc, len(cols))
 
 	return &nameResolver{
-		evalCtx:    evalCtx,
 		tableID:    tableID,
 		source:     source,
 		nrc:        nrc,

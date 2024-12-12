@@ -106,9 +106,11 @@ project
       │    ├── columns: a:1!null crdb_internal_mvcc_timestamp:3 tableoid:4
       │    └── computed column expressions
       │         └── v:2
-      │              └── a:1::CHAR
+      │              └── assignment-cast: CHAR
+      │                   └── a:1
       └── projections
-           └── a:1::CHAR [as=v:2]
+           └── assignment-cast: CHAR [as=v:2]
+                └── a:1
 
 # -- INSERT tests --
 
@@ -370,9 +372,11 @@ project
            │    ├── columns: a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
            │    └── computed column expressions
            │         └── v:6
-           │              └── a:5::CHAR
+           │              └── assignment-cast: CHAR
+           │                   └── a:5
            └── projections
-                └── a:5::CHAR [as=v:6]
+                └── assignment-cast: CHAR [as=v:6]
+                     └── a:5
 
 build
 DELETE FROM t_idx WHERE a > 1
@@ -609,9 +613,11 @@ project
            │    │    │    ├── columns: a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
            │    │    │    └── computed column expressions
            │    │    │         └── v:6
-           │    │    │              └── a:5::CHAR
+           │    │    │              └── assignment-cast: CHAR
+           │    │    │                   └── a:5
            │    │    └── projections
-           │    │         └── a:5::CHAR [as=v:6]
+           │    │         └── assignment-cast: CHAR [as=v:6]
+           │    │              └── a:5
            │    └── projections
            │         └── 'foo' [as=a_new:9]
            └── projections
@@ -1041,10 +1047,12 @@ project
            │    │    │    ├── columns: a:7!null
            │    │    │    ├── computed column expressions
            │    │    │    │    └── v:8
-           │    │    │    │         └── a:7::CHAR
+           │    │    │    │         └── assignment-cast: CHAR
+           │    │    │    │              └── a:7
            │    │    │    └── flags: disabled not visible index feature
            │    │    └── projections
-           │    │         └── a:7::CHAR [as=v:8]
+           │    │         └── assignment-cast: CHAR [as=v:8]
+           │    │              └── a:7
            │    └── filters
            │         └── column1:5 = a:7
            └── aggregations

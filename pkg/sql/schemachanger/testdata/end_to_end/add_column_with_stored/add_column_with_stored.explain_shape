@@ -17,4 +17,5 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index tbl_pkey+ in relation tbl
  ├── validate NOT NULL constraint on column j+ in index tbl_pkey+ in relation tbl
+ ├── validate non-index-backed constraint tbl.[constraint 2] in relation tbl
  └── execute 3 system table mutations transactions
