@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -595,7 +596,12 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
 	}
 
+	// Be aggressive with the SCHEMA CHANGE GC job. For tests involving column
+	// rewrites, this job must run for the tests to succeed. Its execution
+	// triggers RangeFeedDeleteRange events.
 	sqlDB := sqlutils.MakeSQLRunner(db)
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, db)()
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.registry.interval.adopt='1s'")
 
 	type decodeExpectation struct {
 		expectUnwatchedErr bool
@@ -730,8 +736,9 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
-			sqlDB.Exec(t, `
-				CREATE TABLE foo (
+			sqlDB.ExecMultiple(t,
+				`DROP TABLE IF EXISTS foo`,
+				`CREATE TABLE foo (
 					i INT,
 					j INT,
 					a STRING,
@@ -747,6 +754,9 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 			popRow, cleanup := cdctest.MakeRangeFeedValueReaderExtended(t, s.ExecutorConfig(), tableDesc)
 			defer cleanup()
+
+			_, err := sqltestutils.AddImmediateGCZoneConfig(db, tableDesc.GetID())
+			require.NoError(t, err)
 
 			targetType := jobspb.ChangefeedTargetSpecification_EACH_FAMILY
 			if tc.familyName != "" {
@@ -769,8 +779,10 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			require.NoError(t, err)
 
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectECFamily)
+			log.Infof(ctx, "expectedEvents: %d\n", expectedEvents)
 			for i := 0; i < expectedEvents; i++ {
 				v, deleteRange := popRow(t)
+				log.Infof(ctx, "event[%d]: v=%+v, deleteRange=%+v", i, v, deleteRange)
 
 				if deleteRange != nil {
 					// Should not see a RangeFeedValue and a RangeFeedDeleteRange
