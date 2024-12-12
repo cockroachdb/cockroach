@@ -267,6 +267,10 @@ func (b *Builder) buildRelational(e memo.RelExpr) (_ execPlan, outputCols colOrd
 	case *memo.LockExpr:
 		ep, outputCols, err = b.buildLock(t)
 
+	case *memo.VectorSearchExpr, *memo.VectorPartitionSearchExpr:
+		err = unimplemented.New("vector index search",
+			"execution planning for vector index search is not yet implemented")
+
 	case *memo.BarrierExpr:
 		ep, outputCols, err = b.buildBarrier(t)
 
@@ -754,6 +758,10 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	if idx.IsInverted() && len(scan.InvertedConstraint) == 0 && scan.Constraint == nil {
 		return execPlan{}, colOrdMap{},
 			errors.AssertionFailedf("expected inverted index scan to have a constraint")
+	}
+	if idx.IsVector() {
+		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
+			"only VectorSearch operators can use vector indexes")
 	}
 	b.IndexesUsed.add(tab.ID(), idx.ID())
 

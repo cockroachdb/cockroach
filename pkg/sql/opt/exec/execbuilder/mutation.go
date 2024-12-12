@@ -88,10 +88,14 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 	}
 	// Construct list of columns that only contains columns that need to be
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols)+len(ins.PartialIndexPutCols))
+	cnt := len(ins.InsertCols) + len(ins.CheckCols) + len(ins.PartialIndexPutCols) +
+		len(ins.VectorIndexPutPartitionCols) + len(ins.VectorIndexPutCentroidCols)
+	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
 	colList = appendColsWhenPresent(colList, ins.PartialIndexPutCols)
+	colList = appendColsWhenPresent(colList, ins.VectorIndexPutPartitionCols)
+	colList = appendColsWhenPresent(colList, ins.VectorIndexPutCentroidCols)
 	input, _, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -321,10 +325,14 @@ func (b *Builder) tryBuildFastPathInsert(
 		}
 	}
 
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols)+len(ins.PartialIndexPutCols))
+	cnt := len(ins.InsertCols) + len(ins.CheckCols) + len(ins.PartialIndexPutCols) +
+		len(ins.VectorIndexPutPartitionCols) + len(ins.VectorIndexPutCentroidCols)
+	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
 	colList = appendColsWhenPresent(colList, ins.PartialIndexPutCols)
+	colList = appendColsWhenPresent(colList, ins.VectorIndexPutPartitionCols)
+	colList = appendColsWhenPresent(colList, ins.VectorIndexPutCentroidCols)
 	rows, err := b.buildValuesRows(values)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, false, err
@@ -404,7 +412,9 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
 	cnt := len(upd.FetchCols) + len(upd.UpdateCols) + len(upd.PassthroughCols) +
-		len(upd.CheckCols) + len(upd.PartialIndexPutCols) + len(upd.PartialIndexDelCols)
+		len(upd.CheckCols) + len(upd.PartialIndexPutCols) + len(upd.PartialIndexDelCols) +
+		len(upd.VectorIndexPutPartitionCols) + len(upd.VectorIndexPutCentroidCols) +
+		len(upd.VectorIndexDelPartitionCols)
 	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
@@ -418,6 +428,9 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
 	colList = appendColsWhenPresent(colList, upd.PartialIndexPutCols)
 	colList = appendColsWhenPresent(colList, upd.PartialIndexDelCols)
+	colList = appendColsWhenPresent(colList, upd.VectorIndexPutPartitionCols)
+	colList = appendColsWhenPresent(colList, upd.VectorIndexPutCentroidCols)
+	colList = appendColsWhenPresent(colList, upd.VectorIndexDelPartitionCols)
 
 	input, _, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
@@ -501,7 +514,9 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
 	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) + len(ups.CheckCols) +
-		len(ups.PartialIndexPutCols) + len(ups.PartialIndexDelCols) + 1
+		len(ups.PartialIndexPutCols) + len(ups.PartialIndexDelCols) +
+		len(ups.VectorIndexPutPartitionCols) + len(ups.VectorIndexPutCentroidCols) +
+		len(ups.VectorIndexDelPartitionCols) + 1
 	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, ups.InsertCols)
 	colList = appendColsWhenPresent(colList, ups.FetchCols)
@@ -512,6 +527,9 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
 	colList = appendColsWhenPresent(colList, ups.PartialIndexPutCols)
 	colList = appendColsWhenPresent(colList, ups.PartialIndexDelCols)
+	colList = appendColsWhenPresent(colList, ups.VectorIndexPutPartitionCols)
+	colList = appendColsWhenPresent(colList, ups.VectorIndexPutCentroidCols)
+	colList = appendColsWhenPresent(colList, ups.VectorIndexDelPartitionCols)
 
 	input, inputCols, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
@@ -589,7 +607,9 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (_ execPlan, outputCols colO
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(del.FetchCols)+len(del.PassthroughCols)+len(del.PartialIndexDelCols))
+	cnt := len(del.FetchCols) + len(del.PassthroughCols) +
+		len(del.PartialIndexDelCols) + len(del.VectorIndexDelPartitionCols)
+	colList := make(opt.ColList, 0, cnt)
 	colList = appendColsWhenPresent(colList, del.FetchCols)
 	// The RETURNING clause of the Delete can refer to the columns in any of the
 	// USING tables. As a result, the Update may need to passthrough those
@@ -598,6 +618,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (_ execPlan, outputCols colO
 		colList = append(colList, del.PassthroughCols...)
 	}
 	colList = appendColsWhenPresent(colList, del.PartialIndexDelCols)
+	colList = appendColsWhenPresent(colList, del.VectorIndexDelPartitionCols)
 
 	input, _, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
 	if err != nil {
