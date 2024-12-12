@@ -129,5 +129,7 @@ func (m *txnMetricRecorder) closeLocked() {
 		// Note that successful read-only txn are also counted as committed, even
 		// though they never had a txn record.
 		m.metrics.Commits.Inc(1)
+	case roachpb.PREPARED:
+		m.metrics.Prepares.Inc(1)
 	}
 }

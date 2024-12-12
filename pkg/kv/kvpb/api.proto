@@ -979,6 +979,16 @@ message EndTxnRequest {
   // from the TxnCoordSender on a failed heartbeat. It should only be set to
   // true when commit=false.
   bool poison = 9;
+  // Prepare, if true, causes the end transaction to proceed as though
+  // committing, but the transaction state is set to PREPARED instead of
+  // COMMITTED on success. If true, commit must be set to true as well.
+  //
+  // Prepare cannot be used in conjunction with the InFlightWrites field.
+  // All in-flight writes must be confirmed to have succeeded before the
+  // transaction can be prepared.
+  //
+  // The field is used to support the XA two-phase commit protocol.
+  bool prepare = 12;
 
   reserved 7, 8, 10;
 }

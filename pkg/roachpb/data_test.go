@@ -732,6 +732,32 @@ func TestTransactionUpdateMinTimestamp(t *testing.T) {
 	}
 }
 
+func TestTransactionUpdatePrepared(t *testing.T) {
+	txn := nonZeroTxn
+	txn.Status = PENDING
+
+	txn2 := nonZeroTxn
+	txn2.Status = PREPARED
+
+	// In same epoch, PENDING < PREPARED.
+	txn.Update(&txn2)
+	if a, e := txn.Status, PREPARED; a != e {
+		t.Errorf("expected status %s; got %s", e, a)
+	}
+
+	txn2.Status = PENDING
+	txn.Update(&txn2)
+	if a, e := txn.Status, PREPARED; a != e {
+		t.Errorf("expected status %s; got %s", e, a)
+	}
+
+	txn2.Status = COMMITTED
+	txn.Update(&txn2)
+	if a, e := txn.Status, COMMITTED; a != e {
+		t.Errorf("expected status %s; got %s", e, a)
+	}
+}
+
 func TestTransactionUpdateStaging(t *testing.T) {
 	txn := nonZeroTxn
 	txn.Status = PENDING

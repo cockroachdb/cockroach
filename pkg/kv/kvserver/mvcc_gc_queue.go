@@ -841,6 +841,7 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCTransactionSpanGCCommitted.Inc(int64(info.TransactionSpanGCCommitted))
 	metrics.GCTransactionSpanGCStaging.Inc(int64(info.TransactionSpanGCStaging))
 	metrics.GCTransactionSpanGCPending.Inc(int64(info.TransactionSpanGCPending))
+	metrics.GCTransactionSpanGCPrepared.Inc(int64(info.TransactionSpanGCPrepared))
 	metrics.GCAbortSpanScanned.Inc(int64(info.AbortSpanTotal))
 	metrics.GCAbortSpanConsidered.Inc(int64(info.AbortSpanConsidered))
 	metrics.GCAbortSpanGCNum.Inc(int64(info.AbortSpanGCNum))

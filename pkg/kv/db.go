@@ -1110,6 +1110,46 @@ func runTxn(ctx context.Context, txn *Txn, retryable func(context.Context, *Txn)
 	return err
 }
 
+// CommitPrepared commits the prepared transaction.
+func (db *DB) CommitPrepared(ctx context.Context, txn *roachpb.Transaction) error {
+	return db.endPrepared(ctx, txn, true /* commit */)
+}
+
+// RollbackPrepared rolls back the prepared transaction.
+func (db *DB) RollbackPrepared(ctx context.Context, txn *roachpb.Transaction) error {
+	return db.endPrepared(ctx, txn, false /* commit */)
+}
+
+func (db *DB) endPrepared(ctx context.Context, txn *roachpb.Transaction, commit bool) error {
+	if txn.Status != roachpb.PREPARED {
+		return errors.WithContextTags(errors.AssertionFailedf("transaction %v is not in a prepared state", txn), ctx)
+	}
+	if txn.Key == nil {
+		// If the transaction key is nil, the transaction was read-only and never
+		// wrote a transaction record when preparing. Committing or rolling back
+		// such a transaction is a no-op.
+		return nil
+	}
+
+	// NOTE: an EndTxn sent to a prepared transaction does not need a deadline,
+	// because the commit deadline was already checked when the transaction was
+	// prepared and the transaction can not have been pushed to a later commit
+	// timestamp when prepared.
+	et := endTxnReq(commit, hlc.Timestamp{} /* deadline */)
+	et.req.Key = txn.Key
+	// TODO(nvanbenschoten): it's unfortunate that we have to set the txn's
+	// LockSpans here. cmd_end_transaction.go should be able to read them from the
+	// transaction record. Unfortunately, it currently doesn't. Address this
+	// before merging this commit.
+	et.req.LockSpans = txn.LockSpans
+	ba := &kvpb.BatchRequest{Requests: et.unionArr[:]}
+	ba.Txn = txn
+	// NOTE: bypass the CrossRangeTxnWrapperSender, which does not support
+	// transactional requests. Use the underlying sender directly.
+	_, pErr := db.sendUsingSender(ctx, ba, db.factory.NonTransactionalSender())
+	return pErr.GoError()
+}
+
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns (nil, nil) for an empty batch.
 func (db *DB) send(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {

@@ -202,6 +202,9 @@ func (tc *txnCommitter) SendLocked(
 	switch br.Txn.Status {
 	case roachpb.STAGING:
 		// Continue with STAGING-specific validation and cleanup.
+	case roachpb.PREPARED:
+		// The transaction is prepared.
+		return br, nil
 	case roachpb.COMMITTED:
 		// The transaction is explicitly committed. This is possible if all
 		// in-flight writes were sent to the same range as the EndTxn request,
@@ -345,6 +348,11 @@ func (tc *txnCommitter) canCommitInParallel(ba *kvpb.BatchRequest, et *kvpb.EndT
 
 	// We're trying to parallel commit, not parallel abort.
 	if !et.Commit {
+		return false
+	}
+
+	// We don't support a parallel prepare.
+	if et.Prepare {
 		return false
 	}
 

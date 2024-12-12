@@ -274,27 +274,25 @@ func (txn *Txn) statusLocked() roachpb.TransactionStatus {
 	return txn.mu.sender.TxnStatus()
 }
 
-// IsCommitted returns true iff the transaction has the committed status.
-func (txn *Txn) IsCommitted() bool {
+// hasStatus returns true iff the transaction has the provided status.
+func (txn *Txn) hasStatus(s roachpb.TransactionStatus) bool {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.statusLocked() == roachpb.COMMITTED
+	return txn.statusLocked() == s
 }
 
+// IsCommitted returns true iff the transaction has the committed status.
+func (txn *Txn) IsCommitted() bool { return txn.hasStatus(roachpb.COMMITTED) }
+
 // IsAborted returns true iff the transaction has the aborted status.
-func (txn *Txn) IsAborted() bool {
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	return txn.statusLocked() == roachpb.ABORTED
-}
+func (txn *Txn) IsAborted() bool { return txn.hasStatus(roachpb.ABORTED) }
+
+// IsPrepared returns true iff the transaction has the prepared status.
+func (txn *Txn) IsPrepared() bool { return txn.hasStatus(roachpb.PREPARED) }
 
 // IsOpen returns true iff the transaction is in the open state where
 // it can accept further commands.
-func (txn *Txn) IsOpen() bool {
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	return txn.statusLocked() == roachpb.PENDING
-}
+func (txn *Txn) IsOpen() bool { return txn.hasStatus(roachpb.PENDING) }
 
 // isClientFinalized returns true if the client has issued an EndTxn request in
 // an attempt to finalize the transaction.
@@ -994,6 +992,21 @@ func (txn *Txn) rollback(ctx context.Context) *kvpb.Error {
 		return kvpb.NewError(err)
 	}
 	return nil
+}
+
+// Prepare sends an EndTxnRequest with Prepare=true. Once a transaction is
+// prepared, it cannot be used to perform any more reads or writes. A prepared
+// transaction can only be committed or rolled back.
+func (txn *Txn) Prepare(ctx context.Context) error {
+	if txn.typ != RootTxn {
+		return errors.WithContextTags(errors.AssertionFailedf("Prepare() called on leaf txn"), ctx)
+	}
+
+	et := endTxnReq(true, txn.deadline())
+	et.req.Prepare = true
+	ba := &kvpb.BatchRequest{Requests: et.unionArr[:]}
+	_, pErr := txn.Send(ctx, ba)
+	return pErr.GoError()
 }
 
 // AddCommitTrigger adds a closure to be executed on successful commit

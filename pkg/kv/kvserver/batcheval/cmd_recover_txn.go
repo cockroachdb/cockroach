@@ -108,7 +108,7 @@ func RecoverTxn(
 		// changed its epoch or timestamp, and the only other valid status
 		// for it to have is COMMITTED.
 		switch reply.RecoveredTxn.Status {
-		case roachpb.PENDING, roachpb.ABORTED:
+		case roachpb.PENDING, roachpb.PREPARED, roachpb.ABORTED:
 			// Once implicitly committed, the transaction should never move back
 			// to the PENDING status and it should never be ABORTED.
 			//
@@ -170,7 +170,7 @@ func RecoverTxn(
 			// query then we could assert that the transaction record can only be
 			// COMMITTED if legalChange=true.
 			return result.Result{}, nil
-		case roachpb.PENDING:
+		case roachpb.PENDING, roachpb.PREPARED:
 			if args.Txn.Epoch < reply.RecoveredTxn.Epoch {
 				// Recovery not immediately needed because the transaction is
 				// still in progress.
@@ -181,8 +181,8 @@ func RecoverTxn(
 			// ever be launched for a STAGING transaction and it is not possible for
 			// a transaction to move back to the PENDING status in the same epoch.
 			return result.Result{}, errors.AssertionFailedf(
-				"programming error: cannot recover PENDING transaction in same epoch: %s", reply.RecoveredTxn,
-			)
+				"programming error: cannot recover %s transaction in same epoch: %s",
+				reply.RecoveredTxn.Status, reply.RecoveredTxn)
 		case roachpb.STAGING:
 			if legalChange {
 				// Recovery not immediately needed because the transaction is
