@@ -272,3 +272,48 @@ CMU                          Scottie Dog  15213
 Central Michigan University  Chippewas    97858
 Evergreen State              geoducks     98505
 Western Oregon               wolves       97361
+
+#
+# Reproduction for #137341
+#
+statement ok
+CREATE TABLE t137341 (
+  region crdb_internal_region NOT NULL,
+  id STRING,
+  u1 STRING,
+  u2 STRING,
+  s STRING,
+  PRIMARY KEY (id),
+  UNIQUE INDEX (u1),
+  INDEX (s),
+  UNIQUE INDEX (u2)
+) LOCALITY REGIONAL BY ROW AS region
+
+statement ok
+INSERT INTO t137341 (region, id, u1, u2, s) VALUES ('ca-central-1', 'a', 'u1-a', 'u2-a', 'common')
+
+statement ok
+CREATE TABLE t137341b (
+  region crdb_internal_region NOT NULL,
+  id STRING,
+  u1 STRING,
+  u2 STRING,
+  s STRING,
+  PRIMARY KEY (id),
+  INDEX (s)
+) LOCALITY REGIONAL BY ROW AS region
+
+statement ok
+INSERT INTO t137341b (region, id, u1, u2, s) VALUES ('ca-central-1', 'a', 'u1-a', 'u2-a', 'common')
+
+statement ok
+INSERT INTO t137341b (region, id, u1, u2, s) VALUES ('us-east-1', 'b', 'u1-b', 'u2-b', 'common')
+
+statement ok
+CREATE UNIQUE INDEX ON t137341b(u1)
+
+statement ok
+CREATE UNIQUE INDEX ON t137341b(u2)
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "t137341b_u2_key"
+UPDATE t137341b SET u2 = 'u2-a' WHERE u2 = 'u2-b'
