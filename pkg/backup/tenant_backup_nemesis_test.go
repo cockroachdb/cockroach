@@ -166,7 +166,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 	)
 	bankData := bank.FromConfig(numAccounts, numAccounts, payloadSize, splits)
 	l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
-	_, err = workloadsql.Setup(ctx, tenant10Conn, bankData, l)
+	err = workloadsql.Setup(ctx, tenant10Conn, bankData, l)
 	require.NoError(t, err)
 
 	backupDone := make(chan struct{})

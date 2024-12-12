@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -265,17 +264,16 @@ type restoreDataLoader struct {
 // InitialDataLoad implements the InitialDataLoader interface.
 func (l restoreDataLoader) InitialDataLoad(
 	ctx context.Context, db *gosql.DB, gen workload.Generator,
-) (int64, error) {
+) error {
 	log.Infof(ctx, "starting restore of %d tables", len(gen.Tables()))
 	start := timeutil.Now()
-	bytes, err := workloadccl.RestoreFixture(ctx, db, l.fixture, l.database, true /* injectStats */)
+	err := workloadccl.RestoreFixture(ctx, db, l.fixture, l.database, true /* injectStats */)
 	if err != nil {
-		return 0, errors.Wrap(err, `restoring fixture`)
+		return errors.Wrap(err, `restoring fixture`)
 	}
 	elapsed := timeutil.Since(start)
-	log.Infof(ctx, "restored %s bytes in %d tables (took %s, %s)",
-		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
-	return bytes, nil
+	log.Infof(ctx, "restored %d tables (took %s)", len(gen.Tables()), elapsed)
+	return nil
 }
 
 func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
@@ -300,7 +298,7 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	}
 
 	l := restoreDataLoader{fixture: fixture, database: dbName}
-	if _, err := workloadsql.Setup(ctx, sqlDB, gen, l); err != nil {
+	if err := workloadsql.Setup(ctx, sqlDB, gen, l); err != nil {
 		return err
 	}
 
@@ -331,7 +329,7 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 		InjectStats:  *fixturesImportInjectStats,
 		CSVServer:    *fixturesMakeImportCSVServerURL,
 	}
-	if _, err := workloadsql.Setup(ctx, sqlDB, gen, l); err != nil {
+	if err := workloadsql.Setup(ctx, sqlDB, gen, l); err != nil {
 		return err
 	}
 

@@ -853,7 +853,7 @@ func TestAvroLedger(t *testing.T) {
 		ledger.RandomSeed.Set(1)
 		gen := ledger.FromFlags(`--customers=1`)
 		var l workloadsql.InsertsDataLoader
-		_, err := workloadsql.Setup(ctx, s.DB, gen, l)
+		err := workloadsql.Setup(ctx, s.DB, gen, l)
 		require.NoError(t, err)
 
 		ledger := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR customer, transaction, entry, session

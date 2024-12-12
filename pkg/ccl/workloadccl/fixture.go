@@ -17,12 +17,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -250,7 +248,7 @@ func MakeFixture(
 	// Ideally, the PostLoad hooks would be idempotent and we could include them
 	// here (but still run them on load for old fixtures without them), but that
 	// yak will remain unshaved.
-	if _, err := l.InitialDataLoad(ctx, sqlDB, gen); err != nil {
+	if err := l.InitialDataLoad(ctx, sqlDB, gen); err != nil {
 		return Fixture{}, err
 	}
 
@@ -306,23 +304,22 @@ type ImportDataLoader struct {
 // InitialDataLoad implements the InitialDataLoader interface.
 func (l ImportDataLoader) InitialDataLoad(
 	ctx context.Context, db *gosql.DB, gen workload.Generator,
-) (int64, error) {
+) error {
 	if l.FilesPerNode == 0 {
 		l.FilesPerNode = 1
 	}
 
 	log.Infof(ctx, "starting import of %d tables", len(gen.Tables()))
 	start := timeutil.Now()
-	bytes, err := ImportFixture(
+	err := ImportFixture(
 		ctx, db, gen, l.dbName, l.FilesPerNode, l.InjectStats, l.CSVServer)
 	if err != nil {
-		return 0, errors.Wrap(err, `importing fixture`)
+		return errors.Wrap(err, `importing fixture`)
 	}
 	elapsed := timeutil.Since(start)
-	log.Infof(ctx, "imported %s bytes in %d tables (took %s, %s)",
-		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
+	log.Infof(ctx, "imported %d tables (took %s)", len(gen.Tables()), elapsed)
 
-	return bytes, nil
+	return nil
 }
 
 // Specify an explicit empty prefix for crdb_internal to avoid an error if
@@ -349,19 +346,18 @@ func ImportFixture(
 	filesPerNode int,
 	injectStats bool,
 	csvServer string,
-) (int64, error) {
+) error {
 	if !workload.SupportsFixtures(gen) {
-		return 0, errors.Errorf(
+		return errors.Errorf(
 			`import fixture is not supported for workload %s`, gen.Meta().Name,
 		)
 	}
 
 	numNodes, err := getNodeCount(ctx, sqlDB)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	var bytesAtomic int64
 	g := ctxgroup.WithContext(ctx)
 	tables := gen.Tables()
 	if injectStats && tablesHaveStats(tables) {
@@ -399,7 +395,7 @@ func ImportFixture(
 			}
 			return nil
 		}); err != nil {
-			return 0, err
+			return err
 		}
 		currentTable += maxTableBatchSize
 	}
@@ -422,16 +418,15 @@ func ImportFixture(
 				return err
 			}
 			defer res.Release()
-			tableBytes, err := importFixtureTable(
+			err = importFixtureTable(
 				ctx, sqlDB, dbName, table, paths, `` /* output */, injectStats)
-			atomic.AddInt64(&bytesAtomic, tableBytes)
 			return errors.Wrapf(err, `importing table %s`, table.Name)
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return 0, err
+		return err
 	}
-	return atomic.LoadInt64(&bytesAtomic), nil
+	return nil
 }
 
 func createFixtureTable(tx *gosql.Tx, dbName string, table workload.Table) error {
@@ -460,7 +455,7 @@ func importFixtureTable(
 	paths []string,
 	output string,
 	injectStats bool,
-) (int64, error) {
+) error {
 	start := timeutil.Now()
 	var buf bytes.Buffer
 	var params []interface{}
@@ -480,49 +475,47 @@ func importFixtureTable(
 		params = append(params, output)
 		fmt.Fprintf(&buf, `, transform=$%d`, len(params))
 	}
-	var rows, index, tableBytes int64
+	var rows int64
 	var discard driver.Value
 	res, err := sqlDB.Query(buf.String(), params...)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	defer res.Close()
 	if !res.Next() {
 		if err := res.Err(); err != nil {
-			return 0, errors.Wrap(err, "unexpected error during import")
+			return errors.Wrap(err, "unexpected error during import")
 		}
-		return 0, gosql.ErrNoRows
+		return gosql.ErrNoRows
 	}
 	resCols, err := res.Columns()
 	if err != nil {
-		return 0, err
+		return err
 	}
 	if len(resCols) == 7 {
 		if err := res.Scan(
-			&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
+			&discard, &discard, &discard, &rows, &discard, &discard, &discard,
 		); err != nil {
-			return 0, err
+			return err
 		}
 	} else {
 		if err := res.Scan(
-			&discard, &discard, &discard, &rows, &index, &tableBytes,
+			&discard, &discard, &discard, &rows,
 		); err != nil {
-			return 0, err
+			return err
 		}
 	}
 	elapsed := timeutil.Since(start)
-	log.Infof(ctx, `imported %s in %s table (%d rows, %d index entries, took %s, %s)`,
-		humanizeutil.IBytes(tableBytes), table.Name, rows, index, elapsed,
-		humanizeutil.DataRate(tableBytes, elapsed))
+	log.Infof(ctx, `imported in %s table (%d rows, took %s)`, table.Name, rows, elapsed)
 
 	// Inject pre-calculated stats.
 	if injectStats && len(table.Stats) > 0 {
 		if err := injectStatistics(qualifiedTableName, &table, sqlDB); err != nil {
-			return 0, err
+			return err
 		}
 	}
 
-	return tableBytes, nil
+	return nil
 }
 
 // tablesHaveStats returns whether any of the provided tables have associated
@@ -608,8 +601,7 @@ func makeQualifiedTableName(dbName string, table *workload.Table) string {
 // license is required to have been set in the cluster.
 func RestoreFixture(
 	ctx context.Context, sqlDB *gosql.DB, fixture Fixture, database string, injectStats bool,
-) (int64, error) {
-	var bytesAtomic int64
+) error {
 	g := ctxgroup.WithContext(ctx)
 	genName := fixture.Generator.Meta().Name
 	tables := fixture.Generator.Tables()
@@ -628,7 +620,7 @@ func RestoreFixture(
 			start := timeutil.Now()
 			restoreStmt := fmt.Sprintf(`RESTORE %s.%s FROM LATEST IN $1 WITH into_db=$2, unsafe_restore_incompatible_version`, genName, table.TableName)
 			log.Infof(ctx, "Restoring from %s", table.BackupURI)
-			var rows, index, tableBytes int64
+			var rows int64
 			var discard interface{}
 			res, err := sqlDB.Query(restoreStmt, table.BackupURI, database)
 			if err != nil {
@@ -647,27 +639,24 @@ func RestoreFixture(
 			}
 			if len(resCols) == 7 {
 				if err := res.Scan(
-					&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
+					&discard, &discard, &discard, &rows, &discard, &discard, &discard,
 				); err != nil {
 					return err
 				}
 			} else {
 				if err := res.Scan(
-					&discard, &discard, &discard, &rows, &index, &tableBytes,
+					&discard, &discard, &discard, &rows,
 				); err != nil {
 					return err
 				}
 			}
-			atomic.AddInt64(&bytesAtomic, tableBytes)
 			elapsed := timeutil.Since(start)
-			log.Infof(ctx, `loaded %s table %s in %s (%d rows, %d index entries, %s)`,
-				humanizeutil.IBytes(tableBytes), table.TableName, elapsed, rows, index,
-				humanizeutil.IBytes(int64(float64(tableBytes)/elapsed.Seconds())))
+			log.Infof(ctx, `loaded table %s in %s (%d rows)`, table.TableName, elapsed, rows)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return 0, err
+		return err
 	}
 	if injectStats {
 		for i := range tables {
@@ -675,12 +664,12 @@ func RestoreFixture(
 			if len(t.Stats) > 0 {
 				qualifiedTableName := makeQualifiedTableName(genName, t)
 				if err := injectStatistics(qualifiedTableName, t, sqlDB); err != nil {
-					return 0, err
+					return err
 				}
 			}
 		}
 	}
-	return atomic.LoadInt64(&bytesAtomic), nil
+	return nil
 }
 
 func listDir(

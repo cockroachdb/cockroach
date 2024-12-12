@@ -1681,7 +1681,7 @@ func (c *transientCluster) SetupWorkload(ctx context.Context) error {
 		if c.demoCtx.IsInteractive() {
 			fmt.Printf("#\n# Beginning initialization of the %s dataset, please wait...\n", gen.Meta().Name)
 		}
-		if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
+		if err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 			return err
 		}
 		// Perform partitioning if requested by configuration.

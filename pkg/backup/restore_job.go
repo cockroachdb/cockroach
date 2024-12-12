@@ -2195,8 +2195,6 @@ func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 				tree.NewDString(string(jobs.StatusSucceeded)),
 				tree.NewDFloat(tree.DFloat(1.0)),
 				tree.NewDInt(tree.DInt(r.restoreStats.Rows)),
-				tree.NewDInt(tree.DInt(r.restoreStats.IndexEntries)),
-				tree.NewDInt(tree.DInt(r.restoreStats.DataSize)),
 			}
 		}
 	}():

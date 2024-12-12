@@ -70,7 +70,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 
 	wk := bank.FromRows(rows)
 	l := workloadsql.InsertsDataLoader{BatchSize: 100, Concurrency: 3}
-	if _, err := workloadsql.Setup(ctx, conn, wk, l); err != nil {
+	if err := workloadsql.Setup(ctx, conn, wk, l); err != nil {
 		t.Fatal(err)
 	}
 

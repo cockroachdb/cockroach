@@ -32,7 +32,7 @@ import (
 // InitialDataLoader implementation.
 func Setup(
 	ctx context.Context, db *gosql.DB, gen workload.Generator, l workload.InitialDataLoader,
-) (int64, error) {
+) error {
 	var hooks workload.Hooks
 	if h, ok := gen.(workload.Hookser); ok {
 		hooks = h.Hooks()
@@ -40,29 +40,29 @@ func Setup(
 
 	if hooks.PreCreate != nil {
 		if err := hooks.PreCreate(db); err != nil {
-			return 0, errors.Wrapf(err, "Could not pre-create")
+			return errors.Wrapf(err, "Could not pre-create")
 		}
 	}
 
-	bytes, err := l.InitialDataLoad(ctx, db, gen)
+	err := l.InitialDataLoad(ctx, db, gen)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
 	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
 	for _, table := range gen.Tables() {
 		if err := Split(ctx, db, table, splitConcurrency); err != nil {
-			return 0, err
+			return err
 		}
 	}
 
 	if hooks.PostLoad != nil {
 		if err := hooks.PostLoad(ctx, db); err != nil {
-			return 0, errors.Wrapf(err, "Could not postload")
+			return errors.Wrapf(err, "Could not postload")
 		}
 	}
 
-	return bytes, nil
+	return nil
 }
 
 // maybeDisableMergeQueue disables the merge queue for versions prior to

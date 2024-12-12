@@ -1809,8 +1809,6 @@ func (r *importResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 		tree.NewDString(string(jobs.StatusSucceeded)),
 		tree.NewDFloat(tree.DFloat(1.0)),
 		tree.NewDInt(tree.DInt(r.res.Rows)),
-		tree.NewDInt(tree.DInt(r.res.IndexEntries)),
-		tree.NewDInt(tree.DInt(r.res.DataSize)),
 	}:
 		return nil
 	case <-ctx.Done():

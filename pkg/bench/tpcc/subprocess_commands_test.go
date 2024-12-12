@@ -81,7 +81,7 @@ var (
 		require.NoError(t, gen.Hooks().Validate())
 		{
 			var l workloadsql.InsertsDataLoader
-			_, err := workloadsql.Setup(ctx, db, gen, l)
+			err := workloadsql.Setup(ctx, db, gen, l)
 			require.NoError(t, err)
 		}
 	})
