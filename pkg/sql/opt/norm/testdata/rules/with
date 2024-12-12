@@ -1937,7 +1937,7 @@ project
       └── i:2 [as=i:5, outer=(2)]
 
 # Case with GroupBy.
-norm expect=TryAddLimitToRecursiveBranch
+norm expect=TryAddLimitToRecursiveBranch disable=EliminateGroupBy
 WITH RECURSIVE cte (i, j) AS (
   (SELECT 1, 2)
   UNION ALL

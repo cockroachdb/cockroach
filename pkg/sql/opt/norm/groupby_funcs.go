@@ -440,6 +440,49 @@ func canEliminateGroupByJoin(
 	return true
 }
 
+// AreAllPassThroughAggs returns true if all the given aggregate functions are
+// pass-through when there is only one row argument,
+// meaning they are effictively no-ops. This also includes
+// aggregate functions that have "any not null" semantics,
+// which select the first encountered non-null input value.
+// Example aggregate functions include ConstAgg, ConstNotNullAgg, AnyNotNullAgg,
+// Sum, BoolAndAgg, and ConcatAgg.
+// See also opt.AggregateOpReverseMap.
+func (c *CustomFuncs) AreAllPassThroughAggs(aggs memo.AggregationsExpr) bool {
+	for i := range aggs {
+		switch aggs[i].Agg.Op() {
+		case opt.ConstAggOp, opt.ConstNotNullAggOp, opt.AnyNotNullAggOp,
+			opt.BitAndAggOp, opt.BitOrAggOp, opt.BoolAndOp, opt.BoolOrOp,
+		  opt.MaxOp, opt.MinOp, opt.SumOp, opt.SumIntOp, opt.XorAggOp, 
+			opt.ConcatAggOp, opt.StringAggOp:
+			if _, ok := aggs[i].Agg.Child(0).(*memo.VariableExpr); !ok {
+				// ConstAgg-like aggregates always have a variable as input.
+				panic(errors.AssertionFailedf("expected variable as input to aggregate"))
+			}
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// ConvertPassThroughAggsToProjections builds a projection for each
+// pass-through aggregate function which returns a different output column ID
+// than its input column ID.
+func (c *CustomFuncs) ConvertPassThroughAggsToProjections(
+	aggs memo.AggregationsExpr,
+) memo.ProjectionsExpr {
+	projections := make(memo.ProjectionsExpr, 0, len(aggs))
+	for i := range aggs {
+		// ConstAgg-like aggregates always have a variable as input.
+		inputVar := aggs[i].Agg.Child(0).(*memo.VariableExpr)
+		if inputVar.Col != aggs[i].Col {
+			projections = append(projections, c.f.ConstructProjectionsItem(inputVar, aggs[i].Col))
+		}
+	}
+	return projections
+}
+
 // AreAllAnyNotNullAggs returns true if all the given aggregate functions have
 // "any not null" semantics, meaning they select the first encountered non-null
 // input value. This is true of ConstAgg, ConstNotNullAgg, and AnyNotNullAgg.

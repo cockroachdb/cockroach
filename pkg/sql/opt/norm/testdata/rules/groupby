@@ -81,6 +81,14 @@ CREATE TABLE xyzbs
 )
 ----
 
+exec-ddl
+CREATE TABLE booleans (
+  k INT PRIMARY KEY,
+	a BOOL NOT NULL,
+	b BOOL
+)
+----
+
 # --------------------------------------------------
 # ConvertGroupByToDistinct
 # --------------------------------------------------
@@ -138,18 +146,16 @@ scan xy
 norm expect=EliminateJoinUnderGroupByLeft
 SELECT k, max(r1) FROM fks INNER JOIN (SELECT * FROM (VALUES (1), (2)) f(t)) ON True GROUP BY k
 ----
-group-by (hash)
+project
  ├── columns: k:1!null max:8!null
- ├── grouping columns: k:1!null
  ├── key: (1)
  ├── fd: (1)-->(8)
  ├── scan fks
  │    ├── columns: k:1!null r1:3!null
  │    ├── key: (1)
  │    └── fd: (1)-->(3)
- └── aggregations
-      └── max [as=max:8, outer=(3)]
-           └── r1:3
+ └── projections
+      └── r1:3 [as=max:8, outer=(3)]
 
 # Case with ScalarGroupBy with a sum aggregate that doesn't ignore duplicates.
 # The join can be eliminated because r1 is a foreign key referencing x, which
@@ -174,35 +180,31 @@ scalar-group-by
 norm expect=EliminateJoinUnderGroupByLeft
 SELECT x, max(y) FROM xy LEFT JOIN fks ON True GROUP BY x
 ----
-group-by (hash)
+project
  ├── columns: x:1!null max:11
- ├── grouping columns: x:1!null
  ├── key: (1)
  ├── fd: (1)-->(11)
  ├── scan xy
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── aggregations
-      └── max [as=max:11, outer=(2)]
-           └── y:2
+ └── projections
+      └── y:2 [as=max:11, outer=(2)]
 
 # LeftJoin case with a not-null foreign key equality filter and a sum aggregate.
 norm expect=EliminateJoinUnderGroupByLeft disable=EliminateJoinUnderProjectLeft
 SELECT k, sum(r1) FROM fks LEFT JOIN xy ON x=r1 GROUP BY k
 ----
-group-by (hash)
+project
  ├── columns: k:1!null sum:11!null
- ├── grouping columns: k:1!null
  ├── key: (1)
  ├── fd: (1)-->(11)
  ├── scan fks
  │    ├── columns: k:1!null r1:3!null
  │    ├── key: (1)
  │    └── fd: (1)-->(3)
- └── aggregations
-      └── sum [as=sum:11, outer=(3)]
-           └── r1:3
+ └── projections
+      └── r1:3 [as=sum:11, outer=(3)]
 
 # The LeftJoin guarantees that all left rows will be included in the output, and
 # since k is a key column, no rows from xy will be duplicated. Therefore the sum
@@ -210,18 +212,16 @@ group-by (hash)
 norm expect=EliminateJoinUnderGroupByLeft disable=EliminateJoinUnderProjectLeft
 SELECT x, sum(y) FROM xy LEFT JOIN fks ON x=k GROUP BY x
 ----
-group-by (hash)
+project
  ├── columns: x:1!null sum:11
- ├── grouping columns: x:1!null
  ├── key: (1)
  ├── fd: (1)-->(11)
  ├── scan xy
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── aggregations
-      └── sum [as=sum:11, outer=(2)]
-           └── y:2
+ └── projections
+      └── y:2 [as=sum:11, outer=(2)]
 
 # The LeftJoin guarantees that all left rows will be included in the output, and
 # since r2 is a foreign key referencing x, it is guaranteed that no left rows
@@ -230,44 +230,39 @@ group-by (hash)
 norm expect=EliminateJoinUnderGroupByLeft disable=EliminateJoinUnderProjectLeft
 SELECT k, sum(r1) FROM fks LEFT JOIN xy ON x=r2 GROUP BY k
 ----
-group-by (hash)
+project
  ├── columns: k:1!null sum:11!null
- ├── grouping columns: k:1!null
  ├── key: (1)
  ├── fd: (1)-->(11)
  ├── scan fks
  │    ├── columns: k:1!null r1:3!null
  │    ├── key: (1)
  │    └── fd: (1)-->(3)
- └── aggregations
-      └── sum [as=sum:11, outer=(3)]
-           └── r1:3
+ └── projections
+      └── r1:3 [as=sum:11, outer=(3)]
 
 # InnerJoin case. Because r1 is a non-null foreign key that references x, the
 # join output is guaranteed to include every left row exactly once.
 norm expect=EliminateJoinUnderGroupByLeft disable=EliminateJoinUnderProjectLeft
 SELECT k, sum(r1) FROM fks INNER JOIN xy ON x=r1 GROUP BY k
 ----
-group-by (hash)
+project
  ├── columns: k:1!null sum:11!null
- ├── grouping columns: k:1!null
  ├── key: (1)
  ├── fd: (1)-->(11)
  ├── scan fks
  │    ├── columns: k:1!null r1:3!null
  │    ├── key: (1)
  │    └── fd: (1)-->(3)
- └── aggregations
-      └── sum [as=sum:11, outer=(3)]
-           └── r1:3
+ └── projections
+      └── r1:3 [as=sum:11, outer=(3)]
 
 # Case with an ordering on left columns.
 norm expect=EliminateJoinUnderGroupByLeft
 SELECT max(y) FROM xy LEFT JOIN fks ON True GROUP BY x ORDER BY x
 ----
-group-by (streaming)
+project
  ├── columns: max:11  [hidden: x:1!null]
- ├── grouping columns: x:1!null
  ├── key: (1)
  ├── fd: (1)-->(11)
  ├── ordering: +1
@@ -276,9 +271,8 @@ group-by (streaming)
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── ordering: +1
- └── aggregations
-      └── max [as=max:11, outer=(2)]
-           └── y:2
+ └── projections
+      └── y:2 [as=max:11, outer=(2)]
 
 # Cross join case where neither the foreign key column nor its referenced column
 # are output columns.
@@ -369,9 +363,8 @@ group-by (hash)
 norm expect-not=EliminateJoinUnderGroupByLeft
 SELECT k, sum(r1) FROM fks INNER JOIN xy ON x=r2 GROUP BY k
 ----
-group-by (hash)
+project
  ├── columns: k:1!null sum:11!null
- ├── grouping columns: k:1!null
  ├── key: (1)
  ├── fd: (1)-->(11)
  ├── inner-join (hash)
@@ -388,41 +381,37 @@ group-by (hash)
  │    │    └── key: (7)
  │    └── filters
  │         └── x:7 = r2:4 [outer=(4,7), constraints=(/4: (/NULL - ]; /7: (/NULL - ]), fd=(4)==(7), (7)==(4)]
- └── aggregations
-      └── sum [as=sum:11, outer=(3)]
-           └── r1:3
+ └── projections
+      └── r1:3 [as=sum:11, outer=(3)]
 
 # No-op case because the ordering includes a column from the right input.
 norm expect-not=EliminateJoinUnderGroupByLeft
 SELECT x, max(y) FROM xy LEFT JOIN fks ON True GROUP BY x, k ORDER BY x, k
 ----
-group-by (streaming)
+sort
  ├── columns: x:1!null max:11  [hidden: k:5]
- ├── grouping columns: x:1!null k:5
  ├── key: (1,5)
- ├── fd: (1,5)-->(11)
+ ├── fd: (1)-->(11)
  ├── ordering: +1,+5
- ├── sort
- │    ├── columns: x:1!null y:2 k:5
- │    ├── key: (1,5)
- │    ├── fd: (1)-->(2)
- │    ├── ordering: +1,+5
- │    └── left-join (cross)
- │         ├── columns: x:1!null y:2 k:5
- │         ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
- │         ├── key: (1,5)
- │         ├── fd: (1)-->(2)
- │         ├── scan xy
- │         │    ├── columns: x:1!null y:2
- │         │    ├── key: (1)
- │         │    └── fd: (1)-->(2)
- │         ├── scan fks
- │         │    ├── columns: k:5!null
- │         │    └── key: (5)
- │         └── filters (true)
- └── aggregations
-      └── max [as=max:11, outer=(2)]
-           └── y:2
+ └── project
+      ├── columns: max:11 x:1!null k:5
+      ├── key: (1,5)
+      ├── fd: (1)-->(11)
+      ├── left-join (cross)
+      │    ├── columns: x:1!null y:2 k:5
+      │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
+      │    ├── key: (1,5)
+      │    ├── fd: (1)-->(2)
+      │    ├── scan xy
+      │    │    ├── columns: x:1!null y:2
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    ├── scan fks
+      │    │    ├── columns: k:5!null
+      │    │    └── key: (5)
+      │    └── filters (true)
+      └── projections
+           └── y:2 [as=max:11, outer=(2)]
 
 # --------------------------------------------------
 # EliminateJoinUnderGroupByRight
@@ -432,18 +421,16 @@ group-by (streaming)
 norm expect=EliminateJoinUnderGroupByRight disable=EliminateJoinUnderProjectRight
 SELECT k, sum(r1) FROM xy INNER JOIN fks ON x = r1 GROUP BY k
 ----
-group-by (hash)
+project
  ├── columns: k:5!null sum:11!null
- ├── grouping columns: k:5!null
  ├── key: (5)
  ├── fd: (5)-->(11)
  ├── scan fks
  │    ├── columns: k:5!null r1:7!null
  │    ├── key: (5)
  │    └── fd: (5)-->(7)
- └── aggregations
-      └── sum [as=sum:11, outer=(7)]
-           └── r1:7
+ └── projections
+      └── r1:7 [as=sum:11, outer=(7)]
 
 # No-op case because columns from the right side of a left join are being used.
 norm expect-not=EliminateJoinUnderGroupByRight
@@ -1077,14 +1064,111 @@ scan a
  ├── key: (1)
  └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
 
+# Eliminate the GroupBy when the aggregate functions produce the same column as
+# their input column. This tests for sumInt and sum aggregator functions.
+exprnorm expect=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "a") (Cols "k,i,f") ])
+    [
+        (AggregationsItem (SumInt (Var "i")) (LookupColumn "i"))
+        (AggregationsItem (Sum (Var "f")) (LookupColumn "f"))
+    ]
+    [ (GroupingCols "k") ]
+)
+----
+scan a
+ ├── columns: k:1!null i:2!null f:3
+ ├── key: (1)
+ └── fd: (1)-->(2,3), (2,3)~~>(1)
+
+# Eliminate the GroupBy when the aggregate functions produce the same column as
+# their input column. This tests for Max and Min aggregator functions.
+exprnorm expect=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "a") (Cols "k,i,f") ])
+    [
+        (AggregationsItem (Max (Var "i")) (LookupColumn "i"))
+        (AggregationsItem (Min (Var "f")) (LookupColumn "f"))
+    ]
+    [ (GroupingCols "k") ]
+)
+----
+scan a
+ ├── columns: k:1!null i:2!null f:3
+ ├── key: (1)
+ └── fd: (1)-->(2,3), (2,3)~~>(1)
+
+# Eliminate the GroupBy when the aggregate functions produce the same column as
+# their input column. This tests for Max and Min aggregator functions.
+exprnorm expect=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "a") (Cols "k,i,s") ])
+    [
+        (AggregationsItem (XorAgg (Var "i")) (LookupColumn "i"))
+        (AggregationsItem (ConcatAgg (Var "s")) (LookupColumn "s"))
+        (AggregationsItem (StringAgg (Var "s") (Const ", " "string")) (LookupColumn "s"))
+    ]
+    [ (GroupingCols "k") ]
+)
+----
+scan a
+ ├── columns: k:1!null i:2!null s:4!null
+ ├── key: (1)
+ └── fd: (1)-->(2,4), (2,4)-->(1)
+
+# Eliminate the GroupBy when the aggregate functions functions produce
+# the same column as their input column. This tests for bool-and and bool-or
+# aggregator functions.
+exprnorm expect=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "booleans") (Cols "k,a,b")])
+		[
+		    (AggregationsItem (BoolAnd (Var "a")) (LookupColumn "a"))
+		    (AggregationsItem (BoolOr (Var "b")) (LookupColumn "b"))
+		]
+		[ (GroupingCols "k")]
+)
+----
+scan booleans
+ ├── columns: k:1!null a:2!null b:3
+ ├── key: (1)
+ └── fd: (1)-->(2,3)
+
+# Eliminate the GroupBy when the aggregate functions produce the same column as
+# their input column and produce a new column. This tests for
+# bitwise-and, bitwise-or, and sum integer aggregator functions.
+exprnorm expect=EliminateGroupBy
+(GroupBy
+    (Scan [ (Table "a") (Cols "k,i") ])
+    [
+        (AggregationsItem (BitAndAgg (Var "i")) (LookupColumn "i"))
+        (AggregationsItem (BitOrAgg (Var "i")) (NewColumn "i_bitOr" "int"))
+        (AggregationsItem (SumInt (Var "i")) (NewColumn "i_sumInt" "int"))
+    ]
+    [ (GroupingCols "k") ]
+)
+----
+project
+ ├── columns: i_bitOr:8!null i_sumInt:9!null k:1!null i:2!null
+ ├── key: (1)
+ ├── fd: (1)-->(2), (2)==(8,9), (8)==(2,9), (9)==(2,8)
+ ├── scan a
+ │    ├── columns: k:1!null i:2!null
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── projections
+      ├── i:2 [as=i_bitOr:8, outer=(2)]
+      └── i:2 [as=i_sumInt:9, outer=(2)]
+
+
 # Eliminate the GroupBy when the aggregate functions produce a new column.
 exprnorm expect=EliminateGroupBy
 (GroupBy
     (Scan [ (Table "a") (Cols "k,i,f,s") ])
     [
         (AggregationsItem (ConstAgg (Var "i")) (NewColumn "i_agg" "int"))
-        (AggregationsItem (ConstNotNullAgg (Var "f")) (NewColumn "f_agg" "float"))
-        (AggregationsItem (AnyNotNullAgg (Var "s")) (NewColumn "s_agg" "string"))
+        (AggregationsItem (Max (Var "f")) (NewColumn "f_agg" "float"))
+        (AggregationsItem (StringAgg (Var "s") (Const ", " "string")) (NewColumn "s_agg" "string"))
     ]
     [ (GroupingCols "k") ]
 )
@@ -1164,13 +1248,13 @@ project
  └── projections
       └── CASE WHEN k:5 IS NOT NULL THEN 'Y' ELSE 'N' END [as=case:14, outer=(5)]
 
-# Don't eliminate the GroupBy if there is an aggregate function other than
-# ConstAgg, ConstNotNullAgg, or AnyNotNullAgg.
+# Don't eliminate the GroupBy if there is an aggregate function
+# that is not pass-through
 exprnorm expect-not=EliminateGroupBy
 (GroupBy
     (Scan [ (Table "a") (Cols "k,i,f,s") ])
     [
-        (AggregationsItem (Sum (Var "i")) (NewColumn "sum" "int"))
+        (AggregationsItem (Avg (Var "i")) (NewColumn "avg" "int"))
         (AggregationsItem (ConstNotNullAgg (Var "f")) (NewColumn "f_agg" "float"))
         (AggregationsItem (AnyNotNullAgg (Var "s")) (NewColumn "s_agg" "string"))
     ]
@@ -1178,7 +1262,7 @@ exprnorm expect-not=EliminateGroupBy
 )
 ----
 group-by (hash)
- ├── columns: k:1!null sum:8!null f_agg:9 s_agg:10!null
+ ├── columns: k:1!null avg:8!null f_agg:9 s_agg:10!null
  ├── grouping columns: k:1!null
  ├── key: (1)
  ├── fd: (1)-->(8-10)
@@ -1187,7 +1271,7 @@ group-by (hash)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
  └── aggregations
-      ├── sum [as=sum:8, outer=(2)]
+      ├── avg [as=avg:8, outer=(2)]
       │    └── i:2
       ├── const-not-null-agg [as=f_agg:9, outer=(3)]
       │    └── f:3
@@ -1201,7 +1285,7 @@ exprnorm expect-not=EliminateGroupBy
     (Scan [ (Table "a") (Cols "i,f,s") ])
     [
         (AggregationsItem (ConstNotNullAgg (Var "f")) (NewColumn "f_agg" "float"))
-        (AggregationsItem (AnyNotNullAgg (Var "s")) (NewColumn "s_agg" "string"))
+        (AggregationsItem (ConcatAgg (Var "s")) (NewColumn "s_agg" "string"))
     ]
     [ (GroupingCols "i") ]
 )
@@ -1218,7 +1302,7 @@ group-by (hash)
  └── aggregations
       ├── const-not-null-agg [as=f_agg:8, outer=(3)]
       │    └── f:3
-      └── any-not-null-agg [as=s_agg:9, outer=(4)]
+      └── concat-agg [as=s_agg:9, outer=(4)]
            └── s:4
 
 # Don't eliminate the GroupBy if the grouping columns form a lax key.
@@ -1466,7 +1550,7 @@ project
 # --------------------------------------------------
 # ReduceGroupingCols
 # --------------------------------------------------
-norm expect=ReduceGroupingCols
+norm expect=ReduceGroupingCols disable=EliminateGroupBy
 SELECT k, min(i), f, s FROM a GROUP BY s, f, k
 ----
 group-by (hash)
@@ -1486,7 +1570,7 @@ group-by (hash)
       └── const-agg [as=s:4, outer=(4)]
            └── s:4
 
-norm expect=ReduceGroupingCols
+norm expect=ReduceGroupingCols disable=EliminateGroupBy
 SELECT k, sum(DISTINCT i), f, s FROM a, xy GROUP BY s, f, k
 ----
 group-by (hash)
@@ -1513,7 +1597,7 @@ group-by (hash)
            └── s:4
 
 # Eliminated columns are not part of projection.
-norm expect=ReduceGroupingCols
+norm expect=ReduceGroupingCols disable=EliminateGroupBy
 SELECT min(f) FROM a GROUP BY i, s, k
 ----
 project
@@ -1532,7 +1616,7 @@ project
                 └── f:3
 
 # All grouping columns eliminated.
-norm expect=ReduceGroupingCols
+norm expect=ReduceGroupingCols disable=EliminateGroupBy
 SELECT sum(f), i FROM a GROUP BY k, i, f HAVING k=1
 ----
 group-by (streaming)
@@ -1557,7 +1641,7 @@ group-by (streaming)
       └── const-agg [as=i:2, outer=(2)]
            └── i:2
 
-norm expect=ReduceGroupingCols
+norm expect=ReduceGroupingCols disable=EliminateGroupBy
 SELECT DISTINCT ON (k, f, s) i, f, x FROM a JOIN xy ON i=y
 ----
 distinct-on
@@ -4095,7 +4179,7 @@ scalar-group-by
 # --------------------------------------------------
 
 # Case with sum aggregate.
-norm expect=FoldGroupingOperators
+norm expect=FoldGroupingOperators disable=EliminateGroupBy
 SELECT sum(s) FROM (SELECT sum(x) FROM xy GROUP BY y) AS f(s)
 ----
 scalar-group-by
@@ -4111,7 +4195,7 @@ scalar-group-by
            └── x:1
 
 # Case with count-rows aggregate.
-norm expect=FoldGroupingOperators
+norm expect=FoldGroupingOperators disable=EliminateGroupBy
 SELECT sum_int(c) FROM (SELECT count(x) FROM xy GROUP BY y) AS f(c)
 ----
 scalar-group-by
@@ -4124,7 +4208,7 @@ scalar-group-by
       └── count-rows [as=sum_int:6]
 
 # Case with a count aggregate.
-norm expect=FoldGroupingOperators
+norm expect=FoldGroupingOperators disable=EliminateGroupBy
 SELECT sum_int(cnt) FROM (SELECT count(c2) FROM nullablecols GROUP BY c1) AS f(cnt)
 ----
 scalar-group-by
@@ -4139,7 +4223,7 @@ scalar-group-by
            └── c2:2
 
 # Case with max aggregate.
-norm expect=FoldGroupingOperators
+norm expect=FoldGroupingOperators disable=EliminateGroupBy
 SELECT max(m) FROM (SELECT max(x) FROM xy GROUP BY y) AS f(m)
 ----
 scalar-group-by
@@ -4155,7 +4239,7 @@ scalar-group-by
            └── x:1
 
 # Case with bit_and aggregate.
-norm expect=FoldGroupingOperators
+norm expect=FoldGroupingOperators disable=EliminateGroupBy
 SELECT bit_and(b) FROM (SELECT bit_and(x) FROM xy GROUP BY y) AS f(b)
 ----
 scalar-group-by
@@ -4171,7 +4255,7 @@ scalar-group-by
            └── x:1
 
 # Case with multiple aggregates.
-norm expect=FoldGroupingOperators
+norm expect=FoldGroupingOperators disable=EliminateGroupBy
 SELECT max(m), sum(s), sum_int(c)
 FROM (SELECT sum(b), count(c), max(b) FROM abc GROUP BY a)
 AS f(s, c, m)
@@ -4191,7 +4275,7 @@ scalar-group-by
       └── count-rows [as=sum_int:11]
 
 # Case with aggregation on a grouping column.
-norm expect=FoldGroupingOperators
+norm expect=FoldGroupingOperators disable=EliminateGroupBy
 SELECT max(x)
 FROM (SELECT DISTINCT ON (a) a FROM abc) AS f(x)
 ----
@@ -4208,7 +4292,7 @@ scalar-group-by
 
 # GroupBy on GroupBy case where the inner grouping columns determine the outer
 # grouping columns, but they do not intersect.
-norm expect=FoldGroupingOperators
+norm expect=FoldGroupingOperators disable=EliminateGroupBy
 SELECT sum(s) FROM (SELECT y, sum(x) AS s FROM xy GROUP BY x) GROUP BY y
 ----
 project
@@ -4227,7 +4311,7 @@ project
                 └── x:1
 
 # GroupBy on GroupBy case with multiple-column grouping.
-norm expect=FoldGroupingOperators
+norm expect=FoldGroupingOperators disable=EliminateGroupBy
 SELECT sum(s) FROM (SELECT a, sum(c) AS s FROM abc GROUP BY a, b) GROUP BY a
 ----
 project
