@@ -740,6 +740,7 @@ func (tp *txnPipeliner) updateLockTracking(
 				"allowed by kv.transaction.max_intents_and_locks: "+
 				"count: %d, txn: %s, ba: %s", tp.writeCount, ba.Txn, ba.Summary())
 		}
+		tp.txnMetrics.TxnsResponseOverCountLimit.Inc(1)
 	}
 
 	// Deal with compacting the lock spans.
