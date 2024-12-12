@@ -603,12 +603,12 @@ type vectorizedFlowCreator struct {
 	// pools during the flow cleanup.
 	releasables []execreleasable.Releasable
 
-	monitorRegistry colexecargs.MonitorRegistry
+	monitorRegistry *colexecargs.MonitorRegistry
 	// closerRegistry will be closed during the flow cleanup. It is safe to do
 	// so in the main flow goroutine since all other goroutines that might have
 	// used these objects must have exited by the time Cleanup() is called -
 	// Flow.Wait() ensures that.
-	closerRegistry colexecargs.CloserRegistry
+	closerRegistry *colexecargs.CloserRegistry
 	diskQueueCfg   colcontainer.DiskQueueCfg
 	fdSemaphore    semaphore.Semaphore
 }
@@ -620,6 +620,8 @@ var vectorizedFlowCreatorPool = sync.Pool{
 		return &vectorizedFlowCreator{
 			streamIDToInputOp: make(map[execinfrapb.StreamID]colexecargs.OpWithMetaInfo),
 			streamIDToSpecIdx: make(map[execinfrapb.StreamID]int),
+			monitorRegistry:   &colexecargs.MonitorRegistry{},
+			closerRegistry:    &colexecargs.CloserRegistry{},
 		}
 	},
 }
@@ -1175,8 +1177,8 @@ func (s *vectorizedFlowCreator) setupFlow(
 				FDSemaphore:          s.fdSemaphore,
 				SemaCtx:              s.semaCtx,
 				Factory:              factory,
-				MonitorRegistry:      &s.monitorRegistry,
-				CloserRegistry:       &s.closerRegistry,
+				MonitorRegistry:      s.monitorRegistry,
+				CloserRegistry:       s.closerRegistry,
 				TypeResolver:         &s.typeResolver,
 			}
 			numOldMonitors := len(s.monitorRegistry.GetMonitors())
