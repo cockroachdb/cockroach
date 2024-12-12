@@ -52,7 +52,7 @@ func EncodeChildKey(appendTo []byte, key ChildKey) []byte {
 		// The primary key is already in encoded form.
 		return append(appendTo, key.PrimaryKey...)
 	}
-	return encoding.EncodeUint64Ascending(appendTo, uint64(key.PartitionKey))
+	return encoding.EncodeUvarintAscending(appendTo, uint64(key.PartitionKey))
 }
 
 // DecodePartitionMetadata decodes the metadata for a partition.
@@ -128,7 +128,7 @@ func DecodeChildKey(encChildKey []byte, level Level) (ChildKey, error) {
 		return ChildKey{PrimaryKey: encChildKey}, nil
 	} else {
 		// Non-leaf vectors point to the partition key.
-		_, childPartitionKey, err := encoding.DecodeUint64Ascending(encChildKey)
+		_, childPartitionKey, err := encoding.DecodeUvarintAscending(encChildKey)
 		if err != nil {
 			return ChildKey{}, err
 		}
