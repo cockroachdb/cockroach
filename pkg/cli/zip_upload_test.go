@@ -16,6 +16,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"sort"
 	"strconv"
@@ -100,6 +101,9 @@ func setupZipDir(t *testing.T, inputs zipUploadTestContents) (string, func()) {
 			require.NoError(t, err)
 			require.NoError(t, file.Close())
 		}
+
+		// setup table dumps - copy the test table dumps to the debug directory
+		require.NoError(t, exec.Command("cp", "-r", "testdata/table_dumps/", debugDir).Run())
 	}
 
 	return debugDir, func() {
@@ -190,6 +194,8 @@ func TestUploadZipEndToEnd(t *testing.T) {
 					d.ScanArgs(t, "log-format", &logFormat)
 					includeFlag = fmt.Sprintf("%s --log-format=%s", includeFlag, logFormat)
 				}
+			case "upload-tables":
+				includeFlag = "--include=tables"
 			}
 
 			debugDir, cleanup := setupZipDir(t, testInput)
@@ -361,20 +367,49 @@ func setupDDLogsHook(t *testing.T, req *http.Request) ([]byte, error) {
 
 	fmt.Println("Logs API Hook:", req.URL)
 
-	// remove timestamp from the logs to make the test deterministic
-	var lines []ddLogsAPIEntry
-	if err := json.Unmarshal(body.Bytes(), &lines); err != nil {
-		return nil, err
-	}
-
-	for _, line := range lines {
-		line.Timestamp = 0
-		raw, err := json.Marshal(line)
-		if err != nil {
+	// capture body contents for the log upload use case
+	if bytes.Contains(body.Bytes(), []byte("source:cockroachdb")) {
+		// remove timestamp from the logs to make the test deterministic
+		var lines []ddLogsAPIEntry
+		if err := json.Unmarshal(body.Bytes(), &lines); err != nil {
 			return nil, err
 		}
 
-		fmt.Println("Logs API Hook:", string(raw))
+		for _, line := range lines {
+			line.Timestamp = 0
+			raw, err := json.Marshal(line)
+			if err != nil {
+				return nil, err
+			}
+
+			fmt.Println("Logs API Hook:", string(raw))
+		}
+	}
+
+	// capture the body contents for the table dump upload use case
+	if bytes.Contains(body.Bytes(), []byte("source:debug-zip")) {
+		var lines []map[string]any
+		require.NoError(t, json.Unmarshal(body.Bytes(), &lines))
+
+		for _, parsedLine := range lines {
+			// sort the keys to make the test deterministic
+			keys := make([]string, 0, len(lines))
+			for k := range parsedLine {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+
+			func() {
+				printLock.Lock()
+				defer printLock.Unlock()
+
+				fmt.Print("Logs API Hook: ")
+				for _, k := range keys {
+					fmt.Printf("%s=%v\t", k, parsedLine[k])
+				}
+				fmt.Println()
+			}()
+		}
 	}
 
 	return []byte("200 OK"), nil
