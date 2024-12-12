@@ -11,7 +11,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -70,13 +69,8 @@ func TestContextCancel(t *testing.T) {
 		wg.Add(1)
 		m.Go(func(ctx context.Context, l *logger.Logger) error {
 			defer wg.Done()
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(30 * time.Second):
-				t.Fatal("expected context to be canceled")
-			}
-			return nil
+			<-ctx.Done()
+			return ctx.Err()
 		})
 		cancel()
 		wg.Wait()
@@ -92,13 +86,8 @@ func TestContextCancel(t *testing.T) {
 		wg.Add(1)
 		cancel := m.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
 			defer wg.Done()
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(30 * time.Second):
-				t.Fatal("expected context to be canceled")
-			}
-			return nil
+			<-ctx.Done()
+			return ctx.Err()
 		})
 		cancel()
 		wg.Wait()
@@ -128,11 +117,88 @@ func TestTerminate(t *testing.T) {
 		for i := 0; i < numTasks; i++ {
 			e := <-m.CompletedEvents()
 			require.NoError(t, e.Err)
-
 		}
 	}()
 	m.Terminate(nilLogger())
 	require.Equal(t, uint32(numTasks), counter.Load())
+}
+
+func TestGroups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	m := NewManager(ctx, nilLogger())
+
+	numTasks := 10
+	g := m.NewGroup()
+	channels := make([]chan struct{}, numTasks)
+
+	// Start tasks.
+	for i := 0; i < numTasks; i++ {
+		channels[i] = make(chan struct{})
+		g.Go(func(ctx context.Context, l *logger.Logger) error {
+			<-channels[i]
+			return nil
+		})
+	}
+
+	// Start a goroutine that waits for all tasks in the group to complete.
+	done := make(chan struct{})
+	go func() {
+		g.Wait()
+		close(done)
+	}()
+
+	// Close channels one by one to complete all tasks, and ensure the group is
+	// not done yet.
+	for i := 0; i < numTasks; i++ {
+		select {
+		case <-done:
+			t.Fatal("group should not be done yet")
+		default:
+		}
+		// Close the channel and wait for the completed event.
+		close(channels[i])
+		<-m.CompletedEvents()
+	}
+
+	// Ensure the group is done.
+	<-done
+	m.Terminate(nilLogger())
+}
+
+func TestTerminateGroups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	m := NewManager(ctx, nilLogger())
+
+	numTasks := 3
+	g := m.NewGroup()
+
+	// Start tasks.
+	for i := 0; i < numTasks; i++ {
+		g.Go(func(ctx context.Context, l *logger.Logger) error {
+			<-ctx.Done()
+			return nil
+		})
+	}
+
+	// Start a goroutine that waits for all tasks in the group to complete.
+	done := make(chan struct{})
+	go func() {
+		g.Wait()
+		close(done)
+	}()
+
+	// Consume all completed events.
+	go func() {
+		for i := 0; i < numTasks; i++ {
+			e := <-m.CompletedEvents()
+			require.NoError(t, e.Err)
+		}
+	}()
+
+	m.Terminate(nilLogger())
+	<-done
 }
 
 func nilLogger() *logger.Logger {
