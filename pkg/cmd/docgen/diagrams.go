@@ -622,22 +622,20 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
-		name: "begin_stmt",
+		name: "legacy_begin_stmt",
 		inline: []string{
 			"opt_transaction",
 			"begin_transaction",
-			"transaction_mode",
-			"transaction_user_priority",
-			"user_priority",
-			"iso_level",
 			"transaction_mode_list",
 			"opt_comma",
+			"transaction_mode",
+			"transaction_user_priority",
 			"transaction_read_mode",
 			"as_of_clause",
 			"transaction_deferrable_mode",
-		},
-		exclude: []*regexp.Regexp{
-			regexp.MustCompile("'START'"),
+			"user_priority",
+			"transaction_iso_level",
+			"iso_level",
 		},
 	},
 	{
@@ -1373,7 +1371,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name: "set_transaction",
-		stmt: "nonpreparable_set_stmt",
+		stmt: "set_transaction_stmt",
 		inline: []string{
 			"set_transaction_stmt",
 			"transaction_mode",
@@ -1384,6 +1382,8 @@ var specs = []stmtSpec{
 			"as_of_clause",
 			"opt_comma",
 			"transaction_deferrable_mode",
+			"transaction_iso_level",
+			"iso_level",
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")},
 	},
