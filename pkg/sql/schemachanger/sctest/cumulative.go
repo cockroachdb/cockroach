@@ -180,7 +180,7 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 
 				if t.Failed() {
 					t.Log("forcing job failure from BeforeStage due to test failure")
-					return errors.New("t.Failed() is true")
+					return jobs.MarkAsPermanentJobError(errors.New("t.Failed() is true"))
 				}
 
 				s := p.Stages[stageIdx]
