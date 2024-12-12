@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // MonitoringConfig is a set of callbacks which the kvfeed calls to provide
@@ -392,8 +393,15 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 			return err
 		}
 		if log.V(2) {
-			log.Infof(ctx, "kv feed encountered table events: %#v", events)
+			log.Infof(ctx, "kv feed encountered table events at or before %s: %#v", schemaChangeTS, events)
 		}
+		var tables []redact.RedactableString
+		for _, event := range events {
+			tables = append(tables, redact.Sprintf("table %q (id %d, version %d -> %d)",
+				redact.Safe(event.Before.GetName()), event.Before.GetID(), event.Before.GetVersion(), event.After.GetVersion()))
+		}
+		log.Infof(ctx, "kv feed encountered schema change(s) at or before %s: %s",
+			schemaChangeTS, redact.Join(", ", tables))
 
 		// Detect whether the event corresponds to a primary index change. Also
 		// detect whether the change corresponds to any change in the set of visible
