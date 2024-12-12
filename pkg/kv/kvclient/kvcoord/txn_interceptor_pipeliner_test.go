@@ -2376,7 +2376,7 @@ func TestTxnPipelinerCondenseLockSpans2(t *testing.T) {
 			TrackedWritesMaxSize.Override(ctx, &tp.st.SV, tc.maxBytes)
 
 			for _, sp := range tc.lockSpans {
-				tp.lockFootprint.insert(roachpb.Span{Key: roachpb.Key(sp.start), EndKey: roachpb.Key(sp.end)})
+				tp.lockFootprint.insert(true, roachpb.Span{Key: roachpb.Key(sp.start), EndKey: roachpb.Key(sp.end)})
 			}
 
 			for _, k := range tc.ifWrites {
@@ -2524,11 +2524,13 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 		// request is expected to be rejected.
 		expRejectIdx int
 		maxSize      int64
+		maxCount     int64
 	}{
 		{name: "large request",
 			reqs:         []*kvpb.BatchRequest{largeWrite},
 			expRejectIdx: 0,
 			maxSize:      int64(len(largeAs)) - 1 + roachpb.SpanOverhead,
+			maxCount:     0,
 		},
 		{name: "requests that add up",
 			reqs: []*kvpb.BatchRequest{
@@ -2538,7 +2540,17 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			expRejectIdx: 2,
 			// maxSize is such that first two requests fit and the third one
 			// goes above the limit.
-			maxSize: 9 + 2*roachpb.SpanOverhead,
+			maxSize:  9 + 2*roachpb.SpanOverhead,
+			maxCount: 0,
+		},
+		{name: "requests that count up",
+			reqs: []*kvpb.BatchRequest{
+				putBatchNoAsyncConsensus(roachpb.Key("aaaa"), nil),
+				putBatchNoAsyncConsensus(roachpb.Key("bbbb"), nil),
+				putBatchNoAsyncConsensus(roachpb.Key("cccc"), nil)},
+			expRejectIdx: 2,
+			maxSize:      0,
+			maxCount:     1,
 		},
 		{name: "async requests that add up",
 			// Like the previous test, but this time the requests run with async
@@ -2550,6 +2562,19 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 				putBatch(roachpb.Key("cccc"), nil)},
 			expRejectIdx: 2,
 			maxSize:      10 + roachpb.SpanOverhead,
+			maxCount:     0,
+		},
+		{name: "async requests that count up",
+			// Like the previous test, but this time the requests run with async
+			// consensus. Being tracked as in-flight writes, this test shows that
+			// in-flight writes count towards the budget.
+			reqs: []*kvpb.BatchRequest{
+				putBatch(roachpb.Key("aaaa"), nil),
+				putBatch(roachpb.Key("bbbb"), nil),
+				putBatch(roachpb.Key("cccc"), nil)},
+			expRejectIdx: 2,
+			maxSize:      0,
+			maxCount:     1,
 		},
 		{
 			name: "scan response goes over budget, next request rejected",
@@ -2559,6 +2584,7 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			resp:         []*kvpb.BatchResponse{lockingScanResp},
 			expRejectIdx: 1,
 			maxSize:      10 + roachpb.SpanOverhead,
+			maxCount:     0,
 		},
 		{
 			name: "scan response goes over budget",
@@ -2569,6 +2595,7 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			resp:         []*kvpb.BatchResponse{lockingScanResp},
 			expRejectIdx: -1,
 			maxSize:      10 + roachpb.SpanOverhead,
+			maxCount:     0,
 		},
 		{
 			name: "del range response goes over budget, next request rejected",
@@ -2578,6 +2605,7 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			resp:         []*kvpb.BatchResponse{delRangeResp},
 			expRejectIdx: 1,
 			maxSize:      10 + roachpb.SpanOverhead,
+			maxCount:     0,
 		},
 		{
 			name: "del range response goes over budget",
@@ -2588,6 +2616,7 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			resp:         []*kvpb.BatchResponse{delRangeResp},
 			expRejectIdx: -1,
 			maxSize:      10 + roachpb.SpanOverhead,
+			maxCount:     0,
 		},
 	}
 	for _, tc := range testCases {
@@ -2597,8 +2626,13 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 			}
 
 			tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
-			TrackedWritesMaxSize.Override(ctx, &tp.st.SV, tc.maxSize)
-			rejectTxnOverTrackedWritesBudget.Override(ctx, &tp.st.SV, true)
+			if tc.maxCount > 0 {
+				rejectTxnMaxCount.Override(ctx, &tp.st.SV, tc.maxCount)
+			}
+			if tc.maxSize > 0 {
+				TrackedWritesMaxSize.Override(ctx, &tp.st.SV, tc.maxSize)
+				rejectTxnOverTrackedWritesBudget.Override(ctx, &tp.st.SV, true)
+			}
 
 			txn := makeTxnProto()
 
@@ -2637,7 +2671,11 @@ func TestTxnPipelinerRejectAboveBudget(t *testing.T) {
 						t.Fatalf("expected lockSpansOverBudgetError, got %+v", pErr.GoError())
 					}
 					require.Equal(t, pgcode.ConfigurationLimitExceeded, pgerror.GetPGCode(pErr.GoError()))
-					require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByLockSpanBudget.Count())
+					if tc.maxSize > 0 {
+						require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByLockSpanBudget.Count())
+					} else {
+						require.Equal(t, int64(1), tp.txnMetrics.TxnsRejectedByLockCountLimit.Count())
+					}
 
 					// Make sure rolling back the txn works.
 					rollback := &kvpb.BatchRequest{}
