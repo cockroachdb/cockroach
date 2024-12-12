@@ -1190,8 +1190,19 @@ func (b *Builder) shouldApplyImplicitLockingToUpdateInput(upd *memo.UpdateExpr) 
 	if idxJoin, ok := input.(*memo.IndexJoinExpr); ok {
 		input = idxJoin.Input
 	}
-	if scan, ok := input.(*memo.ScanExpr); ok {
-		return scan.Table
+	switch t := input.(type) {
+	case *memo.ScanExpr:
+		return t.Table
+	case *memo.LookupJoinExpr:
+		md := b.mem.Metadata()
+		updateTableStableID := md.Table(upd.Table).ID()
+		lookupTableStableID := md.Table(t.Table).ID()
+		// Only lock rows read in the lookup join if the lookup table is the
+		// same as the table being updated. Also, don't lock rows if there is an
+		// ON condition so that we don't lock rows that won't be updated.
+		if updateTableStableID == lookupTableStableID && t.On.IsTrue() {
+			return t.Table
+		}
 	}
 	return 0
 }
@@ -1223,6 +1234,9 @@ func (b *Builder) shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) 
 
 	case *memo.LookupJoinExpr:
 		input = join.Input
+		if inner, ok := input.(*memo.LookupJoinExpr); ok && inner.Table == join.Table {
+			input = inner.Input
+		}
 		toLock = join.Table
 
 	default:

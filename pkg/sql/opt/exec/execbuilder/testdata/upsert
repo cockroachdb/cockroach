@@ -990,3 +990,136 @@ vectorized: true
               missing stats
               table: t121322_c@t121322_c_pkey
               spans: FULL SCAN
+
+# Test that FOR UPDATE locks are applied to reads in generic query plans.
+
+statement ok
+CREATE TABLE t137352 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE INDEX (a)
+)
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+PREPARE p AS UPSERT INTO t137352 VALUES ($1, $2, $3)
+
+query T
+EXPLAIN ANALYZE EXECUTE p(1, 10, 100)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• upsert
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ into: t137352(k, a, b)
+│ auto commit
+│ arbiter indexes: t137352_pkey
+│
+└── • lookup join (left outer)
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 1
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: t137352@t137352_pkey
+    │ equality: (column1) = (k)
+    │ equality cols are key
+    │ locking strength: for update
+    │
+    └── • values
+          sql nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 3 columns, 1 row
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS INSERT INTO t137352 VALUES ($1, $2, $3) ON CONFLICT (a) DO UPDATE SET b = $3
+
+query T
+EXPLAIN ANALYZE EXECUTE p(1, 10, 100)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• upsert
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ into: t137352(k, a, b)
+│ auto commit
+│ arbiter indexes: t137352_a_key
+│
+└── • render
+    │
+    └── • lookup join (left outer)
+        │ sql nodes: <hidden>
+        │ kv nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 1
+        │ KV time: 0µs
+        │ KV contention time: 0µs
+        │ KV rows decoded: 1
+        │ KV pairs read: 2
+        │ KV bytes read: 8 B
+        │ KV gRPC calls: 1
+        │ estimated max memory allocated: 0 B
+        │ table: t137352@t137352_pkey
+        │ equality: (k) = (k)
+        │ equality cols are key
+        │ locking strength: for update
+        │
+        └── • lookup join (left outer)
+            │ sql nodes: <hidden>
+            │ kv nodes: <hidden>
+            │ regions: <hidden>
+            │ actual row count: 1
+            │ KV time: 0µs
+            │ KV contention time: 0µs
+            │ KV rows decoded: 1
+            │ KV pairs read: 2
+            │ KV bytes read: 8 B
+            │ KV gRPC calls: 1
+            │ estimated max memory allocated: 0 B
+            │ table: t137352@t137352_a_key
+            │ equality: (column2) = (a)
+            │ equality cols are key
+            │ locking strength: for update
+            │
+            └── • values
+                  sql nodes: <hidden>
+                  regions: <hidden>
+                  actual row count: 1
+                  size: 3 columns, 1 row
