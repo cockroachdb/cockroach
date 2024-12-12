@@ -264,6 +264,7 @@ vectorized: true
                   table: statement_statistics@primary
                   spans: /0-/0/2022-05-04T15:59:59.999999001Z
                   limit: 1024
+                  locking strength: for update
 
 statement ok
 ALTER TABLE system.transaction_statistics INJECT STATISTICS '[
@@ -448,6 +449,7 @@ vectorized: true
                   table: transaction_statistics@primary
                   spans: /0-/0/2022-05-04T15:59:59.999999001Z
                   limit: 1024
+                  locking strength: for update
 
 query T
 EXPLAIN (VERBOSE)
@@ -507,6 +509,7 @@ vectorized: true
                   table: statement_statistics@primary
                   spans: /0/2022-05-04T14:00:00Z/"123"/"234"/"345"/"test"/1-/0/2022-05-04T15:59:59.999999001Z
                   limit: 1024
+                  locking strength: for update
 
 query T
 EXPLAIN (VERBOSE)
@@ -561,6 +564,7 @@ vectorized: true
                   table: transaction_statistics@primary
                   spans: /0/2022-05-04T14:00:00Z/"123"/"test"/2-/0/2022-05-04T15:59:59.999999001Z
                   limit: 1024
+                  locking strength: for update
 
 statement ok
 RESET CLUSTER SETTING sql.stats.flush.interval
