@@ -6,7 +6,9 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"sync"
@@ -18,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"storj.io/drpc/drpcmigrate"
 )
 
 type RPCListenerFactory func(
@@ -131,6 +134,23 @@ func startListenRPCAndSQL(
 		}
 	}
 
+	drpcHeader := []byte(drpcmigrate.DRPCHeader)
+	drpcL := m.Match(func(reader io.Reader) bool {
+		buf := make([]byte, len(drpcmigrate.DRPCHeader))
+		if _, err := io.ReadFull(reader, buf); err != nil {
+			return false
+		}
+		eq := bytes.Equal(buf, drpcHeader)
+		if eq == true {
+			return eq
+		}
+		return eq
+	})
+	// For drpc conns, we need to throw away the header before passing the conn
+	// to the drpc server.
+	// This would not be required explicitly if we used `drpcmigrate.ListenMux`
+	// but cmux keeps the prefix.
+	drpcL = &dropDRPCHeaderListener{wrapped: drpcL}
 	anyL := m.Match(cmux.Any())
 	if serverTestKnobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok {
 		if serverTestKnobs.ContextTestingKnobs.InjectedLatencyOracle != nil {
@@ -141,11 +161,15 @@ func startListenRPCAndSQL(
 	rpcLoopbackL := netutil.NewLoopbackListener(ctx, stopper)
 	sqlLoopbackL := netutil.NewLoopbackListener(ctx, stopper)
 
+	drpcCtx, drpcCancel := context.WithCancel(workersCtx)
+
 	// The remainder shutdown worker.
 	waitForQuiesce := func(context.Context) {
 		<-stopper.ShouldQuiesce()
+		drpcCancel()
 		// TODO(bdarnell): Do we need to also close the other listeners?
 		netutil.FatalIfUnexpected(anyL.Close())
+		netutil.FatalIfUnexpected(drpcL.Close())
 		netutil.FatalIfUnexpected(rpcLoopbackL.Close())
 		netutil.FatalIfUnexpected(sqlLoopbackL.Close())
 		netutil.FatalIfUnexpected(ln.Close())
@@ -161,14 +185,16 @@ func startListenRPCAndSQL(
 		})
 	}
 
+	stopper.AddCloser(stop.CloserFn(stopGRPC))
+
 	if err := stopper.RunAsyncTask(
-		workersCtx, "grpc-quiesce", waitForQuiesce,
+		workersCtx, "grpc-drpc-quiesce", waitForQuiesce,
 	); err != nil {
 		waitForQuiesce(ctx)
 		stopGRPC()
+		drpcCancel()
 		return nil, nil, nil, nil, err
 	}
-	stopper.AddCloser(stop.CloserFn(stopGRPC))
 
 	// startRPCServer starts the RPC server. We do not do this
 	// immediately because we want the cluster to be ready (or ready to
@@ -179,7 +205,18 @@ func startListenRPCAndSQL(
 		_ = stopper.RunAsyncTask(workersCtx, "serve-grpc", func(context.Context) {
 			netutil.FatalIfUnexpected(grpc.Serve(anyL))
 		})
-		_ = stopper.RunAsyncTask(workersCtx, "serve-loopback-grpc", func(context.Context) {
+		_ = stopper.RunAsyncTask(drpcCtx, "serve-drpc", func(ctx context.Context) {
+			if grpc.drpc == nil {
+				return
+			}
+			if cfg := grpc.drpc.TLSCfg; cfg != nil {
+				drpcTLSL := tls.NewListener(drpcL, cfg)
+				netutil.FatalIfUnexpected(grpc.drpc.Srv.Serve(ctx, drpcTLSL))
+			} else {
+				netutil.FatalIfUnexpected(grpc.drpc.Srv.Serve(ctx, drpcL))
+			}
+		})
+		_ = stopper.RunAsyncTask(ctx, "serve-loopback-grpc", func(context.Context) {
 			netutil.FatalIfUnexpected(grpc.Serve(rpcLoopbackL))
 		})
 
@@ -191,4 +228,28 @@ func startListenRPCAndSQL(
 	}
 
 	return pgL, sqlLoopbackL, rpcLoopbackL.Connect, startRPCServer, nil
+}
+
+type dropDRPCHeaderListener struct {
+	wrapped net.Listener
+}
+
+func (ln *dropDRPCHeaderListener) Accept() (net.Conn, error) {
+	conn, err := ln.wrapped.Accept()
+	if err != nil {
+		return nil, err
+	}
+	buf := make([]byte, len(drpcmigrate.DRPCHeader))
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+func (ln *dropDRPCHeaderListener) Close() error {
+	return ln.wrapped.Close()
+}
+
+func (ln *dropDRPCHeaderListener) Addr() net.Addr {
+	return ln.wrapped.Addr()
 }
