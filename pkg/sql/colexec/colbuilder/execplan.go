@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -420,7 +421,7 @@ func (r opResult) createDiskBackedSort(
 	// could improve this.
 	diskSpiller := colexecdisk.NewOneInputDiskSpiller(
 		input, inMemorySorter.(colexecop.BufferingInMemoryOperator),
-		sorterMemMonitorName,
+		sorterMemMonitorName, args.MakeConcurrencySafeForDiskBackedOp,
 		func(input colexecop.Operator) colexecop.Operator {
 			opName := opNamePrefix + "external-sorter"
 			// We are using unlimited memory accounts here because external
@@ -432,7 +433,6 @@ func (r opResult) createDiskBackedSort(
 			sortUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 			mergeUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[1], factory)
 			outputUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[2], factory)
-			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
 			es := colexecdisk.NewExternalSorter(
 				flowCtx,
 				processorID,
@@ -447,7 +447,7 @@ func (r opResult) createDiskBackedSort(
 				args.TestingKnobs.DelegateFDAcquisitions,
 				args.DiskQueueCfg,
 				args.FDSemaphore,
-				diskAccount,
+				args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID),
 				accounts[3],
 				flowCtx.TestingKnobs().VecFDsToAcquire,
 			)
@@ -754,6 +754,9 @@ func NewColOperator(
 	if args.CloserRegistry == nil {
 		args.CloserRegistry = &colexecargs.CloserRegistry{}
 	}
+	if args.RegistriesMu == nil {
+		args.RegistriesMu = &syncutil.Mutex{}
+	}
 
 	core := &spec.Core
 	post := &spec.Post
@@ -1050,7 +1053,7 @@ func NewColOperator(
 					evalCtx.SingleDatumAggMemAccount = ehaMemAccount
 					diskSpiller := colexecdisk.NewOneInputDiskSpiller(
 						inputs[0].Root, inMemoryHashAggregator.(colexecop.BufferingInMemoryOperator),
-						hashAggregatorMemMonitorName,
+						hashAggregatorMemMonitorName, args.MakeConcurrencySafeForDiskBackedOp,
 						func(input colexecop.Operator) colexecop.Operator {
 							newAggArgs := *newAggArgs
 							// Note that the hash-based partitioner will make
@@ -1120,12 +1123,15 @@ func NewColOperator(
 					allocator, inputs[0].Root, core.Distinct.DistinctColumns, result.ColumnTypes,
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
-				edOpName := redact.SafeString("external-distinct")
-				diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
+				// Capture the current input type schema since the spilling to
+				// disk might occur during the execution time, at which point
+				// result.ColumnTypes might point to something different.
+				inputTypes := result.ColumnTypes
 				diskSpiller := colexecdisk.NewOneInputDiskSpiller(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
-					distinctMemMonitorName,
+					distinctMemMonitorName, args.MakeConcurrencySafeForDiskBackedOp,
 					func(input colexecop.Operator) colexecop.Operator {
+						edOpName := redact.SafeString("external-distinct")
 						accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 							ctx, flowCtx, edOpName, spec.ProcessorID, 2, /* numAccounts */
 						)
@@ -1135,10 +1141,10 @@ func NewColOperator(
 							flowCtx,
 							args,
 							input,
-							result.ColumnTypes,
+							inputTypes,
 							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, edOpName, factory),
 							inMemoryUnorderedDistinct,
-							diskAccount,
+							args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID),
 							accounts[1],
 						)
 						args.CloserRegistry.AddCloser(toClose)
@@ -1203,12 +1209,11 @@ func NewColOperator(
 					// in-memory hash joiner.
 					result.Root = inMemoryHashJoiner
 				} else {
-					opName := redact.SafeString("external-hash-joiner")
-					diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 					diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
-						[]redact.SafeString{hashJoinerMemMonitorName},
+						[]redact.SafeString{hashJoinerMemMonitorName}, args.MakeConcurrencySafeForDiskBackedOp,
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
+							opName := redact.SafeString("external-hash-joiner")
 							accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 								ctx, flowCtx, opName, spec.ProcessorID, 2, /* numAccounts */
 							)
@@ -1221,7 +1226,7 @@ func NewColOperator(
 								hjArgs.Spec,
 								inputOne, inputTwo,
 								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, opName, factory),
-								diskAccount,
+								args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID),
 								accounts[1],
 							)
 							args.CloserRegistry.AddCloser(ehj)
@@ -1374,6 +1379,7 @@ func NewColOperator(
 			diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 				inputs[0].Root, inputs[1].Root, hgj,
 				[]redact.SafeString{hashJoinerMemMonitorName, hashAggregatorMemMonitorName},
+				args.MakeConcurrencySafeForDiskBackedOp,
 				func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 					// When we spill to disk, we just use a combo of an external
 					// hash join followed by an external hash aggregation.

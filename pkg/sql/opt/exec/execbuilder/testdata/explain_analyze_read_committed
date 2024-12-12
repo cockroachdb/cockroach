@@ -82,7 +82,6 @@ quality of service: regular
 │ actual row count: 2
 │ vectorized batch count: 0
 │ estimated max memory allocated: 0 B
-│ estimated max sql temp disk usage: 0 B
 │ estimated row count: 990 (missing stats)
 │ equality: (v) = (a)
 │ right cols are key
