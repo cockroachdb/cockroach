@@ -328,7 +328,7 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 // operator, then pass in empty struct.
 // - diskBackedReuseMode indicates whether this disk-backed sort can be used
 // multiple times.
-func (r opResult) createDiskBackedSort(
+func createDiskBackedSort(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
@@ -432,7 +432,6 @@ func (r opResult) createDiskBackedSort(
 			sortUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[0], factory)
 			mergeUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[1], factory)
 			outputUnlimitedAllocator := colmem.NewAllocator(ctx, accounts[2], factory)
-			diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID)
 			es := colexecdisk.NewExternalSorter(
 				flowCtx,
 				processorID,
@@ -447,7 +446,7 @@ func (r opResult) createDiskBackedSort(
 				args.TestingKnobs.DelegateFDAcquisitions,
 				args.DiskQueueCfg,
 				args.FDSemaphore,
-				diskAccount,
+				args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, processorID),
 				accounts[3],
 				flowCtx.TestingKnobs().VecFDsToAcquire,
 			)
@@ -465,7 +464,7 @@ func (r opResult) createDiskBackedSort(
 // that can be used by the hash-based partitioner.
 // NOTE: unless DelegateFDAcquisitions testing knob is set to true, it is up to
 // the caller to acquire the necessary file descriptors up front.
-func (r opResult) makeDiskBackedSorterConstructor(
+func makeDiskBackedSorterConstructor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	args *colexecargs.NewColOperatorArgs,
@@ -489,7 +488,7 @@ func (r opResult) makeDiskBackedSorterConstructor(
 		// of the hash-based partitioner, it can be reused multiple times (in
 		// the worst case, for each partition).
 		const reuseMode = colexecop.BufferingOpCanReuse
-		return r.createDiskBackedSort(
+		return createDiskBackedSort(
 			ctx, flowCtx, &sortArgs, input, inputTypes,
 			execinfrapb.Ordering{Columns: orderingCols}, 0, /* limit */
 			0 /* matchLen */, maxNumberPartitions, args.Spec.ProcessorID,
@@ -1069,7 +1068,7 @@ func NewColOperator(
 									OutputUnlimitedAllocator: colmem.NewAllocator(ctx, ehaAccounts[2], factory),
 									MaxOutputBatchMemSize:    newHashAggArgs.MaxOutputBatchMemSize,
 								},
-								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaOpName, factory),
+								makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehaOpName, factory),
 								args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehaOpName, spec.ProcessorID),
 								ehaAccounts[3],
 								spec.Core.Aggregator.OutputOrdering,
@@ -1120,12 +1119,15 @@ func NewColOperator(
 					allocator, inputs[0].Root, core.Distinct.DistinctColumns, result.ColumnTypes,
 					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
-				edOpName := redact.SafeString("external-distinct")
-				diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)
+				// Capture the current input type schema since the spilling to
+				// disk might occur during the execution time, at which point
+				// result.ColumnTypes might point to something different.
+				inputTypes := result.ColumnTypes
 				diskSpiller := colexecdisk.NewOneInputDiskSpiller(
 					inputs[0].Root, inMemoryUnorderedDistinct.(colexecop.BufferingInMemoryOperator),
 					distinctMemMonitorName,
 					func(input colexecop.Operator) colexecop.Operator {
+						edOpName := redact.SafeString("external-distinct")
 						accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 							ctx, flowCtx, edOpName, spec.ProcessorID, 2, /* numAccounts */
 						)
@@ -1135,10 +1137,10 @@ func NewColOperator(
 							flowCtx,
 							args,
 							input,
-							result.ColumnTypes,
-							result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, edOpName, factory),
+							inputTypes,
+							makeDiskBackedSorterConstructor(ctx, flowCtx, args, edOpName, factory),
 							inMemoryUnorderedDistinct,
-							diskAccount,
+							args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID),
 							accounts[1],
 						)
 						args.CloserRegistry.AddCloser(toClose)
@@ -1203,12 +1205,11 @@ func NewColOperator(
 					// in-memory hash joiner.
 					result.Root = inMemoryHashJoiner
 				} else {
-					opName := redact.SafeString("external-hash-joiner")
-					diskAccount := args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID)
 					diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
 						[]redact.SafeString{hashJoinerMemMonitorName},
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
+							opName := redact.SafeString("external-hash-joiner")
 							accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 								ctx, flowCtx, opName, spec.ProcessorID, 2, /* numAccounts */
 							)
@@ -1220,8 +1221,8 @@ func NewColOperator(
 								args,
 								hjArgs.Spec,
 								inputOne, inputTwo,
-								result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, opName, factory),
-								diskAccount,
+								makeDiskBackedSorterConstructor(ctx, flowCtx, args, opName, factory),
+								args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, opName, spec.ProcessorID),
 								accounts[1],
 							)
 							args.CloserRegistry.AddCloser(ehj)
@@ -1384,7 +1385,7 @@ func NewColOperator(
 						args,
 						hjArgs.Spec,
 						inputOne, inputTwo,
-						result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehgjOpName+"-join", factory),
+						makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehgjOpName+"-join", factory),
 						args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehgjOpName+"-join", spec.ProcessorID),
 						ehgjAccounts[2],
 					)
@@ -1411,7 +1412,7 @@ func NewColOperator(
 							OutputUnlimitedAllocator: colmem.NewAllocator(ctx, ehgjAccounts[4], factory),
 							MaxOutputBatchMemSize:    newHashAggArgs.MaxOutputBatchMemSize,
 						},
-						result.makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehgjOpName+"-agg", factory),
+						makeDiskBackedSorterConstructor(ctx, flowCtx, args, ehgjOpName+"-agg", factory),
 						args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehgjOpName+"-agg", spec.ProcessorID),
 						ehgjAccounts[5],
 						// TODO(yuzefovich): think through whether the hash
@@ -1435,7 +1436,7 @@ func NewColOperator(
 			ordering := core.Sorter.OutputOrdering
 			matchLen := core.Sorter.OrderingMatchLen
 			limit := core.Sorter.Limit
-			result.Root = result.createDiskBackedSort(
+			result.Root = createDiskBackedSort(
 				ctx, flowCtx, args, input, result.ColumnTypes, ordering, limit, matchLen, 0, /* maxNumberPartitions */
 				spec.ProcessorID, "" /* opNamePrefix */, factory, colexecop.BufferingOpNoReuse,
 			)
@@ -1493,7 +1494,7 @@ func NewColOperator(
 						getStreamingAllocator(ctx, args, flowCtx), input, result.ColumnTypes,
 						core.Windower.PartitionBy, wf.Ordering.Columns, partitionColIdx,
 						func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column) colexecop.Operator {
-							return result.createDiskBackedSort(
+							return createDiskBackedSort(
 								ctx, flowCtx, args, input, inputTypes,
 								execinfrapb.Ordering{Columns: orderingCols}, 0 /*limit */, 0, /* matchLen */
 								0 /* maxNumberPartitions */, spec.ProcessorID,
@@ -1505,7 +1506,7 @@ func NewColOperator(
 					result.ColumnTypes = append(result.ColumnTypes, types.Bool)
 				} else {
 					if len(wf.Ordering.Columns) > 0 {
-						input = result.createDiskBackedSort(
+						input = createDiskBackedSort(
 							ctx, flowCtx, args, input, result.ColumnTypes,
 							wf.Ordering, 0 /* limit */, 0 /* matchLen */, 0, /* maxNumberPartitions */
 							spec.ProcessorID, opNamePrefix, factory, colexecop.BufferingOpNoReuse,

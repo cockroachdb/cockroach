@@ -71,6 +71,7 @@ func TestExternalSort(t *testing.T) {
 			for _, tc := range tcs {
 				log.Infof(context.Background(), "spillForced=%t/numRepartitions=%d/%s", spillForced, numForcedRepartitions, tc.description)
 				var semsToCheck []semaphore.Semaphore
+				var numRuns, numSpills int
 				colexectestutils.RunTestsWithTyps(
 					t,
 					testAllocator,
@@ -79,7 +80,6 @@ func TestExternalSort(t *testing.T) {
 					tc.expected,
 					colexectestutils.OrderedVerifier,
 					func(input []colexecop.Operator) (colexecop.Operator, error) {
-						numOldClosers := closerRegistry.NumClosers()
 						// A sorter should never exceed ExternalSorterMinPartitions, even
 						// during repartitioning. A panic will happen if a sorter requests
 						// more than this number of file descriptors.
@@ -92,16 +92,18 @@ func TestExternalSort(t *testing.T) {
 						if tc.k == 0 || tc.k >= uint64(len(tc.tuples)) {
 							semsToCheck = append(semsToCheck, sem)
 						}
-						sorter, err := createDiskBackedSorter(
-							ctx, flowCtx, input, tc.typs, tc.ordCols, tc.matchLen, tc.k, func() {},
+						numRuns++
+						return createDiskBackedSorter(
+							ctx, flowCtx, input, tc.typs, tc.ordCols, tc.matchLen, tc.k, func() { numSpills++ },
 							numForcedRepartitions, false /* delegateFDAcquisition */, queueCfg, sem,
 							&monitorRegistry, &closerRegistry,
 						)
-						// Check that the sort as well as the disk spiller were
-						// added as Closers.
-						require.Equal(t, 2, closerRegistry.NumClosers()-numOldClosers)
-						return sorter, err
 					})
+				// We expect that each run resulted in the disk spiller being
+				// included into the closer registry. Additionally, every time
+				// we spilled, we should've included the external sort in there
+				// too.
+				require.Equal(t, numRuns+numSpills, closerRegistry.NumClosers())
 				// Close all closers manually (in production this is done on the
 				// flow cleanup).
 				closerRegistry.Close(ctx)

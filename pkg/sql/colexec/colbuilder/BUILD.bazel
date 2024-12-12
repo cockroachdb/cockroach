@@ -46,6 +46,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log",
         "//pkg/util/mon",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
