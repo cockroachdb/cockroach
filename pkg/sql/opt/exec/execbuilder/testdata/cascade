@@ -1029,6 +1029,7 @@ vectorized: true
                 │       └── • lookup join
                 │           │ table: loop_a@loop_a_cascade_delete_idx
                 │           │ equality: (id) = (cascade_delete)
+                │           │ locking strength: for update
                 │           │
                 │           └── • distinct
                 │               │ estimated row count: 10
@@ -1168,6 +1169,7 @@ quality of service: regular
                 │           │ estimated max memory allocated: 0 B
                 │           │ table: loop_a@loop_a_cascade_delete_idx
                 │           │ equality: (id) = (cascade_delete)
+                │           │ locking strength: for update
                 │           │
                 │           └── • distinct
                 │               │ sql nodes: <hidden>

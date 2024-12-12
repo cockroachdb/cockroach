@@ -1103,6 +1103,7 @@ vectorized: true
 │       └── • lookup join
 │           │ table: child_delete@c_delete_idx_invisible
 │           │ equality: (p) = (p)
+│           │ locking strength: for update
 │           │
 │           └── • distinct
 │               │ estimated row count: 10
