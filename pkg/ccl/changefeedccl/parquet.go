@@ -54,7 +54,7 @@ func newParquetSchemaDefintion(
 	var columnTypes []*types.T
 
 	numCols := 0
-	if err := row.ForAllColumns().Col(func(col cdcevent.ResultColumn) error {
+	if err := row.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
 		columnNames = append(columnNames, col.Name)
 		columnTypes = append(columnTypes, col.Typ)
 		numCols += 1
@@ -164,7 +164,7 @@ func (w *parquetWriter) populateDatums(
 ) error {
 	datums := w.datumAlloc[:0]
 
-	if err := updatedRow.ForAllColumns().Datum(func(d tree.Datum, _ cdcevent.ResultColumn) error {
+	if err := updatedRow.ForEachColumn().Datum(func(d tree.Datum, _ cdcevent.ResultColumn) error {
 		datums = append(datums, d)
 		return nil
 	}); err != nil {
@@ -246,28 +246,23 @@ func addParquetTestMetadata(
 	// key. In tests where we target a column family without a key in it,
 	// ForEachColumn will exclude the primary key of the table, which is what
 	// we want.
-	valueCols := map[string]int{}
 	var valuesInOrder []string
 	if err := row.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
-		valueCols[col.Name] = -1
 		valuesInOrder = append(valuesInOrder, col.Name)
 		return nil
 	}); err != nil {
 		return parquetOpts, err
 	}
 
-	// Iterate over ForAllColumns to determine the offets of each column
+	// Iterate over ForEachColumn to determine the offets of each column
 	// in a parquet row (ie. the slice of datums provided to addData). We don't
 	// do this above because there is no way to determine it from
 	// cdcevent.ResultColumn. The Ordinal() method may return an invalid
 	// number for virtual columns.
 	idx := 0
-	if err := row.ForAllColumns().Col(func(col cdcevent.ResultColumn) error {
+	if err := row.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
 		if _, colIsInKey := keyCols[col.Name]; colIsInKey {
 			keyCols[col.Name] = idx
-		}
-		if _, colIsInValue := valueCols[col.Name]; colIsInValue {
-			valueCols[col.Name] = idx
 		}
 		idx += 1
 		return nil
@@ -275,27 +270,23 @@ func addParquetTestMetadata(
 		return parquetOpts, err
 	}
 	valuesInOrder = append(valuesInOrder, parquetCrdbEventTypeColName)
-	valueCols[parquetCrdbEventTypeColName] = idx
 	idx += 1
 
 	if encodingOpts.UpdatedTimestamps {
 		valuesInOrder = append(valuesInOrder, parquetOptUpdatedTimestampColName)
-		valueCols[parquetOptUpdatedTimestampColName] = idx
 		idx += 1
 	}
 	if encodingOpts.MVCCTimestamps {
 		valuesInOrder = append(valuesInOrder, parquetOptMVCCTimestampColName)
-		valueCols[parquetOptMVCCTimestampColName] = idx
 		idx += 1
 	}
 	if encodingOpts.Diff {
 		valuesInOrder = append(valuesInOrder, parquetOptDiffColName)
-		valueCols[parquetOptDiffColName] = idx
 		idx += 1
 	}
 
 	parquetOpts = append(parquetOpts, parquet.WithMetadata(map[string]string{"keyCols": serializeMap(keysInOrder, keyCols)}))
-	parquetOpts = append(parquetOpts, parquet.WithMetadata(map[string]string{"allCols": serializeMap(valuesInOrder, valueCols)}))
+	parquetOpts = append(parquetOpts, parquet.WithMetadata(map[string]string{"allCols": strings.Join(valuesInOrder, ",")}))
 	return parquetOpts, nil
 }
 
