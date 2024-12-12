@@ -44,12 +44,13 @@ func createProtectedTimestampRecord(
 // historical read of a table descriptor.
 var systemTablesToProtect = []descpb.ID{
 	keys.DescriptorTableID,
-	keys.CommentsTableID,
-	keys.ZonesTableID,
-	// Required for CDC Queries.
-	keys.RoleMembersTableID,
 	keys.UsersTableID,
-	// TODO(#128806, #133566): identify and add any more required tables
+	keys.ZonesTableID,
+	keys.RoleMembersTableID,
+	keys.CommentsTableID,
+	keys.NamespaceTableID,
+	keys.RoleOptionsTableID,
+	// These can be identified by the TestChangefeedIdentifyDependentTablesForProtecting test.
 }
 
 func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
