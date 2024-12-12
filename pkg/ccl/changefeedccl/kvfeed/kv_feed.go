@@ -12,6 +12,7 @@ package kvfeed
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -391,6 +392,13 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
+		var tables []string
+		for _, event := range events {
+			tables = append(tables, fmt.Sprintf("table %s (id %d, version %d -> %d)",
+				event.Before.GetName(), event.Before.GetID(), event.Before.GetVersion(), event.After.GetVersion()))
+		}
+		log.Infof(ctx, "kv feed encountered schema change(s) at or before %s in: %s",
+			schemaChangeTS, strings.Join(tables, ", "))
 		if log.V(2) {
 			log.Infof(ctx, "kv feed encountered table events: %#v", events)
 		}
