@@ -40,13 +40,9 @@ statement error rejected.*: SELECT FOR UPDATE without WHERE or LIMIT clause
 statement ok
 (SELECT * FROM foo WHERE x = 2) FOR UPDATE
 
-# Skipped due to https://github.com/cockroachdb/cockroach/issues/129647.
-skipif config local-read-committed
 statement ok
 SELECT * FROM (SELECT * FROM foo WHERE x = 2) FOR UPDATE
 
-# Skipped due to https://github.com/cockroachdb/cockroach/issues/129647.
-skipif config local-read-committed
 statement ok
 SELECT * FROM (SELECT * FROM (SELECT * FROM foo) WHERE x = 2) FOR UPDATE
 
