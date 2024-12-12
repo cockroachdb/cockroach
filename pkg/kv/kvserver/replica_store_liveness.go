@@ -35,7 +35,7 @@ var RaftLeaderFortificationFractionEnabled = settings.RegisterFloatSetting(
 		"roll out Leader leases across the ranges in a cluster.",
 	metamorphic.ConstantWithTestChoice("kv.raft.leader_fortification.fraction_enabled",
 		0.0, /* defaultValue */
-		1.0 /* otherValues */),
+		1.0  /* otherValues */),
 	settings.FloatInRange(0.0, 1.0),
 	settings.WithPublic,
 )
@@ -87,6 +87,16 @@ func (r *replicaRLockedStoreLiveness) SupportFrom(
 // SupportFromEnabled implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportFromEnabled() bool {
 	if !r.store.storeLiveness.SupportFromEnabled(context.TODO()) {
+		return false
+	}
+	if (*Replica)(r).shouldUseExpirationLeaseRLocked() {
+		// If this range wants to use an expiration based lease, either because it's
+		// one of the system ranges (NodeLiveness, Meta) or because the cluster
+		// setting to always use expiration based leases is turned on, then do not
+		// fortify the leader. There's no benefit to doing so because we aren't
+		// going to acquire a leader lease on top of it. On the other hand, by not
+		// fortifying, we ensure there's no StoreLiveness dependency for these
+		// ranges.
 		return false
 	}
 	fracEnabled := RaftLeaderFortificationFractionEnabled.Get(&r.store.ClusterSettings().SV)
