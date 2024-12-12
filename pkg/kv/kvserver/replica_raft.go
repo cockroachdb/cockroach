@@ -647,10 +647,21 @@ func (r *Replica) stepRaftGroupRaftMuLocked(req *kvserverpb.RaftMessageRequest) 
 			wakeLeader := hasLeader && !fromLeader
 			r.maybeUnquiesceLocked(wakeLeader, false /* mayCampaign */)
 		}
-		if r.store.TestingKnobs() == nil ||
-			!r.store.TestingKnobs().DisableUpdateLastUpdateTimesMapOnRaftGroupStep {
-			r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, r.Clock().PhysicalTime())
+
+		{
+			// Update the lastUpdateTimes map, unless configured not to by a testing
+			// knob.
+			disableUpdateLastUpdateTimesMapOnRaftGroupStep := false
+			if r.store.TestingKnobs() == nil &&
+				r.store.TestingKnobs().DisableUpdateLastUpdateTimesMapOnRaftGroupStep != nil {
+				disableUpdateLastUpdateTimesMapOnRaftGroupStep = r.store.TestingKnobs().DisableUpdateLastUpdateTimesMapOnRaftGroupStep(r)
+			}
+
+			if !disableUpdateLastUpdateTimesMapOnRaftGroupStep {
+				r.mu.lastUpdateTimes.update(req.FromReplica.ReplicaID, r.Clock().PhysicalTime())
+			}
 		}
+
 		switch req.Message.Type {
 		case raftpb.MsgPreVote, raftpb.MsgVote:
 			// If we receive a (pre)vote request, and we find our leader to be dead or
@@ -3046,7 +3057,9 @@ func (r *Replica) printRaftTail(
 func (r *Replica) updateLastUpdateTimesUsingStoreLivenessRLocked(
 	storeClockTimestamp hlc.ClockTimestamp,
 ) {
-	// If store liveness is not enabled, there is nothing to do.
+	// If store liveness is not enabled, there is nothing to do. The
+	// lastUpdateTimes map will be updated as a result of responses to heartbeats
+	// sent by the leader.
 	if !(*replicaRLockedStoreLiveness)(r).SupportFromEnabled() {
 		return
 	}
