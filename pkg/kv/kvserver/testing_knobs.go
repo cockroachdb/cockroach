@@ -547,9 +547,14 @@ type StoreTestingKnobs struct {
 	// raft group for that replica.
 	RaftReportUnreachableBypass func(roachpb.ReplicaID) bool
 
-	// DisableUpdateLastUpdateTimesMapOnRaftGroupStep disables updating the
-	// lastUpdateTimes map when a raft group is stepped.
-	DisableUpdateLastUpdateTimesMapOnRaftGroupStep bool
+	// DisableUpdateLastUpdateTimesMapOnRaftGroupStep, if set, is invoked with the
+	// replica whose raft group is being stepped. It returns whether the
+	// lastUpdateTimes map should be not be updated upon stepping the raft group.
+	//
+	// This testing knob is used to simulate the leader not sending or receiving
+	// messages because it has no updates and heartbeats are turned off. This
+	// simulation is only meaningful for ranges that use leader leases.
+	DisableUpdateLastUpdateTimesMapOnRaftGroupStep func(r *Replica) bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

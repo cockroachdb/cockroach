@@ -3,13 +3,20 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package kvserver
+package kvserver_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -22,14 +29,14 @@ func TestRaftFortificationEnabledForRangeID(t *testing.T) {
 	// Ensure fracEnabled=0.0 never returns true.
 	t.Run("fracEnabled=0.0", func(t *testing.T) {
 		for i := range 10_000 {
-			require.False(t, raftFortificationEnabledForRangeID(0.0, roachpb.RangeID(i)))
+			require.False(t, kvserver.RaftFortificationEnabledForRangeID(0.0, roachpb.RangeID(i)))
 		}
 	})
 
 	// Ensure fracEnabled=1.0 always returns true.
 	t.Run("fracEnabled=1.0", func(t *testing.T) {
 		for i := range 10_000 {
-			require.True(t, raftFortificationEnabledForRangeID(1.0, roachpb.RangeID(i)))
+			require.True(t, kvserver.RaftFortificationEnabledForRangeID(1.0, roachpb.RangeID(i)))
 		}
 	})
 
@@ -70,7 +77,7 @@ func TestRaftFortificationEnabledForRangeID(t *testing.T) {
 	for _, tc := range testCases {
 		name := fmt.Sprintf("fracEnabled=%f/rangeID=%d", tc.fracEnabled, tc.rangeID)
 		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.exp, raftFortificationEnabledForRangeID(tc.fracEnabled, tc.rangeID))
+			require.Equal(t, tc.exp, kvserver.RaftFortificationEnabledForRangeID(tc.fracEnabled, tc.rangeID))
 		})
 	}
 
@@ -80,7 +87,7 @@ func TestRaftFortificationEnabledForRangeID(t *testing.T) {
 			enabled := 0
 			const total = 100_000
 			for i := range total {
-				if raftFortificationEnabledForRangeID(fracEnabled, roachpb.RangeID(i)) {
+				if kvserver.RaftFortificationEnabledForRangeID(fracEnabled, roachpb.RangeID(i)) {
 					enabled++
 				}
 			}
@@ -92,16 +99,78 @@ func TestRaftFortificationEnabledForRangeID(t *testing.T) {
 	// Test panic on invalid fracEnabled.
 	t.Run("fracEnabled=invalid", func(t *testing.T) {
 		require.Panics(t, func() {
-			raftFortificationEnabledForRangeID(-0.1, 1)
+			kvserver.RaftFortificationEnabledForRangeID(-0.1, 1)
 		})
 		require.Panics(t, func() {
-			raftFortificationEnabledForRangeID(1.1, 1)
+			kvserver.RaftFortificationEnabledForRangeID(1.1, 1)
 		})
+	})
+}
+
+// TestFortificationDisabledForExpirationBasedLeases ensures that raft
+// fortification is disabled for ranges that want to use expiration based
+// leases. This is always the case for meta ranges and the node liveness range,
+// and can be the case for other ranges if the cluster setting to always use
+// expiration based leases is turned on.
+func TestRaftFortificationDisabledForExpirationBasedLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "useExpirationBasedLeases", func(t *testing.T, useExpirationBasedLeases bool) {
+		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+			},
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		if useExpirationBasedLeases {
+			kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseExpiration)
+		} else {
+			kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
+		}
+
+		testCases := []struct {
+			key roachpb.Key
+			exp bool
+		}{
+			{
+				key: keys.NodeLivenessPrefix,
+				exp: false,
+			},
+			{
+				key: keys.Meta1Prefix,
+				exp: false,
+			},
+			{
+				key: keys.Meta2Prefix,
+				exp: false,
+			},
+			{
+				key: keys.NamespaceTableMin,
+				exp: true,
+			},
+			{
+				key: keys.TableDataMin,
+				exp: true,
+			},
+		}
+
+		for _, test := range testCases {
+			repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(test.key))
+			if useExpirationBasedLeases {
+				require.False(t, repl.SupportFromEnabled())
+			} else {
+				require.Equal(t, test.exp, repl.SupportFromEnabled())
+			}
+		}
 	})
 }
 
 func BenchmarkRaftFortificationEnabledForRangeID(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		_ = raftFortificationEnabledForRangeID(0.5, roachpb.RangeID(i))
+		_ = kvserver.RaftFortificationEnabledForRangeID(0.5, roachpb.RangeID(i))
 	}
 }

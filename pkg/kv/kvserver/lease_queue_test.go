@@ -404,8 +404,8 @@ func TestLeaseQueueSwitchesLeaseType(t *testing.T) {
 }
 
 // TestUpdateLastUpdateTimesUsingStoreLiveness tests that `lastUpdateTimes` is
-// updated when the leader is supported by a follower in the store liveness even
-// if it's not updating the map upon receiving followers' messages.
+// updated when the leader is supported by a follower in store liveness even if
+// it's not updating the map upon receiving followers' messages.
 func TestUpdateLastUpdateTimesUsingStoreLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -416,7 +416,8 @@ func TestUpdateLastUpdateTimesUsingStoreLiveness(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, false) // override metamorphism
+	// This test is only relevant for leader leases.
+	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
 
 	manualClock := hlc.NewHybridManualClock()
 	knobs := base.TestingKnobs{
@@ -426,8 +427,16 @@ func TestUpdateLastUpdateTimesUsingStoreLiveness(t *testing.T) {
 		Store: &kvserver.StoreTestingKnobs{
 			// Disable updating the `lastUpdateTimes` map when the leader receives
 			// messages from followers. This is to simulate the leader not
-			// sending/receiving any messages because it doesn't have any updates.
-			DisableUpdateLastUpdateTimesMapOnRaftGroupStep: true,
+			// sending/receiving any messages because it doesn't have any updates. We
+			// only want to do this for ranges that use leader leases (read: we want
+			// to omit the meta ranges/NodeLiveness range which always use expiration
+			// based leases and don't partake in fortification).
+			//
+			// Also see updateLastUpdateTimesUsingStoreLivenessRLocked which is the
+			// method being tested here.
+			DisableUpdateLastUpdateTimesMapOnRaftGroupStep: func(r *kvserver.Replica) bool {
+				return r.SupportFromEnabled()
+			},
 		},
 	}
 
@@ -444,19 +453,12 @@ func TestUpdateLastUpdateTimesUsingStoreLiveness(t *testing.T) {
 	require.NoError(t, tc.WaitForFullReplication())
 
 	db := tc.Server(0).DB()
-	sqlDB := tc.ServerConn(0)
-
 	// Split off a few ranges so we have something to work with.
 	scratchKey := tc.ScratchRange(t)
 	for i := 0; i <= 16; i++ {
 		splitKey := append(scratchKey.Clone(), byte(i))
 		require.NoError(t, db.AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
 	}
-
-	// Switch 100% of ranges to use leader fortification.
-	_, err := sqlDB.ExecContext(ctx,
-		`SET CLUSTER SETTING kv.raft.leader_fortification.fraction_enabled = 1.00`)
-	require.NoError(t, err)
 
 	// Increment the manual clock to ensure that all followers are initially
 	// considered inactive.
