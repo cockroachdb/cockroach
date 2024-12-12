@@ -221,6 +221,12 @@ const (
 	SinkParamSASLAwsIAMSessionName  = `sasl_aws_iam_session_name`
 	SinkParamTableNameAttribute     = `with_table_name_attribute`
 
+	// These are custom fields required by ID Anywhere. They should not be
+	// documented.
+	SinkParamSASLIDAnywhereResource            = `sasl_id_anywhere_resource`
+	SinkParamSASLIDAnywhereClientAssertionType = `sasl_id_anywhere_client_assertion_type`
+	SinkParamSASLIDAnywhereClientAssertion     = `sasl_id_anywhere_client_assertion`
+
 	SinkSchemeConfluentKafka    = `confluent-cloud`
 	SinkParamConfluentAPIKey    = `api_key`
 	SinkParamConfluentAPISecret = `api_secret`
@@ -239,8 +245,11 @@ const (
 	Topics = `topics`
 )
 
-// Support additional mechanism on top of the default SASL mechanism.
-const SASLTypeAWSMSKIAM = "AWS_MSK_IAM"
+// Support additional mechanisms on top of the default SASL mechanisms.
+const (
+	SASLTypeAWSMSKIAM  = "AWS_MSK_IAM"
+	SASLTypeIDAnywhere = "ID_ANYWHERE"
+)
 
 func makeStringSet(opts ...string) map[string]struct{} {
 	res := make(map[string]struct{}, len(opts))

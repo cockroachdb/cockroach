@@ -858,6 +858,14 @@ func newTokenProvider(
 	}, nil
 }
 
+func newIDAnywhereTokenProvider(
+	ctx context.Context, dialConfig kafkaDialConfig,
+) (sarama.AccessTokenProvider, error) {
+	return &tokenProvider{
+		tokenSource: oauth2.ReuseTokenSource(nil, idAnywhereTokenSource{dialConfig: dialConfig, ctx: ctx}),
+	}, nil
+}
+
 // Apply configures provided kafka configuration struct based on this config.
 func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 	// Sarama limits the size of each message to be MaxMessageSize (1MB) bytes.
@@ -936,6 +944,15 @@ type kafkaDialConfig struct {
 	saslAwsIAMRoleArn     string
 	saslAwsRegion         string
 	saslAwsIAMSessionName string
+
+	// These are specific to the (custom) IDAnywhere SASL mechanism. It also uses saslTokenURL, and saslClientID.
+	saslIDAnywhereConfig saslIDAnywhereConfig
+}
+
+type saslIDAnywhereConfig struct {
+	resource            string
+	clientAssertionType string
+	clientAssertion     string
 }
 
 func buildDialConfig(u sinkURL) (kafkaDialConfig, error) {
@@ -999,7 +1016,7 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 		dialConfig.saslMechanism = sarama.SASLTypePlaintext
 	}
 	switch dialConfig.saslMechanism {
-	case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext, changefeedbase.SASLTypeAWSMSKIAM:
+	case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext, changefeedbase.SASLTypeAWSMSKIAM, changefeedbase.SASLTypeIDAnywhere:
 	default:
 		return kafkaDialConfig{}, errors.Errorf(`param %s must be one of %s, %s, %s, %s or %s`,
 			changefeedbase.SinkParamSASLMechanism,
@@ -1014,6 +1031,14 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 	case changefeedbase.SASLTypeAWSMSKIAM:
 		requiredSASLParams = []string{changefeedbase.SinkParamSASLAwsRegion, changefeedbase.SinkParamSASLAwsIAMRoleArn,
 			changefeedbase.SinkParamSASLAwsIAMSessionName}
+	case changefeedbase.SASLTypeIDAnywhere:
+		requiredSASLParams = []string{
+			changefeedbase.SinkParamSASLClientID,
+			changefeedbase.SinkParamSASLTokenURL,
+			changefeedbase.SinkParamSASLIDAnywhereResource,
+			changefeedbase.SinkParamSASLIDAnywhereClientAssertion,
+			changefeedbase.SinkParamSASLIDAnywhereClientAssertionType,
+		}
 	default:
 		requiredSASLParams = []string{changefeedbase.SinkParamSASLUser, changefeedbase.SinkParamSASLPassword}
 	}
@@ -1034,7 +1059,8 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 		}
 	}
 
-	if dialConfig.saslMechanism != sarama.SASLTypeOAuth {
+	// TODO: this can be done a little more cleanly.
+	if dialConfig.saslMechanism != sarama.SASLTypeOAuth && dialConfig.saslMechanism != changefeedbase.SASLTypeIDAnywhere {
 		oauthParams := []string{changefeedbase.SinkParamSASLClientID, changefeedbase.SinkParamSASLClientSecret,
 			changefeedbase.SinkParamSASLTokenURL, changefeedbase.SinkParamSASLGrantType,
 			changefeedbase.SinkParamSASLScopes}
@@ -1057,6 +1083,10 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 	dialConfig.saslAwsRegion = u.consumeParam(changefeedbase.SinkParamSASLAwsRegion)
 	dialConfig.saslAwsIAMSessionName = u.consumeParam(changefeedbase.SinkParamSASLAwsIAMSessionName)
 	dialConfig.saslAwsIAMRoleArn = u.consumeParam(changefeedbase.SinkParamSASLAwsIAMRoleArn)
+
+	dialConfig.saslIDAnywhereConfig.resource = u.consumeParam(changefeedbase.SinkParamSASLIDAnywhereResource)
+	dialConfig.saslIDAnywhereConfig.clientAssertion = u.consumeParam(changefeedbase.SinkParamSASLIDAnywhereClientAssertion)
+	dialConfig.saslIDAnywhereConfig.clientAssertionType = u.consumeParam(changefeedbase.SinkParamSASLIDAnywhereClientAssertionType)
 
 	var decodedClientSecret []byte
 	if err := u.decodeBase64(changefeedbase.SinkParamSASLClientSecret, &decodedClientSecret); err != nil {
@@ -1289,10 +1319,12 @@ func buildKafkaConfig(
 		config.Net.SASL.User = dialConfig.saslUser
 		config.Net.SASL.Password = dialConfig.saslPassword
 
+		// Substitute our fake SASL mechanism with the backing implementation (OAuth).
 		var mechanism sarama.SASLMechanism
-		if dialConfig.saslMechanism == changefeedbase.SASLTypeAWSMSKIAM {
+		switch dialConfig.saslMechanism {
+		case changefeedbase.SASLTypeAWSMSKIAM, changefeedbase.SASLTypeIDAnywhere:
 			mechanism = sarama.SASLTypeOAuth
-		} else {
+		default:
 			mechanism = sarama.SASLMechanism(dialConfig.saslMechanism)
 		}
 
@@ -1305,9 +1337,12 @@ func buildKafkaConfig(
 			config.Net.SASL.SCRAMClientGeneratorFunc = sha256ClientGenerator
 		case sarama.SASLTypeOAuth:
 			var err error
-			if dialConfig.saslMechanism == changefeedbase.SASLTypeAWSMSKIAM {
+			switch dialConfig.saslMechanism {
+			case changefeedbase.SASLTypeAWSMSKIAM:
 				config.Net.SASL.TokenProvider, err = newAwsIAMRoleSASLTokenProvider(ctx, dialConfig)
-			} else {
+			case changefeedbase.SASLTypeIDAnywhere:
+				config.Net.SASL.TokenProvider, err = newIDAnywhereTokenProvider(ctx, dialConfig)
+			default:
 				config.Net.SASL.TokenProvider, err = newTokenProvider(ctx, dialConfig)
 			}
 			if err != nil {
