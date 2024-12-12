@@ -1126,24 +1126,101 @@ func MergeWindowedHistogram(cur *prometheusgo.Histogram, prev *prometheusgo.Hist
 	*cur.SampleSum = sampleSum
 }
 
-// Quantile is a quantile along with a string suffix to be attached to the metric
-// name upon recording into the internal TSDB.
-type Quantile struct {
-	Suffix   string
-	Quantile float64
+// HistogramMetricComputer is the computation function used to compute and
+// store histogram metrics into the internal TSDB, along with the suffix
+// to be attached to the metric.
+type HistogramMetricComputer struct {
+	Suffix          string
+	IsSummaryMetric bool
+	ComputedMetric  func(h HistogramSnapshot) float64
 }
 
-// RecordHistogramQuantiles are the quantiles at which (windowed) histograms
-// are recorded into the internal TSDB.
-var RecordHistogramQuantiles = []Quantile{
-	{"-max", 100},
-	{"-p99.999", 99.999},
-	{"-p99.99", 99.99},
-	{"-p99.9", 99.9},
-	{"-p99", 99},
-	{"-p90", 90},
-	{"-p75", 75},
-	{"-p50", 50},
+// HistogramMetricComputers is a slice of all the HistogramMetricComputer
+// that are used to record (windowed) histogram metrics into TSDB.
+var HistogramMetricComputers = []HistogramMetricComputer{
+	{
+		Suffix:          "-max",
+		IsSummaryMetric: true,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			return h.ValueAtQuantile(100)
+		},
+	},
+	{
+		Suffix:          "-p99.999",
+		IsSummaryMetric: true,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			return h.ValueAtQuantile(99.999)
+		},
+	},
+	{
+		Suffix:          "-p99.99",
+		IsSummaryMetric: true,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			return h.ValueAtQuantile(99.99)
+		},
+	},
+	{
+		Suffix:          "-p99.9",
+		IsSummaryMetric: true,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			return h.ValueAtQuantile(99.9)
+		},
+	},
+	{
+		Suffix:          "-p99",
+		IsSummaryMetric: true,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			return h.ValueAtQuantile(99)
+		},
+	},
+	{
+		Suffix:          "-p90",
+		IsSummaryMetric: true,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			return h.ValueAtQuantile(90)
+		},
+	},
+	{
+		Suffix:          "-p75",
+		IsSummaryMetric: true,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			return h.ValueAtQuantile(75)
+		},
+	},
+	{
+		Suffix:          "-p50",
+		IsSummaryMetric: true,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			return h.ValueAtQuantile(50)
+		},
+	},
+	{
+		Suffix:          "-avg",
+		IsSummaryMetric: true,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			avg := h.Mean()
+			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
+				avg = 0
+			}
+			return avg
+		},
+	},
+	{
+		Suffix:          "-count",
+		IsSummaryMetric: false,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			count, _ := h.Total()
+			return float64(count)
+		},
+	},
+	{
+		Suffix:          "-sum",
+		IsSummaryMetric: false,
+		ComputedMetric: func(h HistogramSnapshot) float64 {
+			_, sum := h.Total()
+			return sum
+		},
+	},
 }
 
 // vector holds the base vector implementation. This is meant to be embedded
