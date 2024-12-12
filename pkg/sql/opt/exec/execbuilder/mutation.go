@@ -1144,13 +1144,13 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 		return 0, nil
 
 	case *memo.UpdateExpr:
-		return shouldApplyImplicitLockingToUpdateOrDeleteInput(t), nil
+		return shouldApplyImplicitLockingToUpdateOrDeleteInput(t.Input, t.Table), nil
 
 	case *memo.UpsertExpr:
 		return shouldApplyImplicitLockingToUpsertInput(t), nil
 
 	case *memo.DeleteExpr:
-		return shouldApplyImplicitLockingToUpdateOrDeleteInput(t), nil
+		return shouldApplyImplicitLockingToUpdateOrDeleteInput(t.Input, t.Table), nil
 
 	default:
 		return 0, errors.AssertionFailedf("unexpected mutation expression %T", t)
@@ -1183,18 +1183,35 @@ func (b *Builder) shouldApplyImplicitLockingToMutationInput(
 //
 // UPDATEs and DELETEs happen to have exactly the same matching pattern, so we
 // reuse this function for both.
-func shouldApplyImplicitLockingToUpdateOrDeleteInput(mutExpr memo.RelExpr) opt.TableID {
+func shouldApplyImplicitLockingToUpdateOrDeleteInput(
+	input memo.RelExpr, tabID opt.TableID,
+) opt.TableID {
 	// Try to match the mutation's input expression against the pattern:
 	//
-	//   [Project]* [IndexJoin] Scan
+	//   [Project]* [IndexJoin] (Scan | LookupJoin [LookupJoin] Values)
 	//
-	input := mutExpr.Child(0).(memo.RelExpr)
+	// The IndexJoin will only be present if the base expression is a Scan, but
+	// making it an optional prefix to the LookupJoins makes the logic simpler.
 	input = unwrapProjectExprs(input)
 	if idxJoin, ok := input.(*memo.IndexJoinExpr); ok {
 		input = idxJoin.Input
 	}
-	if scan, ok := input.(*memo.ScanExpr); ok {
-		return scan.Table
+	switch t := input.(type) {
+	case *memo.ScanExpr:
+		return t.Table
+	case *memo.LookupJoinExpr:
+		if innerJoin, ok := t.Input.(*memo.LookupJoinExpr); ok && innerJoin.Table == t.Table {
+			t = innerJoin
+		}
+		md := input.Memo().Metadata()
+		mutStableID := md.Table(tabID).ID()
+		lookupStableID := md.Table(t.Table).ID()
+		// Only lock rows read in the lookup join if the lookup table is the
+		// same as the table being updated. Also, don't lock rows if there is an
+		// ON condition so that we don't lock rows that won't be updated.
+		if mutStableID == lookupStableID && t.On.IsTrue() && t.Input.Op() == opt.ValuesOp {
+			return t.Table
+		}
 	}
 	return 0
 }
@@ -1206,7 +1223,7 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(mutExpr memo.RelExpr) opt.T
 func shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) opt.TableID {
 	// Try to match the Upsert's input expression against the pattern:
 	//
-	//   [Project]* (LeftJoin Scan | LookupJoin) [Project]* Values
+	//   [Project]* (LeftJoin Scan | LookupJoin [LookupJoin]) [Project]* Values
 	//
 	input := ups.Input
 	input = unwrapProjectExprs(input)
@@ -1222,6 +1239,13 @@ func shouldApplyImplicitLockingToUpsertInput(ups *memo.UpsertExpr) opt.TableID {
 
 	case *memo.LookupJoinExpr:
 		input = join.Input
+		if inner, ok := input.(*memo.LookupJoinExpr); ok && inner.Table == join.Table {
+			// When a generic query plan reads from a secondary index first,
+			// then performs a lookup into the primary index, the plan has a
+			// double lookup join pattern. We add implicit locks in this case
+			// where both lookup joins have the same table.
+			input = inner.Input
+		}
 		toLock = join.Table
 
 	default:

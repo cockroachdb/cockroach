@@ -388,3 +388,128 @@ vectorized: true
                   estimated row count: 333 (missing stats)
                   table: b@b_pkey
                   spans: /2-
+
+# Test that FOR UPDATE locks are applied to reads in generic query plans.
+
+statement ok
+CREATE TABLE t137352 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX (a),
+  INDEX (b)
+)
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+PREPARE p AS DELETE FROM t137352 WHERE k = $1
+
+query T
+EXPLAIN ANALYZE EXECUTE p(1)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• delete
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ from: t137352
+│ auto commit
+│
+└── • lookup join
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: t137352@t137352_pkey
+    │ equality: ($1) = (k)
+    │ equality cols are key
+    │ locking strength: for update
+    │
+    └── • values
+          sql nodes: <hidden>
+          regions: <hidden>
+          actual row count: 1
+          size: 1 column, 1 row
+
+statement ok
+DEALLOCATE p
+
+statement ok
+PREPARE p AS DELETE FROM t137352 WHERE a = $1
+
+query T
+EXPLAIN ANALYZE EXECUTE p(10)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• delete
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ from: t137352
+│ auto commit
+│
+└── • lookup join
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ actual row count: 0
+    │ KV time: 0µs
+    │ KV contention time: 0µs
+    │ KV rows decoded: 0
+    │ KV bytes read: 0 B
+    │ KV gRPC calls: 0
+    │ estimated max memory allocated: 0 B
+    │ table: t137352@t137352_pkey
+    │ equality: (k) = (k)
+    │ equality cols are key
+    │ locking strength: for update
+    │
+    └── • lookup join
+        │ sql nodes: <hidden>
+        │ kv nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 0
+        │ KV time: 0µs
+        │ KV contention time: 0µs
+        │ KV rows decoded: 0
+        │ KV bytes read: 0 B
+        │ KV gRPC calls: 0
+        │ estimated max memory allocated: 0 B
+        │ table: t137352@t137352_a_idx
+        │ equality: ($1) = (a)
+        │ locking strength: for update
+        │
+        └── • values
+              sql nodes: <hidden>
+              regions: <hidden>
+              actual row count: 1
+              size: 1 column, 1 row
