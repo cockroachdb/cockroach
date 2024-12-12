@@ -9,7 +9,7 @@ CREATE INDEX ON t(k);
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 EXPLAIN (DDL) rollback at post-commit stage 2 of 15;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›);
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 24 elements transitioning toward ABSENT

@@ -6,7 +6,7 @@ CREATE SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
 ALTER TABLE t ADD COLUMN j INT DEFAULT nextval('sq1');
 EXPLAIN (DDL) rollback at post-commit stage 1 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ADD COLUMN ‹j› INT8 DEFAULT nextval(‹'sq1'›); following CREATE SEQUENCE ‹defaultdb›.public.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN j INT8 DEFAULT nextval(‹'sq1'›); following CREATE SEQUENCE defaultdb.public.sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 25 elements transitioning toward ABSENT

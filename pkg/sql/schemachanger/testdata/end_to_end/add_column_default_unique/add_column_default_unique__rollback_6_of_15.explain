@@ -6,7 +6,7 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT CAST(date_part('year', now()) AS INT);
 EXPLAIN (DDL) rollback at post-commit stage 6 of 15;
 ----
-Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8);
+Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 8 elements transitioning toward ABSENT
