@@ -58,7 +58,7 @@ type OnReorderRuleParam struct {
 // the base relations of the left and right inputs of the join, the set of all
 // base relations currently being considered, the base relations referenced by
 // the join's ON condition, and the type of join.
-type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, op opt.Operator)
+type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, op opt.Operator, ub, cost float64)
 
 // JoinOrderBuilder is used to add valid orderings of a given join tree to the
 // memo during exploration.
@@ -266,6 +266,10 @@ type OnAddJoinFunc func(left, right, all, joinRefs, selectRefs []memo.RelExpr, o
 // the best plan; for example, the plan for TPC-H query 9 is much slower without
 // it (try commenting out the call to ensureClosure()).
 //
+// Plan Pruning
+// ------------
+// TODO
+//
 // Citations: [8]
 type JoinOrderBuilder struct {
 	f       *norm.Factory
@@ -302,7 +306,12 @@ type JoinOrderBuilder struct {
 	// ((xy, ab), uv), (ab, (xy, uv)), etc.
 	//
 	// The group for a single base relation is simply the base relation itself.
-	plans map[vertexSet]memo.RelExpr
+	candidatePlans map[vertexSet][]candidatePlan
+
+	upperBounds map[vertexSet]float64
+
+	// TODO
+	builtPlans map[vertexSet]memo.RelExpr
 
 	// applicableEdges maps from each (sub)set of vertexes to the set of edges
 	// that must be used when building join trees for the set. See
@@ -341,7 +350,9 @@ func (jb *JoinOrderBuilder) Init(ctx context.Context, f *norm.Factory, evalCtx *
 		f:               f,
 		ctx:             ctx,
 		evalCtx:         evalCtx,
-		plans:           make(map[vertexSet]memo.RelExpr),
+		candidatePlans:  make(map[vertexSet][]candidatePlan),
+		upperBounds:     make(map[vertexSet]float64),
+		builtPlans:      make(map[vertexSet]memo.RelExpr),
 		applicableEdges: make(map[vertexSet]edgeSet),
 		onReorderFunc:   jb.onReorderFunc,
 		onAddJoinFunc:   jb.onAddJoinFunc,
@@ -372,6 +383,11 @@ func (jb *JoinOrderBuilder) Reorder(join memo.RelExpr) {
 		// validateEdges comment for more information.
 		jb.validateEdges()
 
+		// Attempt to prove upper bounds on the result cardinality of joining each
+		// subset of relations. This is used to prune candidate plans before they
+		// are built.
+		jb.computeUpperBounds()
+
 		if jb.onReorderFunc != nil {
 			// Hook for testing purposes.
 			jb.callOnReorderFunc(join)
@@ -380,6 +396,10 @@ func (jb *JoinOrderBuilder) Reorder(join memo.RelExpr) {
 		// Execute the DPSube algorithm. Enumerate all join orderings and add any
 		// valid ones to the memo.
 		jb.dpSube()
+
+		jb.pruneCandidatePlans()
+
+		jb.buildCandidatePlans(jb.allVertexes())
 
 	default:
 		panic(errors.AssertionFailedf("%v cannot be reordered", t.Op()))
@@ -432,6 +452,8 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 			rightEdges:    rightEdges,
 		}
 
+		beforeEdges := jb.allEdges()
+
 		// Create hyperedges for the join graph using this join's ON condition.
 		if t.Op() == opt.InnerJoinOp {
 			jb.makeInnerEdge(op, on)
@@ -441,7 +463,11 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 
 		// Initialize the plan for this join. This allows any new joins with the
 		// same set of input relations to be added to the same memo group.
-		jb.plans[leftVertexes.union(rightVertexes)] = t
+		union := leftVertexes.union(rightVertexes)
+		jb.builtPlans[union] = t
+		joinEdges := jb.allEdges().Difference(beforeEdges)
+		selectEdges := edgeSet{}
+		jb.addCandidatePlan(t.Op(), leftVertexes, rightVertexes, joinEdges, selectEdges)
 
 	default:
 		jb.addBaseRelation(t)
@@ -543,7 +569,8 @@ func (jb *JoinOrderBuilder) validateEdges() {
 		}
 	}
 	if jb.rebuildAllJoins {
-		for vertexes := range jb.plans {
+		jb.candidatePlans = make(map[vertexSet][]candidatePlan)
+		for vertexes := range jb.builtPlans {
 			if vertexes.isSingleton() || vertexes == jb.allVertexes() {
 				// Do not remove the plan if it is for a base relation (not a join) or
 				// it is the root join. Adding to the root join group is correct because
@@ -554,7 +581,7 @@ func (jb *JoinOrderBuilder) validateEdges() {
 				// disconnected from the main query plan.
 				continue
 			}
-			delete(jb.plans, vertexes)
+			delete(jb.builtPlans, vertexes)
 		}
 	}
 }
@@ -610,19 +637,13 @@ func (jb *JoinOrderBuilder) setApplicableEdges(s vertexSet) {
 // base relations without creating an invalid plan or introducing cross joins.
 // If any valid joins are found, they are added to the memo.
 func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
-	if jb.plans[s1] == nil || jb.plans[s2] == nil {
+	if !jb.planExists(s1) || !jb.planExists(s2) {
 		// Both inputs must have plans.
 		return
 	}
-	// Keep track of which edges are applicable to this join.
-	var appliedEdges edgeSet
-
-	jb.equivs.Reset()
-	jb.equivs.AddFromFDs(&jb.plans[s1].Relational().FuncDeps)
-	jb.equivs.AddFromFDs(&jb.plans[s2].Relational().FuncDeps)
-
 	// Gather all inner edges that connect the left and right relation sets.
-	var innerJoinFilters memo.FiltersExpr
+	//var innerJoinFilters memo.FiltersExpr
+	var innerJoinEdges edgeSet
 	for i, ok := jb.innerEdges.Next(0); ok; i, ok = jb.innerEdges.Next(i + 1) {
 		e := &jb.edges[i]
 
@@ -631,37 +652,28 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 		if e.checkInnerJoin(s1, s2) {
 			// Record this edge as applied even if it's redundant, since redundant
 			// edges are trivially applied.
-			appliedEdges.Add(i)
-			if areFiltersRedundant(&jb.equivs, e.filters) {
-				// Avoid adding redundant filters.
-				continue
-			}
-			for j := range e.filters {
-				jb.equivs.AddFromFDs(&e.filters[j].ScalarProps().FuncDeps)
-			}
-			innerJoinFilters = append(innerJoinFilters, e.filters...)
+			//appliedEdges.Add(i)
+			innerJoinEdges.Add(i)
 		}
 	}
 
 	// Iterate through the non-inner edges and attempt to construct joins from
 	// them.
+	var nonInnerJoinEdges edgeSet
 	for i, ok := jb.nonInnerEdges.Next(0); ok; i, ok = jb.nonInnerEdges.Next(i + 1) {
 		e := &jb.edges[i]
 
 		// Ensure that this edge forms a valid connection between the two sets. See
 		// the checkNonInnerJoin and checkInnerJoin comments for more information.
 		if e.checkNonInnerJoin(s1, s2) {
-			appliedEdges.Add(i)
-
 			// Construct a non-inner join. If any inner join filters also apply to the
 			// pair of relationSets, construct a select on top of the join with the
 			// inner join filters.
-			jb.addJoin(e.op.joinType, s1, s2, e.filters, innerJoinFilters, appliedEdges)
+			nonInnerJoinEdges.Add(i)
+			jb.addJoin(e.op.joinType, s1, s2, nonInnerJoinEdges, innerJoinEdges)
 			return
 		}
 		if e.checkNonInnerJoin(s2, s1) {
-			appliedEdges.Add(i)
-
 			// If joining s1, s2 is not valid, try s2, s1. We only do this if the
 			// s1, s2 join fails, because commutation is handled by the addJoin
 			// function. This is necessary because we only iterate s1 up to subset / 2
@@ -684,18 +696,23 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			// 010 on the right. 101 is larger than 111 / 2, so we will not enumerate
 			// this plan unless we consider a join with s2 on the left and s1 on the
 			// right.
-			jb.addJoin(e.op.joinType, s2, s1, e.filters, innerJoinFilters, appliedEdges)
+			nonInnerJoinEdges.Add(i)
+			jb.addJoin(e.op.joinType, s2, s1, nonInnerJoinEdges, innerJoinEdges)
 			return
 		}
 	}
 
-	if !appliedEdges.Empty() {
+	if !innerJoinEdges.Empty() {
 		// Construct an inner join. Don't add in the case when a non-inner join has
 		// already been constructed, because doing so can lead to a case where a
 		// non-inner join operator 'disappears' because an inner join has replaced
 		// it.
-		jb.addJoin(opt.InnerJoinOp, s1, s2, innerJoinFilters, nil /* selectFilters */, appliedEdges)
+		jb.addJoin(opt.InnerJoinOp, s1, s2, innerJoinEdges, edgeSet{} /* selectFilters */)
 	}
+}
+
+func (jb *JoinOrderBuilder) planExists(s vertexSet) bool {
+	return s.isSingleton() || len(jb.candidatePlans[s]) > 0
 }
 
 // makeInnerEdge constructs edges from the ON condition of an inner join. If the
@@ -751,7 +768,7 @@ func (jb *JoinOrderBuilder) makeTransitiveEdge(col1, col2 opt.ColumnID) {
 		return
 	}
 
-	originalJoin, ok := jb.plans[op.leftVertexes.union(op.rightVertexes)]
+	originalJoin, ok := jb.builtPlans[op.leftVertexes.union(op.rightVertexes)]
 	if !ok {
 		panic(errors.AssertionFailedf("failed to find expected join plan"))
 	}
@@ -781,6 +798,7 @@ func (jb *JoinOrderBuilder) makeEdge(op *operator, filters memo.FiltersExpr) (e 
 	e.calcNullRejectedRels(jb)
 	e.calcSES(jb)
 	e.calcTES(jb.edges)
+	e.cacheEqColMaxFreq(jb)
 	return e
 }
 
@@ -835,6 +853,77 @@ func (jb *JoinOrderBuilder) checkAppliedEdges(s1, s2 vertexSet, appliedEdges edg
 	return allAppliedEdges.Equals(expectedAppliedEdges)
 }
 
+func (jb *JoinOrderBuilder) addCandidatePlan(
+	op opt.Operator, s1, s2 vertexSet, joinEdges, selectEdges edgeSet,
+) {
+	union := s1.union(s2)
+	jb.candidatePlans[union] = append(
+		jb.candidatePlans[union],
+		candidatePlan{
+			typ:   op,
+			left:  s1,
+			right: s2,
+			on:    joinEdges,
+			sel:   selectEdges,
+			cost:  math.MaxFloat64, // Initialize to an invalid value.
+		},
+	)
+}
+
+func validCost(cost float64) bool {
+	return cost < math.MaxFloat64
+}
+
+// computeUpperBounds attempts to compute upper bounds on the cardinality of a
+// join between the given relations. Currently, it only handles INNER JOINs and
+// equality conditions.
+func (jb *JoinOrderBuilder) computeUpperBounds() {
+	if !jb.nonInnerEdges.Empty() {
+		// We only handle INNER JOINs for now.
+		return
+	}
+	subsets := jb.allVertexes()
+	for subset := vertexSet(1); subset <= subsets; subset++ {
+		if subset.isSingleton() {
+			// This subset represents a single relation. The upper bound in this case
+			// is the cardinality estimate for that relation.
+			ub := jb.vertexes[subset.getSingleton()].Relational().Statistics().RowCount
+			jb.upperBounds[subset] = max(ub, 1)
+			continue
+		}
+		ub := math.MaxFloat64
+		for i := range jb.edges {
+			e := &jb.edges[i]
+			if jb.edges[i].ses.isSubsetOf(subset) {
+				// The edge references only relations in the current subset, so it may
+				// be usable for the upper bound.
+				if e.leftEqMaxFreq != 0 && e.rightEqMaxFreq != 0 {
+					// This edge represents an equality condition between two columns, and
+					// we were able to obtain maximum value frequency estimates for both
+					// columns.
+					//
+					// There are two ways to calculate the upper bound using this edge:
+					//   * upperBound(subset/leftVertex) * leftEqMaxFreq
+					//   * upperBound(subset/rightVertex) * rightEqMaxFreq
+					//
+					// We choose the smaller of the two values as the upper bound.
+					if ubWithoutLeft, leftOk := jb.upperBounds[subset.remove(e.leftEqRel)]; leftOk {
+						ub = min(ub, ubWithoutLeft*e.leftEqMaxFreq)
+					}
+					if ubWithoutRight, rightOk := jb.upperBounds[subset.remove(e.rightEqRel)]; rightOk {
+						ub = min(ub, ubWithoutRight*e.rightEqMaxFreq)
+					}
+				}
+			}
+		}
+		if ub != math.MaxFloat64 {
+			// We successfully found a cardinality upper bound for joining this set of
+			// relations.
+			jb.upperBounds[subset] = ub
+		}
+	}
+}
+
 // addJoin adds a join between the given left and right subsets of relations on
 // the given set of edges. If the group containing joins between this set of
 // relations is already contained in the plans field, the new join is added to
@@ -842,66 +931,198 @@ func (jb *JoinOrderBuilder) checkAppliedEdges(s1, s2 vertexSet, appliedEdges edg
 // group). If the join being considered existed in the originally matched join
 // tree, no join is added (though its commuted version may be).
 func (jb *JoinOrderBuilder) addJoin(
-	op opt.Operator,
-	s1, s2 vertexSet,
-	joinFilters, selectFilters memo.FiltersExpr,
-	appliedEdges edgeSet,
+	op opt.Operator, s1, s2 vertexSet, joinEdges, selectEdges edgeSet,
 ) {
 	if s1.intersects(s2) {
 		panic(errors.AssertionFailedf("sets are not disjoint"))
 	}
+	appliedEdges := joinEdges.Union(selectEdges)
 	if !jb.checkAppliedEdges(s1, s2, appliedEdges) {
 		return
 	}
-	if jb.onAddJoinFunc != nil {
-		// Hook for testing purposes.
-		jb.callOnAddJoinFunc(s1, s2, joinFilters, selectFilters, op)
-	}
-
-	left := jb.plans[s1]
-	right := jb.plans[s2]
-	union := s1.union(s2)
 	if !jb.joinIsRedundant(s1, s2, appliedEdges) {
-		if jb.plans[union] != nil {
-			jb.addToGroup(op, left, right, joinFilters, selectFilters, jb.plans[union])
-		} else {
-			jb.plans[union] = jb.memoize(op, left, right, joinFilters, selectFilters)
-		}
-	}
-
-	if commute(op) {
-		// Also add the commuted version of the join to the memo. Note that if the
-		// join is redundant (a join between base relation sets s1 and s2 existed in
-		// the matched join tree) then jb.plans[union] will already have the
-		// original join group.
-		if jb.plans[union] == nil {
-			panic(errors.AssertionFailedf("expected existing join plan"))
-		}
-		jb.addToGroup(op, right, left, joinFilters, selectFilters, jb.plans[union])
-
-		if jb.onAddJoinFunc != nil {
-			// Hook for testing purposes.
-			jb.callOnAddJoinFunc(s2, s1, joinFilters, selectFilters, op)
-		}
+		jb.addCandidatePlan(op, s1, s2, joinEdges, selectEdges)
 	}
 }
 
-// areFiltersRedundant returns true if the given FiltersExpr contains a single
-// equality filter that is already represented by the given FuncDepSet.
-func areFiltersRedundant(equivs *props.EquivSet, filters memo.FiltersExpr) bool {
-	if len(filters) != 1 {
-		return false
+func (jb *JoinOrderBuilder) pruneCandidatePlans() {
+	subsets := jb.allVertexes()
+
+	// Prune candidate plans with sufficiently poor costs based on the cardinality
+	// upper bounds.
+	//const costThreshold float64 = 10
+	getCost := func(s vertexSet) float64 {
+		if s.isSingleton() {
+			return 0
+		}
+		bestCost := math.MaxFloat64
+		for i := range jb.candidatePlans[s] {
+			if jb.candidatePlans[s][i].cost < bestCost {
+				bestCost = jb.candidatePlans[s][i].cost
+			}
+		}
+		return bestCost
 	}
-	eq, ok := filters[0].Condition.(*memo.EqExpr)
-	if !ok {
-		return false
+	for subset := vertexSet(1); subset <= subsets; subset++ {
+		if subset.isSingleton() {
+			// This subset has only one set bit, which means it only represents one
+			// relation. We need at least two relations in order to create a new join.
+			continue
+		}
+		ub, ok := jb.upperBounds[subset]
+		if !ok || !validCost(ub) {
+			// We cannot compute a cost for joining these relations without an upper
+			// bound on the output size.
+			continue
+		}
+		bestCost := math.MaxFloat64
+		plans := jb.candidatePlans[subset]
+		for i := range plans {
+			plan := &plans[i]
+			leftCost, rightCost := getCost(plan.left), getCost(plan.right)
+			if validCost(leftCost) && validCost(rightCost) {
+				// Compute the cost of this plan using the C_out cost function, update
+				// the best cost, and save this plan's cost.
+				cost := ub + leftCost + rightCost
+				bestCost = min(bestCost, cost)
+				plan.cost = cost
+			}
+		}
+		//if validCost(bestCost) {
+		//	for i := 0; i < len(plans); {
+		//		if plans[i].cost > costThreshold*bestCost {
+		//			plans[i] = plans[len(plans)-1]
+		//			plans = plans[:len(plans)-1]
+		//		} else {
+		//			i++
+		//		}
+		//	}
+		//	jb.candidatePlans[subset] = plans
+		//}
 	}
-	var1, ok1 := eq.Left.(*memo.VariableExpr)
-	var2, ok2 := eq.Right.(*memo.VariableExpr)
-	if !ok1 || !ok2 {
-		return false
+
+	// Restore the invariant that a candidate plan is only considered if there are
+	// candidate plans for both its inputs.
+	for subset := vertexSet(1); subset <= subsets; subset++ {
+		if subset.isSingleton() {
+			// This subset has only one set bit, which means it only represents one
+			// relation. We need at least two relations in order to create a new join.
+			continue
+		}
+		plans := jb.candidatePlans[subset]
+		for i := 0; i < len(plans); {
+			if !jb.planExists(plans[i].left) || !jb.planExists(plans[i].right) {
+				// One or both inputs do not exist, so remove the plan.
+				plans[i] = plans[len(plans)-1]
+				plans = plans[:len(plans)-1]
+				continue
+			}
+			i++
+		}
+		jb.candidatePlans[subset] = plans
 	}
-	return equivs.AreColsEquiv(var1.Col, var2.Col)
+}
+
+// bestCost returns the best cost for joining the given set of relations. Note
+// that bestCost does not calculate the cost, so it is only valid to call this
+// function after all candidate plans for the set of relations have been built.
+func (jb *JoinOrderBuilder) bestCost(relations vertexSet) float64 {
+	if relations.isSingleton() {
+		// The C_out cost model considers base relations to have a cost of zero.
+		return 0
+	}
+	plans := jb.candidatePlans[relations]
+	bestCost := math.MaxFloat64
+	for i := 0; i < len(plans); i++ {
+		if plans[i].cost < bestCost {
+			bestCost = plans[i].cost
+		}
+	}
+	return bestCost
+}
+
+func (jb *JoinOrderBuilder) buildCandidatePlans(relations vertexSet) memo.RelExpr {
+	plans := jb.candidatePlans[relations]
+	if len(plans) == 0 {
+		// There are no candidate plans for joining this set of relations.
+		return jb.builtPlans[relations]
+	}
+	memoGroup := jb.builtPlans[relations]
+	ub := jb.upperBounds[relations]
+	for i := range plans {
+		plan := &plans[i]
+		planIsRedundant := jb.joinIsRedundant(plan.left, plan.right, plan.on.Union(plan.sel))
+		if planIsRedundant && !commute(plan.typ) {
+			// This candidate plan was part of the originally matched join tree. Since
+			// the commuted version of the plan is not valid, there is nothing to do.
+			continue
+		}
+		left, right := jb.buildCandidatePlans(plan.left), jb.buildCandidatePlans(plan.right)
+		if left == nil || right == nil {
+			panic(errors.AssertionFailedf("expected a plan for both join inputs"))
+		}
+		jb.equivs.Reset()
+		jb.equivs.AddFromFDs(&left.Relational().FuncDeps)
+		jb.equivs.AddFromFDs(&right.Relational().FuncDeps)
+		joinFilters := jb.filtersFromEdges(plan.on)
+		selectFilters := jb.filtersFromEdges(plan.sel)
+		if !planIsRedundant {
+			// Avoid re-building a plan that was already part of the memo.
+			if memoGroup != nil {
+				jb.addToGroup(plan.typ, left, right, joinFilters, selectFilters, memoGroup)
+			} else {
+				memoGroup = jb.memoize(plan.typ, left, right, joinFilters, selectFilters)
+			}
+			if jb.onAddJoinFunc != nil {
+				// Hook for testing purposes.
+				jb.callOnAddJoinFunc(plan.left, plan.right, joinFilters, selectFilters, plan.typ, ub, plan.cost)
+			}
+		}
+		if commute(plan.typ) {
+			// Also add the commuted version of the join to the memo. Note that if the
+			// join is redundant (a join between base relation sets s1 and s2 existed
+			// in the matched join tree) then jb.plans[union] will already have the
+			// original join group.
+			if memoGroup == nil {
+				panic(errors.AssertionFailedf("expected existing join plan"))
+			}
+			jb.addToGroup(plan.typ, right, left, joinFilters, selectFilters, memoGroup)
+			if jb.onAddJoinFunc != nil {
+				// Hook for testing purposes.
+				jb.callOnAddJoinFunc(plan.right, plan.left, joinFilters, selectFilters, plan.typ, ub, plan.cost)
+			}
+		}
+	}
+	// Make sure to cache the built plan and remove the candidate plans to avoid
+	// duplicate work.
+	jb.builtPlans[relations] = memoGroup
+	delete(jb.candidatePlans, relations)
+	return memoGroup
+}
+
+func (jb *JoinOrderBuilder) filtersFromEdges(edges edgeSet) memo.FiltersExpr {
+	if edges.Len() == 1 {
+		edgeIdx, _ := edges.Next(0)
+		return jb.edges[edgeIdx].filters
+	}
+	var allFilters memo.FiltersExpr
+	for edgeIdx, ok := edges.Next(0); ok; edgeIdx, ok = edges.Next(edgeIdx + 1) {
+		e := &jb.edges[edgeIdx]
+		if e.op.joinType == opt.InnerJoinOp && len(e.filters) == 1 {
+			// Inner join edges always have zero or one filters. If the filter is an
+			// equality, check if it is implied by other filters already present.
+			if eq, isEq := e.filters[0].Condition.(*memo.EqExpr); isEq {
+				var1, isVar1 := eq.Left.(*memo.VariableExpr)
+				var2, isVar2 := eq.Right.(*memo.VariableExpr)
+				if isVar1 && isVar2 && jb.equivs.AreColsEquiv(var1.Col, var2.Col) {
+					continue
+				}
+			}
+			jb.equivs.AddFromFDs(&e.filters[0].ScalarProps().FuncDeps)
+		}
+		allFilters = append(allFilters, e.filters...)
+	}
+	return allFilters
 }
 
 // addToGroup adds a join of the given type and with the given inputs to the
@@ -1053,7 +1274,7 @@ func (jb *JoinOrderBuilder) addBaseRelation(rel memo.RelExpr) {
 	// Initialize the plan for this vertex.
 	idx := vertexIndex(len(jb.vertexes) - 1)
 	relSet := vertexSet(0).add(idx)
-	jb.plans[relSet] = rel
+	jb.builtPlans[relSet] = rel
 }
 
 // joinIsRedundant returns true if a join between the two sets of base relations
@@ -1129,7 +1350,7 @@ func (jb *JoinOrderBuilder) callOnReorderFunc(join memo.RelExpr) {
 // callOnAddJoinFunc calls the onAddJoinFunc callback function. Panics if the
 // function is nil.
 func (jb *JoinOrderBuilder) callOnAddJoinFunc(
-	s1, s2 vertexSet, joinFilters, selectFilters memo.FiltersExpr, op opt.Operator,
+	s1, s2 vertexSet, joinFilters, selectFilters memo.FiltersExpr, op opt.Operator, ub, cost float64,
 ) {
 	jb.onAddJoinFunc(
 		jb.getRelationSlice(s1),
@@ -1138,6 +1359,8 @@ func (jb *JoinOrderBuilder) callOnAddJoinFunc(
 		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(joinFilters))),
 		jb.getRelationSlice(jb.getRelations(jb.getFreeVars(selectFilters))),
 		op,
+		ub,
+		cost,
 	)
 }
 
@@ -1181,6 +1404,17 @@ type edge struct {
 	// a join between two sets of vertexes to be valid. See the conflictRule
 	// comments for more information.
 	rules []conflictRule
+
+	// For an inner join with a single equality filter, we cache the maximum
+	// value frequency of the left and right equality columns in the respective
+	// base relations. This is used to calculate the upper bound on the join
+	// cardinality.
+	leftEqMaxFreq, rightEqMaxFreq float64
+
+	// leftEqRel and rightEqRel represent the relations that contain the left and
+	// right equality columns, respectively. They are only set if the edge
+	// corresponds to a single equality filter of an inner join.
+	leftEqRel, rightEqRel uint64
 }
 
 // operator contains the properties of a join operator from the original join
@@ -1411,6 +1645,48 @@ func (e *edge) addRule(rule conflictRule) {
 		return
 	}
 	e.rules = append(e.rules, rule)
+}
+
+// cacheEqColMaxFreq attempts to derive and cache the maximum value frequency
+// statistics for the left and right equality columns of the edge, assuming the
+// edge represents an inner join with a single equality filter. The maximum
+// value frequency is used to calculate an upper bound on the join cardinality.
+func (e *edge) cacheEqColMaxFreq(jb *JoinOrderBuilder) {
+	if e.op.joinType != opt.InnerJoinOp {
+		// Only inner joins are supported for now.
+		return
+	}
+	getMaxFrequency := func(col opt.ColumnID) (maxFreq float64, vertex uint64) {
+		// Search for the base relation that contains the column.
+		for relation, ok := e.ses.next(0); ok; relation, ok = e.ses.next(relation + 1) {
+			relProps := jb.vertexes[relation].Relational()
+			if relProps.OutputCols.Contains(col) {
+				if relProps.FuncDeps.ColsAreStrictKey(opt.MakeColSet(col)) {
+					// If the column is a key, the max frequency is 1.
+					return 1, relation
+				}
+				colStat, ok := relProps.Statistics().ColStats.LookupSingleton(col)
+				if ok && colStat.Histogram != nil {
+					// Use the max frequency statistic. Ensure that the frequency is at
+					// least 1.
+					return max(colStat.Histogram.MaxFrequency(), 1), relation
+				}
+				break
+			}
+		}
+		// Return zero to indicate the frequency was not found.
+		return 0, 0
+	}
+	if len(e.filters) == 1 {
+		if eq, isEq := e.filters[0].Condition.(*memo.EqExpr); isEq {
+			if leftVar, isLeftVar := eq.Left.(*memo.VariableExpr); isLeftVar {
+				if rightVar, isRightVar := eq.Right.(*memo.VariableExpr); isRightVar {
+					e.leftEqMaxFreq, e.leftEqRel = getMaxFrequency(leftVar.Col)
+					e.rightEqMaxFreq, e.rightEqRel = getMaxFrequency(rightVar.Col)
+				}
+			}
+		}
+	}
 }
 
 // checkNonInnerJoin performs an applicability check for a non-inner join
@@ -1774,6 +2050,22 @@ func getOpIdx(e *edge) int {
 	}
 }
 
+type candidatePlan struct {
+	typ         opt.Operator
+	left, right vertexSet
+	on, sel     edgeSet
+
+	// cost is calculated according to a simple cost model that considers only
+	// join output cardinality:
+	// C_out(T) =
+	//   * 0 if T is a leaf Ri
+	//   * |T| + C_out(T1) + C_out(T2) if T = T1  T
+	//
+	// cost should be initialized to math.MaxFloat64 if the C_out function cannot
+	// be used.
+	cost float64
+}
+
 type edgeSet = intsets.Fast
 
 type bitSet uint64
@@ -1794,6 +2086,11 @@ func (s bitSet) add(idx uint64) bitSet {
 		panic(errors.AssertionFailedf("cannot insert %d into bitSet", idx))
 	}
 	return s | (1 << idx)
+}
+
+// remove returns a copy of the bitSet with the given ele
+func (s bitSet) remove(idx uint64) bitSet {
+	return s & ^(1 << idx)
 }
 
 // union returns the set union of this set with the given set.
@@ -1824,6 +2121,16 @@ func (s bitSet) isSubsetOf(o bitSet) bool {
 // isSingleton returns true if the set has exactly one element.
 func (s bitSet) isSingleton() bool {
 	return s > 0 && (s&(s-1)) == 0
+}
+
+// getSingleton returns the single element from the set. It panics if the set is
+// not a singleton.
+func (s bitSet) getSingleton() uint64 {
+	if !s.isSingleton() {
+		panic(errors.AssertionFailedf("bitSet is not a singleton"))
+	}
+	elem, _ := s.next(0)
+	return elem
 }
 
 // next returns the next element in the set after the given start index, and
