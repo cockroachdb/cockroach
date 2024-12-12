@@ -102,6 +102,18 @@ type DescriptorResolver struct {
 	ObjIDsBySchema map[descpb.ID]map[string]*catalog.DescriptorIDSet
 }
 
+// LookupDatabase implements the resolver.ObjectNameResolver interface.
+func (r *DescriptorResolver) LookupDatabase(
+	ctx context.Context, dbName string,
+) (catalog.DatabaseDescriptor, error) {
+	dbID, ok := r.DbsByName[dbName]
+	if !ok {
+		return nil, nil
+	}
+	dbDesc, _ := r.DescByID[dbID].(catalog.DatabaseDescriptor)
+	return dbDesc, nil
+}
+
 // LookupSchema implements the resolver.ObjectNameTargetResolver interface.
 func (r *DescriptorResolver) LookupSchema(
 	ctx context.Context, dbName, scName string,
@@ -131,7 +143,7 @@ func (r *DescriptorResolver) LookupSchema(
 	return false, catalog.ResolvedObjectPrefix{}, nil
 }
 
-// LookupObject implements the tree.ObjectNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameResolver interface.
 func (r *DescriptorResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (bool, catalog.ResolvedObjectPrefix, catalog.Descriptor, error) {
@@ -171,6 +183,20 @@ func (r *DescriptorResolver) LookupObject(
 		}
 	}
 	return false, catalog.ResolvedObjectPrefix{}, nil, nil
+}
+
+// LookupObjectInDatabase implements the tree.ObjectNameResolver interface.
+func (r *DescriptorResolver) LookupObjectInDatabase(
+	ctx context.Context,
+	flags tree.ObjectLookupFlags,
+	db catalog.DatabaseDescriptor,
+	scName, obName string,
+) (bool, catalog.ResolvedObjectPrefix, catalog.Descriptor, error) {
+	dbName := ""
+	if db != nil {
+		dbName = db.GetName()
+	}
+	return r.LookupObject(ctx, flags, dbName, scName, obName)
 }
 
 // NewDescriptorResolver prepares a DescriptorResolver for the given

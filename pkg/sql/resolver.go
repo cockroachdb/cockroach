@@ -782,7 +782,7 @@ type fkSelfResolver struct {
 
 var _ resolver.SchemaResolver = &fkSelfResolver{}
 
-// LookupObject implements the tree.ObjectNameExistingResolver interface.
+// LookupObject implements the tree.ObjectNameResolver interface.
 func (r *fkSelfResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
