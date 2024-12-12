@@ -1938,7 +1938,7 @@ sort
       ├── window partition=(3) ordering=+4 opt(3)
       │    ├── columns: k:1!null f:3 s:4 avg:7
       │    ├── key: (1)
-      │    ├── fd: (1)-->(3,4)
+      │    ├── fd: (1)-->(3,4,7)
       │    ├── scan a
       │    │    ├── columns: k:1!null f:3 s:4
       │    │    ├── key: (1)
@@ -5382,47 +5382,39 @@ SELECT concat_agg(tab_1739.col3_7::STRING ORDER BY tab_1739.col3_7 DESC)::STRING
 FROM table86308@[0] AS tab_1739 GROUP BY tab_1739.col3_7 HAVING bool_and(false::BOOL)::BOOL
 ----
 project
- └── group-by (hash)
-      ├── select
-      │    ├── window partition=(8)
-      │    │    ├── window partition=(8)
-      │    │    │    ├── project
-      │    │    │    │    ├── scan table86308
-      │    │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    │    ├── col3_9
-      │    │    │    │    │    │    │    └── col3_3 + 0.7530620098114014
-      │    │    │    │    │    │    ├── col3_10
-      │    │    │    │    │    │    │    └── lower(col3_0::STRING)
-      │    │    │    │    │    │    ├── col3_11
-      │    │    │    │    │    │    │    └── col3_3 + 0.8790965676307678
-      │    │    │    │    │    │    ├── col3_12
-      │    │    │    │    │    │    │    └── lower(col3_0::STRING)
-      │    │    │    │    │    │    ├── col3_13
-      │    │    │    │    │    │    │    └── lower(col3_6::STRING)
-      │    │    │    │    │    │    ├── col3_14
-      │    │    │    │    │    │    │    └── col3_3 + -0.27059364318847656
-      │    │    │    │    │    │    └── col3_15
-      │    │    │    │    │    │         └── lower(col3_5::STRING)
-      │    │    │    │    │    └── partial index predicates
-      │    │    │    │    │         └── table3_col3_4_col3_11_col3_1_col3_0_col3_3_key: filters
-      │    │    │    │    │              ├── ((col3_9 = 5e-324) OR (col3_1 = -32768)) OR (col3_15 = '')
-      │    │    │    │    │              ├── col3_3 > 3.4028234663852886e+38
-      │    │    │    │    │              └── lower(col3_0::STRING) != '""'
-      │    │    │    │    └── projections
-      │    │    │    │         ├── false
-      │    │    │    │         ├── col3_3 + 0.8790965676307678
-      │    │    │    │         └── lower(col3_0::STRING)
-      │    │    │    └── windows
-      │    │    │         └── concat-agg [frame="range from unbounded to unbounded"]
-      │    │    │              └── col3_7
-      │    │    └── windows
-      │    │         └── bool-and [frame="range from unbounded to unbounded"]
-      │    │              └── column21
-      │    └── filters
-      │         └── bool_and
-      └── aggregations
-           └── const-agg
-                └── concat_agg
+ └── select
+      ├── group-by (hash)
+      │    ├── project
+      │    │    ├── scan table86308
+      │    │    │    ├── computed column expressions
+      │    │    │    │    ├── col3_9
+      │    │    │    │    │    └── col3_3 + 0.7530620098114014
+      │    │    │    │    ├── col3_10
+      │    │    │    │    │    └── lower(col3_0::STRING)
+      │    │    │    │    ├── col3_11
+      │    │    │    │    │    └── col3_3 + 0.8790965676307678
+      │    │    │    │    ├── col3_12
+      │    │    │    │    │    └── lower(col3_0::STRING)
+      │    │    │    │    ├── col3_13
+      │    │    │    │    │    └── lower(col3_6::STRING)
+      │    │    │    │    ├── col3_14
+      │    │    │    │    │    └── col3_3 + -0.27059364318847656
+      │    │    │    │    └── col3_15
+      │    │    │    │         └── lower(col3_5::STRING)
+      │    │    │    └── partial index predicates
+      │    │    │         └── table3_col3_4_col3_11_col3_1_col3_0_col3_3_key: filters
+      │    │    │              ├── ((col3_9 = 5e-324) OR (col3_1 = -32768)) OR (col3_15 = '')
+      │    │    │              ├── col3_3 > 3.4028234663852886e+38
+      │    │    │              └── lower(col3_0::STRING) != '""'
+      │    │    └── projections
+      │    │         └── false
+      │    └── aggregations
+      │         ├── concat-agg
+      │         │    └── col3_7
+      │         └── bool-and
+      │              └── column21
+      └── filters
+           └── bool_and
 
 exec-ddl
 CREATE TABLE p100478 (
