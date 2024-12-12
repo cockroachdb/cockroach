@@ -24,7 +24,7 @@ const (
 	OwnerKV               Owner = `kv`
 	OwnerAdmissionControl Owner = `admission-control`
 	OwnerObservability    Owner = `obs-prs`
-	OwnerServer           Owner = `server` // not currently staffed
+	OwnerServer           Owner = `server`
 	OwnerSQLFoundations   Owner = `sql-foundations`
 	OwnerMigrations       Owner = `migrations`
 	OwnerSQLQueries       Owner = `sql-queries`
