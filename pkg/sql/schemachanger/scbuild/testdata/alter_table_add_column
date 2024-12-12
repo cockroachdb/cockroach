@@ -126,6 +126,8 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
   {indexId: 1, tableId: 104}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
+- [[CheckConstraint:{DescID: 104, IndexID: 2, ConstraintID: 2, ReferencedColumnIDs: [1]}, TRANSIENT_ABSENT], ABSENT]
+  {columnIds: [1], constraintId: 2, expr: 'CASE WHEN (crdb_internal.assignment_cast(i + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END', indexIdForValidation: 2, referencedColumnIds: [1], tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
@@ -134,16 +136,16 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
   {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
 - [[ColumnComputeExpression:{DescID: 104, ColumnID: 2, Usage: REGULAR}, PUBLIC], ABSENT]
   {columnId: 2, expr: 'i + 1:::INT8', referencedColumnIds: [1], tableId: 104}
-- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
-  {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
+- [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 3, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
+  {constraintId: 3, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, name: foo_pkey, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT]
   {columnId: 1, indexId: 2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   {indexId: 2, tableId: 104}
-- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
-  {constraintId: 3, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
+- [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+  {constraintId: 4, indexId: 3, isUnique: true, sourceIndexId: 1, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 1, indexId: 3, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT]
