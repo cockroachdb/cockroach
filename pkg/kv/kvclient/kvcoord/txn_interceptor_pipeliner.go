@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/google/btree"
+	gbtree "github.com/google/btree"
 )
 
-// The degree of the inFlightWrites btree.
+// The degree of the inFlightWrites gbtree.
 const txnPipelinerBtreeDegree = 32
 
 // PipelinedWritesEnabled is the kv.transaction.write_pipelining.enabled cluster setting.
@@ -991,12 +991,12 @@ func makeInFlightWrite(key roachpb.Key, seq enginepb.TxnSeq, str lock.Strength) 
 	}}
 }
 
-// Less implements the btree.Item interface.
+// Less implements the gbtree.Item interface.
 //
 // inFlightWrites are ordered by Key, then by Sequence, then by Strength. Two
 // inFlightWrites with the same Key but different Sequences and/or Strengths are
 // not considered equal and are maintained separately in the inFlightWritesSet.
-func (a *inFlightWrite) Less(bItem btree.Item) bool {
+func (a *inFlightWrite) Less(bItem gbtree.Item) bool {
 	b := bItem.(*inFlightWrite)
 	kCmp := a.Key.Compare(b.Key)
 	if kCmp != 0 {
@@ -1020,7 +1020,7 @@ func (a *inFlightWrite) Less(bItem btree.Item) bool {
 // writes, O(log n) removal of existing in-flight writes, and O(m + log n)
 // retrieval over m in-flight writes that overlap with a given key.
 type inFlightWriteSet struct {
-	t     *btree.BTree
+	t     *gbtree.BTree
 	bytes int64
 
 	// Avoids allocs.
@@ -1033,7 +1033,7 @@ type inFlightWriteSet struct {
 func (s *inFlightWriteSet) insert(key roachpb.Key, seq enginepb.TxnSeq, str lock.Strength) {
 	if s.t == nil {
 		// Lazily initialize btree.
-		s.t = btree.New(txnPipelinerBtreeDegree)
+		s.t = gbtree.New(txnPipelinerBtreeDegree)
 	}
 
 	w := s.alloc.alloc(key, seq, str)
@@ -1079,7 +1079,7 @@ func (s *inFlightWriteSet) ascend(f func(w *inFlightWrite)) {
 		// Set is empty.
 		return
 	}
-	s.t.Ascend(func(i btree.Item) bool {
+	s.t.Ascend(func(i gbtree.Item) bool {
 		f(i.(*inFlightWrite))
 		return true
 	})
@@ -1100,7 +1100,7 @@ func (s *inFlightWriteSet) ascendRange(start, end roachpb.Key, f func(w *inFligh
 		// Range lookup.
 		s.tmp2 = makeInFlightWrite(end, 0, 0)
 	}
-	s.t.AscendRange(&s.tmp1, &s.tmp2, func(i btree.Item) bool {
+	s.t.AscendRange(&s.tmp1, &s.tmp2, func(i gbtree.Item) bool {
 		f(i.(*inFlightWrite))
 		return true
 	})
