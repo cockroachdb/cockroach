@@ -122,17 +122,19 @@ type diskTokens struct {
 func (d *diskBandwidthLimiter) computeElasticTokens(
 	id intervalDiskLoadInfo, usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
 ) diskTokens {
-	// We are using disk read bytes over the previous adjustment interval as a
-	// proxy for future reads. It is a somewhat bad proxy, but for now we are ok
-	// with the inaccuracy. This will be improved once we start to account for
-	// disk reads in AC.
 	// TODO(aaditya): Include calculation for read and IOPS.
 	// Issue: https://github.com/cockroachdb/cockroach/issues/107623
+
+	// We are using disk read bytes over the previous adjustment interval as a
+	// proxy for future reads. This is a bad estimate, but we account for errors
+	// in this estimate separately at a higher frequency. See
+	// kvStoreTokenGranter.adjustDiskTokenErrorLocked.
 	const alpha = 0.5
 	smoothedReadBytes := alpha*float64(id.intReadBytes) + alpha*float64(d.state.diskLoad.intReadBytes)
 	// Pessimistic approach using the max value between the smoothed and current
 	// reads.
 	intReadBytes := int64(math.Max(smoothedReadBytes, float64(id.intReadBytes)))
+	intReadBytes = int64(math.Max(0, float64(intReadBytes)))
 	diskWriteTokens := int64(float64(id.intProvisionedDiskBytes)*id.elasticBandwidthMaxUtil) - intReadBytes
 	// TODO(aaditya): consider setting a different floor to avoid starving out
 	// elastic writes completely due to out-sized reads from above.
@@ -140,7 +142,7 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 
 	totalUsedTokens := sumDiskTokens(usedTokens)
 	tokens := diskTokens{
-		readByteTokens:  0,
+		readByteTokens:  intReadBytes,
 		writeByteTokens: diskWriteTokens,
 		readIOPSTokens:  0,
 		writeIOPSTokens: 0,
@@ -159,14 +161,16 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	ib := humanizeutil.IBytes
 	p.Printf("diskBandwidthLimiter (tokenUtilization %.2f, tokensUsed (elastic %s, "+
-		"snapshot %s, regular %s) tokens (write %s (prev %s)), writeBW %s/s, readBW %s/s, "+
-		"provisioned %s/s)",
+		"snapshot %s, regular %s) tokens (write %s (prev %s), read %s (prev %s)), writeBW %s/s, "+
+		"readBW %s/s, provisioned %s/s)",
 		d.state.diskBWUtil,
 		ib(d.state.usedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
 		ib(d.state.usedTokens[admissionpb.SnapshotIngestStoreWorkType].writeByteTokens),
 		ib(d.state.usedTokens[admissionpb.RegularStoreWorkType].writeByteTokens),
 		ib(d.state.tokens.writeByteTokens),
 		ib(d.state.prevTokens.writeByteTokens),
+		ib(d.state.tokens.readByteTokens),
+		ib(d.state.prevTokens.readByteTokens),
 		ib(d.state.diskLoad.intWriteBytes/adjustmentInterval),
 		ib(d.state.diskLoad.intReadBytes/adjustmentInterval),
 		ib(d.state.diskLoad.intProvisionedDiskBytes/adjustmentInterval),
