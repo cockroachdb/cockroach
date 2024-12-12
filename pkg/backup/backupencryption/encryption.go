@@ -132,8 +132,19 @@ func (e *EncryptedDataKeyMap) AddEncryptedDataKey(
 }
 
 func (e *EncryptedDataKeyMap) getEncryptedDataKey(
-	masterKeyID PlaintextMasterKeyID,
+	replicaIDs []PlaintextMasterKeyID,
 ) ([]byte, error) {
+	for _, replicaID := range replicaIDs {
+		if encDataKey, found := e.getSingleEncryptedDataKey(replicaID); found {
+			return encDataKey, nil
+		}
+	}
+	return nil, errors.Newf("could not find an entry in the encryptedDataKeyMap for IDs %v", replicaIDs)
+}
+
+func (e *EncryptedDataKeyMap) getSingleEncryptedDataKey(
+	masterKeyID PlaintextMasterKeyID,
+) ([]byte, bool) {
 	// Hash the master key ID before reading from the map.
 	hasher := crypto.SHA256.New()
 	hasher.Write([]byte(masterKeyID))
@@ -141,10 +152,10 @@ func (e *EncryptedDataKeyMap) getEncryptedDataKey(
 	var encDataKey []byte
 	var ok bool
 	if encDataKey, ok = e.m[HashedMasterKeyID(hash)]; !ok {
-		return nil, errors.New("could not find an entry in the encryptedDataKeyMap")
+		return nil, false
 	}
 
-	return encDataKey, nil
+	return encDataKey, true
 }
 
 // RangeOverMap iterates over the map and executes fn on every key-value pair.
@@ -180,11 +191,12 @@ func ValidateKMSURIsAgainstFullBackup(
 			_ = kms.Close()
 		}()
 
-		// Depending on the KMS specific implementation, this may or may not contact
-		// the remote KMS.
-		id := kms.MasterKeyID()
+		plaintextReplicaIDs := []PlaintextMasterKeyID{}
+		for _, replicaID := range kms.ReplicaIDs() {
+			plaintextReplicaIDs = append(plaintextReplicaIDs, PlaintextMasterKeyID(replicaID))
+		}
 
-		encryptedDataKey, err := kmsMasterKeyIDToDataKey.getEncryptedDataKey(PlaintextMasterKeyID(id))
+		encryptedDataKey, err := kmsMasterKeyIDToDataKey.getEncryptedDataKey(plaintextReplicaIDs)
 		if err != nil {
 			return nil,
 				errors.Wrap(err,
@@ -255,10 +267,10 @@ func MakeNewEncryptionOptions(
 // specified by kmsURI.
 func GetEncryptedDataKeyFromURI(
 	ctx context.Context, plaintextDataKey []byte, kmsURI string, kmsEnv cloud.KMSEnv,
-) (string, []byte, error) {
+) (string, string, []byte, error) {
 	kms, err := cloud.KMSFromURI(ctx, kmsURI, kmsEnv)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 
 	defer func() {
@@ -267,15 +279,15 @@ func GetEncryptedDataKeyFromURI(
 
 	kmsURL, err := url.ParseRequestURI(kmsURI)
 	if err != nil {
-		return "", nil, errors.Wrap(err, "cannot parse KMSURI")
+		return "", "", nil, errors.Wrap(err, "cannot parse KMSURI")
 	}
 	encryptedDataKey, err := kms.Encrypt(ctx, plaintextDataKey)
 	if err != nil {
-		return "", nil, cloud.KMSInaccessible(errors.Wrapf(err, "failed to encrypt data key for KMS scheme %s",
+		return "", "", nil, cloud.KMSInaccessible(errors.Wrapf(err, "failed to encrypt data key for KMS scheme %s",
 			kmsURL.Scheme))
 	}
 
-	return kms.MasterKeyID(), encryptedDataKey, nil
+	return kms.MasterKeyID(), kms.MasterKeyID24_3Compatible(), encryptedDataKey, nil
 }
 
 // GetEncryptedDataKeyByKMSMasterKeyID constructs a mapping {MasterKeyID :
@@ -293,7 +305,7 @@ func GetEncryptedDataKeyByKMSMasterKeyID(
 	// key for each one.
 	var kmsInfo *jobspb.BackupEncryptionOptions_KMSInfo
 	for _, kmsURI := range kmsURIs {
-		masterKeyID, encryptedDataKey, err := GetEncryptedDataKeyFromURI(ctx,
+		masterKeyID, masterKeyID24_3Compatible, encryptedDataKey, err := GetEncryptedDataKeyFromURI(ctx,
 			plaintextDataKey, kmsURI, kmsEnv)
 		if err != nil {
 			return nil, nil, err
@@ -309,6 +321,9 @@ func GetEncryptedDataKeyByKMSMasterKeyID(
 		}
 
 		encryptedDataKeyByKMSMasterKeyID.AddEncryptedDataKey(PlaintextMasterKeyID(masterKeyID),
+			encryptedDataKey)
+
+		encryptedDataKeyByKMSMasterKeyID.AddEncryptedDataKey(PlaintextMasterKeyID(masterKeyID24_3Compatible),
 			encryptedDataKey)
 	}
 
