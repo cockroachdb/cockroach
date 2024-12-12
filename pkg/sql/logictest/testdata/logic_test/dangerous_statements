@@ -15,3 +15,16 @@ ALTER TABLE foo DROP COLUMN x
 
 statement error rejected.*: SET database to empty string
 SET database = ''
+
+subtest regression_129647
+
+statement ok
+SELECT * FROM (SELECT * FROM foo WHERE x = 2) FOR UPDATE
+
+statement ok
+SELECT * FROM (SELECT * FROM (SELECT * FROM foo) WHERE x = 2) FOR UPDATE
+
+statement ok
+SELECT * FROM (SELECT * FROM (SELECT * FROM foo) WHERE x > 1) WHERE x > 2 FOR UPDATE
+
+subtest end
