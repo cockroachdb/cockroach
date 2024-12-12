@@ -25,7 +25,9 @@ import (
 
 const (
 	crossFlag       = "cross"
+	lintFlag        = "lint"
 	cockroachTarget = "//pkg/cmd/cockroach:cockroach"
+	nogoEnableFlag  = "--run_validations"
 	nogoDisableFlag = "--norun_validations"
 	geosTarget      = "//c-deps:libgeos"
 	devTarget       = "//pkg/cmd/dev:dev"
@@ -59,6 +61,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 		RunE: runE,
 	}
 	buildCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
+	buildCmd.Flags().BoolP(lintFlag, "l", false, "perform linting (nogo) as part of the build process (i.e. override nolintonbuild config)")
 	buildCmd.Flags().String(crossFlag, "", "cross-compiles using the builder image (options: linux, linuxarm, macos, macosarm, windows)")
 	buildCmd.Flags().Lookup(crossFlag).NoOptDefVal = "linux"
 	buildCmd.Flags().StringArray(dockerArgsFlag, []string{}, "additional arguments to pass to Docker (only used for cross builds)")
@@ -141,11 +144,15 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
+	lint := mustGetFlagBool(cmd, lintFlag)
 	dockerArgs := mustGetFlagStringArray(cmd, dockerArgsFlag)
 
 	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets)
 	if err != nil {
 		return err
+	}
+	if lint {
+		args = append(args, nogoEnableFlag)
 	}
 	args = append(args, additionalBazelArgs...)
 	configArgs := getConfigArgs(args)
