@@ -853,6 +853,7 @@ vectorized: true
 │             missing stats
 │             table: parent@parent_pkey
 │             spans: [/2 - /2]
+│             locking strength: for update
 │
 └── • constraint-check
     │
@@ -1043,6 +1044,7 @@ vectorized: true
 │             missing stats
 │             table: parent@parent_pkey
 │             spans: [/2 - /2]
+│             locking strength: for update
 │
 ├── • fk-cascade
 │   │ fk: child_delete_p_fkey
@@ -1054,6 +1056,7 @@ vectorized: true
 │             missing stats
 │             table: child_delete@c_delete_idx_invisible
 │             spans: [/2 - /2]
+│             locking strength: for update
 │
 └── • constraint-check
     │

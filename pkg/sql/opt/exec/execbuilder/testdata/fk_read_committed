@@ -322,6 +322,7 @@ vectorized: true
 │             estimated row count: 1 (missing stats)
 │             table: jars@jars_pkey
 │             spans: /1/0
+│             locking strength: for update
 │
 └── • constraint-check
     │

@@ -736,6 +736,7 @@ vectorized: true
           estimated row count: 1 (missing stats)
           table: t@t_pkey
           spans: /3/0
+          locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b

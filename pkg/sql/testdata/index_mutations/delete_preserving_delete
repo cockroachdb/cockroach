@@ -21,7 +21,7 @@ INSERT INTO ti VALUES (1, 2, 100)
 kvtrace
 DELETE FROM ti WHERE a = 1
 ----
-Scan /Table/106/1/1/0
+Scan /Table/106/1/1/0 lock Exclusive (Block, Unreplicated)
 Put (delete) /Table/106/2/2/100/1/0
 Del /Table/106/1/1/0
 
@@ -49,14 +49,14 @@ INSERT INTO tpi VALUES (1, 2, 'bar'), (2, 3, 'bar'), (3, 2, 'foo')
 kvtrace
 DELETE FROM tpi WHERE a = 1
 ----
-Scan /Table/107/1/1/0
+Scan /Table/107/1/1/0 lock Exclusive (Block, Unreplicated)
 Del /Table/107/1/1/0
 
 # Delete a row that matches the partial index.
 kvtrace
 DELETE FROM tpi WHERE a = 3
 ----
-Scan /Table/107/1/3/0
+Scan /Table/107/1/3/0 lock Exclusive (Block, Unreplicated)
 Put (delete) /Table/107/2/"foo"/3/0
 Del /Table/107/1/3/0
 
@@ -110,7 +110,7 @@ INSERT INTO tii VALUES (1, ARRAY[1, 2, 3, 2, 2, NULL, 3])
 kvtrace
 DELETE FROM tii WHERE a = 1
 ----
-Scan /Table/109/1/1/0
+Scan /Table/109/1/1/0 lock Exclusive (Block, Unreplicated)
 Put (delete) /Table/109/2/NULL/1/0
 Put (delete) /Table/109/2/1/1/0
 Put (delete) /Table/109/2/2/1/0
@@ -141,7 +141,7 @@ INSERT INTO tmi VALUES (1, 2, '{"a": "foo", "b": "bar"}'::json)
 kvtrace
 DELETE FROM tmi WHERE a = 1
 ----
-Scan /Table/110/1/1/0
+Scan /Table/110/1/1/0 lock Exclusive (Block, Unreplicated)
 Put (delete) /Table/110/2/2/"a"/"foo"/1/0
 Put (delete) /Table/110/2/2/"b"/"bar"/1/0
 Del /Table/110/1/1/0

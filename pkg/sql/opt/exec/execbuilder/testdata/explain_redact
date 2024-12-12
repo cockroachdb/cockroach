@@ -1458,6 +1458,7 @@ vectorized: true
           missing stats
           table: f@f_f_idx (partial index)
           spans: 1 span
+          locking strength: for update
 
 query T
 EXPLAIN (VERBOSE, REDACT) DELETE FROM f WHERE f = 8.5
@@ -1482,6 +1483,7 @@ vectorized: true
           estimated row count: 10 (missing stats)
           table: f@f_f_idx (partial index)
           spans: 1 span
+          locking strength: for update
 
 query T
 EXPLAIN (OPT, REDACT) DELETE FROM f WHERE f = 8.5
