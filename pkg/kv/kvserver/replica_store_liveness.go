@@ -89,6 +89,18 @@ func (r *replicaRLockedStoreLiveness) SupportFromEnabled() bool {
 	if !r.store.storeLiveness.SupportFromEnabled(context.TODO()) {
 		return false
 	}
+	if shouldUseExpirationLease(
+		r.store.cfg.NodeLiveness, r.shMu.state.Desc, r.store.ClusterSettings(), r.store.getNodeRangeCount(),
+	) {
+		// If this range wants to use an expiration based lease, either because it's
+		// one of the system ranges (NodeLiveness, Meta) or because the cluster
+		// setting to always use expiration based leases is turned on, then do not
+		// fortify the leader. There's no benefit to doing so because we aren't
+		// going to acquire a leader lease on top of it. On the other hand, by not
+		// fortifying, we ensure there's no StoreLiveness dependency for these
+		// ranges.
+		return false
+	}
 	fracEnabled := RaftLeaderFortificationFractionEnabled.Get(&r.store.ClusterSettings().SV)
 	fortifyEnabled := raftFortificationEnabledForRangeID(fracEnabled, r.RangeID)
 	return fortifyEnabled
@@ -115,9 +127,21 @@ func raftFortificationEnabledForRangeID(fracEnabled float64, rangeID roachpb.Ran
 	return perc < percEnabled
 }
 
+// TestingRaftFortificationEnabledForRangeID is a testing-only function that
+// exports raftFortificationEnabledForRangeID for	use in tests.
+func TestingRaftFortificationEnabledForRangeID(fracEnabled float64, rangeID roachpb.RangeID) bool {
+	return raftFortificationEnabledForRangeID(fracEnabled, rangeID)
+}
+
 // SupportExpired implements the raftstoreliveness.StoreLiveness interface.
 func (r *replicaRLockedStoreLiveness) SupportExpired(ts hlc.Timestamp) bool {
 	// A support expiration timestamp equal to the current time is considered
 	// expired, to be consistent with support withdrawal in Store Liveness.
 	return ts.LessEq(r.store.Clock().Now())
+}
+
+// TestingSupportFromEnabled is a testing-only function that exports
+// SupportFromEnabled.
+func (r *Replica) TestingSupportFromEnabled() bool {
+	return (*replicaRLockedStoreLiveness)(r).SupportFromEnabled()
 }
