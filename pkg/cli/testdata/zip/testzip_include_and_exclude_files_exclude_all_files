@@ -1,0 +1,7 @@
+zip
+----
+debug/debug_zip_command_flags.txt
+debug/hot-ranges-tenant.sh
+debug/hot-ranges.sh
+debug/pprof-summary.sh
+debug/tenant_ranges.err.txt
