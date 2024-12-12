@@ -32,9 +32,9 @@ type InsertsDataLoader struct {
 // InitialDataLoad implements the InitialDataLoader interface.
 func (l InsertsDataLoader) InitialDataLoad(
 	ctx context.Context, db *gosql.DB, gen workload.Generator,
-) (int64, error) {
+) error {
 	if gen.Meta().Name == `tpch` {
-		return 0, errors.New(
+		return errors.New(
 			`tpch currently doesn't work with the inserts data loader. try --data-loader=import`)
 	}
 
@@ -53,7 +53,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 
 	if hooks.PreCreate != nil {
 		if err := hooks.PreCreate(db); err != nil {
-			return 0, errors.Wrapf(err, "Could not precreate")
+			return errors.Wrapf(err, "Could not precreate")
 		}
 	}
 
@@ -88,23 +88,22 @@ func (l InsertsDataLoader) InitialDataLoad(
 			}
 			return nil
 		}); err != nil {
-			return 0, err
+			return err
 		}
 		currentTable += maxTableBatchSize
 	}
 
 	if hooks.PreLoad != nil {
 		if err := hooks.PreLoad(db); err != nil {
-			return 0, errors.Wrapf(err, "Could not preload")
+			return errors.Wrapf(err, "Could not preload")
 		}
 	}
 
-	var bytesAtomic atomic.Int64
 	for _, table := range tables {
 		if table.InitialRows.NumBatches == 0 {
 			continue
 		} else if table.InitialRows.FillBatch == nil {
-			return 0, errors.Errorf(
+			return errors.Errorf(
 				`initial data is not supported for workload %s`, gen.Meta().Name)
 		}
 		tableStart := timeutil.Now()
@@ -147,8 +146,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 							insertStmtBuf.WriteString(`,`)
 						}
 						insertStmtBuf.WriteString(`(`)
-						for i, datum := range row {
-							bytesAtomic.Add(workload.ApproxDatumSize(datum))
+						for i := range row {
 							if i != 0 {
 								insertStmtBuf.WriteString(`,`)
 							}
@@ -167,12 +165,12 @@ func (l InsertsDataLoader) InitialDataLoad(
 			})
 		}
 		if err := g.Wait(); err != nil {
-			return 0, err
+			return err
 		}
 		tableRows := int(tableRowsAtomic.Load())
 		log.Infof(ctx, `imported %s (%s, %d rows)`,
 			table.Name, timeutil.Since(tableStart).Round(time.Second), tableRows,
 		)
 	}
-	return bytesAtomic.Load(), nil
+	return nil
 }

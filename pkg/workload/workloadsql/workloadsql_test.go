@@ -54,7 +54,7 @@ func TestSetup(t *testing.T) {
 
 			gen := bank.FromRows(test.rows)
 			l := InsertsDataLoader{BatchSize: test.batchSize, Concurrency: test.concurrency}
-			if _, err := Setup(ctx, db, gen, l); err != nil {
+			if err := Setup(ctx, db, gen, l); err != nil {
 				t.Fatalf("%+v", err)
 			}
 

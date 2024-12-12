@@ -358,8 +358,7 @@ func runInitImpl(
 		return errors.Errorf(`unknown data loader: %s`, *dataLoader)
 	}
 
-	_, err := workloadsql.Setup(ctx, initDB, gen, l)
-	return err
+	return workloadsql.Setup(ctx, initDB, gen, l)
 }
 
 func startPProfEndPoint(ctx context.Context) {

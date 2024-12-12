@@ -33,7 +33,7 @@ func TestCatchupScanOrdering(t *testing.T) {
 			const numRows, numRanges, payloadBytes, maxTransfer = 10, 10, 10, 999
 			gen := bank.FromConfig(numRows, numRows, payloadBytes, numRanges)
 			var l workloadsql.InsertsDataLoader
-			if _, err := workloadsql.Setup(ctx, s.DB, gen, l); err != nil {
+			if err := workloadsql.Setup(ctx, s.DB, gen, l); err != nil {
 				t.Fatal(err)
 			}
 

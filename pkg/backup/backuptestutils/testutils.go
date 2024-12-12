@@ -152,7 +152,7 @@ func StartBackupRestoreTestCluster(
 
 		sqlDB.Exec(t, `CREATE DATABASE data`)
 		l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
-		if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
+		if err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
 			t.Fatal(err)
 		}
 

@@ -95,7 +95,7 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 			sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE d`)
 
 			l := workloadccl.ImportDataLoader{}
-			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
+			if err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 				t.Fatalf(`%+v`, err)
 			}
 
@@ -159,7 +159,7 @@ func TestAllRegisteredSetup(t *testing.T) {
 			sqlutils.MakeSQLRunner(db).Exec(t, `SET CLUSTER SETTING kv.range_merge.queue.enabled = false`)
 
 			var l workloadsql.InsertsDataLoader
-			if _, err := workloadsql.Setup(ctx, db, gen, l); err != nil {
+			if err := workloadsql.Setup(ctx, db, gen, l); err != nil {
 				t.Fatalf(`%+v`, err)
 			}
 
