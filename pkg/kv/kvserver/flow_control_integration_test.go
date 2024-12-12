@@ -6030,9 +6030,10 @@ func TestFlowControlSendQueueRangeSplitMerge(t *testing.T) {
 -- We will exhaust the tokens across all streams while admission is blocked on
 -- n3, using a single 4 MiB (deduction, the write itself is small) write. Then,
 -- we will write a 1 MiB put to the range, split it, write a 1 MiB put to the
--- LHS range, merge the ranges, and write a 1 MiB put to the merged range. We
--- expect that at each stage where a send queue develops n1->s3, the send queue
--- will be flushed by the range merge and range split range operations.`)
+-- LHS range, and a 1MiB put to the RHS range, merge the ranges, and write a 1
+-- MiB put to the merged range. We expect that at each stage where a send
+-- queue develops n1->s3, the send queue will be flushed by the range merge
+-- and range split range operations.`)
 	h.comment(`
 -- Start by exhausting the tokens from n1->s3 and blocking admission on s3.
 -- (Issuing 4x1MiB regular, 3x replicated write that's not admitted on s3.)`)
@@ -6094,13 +6095,11 @@ ORDER BY streams DESC;
 	h.waitForAllTokensReturnedForStreamsV2(ctx, 0, /* serverIdx */
 		testingMkFlowStream(0), testingMkFlowStream(1))
 
-	// TODO(kvoli): Uncomment once we resolve the subsume wait for application
-	// issue. See #136649.
-	// h.comment(`(Sending 1 MiB put request to post-split RHS range)`)
-	// h.put(ctx, roachpb.Key(right.StartKey), 1, admissionpb.NormalPri)
-	// h.comment(`(Sent 1 MiB put request to post-split RHS range)`)
-	// h.waitForAllTokensReturnedForStreamsV2(ctx, 0, /* serverIdx */
-	// 	testingMkFlowStream(0), testingMkFlowStream(1))
+	h.comment(`(Sending 1 MiB put request to post-split RHS range)`)
+	h.put(ctx, roachpb.Key(right.StartKey), 1, admissionpb.NormalPri)
+	h.comment(`(Sent 1 MiB put request to post-split RHS range)`)
+	h.waitForAllTokensReturnedForStreamsV2(ctx, 0, /* serverIdx */
+		testingMkFlowStream(0), testingMkFlowStream(1))
 
 	h.comment(`
 -- Send queue and flow token metrics from n1, post-split and 1 MiB put on

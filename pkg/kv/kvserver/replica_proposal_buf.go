@@ -732,6 +732,7 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// applies. The command application side doesn't bother protecting against
 	// such regressions. Besides, the considerations for brand new leases below
 	// also apply.
+	//
 	// - For a brand new lease, one might think that the lease start time can be
 	// considered a closed timestamp(*) since, if this replica gets the lease, it
 	// will not evaluate writes at lower timestamps. Unfortunately, there's a
@@ -740,14 +741,24 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// happen that the range is in the process of merging with its left neighbor.
 	// If this range has already been Subsumed as the RHS of a merge then, after
 	// merge, the joint range will allow writes to the former RHS's key space at
-	// timestamps above the RHS's freeze start (which is below the start time of
-	// this lease). Thus, if this lease were to close its start timestamp while
-	// subsumed, then it'd be possible for follower reads to be served before the
-	// merge finalizes at timestamps that would become un-closed after the merge.
+	// timestamps above the RHS's closed timestamp (say t1) at freeze start
+	// (which is below the start time of this lease, say t2). Thus, if this
+	// lease were to close its start timestamp (t2) while subsumed, then it'd be
+	// possible for follower reads to be served before the merge finalizes at
+	// timestamps that would become un-closed after the merge, i.e., interval
+	// (t1, t2].
+	//
 	// Since this scenario is about subsumed ranges, we could make a distinction
 	// between brand new leases for subsumed ranges versus other brand new leases,
 	// and let the former category close the lease start time. But, for
 	// simplicity, we don't close timestamps on any lease requests.
+	//
+	// The same logic applies to SubsumeRequest (when it performs a write): the
+	// closed timestamp it gathers in SubsumeResponse.ClosedTimestamp is t1, but
+	// if the proposal of the SubsumeRequest advances the closed timestamp to
+	// t2, reads would be allowed over the interval (t1, t2] which would
+	// subsequently become un-closed. So SubsumeRequests also don't advance the
+	// closed timestamp.
 	//
 	// As opposed to lease requests, lease transfers behave like regular
 	// proposals: they get a closed timestamp based on closedTSTarget. Note that
@@ -763,7 +774,7 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// timestamps carried by lease requests, make sure to resurrect the old
 	// TestRejectedLeaseDoesntDictateClosedTimestamp and protect against that
 	// scenario.
-	if p.Request.IsSingleRequestLeaseRequest() {
+	if p.Request.IsSingleRequestLeaseRequest() || p.Request.IsSingleSubsumeRequest() {
 		return lai, hlc.Timestamp{}, nil
 	}
 
