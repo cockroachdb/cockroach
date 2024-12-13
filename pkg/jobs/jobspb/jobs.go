@@ -58,3 +58,6 @@ func (rse ResolvedSpanEntries) Equal(rse2 ResolvedSpanEntries) bool {
 	}
 	return true
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (ResolvedSpan_BoundaryType) SafeValue() {}
