@@ -6,6 +6,7 @@
 package tenantcapabilitiestestutils
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -23,21 +24,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var reqWithParamRE = regexp.MustCompile(`(\w+)(?:{(\w+)})?`)
+
 // ParseBatchRequests is a helper function to parse datadriven input that
 // declares (empty) batch requests of supported types, for a particular tenant.
 // The constructed batch request is returned. The cmds are of the following
 // form:
 //
-// cmds=(split, scan, cput)
+// cmds=(AdminSplit, Scan, ConditionalPut, EndTxn{Prepare})
 func ParseBatchRequests(t *testing.T, d *datadriven.TestData) (ba kvpb.BatchRequest) {
 	for _, cmd := range d.CmdArgs {
 		if cmd.Key == "cmds" {
 			for _, z := range cmd.Vals {
-				method, ok := kvpb.StringToMethodMap[z]
+				reqWithParam := reqWithParamRE.FindStringSubmatch(z)
+				reqStr := reqWithParam[1]
+				paramStr := reqWithParam[2]
+				method, ok := kvpb.StringToMethodMap[reqStr]
 				if !ok {
 					t.Fatalf("unsupported request type: %s", z)
 				}
 				request := kvpb.CreateRequest(method)
+				if paramStr != "" {
+					ok = false
+					switch method {
+					case kvpb.EndTxn:
+						switch paramStr {
+						case "Prepare":
+							request.(*kvpb.EndTxnRequest).Prepare = true
+							ok = true
+						}
+					}
+					if !ok {
+						t.Fatalf("unsupported %s param: %s", method, paramStr)
+					}
+				}
 				ba.Add(request)
 			}
 		}

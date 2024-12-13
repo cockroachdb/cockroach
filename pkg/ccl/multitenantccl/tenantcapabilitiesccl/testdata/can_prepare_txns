@@ -1,0 +1,133 @@
+query-sql-system
+SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_name = 'can_prepare_txns'
+----
+10 cluster-10 ready external can_prepare_txns false
+
+exec-sql-tenant
+CREATE TABLE t(a INT PRIMARY KEY)
+----
+ok
+
+# By default, we should not be able to prepare transactions.
+exec-privileged-op-tenant
+BEGIN
+----
+ok
+
+exec-privileged-op-tenant
+INSERT INTO t VALUES (1)
+----
+ok
+
+exec-privileged-op-tenant
+PREPARE TRANSACTION 'txn1'
+----
+pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(commit) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
+
+
+# Grant the capability.
+update-capabilities
+ALTER TENANT [10] GRANT CAPABILITY can_prepare_txns=true
+----
+ok
+
+exec-privileged-op-tenant
+BEGIN
+----
+ok
+
+exec-privileged-op-tenant
+INSERT INTO t VALUES (1)
+----
+ok
+
+exec-privileged-op-tenant
+PREPARE TRANSACTION 'txn2'
+----
+ok
+
+exec-privileged-op-tenant
+ROLLBACK PREPARED 'txn2'
+----
+ok
+
+
+# Revoke the capability using REVOKE syntax.
+update-capabilities
+ALTER TENANT [10] REVOKE CAPABILITY can_prepare_txns
+----
+ok
+
+# Prepared transactions should no longer work.
+exec-privileged-op-tenant
+BEGIN
+----
+ok
+
+exec-privileged-op-tenant
+INSERT INTO t VALUES (1)
+----
+ok
+
+exec-privileged-op-tenant
+PREPARE TRANSACTION 'txn3'
+----
+pq: ba: QueryIntent [/Tenant/10/Table/104/1/1/0], EndTxn(commit) [/Tenant/10/Table/104/1/1/0], [txn: ‹×›], [can-forward-ts] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
+
+
+# However, transactions that have not acquired locks are able to be prepared,
+# since they don't actually prepare a transaction record in the KV layer. This
+# isn't necessarily intentional, but it is also not harmful or worth changing.
+exec-privileged-op-tenant
+BEGIN
+----
+ok
+
+exec-privileged-op-tenant
+SELECT * FROM t
+----
+ok
+
+exec-privileged-op-tenant
+PREPARE TRANSACTION 'txn4'
+----
+ok
+
+exec-privileged-op-tenant
+COMMIT PREPARED 'txn4'
+----
+ok
+
+
+# Grant the capability one more time.
+update-capabilities
+ALTER TENANT [10] GRANT CAPABILITY can_prepare_txns
+----
+ok
+
+exec-privileged-op-tenant
+BEGIN
+----
+ok
+
+exec-privileged-op-tenant
+INSERT INTO t VALUES (1)
+----
+ok
+
+exec-privileged-op-tenant
+PREPARE TRANSACTION 'txn5'
+----
+ok
+
+# Revoke the capability one more time, which will **not** prevent us from
+# committing (or rolling back) the already prepared transaction.
+update-capabilities
+ALTER TENANT [10] REVOKE CAPABILITY can_prepare_txns
+----
+ok
+
+exec-privileged-op-tenant
+COMMIT PREPARED 'txn5'
+----
+ok

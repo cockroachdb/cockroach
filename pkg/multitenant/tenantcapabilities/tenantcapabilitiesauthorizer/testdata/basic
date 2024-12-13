@@ -1,8 +1,8 @@
-upsert ten=10 can_admin_relocate_range=true can_admin_scatter=true can_admin_split=true can_admin_unsplit=true can_view_node_info=true can_view_tsdb_metrics=true
+upsert ten=10 can_admin_relocate_range=true can_admin_scatter=true can_admin_split=true can_admin_unsplit=true can_view_node_info=true can_view_tsdb_metrics=true can_prepare_txns=true
 ----
 ok
 
-upsert ten=11 can_admin_relocate_range=false can_admin_scatter=false can_admin_split=false can_admin_unsplit=false can_view_node_info=false can_view_tsdb_metrics=false
+upsert ten=11 can_admin_relocate_range=false can_admin_scatter=false can_admin_split=false can_admin_unsplit=false can_view_node_info=false can_view_tsdb_metrics=false can_prepare_txns=false
 ----
 ok
 
@@ -67,7 +67,7 @@ ok
 
 # Lastly, flip tenant 10's capability for splits; ensure it can no longer issue
 # splits as a result.
-upsert ten=10 can_admin_relocate_range=false can_admin_scatter=true can_admin_split=false can_admin_unsplit=false can_view_node_info=true can_view_tsdb_metrics=true
+upsert ten=10 can_admin_relocate_range=false can_admin_scatter=true can_admin_split=false can_admin_unsplit=false can_view_node_info=true can_view_tsdb_metrics=true can_prepare_txns=true
 ----
 ok
 
@@ -108,6 +108,35 @@ client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRe
 has-capability-for-batch ten=10 cmds=(Scan, ConditionalPut)
 ----
 ok
+
+# Tenant 10 should be able to prepare transactions, but tenant 11 should not.
+has-capability-for-batch ten=10 cmds=(EndTxn)
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(EndTxn{Prepare})
+----
+ok
+
+has-capability-for-batch ten=11 cmds=(EndTxn)
+----
+ok
+
+has-capability-for-batch ten=11 cmds=(EndTxn{Prepare})
+----
+client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
+
+upsert ten=10 can_admin_relocate_range=false can_admin_scatter=true can_admin_split=false can_admin_unsplit=false can_view_node_info=true can_view_tsdb_metrics=true can_prepare_txns=false
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(EndTxn)
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(EndTxn{Prepare})
+----
+client tenant does not have capability "can_prepare_txns" (*kvpb.EndTxnRequest)
 
 has-node-status-capability ten=10
 ----

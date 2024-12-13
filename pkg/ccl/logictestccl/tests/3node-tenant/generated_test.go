@@ -2206,13 +2206,6 @@ func TestTenantLogic_tuple(
 	runLogicTest(t, "tuple")
 }
 
-func TestTenantLogic_two_phase_commit(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "two_phase_commit")
-}
-
 func TestTenantLogic_txn(
 	t *testing.T,
 ) {
