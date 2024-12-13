@@ -29,7 +29,7 @@ const batchSize = 100
 
 func (i intents) setup() variations {
 	// Most of the slowdown happens during intent resolution.
-	return setup(i, 20.0)
+	return setup(i, 40.0)
 }
 
 func (i intents) setupMetamorphic(rng *rand.Rand) variations {
