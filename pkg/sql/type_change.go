@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -1010,6 +1011,18 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromTable(
 		// Check if the above query returned a result. If it did, then the
 		// enum value is being used by some place.
 		if len(rows) > 0 {
+			// If a reference exists in region_liveness, check see if our region is
+			// unavailable; if so, we will drop this later on -- skip the error.
+			if desc.GetName() == "region_liveness" {
+				downRegions, err := regionliveness.QueryUnavailablePhysicalRegions(ctx, t.execCfg.Codec,
+					txn.KV(), true /* filterAvailable */)
+				if err != nil {
+					return err
+				}
+				if downRegions.ContainsPhysicalRepresentation(string(member.PhysicalRepresentation)) {
+					return nil
+				}
+			}
 			return pgerror.Newf(pgcode.DependentObjectsStillExist,
 				"could not remove enum value %q as it is being used by %q in row: %s",
 				member.LogicalRepresentation, desc.GetName(), labeledRowValues(desc.AccessibleColumns(), rows))
