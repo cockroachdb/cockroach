@@ -496,7 +496,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 // ConfigureClusterFlags implements vm.ProviderOpts.
 func (o *ProviderOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
-	flags.StringVar(&providerInstance.Profile, ProviderName+"-profile", providerInstance.Profile,
+	flags.StringVar(&providerInstance.Profile, ProviderName+"-profile", os.Getenv("AWS_PROFILE"),
 		"Profile to manage cluster in")
 	configFlagVal := awsConfigValue{awsConfig: *DefaultConfig}
 	providerInstance.Config = &configFlagVal.awsConfig
