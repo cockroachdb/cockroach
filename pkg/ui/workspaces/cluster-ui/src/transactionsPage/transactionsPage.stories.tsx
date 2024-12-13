@@ -189,11 +189,7 @@ storiesOf("Transactions Page", module)
       inFlight: true,
       data: undefined,
       lastUpdated,
-      error: new RequestError(
-        "Forbidden",
-        403,
-        "this operation requires admin privilege",
-      ),
+      error: new RequestError(403, "this operation requires admin privilege"),
     };
 
     return (
