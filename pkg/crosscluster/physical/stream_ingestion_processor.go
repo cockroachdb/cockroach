@@ -112,10 +112,6 @@ var compress = settings.RegisterBoolSetting(
 	true,
 )
 
-var streamIngestionResultTypes = []*types.T{
-	types.Bytes, // jobspb.ResolvedSpans
-}
-
 type mvccKeyValues []storage.MVCCKeyValue
 type mvccRangeKeyValues []storage.MVCCRangeKeyValue
 
@@ -306,12 +302,23 @@ func newStreamIngestionDataProcessor(
 	spec execinfrapb.StreamIngestionDataSpec,
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.Processor, error) {
-	rekeyer, err := backup.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
-		nil /* tableRekeys */, []execinfrapb.TenantRekey{spec.TenantRekey},
-		true /* restoreTenantFromStream */)
+	var (
+		rekeyer *backup.KeyRewriter
+		err     error
+	)
+	if len(spec.LDRInitScanRekey) > 0 {
+		rekeyer, err = backup.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
+			spec.LDRInitScanRekey, nil, /* tenantRekeys */
+			false /* restoreTenantFromStream */)
+	} else {
+		rekeyer, err = backup.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
+			nil /* tableRekeys */, []execinfrapb.TenantRekey{spec.TenantRekey},
+			true /* restoreTenantFromStream */)
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	trackedSpans := make([]roachpb.Span, 0)
 	for _, partitionSpec := range spec.PartitionSpecs {
 		trackedSpans = append(trackedSpans, partitionSpec.Spans...)
@@ -341,10 +348,10 @@ func newStreamIngestionDataProcessor(
 		checkpointCh:     make(chan *jobspb.ResolvedSpans),
 		errCh:            make(chan error, 1),
 		rekeyer:          rekeyer,
-		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
+		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID || len(spec.LDRInitScanRekey) > 0,
 		logBufferEvery:   log.Every(30 * time.Second),
 	}
-	if err := sip.Init(ctx, sip, post, streamIngestionResultTypes, flowCtx, processorID, nil, /* memMonitor */
+	if err := sip.Init(ctx, sip, post, replicationutils.CrossClusterIngestionResultType, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
@@ -404,11 +411,25 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	rc := sip.FlowCtx.Cfg.RangeCache
 
 	var err error
-	sip.batcher, err = bulk.MakeStreamSSTBatcher(
-		ctx, db.KV(), rc, st, sip.FlowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
-		sip.FlowCtx.Cfg.BulkSenderLimiter, sip.onFlushUpdateMetricUpdate)
+	if sip.LDRInitialScan() {
+		// TODO(msbutler): consider if we want to pre-split and scatter and disable on the fly split and scatter.
+		sip.batcher, err = bulk.MakeSSTBatcher(
+			ctx,
+			"ldr init scan",
+			db.KV(),
+			st,
+			hlc.Timestamp{}, /* disallowShadowingBelow */
+			true,            /* writeAtBatchTs */
+			true,            /* splitAndScatterRanges */
+			sip.FlowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
+			sip.FlowCtx.Cfg.BulkSenderLimiter)
+	} else {
+		sip.batcher, err = bulk.MakeStreamSSTBatcher(
+			ctx, db.KV(), rc, st, sip.FlowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
+			sip.FlowCtx.Cfg.BulkSenderLimiter, sip.onFlushUpdateMetricUpdate)
+	}
 	if err != nil {
-		sip.MoveToDrainingAndLogError(errors.Wrap(err, "creating stream sst batcher"))
+		sip.MoveToDrainingAndLogError(errors.Wrap(err, "creating sst batcher"))
 		return
 	}
 
@@ -480,6 +501,9 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		return nil
 	})
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
+		if sip.LDRInitialScan() {
+			return nil
+		}
 		if err := sip.checkForCutoverSignal(ctx); err != nil {
 			sip.sendError(errors.Wrap(err, "cutover signal check"))
 		}
@@ -537,6 +561,10 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		sip.MoveToDrainingAndLogError(nil /* error */)
 		return nil, sip.DrainHelper()
 	}
+}
+
+func (sip *streamIngestionProcessor) LDRInitialScan() bool {
+	return len(sip.spec.LDRInitScanRekey) > 0
 }
 
 func (sip *streamIngestionProcessor) MoveToDrainingAndLogError(err error) {
@@ -775,6 +803,9 @@ func (sip *streamIngestionProcessor) handleEvent(event PartitionEvent) error {
 }
 
 func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, bool, error) {
+	if sip.LDRInitialScan() {
+		return sip.rekeyer.RewriteKey(key, 0)
+	}
 	return sip.rekeyer.RewriteTenant(key)
 }
 
@@ -1285,8 +1316,14 @@ func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.Res
 	// Ensure that the current batch is sorted.
 	sort.Sort(b.buffer.curKVBatch)
 	for _, keyVal := range b.buffer.curKVBatch {
-		if err := sip.batcher.AddMVCCKey(ctx, keyVal.Key, keyVal.Value); err != nil {
-			return nil, errors.Wrapf(err, "adding key %+v", keyVal)
+		if !sip.LDRInitialScan() {
+			if err := sip.batcher.AddMVCCKey(ctx, keyVal.Key, keyVal.Value); err != nil {
+				return nil, errors.Wrapf(err, "adding key %+v", keyVal)
+			}
+		} else {
+			if err := sip.batcher.AddMVCCKeyLDR(ctx, keyVal.Key, keyVal.Value); err != nil {
+				return nil, errors.Wrapf(err, "adding ldr key %+v", keyVal)
+			}
 		}
 	}
 
@@ -1299,6 +1336,9 @@ func (sip *streamIngestionProcessor) flushBuffer(b flushableBuffer) (*jobspb.Res
 
 	// Now process the range KVs.
 	if len(b.buffer.curRangeKVBatch) > 0 {
+		if sip.LDRInitialScan() {
+			return nil, errors.AssertionFailedf("unexpected range keys in LDR init scan")
+		}
 		if err := sip.rangeBatcher.flush(ctx, b.buffer.curRangeKVBatch); err != nil {
 			log.Warningf(ctx, "flush error: %v", err)
 			return nil, errors.Wrap(err, "flushing range key sst")

@@ -320,7 +320,13 @@ func TestSourceDestMatching(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sipSpecs, _, err := constructStreamIngestionPlanSpecs(
+			tenantID := roachpb.TenantID{InternalValue: 2}
+			rekeyer := execinfrapb.TenantRekey{
+				OldID: tenantID,
+				NewID: tenantID,
+			}
+
+			sipSpecs, _, err := ConstructStreamIngestionPlanSpecs(
 				ctx,
 				fakeTopology(tc.srcNodes, keys.MakeTenantSpan(roachpb.TenantID{InternalValue: 2})),
 				tc.dstNodes,
@@ -329,8 +335,9 @@ func TestSourceDestMatching(t *testing.T) {
 				jobspb.StreamIngestionCheckpoint{},
 				jobspb.InvalidJobID,
 				streampb.StreamID(2),
-				roachpb.TenantID{InternalValue: 2},
-				roachpb.TenantID{InternalValue: 2},
+				rekeyer,
+				nil, /* ldrInitScanRekey */
+				roachpb.Spans{keys.MakeTenantSpan(tenantID)},
 			)
 			require.NoError(t, err)
 			if len(tc.expectedPairs) > 0 {
