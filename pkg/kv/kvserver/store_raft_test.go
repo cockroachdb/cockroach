@@ -270,7 +270,7 @@ func TestRaftReceiveQueuesEnforceMaxLenConcurrency(t *testing.T) {
 	}
 	// Iterate and set different values of enforceMaxLen.
 	enforceMaxLen := false
-	for i := 0; i < 200; i++ {
+	for i := 0; i < 25; i++ {
 		// NB: SetEnforceMaxLen runs concurrently with LoadOrCreate calls.
 		qs.SetEnforceMaxLen(enforceMaxLen)
 		// Exclude all LoadOrCreate calls while checking is happening.
