@@ -122,6 +122,7 @@ func registerFollowerReads(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:            "follower-reads/mixed-version/single-region",
 		Owner:           registry.OwnerKV,
+		Skip:            "23.1 -> 23.2 upgrades are flaky (#133092)",
 		RequiresLicense: true,
 		Cluster: r.MakeClusterSpec(
 			4, /* nodeCount */
@@ -136,6 +137,7 @@ func registerFollowerReads(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:            "follower-reads/mixed-version/survival=region/locality=global/reads=strong",
 		Owner:           registry.OwnerKV,
+		Skip:            "23.1 -> 23.2 upgrades are flaky (#133092)",
 		RequiresLicense: true,
 		Cluster: r.MakeClusterSpec(
 			6, /* nodeCount */
@@ -959,7 +961,6 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
 		// Test currently fails in shared-process deployments, see: #129167.
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
-		mixedversion.MinimumSupportedVersion("v23.2.0"),
 	)
 }
 
@@ -982,12 +983,6 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// Use a longer upgrade timeout to give the migrations enough time to finish
 		// considering the cross-region latency.
 		mixedversion.UpgradeTimeout(60*time.Minute),
-
-		// This test is flaky when upgrading from v23.1 to v23.2 for follower
-		// reads in shared-process deployments. There were a number of changes
-		// to tenant health checks since then which appear to have addressed
-		// this issue.
-		mixedversion.MinimumSupportedVersion("v23.2.0"),
 	)
 }
 
