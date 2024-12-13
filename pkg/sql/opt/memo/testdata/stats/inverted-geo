@@ -91,7 +91,7 @@ project
 memo
 SELECT i FROM t WHERE st_intersects('LINESTRING(0.5 0.5, 0.7 0.7)', g) ORDER BY i LIMIT 1
 ----
-memo (optimized, ~14KB, required=[presentation: i:1])
+memo (optimized, ~15KB, required=[presentation: i:1])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
@@ -195,7 +195,7 @@ project
 memo
 SELECT i FROM t WHERE st_intersects('LINESTRING(100 100, 150 150)', g) ORDER BY i LIMIT 1
 ----
-memo (optimized, ~14KB, required=[presentation: i:1])
+memo (optimized, ~15KB, required=[presentation: i:1])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
@@ -303,7 +303,7 @@ select
 memo
 SELECT * FROM t WHERE g IS NULL OR st_intersects('LINESTRING(100 100, 150 150)', g)
 ----
-memo (optimized, ~5KB, required=[presentation: i:1,g:2])
+memo (optimized, ~6KB, required=[presentation: i:1,g:2])
  ├── G1: (select G2 G3)
  │    └── [presentation: i:1,g:2]
  │         ├── best: (select G2 G3)
