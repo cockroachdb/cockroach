@@ -52,6 +52,8 @@ func TestExternalSort(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	// Test the case in which the default memory is used as well as the case in
 	// which the joiner spills to disk.
@@ -77,6 +79,7 @@ func TestExternalSort(t *testing.T) {
 					tc.expected,
 					colexectestutils.OrderedVerifier,
 					func(input []colexecop.Operator) (colexecop.Operator, error) {
+						numOldClosers := closerRegistry.NumClosers()
 						// A sorter should never exceed ExternalSorterMinPartitions, even
 						// during repartitioning. A panic will happen if a sorter requests
 						// more than this number of file descriptors.
@@ -89,14 +92,14 @@ func TestExternalSort(t *testing.T) {
 						if tc.k == 0 || tc.k >= uint64(len(tc.tuples)) {
 							semsToCheck = append(semsToCheck, sem)
 						}
-						sorter, closers, err := createDiskBackedSorter(
+						sorter, err := createDiskBackedSorter(
 							ctx, flowCtx, input, tc.typs, tc.ordCols, tc.matchLen, tc.k, func() {},
 							numForcedRepartitions, false /* delegateFDAcquisition */, queueCfg, sem,
-							&monitorRegistry,
+							&monitorRegistry, &closerRegistry,
 						)
 						// Check that the sort as well as the disk spiller were
 						// added as Closers.
-						require.Equal(t, 2, len(closers))
+						require.Equal(t, 2, closerRegistry.NumClosers()-numOldClosers)
 						return sorter, err
 					})
 				for i, sem := range semsToCheck {
@@ -136,6 +139,8 @@ func TestExternalSortRandomized(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	// Interesting disk spilling scenarios:
 	// 1) The sorter is forced to spill to disk as soon as possible.
@@ -188,16 +193,12 @@ func TestExternalSortRandomized(t *testing.T) {
 						func(input []colexecop.Operator) (colexecop.Operator, error) {
 							sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 							semsToCheck = append(semsToCheck, sem)
-							sorter, closers, err := createDiskBackedSorter(
+							return createDiskBackedSorter(
 								ctx, flowCtx, input, typs[:nCols], ordCols,
 								0 /* matchLen */, uint64(k), func() {},
 								numForcedRepartitions, delegateFDAcquisition, queueCfg, sem,
-								&monitorRegistry,
+								&monitorRegistry, &closerRegistry,
 							)
-							// TODO(asubiotto): Explicitly Close when testing.T is passed into
-							//  this constructor and we do a substring match.
-							require.Equal(t, 2, len(closers))
-							return sorter, err
 						})
 					for i, sem := range semsToCheck {
 						require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
@@ -229,6 +230,8 @@ func BenchmarkExternalSort(b *testing.B) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
@@ -269,11 +272,11 @@ func BenchmarkExternalSort(b *testing.B) {
 								// in-memory top K sort benchmark.
 								k = 128
 							}
-							sorter, _, err := createDiskBackedSorter(
+							sorter, err := createDiskBackedSorter(
 								ctx, flowCtx, []colexecop.Operator{source}, typs, ordCols,
 								0 /* matchLen */, k, func() { spilled = true },
 								0 /* numForcedRepartitions */, false /* delegateFDAcquisitions */, queueCfg, &colexecop.TestingSemaphore{},
-								&monitorRegistry,
+								&monitorRegistry, &closerRegistry,
 							)
 							require.NoError(b, err)
 							sorter.Init(ctx)
@@ -307,7 +310,8 @@ func createDiskBackedSorter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, []colexecop.Closer, error) {
+	closerRegistry *colexecargs.CloserRegistry,
+) (colexecop.Operator, error) {
 	sorterSpec := &execinfrapb.SorterSpec{
 		OutputOrdering:   execinfrapb.Ordering{Columns: ordCols},
 		OrderingMatchLen: uint32(matchLen),
@@ -326,10 +330,11 @@ func createDiskBackedSorter(
 		DiskQueueCfg:    diskQueueCfg,
 		FDSemaphore:     testingSemaphore,
 		MonitorRegistry: monitorRegistry,
+		CloserRegistry:  closerRegistry,
 	}
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Root, result.ToClose, err
+	return result.Root, err
 }

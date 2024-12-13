@@ -54,6 +54,8 @@ func TestHashGroupJoiner(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	tcs := []groupJoinTestCase{
 		{
@@ -153,8 +155,10 @@ func TestHashGroupJoiner(t *testing.T) {
 			colexectestutils.RunTests(
 				t, testAllocator, []colexectestutils.Tuples{tc.jtc.leftTuples, tc.jtc.rightTuples}, tc.atc.expected, colexectestutils.UnorderedVerifier,
 				func(inputs []colexecop.Operator) (colexecop.Operator, error) {
-					hgjOp, closers, err := createDiskBackedHashGroupJoiner(
-						ctx, flowCtx, tc, inputs, func() { spilled = true }, queueCfg, &monitorRegistry,
+					numOldClosers := closerRegistry.NumClosers()
+					hgjOp, err := createDiskBackedHashGroupJoiner(
+						ctx, flowCtx, tc, inputs, func() { spilled = true },
+						queueCfg, &monitorRegistry, &closerRegistry,
 					)
 					// Expect ten closers:
 					// - 1: for the in-memory hash group joiner
@@ -164,7 +168,7 @@ func TestHashGroupJoiner(t *testing.T) {
 					// - 1: for the external hash joiner
 					// - 1: for the external hash aggregator
 					// - 1: for the disk spiller around the hash group joiner.
-					require.Equal(t, 10, len(closers))
+					require.Equal(t, 10, closerRegistry.NumClosers()-numOldClosers)
 					return hgjOp, err
 
 				},
@@ -182,7 +186,8 @@ func createDiskBackedHashGroupJoiner(
 	spillingCallbackFn func(),
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, []colexecop.Closer, error) {
+	closerRegistry *colexecargs.CloserRegistry,
+) (colexecop.Operator, error) {
 	tc.jtc.init()
 	hjSpec := createSpecForHashJoiner(&tc.jtc)
 	tc.atc.unorderedInput = true
@@ -204,8 +209,9 @@ func createDiskBackedHashGroupJoiner(
 		DiskQueueCfg:    diskQueueCfg,
 		FDSemaphore:     &colexecop.TestingSemaphore{},
 		MonitorRegistry: monitorRegistry,
+		CloserRegistry:  closerRegistry,
 	}
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Root, result.ToClose, err
+	return result.Root, err
 }

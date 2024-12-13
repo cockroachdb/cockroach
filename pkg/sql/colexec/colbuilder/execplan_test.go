@@ -105,16 +105,18 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	}
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 	args := &colexecargs.NewColOperatorArgs{
 		Spec: &execinfrapb.ProcessorSpec{
 			Core:        execinfrapb.ProcessorCoreUnion{TableReader: &tr},
 			ResultTypes: []*types.T{types.Int4},
 		},
 		MonitorRegistry: &monitorRegistry,
+		CloserRegistry:  &closerRegistry,
 	}
 	r1, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
-	defer r1.TestCleanupNoError(t)
 
 	args = &colexecargs.NewColOperatorArgs{
 		Spec: &execinfrapb.ProcessorSpec{
@@ -125,10 +127,10 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		},
 		Inputs:          []colexecargs.OpWithMetaInfo{{Root: r1.Root}},
 		MonitorRegistry: &monitorRegistry,
+		CloserRegistry:  &closerRegistry,
 	}
 	r, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
-	defer r.TestCleanupNoError(t)
 
 	m := colexec.NewMaterializer(
 		nil, /* streamingMemAcc */

@@ -451,13 +451,13 @@ func (r opResult) createDiskBackedSort(
 				accounts[3],
 				flowCtx.TestingKnobs().VecFDsToAcquire,
 			)
-			r.ToClose = append(r.ToClose, es.(colexecop.Closer))
+			args.CloserRegistry.AddCloser(es.(colexecop.Closer))
 			return es
 		},
 		diskBackedReuseMode,
 		args.TestingKnobs.SpillingCallbackFn,
 	)
-	r.ToClose = append(r.ToClose, diskSpiller)
+	args.CloserRegistry.AddCloser(diskSpiller)
 	return diskSpiller
 }
 
@@ -589,7 +589,7 @@ func (r opResult) createAndWrapRowSource(
 	}
 	takeOverMetaInfo(&r.OpWithMetaInfo, inputs)
 	r.MetadataSources = append(r.MetadataSources, r.Root.(colexecop.MetadataSource))
-	r.ToClose = append(r.ToClose, r.Root.(colexecop.Closer))
+	args.CloserRegistry.AddCloser(r.Root.(colexecop.Closer))
 	r.Releasables = append(r.Releasables, c)
 	return nil
 }
@@ -750,6 +750,9 @@ func NewColOperator(
 	}
 	if args.MonitorRegistry == nil {
 		args.MonitorRegistry = &colexecargs.MonitorRegistry{}
+	}
+	if args.CloserRegistry == nil {
+		args.CloserRegistry = &colexecargs.CloserRegistry{}
 	}
 
 	core := &spec.Core
@@ -913,7 +916,7 @@ func NewColOperator(
 					return r, err
 				}
 			}
-			result.finishScanPlanning(scanOp, resultTypes)
+			result.finishScanPlanning(scanOp, resultTypes, args.CloserRegistry)
 
 		case core.JoinReader != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -945,7 +948,7 @@ func NewColOperator(
 			if err != nil {
 				return r, err
 			}
-			result.finishScanPlanning(indexJoinOp, indexJoinOp.ResultTypes)
+			result.finishScanPlanning(indexJoinOp, indexJoinOp.ResultTypes, args.CloserRegistry)
 
 		case core.Filterer != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -1024,7 +1027,7 @@ func NewColOperator(
 					result.Root = colexec.NewHashAggregator(
 						ctx, newHashAggArgs, nil, /* newSpillingQueueArgs */
 					)
-					result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
+					args.CloserRegistry.AddCloser(result.Root.(colexecop.Closer))
 				} else {
 					newHashAggArgs, sqArgs, hashAggregatorMemMonitorName := makeNewHashAggregatorArgs(
 						ctx, flowCtx, args, opName, newAggArgs, factory,
@@ -1071,20 +1074,20 @@ func NewColOperator(
 								ehaAccounts[3],
 								spec.Core.Aggregator.OutputOrdering,
 							)
-							result.ToClose = append(result.ToClose, toClose)
+							args.CloserRegistry.AddCloser(toClose)
 							return eha
 						},
 						colexecop.BufferingOpNoReuse,
 						args.TestingKnobs.SpillingCallbackFn,
 					)
 					result.Root = diskSpiller
-					result.ToClose = append(result.ToClose, diskSpiller)
+					args.CloserRegistry.AddCloser(diskSpiller)
 				}
 			} else {
 				evalCtx.SingleDatumAggMemAccount = getStreamingMemAccount(args, flowCtx)
 				newAggArgs.Allocator = getStreamingAllocator(ctx, args, flowCtx)
 				result.Root = colexec.NewOrderedAggregator(ctx, newAggArgs)
-				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
+				args.CloserRegistry.AddCloser(result.Root.(colexecop.Closer))
 			}
 
 		case core.Distinct != nil:
@@ -1138,14 +1141,14 @@ func NewColOperator(
 							diskAccount,
 							accounts[1],
 						)
-						result.ToClose = append(result.ToClose, toClose)
+						args.CloserRegistry.AddCloser(toClose)
 						return ed
 					},
 					colexecop.BufferingOpNoReuse,
 					args.TestingKnobs.SpillingCallbackFn,
 				)
 				result.Root = diskSpiller
-				result.ToClose = append(result.ToClose, diskSpiller)
+				args.CloserRegistry.AddCloser(diskSpiller)
 			}
 
 		case core.Ordinality != nil:
@@ -1182,7 +1185,7 @@ func NewColOperator(
 					crossJoinerDiskAcc,
 					accounts[1],
 				)
-				result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
+				args.CloserRegistry.AddCloser(result.Root.(colexecop.Closer))
 			} else {
 				opName := redact.SafeString("hash-joiner")
 				hjArgs, hashJoinerMemMonitorName := makeNewHashJoinerArgs(
@@ -1221,13 +1224,13 @@ func NewColOperator(
 								diskAccount,
 								accounts[1],
 							)
-							result.ToClose = append(result.ToClose, ehj)
+							args.CloserRegistry.AddCloser(ehj)
 							return ehj
 						},
 						args.TestingKnobs.SpillingCallbackFn,
 					)
 					result.Root = diskSpiller
-					result.ToClose = append(result.ToClose, diskSpiller)
+					args.CloserRegistry.AddCloser(diskSpiller)
 				}
 			}
 
@@ -1275,7 +1278,7 @@ func NewColOperator(
 			)
 
 			result.Root = mj
-			result.ToClose = append(result.ToClose, mj.(colexecop.Closer))
+			args.CloserRegistry.AddCloser(mj.(colexecop.Closer))
 			result.ColumnTypes = core.MergeJoiner.Type.MakeOutputTypes(spec.Input[0].ColumnTypes, spec.Input[1].ColumnTypes)
 
 			if onExpr != nil {
@@ -1353,7 +1356,7 @@ func NewColOperator(
 				newHashAggArgs,
 				sqArgs,
 			)
-			result.ToClose = append(result.ToClose, hgj.(colexecop.Closer))
+			args.CloserRegistry.AddCloser(hgj.(colexecop.Closer))
 
 			ehgjOpName := redact.SafeString("external-hash-group-joiner")
 			ehgjAccounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
@@ -1385,7 +1388,7 @@ func NewColOperator(
 						args.MonitorRegistry.CreateDiskAccount(ctx, flowCtx, ehgjOpName+"-join", spec.ProcessorID),
 						ehgjAccounts[2],
 					)
-					result.ToClose = append(result.ToClose, ehj)
+					args.CloserRegistry.AddCloser(ehj)
 
 					aggInput := ehj.(colexecop.Operator)
 					if len(hgjSpec.JoinOutputColumns) > 0 {
@@ -1415,13 +1418,13 @@ func NewColOperator(
 						// group-join needs to maintain the ordering.
 						execinfrapb.Ordering{}, /* outputOrdering */
 					)
-					result.ToClose = append(result.ToClose, toClose)
+					args.CloserRegistry.AddCloser(toClose)
 					return eha
 				},
 				args.TestingKnobs.SpillingCallbackFn,
 			)
 			result.Root = diskSpiller
-			result.ToClose = append(result.ToClose, diskSpiller)
+			args.CloserRegistry.AddCloser(diskSpiller)
 
 		case core.Sorter != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
@@ -1666,14 +1669,14 @@ func NewColOperator(
 							windowArgs, aggType, wf.Frame, &wf.Ordering, argIdxs,
 							aggArgs.OutputTypes[0], aggFnsAlloc,
 						)
-						result.ToClose = append(result.ToClose, toClose...)
+						args.CloserRegistry.AddClosers(toClose)
 						returnType = aggArgs.OutputTypes[0]
 					}
 				} else {
 					colexecerror.InternalError(errors.AssertionFailedf("window function spec is nil"))
 				}
 				if c, ok := result.Root.(colexecop.Closer); ok {
-					result.ToClose = append(result.ToClose, c)
+					args.CloserRegistry.AddCloser(c)
 				}
 
 				result.ColumnTypes = append(result.ColumnTypes, returnType)
@@ -2024,7 +2027,9 @@ func (r opResult) finishBufferedWindowerArgs(
 	args.MainAllocator = colmem.NewAllocator(ctx, mainAcc, factory)
 }
 
-func (r opResult) finishScanPlanning(op colfetcher.ScanOperator, resultTypes []*types.T) {
+func (r opResult) finishScanPlanning(
+	op colfetcher.ScanOperator, resultTypes []*types.T, closerRegistry *colexecargs.CloserRegistry,
+) {
 	r.Root = op
 	if buildutil.CrdbTestBuild {
 		r.Root = colexec.NewInvariantsChecker(r.Root)
@@ -2041,7 +2046,7 @@ func (r opResult) finishScanPlanning(op colfetcher.ScanOperator, resultTypes []*
 	// cancellation check on their own while performing long operations.
 	r.Root = colexecutils.NewCancelChecker(r.Root)
 	r.ColumnTypes = resultTypes
-	r.ToClose = append(r.ToClose, op)
+	closerRegistry.AddCloser(op)
 }
 
 // planFilterExpr creates all operators to implement filter expression.

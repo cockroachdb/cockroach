@@ -49,6 +49,8 @@ func TestExternalHashAggregator(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	rng, _ := randutil.NewTestRand()
 	numForcedRepartitions := rng.Intn(5)
@@ -122,6 +124,7 @@ func TestExternalHashAggregator(t *testing.T) {
 			}
 			var semsToCheck []semaphore.Semaphore
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
+				numOldClosers := closerRegistry.NumClosers()
 				// ehaNumRequiredFDs is the minimum number of file descriptors
 				// that are needed for the machinery of the external aggregator
 				// (plus 1 is needed for the in-memory hash aggregator in order
@@ -129,7 +132,7 @@ func TestExternalHashAggregator(t *testing.T) {
 				ehaNumRequiredFDs := 1 + colexecop.ExternalSorterMinPartitions
 				sem := colexecop.NewTestingSemaphore(ehaNumRequiredFDs)
 				semsToCheck = append(semsToCheck, sem)
-				op, closers, err := createExternalHashAggregator(
+				op, err := createExternalHashAggregator(
 					ctx, flowCtx, &colexecagg.NewAggregatorArgs{
 						Allocator:      testAllocator,
 						Input:          input[0],
@@ -140,9 +143,9 @@ func TestExternalHashAggregator(t *testing.T) {
 						ConstArguments: constArguments,
 						OutputTypes:    outputTypes,
 					},
-					queueCfg, sem, numForcedRepartitions, &monitorRegistry,
+					queueCfg, sem, numForcedRepartitions, &monitorRegistry, &closerRegistry,
 				)
-				require.Equal(t, numExpectedClosers, len(closers))
+				require.Equal(t, numExpectedClosers, closerRegistry.NumClosers()-numOldClosers)
 				if !cfg.diskSpillingEnabled {
 					// Sanity check that indeed only the in-memory hash
 					// aggregator was created.
@@ -151,6 +154,10 @@ func TestExternalHashAggregator(t *testing.T) {
 				}
 				return op, err
 			})
+			// Close all closers manually (in production this is done on the
+			// flow cleanup).
+			closerRegistry.Close(ctx)
+			closerRegistry.Reset()
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
@@ -178,6 +185,8 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	numRows := []int{coldata.BatchSize(), 64 * coldata.BatchSize(), 4096 * coldata.BatchSize()}
 	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
@@ -196,9 +205,9 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 				benchmarkAggregateFunction(
 					b, aggType{
 						new: func(ctx context.Context, args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-							op, _, err := createExternalHashAggregator(
+							op, err := createExternalHashAggregator(
 								ctx, flowCtx, args, queueCfg, &colexecop.TestingSemaphore{},
-								0 /* numForcedRepartitions */, &monitorRegistry,
+								0 /* numForcedRepartitions */, &monitorRegistry, &closerRegistry,
 							)
 							require.NoError(b, err)
 							// The hash-based partitioner is not a
@@ -230,7 +239,8 @@ func createExternalHashAggregator(
 	testingSemaphore semaphore.Semaphore,
 	numForcedRepartitions int,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, []colexecop.Closer, error) {
+	closerRegistry *colexecargs.CloserRegistry,
+) (colexecop.Operator, error) {
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: newAggArgs.InputTypes}},
 		Core: execinfrapb.ProcessorCoreUnion{
@@ -245,8 +255,9 @@ func createExternalHashAggregator(
 		DiskQueueCfg:    diskQueueCfg,
 		FDSemaphore:     testingSemaphore,
 		MonitorRegistry: monitorRegistry,
+		CloserRegistry:  closerRegistry,
 	}
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Root, result.ToClose, err
+	return result.Root, err
 }
