@@ -142,6 +142,19 @@ func (q *raBitQuantizer) QuantizeInSet(
 	q.quantizeHelper(ctx, quantizedSet.(*RaBitQuantizedVectorSet), vectors)
 }
 
+// NewQuantizedVectorSet implements the Quantizer interface
+func (q *raBitQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
+	dataBuffer := make([]uint64, 0, capacity*RaBitQCodeSetWidth(q.GetRandomDims()))
+	raBitQuantizedVectorSet := &RaBitQuantizedVectorSet{
+		Centroid:          centroid,
+		Codes:             MakeRaBitQCodeSetFromRawData(dataBuffer, q.GetRandomDims()),
+		CodeCounts:        make([]uint32, 0, capacity),
+		CentroidDistances: make([]float32, 0, capacity),
+		DotProducts:       make([]float32, 0, capacity),
+	}
+	return raBitQuantizedVectorSet
+}
+
 // EstimateSquaredDistances implements the Quantizer interface.
 func (q *raBitQuantizer) EstimateSquaredDistances(
 	ctx context.Context,
