@@ -66,7 +66,7 @@ type Quantizer interface {
 
 	// NewQuantizedVectorSet returns a new empty vector set preallocated to the
 	// number of vectors specified.
-	NewQuantizedVectorSet(size int) QuantizedVectorSet
+	NewQuantizedVectorSet(size int, centroid vector.T) QuantizedVectorSet
 
 	// EstimateSquaredDistances returns the estimated squared distances of the
 	// query vector from each data vector represented in the given quantized

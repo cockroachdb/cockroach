@@ -76,11 +76,11 @@ func (q *unQuantizer) QuantizeInSet(
 }
 
 // NewQuantizedVectorSet implements the Quantizer interface
-func (q *unQuantizer) NewQuantizedVectorSet(size int) QuantizedVectorSet {
-	dataBuffer := make([]float32, 0, size*q.GetOriginalDims())
+func (q *unQuantizer) NewQuantizedVectorSet(size int, centroid vector.T) QuantizedVectorSet {
+	dataBuffer := make([]float32, 0, size*q.GetRandomDims())
 	unquantizedSet := &UnQuantizedVectorSet{
-		Centroid: make([]float32, q.GetRandomDims()),
-		Vectors:  vector.MakeSetFromRawData(dataBuffer, q.GetOriginalDims()),
+		Centroid: centroid,
+		Vectors:  vector.MakeSetFromRawData(dataBuffer, q.GetRandomDims()),
 	}
 	return unquantizedSet
 }
