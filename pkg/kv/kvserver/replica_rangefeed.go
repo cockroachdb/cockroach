@@ -347,8 +347,11 @@ func (r *Replica) RangeFeed(
 		}
 	}
 
+	// The caller is responsible for setting the admission header
+	// to NormalPriority for any system table rangefeed.
+	isSystemRangefeed := admissionpb.WorkPriority(args.AdmissionHeader.Priority) > admissionpb.BulkNormalPri
 	p, disconnector, err := r.registerWithRangefeedRaftMuLocked(
-		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, stream,
+		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, isSystemRangefeed, stream,
 	)
 	r.raftMu.Unlock()
 
@@ -445,6 +448,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
+	isSystemRangefeed bool,
 	stream rangefeed.Stream,
 ) (rangefeed.Processor, rangefeed.Disconnector, error) {
 	defer logSlowRangefeedRegistration(streamCtx)()
@@ -484,17 +488,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	}
 	r.rangefeedMu.Unlock()
 
-	// Determine if this is a system span, which should get priority.
-	//
-	// TODO(erikgrinaker): With dynamic system tables, this should really check
-	// catalog.IsSystemDescriptor() for the table descriptor, but we don't have
-	// easy access to it here. Consider plumbing this down from the client
-	// instead. See: https://github.com/cockroachdb/cockroach/issues/110883
-	isSystemSpan := span.EndKey.Compare(
-		roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID+1))) <= 0
-
 	// Create a new rangefeed.
-	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(isSystemSpan)
+	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(isSystemRangefeed)
 
 	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r, span: desc.RSpan()}
@@ -512,7 +507,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		Metrics:               r.store.metrics.RangeFeedMetrics,
 		MemBudget:             feedBudget,
 		Scheduler:             r.store.getRangefeedScheduler(),
-		Priority:              isSystemSpan, // only takes effect when Scheduler != nil
+		Priority:              isSystemRangefeed, // only takes effect when Scheduler != nil
 		UnregisterFromReplica: r.unsetRangefeedProcessor,
 	}
 	p = rangefeed.NewProcessor(cfg)
