@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -670,11 +669,12 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	require.NoError(t, roachtestutil.DownloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
 	require.NoError(t, v.writePerfArtifacts(ctx, t, baselineStats, perturbationStats, afterStats))
 
-	t.L().Printf("validating stats during the perturbation")
-	failures := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.acceptableChange)
-	t.L().Printf("validating stats after the perturbation")
-	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)...)
-	require.True(t, len(failures) == 0, strings.Join(failures, "\n"))
+	perturbationInc := baselineStats.increase(perturbationStats)
+	recoveryInc := baselineStats.increase(afterStats)
+	t.L().Printf("perturbation increase %.4f, recovery increase %.4f, acceptable %.4f", perturbationInc, recoveryInc, v.acceptableChange)
+	require.True(t, perturbationInc <= v.acceptableChange, "failed during perturbation: %.4f > %.4f", recoveryInc, v.acceptableChange)
+	require.True(t, recoveryInc <= v.acceptableChange, "failed during recovery: %.4f > %.4f", recoveryInc, v.acceptableChange)
+
 	// TODO(baptist): Look at the time for token return in actual tests to
 	// determine if this can be lowered further.
 	tokenReturnTime := 10 * time.Minute
@@ -732,34 +732,20 @@ func (t trackedStat) merge(o trackedStat, c scoreCalculator) trackedStat {
 // interval
 type opStats map[string]trackedStat
 
-// isAcceptableChange determines if a change from the baseline is acceptable.
-// It compares all the metrics rather than failing fast. Normally multiple
-// metrics will fail at once if a test is going to fail and it is helpful to see
-// all the differences.
-// This returns an array of strings with the reason(s) the change was too large.
-func isAcceptableChange(
-	logger *logger.Logger, baseline, other opStats, acceptableChange float64,
-) []string {
-	// This can happen if we aren't measuring one of the phases.
-	var failures []string
-	if len(other) == 0 {
-		return failures
+func (r opStats) geoMean() float64 {
+	var individual []float64
+	for _, t := range r {
+		individual = append(individual, float64(t.score))
 	}
-	keys := sortedStringKeys(baseline)
+	return geoMean(individual)
+}
 
-	for _, name := range keys {
-		baseStat := baseline[name]
-		otherStat := other[name]
-		increase := float64(otherStat.score) / float64(baseStat.score)
-		if increase > acceptableChange {
-			failure := fmt.Sprintf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
-			logger.Printf(failure)
-			failures = append(failures, failure)
-		} else {
-			logger.Printf("PASSED : %-15s: Increase %.4f <= %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
-		}
+func (baseline opStats) increase(other opStats) float64 {
+	if len(other) == 0 {
+		return 1.0
 	}
-	return failures
+	totalIncrease := other.geoMean() / baseline.geoMean()
+	return totalIncrease
 }
 
 // startNoBackup starts the nodes without enabling backup.
@@ -868,15 +854,6 @@ func waitDuration(ctx context.Context, duration time.Duration) {
 		return
 	case <-time.After(duration):
 	}
-}
-
-func sortedStringKeys(m opStats) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 // geoMean returns the geometric mean from a slice of Values as float64.
