@@ -78,7 +78,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"Status":        {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/jobs/jobspb": {
-						"Type": {},
+						"Type":                      {},
+						"ResolvedSpan_BoundaryType": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/bulk": {
 						"sz":     {},

@@ -58,3 +58,5 @@ func (rse ResolvedSpanEntries) Equal(rse2 ResolvedSpanEntries) bool {
 	}
 	return true
 }
+
+func (ResolvedSpan_BoundaryType) SafeValue() {}
