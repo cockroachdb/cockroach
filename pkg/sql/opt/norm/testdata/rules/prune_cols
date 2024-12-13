@@ -985,7 +985,7 @@ project
  └── inner-join (cross)
       ├── columns: k:1!null i:2!null x:7!null x:11!null y:12!null
       ├── key: (7,11)
-      ├── fd: (1)-->(2), (1)==(7), (7)==(1), (11)-->(12)
+      ├── fd: (1)-->(2), (11)-->(12), (1)==(7), (7)==(1)
       ├── inner-join (hash)
       │    ├── columns: k:1!null i:2 x:7!null
       │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
