@@ -199,3 +199,111 @@ SELECT * FROM all_ab_tuple()
 2 20
 3 30
 4 40
+
+# OUT parameters should not cause a set-returning UDF to return a single row.
+subtest regression_128403
+
+statement ok
+CREATE FUNCTION f128403(OUT x INT, OUT y TEXT) RETURNS SETOF RECORD AS $$
+  SELECT t, t::TEXT FROM generate_series(1, 10) g(t);
+$$ LANGUAGE SQL;
+
+query T rowsort
+select f128403();
+----
+(1,1)
+(2,2)
+(3,3)
+(4,4)
+(5,5)
+(6,6)
+(7,7)
+(8,8)
+(9,9)
+(10,10)
+
+query IT rowsort
+SELECT * FROM f128403();
+----
+1   1
+2   2
+3   3
+4   4
+5   5
+6   6
+7   7
+8   8
+9   9
+10  10
+
+subtest end
+
+# RETURNS TABLE is syntactic sugar for RETURNS SETOF with:
+# - RECORD if there are multiple TABLE parameters, or
+# - the type of the single TABLE parameter.
+subtest returns_table
+
+statement error pgcode 42601 pq: OUT and INOUT arguments aren't allowed in TABLE functions
+CREATE FUNCTION f_table1(OUT x INT, OUT y TEXT) RETURNS TABLE(x INT, y TEXT) AS $$
+  SELECT t, t::TEXT FROM generate_series(1, 10) g(t);
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_table1() RETURNS TABLE(x INT, y TEXT) AS $$
+  SELECT t, t::TEXT FROM generate_series(1, 10) g(t);
+$$ LANGUAGE SQL;
+
+query T rowsort
+select f_table1();
+----
+(1,1)
+(2,2)
+(3,3)
+(4,4)
+(5,5)
+(6,6)
+(7,7)
+(8,8)
+(9,9)
+(10,10)
+
+query IT rowsort
+SELECT * FROM f_table1();
+----
+1   1
+2   2
+3   3
+4   4
+5   5
+6   6
+7   7
+8   8
+9   9
+10  10
+
+# Case with a single TABLE parameter.
+statement ok
+CREATE FUNCTION f_table2() RETURNS TABLE(x INT) AS $$
+  SELECT t FROM generate_series(1, 10) g(t);
+$$ LANGUAGE SQL;
+
+query I rowsort
+select f_table2();
+----
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+
+statement error pgcode 42P13 return type mismatch in function declared to return int\nDETAIL: Actual return type is record
+CREATE FUNCTION err() RETURNS TABLE (x INT) STRICT LANGUAGE SQL AS $$
+  SELECT a, b FROM ab ORDER BY a
+$$
+
+subtest end

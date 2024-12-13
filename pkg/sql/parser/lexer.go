@@ -394,6 +394,13 @@ func (l *lexer) setErr(err error) {
 	l.populateErrorDetails()
 }
 
+// setErrNoDetails is similar to setErr, but is used for an error that should
+// not be further annotated with details.
+func (l *lexer) setErrNoDetails(err error) {
+	err = pgerror.WithCandidateCode(err, pgcode.Syntax)
+	l.lastError = err
+}
+
 func (l *lexer) Error(e string) {
 	e = strings.TrimPrefix(e, "syntax error: ") // we'll add it again below.
 	l.lastError = pgerror.WithCandidateCode(errors.Newf("%s", e), pgcode.Syntax)
