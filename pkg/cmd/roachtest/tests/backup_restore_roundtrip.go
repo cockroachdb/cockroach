@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -247,9 +249,19 @@ func startBackgroundWorkloads(
 	if err != nil {
 		return nil, err
 	}
+
+	handleChemaChangeError := func(err error) error {
+		// If the UNEXPECTED ERROR detail appears, the workload likely flaked.
+		// Otherwise, the workload could have failed due to other reasons like a node
+		// crash.
+		if err != nil && strings.Contains(errors.FlattenDetails(err), "UNEXPECTED ERROR") {
+			return registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.Wrapf(err, "schema change workload failed"))
+		}
+		return err
+	}
 	err = c.RunE(ctx, option.WithNodes(workloadNode), scInit.String())
 	if err != nil {
-		return nil, err
+		return nil, handleChemaChangeError(err)
 	}
 
 	run := func() (func(), error) {
@@ -257,7 +269,6 @@ func startBackgroundWorkloads(
 		if err != nil {
 			return nil, err
 		}
-
 		stopBank := workloadWithCancel(m, func(ctx context.Context) error {
 			return c.RunE(ctx, option.WithNodes(workloadNode), bankRun.String())
 		})
@@ -266,7 +277,10 @@ func startBackgroundWorkloads(
 			return c.RunE(ctx, option.WithNodes(workloadNode), tpccRun.String())
 		})
 		stopSC := workloadWithCancel(m, func(ctx context.Context) error {
-			return c.RunE(ctx, option.WithNodes(workloadNode), scRun.String())
+			if err := c.RunE(ctx, option.WithNodes(workloadNode), scRun.String()); err != nil {
+				return handleChemaChangeError(err)
+			}
+			return nil
 		})
 
 		stopSystemWriter := workloadWithCancel(m, func(ctx context.Context) error {
