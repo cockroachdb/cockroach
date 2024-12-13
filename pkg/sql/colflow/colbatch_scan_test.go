@@ -57,6 +57,8 @@ func TestColBatchScanMeta(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
 	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
@@ -95,12 +97,12 @@ func TestColBatchScanMeta(t *testing.T) {
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:            &spec,
 		MonitorRegistry: &monitorRegistry,
+		CloserRegistry:  &closerRegistry,
 	}
 	res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.TestCleanupNoError(t)
 	tr := res.Root
 	tr.Init(ctx)
 	meta := res.MetadataSources[0].DrainMeta()
@@ -158,6 +160,8 @@ func BenchmarkColBatchScan(b *testing.B) {
 			defer evalCtx.Stop(ctx)
 			var monitorRegistry colexecargs.MonitorRegistry
 			defer monitorRegistry.Close(ctx)
+			var closerRegistry colexecargs.CloserRegistry
+			defer closerRegistry.Close(ctx)
 
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
@@ -177,6 +181,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 				args := &colexecargs.NewColOperatorArgs{
 					Spec:            &spec,
 					MonitorRegistry: &monitorRegistry,
+					CloserRegistry:  &closerRegistry,
 				}
 				res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 				if err != nil {
@@ -192,7 +197,6 @@ func BenchmarkColBatchScan(b *testing.B) {
 					}
 				}
 				b.StopTimer()
-				res.TestCleanupNoError(b)
 			}
 		})
 	}

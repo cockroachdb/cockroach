@@ -599,18 +599,18 @@ type vectorizedFlowCreator struct {
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
 	recordingStats      bool
-	// closers will be closed during the flow cleanup. It is safe to do so in
-	// the main flow goroutine since all other goroutines that might have used
-	// these objects must have exited by the time Cleanup() is called -
-	// Flow.Wait() ensures that.
-	closers colexecop.Closers
 	// releasables contains all components that should be released back to their
 	// pools during the flow cleanup.
 	releasables []execreleasable.Releasable
 
 	monitorRegistry colexecargs.MonitorRegistry
-	diskQueueCfg    colcontainer.DiskQueueCfg
-	fdSemaphore     semaphore.Semaphore
+	// closerRegistry will be closed during the flow cleanup. It is safe to do
+	// so in the main flow goroutine since all other goroutines that might have
+	// used these objects must have exited by the time Cleanup() is called -
+	// Flow.Wait() ensures that.
+	closerRegistry colexecargs.CloserRegistry
+	diskQueueCfg   colcontainer.DiskQueueCfg
+	fdSemaphore    semaphore.Semaphore
 }
 
 var _ execreleasable.Releasable = &vectorizedFlowCreator{}
@@ -649,6 +649,7 @@ func newVectorizedFlowCreator(
 		recordingStats:    recordingStats,
 		releasables:       creator.releasables,
 		monitorRegistry:   creator.monitorRegistry,
+		closerRegistry:    creator.closerRegistry,
 		diskQueueCfg:      diskQueueCfg,
 		fdSemaphore:       fdSemaphore,
 	}
@@ -662,15 +663,7 @@ func newVectorizedFlowCreator(
 }
 
 func (s *vectorizedFlowCreator) cleanup(ctx context.Context) {
-	if err := colexecerror.CatchVectorizedRuntimeError(func() {
-		for _, closer := range s.closers {
-			if err := closer.Close(ctx); err != nil && log.V(1) {
-				log.Infof(ctx, "error closing Closer: %v", err)
-			}
-		}
-	}); err != nil && log.V(1) {
-		log.Infof(ctx, "runtime error closing the closers: %v", err)
-	}
+	s.closerRegistry.Close(ctx)
 	s.monitorRegistry.Close(ctx)
 }
 
@@ -691,12 +684,10 @@ func (s *vectorizedFlowCreator) Release() {
 	for i := range s.opChains {
 		s.opChains[i] = nil
 	}
-	for i := range s.closers {
-		s.closers[i] = nil
-	}
 	for i := range s.releasables {
 		s.releasables[i] = nil
 	}
+	s.closerRegistry.Reset()
 	s.monitorRegistry.Reset()
 	*s = vectorizedFlowCreator{
 		streamIDToInputOp: s.streamIDToInputOp,
@@ -705,9 +696,9 @@ func (s *vectorizedFlowCreator) Release() {
 		// prime it for reuse.
 		procIdxQueue:    s.procIdxQueue[:0],
 		opChains:        s.opChains[:0],
-		closers:         s.closers[:0],
 		releasables:     s.releasables[:0],
 		monitorRegistry: s.monitorRegistry,
+		closerRegistry:  s.closerRegistry,
 	}
 	vectorizedFlowCreatorPool.Put(s)
 }
@@ -825,7 +816,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 
 	foundLocalOutput := false
 	for i, op := range outputs {
-		s.closers = append(s.closers, op)
+		s.closerRegistry.AddCloser(op)
 		if buildutil.CrdbTestBuild {
 			op = colexec.NewInvariantsChecker(op)
 		}
@@ -973,7 +964,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				Root:            os,
 				MetadataSources: colexecop.MetadataSources{os},
 			}
-			s.closers = append(s.closers, os)
+			s.closerRegistry.AddCloser(os)
 		} else if input.Type == execinfrapb.InputSyncSpec_SERIAL_UNORDERED || opt == flowinfra.FuseAggressively {
 			var err error
 			if input.EnforceHomeRegionError != nil {
@@ -987,7 +978,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
 			}
-			s.closers = append(s.closers, sync)
+			s.closerRegistry.AddCloser(sync)
 		} else {
 			// Note that if we have opt == flowinfra.FuseAggressively, then we
 			// must use the serial unordered sync above in order to remove any
@@ -998,7 +989,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
 			}
-			s.closers = append(s.closers, sync)
+			s.closerRegistry.AddCloser(sync)
 			s.operatorConcurrency = true
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
@@ -1185,6 +1176,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				SemaCtx:              s.semaCtx,
 				Factory:              factory,
 				MonitorRegistry:      &s.monitorRegistry,
+				CloserRegistry:       &s.closerRegistry,
 				TypeResolver:         &s.typeResolver,
 			}
 			numOldMonitors := len(s.monitorRegistry.GetMonitors())
@@ -1199,7 +1191,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 				}
 				return
 			}
-			s.closers = append(s.closers, result.ToClose...)
 			if flowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
 				result.Root = newPanicInjector(result.Root)
 			}
