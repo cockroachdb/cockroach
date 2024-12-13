@@ -44,6 +44,11 @@ func EncodeUnquantizedVector(
 	return vector.Encode(appendTo, v)
 }
 
+// EncodePartitionKey encodes a partition key into the given byte slice.
+func EncodePartitionKey(appendTo []byte, key PartitionKey) []byte {
+	return encoding.EncodeUvarintAscending(appendTo, uint64(key))
+}
+
 // EncodeChildKey encodes a child key into the given byte slice. The "appendTo"
 // slice is expected to be the prefix shared between all KV entries for a
 // partition.
@@ -52,7 +57,7 @@ func EncodeChildKey(appendTo []byte, key ChildKey) []byte {
 		// The primary key is already in encoded form.
 		return append(appendTo, key.PrimaryKey...)
 	}
-	return encoding.EncodeUint64Ascending(appendTo, uint64(key.PartitionKey))
+	return EncodePartitionKey(appendTo, key.PartitionKey)
 }
 
 // DecodePartitionMetadata decodes the metadata for a partition.
@@ -128,7 +133,7 @@ func DecodeChildKey(encChildKey []byte, level Level) (ChildKey, error) {
 		return ChildKey{PrimaryKey: encChildKey}, nil
 	} else {
 		// Non-leaf vectors point to the partition key.
-		_, childPartitionKey, err := encoding.DecodeUint64Ascending(encChildKey)
+		_, childPartitionKey, err := encoding.DecodeUvarintAscending(encChildKey)
 		if err != nil {
 			return ChildKey{}, err
 		}
