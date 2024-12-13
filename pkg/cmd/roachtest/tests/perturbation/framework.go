@@ -542,10 +542,16 @@ func (w workloadData) addTicks(ticks []cli.Tick) {
 // as the single core operation latency.
 func (v variations) calculateScore(t cli.Tick) time.Duration {
 	if t.Throughput == 0 {
-		// Use a non-infinite score that is still very high if there was a period of no throughput.
+		// Use a non-infinite score that is still very high if there was a
+		// period of no throughput.
 		return time.Hour
 	}
-	return time.Duration(math.Sqrt((float64(v.numNodes*v.vcpu) * float64((t.P50+t.P99)/2)) / t.Throughput * float64(time.Second)))
+	// The throughput score measures the per-vcpu operation latency based on the
+	// total throughput.
+	throughputScore := float64(time.Second) * float64(v.numNodes*v.vcpu) / t.Throughput
+	// The latency score measures the arithmetic mean of the P50 and P99.
+	latencyScore := float64((t.P50 + t.P99) / 2)
+	return time.Duration(geoMean([]float64{throughputScore, latencyScore}))
 }
 
 func (w workloadData) convert(t cli.Tick) trackedStat {
@@ -871,6 +877,15 @@ func sortedStringKeys(m opStats) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// geoMean returns the geometric mean from a slice of Values as float64.
+func geoMean(vals []float64) float64 {
+	m := 1.0
+	for _, v := range vals {
+		m = m * v
+	}
+	return math.Pow(m, 1.0/float64(len(vals)))
 }
 
 // writePerfArtifacts writes the stats file in the right format to node 1 so it
