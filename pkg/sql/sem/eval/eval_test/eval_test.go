@@ -139,6 +139,8 @@ func TestEval(t *testing.T) {
 		rng, _ := randutil.NewTestRand()
 		var monitorRegistry colexecargs.MonitorRegistry
 		defer monitorRegistry.Close(ctx)
+		var closerRegistry colexecargs.CloserRegistry
+		defer closerRegistry.Close(ctx)
 		walk(t, func(t *testing.T, d *datadriven.TestData) string {
 			st := cluster.MakeTestingClusterSettings()
 			flowCtx := &execinfra.FlowCtx{
@@ -191,6 +193,7 @@ func TestEval(t *testing.T) {
 				// the row execution engine.
 				ProcessorConstructor: rowexec.NewProcessor,
 				MonitorRegistry:      &monitorRegistry,
+				CloserRegistry:       &closerRegistry,
 			}
 			// If the expression is of the boolean type, in 50% cases we'll
 			// additionally run it as a filter (i.e. as a "selection" operator

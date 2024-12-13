@@ -1669,6 +1669,8 @@ func TestMergeJoiner(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 	for _, tc := range getMJTestCases() {
 		for _, tc := range tc.mutateTypes() {
 			tc.init()
@@ -1702,6 +1704,7 @@ func TestMergeJoiner(t *testing.T) {
 							DiskQueueCfg:    queueCfg,
 							FDSemaphore:     colexecop.NewTestingSemaphore(mjFDLimit),
 							MonitorRegistry: &monitorRegistry,
+							CloserRegistry:  &closerRegistry,
 						}
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)

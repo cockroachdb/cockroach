@@ -102,6 +102,10 @@ func TestExternalSort(t *testing.T) {
 						require.Equal(t, 2, closerRegistry.NumClosers()-numOldClosers)
 						return sorter, err
 					})
+				// Close all closers manually (in production this is done on the
+				// flow cleanup).
+				closerRegistry.Close(ctx)
+				closerRegistry.Reset()
 				for i, sem := range semsToCheck {
 					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 				}
@@ -167,18 +171,6 @@ func TestExternalSortRandomized(t *testing.T) {
 					delegateFDAcquisition := rng.Float64() < 0.5
 					name := fmt.Sprintf("%s/nCols=%d/nOrderingCols=%d/delegateFDAcquisition=%t/k=%d", namePrefix, nCols, nOrderingCols, delegateFDAcquisition, k)
 					log.Infof(ctx, "%s", name)
-					// Unfortunately, there is currently no better way to check that a
-					// sorter does not have leftover file descriptors other than appending
-					// each semaphore used to this slice on construction. This is because
-					// some tests don't fully drain the input, making intercepting the
-					// sorter.Close() method not a useful option, since it is impossible
-					// to check between an expected case where more than 0 FDs are open
-					// (e.g. in verifySelAndNullResets, where the sorter is not fully
-					// drained so Close must be called explicitly) and an unexpected one.
-					// These cases happen during normal execution when a limit is
-					// satisfied, but flows will call Close explicitly on Cleanup.
-					// TODO(asubiotto): Not implemented yet, currently we rely on the
-					//  flow tracking open FDs and releasing any leftovers.
 					var semsToCheck []semaphore.Semaphore
 					tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols, 0 /* matchLen */)
 					if k > 0 {
@@ -200,6 +192,10 @@ func TestExternalSortRandomized(t *testing.T) {
 								&monitorRegistry, &closerRegistry,
 							)
 						})
+					// Close all closers manually (in production this is done on
+					// the flow cleanup).
+					closerRegistry.Close(ctx)
+					closerRegistry.Reset()
 					for i, sem := range semsToCheck {
 						require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 					}
