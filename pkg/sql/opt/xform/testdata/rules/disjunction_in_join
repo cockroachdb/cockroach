@@ -394,7 +394,7 @@ project
       │    ├── inner-join (cross)
       │    │    ├── columns: b1:15!null b2:16!null b3:17 b4:18 b.rowid:19!null d1:22 d2:23 d3:24 d4:25 d.rowid:26!null
       │    │    ├── key: (19,26)
-      │    │    ├── fd: (19)-->(15-18), (15)==(16), (16)==(15), (26)-->(22-25)
+      │    │    ├── fd: (19)-->(15-18), (26)-->(22-25), (15)==(16), (16)==(15)
       │    │    ├── scan d
       │    │    │    ├── columns: d1:22 d2:23 d3:24 d4:25 d.rowid:26!null
       │    │    │    ├── key: (26)
@@ -790,7 +790,7 @@ project
            ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5 f1:8!null f2:9 f3:10!null
            ├── grouping columns: e1:1!null f1:8!null
            ├── key: (1,8)
-           ├── fd: (2)==(10), (10)==(2), (1,8)-->(2-5,9,10)
+           ├── fd: (1,8)-->(2-5,9,10), (2)==(10), (10)==(2)
            ├── union-all
            │    ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5 f1:8!null f2:9 f3:10!null
            │    ├── left columns: e1:14 e2:15 e3:16 e4:17 e5:18 f1:21 f2:22 f3:23
@@ -873,7 +873,7 @@ project
            ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5 f1:8!null f2:9 f3:10!null
            ├── grouping columns: e1:1!null f1:8!null
            ├── key: (1,8)
-           ├── fd: (2)==(10), (10)==(2), (1,8)-->(2-5,9,10)
+           ├── fd: (1,8)-->(2-5,9,10), (2)==(10), (10)==(2)
            ├── union-all
            │    ├── columns: e1:1!null e2:2!null e3:3!null e4:4!null e5:5 f1:8!null f2:9 f3:10!null
            │    ├── left columns: e1:14 e2:15 e3:16 e4:17 e5:18 f1:21 f2:22 f3:23
@@ -2722,7 +2722,7 @@ project
       ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7!null c2:8!null c3:9 c4:10 c.rowid:11!null
       ├── grouping columns: a1:1!null a3:3!null a4:4!null c.rowid:11!null
       ├── key: (1,3,4,11)
-      ├── fd: (11)-->(7-10), (2)==(8), (8)==(2), (1,3,4,11)-->(2,7-10)
+      ├── fd: (11)-->(7-10), (1,3,4,11)-->(2,7-10), (2)==(8), (8)==(2)
       ├── inner-join (cross)
       │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7!null c2:8!null c3:9 c4:10 c.rowid:11!null b1:14
       │    ├── fd: (11)-->(7-10), (2)==(8), (8)==(2)
@@ -2767,7 +2767,7 @@ project
       ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7!null c2:8!null c3:9 c4:10 c.rowid:11!null
       ├── grouping columns: a1:1!null a3:3!null a4:4!null c.rowid:11!null
       ├── key: (1,3,4,11)
-      ├── fd: (11)-->(7-10), (2)==(8), (8)==(2), (1,3,4,11)-->(2,7-10)
+      ├── fd: (11)-->(7-10), (1,3,4,11)-->(2,7-10), (2)==(8), (8)==(2)
       ├── inner-join (hash)
       │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7!null c2:8!null c3:9 c4:10 c.rowid:11!null b1:14 b2:15
       │    ├── fd: (11)-->(7-10), (2)==(8), (8)==(2)
@@ -2849,7 +2849,7 @@ project
       ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7 c2:8!null c3:9 c4:10 c.rowid:11!null
       ├── grouping columns: a1:1!null a3:3!null a4:4!null c.rowid:11!null
       ├── key: (1,3,4,11)
-      ├── fd: (11)-->(7-10), (2)==(8), (8)==(2), (1,3,4,11)-->(2,7-10)
+      ├── fd: (11)-->(7-10), (1,3,4,11)-->(2,7-10), (2)==(8), (8)==(2)
       ├── inner-join (cross)
       │    ├── columns: a1:1!null a2:2!null a3:3!null a4:4!null c1:7 c2:8!null c3:9 c4:10 c.rowid:11!null b1:14 b3:16
       │    ├── fd: (11)-->(7-10), (2)==(8), (8)==(2)

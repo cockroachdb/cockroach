@@ -1152,7 +1152,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,2,9), (9)==(1), (1)==(9)
+ │    ├── fd: ()-->(1,2,9), (1)==(9), (9)==(1)
  │    ├── scalar-group-by
  │    │    ├── columns: min:9
  │    │    ├── cardinality: [1 - 1]
@@ -1187,7 +1187,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,2,9), (9)==(1), (1)==(9)
+ │    ├── fd: ()-->(1,2,9), (1)==(9), (9)==(1)
  │    ├── scalar-group-by
  │    │    ├── columns: max:9
  │    │    ├── cardinality: [1 - 1]
@@ -1819,7 +1819,7 @@ memo (optimized, ~9KB, required=[presentation: array_agg:7])
 memo
 SELECT array_agg(k) FROM (SELECT * FROM kuvw WHERE u=v ORDER BY u) GROUP BY w
 ----
-memo (optimized, ~15KB, required=[presentation: array_agg:7])
+memo (optimized, ~16KB, required=[presentation: array_agg:7])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:7]
  │         ├── best: (project G2 G3 array_agg)
@@ -2019,7 +2019,7 @@ memo (optimized, ~7KB, required=[presentation: u:2,v:3,w:4])
 memo
 SELECT DISTINCT ON (u, v) u, v, w FROM kuvw
 ----
-memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4])
+memo (optimized, ~7KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2,3)) (distinct-on G2 G3 cols=(2,3),ordering=+2,+3) (distinct-on G2 G3 cols=(2,3),ordering=+3)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2,+3]" G3 cols=(2,3),ordering=+2,+3)
@@ -2142,7 +2142,7 @@ memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
 memo
 SELECT DISTINCT ON (u) u, v, w FROM kuvw ORDER BY u, v, w
 ----
-memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
+memo (optimized, ~7KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
  ├── G1: (distinct-on G2 G3 cols=(2),ordering=+3,+4 opt(2)) (distinct-on G2 G3 cols=(2),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2),ordering=+3,+4)
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
  │    │    ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2),ordering=+3,+4 opt(2))
@@ -2298,7 +2298,7 @@ memo (optimized, ~6KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
 memo
 SELECT (SELECT w FROM kuvw WHERE v=1 AND x=u) FROM xyz ORDER BY x+1, x
 ----
-memo (optimized, ~26KB, required=[presentation: w:12] [ordering: +13,+1])
+memo (optimized, ~27KB, required=[presentation: w:12] [ordering: +13,+1])
  ├── G1: (project G2 G3 x)
  │    ├── [presentation: w:12] [ordering: +13,+1]
  │    │    ├── best: (sort G1)
@@ -2422,7 +2422,7 @@ memo (optimized, ~28KB, required=[])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
-memo (optimized, ~28KB, required=[])
+memo (optimized, ~29KB, required=[])
  ├── G1: (upsert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (upsert G2 G3 G4 xyz)
@@ -3417,7 +3417,7 @@ INDEX gg (g)
 memo
 SELECT d, e, count(*) FROM defg GROUP BY d, e LIMIT 10
 ----
-memo (optimized, ~20KB, required=[presentation: d:1,e:2,count:8])
+memo (optimized, ~21KB, required=[presentation: d:1,e:2,count:8])
  ├── G1: (limit G2 G3) (limit G4 G3) (limit G5 G3) (limit G6 G3)
  │    └── [presentation: d:1,e:2,count:8]
  │         ├── best: (limit G4="[limit hint: 10.00]" G3)
