@@ -236,7 +236,7 @@ func TableDescs(
 		// rewriteCol is a closure that performs the ID rewrite logic on a column.
 		rewriteCol := func(col *descpb.ColumnDescriptor) error {
 			// Rewrite the types.T's IDs present in the column.
-			if err := rewriteIDsInTypesT(col.Type, descriptorRewrites); err != nil {
+			if err := RewriteIDsInTypesT(col.Type, descriptorRewrites); err != nil {
 				return err
 			}
 			var newUsedSeqRefs []descpb.ID
@@ -568,9 +568,9 @@ func rewriteSequencesInFunction(
 	return fmtCtx.CloseAndGetString(), nil
 }
 
-// rewriteIDsInTypesT rewrites all ID's in the input types.T using the input
+// RewriteIDsInTypesT rewrites all ID's in the input types.T using the input
 // ID rewrite mapping.
-func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) error {
+func RewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) error {
 	if !typ.UserDefined() {
 		return nil
 	}
@@ -589,7 +589,7 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 	types.RemapUserDefinedTypeOIDs(typ, newOID, newArrayOID)
 	// If the type is an array, then we need to rewrite the element type as well.
 	if typ.Family() == types.ArrayFamily {
-		if err := rewriteIDsInTypesT(typ.ArrayContents(), descriptorRewrites); err != nil {
+		if err := RewriteIDsInTypesT(typ.ArrayContents(), descriptorRewrites); err != nil {
 			return err
 		}
 	}
@@ -658,7 +658,7 @@ func TypeDescs(types []*typedesc.Mutable, descriptorRewrites jobspb.DescRewriteM
 			}
 		case descpb.TypeDescriptor_ALIAS:
 			// We need to rewrite any ID's present in the aliased types.T.
-			if err := rewriteIDsInTypesT(typ.Alias, descriptorRewrites); err != nil {
+			if err := RewriteIDsInTypesT(typ.Alias, descriptorRewrites); err != nil {
 				return err
 			}
 		default:
@@ -698,11 +698,11 @@ func SchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRe
 				}
 				sig.ID = fnDesc.ID
 				for _, typ := range sig.ArgTypes {
-					if err := rewriteIDsInTypesT(typ, descriptorRewrites); err != nil {
+					if err := RewriteIDsInTypesT(typ, descriptorRewrites); err != nil {
 						return err
 					}
 				}
-				if err := rewriteIDsInTypesT(sig.ReturnType, descriptorRewrites); err != nil {
+				if err := RewriteIDsInTypesT(sig.ReturnType, descriptorRewrites); err != nil {
 					return err
 				}
 				newSigs = append(newSigs, *sig)
@@ -820,7 +820,7 @@ func rewriteSchemaChangerState(
 			return err
 		}
 		if err := screl.WalkTypes(t.Element(), func(t *types.T) error {
-			return rewriteIDsInTypesT(t, descriptorRewrites)
+			return RewriteIDsInTypesT(t, descriptorRewrites)
 		}); err != nil {
 			return errors.Wrap(err, "rewriting user-defined type references")
 		}
@@ -1021,11 +1021,11 @@ func FunctionDescs(
 
 		// Rewrite type IDs.
 		for _, param := range fnDesc.Params {
-			if err := rewriteIDsInTypesT(param.Type, descriptorRewrites); err != nil {
+			if err := RewriteIDsInTypesT(param.Type, descriptorRewrites); err != nil {
 				return err
 			}
 		}
-		if err := rewriteIDsInTypesT(fnDesc.ReturnType.Type, descriptorRewrites); err != nil {
+		if err := RewriteIDsInTypesT(fnDesc.ReturnType.Type, descriptorRewrites); err != nil {
 			return err
 		}
 
