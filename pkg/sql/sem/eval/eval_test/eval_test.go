@@ -146,10 +146,6 @@ func TestEval(t *testing.T) {
 				EvalCtx: evalCtx,
 				Mon:     evalCtx.TestingMon,
 			}
-			memMonitor := execinfra.NewTestMemMonitor(ctx, st)
-			defer memMonitor.Stop(ctx)
-			acc := memMonitor.MakeBoundAccount()
-			defer acc.Close(ctx)
 			expr, err := parser.ParseExpr(d.Input)
 			require.NoError(t, err)
 			if _, ok := expr.(*tree.RangeCond); ok {
@@ -191,7 +187,6 @@ func TestEval(t *testing.T) {
 							return batch
 						}},
 				}},
-				StreamingMemAccount: &acc,
 				// Unsupported post-processing specs are wrapped and run through
 				// the row execution engine.
 				ProcessorConstructor: rowexec.NewProcessor,

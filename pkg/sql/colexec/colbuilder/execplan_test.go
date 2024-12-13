@@ -81,9 +81,6 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		NodeID: evalCtx.NodeID,
 	}
 
-	streamingMemAcc := evalCtx.TestingMon.MakeBoundAccount()
-	defer streamingMemAcc.Close(ctx)
-
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
@@ -113,8 +110,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 			Core:        execinfrapb.ProcessorCoreUnion{TableReader: &tr},
 			ResultTypes: []*types.T{types.Int4},
 		},
-		StreamingMemAccount: &streamingMemAcc,
-		MonitorRegistry:     &monitorRegistry,
+		MonitorRegistry: &monitorRegistry,
 	}
 	r1, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
@@ -127,9 +123,8 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 			Post:        execinfrapb.PostProcessSpec{RenderExprs: []execinfrapb.Expression{{Expr: "@1 - 1"}}},
 			ResultTypes: []*types.T{types.Int},
 		},
-		Inputs:              []colexecargs.OpWithMetaInfo{{Root: r1.Root}},
-		StreamingMemAccount: &streamingMemAcc,
-		MonitorRegistry:     &monitorRegistry,
+		Inputs:          []colexecargs.OpWithMetaInfo{{Root: r1.Root}},
+		MonitorRegistry: &monitorRegistry,
 	}
 	r, err := NewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)

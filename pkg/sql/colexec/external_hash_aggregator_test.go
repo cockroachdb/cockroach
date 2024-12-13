@@ -240,12 +240,11 @@ func createExternalHashAggregator(
 		ResultTypes: newAggArgs.OutputTypes,
 	}
 	args := &colexecargs.NewColOperatorArgs{
-		Spec:                spec,
-		Inputs:              []colexecargs.OpWithMetaInfo{{Root: newAggArgs.Input}},
-		StreamingMemAccount: testMemAcc,
-		DiskQueueCfg:        diskQueueCfg,
-		FDSemaphore:         testingSemaphore,
-		MonitorRegistry:     monitorRegistry,
+		Spec:            spec,
+		Inputs:          []colexecargs.OpWithMetaInfo{{Root: newAggArgs.Input}},
+		DiskQueueCfg:    diskQueueCfg,
+		FDSemaphore:     testingSemaphore,
+		MonitorRegistry: monitorRegistry,
 	}
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
