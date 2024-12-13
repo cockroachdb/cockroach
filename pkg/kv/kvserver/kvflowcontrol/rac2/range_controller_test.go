@@ -1853,6 +1853,15 @@ func TestRaftEventFromMsgStorageAppendAndMsgAppsBasic(t *testing.T) {
 		})
 		require.Equal(t, []raftpb.Message{outboundMsgs[0], outboundMsgs[3], outboundMsgs[2]}, msgApps)
 		checkSnapAndMap(event)
+		// Outbound msgs contains MsgApps for followers, but they are ignored
+		// since in pull mode.
+		event = RaftEventFromMsgStorageAppendAndMsgApps(
+			MsgAppPull, 19, appendMsg, outboundMsgs, logSnap, msgAppScratch, infoMap)
+		require.Equal(t, uint64(10), event.Term)
+		require.Equal(t, appendMsg.Snapshot, event.Snap)
+		require.Equal(t, appendMsg.Entries, event.Entries)
+		require.Nil(t, event.MsgApps)
+		checkSnapAndMap(event)
 	}
 }
 
