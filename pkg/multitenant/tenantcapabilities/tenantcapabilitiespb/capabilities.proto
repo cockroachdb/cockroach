@@ -95,6 +95,10 @@ message TenantCapabilities {
   // CanViewAllMetrics, if set to true, grants the tenant the ability
   // to query any metrics from the host.
   bool can_view_all_metrics = 12;
+
+  // CanPrepareTxns, if set to true, grants the tenant the ability to prepare
+  // transactions as part of the XA two-phase commit protocol.
+  bool can_prepare_txns = 13;
 };
 
 // SpanConfigBound is used to constrain the possible values a SpanConfig may
