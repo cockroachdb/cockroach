@@ -223,7 +223,7 @@ func MakeComputedExprs(
 		return nil, catalog.TableColSet{}, err
 	}
 
-	nr := newNameResolver(evalCtx, tableDesc.GetID(), tn, sourceColumns)
+	nr := newNameResolver(tableDesc.GetID(), tn, sourceColumns)
 	nr.addIVarContainerToSemaCtx(semaCtx)
 
 	var txCtx transform.ExprTransformContext
@@ -252,6 +252,14 @@ func MakeComputedExprs(
 		if err != nil {
 			return nil, catalog.TableColSet{}, err
 		}
+
+		// If the expression has a type that is not identical to the
+		// column's type, wrap the computed column expression in an assignment cast.
+		typedExpr, err = wrapWithAssignmentCast(ctx, typedExpr, col, semaCtx)
+		if err != nil {
+			return nil, catalog.TableColSet{}, err
+		}
+
 		if typedExpr, err = txCtx.NormalizeExpr(ctx, evalCtx, typedExpr); err != nil {
 			return nil, catalog.TableColSet{}, err
 		}

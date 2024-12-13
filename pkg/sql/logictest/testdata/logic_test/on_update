@@ -456,3 +456,22 @@ SET sql_safe_updates = true
 
 statement ok
 DROP TABLE test_backfill
+
+# Verify that ON UPDATE expressions are blocked if the result does not
+# fit into the column type.
+subtest on_update_too_long
+
+statement ok
+CREATE TABLE t81698 (i INT PRIMARY KEY);
+
+statement ok
+INSERT INTO t81698 VALUES (1);
+
+# The DEFAULT expression is small enough, so this ALTER succeeds.
+statement ok
+ALTER TABLE t81698 ADD COLUMN v VARCHAR(2) NOT NULL DEFAULT 'd' ON UPDATE 'on_update';
+
+statement error pgcode 22001 value too long for type VARCHAR\(2\)
+UPDATE t81698 SET i = 2 where i = 1;
+
+subtest end

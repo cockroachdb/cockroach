@@ -946,10 +946,7 @@ func (b *Builder) addComputedColsForTable(
 							scalarType, colType, string(tabCol.ColName()),
 						))
 					}
-					// TODO(mgartner): This should be an assignment cast, but
-					// until #81698 is addressed, that could cause reads to
-					// error after adding a virtual computed column to a table.
-					scalar = b.factory.ConstructCast(scalar, colType)
+					scalar = b.factory.ConstructAssignmentCast(scalar, colType)
 				}
 			})
 			// Check if the expression contains non-immutable operators.

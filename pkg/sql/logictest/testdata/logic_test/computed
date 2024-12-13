@@ -1207,3 +1207,21 @@ statement error pgcode 42601 column "gen" of relation "foooooo" is a computed co
 ALTER TABLE foooooo ALTER COLUMN gen DROP DEFAULT;
 
 subtest end
+
+subtest computed_column_too_large
+
+statement ok
+CREATE TABLE t81698 (i INT PRIMARY KEY);
+
+statement ok
+INSERT INTO t81698 VALUES (1);
+
+skipif config local-legacy-schema-changer
+statement error pgcode 22001 failed to construct index entries during backfill: value too long for type VARCHAR\(2\)
+ALTER TABLE t81698 ADD COLUMN s VARCHAR(2) AS (i || 'stored') STORED;
+
+skipif config local-legacy-schema-changer
+statement error pgcode 22001 validate check constraint: value too long for type VARCHAR\(2\)
+ALTER TABLE t81698 ADD COLUMN v VARCHAR(2) AS (i || 'virtual') VIRTUAL;
+
+subtest end

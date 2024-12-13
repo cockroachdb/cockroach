@@ -227,7 +227,7 @@ CREATE TYPE gh AS (g INT, h INT)
 
 # Try a virtual computed column whose expression cannot be distributed.
 statement ok
-ALTER TABLE data ADD COLUMN g gh[] AS (array_cat(ARRAY[(1, 2)], ARRAY[(a, b)])) VIRTUAL
+ALTER TABLE data ADD COLUMN g gh[] AS (array_cat(ARRAY[(1, 2)], ARRAY[(a, b)])::gh[]) VIRTUAL
 
 # Error if we specify the problematic virtual computed column directly.
 statement error cannot be executed with distsql

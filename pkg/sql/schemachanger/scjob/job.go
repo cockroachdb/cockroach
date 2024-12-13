@@ -156,7 +156,11 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		// If a descriptor can't be found, we additionally mark the error as a
 		// permanent job error, so that non-cancelable jobs don't get retried. If a
 		// descriptor has gone missing, it isn't likely to come back.
-		if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped, catalog.ErrReferencedDescriptorNotFound) {
+		// We also mark assertion errors as permanent job errors, since they are
+		// never expected.
+		if errors.IsAny(
+			err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped, catalog.ErrReferencedDescriptorNotFound,
+		) || errors.HasAssertionFailure(err) {
 			return jobs.MarkAsPermanentJobError(err)
 		}
 		return err
