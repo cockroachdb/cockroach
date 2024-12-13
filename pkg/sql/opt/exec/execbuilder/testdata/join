@@ -2235,7 +2235,7 @@ EXPLAIN (OPT, MEMO)
 SELECT * FROM (VALUES (1, 10), (2, 20), (3, 30)) as v(x, y)
 INNER STRAIGHT JOIN t119035 ON a > x
 ----
-memo (optimized, ~10KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~11KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test]" [presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test])

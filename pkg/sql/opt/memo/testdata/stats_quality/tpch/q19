@@ -78,7 +78,7 @@ scalar-group-by
  │    │         ├── grouping columns: l_orderkey:1(int!null) l_linenumber:4(int!null) p_partkey:19(int!null)
  │    │         ├── stats: [rows=182.3692, distinct(1)=182.304, null(1)=0, distinct(2)=182.369, null(2)=0, distinct(4)=13.9999, null(4)=0, distinct(5)=182.369, null(5)=0, distinct(6)=182.369, null(6)=0, distinct(7)=182.369, null(7)=0, distinct(14)=182.369, null(14)=0, distinct(15)=182.369, null(15)=0, distinct(19)=163.44, null(19)=0, distinct(22)=182.369, null(22)=0, distinct(24)=182.369, null(24)=0, distinct(25)=182.369, null(25)=0, distinct(1,4,19)=182.369, null(1,4,19)=0]
  │    │         ├── key: (1,4,19)
- │    │         ├── fd: (2)==(19), (19)==(2), (1,4,19)-->(2,5-7,14,15,22,24,25)
+ │    │         ├── fd: (1,4,19)-->(2,5-7,14,15,22,24,25), (2)==(19), (19)==(2)
  │    │         ├── union-all
  │    │         │    ├── save-table-name: q19_union_all_5
  │    │         │    ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
@@ -148,7 +148,7 @@ scalar-group-by
  │    │         │              ├── grouping columns: l_orderkey:61(int!null) l_linenumber:64(int!null) p_partkey:79(int!null)
  │    │         │              ├── stats: [rows=486.9996, distinct(61)=486.233, null(61)=0, distinct(62)=487, null(62)=0, distinct(64)=14, null(64)=0, distinct(65)=487, null(65)=0, distinct(66)=487, null(66)=0, distinct(67)=487, null(67)=0, distinct(74)=487, null(74)=0, distinct(75)=487, null(75)=0, distinct(79)=401.84, null(79)=0, distinct(82)=487, null(82)=0, distinct(84)=487, null(84)=0, distinct(85)=487, null(85)=0, distinct(61,64,79)=487, null(61,64,79)=0]
  │    │         │              ├── key: (61,64,79)
- │    │         │              ├── fd: (62)==(79), (79)==(62), (61,64,79)-->(62,65-67,74,75,82,84,85)
+ │    │         │              ├── fd: (61,64,79)-->(62,65-67,74,75,82,84,85), (62)==(79), (79)==(62)
  │    │         │              ├── union-all
  │    │         │              │    ├── save-table-name: q19_union_all_12
  │    │         │              │    ├── columns: l_orderkey:61(int!null) l_partkey:62(int!null) l_linenumber:64(int!null) l_quantity:65(float!null) l_extendedprice:66(float!null) l_discount:67(float!null) l_shipinstruct:74(char!null) l_shipmode:75(char!null) p_partkey:79(int!null) p_brand:82(char!null) p_size:84(int!null) p_container:85(char!null)

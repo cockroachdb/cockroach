@@ -174,7 +174,7 @@ where
 inner-join (hash)
  ├── columns: id1_6_0_:1!null id1_4_1_:8!null phone_nu2_6_0_:2 person_i4_6_0_:4!null phone_ty3_6_0_:3 person_i1_5_0__:16!null addresse2_5_0__:17 addresse3_0__:18!null address2_4_1_:9 createdo3_4_1_:10 name4_4_1_:11 nickname5_4_1_:12 version6_4_1_:13!null person_i1_5_0__:16!null addresse2_5_0__:17 addresse3_0__:18!null
  ├── key: (1,18)
- ├── fd: (1)-->(2-4), (8)-->(9-13), (4)==(8,16), (8)==(4,16), (16,18)-->(17), (16)==(4,8)
+ ├── fd: (1)-->(2-4), (8)-->(9-13), (16,18)-->(17), (4)==(8,16), (8)==(4,16), (16)==(4,8)
  ├── scan person_addresses [as=addresses2_]
  │    ├── columns: addresses2_.person_id:16!null addresses:17 addresses_key:18!null
  │    ├── key: (16,18)
@@ -661,7 +661,7 @@ distinct-on
  ├── inner-join (hash)
  │    ├── columns: phone0_.id:1!null person_id:4!null calls1_.phone_id:11!null person2_.id:14!null address:15 createdon:16 name:17 nickname:18 version:19!null
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    ├── fd: (1)-->(4), (1)==(11), (11)==(1), (14)-->(15-19), (4)==(14), (14)==(4)
+ │    ├── fd: (1)-->(4), (14)-->(15-19), (1)==(11), (11)==(1), (4)==(14), (14)==(4)
  │    ├── scan phone_call [as=calls1_]
  │    │    └── columns: calls1_.phone_id:11
  │    ├── inner-join (hash)
@@ -990,7 +990,7 @@ project
            ├── cardinality: [0 - 1]
            ├── has-placeholder
            ├── key: ()
-           ├── fd: ()-->(1-6,9,12), (12)==(1), (1)==(12)
+           ├── fd: ()-->(1-6,9,12), (1)==(12), (12)==(1)
            ├── project
            │    ├── columns: phones1_.id:9!null person_id:12
            │    ├── cardinality: [0 - 1]
@@ -1005,7 +1005,7 @@ project
            │         ├── cardinality: [0 - 1]
            │         ├── has-placeholder
            │         ├── key: ()
-           │         ├── fd: ()-->(9,12,17), (17)==(9), (9)==(17)
+           │         ├── fd: ()-->(9,12,17), (9)==(17), (17)==(9)
            │         ├── values
            │         │    ├── columns: "$1":17
            │         │    ├── cardinality: [1 - 1]
@@ -1055,7 +1055,7 @@ project
            ├── cardinality: [0 - 1]
            ├── has-placeholder
            ├── key: ()
-           ├── fd: ()-->(1-6,9,12), (12)==(1), (1)==(12)
+           ├── fd: ()-->(1-6,9,12), (1)==(12), (12)==(1)
            ├── project
            │    ├── columns: phones1_.id:9!null person_id:12
            │    ├── cardinality: [0 - 1]
@@ -1070,7 +1070,7 @@ project
            │         ├── cardinality: [0 - 1]
            │         ├── has-placeholder
            │         ├── key: ()
-           │         ├── fd: ()-->(9,12,17), (17)==(9), (9)==(17)
+           │         ├── fd: ()-->(9,12,17), (9)==(17), (17)==(9)
            │         ├── values
            │         │    ├── columns: "$1":17
            │         │    ├── cardinality: [1 - 1]
@@ -1724,7 +1724,7 @@ project
  │    ├── key columns: [2] = [10]
  │    ├── lookup columns are key
  │    ├── key: (5)
- │    ├── fd: ()-->(1), (5)-->(6,7,10,12), (2)==(5), (5)==(2), (10)-->(12)
+ │    ├── fd: ()-->(1), (5)-->(6,7,10,12), (10)-->(12), (2)==(5), (5)==(2)
  │    ├── inner-join (lookup news [as=news1_])
  │    │    ├── columns: newspaper_id:1!null news_news_id:2!null news1_.news_id:5!null news1_.detail:6 news1_.title:7
  │    │    ├── key columns: [2] = [5]
@@ -1804,19 +1804,19 @@ project
  │    ├── key columns: [2] = [23]
  │    ├── lookup columns are key
  │    ├── key: (5)
- │    ├── fd: ()-->(1), (5)-->(6-8,11,12,17,19,23,26), (2)==(5), (5)==(2), (11)-->(12), (17)-->(19), (23)-->(26)
+ │    ├── fd: ()-->(1), (5)-->(6-8,11,12,17,19,23,26), (11)-->(12), (17)-->(19), (23)-->(26), (2)==(5), (5)==(2)
  │    ├── left-join (lookup generationgroup [as=a15])
  │    │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:5!null generation1_.age:6 generation1_.culture:7 generation1_.description:8 a13.id:11 a13.age:12 a15.id:17 a15.culture:19
  │    │    ├── key columns: [2] = [17]
  │    │    ├── lookup columns are key
  │    │    ├── key: (5)
- │    │    ├── fd: ()-->(1), (5)-->(6-8,11,12,17,19), (2)==(5), (5)==(2), (11)-->(12), (17)-->(19)
+ │    │    ├── fd: ()-->(1), (5)-->(6-8,11,12,17,19), (11)-->(12), (17)-->(19), (2)==(5), (5)==(2)
  │    │    ├── left-join (lookup generationgroup [as=a13])
  │    │    │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:5!null generation1_.age:6 generation1_.culture:7 generation1_.description:8 a13.id:11 a13.age:12
  │    │    │    ├── key columns: [2] = [11]
  │    │    │    ├── lookup columns are key
  │    │    │    ├── key: (5)
- │    │    │    ├── fd: ()-->(1), (5)-->(6-8,11,12), (2)==(5), (5)==(2), (11)-->(12)
+ │    │    │    ├── fd: ()-->(1), (5)-->(6-8,11,12), (11)-->(12), (2)==(5), (5)==(2)
  │    │    │    ├── inner-join (lookup generationgroup [as=generation1_])
  │    │    │    │    ├── columns: generationuser_id:1!null ref_id:2!null generation1_.id:5!null generation1_.age:6 generation1_.culture:7 generation1_.description:8
  │    │    │    │    ├── key columns: [2] = [5]
@@ -2518,7 +2518,7 @@ group-by (hash)
  │    │    ├── fd: (1)-->(2-5), (8,9)-->(11), (1,8,9)-->(2-5,11,20)
  │    │    ├── inner-join (cross)
  │    │    │    ├── columns: this_.studentid:1!null name:2!null address_city:3 address_state:4 preferredcoursecode:5!null enrolment_.studentid:8!null enrolment_.coursecode:9!null enrolment_.year:11!null maxstudentenrolment_.coursecode:15!null maxstudentenrolment_.year:17!null
- │    │    │    ├── fd: (1)-->(2-5), (5)==(15), (15)==(5), (8,9)-->(11)
+ │    │    │    ├── fd: (1)-->(2-5), (8,9)-->(11), (5)==(15), (15)==(5)
  │    │    │    ├── inner-join (hash)
  │    │    │    │    ├── columns: this_.studentid:1!null name:2!null address_city:3 address_state:4 preferredcoursecode:5!null maxstudentenrolment_.coursecode:15!null maxstudentenrolment_.year:17!null
  │    │    │    │    ├── fd: (1)-->(2-5), (5)==(15), (15)==(5)

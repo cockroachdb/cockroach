@@ -14,9 +14,11 @@ import (
 // EquivGroups describes a set of equivalence groups of columns. It can answer
 // queries about which columns are equivalent to one another. Equivalence groups
 // are always non-empty and disjoint.
-//
-// TODO(drewk): incorporate EquivGroups into FuncDepSets.
 type EquivGroups struct {
+	// groups contains the equiv groups in no particular order. It should never be
+	// accessed outside the EquivSet methods. Each ColSet should be considered
+	// immutable once it becomes part of the groups slice. To update an equiv
+	// group, replace it with a new ColSet.
 	groups []opt.ColSet
 }
 
@@ -182,11 +184,9 @@ func (eq *EquivGroups) AddFromFDs(fdset *FuncDepSet) {
 	if buildutil.CrdbTestBuild {
 		defer eq.verify()
 	}
-	for i := range fdset.deps {
-		fd := &fdset.deps[i]
-		if fd.equiv {
-			eq.AddNoCopy(fd.from.Union(fd.to))
-		}
+	for i := range fdset.equiv.groups {
+		// It's safe to not copy here because the equiv groups are immutable.
+		eq.AddNoCopy(fdset.equiv.groups[i])
 	}
 }
 

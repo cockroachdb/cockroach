@@ -39,7 +39,7 @@ limit
  ├── columns: x:1(int!null) y:2(int!null) z:3(float!null) s:4(string)
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4), (2)==(1), (1)==(2)
+ ├── fd: ()-->(1-4), (1)==(2), (2)==(1)
  ├── prune: (1-4)
  ├── interesting orderings: (+(1|2)) (-4,+3,+(1|2))
  ├── project
@@ -288,7 +288,7 @@ sort
       │    │    ├── k: 1
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
-      │    │    ├── fd: ()-->(11-13,16-18), (16)==(11), (13)==(18), (18)==(13), (12)==(17), (17)==(12), (11)==(16)
+      │    │    ├── fd: ()-->(11-13,16-18), (11)==(16), (16)==(11), (13)==(18), (18)==(13), (12)==(17), (17)==(12)
       │    │    ├── interesting orderings: (+(12|17))
       │    │    └── inner-join (cross)
       │    │         ├── columns: t2.a:11(int!null) t2.b:12(int!null) t2.c:13(int!null) t3.a:16(int!null) t3.b:17(int!null) t3.c:18(int!null)

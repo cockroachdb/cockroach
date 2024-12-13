@@ -2263,7 +2263,7 @@ quality of service: regular
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM tc JOIN t ON k=a
 ----
-memo (optimized, ~18KB, required=[presentation: info:14] [distribution: test])
+memo (optimized, ~19KB, required=[presentation: info:14] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:8,v:9] [distribution: test])
  │    └── [presentation: info:14] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:8,v:9] [distribution: test]" [presentation: a:1,b:2,k:8,v:9] [distribution: test])
@@ -2344,7 +2344,7 @@ TABLE t
  ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX t_pkey
       └── k int not null
-memo (optimized, ~18KB, required=[presentation: info:14] [distribution: test])
+memo (optimized, ~19KB, required=[presentation: info:14] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:8,v:9] [distribution: test])
  │    └── [presentation: info:14] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:8,v:9] [distribution: test]" [presentation: a:1,b:2,k:8,v:9] [distribution: test])

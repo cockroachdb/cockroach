@@ -1577,7 +1577,7 @@ union
  ├── right columns: y:7 x:6 z:8
  ├── internal-ordering: +(11|12),+13
  ├── key: (12,13)
- ├── fd: (11)==(12), (12)==(11)
+ ├── fd: (12,13)-->(11), (11)==(12), (12)==(11)
  ├── ordering: +(11|12) [actual: +11]
  ├── select
  │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
@@ -2922,7 +2922,7 @@ project
       └── project
            ├── columns: t0_85393.c0:1 t0_85393.rowid:2!null t1_85393.c0:5 t1_85393.rowid:6!null
            ├── key: (6)
-           ├── fd: (2)==(6), (6)==(2), (2)-->(1,5)
+           ├── fd: (2)-->(1,5), (2)==(6), (6)==(2)
            ├── ordering: +(2|6) [actual: +2]
            ├── inner-join (merge)
            │    ├── columns: t0_85393.c0:17 t0_85393.rowid:18!null t1_85393.c0:21 t1_85393.rowid:22!null
