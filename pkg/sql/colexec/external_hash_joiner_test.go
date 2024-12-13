@@ -50,6 +50,8 @@ func TestExternalHashJoiner(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	rng, _ := randutil.NewTestRand()
 	numForcedRepartitions := rng.Intn(5)
@@ -73,21 +75,26 @@ func TestExternalHashJoiner(t *testing.T) {
 					tc.skipAllNullsInjection = true
 				}
 				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
+					numOldClosers := closerRegistry.NumClosers()
 					sem := colexecop.NewTestingSemaphore(colexecop.ExternalHJMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
 					spec := createSpecForHashJoiner(tc)
-					hjOp, closers, err := createDiskBackedHashJoiner(
+					hjOp, err := createDiskBackedHashJoiner(
 						ctx, flowCtx, spec, sources, func() {}, queueCfg,
 						numForcedRepartitions, delegateFDAcquisitions, sem,
-						&monitorRegistry,
+						&monitorRegistry, &closerRegistry,
 					)
 					// Expect six closers:
 					// - 1 for the disk spiller
 					// - 1 for the external hash joiner
 					// - 2 for each of the external sorts (4 total here).
-					require.Equal(t, 6, len(closers))
+					require.Equal(t, 6, closerRegistry.NumClosers()-numOldClosers)
 					return hjOp, err
 				})
+				// Close all closers manually (in production this is done on the
+				// flow cleanup).
+				closerRegistry.Close(ctx)
+				closerRegistry.Reset()
 				for i, sem := range semsToCheck {
 					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 				}
@@ -142,17 +149,19 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 	sem := colexecop.NewTestingSemaphore(colexecop.ExternalHJMinPartitions)
 	// Ignore closers since the sorter should close itself when it is drained of
 	// all tuples. We assert this by checking that the semaphore reports a count
 	// of 0.
-	hj, _, err := createDiskBackedHashJoiner(
+	hj, err := createDiskBackedHashJoiner(
 		ctx, flowCtx, spec, []colexecop.Operator{leftSource, rightSource},
 		func() { spilled = true }, queueCfg,
 		// Force a repartition so that the recursive repartitioning always
 		// occurs.
 		1, /* numForcedRepartitions */
-		true /* delegateFDAcquisitions */, sem, &monitorRegistry,
+		true /* delegateFDAcquisitions */, sem, &monitorRegistry, &closerRegistry,
 	)
 	require.NoError(t, err)
 	hj.Init(ctx)
@@ -218,6 +227,8 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	nCols := 4
 	for _, typ := range []*types.T{types.Int, types.Bytes} {
@@ -261,10 +272,10 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							leftSource := colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
 							rightSource := colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
-							hj, _, err := createDiskBackedHashJoiner(
+							hj, err := createDiskBackedHashJoiner(
 								ctx, flowCtx, spec, []colexecop.Operator{leftSource, rightSource},
 								func() {}, queueCfg, 0 /* numForcedRepartitions */, false, /* delegateFDAcquisitions */
-								colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit), &monitorRegistry,
+								colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit), &monitorRegistry, &closerRegistry,
 							)
 							require.NoError(b, err)
 							hj.Init(ctx)
@@ -292,13 +303,15 @@ func createDiskBackedHashJoiner(
 	delegateFDAcquisitions bool,
 	testingSemaphore semaphore.Semaphore,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, []colexecop.Closer, error) {
+	closerRegistry *colexecargs.CloserRegistry,
+) (colexecop.Operator, error) {
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:            spec,
 		Inputs:          colexectestutils.MakeInputs(sources),
 		DiskQueueCfg:    diskQueueCfg,
 		FDSemaphore:     testingSemaphore,
 		MonitorRegistry: monitorRegistry,
+		CloserRegistry:  closerRegistry,
 	}
 	// We will not use streaming memory account for the external hash join so
 	// that the in-memory hash join operator could hit the memory limit set on
@@ -307,5 +320,5 @@ func createDiskBackedHashJoiner(
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Root, result.ToClose, err
+	return result.Root, err
 }
