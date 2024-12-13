@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -44,10 +45,6 @@ import (
 	"github.com/cockroachdb/logtags"
 	pbtypes "github.com/gogo/protobuf/types"
 )
-
-var logicalReplicationWriterResultType = []*types.T{
-	types.Bytes, // jobspb.ResolvedSpans
-}
 
 var useLowPriority = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -255,7 +252,7 @@ func newLogicalReplicationWriterProcessor(
 		debug:       &lrw.debug,
 	}
 
-	if err := lrw.Init(ctx, lrw, post, logicalReplicationWriterResultType, flowCtx, processorID, nil, /* memMonitor */
+	if err := lrw.Init(ctx, lrw, post, replicationutils.CrossClusterIngestionResultType, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {

@@ -65,6 +65,8 @@ var (
 		30*time.Second,
 		settings.NonNegativeDuration,
 	)
+
+	errOfflineInitialScanComplete = errors.New("spinning down offline initial scan")
 )
 
 type logicalReplicationResumer struct {
@@ -104,6 +106,38 @@ func (r *logicalReplicationResumer) updateRunningStatus(
 	}
 }
 
+func (r *logicalReplicationResumer) maybePublishCreatedTables(
+	ctx context.Context,
+	jobExecCtx sql.JobExecContext,
+	progress *jobspb.LogicalReplicationProgress,
+	details jobspb.LogicalReplicationDetails,
+) error {
+	if !(details.CreateTable && progress.ReplicatedTime.IsSet() && !progress.PublishedNewTables) {
+		return nil
+	}
+	return sql.DescsTxn(ctx, jobExecCtx.ExecCfg(), func(ctx context.Context, txn isql.Txn, descCol *descs.Collection) error {
+		b := txn.KV().NewBatch()
+		for _, pair := range details.ReplicationPairs {
+			td, err := descCol.MutableByID(txn.KV()).Table(ctx, descpb.ID(pair.DstDescriptorID))
+			if err != nil {
+				return err
+			}
+			td.SetPublic()
+			if err := descCol.WriteDescToBatch(ctx, true /* kvTrace */, td, b); err != nil {
+				return err
+			}
+		}
+		if err := txn.KV().Run(ctx, b); err != nil {
+			return err
+		}
+		return r.job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.PublishedNewTables = true
+			ju.UpdateProgress(md.Progress)
+			return nil
+		})
+	})
+}
+
 func (r *logicalReplicationResumer) ingest(
 	ctx context.Context, jobExecCtx sql.JobExecContext,
 ) error {
@@ -120,6 +154,9 @@ func (r *logicalReplicationResumer) ingest(
 		jobID                 = r.job.ID()
 		replicatedTimeAtStart = progress.ReplicatedTime
 	)
+	if err := r.maybePublishCreatedTables(ctx, jobExecCtx, progress, payload); err != nil {
+		return err
+	}
 
 	client, err := streamclient.GetFirstActiveClient(ctx,
 		append([]string{payload.SourceClusterConnStr}, progress.StreamAddresses...),
@@ -158,9 +195,11 @@ func (r *logicalReplicationResumer) ingest(
 	}
 
 	// TODO(azhu): add a flag to avoid recreating dlq tables during replanning
-	dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.destTableBySrcID)
-	if err := dlqClient.Create(ctx); err != nil {
-		return errors.Wrap(err, "failed to create dead letter queue")
+	if !(payload.CreateTable && progress.ReplicatedTime.IsEmpty()) {
+		dlqClient := InitDeadLetterQueueClient(execCfg.InternalDB.Executor(), planInfo.destTableBySrcID)
+		if err := dlqClient.Create(ctx); err != nil {
+			return errors.Wrap(err, "failed to create dead letter queue")
+		}
 	}
 
 	frontier, err := span.MakeFrontierAt(replicatedTimeAtStart, planInfo.sourceSpans...)
@@ -336,7 +375,8 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		asOf = payload.ReplicationStartTime
 	}
 	req := streampb.LogicalReplicationPlanRequest{
-		PlanAsOf: asOf,
+		PlanAsOf:       asOf,
+		IncludeIndexes: payload.CreateTable && progress.ReplicatedTime.IsEmpty(),
 	}
 	for _, pair := range payload.ReplicationPairs {
 		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
@@ -346,6 +386,11 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 	if err != nil {
 		return nil, nil, info, err
 	}
+
+	if payload.CreateTable && progress.ReplicatedTime.IsEmpty() {
+		return p.planOfflineInitialScan(ctx, dsp, plan)
+	}
+
 	info.sourceSpans = plan.SourceSpans
 	info.streamAddress = plan.Topology.StreamAddresses()
 
@@ -460,13 +505,101 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 	physicalPlan.AddNoInputStage(
 		processorCorePlacements,
 		execinfrapb.PostProcessSpec{},
-		logicalReplicationWriterResultType,
+		replicationutils.CrossClusterIngestionResultType,
 		execinfrapb.Ordering{},
 	)
 	physicalPlan.PlanToStreamColMap = []int{0}
 	sql.FinalizePlan(ctx, planCtx, physicalPlan)
 
 	return physicalPlan, planCtx, info, nil
+}
+
+func (p *logicalReplicationPlanner) planOfflineInitialScan(
+	ctx context.Context, dsp *sql.DistSQLPlanner, plan streamclient.LogicalReplicationPlan,
+) (*sql.PhysicalPlan, *sql.PlanningCtx, logicalReplicationPlanInfo, error) {
+	var (
+		execCfg  = p.jobExecCtx.ExecCfg()
+		evalCtx  = p.jobExecCtx.ExtendedEvalContext()
+		progress = p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+		payload  = p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
+		info     = logicalReplicationPlanInfo{
+			sourceSpans:   plan.SourceSpans,
+			streamAddress: plan.Topology.StreamAddresses(),
+		}
+	)
+
+	rekeys := make([]execinfrapb.TableRekey, 0, len(payload.ReplicationPairs))
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
+		for _, pair := range payload.ReplicationPairs {
+			// TODO(msbutler): avoid a marshalling round trip.
+			dstTableDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, descpb.ID(pair.DstDescriptorID))
+			if err != nil {
+				return errors.Wrapf(err, "failed to look up table descriptor %d", pair.DstDescriptorID)
+			}
+			newDescBytes, err := protoutil.Marshal(dstTableDesc.DescriptorProto())
+			if err != nil {
+				return errors.NewAssertionErrorWithWrappedErrf(err,
+					"marshalling descriptor")
+			}
+			rekeys = append(rekeys, execinfrapb.TableRekey{
+				OldID:   uint32(pair.SrcDescriptorID),
+				NewDesc: newDescBytes,
+			})
+		}
+		return nil
+	}); err != nil {
+		return nil, nil, info, err
+	}
+
+	// TODO(msbutler): consider repartitioning topology
+
+	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
+	if err != nil {
+		return nil, nil, info, err
+	}
+	destNodeLocalities, err := physical.GetDestNodeLocalities(ctx, dsp, nodes)
+	if err != nil {
+		return nil, nil, info, err
+	}
+
+	streamIngestionSpecs, _, err := physical.ConstructStreamIngestionPlanSpecs(
+		ctx,
+		plan.Topology,
+		destNodeLocalities,
+		payload.ReplicationStartTime,
+		hlc.Timestamp{},
+		progress.Checkpoint,
+		p.job.ID(),
+		streampb.StreamID(payload.StreamID),
+		execinfrapb.TenantRekey{},
+		rekeys,
+		plan.SourceSpans)
+	if err != nil {
+		return nil, nil, info, err
+	}
+
+	// Setup a one-stage plan with one proc per input spec.
+	corePlacement := make([]physicalplan.ProcessorCorePlacement, 0, len(streamIngestionSpecs))
+	for instanceID := range streamIngestionSpecs {
+		for _, spec := range streamIngestionSpecs[instanceID] {
+			corePlacement = append(corePlacement, physicalplan.ProcessorCorePlacement{
+				SQLInstanceID: instanceID,
+				Core:          execinfrapb.ProcessorCoreUnion{StreamIngestionData: &spec},
+			})
+		}
+	}
+
+	physPlan := planCtx.NewPhysicalPlan()
+	physPlan.AddNoInputStage(
+		corePlacement,
+		execinfrapb.PostProcessSpec{},
+		replicationutils.CrossClusterIngestionResultType,
+		execinfrapb.Ordering{},
+	)
+
+	physPlan.PlanToStreamColMap = []int{0}
+	sql.FinalizePlan(ctx, planCtx, physPlan)
+	return physPlan, planCtx, info, nil
 }
 
 // rowHandler is responsible for handling checkpoints sent by logical
@@ -582,6 +715,12 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+	if rh.job.Details().(jobspb.LogicalReplicationDetails).CreateTable && replicatedTime.IsSet() && rh.replicatedTimeAtStart.IsEmpty() {
+		// NB: the frontier update for the replicated time may not get sent over to
+		// the source, but this isn't a big deal-- when the distsql flow retries a
+		// new heartbeat will be sent.
+		return errOfflineInitialScanComplete
+	}
 	return nil
 }
 
@@ -614,6 +753,7 @@ func (r *logicalReplicationResumer) ingestWithRetries(
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.AfterRetryIteration != nil {
 			knobs.AfterRetryIteration(err)
 		}
+
 	}
 	return err
 }
@@ -648,6 +788,8 @@ func (r *logicalReplicationResumer) OnFailOrCancel(
 	for _, pair := range details.ReplicationPairs {
 		destTableIDs = append(destTableIDs, uint32(pair.DstDescriptorID))
 	}
+	// TODO(msbutler): drop any offline tables.
+
 	if err := replicationutils.UnlockLDRTables(ctx, execCfg, destTableIDs, r.job.ID()); err != nil {
 		return err
 	}
