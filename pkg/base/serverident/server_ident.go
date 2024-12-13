@@ -12,9 +12,9 @@ import "context"
 // an import dependency cycle. See SetSystemTenantID.
 var SystemTenantID string
 
-// ServerIdentificationContextKey is the type of a context.Value key
+// serverIdentificationContextKey is the type of a context.Value key
 // used to carry ServerIdentificationPayload values.
-type ServerIdentificationContextKey struct{}
+type serverIdentificationContextKey struct{}
 
 // ContextWithServerIdentification returns a context annotated with the provided
 // server identity. Use ServerIdentificationFromContext(ctx) to retrieve it from
@@ -22,13 +22,13 @@ type ServerIdentificationContextKey struct{}
 func ContextWithServerIdentification(
 	ctx context.Context, serverID ServerIdentificationPayload,
 ) context.Context {
-	return context.WithValue(ctx, ServerIdentificationContextKey{}, serverID)
+	return context.WithValue(ctx, serverIdentificationContextKey{}, serverID)
 }
 
 // ServerIdentificationFromContext retrieves the server identity put in the
 // context by ContextWithServerIdentification.
 func ServerIdentificationFromContext(ctx context.Context) ServerIdentificationPayload {
-	r := ctx.Value(ServerIdentificationContextKey{})
+	r := ctx.Value(serverIdentificationContextKey{})
 	if r == nil {
 		return nil
 	}
@@ -36,7 +36,7 @@ func ServerIdentificationFromContext(ctx context.Context) ServerIdentificationPa
 }
 
 // ServerIdentificationPayload is the type of a context.Value payload
-// associated with a ServerIdentificationContextKey.
+// associated with a serverIdentificationContextKey.
 type ServerIdentificationPayload interface {
 	// ServerIdentityString retrieves an identifier corresponding to the
 	// given retrieval key. If there is no value known for a given key,

@@ -41,7 +41,7 @@ func TestRedactedLogOutput(t *testing.T) {
 
 	ctx := context.Background()
 	sysIDPayload := testIDPayload{tenantID: "1"}
-	ctx = context.WithValue(ctx, serverident.ServerIdentificationContextKey{}, sysIDPayload)
+	ctx = serverident.ContextWithServerIdentification(ctx, sysIDPayload)
 
 	Errorf(ctx, "test1 %v end", "hello")
 	if contains(redactableIndicator, t) {
