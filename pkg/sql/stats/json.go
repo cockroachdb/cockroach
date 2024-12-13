@@ -85,7 +85,7 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 			NumEq:         b.NumEq,
 			NumRange:      b.NumRange,
 			DistinctRange: b.DistinctRange,
-			UpperBound:    tree.AsStringWithFlags(datum, tree.FmtExport),
+			UpperBound:    tree.AsStringWithFlags(datum, tree.FmtExport|tree.FmtAlwaysQualifyUserDefinedTypeNames),
 		})
 	}
 	return nil
