@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,10 +66,77 @@ func TestGetRecordedMetricNames(t *testing.T) {
 	metricsMetadata, _, _ := s.MetricsRecorder().GetMetricsMetadata(true /* combine */)
 	recordedNames := s.MetricsRecorder().GetRecordedMetricNames(metricsMetadata)
 
-	require.Equal(t, len(metricsMetadata), len(recordedNames))
 	for _, v := range recordedNames {
 		require.True(t, strings.HasPrefix(v, "cr.node") || strings.HasPrefix(v, "cr.store"))
 	}
+}
+
+func TestGetRecordedMetricNames_histogram(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	metricName := "my.metric"
+	metricsMetadata := map[string]metric.Metadata{
+		metricName: {
+			Name:        metricName,
+			Help:        "help text",
+			Measurement: "measurement",
+			Unit:        metric.Unit_COUNT,
+			MetricType:  prometheusgo.MetricType_HISTOGRAM,
+		},
+	}
+
+	recordedNames := s.MetricsRecorder().GetRecordedMetricNames(metricsMetadata)
+	require.Equal(t, len(metric.HistogramMetricComputers), len(recordedNames))
+	for _, histogramMetric := range metric.HistogramMetricComputers {
+		_, ok := recordedNames[metricName+histogramMetric.Suffix]
+		require.True(t, ok)
+	}
+}
+
+func TestHistogramMetricComputers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	metricName := "my.metric"
+	h := metric.NewHistogram(metric.HistogramOptions{
+		Metadata: metric.Metadata{Name: metricName},
+		Buckets:  []float64{10, 20, 30, 40, 50, 60, 70, 80, 90, 100},
+		Mode:     metric.HistogramModePrometheus,
+	})
+
+	sum := int64(0)
+	count := 0
+
+	for i := 1; i <= 10; i++ {
+		recordedVal := int64(i) * 10
+		sum += recordedVal
+		count++
+		h.RecordValue(recordedVal)
+	}
+
+	avg := float64(sum) / float64(count)
+	snapshot := h.WindowedSnapshot()
+	results := make(map[string]float64, len(metric.HistogramMetricComputers))
+	for _, c := range metric.HistogramMetricComputers {
+		results[metricName+c.Suffix] = c.ComputedMetric(snapshot)
+	}
+
+	expected := map[string]float64{
+		metricName + "-sum":     float64(sum),
+		metricName + "-avg":     avg,
+		metricName + "-count":   float64(count),
+		metricName + "-max":     100,
+		metricName + "-p99.999": 100,
+		metricName + "-p99.99":  100,
+		metricName + "-p99.9":   100,
+		metricName + "-p99":     100,
+		metricName + "-p90":     90,
+		metricName + "-p75":     80,
+		metricName + "-p50":     50,
+	}
+	require.Equal(t, expected, results)
 }
 
 // TestStatusVars verifies that prometheus metrics are available via the
