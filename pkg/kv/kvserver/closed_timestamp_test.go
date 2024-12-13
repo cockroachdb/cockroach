@@ -661,7 +661,7 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 					NodeID:  newLeaseholder.NodeID(),
 					StoreID: newLeaseholder.StoreID(),
 				}
-				newLease, err := tc.MoveRangeLeaseNonCooperatively(ctx, rhsDesc, target, clock)
+				newLease, err := tc.MoveRangeLeaseNonCooperatively(t, ctx, rhsDesc, target, clock)
 				require.NoError(t, err)
 				return target, newLease.Start.ToTimestamp()
 			},

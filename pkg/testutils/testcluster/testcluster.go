@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1208,6 +1209,7 @@ func (tc *TestCluster) RemoveLeaseHolderOrFatal(
 
 // MoveRangeLeaseNonCooperatively is part of the TestClusterInterface.
 func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
+	t *testing.T,
 	ctx context.Context,
 	rangeDesc roachpb.RangeDescriptor,
 	dest roachpb.ReplicationTarget,
@@ -1235,9 +1237,8 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 	// lease. But it is possible that another replica grabs the lease before us
 	// when it's up for grabs. To handle that case, we wrap the entire operation
 	// in an outer retry loop.
-	const retryDur = testutils.DefaultSucceedsSoonDuration
 	var newLease *roachpb.Lease
-	err = retry.ForDuration(retryDur, func() error {
+	testutils.SucceedsWithin(t, func() error {
 		// Find the current lease.
 		prevLease, _, err := tc.FindRangeLease(rangeDesc, nil /* hint */)
 		if err != nil {
@@ -1287,7 +1288,7 @@ func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 				"but lease in wrong location, want %v, got %v", dest, newLease.Replica)
 		}
 		return nil
-	})
+	}, 2*testutils.DefaultSucceedsSoonDuration)
 	log.Infof(ctx, "MoveRangeLeaseNonCooperatively: acquired lease: %s. err: %v", newLease, err)
 	return newLease, err
 }
