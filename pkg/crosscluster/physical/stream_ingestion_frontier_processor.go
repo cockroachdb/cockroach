@@ -255,7 +255,7 @@ func (sf *streamIngestionFrontier) ConsumerClosed() {
 func decodeResolvedSpans(
 	alloc *tree.DatumAlloc, resolvedSpanDatums rowenc.EncDatum,
 ) (*jobspb.ResolvedSpans, error) {
-	if err := resolvedSpanDatums.EnsureDecoded(streamIngestionResultTypes[0], alloc); err != nil {
+	if err := resolvedSpanDatums.EnsureDecoded(replicationutils.CrossClusterIngestionResultType[0], alloc); err != nil {
 		return nil, err
 	}
 	raw, ok := resolvedSpanDatums.Datum.(*tree.DBytes)

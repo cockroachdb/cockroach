@@ -19,6 +19,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/isql",
+        "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/fingerprintutils",

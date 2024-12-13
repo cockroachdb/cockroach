@@ -248,6 +248,9 @@ message StreamIngestionDataSpec {
 
   // Checkpoint stores a set of resolved spans denoting completed progress.
   optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 10 [(gogoproto.nullable) = false];
+
+  repeated TableRekey ldr_init_scan_rekey = 12 [(gogoproto.nullable) = false, (gogoproto.customname) = "LDRInitScanRekey"];
+
 }
 
 message StreamIngestionFrontierSpec {
