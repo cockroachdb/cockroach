@@ -3,26 +3,24 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package main
+package cli
 
 import (
 	"fmt"
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
 // setBashCompletionFunction sets up a custom bash completion function to
 // autocomplete cluster names in various commands.
-func setBashCompletionFunction() {
+func (cr *commandRegistry) setBashCompletionFunction() {
 	// Generate a list of commands that DON'T take a cluster argument.
 	var s []string
-	for _, cmd := range []*cobra.Command{createCmd, listCmd, syncCmd, gcCmd} {
-		s = append(s, fmt.Sprintf("%s_%s", rootCmd.Name(), cmd.Name()))
+	for _, cmd := range cr.excludeFromBashCompletion {
+		s = append(s, fmt.Sprintf("%s_%s", cr.rootCmd.Name(), cmd.Name()))
 	}
 	excluded := strings.Join(s, " | ")
 
-	rootCmd.BashCompletionFunction = fmt.Sprintf(
+	cr.rootCmd.BashCompletionFunction = fmt.Sprintf(
 		`__custom_func()
 {
     # only complete the 2nd arg, e.g. adminurl <foo>
