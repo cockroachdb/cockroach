@@ -224,8 +224,9 @@ func (h *Helper) ExecWithGateway(
 	return h.DefaultService().ExecWithGateway(rng, nodes, query, args...)
 }
 
-// GoWithCancel implements the Tasker interface.
-func (h *Helper) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelFunc {
+// defaultTaskOptions returns the default options that are passed to all tasks
+// started by the helper.
+func (h *Helper) defaultTaskOptions() []task.Option {
 	loggerFuncOpt := task.LoggerFunc(func(name string) (*logger.Logger, error) {
 		bgLogger, err := h.loggerFor(name)
 		if err != nil {
@@ -246,14 +247,24 @@ func (h *Helper) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelF
 		}
 		return nil
 	})
+	return []task.Option{loggerFuncOpt, panicOpt, errHandlerOpt}
+}
+
+// GoWithCancel implements the Tasker interface.
+func (h *Helper) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelFunc {
 	return h.runner.background.GoWithCancel(
-		fn, task.OptionList(opts...), loggerFuncOpt, panicOpt, errHandlerOpt,
+		fn, task.OptionList(h.defaultTaskOptions()...), task.OptionList(opts...),
 	)
 }
 
 // Go implements the Tasker interface.
 func (h *Helper) Go(fn task.Func, opts ...task.Option) {
 	h.GoWithCancel(fn, opts...)
+}
+
+// NewGroup implements the Group interface.
+func (h *Helper) NewGroup() task.Group {
+	return h.runner.background.NewGroup(h.defaultTaskOptions()...)
 }
 
 // GoCommand has the same semantics of `GoWithCancel()`; the command passed will
