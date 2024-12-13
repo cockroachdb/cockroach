@@ -372,6 +372,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		),
 		KVFlowAdmittedPiggybacker:    node_rac2.NewAdmittedPiggybacker(),
 		KVFlowStreamTokenProvider:    rac2.NewStreamTokenCounterProvider(st, clock),
+		KVFlowWaitForEvalConfig:      rac2.NewWaitForEvalConfig(st),
 		KVFlowEvalWaitMetrics:        rac2.NewEvalWaitMetrics(),
 		KVFlowRangeControllerMetrics: rac2.NewRangeControllerMetrics(),
 	}
@@ -1549,6 +1550,17 @@ func NewStore(
 		Name:     mon.MakeMonitorName("raft-receive-queue"),
 		CurCount: s.metrics.RaftRcvdQueuedBytes,
 		Settings: cfg.Settings,
+	})
+	s.cfg.KVFlowWaitForEvalConfig.RegisterWatcher(func(wc rac2.WaitForEvalCategory) {
+		// When the system is configured with rac2.AllWorkWaitsForEval, RACv2 is
+		// running in a mode where all senders are using send token pools for all
+		// messages to pace sending to a receiving store. These send token pools
+		// are stricter than per range limits. Additionally, these are byte sized
+		// pools, which is a better way to protect the receiver than a count
+		// limit. Hence, we turn off maxLen enforcement in that case, since it is
+		// unnecessary extra protection, and to respect this on the sender side
+		// (in RACv2 code) would result in unnecessary code complexity.
+		s.raftRecvQueues.SetEnforceMaxLen(wc != rac2.AllWorkWaitsForEval)
 	})
 
 	s.cfg.RangeLogWriter = newWrappedRangeLogWriter(
