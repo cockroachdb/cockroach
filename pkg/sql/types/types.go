@@ -2060,6 +2060,13 @@ func (t *T) SQLString() string {
 		return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
 	case TupleFamily:
 		if t.UserDefined() {
+			// We do not expect to be in a situation where we want to format a
+			// user-defined type to a string and do not have the TypeMeta hydrated,
+			// but there have been bugs in the past, and returning a less informative
+			// string is better than a nil-pointer panic.
+			if t.TypeMeta.Name == nil {
+				return fmt.Sprintf("@%d", t.Oid())
+			}
 			// Do not include the catalog name. We do not allow a table to reference
 			// a type in another database, so it will always be for the current database.
 			// Removing the catalog name makes the output more portable for other
@@ -2080,12 +2087,18 @@ func (t *T) SQLString() string {
 // SQLStringFullyQualified is a wrapper for SQLString() for when we need the
 // type name to be a fully-qualified 3-part name.
 func (t *T) SQLStringFullyQualified() string {
-	if t.TypeMeta.Name != nil &&
-		(t.Family() == EnumFamily || (t.Family() == TupleFamily && t.UserDefined())) {
-		// Include the catalog in the type name. This is necessary to properly
-		// resolve the type, as some code paths require the database name to
-		// correctly distinguish cross-database references.
-		return t.TypeMeta.Name.FQName(true /* explicitCatalog */)
+	if t.UserDefined() {
+		switch t.Family() {
+		case ArrayFamily:
+			return t.ArrayContents().SQLStringFullyQualified() + "[]"
+		default:
+			if t.TypeMeta.Name != nil {
+				// Include the catalog in the type name. This is necessary to properly
+				// resolve the type, as some code paths require the database name to
+				// correctly distinguish cross-database references.
+				return t.TypeMeta.Name.FQName(true /* explicitCatalog */)
+			}
+		}
 	}
 	return t.SQLString()
 }
