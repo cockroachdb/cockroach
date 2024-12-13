@@ -75,6 +75,16 @@ func (q *unQuantizer) QuantizeInSet(
 	unquantizedSet.AddSet(vectors)
 }
 
+// NewQuantizedVectorSet implements the Quantizer interface
+func (q *unQuantizer) NewQuantizedVectorSet(size int) QuantizedVectorSet {
+	dataBuffer := make([]float32, 0, size*q.GetOriginalDims())
+	unquantizedSet := &UnQuantizedVectorSet{
+		Centroid: make([]float32, q.GetRandomDims()),
+		Vectors:  vector.MakeSetFromRawData(dataBuffer, q.GetOriginalDims()),
+	}
+	return unquantizedSet
+}
+
 // EstimateSquaredDistances implements the Quantizer interface.
 func (q *unQuantizer) EstimateSquaredDistances(
 	ctx context.Context,
