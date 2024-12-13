@@ -368,7 +368,8 @@ type RaftEvent struct {
 	// Entries contains the log entries to be written to storage.
 	Entries []raftpb.Entry
 	// MsgApps to followers. Only populated on the leader, when operating in
-	// MsgAppPush mode. This is informational, for bookkeeping in the callee.
+	// MsgAppPush mode. This is informational, for bookkeeping in the callee,
+	// which only looks at MsgApps with non-empty Entries.
 	//
 	// These MsgApps can be for entries in Entries, or for earlier ones.
 	// Typically, the MsgApps are ordered by entry index, and are a sequence of
@@ -436,7 +437,13 @@ func RaftEventFromMsgStorageAppendAndMsgApps(
 		event.Snap = appendMsg.Snapshot
 		event.Entries = appendMsg.Entries
 	}
-	if len(outboundMsgs) == 0 {
+	if len(outboundMsgs) == 0 || mode == MsgAppPull {
+		// MsgAppPull mode can have MsgApps with entries under some cases: (a)
+		// when the replica is in StateProbe, (b) stale MsgApps queued up inside
+		// Raft from when the replica was in StateProbe, even though it is now in
+		// StateReplicate. We ignore those in the RaftEvent created for the
+		// RangeController. They will get sent, but that is not the concern of the
+		// RACv2 code.
 		return event
 	}
 	// Clear the slices, to reuse slice allocations.
