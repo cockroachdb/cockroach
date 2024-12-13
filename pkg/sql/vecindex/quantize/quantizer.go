@@ -64,6 +64,10 @@ type Quantizer interface {
 	// NOTE: The caller must ensure that a Workspace is attached to the context.
 	QuantizeInSet(ctx context.Context, quantizedSet QuantizedVectorSet, vectors *vector.Set)
 
+	// NewQuantizedVectorSet returns a new empty vector set preallocated to the
+	// number of vectors specified.
+	NewQuantizedVectorSet(size int, centroid vector.T) QuantizedVectorSet
+
 	// EstimateSquaredDistances returns the estimated squared distances of the
 	// query vector from each data vector represented in the given quantized
 	// vector set, as well as the error bounds for those distances.
