@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
@@ -297,13 +296,6 @@ func (r *testRunner) Run(
 	// Validate options.
 	if len(tests) == 0 {
 		return fmt.Errorf("no test matched filters")
-	}
-
-	hasDevLicense := config.CockroachDevLicense != ""
-	for _, t := range tests {
-		if t.RequiresLicense && !hasDevLicense {
-			return fmt.Errorf("test %q requires an enterprise license, set COCKROACH_DEV_LICENSE", t.Name)
-		}
 	}
 
 	if err := clustersOpt.validate(); err != nil {

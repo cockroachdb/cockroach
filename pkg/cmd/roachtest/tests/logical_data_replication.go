@@ -203,7 +203,6 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			Suites:           registry.Suites(registry.Nightly),
 			Cluster:          sp.clusterSpec.ToSpec(r),
 			Leases:           registry.MetamorphicLeases,
-			RequiresLicense:  true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rng, seed := randutil.NewPseudoRand()
 				t.L().Printf("random seed is %d", seed)
