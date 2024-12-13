@@ -158,6 +158,8 @@ func (zc *debugZipContext) collectClusterData(
 					return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, cErr
 				}
 			}
+		} else {
+			s.info("skipping %s due to file filters", nodesFile)
 		}
 
 		if nodesList == nil {
@@ -189,7 +191,10 @@ func (zc *debugZipContext) collectClusterData(
 			if cErr := zc.z.createJSONOrError(s, zc.prefix+"/"+livenessFile, nodes, err); cErr != nil {
 				return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, cErr
 			}
+		} else {
+			s.info("skipping %s due to file filters", livenessFile)
 		}
+
 		livenessByNodeID = map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
 		if lresponse != nil {
 			livenessByNodeID = lresponse.Statuses
@@ -232,7 +237,7 @@ func (zc *debugZipContext) getTenantRange(ctx context.Context) error {
 				sLocality := zc.clusterPrinter.start(redact.Sprintf("writing tenant ranges for locality: %s", locality))
 				name := fmt.Sprintf("%s/%s/%s", zc.prefix, tenantRangesName, locality)
 				if !zipCtx.files.shouldIncludeFile(locality + ".json") {
-					s.info("skipping tenant ranges for locality %s", locality)
+					s.info("skipping tenant ranges for locality %s due to file filters", locality)
 					continue
 				}
 				s := zc.clusterPrinter.start(redact.Sprintf("writing tenant ranges for locality %s", locality))

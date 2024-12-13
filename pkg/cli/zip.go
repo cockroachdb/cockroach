@@ -522,8 +522,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	baseName := path.Join(base, fileName)
 	fileNameWithExtension := fileName + "." + zc.clusterPrinter.sqlOutputFilenameExtension
 	if !zipCtx.files.shouldIncludeFile(fileNameWithExtension) {
-		s := zr.start(redact.Sprintf("skipping table data for %s due to file filters", table))
-		s.done()
+		zr.info("skipping table data for %s due to file filters", table)
 		return nil
 	}
 	s := zr.start(redact.Sprintf("retrieving SQL data for %s", table))
