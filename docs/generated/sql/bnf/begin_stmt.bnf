@@ -1,2 +1,0 @@
-begin_stmt ::=
-	'START' 'TRANSACTION' begin_transaction
