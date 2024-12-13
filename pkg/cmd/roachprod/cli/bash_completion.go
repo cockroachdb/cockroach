@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package main
+package cli
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ import (
 
 // setBashCompletionFunction sets up a custom bash completion function to
 // autocomplete cluster names in various commands.
-func setBashCompletionFunction() {
+func setBashCompletionFunction(rootCmd, syncCmd *cobra.Command) {
 	// Generate a list of commands that DON'T take a cluster argument.
 	var s []string
 	for _, cmd := range []*cobra.Command{createCmd, listCmd, syncCmd, gcCmd} {
