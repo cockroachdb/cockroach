@@ -223,14 +223,23 @@ func (r *Replica) updateTimestampCache(
 				tombstone = false
 			case roachpb.ABORTED:
 				tombstone = true
-			case roachpb.STAGING:
-				// No need to update the timestamp cache. If a transaction
-				// is in this state then it must have a transaction record.
-				continue
 			case roachpb.COMMITTED:
-				// No need to update the timestamp cache. It was already
-				// updated by the corresponding EndTxn request.
+				// No need to update the timestamp cache. It was already updated by the
+				// corresponding EndTxn request.
 				continue
+			case roachpb.STAGING:
+				// Staging transaction cannot have their timestamp pushed. They can be
+				// aborted, but then they will be in the ABORTED state. So this must
+				// have been a no-op push where the PushTo timestamp was already below
+				// the staging transaction's timestamp.
+				continue
+			case roachpb.PREPARED:
+				// Prepared transactions are not allowed to be pushed, regardless of the
+				// push type. So this must have been a no-op push where the PushTo
+				// timestamp was already below the prepared transaction's timestamp.
+				continue
+			default:
+				log.Fatalf(ctx, "unexpected transaction status: %v", pushee.Status)
 			}
 
 			var key roachpb.Key
