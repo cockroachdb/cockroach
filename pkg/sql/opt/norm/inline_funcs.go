@@ -245,7 +245,7 @@ func (c *CustomFuncs) InlineProjectProject(
 	}
 
 	// Add any outer passthrough columns that refer to inner synthesized columns.
-	newPassthrough := passthrough
+	newPassthrough := passthrough.Copy()
 	if !newPassthrough.Empty() {
 		for i := range innerProjections {
 			item := &innerProjections[i]
