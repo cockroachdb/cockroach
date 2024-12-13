@@ -219,13 +219,17 @@ func (r *Replica) updateTimestampCache(
 
 			var tombstone bool
 			switch pushee.Status {
-			case roachpb.PENDING:
+			case roachpb.PENDING, roachpb.PREPARED:
 				tombstone = false
 			case roachpb.ABORTED:
 				tombstone = true
 			case roachpb.STAGING:
 				// No need to update the timestamp cache. If a transaction
 				// is in this state then it must have a transaction record.
+				// TODO(nvanbenschoten): is this correct? We don't allow a
+				// STAGING transaction to be pushed, so this might be dead code,
+				// but as of 3dbb321e, it seems like we should be updating the
+				// timestamp cache even if we have a transaction record.
 				continue
 			case roachpb.COMMITTED:
 				// No need to update the timestamp cache. It was already
