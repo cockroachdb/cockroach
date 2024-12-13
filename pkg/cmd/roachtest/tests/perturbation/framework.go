@@ -471,7 +471,7 @@ type perturbation interface {
 	endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration
 }
 
-func prettyPrint(title string, stats map[string]trackedStat) string {
+func prettyPrint(title string, stats opStats) string {
 	var outputStr strings.Builder
 	outputStr.WriteString(title + "\n")
 	keys := sortedStringKeys(stats)
@@ -556,8 +556,8 @@ func (w workloadData) convert(t cli.Tick) trackedStat {
 
 // worstStats returns the worst stats for a given interval for each of the
 // tracked data types.
-func (w workloadData) worstStats(i interval) map[string]trackedStat {
-	m := make(map[string]trackedStat)
+func (w workloadData) worstStats(i interval) opStats {
+	m := make(opStats)
 	for name, stats := range w.data {
 		for time, stat := range stats {
 			if time.After(i.start) && time.Before(i.end) {
@@ -722,13 +722,17 @@ func (t trackedStat) merge(o trackedStat, c scoreCalculator) trackedStat {
 	}
 }
 
+// opStats represent the overall statistics from a single operation over a time
+// interval
+type opStats map[string]trackedStat
+
 // isAcceptableChange determines if a change from the baseline is acceptable.
 // It compares all the metrics rather than failing fast. Normally multiple
 // metrics will fail at once if a test is going to fail and it is helpful to see
 // all the differences.
 // This returns an array of strings with the reason(s) the change was too large.
 func isAcceptableChange(
-	logger *logger.Logger, baseline, other map[string]trackedStat, acceptableChange float64,
+	logger *logger.Logger, baseline, other opStats, acceptableChange float64,
 ) []string {
 	// This can happen if we aren't measuring one of the phases.
 	var failures []string
@@ -860,7 +864,7 @@ func waitDuration(ctx context.Context, duration time.Duration) {
 	}
 }
 
-func sortedStringKeys(m map[string]trackedStat) []string {
+func sortedStringKeys(m opStats) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
@@ -873,7 +877,7 @@ func sortedStringKeys(m map[string]trackedStat) []string {
 // can be picked up by roachperf. Currently it only writes the write stats since
 // there would be too many lines on the graph otherwise.
 func (v variations) writePerfArtifacts(
-	ctx context.Context, t test.Test, baseline, perturbation, recovery map[string]trackedStat,
+	ctx context.Context, t test.Test, baseline, perturbation, recovery opStats,
 ) error {
 
 	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, v)
