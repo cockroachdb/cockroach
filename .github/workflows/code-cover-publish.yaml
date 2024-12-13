@@ -56,3 +56,7 @@ jobs:
           parent: false
           destination: 'crl-codecover-public/pr-cockroach/'
           process_gcloudignore: false
+
+      - name: 'Call DeadManSnitch'
+        run: |
+          curl -X GET 'https://nosnch.in/c2d75963ee' -d 'message=Code coverage uploaded to GCS'
