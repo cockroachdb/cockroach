@@ -469,7 +469,6 @@ func registerPGRegress(r registry.Registry) {
 		// some diffs include line numbers, so we don't treat failures as
 		// blockers for now.
 		NonReleaseBlocker: true,
-		RequiresLicense:   true,
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Weekly),
 		Leases:            registry.MetamorphicLeases,

@@ -94,12 +94,6 @@ type TestSpec struct {
 	// still be run regularly.
 	NonReleaseBlocker bool
 
-	// RequiresLicense indicates that the test requires an
-	// enterprise license to run correctly. Use this to ensure
-	// tests will fail-early if COCKROACH_DEV_LICENSE is not set
-	// in the environment.
-	RequiresLicense bool
-
 	// RequiresDeprecatedWorkload indicates that the test requires
 	// the 'workload' binary to be present for the test to run. Use
 	// this to ensure tests will fail-early if a 'workload' binary

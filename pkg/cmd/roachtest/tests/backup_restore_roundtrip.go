@@ -82,7 +82,6 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			Owner:             registry.OwnerDisasterRecovery,
 			Cluster:           r.MakeClusterSpec(4, spec.WorkloadNode()),
 			EncryptionSupport: registry.EncryptionMetamorphic,
-			RequiresLicense:   true,
 			NativeLibs:        registry.LibGEOS,
 			// See https://github.com/cockroachdb/cockroach/issues/105968
 			CompatibleClouds:           registry.Clouds(spec.GCE, spec.Local),

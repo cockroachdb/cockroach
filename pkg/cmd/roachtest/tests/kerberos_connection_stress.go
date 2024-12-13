@@ -42,7 +42,6 @@ func registerKerberosConnectionStressTest(r registry.Registry) {
 		// Cannot be run locally as it is dependent on Linux.
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
-		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKerberosConnectionStressTest(ctx, t, c, numNodes, 1)
 		},

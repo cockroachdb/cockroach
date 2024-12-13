@@ -73,7 +73,6 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          testTimeout,
-		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			numWorkers := (len(c.All()) - 1) * 10
 			// Number of tables per-database from the TPCC template.

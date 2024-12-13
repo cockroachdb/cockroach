@@ -27,7 +27,6 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 		Name:             "schemachange/multiregion/system-database",
 		Owner:            registry.OwnerSQLFoundations,
 		Timeout:          time.Hour * 1,
-		RequiresLicense:  true,
 		Cluster:          clusterSpec,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
