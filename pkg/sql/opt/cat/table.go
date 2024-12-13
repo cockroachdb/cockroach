@@ -363,9 +363,11 @@ type UniqueConstraint interface {
 	// WithoutIndex is true if this unique constraint is not enforced by an index.
 	WithoutIndex() bool
 
-	// CanUseTombstones is true if this unique constraint can be enforced by
-	// writing tombstones to all partitions.
-	CanUseTombstones() bool
+	// TombstoneIndexOrdinal returns the index ordinal of the index into which to write
+	// tombstones for the enforcement of this uniqueness constraint, or -1 if this
+	// constraint is not enforceable with tombstones. 'ok' is true if this constraint is
+	// enforceable with tombstones, false otherwise.
+	TombstoneIndexOrdinal() (_ IndexOrdinal, ok bool)
 
 	// Validated is true if the constraint is validated (i.e. we know that the
 	// existing data satisfies the constraint). It is possible to set up a unique
