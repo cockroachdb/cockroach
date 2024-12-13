@@ -470,16 +470,6 @@ type perturbation interface {
 	endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration
 }
 
-func prettyPrint(title string, stats opStats) string {
-	var outputStr strings.Builder
-	outputStr.WriteString(title + "\n")
-	keys := sortedStringKeys(stats)
-	for _, name := range keys {
-		outputStr.WriteString(fmt.Sprintf("%-15s: %s\n", name, stats[name]))
-	}
-	return outputStr.String()
-}
-
 // interval is a time interval.
 type interval struct {
 	start time.Time
@@ -650,10 +640,6 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	afterDuration := v.perturbation.endPerturbation(ctx, t, v)
 	afterInterval := intervalSince(afterDuration)
 
-	t.L().Printf("Baseline interval     : %s", baselineInterval)
-	t.L().Printf("Perturbation interval : %s", perturbationInterval)
-	t.L().Printf("Recovery interval     : %s", afterInterval)
-
 	cancelWorkload()
 	require.NoError(t, m.WaitE())
 
@@ -661,13 +647,13 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	perturbationStats := data.worstStats(perturbationInterval)
 	afterStats := data.worstStats(afterInterval)
 
-	t.L().Printf("%s\n", prettyPrint("Baseline stats", baselineStats))
-	t.L().Printf("%s\n", prettyPrint("Perturbation stats", perturbationStats))
-	t.L().Printf("%s\n", prettyPrint("Recovery stats", afterStats))
-
 	t.Status("T5: validating results")
 	require.NoError(t, roachtestutil.DownloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
 	require.NoError(t, v.writePerfArtifacts(ctx, t, baselineStats, perturbationStats, afterStats))
+
+	t.L().Printf("Baseline     : %s\n%s\n", baselineInterval, baselineStats)
+	t.L().Printf("Perturbation : %s\n%s\n", perturbationInterval, perturbationStats)
+	t.L().Printf("Recovery     : %s\n%s\n", afterInterval, afterStats)
 
 	perturbationInc := baselineStats.increase(perturbationStats)
 	recoveryInc := baselineStats.increase(afterStats)
@@ -726,6 +712,14 @@ func (t trackedStat) merge(o trackedStat, c scoreCalculator) trackedStat {
 		Tick:  tick,
 		score: max(t.score, o.score),
 	}
+}
+
+func (r opStats) String() string {
+	var outputStr strings.Builder
+	for key, stat := range r {
+		outputStr.WriteString(fmt.Sprintf("%-15s: %s\n", key, stat))
+	}
+	return outputStr.String()
 }
 
 // opStats represent the overall statistics from a single operation over a time
