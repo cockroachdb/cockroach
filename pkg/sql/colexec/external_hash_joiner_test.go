@@ -65,15 +65,6 @@ func TestExternalHashJoiner(t *testing.T) {
 				log.Infof(ctx, "spillForced=%t/numRepartitions=%d/%s/delegateFDAcquisitions=%t",
 					spillForced, numForcedRepartitions, tc.description, delegateFDAcquisitions)
 				var semsToCheck []semaphore.Semaphore
-				oldSkipAllNullsInjection := tc.skipAllNullsInjection
-				if !tc.onExpr.Empty() {
-					// When we have ON expression, there might be other operators (like
-					// selections) on top of the external hash joiner in
-					// diskSpiller.diskBackedOp chain. This will not allow for Close()
-					// call to propagate to the external hash joiner, so we will skip
-					// allNullsInjection test for now.
-					tc.skipAllNullsInjection = true
-				}
 				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					numOldClosers := closerRegistry.NumClosers()
 					sem := colexecop.NewTestingSemaphore(colexecop.ExternalHJMinPartitions)
@@ -98,7 +89,6 @@ func TestExternalHashJoiner(t *testing.T) {
 				for i, sem := range semsToCheck {
 					require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 				}
-				tc.skipAllNullsInjection = oldSkipAllNullsInjection
 			}
 		}
 	}

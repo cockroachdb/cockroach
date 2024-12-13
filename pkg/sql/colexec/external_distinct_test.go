@@ -91,6 +91,10 @@ func TestExternalDistinct(t *testing.T) {
 				require.Equal(t, numExpectedClosers, closerRegistry.NumClosers()-numOldClosers)
 				return distinct, err
 			})
+			// Close all closers manually (in production this is done on the
+			// flow cleanup).
+			closerRegistry.Close(ctx)
+			closerRegistry.Reset()
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
