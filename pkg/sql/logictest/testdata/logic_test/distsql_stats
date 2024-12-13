@@ -1107,10 +1107,10 @@ statement ok
 CREATE TYPE e AS ENUM ('hello', 'howdy', 'hi');
 
 statement ok
-CREATE TABLE et (x e, y e, PRIMARY KEY (x));
+CREATE TABLE et (x e, y e, z e[], PRIMARY KEY (x), FAMILY (x, y, z));
 
 statement ok
-INSERT INTO et VALUES ('hello', 'hello'), ('howdy', 'howdy'), ('hi', 'hi');
+INSERT INTO et VALUES ('hello', 'hello', '{hello}'), ('howdy', 'howdy', '{howdy}'), ('hi', 'hi', '{hi}');
 
 statement ok
 CREATE STATISTICS s FROM et
@@ -1130,6 +1130,140 @@ ORDER BY
 statistics_name  column_names  row_count  null_count  has_histogram
 s                {x}           3          0           true
 s                {y}           3          0           true
+s                {z}           3          0           true
+
+query T
+SELECT jsonb_pretty(
+  regexp_replace(COALESCE(json_agg(stat), '[]')::STRING, '"id": [0-9]+', '"id": 0', 'g')::JSONB
+)
+  FROM (
+SELECT json_array_elements(statistics) - 'created_at' AS stat
+FROM [SHOW STATISTICS USING JSON FOR TABLE et]
+)
+----
+[
+    {
+        "avg_size": 4,
+        "columns": [
+            "x"
+        ],
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hello"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "howdy"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hi"
+            }
+        ],
+        "histo_col_type": "test.public.e",
+        "histo_version": 3,
+        "id": 0,
+        "name": "s",
+        "null_count": 0,
+        "row_count": 3
+    },
+    {
+        "avg_size": 3,
+        "columns": [
+            "y"
+        ],
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hello"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "howdy"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "hi"
+            }
+        ],
+        "histo_col_type": "test.public.e",
+        "histo_version": 3,
+        "id": 0,
+        "name": "s",
+        "null_count": 0,
+        "row_count": 3
+    },
+    {
+        "avg_size": 7,
+        "columns": [
+            "z"
+        ],
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 1,
+                "num_range": 0,
+                "upper_bound": "ARRAY['hello':::test.public.e]"
+            },
+            {
+                "distinct_range": 1,
+                "num_eq": 1,
+                "num_range": 1,
+                "upper_bound": "ARRAY['hi':::test.public.e]"
+            }
+        ],
+        "histo_col_type": "test.public.e[]",
+        "histo_version": 3,
+        "id": 0,
+        "name": "s",
+        "null_count": 0,
+        "row_count": 3
+    }
+]
+
+# Verify that we can inject these stats.
+let $json_stats
+SHOW STATISTICS USING JSON FOR TABLE et
+
+statement ok
+DELETE FROM system.table_statistics
+
+# Restore the old stats.
+statement ok
+ALTER TABLE et INJECT STATISTICS $$$json_stats$$
+
+query TTIIB colnames
+SELECT
+  statistics_name,
+  column_names,
+  row_count,
+  null_count,
+  histogram_id IS NOT NULL AS has_histogram
+FROM
+  [SHOW STATISTICS FOR TABLE et]
+ORDER BY
+  column_names::STRING, created
+----
+statistics_name  column_names  row_count  null_count  has_histogram
+s                {x}           3          0           true
+s                {y}           3          0           true
+s                {z}           3          0           true
 
 # JSON and other inverted-index columns. See also #35150.
 statement ok
