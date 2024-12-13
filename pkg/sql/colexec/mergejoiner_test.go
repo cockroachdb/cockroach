@@ -1697,12 +1697,11 @@ func TestMergeJoiner(t *testing.T) {
 					func(sources []colexecop.Operator) (colexecop.Operator, error) {
 						spec := createSpecForMergeJoiner(tc)
 						args := &colexecargs.NewColOperatorArgs{
-							Spec:                spec,
-							Inputs:              colexectestutils.MakeInputs(sources),
-							StreamingMemAccount: testMemAcc,
-							DiskQueueCfg:        queueCfg,
-							FDSemaphore:         colexecop.NewTestingSemaphore(mjFDLimit),
-							MonitorRegistry:     &monitorRegistry,
+							Spec:            spec,
+							Inputs:          colexectestutils.MakeInputs(sources),
+							DiskQueueCfg:    queueCfg,
+							FDSemaphore:     colexecop.NewTestingSemaphore(mjFDLimit),
+							MonitorRegistry: &monitorRegistry,
 						}
 						flowCtx.Cfg.TestingKnobs.MemoryLimitBytes = memoryLimit
 						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)

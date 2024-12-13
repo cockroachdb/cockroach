@@ -294,12 +294,11 @@ func createDiskBackedHashJoiner(
 	monitorRegistry *colexecargs.MonitorRegistry,
 ) (colexecop.Operator, []colexecop.Closer, error) {
 	args := &colexecargs.NewColOperatorArgs{
-		Spec:                spec,
-		Inputs:              colexectestutils.MakeInputs(sources),
-		StreamingMemAccount: testMemAcc,
-		DiskQueueCfg:        diskQueueCfg,
-		FDSemaphore:         testingSemaphore,
-		MonitorRegistry:     monitorRegistry,
+		Spec:            spec,
+		Inputs:          colexectestutils.MakeInputs(sources),
+		DiskQueueCfg:    diskQueueCfg,
+		FDSemaphore:     testingSemaphore,
+		MonitorRegistry: monitorRegistry,
 	}
 	// We will not use streaming memory account for the external hash join so
 	// that the in-memory hash join operator could hit the memory limit set on

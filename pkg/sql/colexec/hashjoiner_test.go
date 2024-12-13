@@ -1023,10 +1023,9 @@ func TestHashJoiner(t *testing.T) {
 				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
-						Spec:                spec,
-						StreamingMemAccount: monitorRegistry.NewStreamingMemAccount(flowCtx),
-						Inputs:              colexectestutils.MakeInputs(sources),
-						MonitorRegistry:     &monitorRegistry,
+						Spec:            spec,
+						Inputs:          colexectestutils.MakeInputs(sources),
+						MonitorRegistry: &monitorRegistry,
 					}
 					args.TestingKnobs.DiskSpillingDisabled = true
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)

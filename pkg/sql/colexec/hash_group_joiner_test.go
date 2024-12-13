@@ -200,11 +200,10 @@ func createDiskBackedHashGroupJoiner(
 			Core:        execinfrapb.ProcessorCoreUnion{HashGroupJoiner: &hgjSpec},
 			ResultTypes: tc.outputTypes,
 		},
-		Inputs:              colexectestutils.MakeInputs(inputs),
-		StreamingMemAccount: testMemAcc,
-		DiskQueueCfg:        diskQueueCfg,
-		FDSemaphore:         &colexecop.TestingSemaphore{},
-		MonitorRegistry:     monitorRegistry,
+		Inputs:          colexectestutils.MakeInputs(inputs),
+		DiskQueueCfg:    diskQueueCfg,
+		FDSemaphore:     &colexecop.TestingSemaphore{},
+		MonitorRegistry: monitorRegistry,
 	}
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)

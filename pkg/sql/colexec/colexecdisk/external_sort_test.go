@@ -229,12 +229,11 @@ func createDiskBackedSorter(
 		ResultTypes: typs,
 	}
 	args := &colexecargs.NewColOperatorArgs{
-		Spec:                spec,
-		Inputs:              colexectestutils.MakeInputs(sources),
-		StreamingMemAccount: testMemAcc,
-		DiskQueueCfg:        diskQueueCfg,
-		FDSemaphore:         testingSemaphore,
-		MonitorRegistry:     monitorRegistry,
+		Spec:            spec,
+		Inputs:          colexectestutils.MakeInputs(sources),
+		DiskQueueCfg:    diskQueueCfg,
+		FDSemaphore:     testingSemaphore,
+		MonitorRegistry: monitorRegistry,
 	}
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions

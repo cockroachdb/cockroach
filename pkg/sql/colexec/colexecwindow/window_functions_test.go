@@ -1069,12 +1069,11 @@ func TestWindowFunctions(t *testing.T) {
 				// FDs.
 				sem := colexecop.NewTestingSemaphore(relativeRankNumRequiredFDs)
 				args := &colexecargs.NewColOperatorArgs{
-					Spec:                spec,
-					Inputs:              colexectestutils.MakeInputs(sources),
-					StreamingMemAccount: testMemAcc,
-					DiskQueueCfg:        queueCfg,
-					FDSemaphore:         sem,
-					MonitorRegistry:     &monitorRegistry,
+					Spec:            spec,
+					Inputs:          colexectestutils.MakeInputs(sources),
+					DiskQueueCfg:    queueCfg,
+					FDSemaphore:     sem,
+					MonitorRegistry: &monitorRegistry,
 				}
 				semsToCheck = append(semsToCheck, sem)
 				result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)

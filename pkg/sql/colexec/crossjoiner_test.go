@@ -401,12 +401,11 @@ func TestCrossJoiner(t *testing.T) {
 				runHashJoinTestCase(t, tc, nil /* rng */, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
-						Spec:                spec,
-						Inputs:              colexectestutils.MakeInputs(sources),
-						StreamingMemAccount: testMemAcc,
-						DiskQueueCfg:        queueCfg,
-						FDSemaphore:         colexecop.NewTestingSemaphore(colexecop.ExternalHJMinPartitions),
-						MonitorRegistry:     &monitorRegistry,
+						Spec:            spec,
+						Inputs:          colexectestutils.MakeInputs(sources),
+						DiskQueueCfg:    queueCfg,
+						FDSemaphore:     colexecop.NewTestingSemaphore(colexecop.ExternalHJMinPartitions),
+						MonitorRegistry: &monitorRegistry,
 					}
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 					if err != nil {
@@ -468,11 +467,10 @@ func BenchmarkCrossJoiner(b *testing.B) {
 				args := &colexecargs.NewColOperatorArgs{
 					Spec: spec,
 					// Inputs will be set below.
-					Inputs:              []colexecargs.OpWithMetaInfo{{}, {}},
-					StreamingMemAccount: testMemAcc,
-					DiskQueueCfg:        queueCfg,
-					FDSemaphore:         colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit),
-					MonitorRegistry:     &monitorRegistry,
+					Inputs:          []colexecargs.OpWithMetaInfo{{}, {}},
+					DiskQueueCfg:    queueCfg,
+					FDSemaphore:     colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit),
+					MonitorRegistry: &monitorRegistry,
 				}
 				b.Run(fmt.Sprintf("spillForced=%t/type=%s/rows=%d", spillForced, joinType, nRows), func(b *testing.B) {
 					var nOutputRows int
