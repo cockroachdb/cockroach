@@ -49,6 +49,12 @@ func EncodePartitionKey(appendTo []byte, key PartitionKey) []byte {
 	return encoding.EncodeUvarintAscending(appendTo, uint64(key))
 }
 
+// EncodedPartitionKeyLen returns the number of bytes needed to encode the
+// partition key.
+func EncodedPartitionKeyLen(key PartitionKey) int {
+	return encoding.EncLenUvarintAscending(uint64(key))
+}
+
 // EncodeChildKey encodes a child key into the given byte slice. The "appendTo"
 // slice is expected to be the prefix shared between all KV entries for a
 // partition.
