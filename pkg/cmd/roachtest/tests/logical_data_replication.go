@@ -197,6 +197,25 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			},
 			run: TestLDRTPCC,
 		},
+		{
+			name: "ldr/create/tpcc",
+			clusterSpec: multiClusterSpec{
+				leftNodes:  3,
+				rightNodes: 3,
+				clusterOpts: []spec.Option{
+					spec.CPU(8),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(8),
+					spec.VolumeSize(100),
+				},
+			},
+			ldrConfig: ldrConfig{
+				// Usually takes around 10 minutes for 1000 tpcc init scan.
+				initialScanTimeout: 20 * time.Minute,
+				createTables:       true,
+			},
+			run: TestLDRCreateTablesTPCC,
+		},
 	}
 
 	for _, sp := range specs {
@@ -367,6 +386,65 @@ func TestLDRTPCC(
 	monitor.Wait()
 	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, workload)
+}
+
+// TestLDRCreateTablesTPCC inits the left cluster with 1000 warehouse tpcc,
+// begins unidirectional fast initial scan LDR, starts a tpcc 1000 wh workload
+// on the left, and observes initial scan, catchup scan, and steady state
+// performance.
+func TestLDRCreateTablesTPCC(
+	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup, ldrConfig ldrConfig,
+) {
+	// duration is 30 minutes because during this time, the following occurs:
+	// - 10 minute initial scan
+	// - 5 mins with logical_replication.consumer.low_admission_priority.enabled =
+	// false (during initial benchmarking, flipping this to true caused the
+	// catchup scan to take 15 minutes).
+	// - 15 mins of steady state. If the above scans take too long, the latency
+	// verifier may trip.
+	duration := 30 * time.Minute
+	warehouses := 1000
+	if c.IsLocal() {
+		duration = 3 * time.Minute
+		warehouses = 10
+	}
+
+	workload := LDRWorkload{
+		workload: replicateTPCC{
+			warehouses:     warehouses,
+			duration:       duration,
+			repairOrderIDs: true,
+		},
+		dbName:            "tpcc",
+		manualSchemaSetup: true,
+		tableNames:        []string{"customer", "district", "history", "item", "new_order", "order_line", "order", "stock", "warehouse"},
+	}
+
+	setup.right.sysSQL.Exec(t, "CREATE DATABASE tpcc")
+	setup.right.sysSQL.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.low_admission_priority.enabled = false")
+	c.Run(ctx,
+		option.WithNodes(setup.workloadNode),
+		fmt.Sprintf("./cockroach workload init tpcc --warehouses=%d --fks=false {pgurl:%d:system}", warehouses, setup.left.nodes[0]))
+
+	workloadDoneCh := make(chan struct{})
+	monitor := c.NewMonitor(ctx, setup.CRDBNodes())
+	monitor.Go(func(ctx context.Context) error {
+		defer close(workloadDoneCh)
+		// Run workload on the left cluster. Unlike other ldr tests at the moment,
+		// this one spins up the source workload before LDR begins. This tests LWW
+		// on data ingested via the offline initial scan.
+		return c.RunE(ctx, option.WithNodes(setup.workloadNode), workload.workload.sourceRunCmd("system", setup.left.nodes))
+	})
+	_, rightJobID := setupLDR(ctx, t, c, setup, workload, ldrConfig)
+
+	maxExpectedLatency := 3 * time.Minute
+	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, 0 /* leftJobID */, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
+
+	monitor.Wait()
+	validateLatency()
+
+	// On the 1000 tpcc workload, this takes about 12 minutes.
+	VerifyCorrectness(ctx, c, t, setup, 0 /* leftJobID */, rightJobID, 2*time.Minute, workload)
 }
 
 func TestLDRUpdateHeavy(
@@ -741,6 +819,7 @@ func (mc *multiCluster) Start(ctx context.Context, t test.Test) (multiClusterSet
 type ldrConfig struct {
 	mode               mode
 	initialScanTimeout time.Duration
+	createTables       bool
 }
 
 func setupLDR(
@@ -784,6 +863,9 @@ func setupLDR(
 		}
 		targetDB.Exec(t, fmt.Sprintf("USE %s", dbName))
 		ldrCmd := fmt.Sprintf("CREATE LOGICAL REPLICATION STREAM FROM TABLES %s ON $1 INTO TABLES %s %s", tableNamesStr, tableNamesStr, options)
+		if ldrConfig.createTables {
+			ldrCmd = fmt.Sprintf("CREATE LOGICALLY REPLICATED TABLES %s FROM TABLES %s ON $1 %s WITH UNIDIRECTIONAL", tableNamesStr, tableNamesStr, options)
+		}
 		r := targetDB.QueryRow(t,
 			ldrCmd,
 			sourceURL,
@@ -798,8 +880,10 @@ func setupLDR(
 	t.L().Printf("created external connections")
 
 	rightJobID := startLDR(setup.right.sysSQL, leftExternalConn.String())
-	leftJobID := startLDR(setup.left.sysSQL, rightExternalConn.String())
-
+	var leftJobID int
+	if !ldrConfig.createTables {
+		leftJobID = startLDR(setup.left.sysSQL, rightExternalConn.String())
+	}
 	// TODO(ssd): We wait for the replicated time to
 	// avoid starting the workload here until we
 	// have the behaviour around initial scans
@@ -812,6 +896,10 @@ func setupLDR(
 	approxInitScanStart := timeutil.Now()
 	t.L().Printf("Waiting for initial scan(s) to complete")
 	initScanMon.Go(func(ctx context.Context) error {
+		if leftJobID == 0 {
+			t.L().Printf("No left job created")
+			return nil
+		}
 		waitForReplicatedTime(t, leftJobID, setup.left.db, getLogicalDataReplicationJobInfo, initialScanTimeout)
 		t.L().Printf("Initial scan for left job completed in %s", timeutil.Since(approxInitScanStart))
 		return nil
@@ -840,9 +928,12 @@ func setupLatencyVerifiers(
 	maxExpectedLatency time.Duration,
 ) func() {
 
-	llv := makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
-		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
-	defer llv.maybeLogLatencyHist()
+	var llv *latencyVerifier
+	if leftJobID != 0 {
+		llv = makeLatencyVerifier("ldr-left", 0, maxExpectedLatency, t.L(),
+			getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
+		defer llv.maybeLogLatencyHist()
+	}
 
 	rlv := makeLatencyVerifier("ldr-right", 0, maxExpectedLatency, t.L(),
 		getLogicalDataReplicationJobInfo, t.Status, false /* tolerateErrors */)
@@ -851,6 +942,10 @@ func setupLatencyVerifiers(
 	debugZipFetcher := &sync.Once{}
 
 	mon.Go(func(ctx context.Context) error {
+		if leftJobID == 0 {
+			t.L().Printf("No left job created")
+			return nil
+		}
 		if err := llv.pollLatencyUntilJobSucceeds(ctx, setup.left.db, leftJobID, time.Second, workloadDoneCh); err != nil {
 			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
 			return err
@@ -866,7 +961,9 @@ func setupLatencyVerifiers(
 	})
 	return func() {
 		rlv.assertValid(t)
-		llv.assertValid(t)
+		if leftJobID != 0 {
+			llv.assertValid(t)
+		}
 	}
 }
 
@@ -881,8 +978,10 @@ func VerifyCorrectness(
 ) {
 	now := timeutil.Now()
 	t.L().Printf("Waiting for replicated times to catchup before verifying left and right clusters")
-	waitForReplicatedTimeToReachTimestamp(t, leftJobID, setup.left.db, getLogicalDataReplicationJobInfo, waitTime, now)
-	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.left.db, ldrWorkload.dbName))
+	if leftJobID != 0 {
+		waitForReplicatedTimeToReachTimestamp(t, leftJobID, setup.left.db, getLogicalDataReplicationJobInfo, waitTime, now)
+		require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.left.db, ldrWorkload.dbName))
+	}
 	waitForReplicatedTimeToReachTimestamp(t, rightJobID, setup.right.db, getLogicalDataReplicationJobInfo, waitTime, now)
 	require.NoError(t, replicationtestutils.CheckEmptyDLQs(ctx, setup.right.db, ldrWorkload.dbName))
 
