@@ -30,3 +30,6 @@ func (fes RestoreFrontierEntries) Equal(fes2 RestoreFrontierEntries) bool {
 	}
 	return true
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (ResolvedSpan_BoundaryType) SafeValue() {}
