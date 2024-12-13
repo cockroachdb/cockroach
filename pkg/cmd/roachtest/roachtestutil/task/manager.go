@@ -18,10 +18,11 @@ import (
 type (
 	// Manager is responsible for managing a group of tasks initiated during
 	// tests. The interface is designed for the test framework to control tasks.
-	// Typically, tests will only interact, and be provided with the smaller
-	// Tasker interface to start tasks.
+	// Typically, tests will only interact, and be provided with the smaller Group
+	// and Tasker interfaces to start tasks or wait on groups of tasks.
 	Manager interface {
 		Tasker
+		GroupProvider
 		Terminate(*logger.Logger)
 		CompletedEvents() <-chan Event
 	}
@@ -34,26 +35,42 @@ type (
 	}
 
 	manager struct {
-		group  ctxgroup.Group
 		ctx    context.Context
 		logger *logger.Logger
 		events chan Event
 		id     atomic.Uint32
-		mu     struct {
+		group  *group
+	}
+
+	group struct {
+		manager  *manager
+		options  []Option
+		ctxGroup ctxgroup.Group
+		groupMu  struct {
+			syncutil.Mutex
+			groups []*group
+		}
+		cancelMu struct {
 			syncutil.Mutex
 			cancelFns []context.CancelFunc
 		}
 	}
 )
 
+// NewManager creates a new Manager. The context passed to the manager is used
+// to control the lifetime of all tasks started by the manager. The logger is
+// the default logger used by all tasks started by the manager.
 func NewManager(ctx context.Context, l *logger.Logger) Manager {
-	g := ctxgroup.WithContext(ctx)
-	return &manager{
-		group:  g,
+	m := &manager{
 		ctx:    ctx,
 		logger: l,
 		events: make(chan Event),
 	}
+	m.group = &group{
+		manager:  m,
+		ctxGroup: ctxgroup.WithContext(ctx),
+	}
+	return m
 }
 
 func (m *manager) defaultOptions() []Option {
@@ -73,9 +90,65 @@ func (m *manager) defaultOptions() []Option {
 	}
 }
 
+// Terminate will call the stop functions for every task started during the
+// test. Returns when all task functions have returned, or after a 5-minute
+// timeout, whichever comes first. If the timeout is reached, the function logs
+// a warning message and returns.
+func (m *manager) Terminate(l *logger.Logger) {
+	m.group.cancelAll()
+
+	doneCh := make(chan error)
+	go func() {
+		defer close(doneCh)
+		m.group.Wait()
+	}()
+
+	WaitForChannel(doneCh, "tasks", l)
+}
+
+// CompletedEvents returns a channel that will receive events for all tasks
+// started by the manager.
+func (m *manager) CompletedEvents() <-chan Event {
+	return m.events
+}
+
+// NewGroup creates a new group of tasks as a subgroup under the manager's
+// default group.
+func (m *manager) NewGroup(opts ...Option) Group {
+	return m.group.NewGroup(opts...)
+}
+
+// GoWithCancel runs GoWithCancel on the manager's default group.
 func (m *manager) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
-	opt := CombineOptions(OptionList(m.defaultOptions()...), OptionList(opts...))
-	groupCtx, cancel := context.WithCancel(m.ctx)
+	return m.group.GoWithCancel(fn, opts...)
+}
+
+// Go runs Go on the manager's default group.
+func (m *manager) Go(fn Func, opts ...Option) {
+	_ = m.group.GoWithCancel(fn, opts...)
+}
+
+func (t *group) NewGroup(opts ...Option) Group {
+	subgroup := &group{
+		manager:  t.manager,
+		options:  opts,
+		ctxGroup: ctxgroup.WithContext(t.manager.ctx),
+	}
+	t.groupMu.Lock()
+	defer t.groupMu.Unlock()
+	t.groupMu.groups = append(t.groupMu.groups, subgroup)
+	return subgroup
+}
+
+func (t *group) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
+	// Combine options in order of precedence: default options, task options, and
+	// options passed to GoWithCancel.
+	opt := CombineOptions(
+		OptionList(t.manager.defaultOptions()...),
+		OptionList(t.options...),
+		OptionList(opts...),
+	)
+	groupCtx, cancel := context.WithCancel(t.manager.ctx)
 	var expectedContextCancellation atomic.Bool
 
 	// internalFunc is a wrapper around the user-provided function that
@@ -91,7 +164,7 @@ func (m *manager) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 		return retErr
 	}
 
-	m.group.Go(func() error {
+	t.ctxGroup.Go(func() error {
 		l, err := opt.L(opt.Name)
 		if err != nil {
 			return err
@@ -114,10 +187,10 @@ func (m *manager) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 		// already aware of the cancelation and sending an event would be redundant.
 		// For instance, a call to test.Fatal would already have captured the error
 		// and canceled the context.
-		if IsContextCanceled(m.ctx) {
+		if IsContextCanceled(t.manager.ctx) {
 			return nil
 		}
-		m.events <- event
+		t.manager.events <- event
 		return err
 	})
 
@@ -127,38 +200,36 @@ func (m *manager) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 	}
 	// Collect all taskCancelFn(s) so that we can explicitly stop all tasks when
 	// the tasker is terminated.
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.mu.cancelFns = append(m.mu.cancelFns, taskCancelFn)
+	t.cancelMu.Lock()
+	defer t.cancelMu.Unlock()
+	t.cancelMu.cancelFns = append(t.cancelMu.cancelFns, taskCancelFn)
 	return taskCancelFn
 }
 
-func (m *manager) Go(fn Func, opts ...Option) {
-	_ = m.GoWithCancel(fn, opts...)
+func (t *group) Go(fn Func, opts ...Option) {
+	_ = t.GoWithCancel(fn, opts...)
 }
 
-// Terminate will call the stop functions for every task started during the
-// test. Returns when all task functions have returned, or after a 5-minute
-// timeout, whichever comes first. If the timeout is reached, the function logs
-// a warning message and returns.
-func (m *manager) Terminate(l *logger.Logger) {
+func (t *group) cancelAll() {
 	func() {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		for _, cancel := range m.mu.cancelFns {
+		t.cancelMu.Lock()
+		defer t.cancelMu.Unlock()
+		for _, cancel := range t.cancelMu.cancelFns {
 			cancel()
 		}
 	}()
-
-	doneCh := make(chan error)
-	go func() {
-		defer close(doneCh)
-		_ = m.group.Wait()
-	}()
-
-	WaitForChannel(doneCh, "tasks", l)
+	t.groupMu.Lock()
+	defer t.groupMu.Unlock()
+	for _, g := range t.groupMu.groups {
+		g.cancelAll()
+	}
 }
 
-func (m *manager) CompletedEvents() <-chan Event {
-	return m.events
+func (t *group) Wait() {
+	t.groupMu.Lock()
+	defer t.groupMu.Unlock()
+	_ = t.ctxGroup.Wait()
+	for _, g := range t.groupMu.groups {
+		g.Wait()
+	}
 }
