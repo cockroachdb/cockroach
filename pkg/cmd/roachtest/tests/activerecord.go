@@ -111,11 +111,11 @@ func registerActiveRecord(r registry.Registry) {
 			t,
 			c,
 			node,
-			"install ruby 3.1",
+			"install ruby 3.3",
 			`mkdir -p ruby-install && \
         curl -fsSL https://github.com/postmodern/ruby-install/archive/v0.9.1.tar.gz | tar --strip-components=1 -C ruby-install -xz && \
         sudo make -C ruby-install install && \
-        sudo ruby-install --system ruby 3.1.4 && \
+        sudo ruby-install --system ruby 3.3.6 && \
         sudo gem update --system`,
 		); err != nil {
 			t.Fatal(err)
@@ -146,7 +146,7 @@ func registerActiveRecord(r registry.Registry) {
 			c,
 			node,
 			"installing bundler",
-			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && sudo gem install bundler:2.4.9`,
+			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && sudo gem install bundler:2.5.23`,
 		); err != nil {
 			t.Fatal(err)
 		}
