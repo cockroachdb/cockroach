@@ -187,7 +187,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 
 	zc.clusterPrinter.info("requesting CPU profiles")
 	if !zipCtx.files.shouldIncludeFile(cpuProfileFileName) {
-		zc.clusterPrinter.info("skipping %s", cpuProfileFileName)
+		zc.clusterPrinter.info("skipping %s due to file filters", cpuProfileFileName)
 		return nil
 	}
 
