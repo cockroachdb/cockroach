@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package update
+package cli
 
 import (
 	"context"
@@ -58,7 +58,7 @@ func CheckLatest(branch string, os string, arch string) (time.Time, string, erro
 	return checkLatest(client, ctx, branch, os, arch)
 }
 
-// Downloads the latest binary into the file specified by `toFile`.
+// DownloadLatestRoachprod downloads the latest binary into the file specified by `toFile`.
 func DownloadLatestRoachprod(toFile string, branch string, osName string, arch string) error {
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx, option.WithScopes(storage.ScopeReadOnly))
