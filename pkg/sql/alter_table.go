@@ -2114,7 +2114,7 @@ func handleTTLStorageParamChange(
 			if err != nil {
 				return false, err
 			}
-			if err := s.SetSchedule(after.DeletionCronOrDefault()); err != nil {
+			if err := s.SetScheduleAndNextRun(after.DeletionCronOrDefault()); err != nil {
 				return false, err
 			}
 			if err := schedules.Update(params.ctx, s); err != nil {

@@ -383,7 +383,7 @@ func makeChangefeedSchedule(
 	sj.SetScheduleLabel(label)
 	sj.SetOwner(owner)
 
-	if err := sj.SetSchedule(recurrence.Cron); err != nil {
+	if err := sj.SetScheduleAndNextRun(recurrence.Cron); err != nil {
 		return nil, err
 	}
 
