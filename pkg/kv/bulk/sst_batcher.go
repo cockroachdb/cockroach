@@ -345,6 +345,23 @@ func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 	return b.AddMVCCKey(ctx, key, b.valueScratch)
 }
 
+func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, value []byte) error {
+
+	mvccVal, err := storage.DecodeMVCCValue(value)
+	if err != nil {
+		return err
+	}
+	mvccVal.MVCCValueHeader.OriginTimestamp = key.Timestamp
+	mvccVal.OriginID = 1
+	// NOTE: since we are setting header values, EncodeMVCCValueToBuf will
+	// always use the sctarch buffer or return an error.
+	b.valueScratch, _, err = storage.EncodeMVCCValueToBuf(mvccVal, b.valueScratch[:0])
+	if err != nil {
+		return err
+	}
+	return b.AddMVCCKey(ctx, key, b.valueScratch)
+}
+
 // AddMVCCKey adds a key+timestamp/value pair to the batch (flushing if needed).
 // This is only for callers that want to control the timestamp on individual
 // keys -- like RESTORE where we want the restored data to look like the backup.
