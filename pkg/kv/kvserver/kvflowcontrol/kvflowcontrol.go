@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 )
@@ -436,7 +437,7 @@ func (s Stream) SafeFormat(p redact.SafePrinter, verb rune) {
 	p.Printf("t%s/s%s", tenantSt, s.StoreID.String())
 }
 
-type raftAdmissionMetaKey struct{}
+var raftAdmissionMetaKey = ctxutil.RegisterFastValueKey()
 
 // ContextWithMeta returns a Context wrapping the supplied raft admission meta,
 // if any.
@@ -445,7 +446,7 @@ type raftAdmissionMetaKey struct{}
 // #104154.
 func ContextWithMeta(ctx context.Context, meta *kvflowcontrolpb.RaftAdmissionMeta) context.Context {
 	if meta != nil {
-		ctx = context.WithValue(ctx, raftAdmissionMetaKey{}, meta)
+		ctx = ctxutil.WithFastValue(ctx, raftAdmissionMetaKey, meta)
 	}
 	return ctx
 }
@@ -453,7 +454,7 @@ func ContextWithMeta(ctx context.Context, meta *kvflowcontrolpb.RaftAdmissionMet
 // MetaFromContext returns the raft admission meta embedded in the Context, if
 // any.
 func MetaFromContext(ctx context.Context) *kvflowcontrolpb.RaftAdmissionMeta {
-	val := ctx.Value(raftAdmissionMetaKey{})
+	val := ctxutil.FastValue(ctx, raftAdmissionMetaKey)
 	h, ok := val.(*kvflowcontrolpb.RaftAdmissionMeta)
 	if !ok {
 		return nil
