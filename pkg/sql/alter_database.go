@@ -25,11 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -481,6 +483,20 @@ func (p *planner) AlterDatabaseDropRegion(
 	// not a part of any other database.
 	if isSystemDatabase := dbDesc.ID == keys.SystemDatabaseID; isSystemDatabase {
 		if err := p.checkCanDropSystemDatabaseRegion(ctx, n.Region); err != nil {
+			return nil, err
+		}
+		if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			tablesToClean := []string{"sqlliveness", "lease", "sql_instances", "region_liveness"}
+			for _, t := range tablesToClean {
+				updateQuery := fmt.Sprintf(
+					`UPDATE system.%s SET crdb_region = '%s' WHERE crdb_region = '%s'`, t, dbDesc.RegionConfig.PrimaryRegion, n.Region)
+				if _, err := txn.ExecEx(ctx, "update-dropped-region", txn.KV(),
+					sessiondata.NodeUserSessionDataOverride, updateQuery); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return nil, err
 		}
 	}

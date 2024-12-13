@@ -585,7 +585,6 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 				// and delete surplus IDs. Cleaning up surplus IDs is necessary
 				// to avoid ID exhaustion.
 				for _, region := range regions {
-
 					if err := s.reclaimRegion(ctx, region); err != nil {
 						log.Warningf(ctx, "failed to reclaim instances in region '%v': %v", region, err)
 					}
