@@ -1867,92 +1867,84 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
-		ctx := context.Background()
-		settings := cluster.MakeTestingClusterSettings()
-		kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, leaseType)
-
-		raftConfig := base.RaftConfig{
-			// Drop the raft tick interval so the Raft group is ticked more.
-			RaftTickInterval: 10 * time.Millisecond,
-			// Reduce the max uncommitted entry size.
-			RaftMaxUncommittedEntriesSize: 64 << 10, // 64 KB
-			// RaftProposalQuota cannot exceed RaftMaxUncommittedEntriesSize.
-			RaftProposalQuota: int64(64 << 10),
-			// RaftMaxInflightMsgs * RaftMaxSizePerMsg cannot exceed RaftProposalQuota.
-			RaftMaxInflightMsgs: 16,
-			RaftMaxSizePerMsg:   1 << 10, // 1 KB
-		}
-		// Suppress timeout-based elections to avoid leadership changes in ways this
-		// test doesn't expect. For leader leases, fortification itself provides us
-		// this guarantee.
-		if leaseType != roachpb.LeaseLeader {
-			raftConfig.RaftElectionTimeoutTicks = 1000000
-		}
-
-		const numServers int = 5
-		stickyServerArgs := make(map[int]base.TestServerArgs)
-		for i := 0; i < numServers; i++ {
-			stickyServerArgs[i] = base.TestServerArgs{
-				Settings: settings,
-				StoreSpecs: []base.StoreSpec{
-					{
-						InMemory:    true,
-						StickyVFSID: strconv.FormatInt(int64(i), 10),
-					},
-				},
-				RaftConfig: raftConfig,
-				Knobs: base.TestingKnobs{
-					Server: &server.TestingKnobs{
-						StickyVFSRegistry: fs.NewStickyRegistry(),
-					},
-					Store: &kvserver.StoreTestingKnobs{
-						// Disable leader transfers during leaseholder changes so that we
-						// can easily create leader-not-leaseholder scenarios.
-						DisableLeaderFollowsLeaseholder: true,
-						// Refresh pending commands on every Raft group tick instead of
-						// every RaftReproposalTimeoutTicks.
-						RefreshReasonTicksPeriod: 1,
-					},
-				},
-			}
-		}
-
-		tc := testcluster.StartTestCluster(t, numServers,
-			base.TestClusterArgs{
-				ReplicationMode:   base.ReplicationManual,
-				ServerArgsPerNode: stickyServerArgs,
-			})
-		defer tc.Stopper().Stop(ctx)
-		store := tc.GetFirstStoreFromServer(t, 0)
-
-		key := []byte("a")
-		tc.SplitRangeOrFatal(t, key)
-		tc.AddVotersOrFatal(t, key, tc.Targets(1, 2, 3, 4)...)
-
-		// Raft leadership is kept on node 0.
-		leaderRepl := store.LookupReplica(key)
-		require.NotNil(t, leaderRepl)
-
-		// Put some data in the range so we'll have something to test for.
-		incArgs := incrementArgs(key, 5)
-		if _, err := kv.SendWrapped(ctx, store.TestSender(), incArgs); err != nil {
-			t.Fatal(err)
-		}
-
-		// Wait for all nodes to catch up.
-		tc.WaitForValues(t, key, []int64{5, 5, 5, 5, 5})
-
 		// Test proposing on leader and proposing on follower. Neither should result
 		// in unbounded raft log growth.
 		testutils.RunTrueAndFalse(t, "proposeOnFollower", func(t *testing.T, proposeOnFollower bool) {
+			ctx := context.Background()
+			settings := cluster.MakeTestingClusterSettings()
+			kvserver.OverrideDefaultLeaseType(ctx, &settings.SV, leaseType)
 
-			// Restart any nodes that are down, we dont need to restart 2 since
-			// it started to finish the test case.
-			for _, s := range []int{3, 4} {
-				if tc.ServerStopped(s) {
-					require.NoError(t, tc.RestartServer(s))
+			raftConfig := base.RaftConfig{
+				// Drop the raft tick interval so the Raft group is ticked more.
+				RaftTickInterval: 10 * time.Millisecond,
+				// Reduce the max uncommitted entry size.
+				RaftMaxUncommittedEntriesSize: 64 << 10, // 64 KB
+				// RaftProposalQuota cannot exceed RaftMaxUncommittedEntriesSize.
+				RaftProposalQuota: int64(64 << 10),
+				// RaftMaxInflightMsgs * RaftMaxSizePerMsg cannot exceed RaftProposalQuota.
+				RaftMaxInflightMsgs: 16,
+				RaftMaxSizePerMsg:   1 << 10, // 1 KB
+			}
+			// Suppress timeout-based elections to avoid leadership changes in ways this
+			// test doesn't expect. For leader leases, fortification itself provides us
+			// this guarantee.
+			if leaseType != roachpb.LeaseLeader {
+				raftConfig.RaftElectionTimeoutTicks = 1000000
+			}
+
+			const numServers int = 5
+			stickyServerArgs := make(map[int]base.TestServerArgs)
+			for i := 0; i < numServers; i++ {
+				stickyServerArgs[i] = base.TestServerArgs{
+					Settings: settings,
+					StoreSpecs: []base.StoreSpec{
+						{
+							InMemory:    true,
+							StickyVFSID: strconv.FormatInt(int64(i), 10),
+						},
+					},
+					RaftConfig: raftConfig,
+					Knobs: base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							StickyVFSRegistry: fs.NewStickyRegistry(),
+						},
+						Store: &kvserver.StoreTestingKnobs{
+							// Disable leader transfers during leaseholder changes so that we
+							// can easily create leader-not-leaseholder scenarios.
+							DisableLeaderFollowsLeaseholder: true,
+							// Refresh pending commands on every Raft group tick instead of
+							// every RaftReproposalTimeoutTicks.
+							RefreshReasonTicksPeriod: 1,
+						},
+					},
 				}
 			}
+
+			tc := testcluster.StartTestCluster(t, numServers,
+				base.TestClusterArgs{
+					ReplicationMode:   base.ReplicationManual,
+					ServerArgsPerNode: stickyServerArgs,
+				})
+			defer tc.Stopper().Stop(ctx)
+			store := tc.GetFirstStoreFromServer(t, 0)
+
+			key := []byte("a")
+			tc.SplitRangeOrFatal(t, key)
+			tc.AddVotersOrFatal(t, key, tc.Targets(1, 2, 3, 4)...)
+
+			// Raft leadership is kept on node 0.
+			leaderRepl := store.LookupReplica(key)
+			require.NotNil(t, leaderRepl)
+
+			// Put some data in the range so we'll have something to test for.
+			incArgs := incrementArgs(key, 5)
+			if _, err := kv.SendWrapped(ctx, store.TestSender(), incArgs); err != nil {
+				t.Fatal(err)
+			}
+
+			// Wait for all nodes to catch up.
+			tc.WaitForValues(t, key, []int64{5, 5, 5, 5, 5})
+
 			// Determine which node to propose on. Transfer lease to that node.
 			propIdx := 0
 			if proposeOnFollower {
