@@ -81,7 +81,6 @@ func getObjectPrefix(
 	ctx context.Context, g ByNameGetter, dbName, scName string,
 ) (prefix catalog.ResolvedObjectPrefix, err error) {
 	if g.flags.isMutable {
-		g.flags.isMutable = false
 		g.flags.layerFilters.withoutLeased = true
 	}
 	// If we're reading the object descriptor from the store,
