@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -43,7 +44,8 @@ type raftReceiveQueue struct {
 	mu struct { // not to be locked directly
 		destroyed bool
 		syncutil.Mutex
-		infos []raftRequestInfo
+		infos         []raftRequestInfo
+		enforceMaxLen bool
 	}
 	maxLen int
 	acc    mon.BoundAccount
@@ -106,7 +108,7 @@ func (q *raftReceiveQueue) Append(
 	size = int64(req.Size())
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.mu.destroyed || len(q.mu.infos) >= q.maxLen {
+	if q.mu.destroyed || (q.mu.enforceMaxLen && len(q.mu.infos) >= q.maxLen) {
 		return false, size, false
 	}
 	if q.acc.Grow(context.Background(), size) != nil {
@@ -122,9 +124,22 @@ func (q *raftReceiveQueue) Append(
 	return len(q.mu.infos) == 1, size, true
 }
 
+func (q *raftReceiveQueue) SetEnforceMaxLen(enforceMaxLen bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.mu.enforceMaxLen = enforceMaxLen
+}
+
+func (q *raftReceiveQueue) getEnforceMaxLenForTesting() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.mu.enforceMaxLen
+}
+
 type raftReceiveQueues struct {
-	mon *mon.BytesMonitor
-	m   syncutil.Map[roachpb.RangeID, raftReceiveQueue]
+	mon           *mon.BytesMonitor
+	m             syncutil.Map[roachpb.RangeID, raftReceiveQueue]
+	enforceMaxLen atomic.Bool
 }
 
 func (qs *raftReceiveQueues) Load(rangeID roachpb.RangeID) (*raftReceiveQueue, bool) {
@@ -139,7 +154,34 @@ func (qs *raftReceiveQueues) LoadOrCreate(
 	}
 	q := &raftReceiveQueue{maxLen: maxLen}
 	q.acc.Init(context.Background(), qs.mon)
-	return qs.m.LoadOrStore(rangeID, q)
+	q, loaded = qs.m.LoadOrStore(rangeID, q)
+	if loaded {
+		return q, true
+	}
+	// The sampling of enforceMaxLen can be concurrent with a call to
+	// SetEnforceMaxLen. We can sample a stale value, then SetEnforceMaxLen can
+	// fully execute, and then set the stale value here. Since
+	// qs.SetEnforceMaxLen sets the latest value first, before iterating over
+	// the map, it suffices to check after setting the value here that it has
+	// not changed. There are two cases:
+	//
+	// - Has changed: it is possible that our call to q.SetEnforceMaxLen
+	//   occurred after the corresponding call in qs.SetEnforceMaxLen, so we
+	//   have to loop back and correct it.
+	//
+	// - Has not changed: there may be a concurrent call to
+	//   qs.SetEnforceMaxLen with a different bool parameter, but it has not
+	//   yet updated qs.enforceMaxLen. Which is fine -- that call will iterate
+	//   over the map and do what is necessary.
+	for {
+		enforceBefore := qs.enforceMaxLen.Load()
+		q.SetEnforceMaxLen(enforceBefore)
+		enforceAfter := qs.enforceMaxLen.Load()
+		if enforceAfter == enforceBefore {
+			break
+		}
+	}
+	return q, false
 }
 
 // Delete drains the queue and marks it as deleted. Future Appends
@@ -149,6 +191,18 @@ func (qs *raftReceiveQueues) Delete(rangeID roachpb.RangeID) {
 		q.Delete()
 		qs.m.Delete(rangeID)
 	}
+}
+
+// SetEnforceMaxLen specifies the latest state of whether maxLen needs to be
+// enforced or not. Calls to this method are serialized by the caller.
+func (qs *raftReceiveQueues) SetEnforceMaxLen(enforceMaxLen bool) {
+	// Store the latest value first. A concurrent creation of raftReceiveQueue
+	// can race with this method -- see how this is handled in LoadOrCreate.
+	qs.enforceMaxLen.Store(enforceMaxLen)
+	qs.m.Range(func(_ roachpb.RangeID, q *raftReceiveQueue) bool {
+		q.SetEnforceMaxLen(enforceMaxLen)
+		return true
+	})
 }
 
 // HandleDelegatedSnapshot reads the incoming delegated snapshot message and

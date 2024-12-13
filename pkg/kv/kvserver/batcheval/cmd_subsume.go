@@ -71,6 +71,55 @@ func declareKeysSubsume(
 //
 // The period of time after intents have been placed but before the merge
 // transaction is complete is called the merge's "critical phase".
+//
+// SubsumeRequest does a write on newer cluster versions. This is accomplished
+// by (a) marking SubsumeRequest.flags() with isWrite, and (b) returning a
+// non-empty Result.Replicated. Both are necessary for SubsumeRequest to be
+// replicated via Raft. The write is limited to updating the
+// RangeForceFlushKey with a value corresponding to the index of the raft
+// entry of the Subsume. Since this write is to a replicated Range-ID local
+// key (and because it is done non-transactionally -- see
+// kvserver.AdminMerge), it will not be rolled back if the distributed
+// transaction doing the merge aborts. This is ok since the RangeForceFlushKey
+// only provides a directive to the replication flow control v2 (RACv2)
+// machinery to force-flush up to a particular Raft index. Additionally,
+// safety relies on SubsumeRequest only writing to a Range-ID local key:
+//
+//   - Neither the SubsumeResponse.{MVCCStats,RangeIDLocalMVCCStats} includes
+//     the effect of this write, which is ok since
+//     MVCCState-RangeIDLocalMVCCStats is added to the merged range's stats and
+//     the RHS's RangeForceFlushKey will be deleted.
+//
+//   - SubsumeResponse.LeaseAppliedIndex, say x, includes all requests preceding
+//     this SubsumeRequest, but not this request. Since the merge txn only waits
+//     for application on all RHS replicas up to x, it is possible that some
+//     replica has not applied the SubsumeRequest and gets merged with the LHS.
+//     This is ok since the RangeForceFlushKey of the RHS is deleted by the
+//     merge.
+//
+// The SubsumeResponse.{FreezeStart,ClosedTimestamp,ReadSummary} are used in
+// varying degrees to adjust the timestamp cache of the merged range (see
+// Store.MergeRange). On the surface, this behavior is unaffected by whether
+// SubsumeRequest is a read or write, since the effect of this SubsumeRequest
+// on the timestamp cache is ignored either way (this request evaluation
+// updates the timestamp cache after the call to Subsume returns), and is not
+// relevant for correctness. However, there is a hazard if this SubsumeRequest
+// (when it is a write) bumps the closed timestamp, say from t1 to t2.
+// Followers could subsequently admit reads (on the RHS, before the merge)
+// with timestamps in the interval (t1, t2], that will not be accounted for in
+// the timestamp cache of the merged range (since the closed timestamp
+// returned in SubsumeResponse.ClosedTimestamp=t1). Note that such follower
+// writes are possible because followers do not freeze the range like the
+// leaseholder does. The simple way to avoid this hazard is to not bump the
+// closed timestamp when proposing a SubsumeRequest. This is accomplished by
+// two means:
+//   - Side transport (see Replica.BumpSideTransportClosed): Does not bump the
+//     closed timestamp if the range merge is in progress. And Subsume ensures
+//     that the merge is in progress by calling WatchForMerge below.
+//   - Closed timestamp replicated via Raft (see
+//     propBuf.allocateLAIAndClosedTimestampLocked): The closed timestamp is not
+//     advanced if the BatchRequest contains a single request which is a
+//     SubsumeRequest.
 func Subsume(
 	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
