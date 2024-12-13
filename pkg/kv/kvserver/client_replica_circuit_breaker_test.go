@@ -1154,7 +1154,7 @@ func (cbt *circuitBreakerTest) TripBreaker(idx int) {
 
 func (cbt *circuitBreakerTest) UntripsSoon(t *testing.T, method func(idx int) error, idx int) {
 	t.Helper()
-	testutils.SucceedsSoon(t, func() error {
+	testutils.SucceedsWithin(t, func() error {
 		t.Helper()
 		err := method(idx)
 		// All errors coming out should be annotated as coming from
@@ -1170,7 +1170,7 @@ func (cbt *circuitBreakerTest) UntripsSoon(t *testing.T, method func(idx int) er
 			t.Fatalf("saw unexpected error %+v", err)
 		}
 		return err
-	})
+	}, 2*testutils.SucceedsSoonDuration())
 }
 
 func (cbt *circuitBreakerTest) WaitForProposals(t *testing.T, idx int) {
