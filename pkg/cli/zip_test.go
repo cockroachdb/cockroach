@@ -1308,3 +1308,145 @@ func TestPartialZipForExcludedNodes(t *testing.T) {
 
 	require.True(t, oserror.IsNotExist(err), "node directory should not be present in the zip")
 }
+
+// This tests the operation of zip over excluded nodes.
+func TestIncludeFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.Cleanup()
+	zipName := filepath.Join(dir, "debug.zip")
+
+	// We want a low timeout so that the test doesn't take forever;
+	// however low timeouts make race runs flaky with false positives.
+	skip.UnderShort(t)
+	skip.UnderRace(t)
+
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+	// Reduce the number of output log files to just what's expected.
+	defer sc.SetupSingleFileLogging()()
+
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Insecure:          true,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	_, err := c.RunWithCapture("debug zip --concurrency=1 --include-files=*.json --cpu-profile-duration=0 " + dir + "/debug.zip")
+	require.NoError(t, err)
+
+	r, err := zip.OpenReader(zipName)
+	defer func() { _ = r.Close() }()
+	require.NoError(t, err)
+
+	for _, f := range r.File {
+		fmt.Println(f.Name)
+	}
+
+	d, _ := r.Open("debug/nodes/1")
+	defer func() {
+		if d != nil {
+			_ = d.Close()
+		}
+	}()
+}
+
+func trimNonDeterministicZipOutputFiles(out string) string {
+	re := regexp.MustCompile(`(?m).*\.log$`)
+	out = re.ReplaceAllString(out, `deterministic.log`)
+
+	//Below files are generated non-deterministically on eng-flow.
+	re = regexp.MustCompile(`(?m).*job_message\.txt$` + "\n")
+	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m).*job_progress\.txt$` + "\n")
+	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m).*job_progress_history\.txt$` + "\n")
+	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m).*job_status\.txt$` + "\n")
+	out = re.ReplaceAllString(out, ``)
+	return out
+}
+
+func TestZipIncludeAndExcludeFilesDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	datadriven.Walk(t, "testdata/zip/file-filters", func(t *testing.T, path string) {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			// We want a low timeout so that the test doesn't take forever;
+			// however low timeouts make race runs flaky with false positives.
+			skip.UnderShort(t)
+			skip.UnderRace(t)
+
+			sc := log.ScopeWithoutShowLogs(t)
+			defer sc.Close(t)
+			// Reduce the number of output log files to just what's expected.
+			defer sc.SetupSingleFileLogging()()
+
+			ctx := context.Background()
+
+			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+					Insecure:          true,
+				},
+			})
+			defer tc.Stopper().Stop(ctx)
+			commandFlag := d.Cmd
+			commandArgs := d.CmdArgs
+			for _, arg := range commandArgs {
+				commandFlag = commandFlag + " " + arg.String()
+			}
+
+			dir, cleanupFn := testutils.TempDir(t)
+			defer cleanupFn()
+			c := NewCLITest(TestCLIParams{
+				StoreSpecs: []base.StoreSpec{{
+					Path: dir,
+				}},
+			})
+			defer c.Cleanup()
+
+			zipName := filepath.Join(dir, "debug.zip")
+			var command = "debug zip " + dir + "/debug.zip --concurrency=1 --cpu-profile-duration=1s " + commandFlag
+			_, err := c.RunWithCapture(command)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			r, _ := zip.OpenReader(zipName)
+			defer func() {
+				if r != nil {
+					_ = r.Close()
+				}
+			}()
+
+			var fileLists []string
+			for _, f := range r.File {
+				fileLists = append(fileLists, f.Name)
+			}
+			sort.Strings(fileLists)
+			fileList := strings.Join(fileLists, "\n")
+			fileList = trimNonDeterministicZipOutputFiles(fileList)
+			fmt.Println(fileList)
+
+			err = r.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			return fileList
+		})
+	})
+}
