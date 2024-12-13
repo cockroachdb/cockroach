@@ -123,9 +123,8 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		return errors.New("processor is unexpectedly not a RowSource")
 	}
 
-	acc := evalCtx.TestingMon.MakeBoundAccount()
-	defer acc.Close(ctx)
-	testAllocator := colmem.NewAllocator(ctx, &acc, coldataext.NewExtendedColumnFactory(&evalCtx))
+	acc := monitorRegistry.NewStreamingMemAccount(flowCtx)
+	testAllocator := colmem.NewAllocator(ctx, acc, coldataext.NewExtendedColumnFactory(&evalCtx))
 	columnarizers := make([]colexecop.Operator, len(args.inputs))
 	for i, input := range inputsColOp {
 		columnarizers[i] = colexec.NewBufferingColumnarizerForTests(testAllocator, flowCtx, int32(i)+1, input)
@@ -134,7 +133,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	constructorArgs := &colexecargs.NewColOperatorArgs{
 		Spec:                args.pspec,
 		Inputs:              colexectestutils.MakeInputs(columnarizers),
-		StreamingMemAccount: &acc,
+		StreamingMemAccount: acc,
 		DiskQueueCfg: colcontainer.DiskQueueCfg{
 			FS:        tempFS,
 			GetPather: colcontainer.GetPatherFunc(func(context.Context) string { return "" }),

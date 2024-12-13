@@ -93,9 +93,8 @@ func TestColBatchScanMeta(t *testing.T) {
 	}
 
 	args := &colexecargs.NewColOperatorArgs{
-		Spec:                &spec,
-		StreamingMemAccount: testMemAcc,
-		MonitorRegistry:     &monitorRegistry,
+		Spec:            &spec,
+		MonitorRegistry: &monitorRegistry,
 	}
 	res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 	if err != nil {
@@ -176,9 +175,8 @@ func BenchmarkColBatchScan(b *testing.B) {
 				// modifies it.
 				spec.Core.TableReader.Spans = []roachpb.Span{span}
 				args := &colexecargs.NewColOperatorArgs{
-					Spec:                &spec,
-					StreamingMemAccount: testMemAcc,
-					MonitorRegistry:     &monitorRegistry,
+					Spec:            &spec,
+					MonitorRegistry: &monitorRegistry,
 				}
 				res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 				if err != nil {
