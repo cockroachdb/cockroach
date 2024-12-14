@@ -536,8 +536,8 @@ github.com/cockroachdb/errors v1.11.3 h1:5bA+k2Y6r+oz/6Z/RFlNeVCesGARKuC6YymtcDr
 github.com/cockroachdb/errors v1.11.3/go.mod h1:m4UIW4CDjx+R5cybPsNrRbreomiFqt8o1h1wUVazSd8=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55/go.mod h1:QqVqNIiRhLqJXif5C9wbM4JydBhrAF2WDMxkv5xkyxQ=
-github.com/cockroachdb/gogoproto v1.3.3-0.20241214030254-fb9ffcbc9553 h1:qVbAx/t2EU//lHyR4LCDgHoZStlYnUuBeMYejUo/ado=
-github.com/cockroachdb/gogoproto v1.3.3-0.20241214030254-fb9ffcbc9553/go.mod h1:wIrkfXJOUk95vmhcdlmaou6FpqbEExZWBM7EAtKDvYg=
+github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1 h1:heM4wOIqC8Q5OH6rVCo9WoYqRKp1IrJfeqt8KYo12vY=
+github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1/go.mod h1:wIrkfXJOUk95vmhcdlmaou6FpqbEExZWBM7EAtKDvYg=
 github.com/cockroachdb/gostdlib v1.19.0 h1:cSISxkVnTlWhTkyple/T6NXzOi5659FkhxvUgZv+Eb0=
 github.com/cockroachdb/gostdlib v1.19.0/go.mod h1:+dqqpARXbE/gRDEhCak6dm0l14AaTymPZUKMfURjBtY=
 github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f/go.mod h1:Vz9DsVWQQhf3vs21MhPMZpMGSht7O/2vFW2xusFUVOs=
