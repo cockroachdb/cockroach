@@ -126,6 +126,7 @@ go_test(
         "//pkg/util/allstacks",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
+        "//pkg/util/hlc",
         "//pkg/util/ioctx",
         "//pkg/util/json",
         "//pkg/util/leaktest",
