@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -533,6 +534,13 @@ func (s *sysbenchKV) prepDataset(rng *rand.Rand) {
 	// Scan across all tables to ensure that intent resolution has completed.
 	for i := range sysbenchTables {
 		try(s.db.Scan(s.ctx, s.pkPrefix[i], s.indexPrefix[i].PrefixEnd(), 0))
+	}
+
+	// Split between each table and index to ensure cross-range transactions.
+	for i := range sysbenchTables {
+		noExpiration := hlc.Timestamp{}
+		try0(s.db.AdminSplit(s.ctx, s.pkPrefix[i], noExpiration))
+		try0(s.db.AdminSplit(s.ctx, s.indexPrefix[i], noExpiration))
 	}
 }
 
