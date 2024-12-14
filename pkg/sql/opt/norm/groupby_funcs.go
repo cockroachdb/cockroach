@@ -446,18 +446,18 @@ func canEliminateGroupByJoin(
 // aggregate functions that have "any not null" semantics,
 // which select the first encountered non-null input value.
 // Example aggregate functions include ConstAgg, ConstNotNullAgg, AnyNotNullAgg,
-// Sum, BoolAndAgg, and ConcatAgg.
+// Max, BoolAndAgg, and ConcatAgg.
 // See also opt.AggregateOpReverseMap.
 func (c *CustomFuncs) AreAllPassThroughAggs(aggs memo.AggregationsExpr) bool {
 	for i := range aggs {
 		switch aggs[i].Agg.Op() {
 		case opt.ConstAggOp, opt.ConstNotNullAggOp, opt.AnyNotNullAggOp,
 			opt.BitAndAggOp, opt.BitOrAggOp, opt.BoolAndOp, opt.BoolOrOp,
-		  opt.MaxOp, opt.MinOp, opt.SumOp, opt.SumIntOp, opt.XorAggOp, 
+		  opt.MaxOp, opt.MinOp, opt.SumIntOp, opt.XorAggOp, 
 			opt.ConcatAggOp, opt.StringAggOp:
 			if _, ok := aggs[i].Agg.Child(0).(*memo.VariableExpr); !ok {
-				// ConstAgg-like aggregates always have a variable as input.
-				panic(errors.AssertionFailedf("expected variable as input to aggregate"))
+				// Ensure aggregator function has variable as input.
+				return false
 			}
 			continue
 		}
@@ -474,7 +474,8 @@ func (c *CustomFuncs) ConvertPassThroughAggsToProjections(
 ) memo.ProjectionsExpr {
 	projections := make(memo.ProjectionsExpr, 0, len(aggs))
 	for i := range aggs {
-		// ConstAgg-like aggregates always have a variable as input.
+		// Assume AreAllPassThroughAggs has ensured all aggregator functions
+		// have a variable as input.
 		inputVar := aggs[i].Agg.Child(0).(*memo.VariableExpr)
 		if inputVar.Col != aggs[i].Col {
 			projections = append(projections, c.f.ConstructProjectionsItem(inputVar, aggs[i].Col))
