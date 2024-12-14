@@ -62,10 +62,13 @@ func newTxnKVFetcher(
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 ) *txnKVFetcher {
+	alloc := new(struct {
+		batchRequestsIssued int64
+		kvPairsRead         int64
+	})
 	var sendFn sendFunc
-	var batchRequestsIssued int64
 	if bsHeader == nil {
-		sendFn = makeSendFunc(txn, ext, &batchRequestsIssued)
+		sendFn = makeSendFunc(txn, ext, &alloc.batchRequestsIssued)
 	} else {
 		negotiated := false
 		sendFn = func(ctx context.Context, ba *kvpb.BatchRequest) (br *kvpb.BatchResponse, _ error) {
@@ -91,7 +94,7 @@ func newTxnKVFetcher(
 			if pErr != nil {
 				return nil, pErr.GoError()
 			}
-			batchRequestsIssued++
+			alloc.batchRequestsIssued++
 			return br, nil
 		}
 	}
@@ -107,8 +110,8 @@ func newTxnKVFetcher(
 		deadlockTimeout:            deadlockTimeout,
 		acc:                        acc,
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
-		kvPairsRead:                new(int64),
-		batchRequestsIssued:        &batchRequestsIssued,
+		kvPairsRead:                &alloc.kvPairsRead,
+		batchRequestsIssued:        &alloc.batchRequestsIssued,
 	}
 	fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
 	fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
