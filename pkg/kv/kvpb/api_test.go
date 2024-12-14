@@ -435,7 +435,7 @@ func TestRequestHeaderRoundTrip(t *testing.T) {
 
 func TestBatchRequestEmptySize(t *testing.T) {
 	ba := &BatchRequest{}
-	require.Equal(t, 28, ba.Size())
+	require.Equal(t, 22, ba.Size())
 }
 
 func TestBatchResponseEmptySize(t *testing.T) {
