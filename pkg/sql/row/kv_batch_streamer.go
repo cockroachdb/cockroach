@@ -23,7 +23,7 @@ import (
 
 // txnKVStreamer handles retrieval of key/values.
 type txnKVStreamer struct {
-	kvBatchFetcherHelper
+	kvBatchMetrics
 	streamer       *kvstreamer.Streamer
 	lockStrength   lock.Strength
 	lockDurability lock.Durability
@@ -69,7 +69,7 @@ func newTxnKVStreamer(
 		acc:            acc,
 		rawMVCCValues:  rawMVCCValues,
 	}
-	f.kvBatchFetcherHelper.init(f.nextBatch, kvPairsRead, batchRequestsIssued)
+	f.kvBatchMetrics.init(kvPairsRead, batchRequestsIssued)
 	return f
 }
 
@@ -184,6 +184,16 @@ func (f *txnKVStreamer) releaseLastResult(ctx context.Context) {
 	f.lastResultState.Result = kvstreamer.Result{}
 }
 
+// NextBatch implements the KVBatchFetcher interface.
+func (f *txnKVStreamer) NextBatch(ctx context.Context) (KVBatchFetcherResponse, error) {
+	resp, err := f.nextBatch(ctx)
+	if !resp.MoreKVs || err != nil {
+		return resp, err
+	}
+	f.kvBatchMetrics.Record(resp)
+	return resp, nil
+}
+
 func (f *txnKVStreamer) nextBatch(ctx context.Context) (resp KVBatchFetcherResponse, _ error) {
 	// Check whether there are more batches in the current ScanResponse.
 	if len(f.lastResultState.remainingBatches) > 0 {
@@ -241,5 +251,5 @@ func (f *txnKVStreamer) Close(ctx context.Context) {
 	f.streamer.Close(ctx)
 	f.acc.Clear(ctx)
 	// Preserve observability-related fields.
-	*f = txnKVStreamer{kvBatchFetcherHelper: f.kvBatchFetcherHelper}
+	*f = txnKVStreamer{kvBatchMetrics: f.kvBatchMetrics}
 }
