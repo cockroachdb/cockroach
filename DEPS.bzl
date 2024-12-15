@@ -1821,10 +1821,10 @@ def go_deps():
         name = "com_github_cockroachdb_logtags",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/logtags",
-        sha256 = "ff8b3d36873cfff78669000d194cbaa96520549a62408c52b538380d953b99d7",
-        strip_prefix = "github.com/cockroachdb/logtags@v0.0.0-20241205023844-89a8856d99be",
+        sha256 = "7df3ef26fda4b64a0707524d04fe809991e885f4705e49ddb92a0d7ea2d8749a",
+        strip_prefix = "github.com/cockroachdb/logtags@v0.0.0-20241215213750-2daa9399f676",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/logtags/com_github_cockroachdb_logtags-v0.0.0-20241205023844-89a8856d99be.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/logtags/com_github_cockroachdb_logtags-v0.0.0-20241215213750-2daa9399f676.zip",
         ],
     )
     go_repository(
