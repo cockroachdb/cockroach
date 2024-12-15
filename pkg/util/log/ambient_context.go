@@ -73,6 +73,12 @@ func (ac *AmbientContext) AddLogTag(name string, value interface{}) {
 	ac.refreshCache()
 }
 
+// AddLogTags adds a set of tags to the ambient context.
+func (ac *AmbientContext) AddLogTags(tags *logtags.Buffer) {
+	ac.tags = ac.tags.Merge(tags)
+	ac.refreshCache()
+}
+
 func (ac *AmbientContext) refreshCache() {
 	ac.backgroundCtx = ac.annotateCtxInternal(context.Background())
 }
