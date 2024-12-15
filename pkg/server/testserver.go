@@ -2509,14 +2509,14 @@ func TestingMakeLoggingContexts(
 	appTenantID roachpb.TenantID,
 ) (sysContext, appContext context.Context) {
 	ctxSysTenant := context.Background()
-	ctxSysTenant = context.WithValue(ctxSysTenant, serverident.ServerIdentificationContextKey{}, &idProvider{
+	ctxSysTenant = serverident.ContextWithServerIdentification(ctxSysTenant, &idProvider{
 		tenantID:   roachpb.SystemTenantID,
 		clusterID:  &base.ClusterIDContainer{},
 		serverID:   &base.NodeIDContainer{},
 		tenantName: roachpb.NewTenantNameContainer("system"),
 	})
 	ctxAppTenant := context.Background()
-	ctxAppTenant = context.WithValue(ctxAppTenant, serverident.ServerIdentificationContextKey{}, &idProvider{
+	ctxAppTenant = serverident.ContextWithServerIdentification(ctxAppTenant, &idProvider{
 		tenantID:   appTenantID,
 		clusterID:  &base.ClusterIDContainer{},
 		serverID:   &base.NodeIDContainer{},
