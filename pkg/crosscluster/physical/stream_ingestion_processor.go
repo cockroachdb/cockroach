@@ -8,11 +8,13 @@ package physical
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -475,10 +477,15 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			}
 		}
 
+		var subscriptionOpts []streamclient.SubscribeOption
+		if sip.LDRInitialScan() {
+			subscriptionOpts = []streamclient.SubscribeOption{streamclient.WithInitialScanOnly()}
+		}
+
 		sub, err := streamClient.Subscribe(ctx, streampb.StreamID(sip.spec.StreamID),
 			int32(sip.FlowCtx.NodeID.SQLInstanceID()), sip.ProcessorID,
 			token,
-			sip.spec.InitialScanTimestamp, sip.frontier)
+			sip.spec.InitialScanTimestamp, sip.frontier, subscriptionOpts...)
 
 		if err != nil {
 			sip.MoveToDrainingAndLogError(errors.Wrapf(err, "consuming partition %v", redactedAddr))
@@ -487,15 +494,28 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		subscriptions[id] = sub
 		sip.subscriptionGroup.GoCtx(func(ctx context.Context) error {
 			if err := sub.Subscribe(ctx); err != nil {
+				if sip.LDRInitialScan() {
+					// TODO(msbutler): figure out why errors.Is() doesn't work.
+					if strings.Contains(err.Error(), producer.ErrInitialScanComplete.Error()) {
+						return nil
+					}
+				}
 				sip.sendError(errors.Wrap(err, "subscription"))
 			}
 			return nil
 		})
 	}
 
+	// TODO(msbutler): remove merged subscription.
 	sip.mergedSubscription = MergeSubscriptions(sip.Ctx(), subscriptions)
 	sip.workerGroup.GoCtx(func(ctx context.Context) error {
 		if err := sip.mergedSubscription.Run(); err != nil {
+			if sip.LDRInitialScan() {
+				if strings.Contains(err.Error(), producer.ErrInitialScanComplete.Error()) {
+					return nil
+				}
+			}
+
 			sip.sendError(errors.Wrap(err, "merge subscription"))
 		}
 		return nil
@@ -680,6 +700,7 @@ func (sip *streamIngestionProcessor) flushLoop(_ context.Context) error {
 		// because the reader of checkpointCh is the caller of
 		// Next(). But there might never be another Next()
 		// call.
+
 		select {
 		case sip.checkpointCh <- resolvedSpan:
 		case <-sip.stopCh:
