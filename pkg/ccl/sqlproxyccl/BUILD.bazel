@@ -35,6 +35,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgwirebase",
         "//pkg/util/cache",
+        "//pkg/util/ctxutil",
         "//pkg/util/grpcutil",
         "//pkg/util/httputil",
         "//pkg/util/log",

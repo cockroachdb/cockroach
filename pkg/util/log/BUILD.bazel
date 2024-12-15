@@ -63,6 +63,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/allstacks",
         "//pkg/util/caller",
+        "//pkg/util/ctxutil",
         "//pkg/util/debugutil",
         "//pkg/util/encoding/encodingtype",
         "//pkg/util/envutil",

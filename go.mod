@@ -133,7 +133,7 @@ require (
 	github.com/cockroachdb/errors v1.11.3
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
-	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b
+	github.com/cockroachdb/logtags v0.0.0-20241205023844-89a8856d99be
 	github.com/cockroachdb/pebble v0.0.0-20241206160845-91e091aa3637
 	github.com/cockroachdb/redact v1.1.5
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
