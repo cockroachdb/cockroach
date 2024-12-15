@@ -21,6 +21,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -303,10 +304,10 @@ func encodeSpec(
 	srcTenant replicationtestutils.TenantState,
 	initialScanTime hlc.Timestamp,
 	previousReplicatedTime hlc.Timestamp,
-	tables ...string,
+	table string,
 ) []byte {
-	spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, tables...)
-	return encodeSpecForSpans(t, initialScanTime, previousReplicatedTime, spans)
+	spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, table)
+	return encodeSpecForSpans(t, initialScanTime, previousReplicatedTime, spans, false /* initialScanOnly */)
 }
 
 func encodeSpecForSpans(
@@ -314,17 +315,20 @@ func encodeSpecForSpans(
 	initialScanTime hlc.Timestamp,
 	previousReplicatedTime hlc.Timestamp,
 	spans []roachpb.Span,
+	initialScanOnly bool,
 ) []byte {
 	var progress []jobspb.ResolvedSpan
 	for _, span := range spans {
 		progress = append(progress, jobspb.ResolvedSpan{Span: span, Timestamp: previousReplicatedTime})
 	}
+
 	spec := &streampb.StreamPartitionSpec{
 		InitialScanTimestamp:        initialScanTime,
 		PreviousReplicatedTimestamp: previousReplicatedTime,
 		Spans:                       spans,
 		Progress:                    progress,
 		WrappedEvents:               true,
+		InitialScanOnly:             initialScanOnly,
 		Config: streampb.StreamPartitionSpec_ExecutionConfig{
 			MinCheckpointFrequency: 10 * time.Millisecond,
 		},
@@ -454,6 +458,30 @@ CREATE TABLE t3(
 				break
 			}
 		}
+	})
+
+	t.Run("initial-scan-only", func(t *testing.T) {
+
+		spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, "t1")
+		spec := encodeSpecForSpans(t, initialScanTimestamp, hlc.Timestamp{}, spans, true /* initialScanOnly */)
+
+		_, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
+			streamPartitionQuery, streamID, spec)
+		defer feed.Close(ctx)
+
+		expected := replicationtestutils.EncodeKV(t, srcTenant.Codec, t1Descr, 42)
+		firstObserved := feed.ObserveKey(ctx, expected.Key)
+
+		require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
+
+		// Periodically, resolved timestamps should be published.
+		// Observe resolved timestamp that's higher than the previous value timestamp.
+		feed.ObserveResolved(ctx, firstObserved.Value.Timestamp)
+
+		feed.ObserveError(ctx, func(err error) bool {
+			// TODO(msbutler): understand why errors.Is does not work here.
+			return strings.Contains(err.Error(), producer.ErrInitialScanComplete.Error())
+		})
 	})
 }
 
@@ -646,7 +674,7 @@ USE d;
 	// Only subscribe to table t1 and t2, not t3.
 	// We start the stream at a resume timestamp to avoid any initial scan.
 	spans := spansForTables(h.SysServer.DB(), srcTenant.Codec, "t1", "t2")
-	spec := encodeSpecForSpans(t, initialScanTimestamp, streamResumeTimestamp, spans)
+	spec := encodeSpecForSpans(t, initialScanTimestamp, streamResumeTimestamp, spans, false)
 
 	source, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
 		streamPartitionQuery, streamID, spec)

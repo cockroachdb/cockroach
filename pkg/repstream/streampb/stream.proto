@@ -144,7 +144,9 @@ message StreamPartitionSpec {
 
   ReplicationType type = 12;
 
-  // NEXT ID: 13.
+  bool initial_scan_only = 13;
+
+  // NEXT ID: 14.
 }
 
 // SpanConfigEventStreamSpec is the span config event stream specification.

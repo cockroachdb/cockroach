@@ -272,6 +272,7 @@ func (p *partitionedStreamClient) Subscribe(
 	if p.logical {
 		sps.Type = streampb.ReplicationType_LOGICAL
 	}
+	sps.InitialScanOnly = cfg.withInitialScanOnly
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {

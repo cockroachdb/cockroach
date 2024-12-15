@@ -82,6 +82,8 @@ var emitMetadata = settings.RegisterBoolSetting(
 	true,
 )
 
+var ErrInitialScanComplete = errors.New("initial scan completed")
+
 var _ eval.ValueGenerator = (*eventStream)(nil)
 
 var eventStreamReturnType = types.MakeLabeledTuple(
@@ -268,6 +270,9 @@ func (s *eventStream) Close(ctx context.Context) {
 
 func (s *eventStream) onInitialScanDone(ctx context.Context) {
 	log.VInfof(ctx, 2, "initial scan completed")
+	if s.spec.InitialScanOnly {
+		s.setErr(ErrInitialScanComplete)
+	}
 }
 
 func (s *eventStream) onValues(ctx context.Context, values []kv.KeyValue) {
