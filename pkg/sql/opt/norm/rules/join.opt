@@ -80,7 +80,7 @@
             (CanMapJoinOpFilter
                 $item
                 $leftCols:(OutputCols $left)
-                $equivSet:(GetEquivSet $on $left $right)
+                $equivSet:(GetEquivGroups $on $left $right)
             ) &
             (CanMapJoinOpFilter
                 $item
@@ -140,7 +140,7 @@
             (CanMapJoinOpFilter
                 $item
                 $leftCols
-                $equivSet:(GetEquivSet $on $left $right)
+                $equivSet:(GetEquivGroups $on $left $right)
             )
         ...
     ]
@@ -174,7 +174,7 @@
             (CanMapJoinOpFilter
                 $item
                 $rightCols
-                $equivSet:(GetEquivSet $on $left $right)
+                $equivSet:(GetEquivGroups $on $left $right)
             )
         ...
     ]

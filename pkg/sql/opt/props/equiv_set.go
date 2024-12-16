@@ -11,30 +11,30 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// EquivSet describes a set of equivalence groups of columns. It can answer
+// EquivGroups describes a set of equivalence groups of columns. It can answer
 // queries about which columns are equivalent to one another. Equivalence groups
 // are always non-empty and disjoint.
 //
-// TODO(drewk): incorporate EquivSets into FuncDepSets.
-type EquivSet struct {
+// TODO(drewk): incorporate EquivGroups into FuncDepSets.
+type EquivGroups struct {
 	buf    [equalityBufferSize]opt.ColSet
 	groups []opt.ColSet
 }
 
 const equalityBufferSize = 1
 
-// NewEquivSet returns a new equality set with a starting capacity of one
-// equivalence group. This optimizes for the common case when only one
+// NewEquivGroups returns a new equality set with a starting capacity of
+// one equivalence group. This optimizes for the common case when only one
 // equivalence group is stored.
-func NewEquivSet() EquivSet {
-	set := EquivSet{}
+func NewEquivGroups() EquivGroups {
+	set := EquivGroups{}
 	set.groups = set.buf[:0]
 	return set
 }
 
-// Reset prepares the EquivSet for reuse, maintaining references to any
+// Reset prepares the EquivGroups for reuse, maintaining references to any
 // allocated slice memory.
-func (eq *EquivSet) Reset() {
+func (eq *EquivGroups) Reset() {
 	for i := range eq.groups {
 		// Release any references to the large portion of ColSets.
 		eq.groups[i] = opt.ColSet{}
@@ -42,9 +42,9 @@ func (eq *EquivSet) Reset() {
 	eq.groups = eq.groups[:0]
 }
 
-// Add adds the given equivalent columns to the EquivSet. If possible, the
+// Add adds the given equivalent columns to the EquivGroups. If possible, the
 // columns are added to an existing group. Otherwise, a new one is created.
-func (eq *EquivSet) Add(equivCols opt.ColSet) {
+func (eq *EquivGroups) Add(equivCols opt.ColSet) {
 	if buildutil.CrdbTestBuild {
 		defer eq.verify()
 	}
@@ -65,8 +65,8 @@ func (eq *EquivSet) Add(equivCols opt.ColSet) {
 }
 
 // AddFromFDs adds all equivalence relations from the given FuncDepSet to the
-// EquivSet.
-func (eq *EquivSet) AddFromFDs(fdset *FuncDepSet) {
+// EquivGroups.
+func (eq *EquivGroups) AddFromFDs(fdset *FuncDepSet) {
 	if buildutil.CrdbTestBuild {
 		defer eq.verify()
 	}
@@ -79,7 +79,7 @@ func (eq *EquivSet) AddFromFDs(fdset *FuncDepSet) {
 }
 
 // AreColsEquiv indicates whether the given columns are equivalent.
-func (eq *EquivSet) AreColsEquiv(left, right opt.ColumnID) bool {
+func (eq *EquivGroups) AreColsEquiv(left, right opt.ColumnID) bool {
 	if buildutil.CrdbTestBuild {
 		defer eq.verify()
 	}
@@ -97,7 +97,7 @@ func (eq *EquivSet) AreColsEquiv(left, right opt.ColumnID) bool {
 // Group returns the group of columns equivalent to the given column. It
 // returns the empty set if no such group exists. The returned should not be
 // mutated without being copied first.
-func (eq *EquivSet) Group(col opt.ColumnID) opt.ColSet {
+func (eq *EquivGroups) Group(col opt.ColumnID) opt.ColSet {
 	for i := range eq.groups {
 		if eq.groups[i].Contains(col) {
 			return eq.groups[i]
@@ -109,7 +109,7 @@ func (eq *EquivSet) Group(col opt.ColumnID) opt.ColSet {
 // tryMergeGroups attempts to merge the equality group at the given index with
 // any of the *following* groups. If a group can be merged, it is removed after
 // its columns are added to the given group.
-func (eq *EquivSet) tryMergeGroups(idx int) {
+func (eq *EquivGroups) tryMergeGroups(idx int) {
 	if buildutil.CrdbTestBuild {
 		defer eq.verify()
 	}
@@ -123,7 +123,7 @@ func (eq *EquivSet) tryMergeGroups(idx int) {
 	}
 }
 
-func (eq *EquivSet) verify() {
+func (eq *EquivGroups) verify() {
 	var seen opt.ColSet
 	for _, group := range eq.groups {
 		if group.Len() <= 1 {
@@ -136,7 +136,7 @@ func (eq *EquivSet) verify() {
 	}
 }
 
-func (eq *EquivSet) String() string {
+func (eq *EquivGroups) String() string {
 	ret := "["
 	for i := range eq.groups {
 		if i > 0 {
