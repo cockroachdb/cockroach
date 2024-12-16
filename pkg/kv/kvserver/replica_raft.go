@@ -258,7 +258,10 @@ func (r *Replica) evalAndPropose(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
-	log.VEventf(proposal.Context(), 2, "acquiring proposal quota (%d bytes)", quotaSize)
+	if log.ExpensiveLogEnabled(proposal.Context(), 2) {
+		quotaSize := quotaSize // avoid heap alloc when conditional not taken
+		log.VEventf(proposal.Context(), 2, "acquiring proposal quota (%d bytes)", quotaSize)
+	}
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, ba, quotaSize)
 	if err != nil {
