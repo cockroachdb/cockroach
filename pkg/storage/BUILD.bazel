@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "array_32bit.go",
         "array_64bit.go",
+        "backup_compaction_iterator.go",
         "ballast.go",
         "batch.go",
         "col_mvcc.go",
@@ -118,6 +119,7 @@ go_test(
     name = "storage_test",
     size = "medium",
     srcs = [
+        "backup_compaction_iterator_test.go",
         "ballast_test.go",
         "batch_test.go",
         "bench_cloud_io_test.go",
