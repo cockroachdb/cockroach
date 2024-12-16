@@ -113,3 +113,46 @@ func TestEquivSet_Rand(t *testing.T) {
 		}
 	}
 }
+
+func TestAdd(t *testing.T) {
+	c := func(cols ...int) opt.ColSet {
+		var r opt.ColSet
+		for _, col := range cols {
+			r.Add(opt.ColumnID(col))
+		}
+		return r
+	}
+
+	eq := NewEquivSet()
+	eq.Add(c(1, 2))
+	require.True(t, eq.AreColsEquiv(1, 2))
+	require.False(t, eq.AreColsEquiv(1, 3))
+	require.False(t, eq.AreColsEquiv(1, 5))
+	require.Equal(t, 1, len(eq.groups))
+
+	eq.Add(c(3, 4))
+	require.True(t, eq.AreColsEquiv(1, 2))
+	require.True(t, eq.AreColsEquiv(3, 4))
+	require.False(t, eq.AreColsEquiv(1, 3))
+	require.False(t, eq.AreColsEquiv(1, 5))
+	require.Equal(t, 2, len(eq.groups))
+
+	eq.Add(c(5, 6))
+	require.True(t, eq.AreColsEquiv(1, 2))
+	require.True(t, eq.AreColsEquiv(3, 4))
+	require.True(t, eq.AreColsEquiv(5, 6))
+	require.False(t, eq.AreColsEquiv(1, 3))
+	require.False(t, eq.AreColsEquiv(1, 5))
+	require.False(t, eq.AreColsEquiv(3, 5))
+	require.Equal(t, 3, len(eq.groups))
+
+	// Combine the three equiv groups into one.
+	eq.Add(c(1, 3, 5))
+	require.True(t, eq.AreColsEquiv(1, 2))
+	require.True(t, eq.AreColsEquiv(3, 4))
+	require.True(t, eq.AreColsEquiv(5, 6))
+	require.True(t, eq.AreColsEquiv(1, 3))
+	require.True(t, eq.AreColsEquiv(1, 5))
+	require.True(t, eq.AreColsEquiv(3, 5))
+	require.Equal(t, 1, len(eq.groups))
+}

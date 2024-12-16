@@ -5,7 +5,11 @@
 
 package props
 
-import "github.com/cockroachdb/cockroach/pkg/sql/opt"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/errors"
+)
 
 // EquivSet describes a set of equivalence groups of columns. It can answer
 // queries about which columns are equivalent to one another. Equivalence groups
@@ -41,6 +45,9 @@ func (eq *EquivSet) Reset() {
 // Add adds the given equivalent columns to the EquivSet. If possible, the
 // columns are added to an existing group. Otherwise, a new one is created.
 func (eq *EquivSet) Add(equivCols opt.ColSet) {
+	if buildutil.CrdbTestBuild {
+		defer eq.verify()
+	}
 	// Attempt to add the equivalence to an existing group.
 	for i := range eq.groups {
 		if eq.groups[i].Intersects(equivCols) {
@@ -60,6 +67,9 @@ func (eq *EquivSet) Add(equivCols opt.ColSet) {
 // AddFromFDs adds all equivalence relations from the given FuncDepSet to the
 // EquivSet.
 func (eq *EquivSet) AddFromFDs(fdset *FuncDepSet) {
+	if buildutil.CrdbTestBuild {
+		defer eq.verify()
+	}
 	for i := range fdset.deps {
 		fd := &fdset.deps[i]
 		if fd.equiv {
@@ -70,6 +80,9 @@ func (eq *EquivSet) AddFromFDs(fdset *FuncDepSet) {
 
 // AreColsEquiv indicates whether the given columns are equivalent.
 func (eq *EquivSet) AreColsEquiv(left, right opt.ColumnID) bool {
+	if buildutil.CrdbTestBuild {
+		defer eq.verify()
+	}
 	for i := range eq.groups {
 		if eq.groups[i].Contains(left) {
 			return eq.groups[i].Contains(right)
@@ -97,13 +110,29 @@ func (eq *EquivSet) Group(col opt.ColumnID) opt.ColSet {
 // any of the *following* groups. If a group can be merged, it is removed after
 // its columns are added to the given group.
 func (eq *EquivSet) tryMergeGroups(idx int) {
-	for i := idx + 1; i < len(eq.groups); i++ {
+	if buildutil.CrdbTestBuild {
+		defer eq.verify()
+	}
+	for i := len(eq.groups) - 1; i > idx; i-- {
 		if eq.groups[idx].Intersects(eq.groups[i]) {
 			eq.groups[idx].UnionWith(eq.groups[i])
 			eq.groups[i] = eq.groups[len(eq.groups)-1]
 			eq.groups[len(eq.groups)-1] = opt.ColSet{}
 			eq.groups = eq.groups[:len(eq.groups)-1]
 		}
+	}
+}
+
+func (eq *EquivSet) verify() {
+	var seen opt.ColSet
+	for _, group := range eq.groups {
+		if group.Len() <= 1 {
+			panic(errors.AssertionFailedf("expected non-trivial equiv group"))
+		}
+		if seen.Intersects(group) {
+			panic(errors.AssertionFailedf("expected non-intersecting equiv groups"))
+		}
+		seen.UnionWith(group)
 	}
 }
 
