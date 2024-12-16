@@ -2698,6 +2698,7 @@ func (st *SessionTracing) Enabled() bool {
 // logical planning starts.
 func (st *SessionTracing) TracePlanStart(ctx context.Context, stmtTag string) {
 	if st.enabled {
+		stmtTag := stmtTag // alloc only if taken
 		log.VEventf(ctx, 2, "planning starts: %s", stmtTag)
 	}
 }
@@ -2735,7 +2736,10 @@ func (st *SessionTracing) TraceRetryInformation(ctx context.Context, retries int
 // TraceExecStart conditionally emits a trace message at the moment
 // plan execution starts.
 func (st *SessionTracing) TraceExecStart(ctx context.Context, engine redact.SafeString) {
-	log.VEventfDepth(ctx, 2, 1, "execution starts: %s engine", engine)
+	if log.ExpensiveLogEnabledVDepth(ctx, 2, 1) {
+		engine := engine // heap alloc only if needed
+		log.VEventfDepth(ctx, 2, 1, "execution starts: %s engine", engine)
+	}
 }
 
 // TraceExecConsume creates a context for TraceExecRowsResult below.
