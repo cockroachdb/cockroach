@@ -737,16 +737,9 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 			fn(name, *m.Counter.Value)
 		}
 	case metric.PrometheusVector:
-		for _, m := range mtr.ToPrometheusMetrics() {
-			if m.Gauge != nil {
-				fn(name, *m.Gauge.Value)
-				continue
-			}
-
-			if m.Counter != nil {
-				fn(name, *m.Counter.Value)
-			}
-		}
+		// NOOP - We don't record metric.PrometheusVector into TSDB. These metrics
+		// are only exported as prometheus metrics via metric.PrometheusExporter.
+		return nil
 
 	default:
 		return errors.Errorf("cannot extract value for type %T", mtr)
