@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -366,20 +367,23 @@ func (ds *ServerImpl) setupFlow(
 	}
 
 	if !f.IsLocal() {
-		flowCtx.AmbientContext.AddLogTag("f", flowCtx.ID.Short().String())
+		bld := logtags.BuildBuffer()
+		bld.Add("f", flowCtx.ID.Short().String())
 		if req.JobTag != "" {
-			flowCtx.AmbientContext.AddLogTag("job", req.JobTag)
+			bld.Add("job", req.JobTag)
 		}
 		if req.StatementSQL != "" {
-			flowCtx.AmbientContext.AddLogTag("distsql.stmt", req.StatementSQL)
+			bld.Add("distsql.stmt", req.StatementSQL)
 		}
-		flowCtx.AmbientContext.AddLogTag("distsql.gateway", req.Flow.Gateway)
+		bld.Add("distsql.gateway", req.Flow.Gateway)
 		if req.EvalContext.SessionData.ApplicationName != "" {
-			flowCtx.AmbientContext.AddLogTag("distsql.appname", req.EvalContext.SessionData.ApplicationName)
+			bld.Add("distsql.appname", req.EvalContext.SessionData.ApplicationName)
 		}
 		if leafTxn != nil {
-			flowCtx.AmbientContext.AddLogTag("distsql.txn", leafTxn.ID())
+			// TODO(radu): boxing the UUID requires an allocation.
+			bld.Add("distsql.txn", leafTxn.ID())
 		}
+		flowCtx.AmbientContext.AddLogTags(bld.Finish())
 		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
 		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
 	}
