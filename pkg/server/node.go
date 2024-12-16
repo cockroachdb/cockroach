@@ -1998,7 +1998,9 @@ func setupSpanForIncomingRPC(
 			tracing.WithServerSpanKind)
 	}
 
-	newSpan.SetLazyTag("request", ba.ShallowCopy())
+	if newSpan != nil && !newSpan.IsNoop() {
+		newSpan.SetLazyTag("request", ba.ShallowCopy())
+	}
 	return ctx, spanForRequest{
 		// For non-local requests, we'll need to attach the recording to the
 		// outgoing BatchResponse if the request is traced. We ignore whether the
