@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/aws/aws-msk-iam-sasl-signer-go/signer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -37,8 +37,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/rcrowley/go-metrics"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/clientcredentials"
 )
 
 func isKafkaSink(u *url.URL) bool {
@@ -778,86 +776,6 @@ func (j *jsonDuration) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-type tokenProvider struct {
-	tokenSource oauth2.TokenSource
-}
-
-var _ sarama.AccessTokenProvider = (*tokenProvider)(nil)
-
-// Token implements the sarama.AccessTokenProvider interface.  This is called by
-// Sarama when connecting to the broker.
-func (t *tokenProvider) Token() (*sarama.AccessToken, error) {
-	token, err := t.tokenSource.Token()
-	if err != nil {
-		// Errors will result in Sarama retrying the broker connection and logging
-		// the transient error, with a Broker connection error surfacing after retry
-		// attempts have been exhausted.
-		return nil, err
-	}
-
-	return &sarama.AccessToken{Token: token.AccessToken}, nil
-}
-
-type AwsIAMRoleSASLTokenProvider struct {
-	ctx            context.Context
-	awsRegion      string
-	iamRoleArn     string
-	iamSessionName string
-}
-
-func (p *AwsIAMRoleSASLTokenProvider) Token() (*sarama.AccessToken, error) {
-	token, _, err := signer.GenerateAuthTokenFromRole(
-		p.ctx, p.awsRegion, p.iamRoleArn, p.iamSessionName)
-	if err != nil {
-		return nil, err
-	}
-
-	return &sarama.AccessToken{Token: token}, nil
-}
-
-func newAwsIAMRoleSASLTokenProvider(
-	ctx context.Context, dialConfig kafkaDialConfig,
-) (sarama.AccessTokenProvider, error) {
-	return &AwsIAMRoleSASLTokenProvider{
-		ctx:            ctx,
-		awsRegion:      dialConfig.saslAwsRegion,
-		iamRoleArn:     dialConfig.saslAwsIAMRoleArn,
-		iamSessionName: dialConfig.saslAwsIAMSessionName,
-	}, nil
-}
-
-func newTokenProvider(
-	ctx context.Context, dialConfig kafkaDialConfig,
-) (sarama.AccessTokenProvider, error) {
-	// grant_type is by default going to be set to 'client_credentials' by the
-	// clientcredentials library as defined by the spec, however non-compliant
-	// auth server implementations may want a custom type
-	var endpointParams url.Values
-	if dialConfig.saslGrantType != `` {
-		endpointParams = url.Values{"grant_type": {dialConfig.saslGrantType}}
-	}
-
-	tokenURL, err := url.Parse(dialConfig.saslTokenURL)
-	if err != nil {
-		return nil, errors.Wrap(err, "malformed token url")
-	}
-
-	// the clientcredentials.Config's TokenSource method creates an
-	// oauth2.TokenSource implementation which returns tokens for the given
-	// endpoint, returning the same cached result until its expiration has been
-	// reached, and then once expired re-requesting a new token from the endpoint.
-	cfg := clientcredentials.Config{
-		ClientID:       dialConfig.saslClientID,
-		ClientSecret:   dialConfig.saslClientSecret,
-		TokenURL:       tokenURL.String(),
-		Scopes:         dialConfig.saslScopes,
-		EndpointParams: endpointParams,
-	}
-	return &tokenProvider{
-		tokenSource: cfg.TokenSource(ctx),
-	}, nil
-}
-
 // Apply configures provided kafka configuration struct based on this config.
 func (c *saramaConfig) Apply(kafka *sarama.Config) error {
 	// Sarama limits the size of each message to be MaxMessageSize (1MB) bytes.
@@ -918,11 +836,16 @@ func getSaramaConfig(
 }
 
 type kafkaDialConfig struct {
-	tlsEnabled            bool
-	tlsSkipVerify         bool
-	caCert                []byte
-	clientCert            []byte
-	clientKey             []byte
+	// temporary, while i move stuff
+	hackOriginalURL *url.URL
+
+	tlsEnabled    bool
+	tlsSkipVerify bool
+	caCert        []byte
+	clientCert    []byte
+	clientKey     []byte
+
+	// rm
 	saslEnabled           bool
 	saslHandshake         bool
 	saslUser              string
@@ -990,79 +913,82 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 		}
 	}
 
-	dialConfig.saslMechanism = u.consumeParam(changefeedbase.SinkParamSASLMechanism)
-	if dialConfig.saslMechanism != `` && !dialConfig.saslEnabled {
-		return kafkaDialConfig{}, errors.Errorf(`%s must be enabled to configure SASL mechanism`,
-			changefeedbase.SinkParamSASLEnabled)
-	}
-	if dialConfig.saslMechanism == `` {
-		dialConfig.saslMechanism = sarama.SASLTypePlaintext
-	}
-	switch dialConfig.saslMechanism {
-	case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext, changefeedbase.SASLTypeAWSMSKIAM:
-	default:
-		return kafkaDialConfig{}, errors.Errorf(`param %s must be one of %s, %s, %s, %s or %s`,
-			changefeedbase.SinkParamSASLMechanism,
-			sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext, changefeedbase.SASLTypeAWSMSKIAM)
-	}
+	// dialConfig.saslMechanism = u.consumeParam(changefeedbase.SinkParamSASLMechanism)
+	// if dialConfig.saslMechanism != `` && !dialConfig.saslEnabled {
+	// 	return kafkaDialConfig{}, errors.Errorf(`%s must be enabled to configure SASL mechanism`,
+	// 		changefeedbase.SinkParamSASLEnabled)
+	// }
+	// if dialConfig.saslMechanism == `` {
+	// 	dialConfig.saslMechanism = sarama.SASLTypePlaintext
+	// }
+	// switch dialConfig.saslMechanism {
+	// case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext, changefeedbase.SASLTypeAWSMSKIAM:
+	// default:
+	// 	return kafkaDialConfig{}, errors.Errorf(`param %s must be one of %s, %s, %s, %s or %s`,
+	// 		changefeedbase.SinkParamSASLMechanism,
+	// 		sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypeOAuth, sarama.SASLTypePlaintext, changefeedbase.SASLTypeAWSMSKIAM)
+	// }
 
-	var requiredSASLParams []string
-	switch dialConfig.saslMechanism {
-	case sarama.SASLTypeOAuth:
-		requiredSASLParams = []string{changefeedbase.SinkParamSASLClientID, changefeedbase.SinkParamSASLClientSecret,
-			changefeedbase.SinkParamSASLTokenURL}
-	case changefeedbase.SASLTypeAWSMSKIAM:
-		requiredSASLParams = []string{changefeedbase.SinkParamSASLAwsRegion, changefeedbase.SinkParamSASLAwsIAMRoleArn,
-			changefeedbase.SinkParamSASLAwsIAMSessionName}
-	default:
-		requiredSASLParams = []string{changefeedbase.SinkParamSASLUser, changefeedbase.SinkParamSASLPassword}
-	}
-	for _, param := range requiredSASLParams {
-		if dialConfig.saslEnabled {
-			if len(u.q[param]) == 0 {
-				errStr := fmt.Sprintf(`%s must be provided when SASL is enabled`, param)
-				if dialConfig.saslMechanism != sarama.SASLTypePlaintext {
-					errStr += fmt.Sprintf(` using mechanism %s`, dialConfig.saslMechanism)
-				}
-				return kafkaDialConfig{}, errors.Errorf("%s", errStr)
-			}
-		} else {
-			if len(u.q[param]) > 0 {
-				return kafkaDialConfig{}, errors.Errorf(`%s must be enabled if %s is provided`,
-					changefeedbase.SinkParamSASLEnabled, param)
-			}
-		}
-	}
+	// var requiredSASLParams []string
+	// switch dialConfig.saslMechanism {
+	// case sarama.SASLTypeOAuth:
+	// 	requiredSASLParams = []string{changefeedbase.SinkParamSASLClientID, changefeedbase.SinkParamSASLClientSecret,
+	// 		changefeedbase.SinkParamSASLTokenURL}
+	// case changefeedbase.SASLTypeAWSMSKIAM:
+	// 	requiredSASLParams = []string{changefeedbase.SinkParamSASLAwsRegion, changefeedbase.SinkParamSASLAwsIAMRoleArn,
+	// 		changefeedbase.SinkParamSASLAwsIAMSessionName}
+	// default:
+	// 	requiredSASLParams = []string{changefeedbase.SinkParamSASLUser, changefeedbase.SinkParamSASLPassword}
+	// }
+	// for _, param := range requiredSASLParams {
+	// 	if dialConfig.saslEnabled {
+	// 		if len(u.q[param]) == 0 {
+	// 			errStr := fmt.Sprintf(`%s must be provided when SASL is enabled`, param)
+	// 			if dialConfig.saslMechanism != sarama.SASLTypePlaintext {
+	// 				errStr += fmt.Sprintf(` using mechanism %s`, dialConfig.saslMechanism)
+	// 			}
+	// 			return kafkaDialConfig{}, errors.Errorf("%s", errStr)
+	// 		}
+	// 	} else {
+	// 		if len(u.q[param]) > 0 {
+	// 			return kafkaDialConfig{}, errors.Errorf(`%s must be enabled if %s is provided`,
+	// 				changefeedbase.SinkParamSASLEnabled, param)
+	// 		}
+	// 	}
+	// }
 
-	if dialConfig.saslMechanism != sarama.SASLTypeOAuth {
-		oauthParams := []string{changefeedbase.SinkParamSASLClientID, changefeedbase.SinkParamSASLClientSecret,
-			changefeedbase.SinkParamSASLTokenURL, changefeedbase.SinkParamSASLGrantType,
-			changefeedbase.SinkParamSASLScopes}
-		for _, param := range oauthParams {
-			if len(u.q[param]) > 0 {
-				return kafkaDialConfig{}, errors.Errorf(`%s is only a valid parameter for %s=%s`, param,
-					changefeedbase.SinkParamSASLMechanism, sarama.SASLTypeOAuth)
-			}
-		}
-	}
+	// // TODO: how to get this behaviour
+	// if dialConfig.saslMechanism != sarama.SASLTypeOAuth {
+	// 	oauthParams := []string{changefeedbase.SinkParamSASLClientID, changefeedbase.SinkParamSASLClientSecret,
+	// 		changefeedbase.SinkParamSASLTokenURL, changefeedbase.SinkParamSASLGrantType,
+	// 		changefeedbase.SinkParamSASLScopes}
+	// 	for _, param := range oauthParams {
+	// 		if len(u.q[param]) > 0 {
+	// 			return kafkaDialConfig{}, errors.Errorf(`%s is only a valid parameter for %s=%s`, param,
+	// 				changefeedbase.SinkParamSASLMechanism, sarama.SASLTypeOAuth)
+	// 		}
+	// 	}
+	// }
 
-	dialConfig.saslUser = u.consumeParam(changefeedbase.SinkParamSASLUser)
-	dialConfig.saslPassword = u.consumeParam(changefeedbase.SinkParamSASLPassword)
-	dialConfig.saslTokenURL = u.consumeParam(changefeedbase.SinkParamSASLTokenURL)
-	dialConfig.saslClientID = u.consumeParam(changefeedbase.SinkParamSASLClientID)
-	dialConfig.saslScopes = u.Query()[changefeedbase.SinkParamSASLScopes]
-	dialConfig.saslGrantType = u.consumeParam(changefeedbase.SinkParamSASLGrantType)
+	// dialConfig.saslUser = u.consumeParam(changefeedbase.SinkParamSASLUser)
+	// dialConfig.saslPassword = u.consumeParam(changefeedbase.SinkParamSASLPassword)
+	// dialConfig.saslTokenURL = u.consumeParam(changefeedbase.SinkParamSASLTokenURL)
+	// dialConfig.saslClientID = u.consumeParam(changefeedbase.SinkParamSASLClientID)
+	// dialConfig.saslScopes = u.Query()[changefeedbase.SinkParamSASLScopes]
+	// dialConfig.saslGrantType = u.consumeParam(changefeedbase.SinkParamSASLGrantType)
 
-	// Configure AWS IAM role based authentication
-	dialConfig.saslAwsRegion = u.consumeParam(changefeedbase.SinkParamSASLAwsRegion)
-	dialConfig.saslAwsIAMSessionName = u.consumeParam(changefeedbase.SinkParamSASLAwsIAMSessionName)
-	dialConfig.saslAwsIAMRoleArn = u.consumeParam(changefeedbase.SinkParamSASLAwsIAMRoleArn)
+	// // Configure AWS IAM role based authentication
+	// dialConfig.saslAwsRegion = u.consumeParam(changefeedbase.SinkParamSASLAwsRegion)
+	// dialConfig.saslAwsIAMSessionName = u.consumeParam(changefeedbase.SinkParamSASLAwsIAMSessionName)
+	// dialConfig.saslAwsIAMRoleArn = u.consumeParam(changefeedbase.SinkParamSASLAwsIAMRoleArn)
 
-	var decodedClientSecret []byte
-	if err := u.decodeBase64(changefeedbase.SinkParamSASLClientSecret, &decodedClientSecret); err != nil {
-		return kafkaDialConfig{}, err
-	}
-	dialConfig.saslClientSecret = string(decodedClientSecret)
+	// var decodedClientSecret []byte
+	// if err := u.decodeBase64(changefeedbase.SinkParamSASLClientSecret, &decodedClientSecret); err != nil {
+	// 	return kafkaDialConfig{}, err
+	// }
+	// dialConfig.saslClientSecret = string(decodedClientSecret)
+
+	dialConfig.hackOriginalURL = u.URL
 
 	return dialConfig, nil
 }
@@ -1283,36 +1209,45 @@ func buildKafkaConfig(
 		}
 	}
 
-	if dialConfig.saslEnabled {
-		config.Net.SASL.Enable = true
-		config.Net.SASL.Handshake = dialConfig.saslHandshake
-		config.Net.SASL.User = dialConfig.saslUser
-		config.Net.SASL.Password = dialConfig.saslPassword
+	// if dialConfig.saslEnabled {
+	// 	config.Net.SASL.Enable = true
+	// 	config.Net.SASL.Handshake = dialConfig.saslHandshake
+	// 	config.Net.SASL.User = dialConfig.saslUser
+	// 	config.Net.SASL.Password = dialConfig.saslPassword
 
-		var mechanism sarama.SASLMechanism
-		if dialConfig.saslMechanism == changefeedbase.SASLTypeAWSMSKIAM {
-			mechanism = sarama.SASLTypeOAuth
-		} else {
-			mechanism = sarama.SASLMechanism(dialConfig.saslMechanism)
-		}
+	// 	var mechanism sarama.SASLMechanism
+	// 	if dialConfig.saslMechanism == changefeedbase.SASLTypeAWSMSKIAM {
+	// 		mechanism = sarama.SASLTypeOAuth
+	// 	} else {
+	// 		mechanism = sarama.SASLMechanism(dialConfig.saslMechanism)
+	// 	}
 
-		config.Net.SASL.Mechanism = mechanism
+	// 	config.Net.SASL.Mechanism = mechanism
 
-		switch mechanism {
-		case sarama.SASLTypeSCRAMSHA512:
-			config.Net.SASL.SCRAMClientGeneratorFunc = sha512ClientGenerator
-		case sarama.SASLTypeSCRAMSHA256:
-			config.Net.SASL.SCRAMClientGeneratorFunc = sha256ClientGenerator
-		case sarama.SASLTypeOAuth:
-			var err error
-			if dialConfig.saslMechanism == changefeedbase.SASLTypeAWSMSKIAM {
-				config.Net.SASL.TokenProvider, err = newAwsIAMRoleSASLTokenProvider(ctx, dialConfig)
-			} else {
-				config.Net.SASL.TokenProvider, err = newTokenProvider(ctx, dialConfig)
-			}
-			if err != nil {
-				return nil, err
-			}
+	// 	switch mechanism {
+	// 	case sarama.SASLTypeSCRAMSHA512:
+	// 		config.Net.SASL.SCRAMClientGeneratorFunc = sha512ClientGenerator
+	// 	case sarama.SASLTypeSCRAMSHA256:
+	// 		config.Net.SASL.SCRAMClientGeneratorFunc = sha256ClientGenerator
+	// 	case sarama.SASLTypeOAuth:
+	// 		var err error
+	// 		if dialConfig.saslMechanism == changefeedbase.SASLTypeAWSMSKIAM {
+	// 			config.Net.SASL.TokenProvider, err = newAwsIAMRoleSASLTokenProvider(ctx, dialConfig)
+	// 		} else {
+	// 			config.Net.SASL.TokenProvider, err = newTokenProvider(ctx, dialConfig)
+	// 		}
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+	// 	}
+	// }
+
+	// Apply auth mechanism.
+	authMechanism, ok := kafkaauth.Registry.Pick(dialConfig.hackOriginalURL)
+	// Not having an auth mechanism is valid.
+	if ok {
+		if err := authMechanism.ApplySarama(ctx, config); err != nil {
+			return nil, err
 		}
 	}
 
