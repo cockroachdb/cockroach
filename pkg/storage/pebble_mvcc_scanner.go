@@ -382,6 +382,13 @@ type pebbleMVCCScanner struct {
 	parent MVCCIterator
 	// memAccount is used to account for the size of the scan results.
 	memAccount *mon.BoundAccount
+	// unlimitedMemAcc will back the memAccount field above when the scanner is
+	// retrieved from its pool. The account is cleared as the scanner returns to
+	// the pool (see release); it's fine to "leak" the account if the scanner is
+	// not returned to the pool, since it's an unlimited account.
+	// When a custom mem account should be used instead, memAccount should be
+	// overridden.
+	unlimitedMemAcc mon.BoundAccount
 	// lockTable is used to determine whether keys are locked in the in-memory
 	// lock table when scanning with the skipLocked option.
 	lockTable LockTableView
@@ -519,14 +526,23 @@ const (
 // Pool for allocating pebble MVCC Scanners.
 var pebbleMVCCScannerPool = sync.Pool{
 	New: func() interface{} {
-		return &pebbleMVCCScanner{}
+		mvccScanner := &pebbleMVCCScanner{
+			unlimitedMemAcc: *mon.NewStandaloneUnlimitedAccount(),
+		}
+		mvccScanner.memAccount = &mvccScanner.unlimitedMemAcc
+		return mvccScanner
 	},
 }
 
 func (p *pebbleMVCCScanner) release() {
+	// Release all bytes from the unlimited memory account (but keep
+	// the account intact).
+	p.unlimitedMemAcc.Empty(context.Background())
 	// Discard most memory references before placing in pool.
 	*p = pebbleMVCCScanner{
-		keyBuf: p.keyBuf,
+		keyBuf:          p.keyBuf,
+		memAccount:      &p.unlimitedMemAcc,
+		unlimitedMemAcc: p.unlimitedMemAcc,
 		// NB: This clears p.alloc.pebbleResults too, which should be maintained
 		// to avoid delaying GC of contained byte slices and avoid accidental
 		// misuse.
