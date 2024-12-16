@@ -2696,6 +2696,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	var err error
 
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+		ctx := ctx // heap alloc only in case of pausable portal
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 			err = ex.makeExecPlan(ctx, planner)
 			if flags := planner.curPlan.flags; err == nil && (flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
@@ -2883,6 +2884,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
 	if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
+		ctx := ctx // alloc only in case of pausable portal
 		// We need to ensure that we're using the planner bound to the first-time
 		// execution of a portal.
 		curPlanner := *planner
