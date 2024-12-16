@@ -124,7 +124,6 @@ go_test(
     deps = [
         "//pkg/backup",
         "//pkg/base",
-        "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprotectedts",
