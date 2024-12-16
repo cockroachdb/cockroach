@@ -70,7 +70,7 @@ func TestEquivGroups_Rand(t *testing.T) {
 		return "expected columns not to be equivalent, but were"
 	}
 
-	equivGroups := NewEquivGroups()
+	var equivGroups EquivGroups
 	for numCols := 2; numCols <= maxCols; numCols = numCols << 1 {
 		for i := 0; i < numIterations; i++ {
 			var colsUsed opt.ColSet
@@ -123,7 +123,7 @@ func TestAdd(t *testing.T) {
 		return r
 	}
 
-	eq := NewEquivGroups()
+	var eq EquivGroups
 	eq.Add(c(1, 2))
 	require.True(t, eq.AreColsEquiv(1, 2))
 	require.False(t, eq.AreColsEquiv(1, 3))
