@@ -79,7 +79,7 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 
 // ScrapeRegistry scrapes all metrics contained in the registry to the metric
 // family map, holding on only to the scraped data (which is no longer
-// connected to the registry and metrics within) when returning from the the
+// connected to the registry and metrics within) when returning from the
 // call. It creates new families as needed.
 func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, includeChildMetrics bool) {
 	labels := registry.GetLabels()
