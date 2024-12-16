@@ -1223,14 +1223,14 @@ func newChangeFrontierProcessor(
 		return nil, err
 	}
 
-	sliMertics, err := flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	sliMetrics, err := flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
 	if err != nil {
 		return nil, err
 	}
 
 	if cf.encoder, err = getEncoder(
 		encodingOpts, AllTargets(spec.Feed), spec.Feed.Select != "",
-		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMertics,
+		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMetrics,
 	); err != nil {
 		return nil, err
 	}
@@ -1467,7 +1467,6 @@ func (cf *changeFrontier) closeMetrics() {
 		if cf.metricsID > 0 {
 			cf.sliMetrics.RunningCount.Dec(1)
 		}
-		delete(cf.metrics.mu.resolved, cf.metricsID)
 		cf.metricsID = -1
 	}()
 
@@ -1633,15 +1632,6 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 		// checkpoint_progress metric which will return the lowest timestamp across
 		// all feeds in the scope.
 		cf.sliMetrics.setCheckpoint(cf.sliMetricsID, newResolved)
-
-		// This backs max_behind_nanos which is deprecated in favor of checkpoint_progress
-		func() {
-			cf.metrics.mu.Lock()
-			defer cf.metrics.mu.Unlock()
-			if cf.metricsID != -1 {
-				cf.metrics.mu.resolved[cf.metricsID] = newResolved
-			}
-		}()
 
 		return cf.maybeEmitResolved(newResolved)
 	}
