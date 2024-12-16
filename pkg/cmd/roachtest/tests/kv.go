@@ -740,11 +740,13 @@ func registerKVSplits(r registry.Registry) {
 	} {
 		item := item // for use in closure below
 		r.Add(registry.TestSpec{
-			Name:             fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases),
-			Owner:            registry.OwnerKV,
-			Timeout:          item.timeout,
-			Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
-			CompatibleClouds: registry.AllExceptAWS,
+			Name:    fmt.Sprintf("kv/splits/nodes=3/quiesce=%t/lease=%s", item.quiesce, item.leases),
+			Owner:   registry.OwnerKV,
+			Timeout: item.timeout,
+			Cluster: r.MakeClusterSpec(4, spec.WorkloadNode()),
+			// These tests are carefully tuned to succeed up to certain number of
+			// splits; they are flaky in slower environments.
+			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           item.leases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
