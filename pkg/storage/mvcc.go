@@ -1511,6 +1511,12 @@ func MVCCGetWithValueHeader(
 	return result, value.MVCCValueHeader, err
 }
 
+var standaloneUnlimitedBoundAccountPool = sync.Pool{
+	New: func() interface{} {
+		return mon.NewStandaloneUnlimitedAccount()
+	},
+}
+
 // mvccGet returns an optionalValue containing the MVCCValue for the
 // given key (if it exists).
 //
@@ -1540,7 +1546,9 @@ func mvccGet(
 
 	memAccount := opts.MemoryAccount
 	if memAccount == nil {
-		memAccount = mon.NewStandaloneUnlimitedAccount()
+		memAccount = standaloneUnlimitedBoundAccountPool.Get().(*mon.BoundAccount)
+		defer standaloneUnlimitedBoundAccountPool.Put(memAccount)
+		defer memAccount.Clear(ctx)
 	}
 
 	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
