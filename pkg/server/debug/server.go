@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	pebbletool "github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/felixge/fgprof"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 	"github.com/spf13/cobra"
@@ -113,6 +114,9 @@ func setupProcessWideRoutes(
 
 	// Set up the vmodule endpoint.
 	mux.HandleFunc("/debug/vmodule", authzFunc(vsrv.vmoduleHandleDebug))
+
+	// https://github.com/felixge/fgprof
+	mux.Handle("/debug/fgprof/", authzFunc(fgprof.Handler().ServeHTTP))
 
 	ps := pprofui.NewServer(pprofui.NewMemStorage(pprofui.ProfileConcurrency, pprofui.ProfileExpiry), profiler)
 	mux.Handle("/debug/pprof/ui/", authzFunc(func(w http.ResponseWriter, r *http.Request) {
