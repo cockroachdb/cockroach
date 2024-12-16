@@ -100,6 +100,8 @@ define HashJoin {
     LeftEqColsAreKey bool
     RightEqColsAreKey bool
     ExtraOnCond tree.TypedExpr
+    EstimatedLeftRowCount uint64
+    EstimatedRightRowCount uint64
 }
 
 # MergeJoin runs a merge join.
@@ -118,6 +120,8 @@ define MergeJoin {
     ReqOrdering exec.OutputOrdering
     LeftEqColsAreKey bool
     RightEqColsAreKey bool
+    EstimatedLeftRowCount uint64
+    EstimatedRightRowCount uint64
 }
 
 # GroupBy runs an aggregation. A set of aggregations is performed for each group

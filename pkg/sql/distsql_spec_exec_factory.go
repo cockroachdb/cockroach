@@ -425,11 +425,13 @@ func (e *distSQLSpecExecFactory) ConstructHashJoin(
 	leftEqCols, rightEqCols []exec.NodeColumnOrdinal,
 	leftEqColsAreKey, rightEqColsAreKey bool,
 	extraOnCond tree.TypedExpr,
+	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) (exec.Node, error) {
 	return e.constructHashOrMergeJoin(
 		joinType, left, right, extraOnCond, leftEqCols, rightEqCols,
 		leftEqColsAreKey, rightEqColsAreKey,
 		ReqOrdering{} /* mergeJoinOrdering */, exec.OutputOrdering{}, /* reqOrdering */
+		estimatedLeftRowCount, estimatedRightRowCount,
 	)
 }
 
@@ -440,6 +442,7 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
 	leftEqColsAreKey, rightEqColsAreKey bool,
+	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) (exec.Node, error) {
 	leftEqCols, rightEqCols, mergeJoinOrdering, err := getEqualityIndicesAndMergeJoinOrdering(leftOrdering, rightOrdering)
 	if err != nil {
@@ -448,6 +451,7 @@ func (e *distSQLSpecExecFactory) ConstructMergeJoin(
 	return e.constructHashOrMergeJoin(
 		joinType, left, right, onCond, leftEqCols, rightEqCols,
 		leftEqColsAreKey, rightEqColsAreKey, mergeJoinOrdering, reqOrdering,
+		estimatedLeftRowCount, estimatedRightRowCount,
 	)
 }
 
@@ -1238,6 +1242,7 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 	leftEqColsAreKey, rightEqColsAreKey bool,
 	mergeJoinOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
+	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) (exec.Node, error) {
 	leftPhysPlan, leftPlan := getPhysPlan(left)
 	rightPhysPlan, rightPlan := getPhysPlan(right)
@@ -1251,9 +1256,20 @@ func (e *distSQLSpecExecFactory) constructHashOrMergeJoin(
 		rightPlanToStreamColMap: rightMap,
 	}
 	post, joinToStreamColMap := helper.joinOutColumns(joinType, resultColumns)
-	// We always try to distribute the join, but planJoiners() itself might
-	// decide not to.
-	planCtx := e.getPlanCtx(shouldDistribute)
+	rec := canDistribute
+	if len(leftEqCols) > 0 {
+		// We can partition both streams on the equality columns.
+		if estimatedLeftRowCount == 0 && estimatedRightRowCount == 0 {
+			// In the absence of stats for both inputs, fall back to
+			// distributing.
+			rec = shouldDistribute
+		} else if estimatedLeftRowCount+estimatedRightRowCount >= e.planner.SessionData().DistributeGroupByRowCountThreshold {
+			// If we have stats on at least one input, then distribute only if
+			// the join appears to be "large".
+			rec = shouldDistribute
+		}
+	}
+	planCtx := e.getPlanCtx(rec)
 	onExpr, err := helper.remapOnExpr(e.ctx, planCtx, onCond)
 	if err != nil {
 		return nil, err

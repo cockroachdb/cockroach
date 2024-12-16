@@ -586,6 +586,8 @@ func checkSupportForPlanNode(
 		if err != nil {
 			return cannotDistribute, err
 		}
+		// TODO(yuzefovich): we might want to be smarter about this and don't
+		// force distribution with small inputs.
 		return rec.compose(shouldDistribute), nil
 
 	case *joinNode:
@@ -600,12 +602,18 @@ func checkSupportForPlanNode(
 		if err != nil {
 			return cannotDistribute, err
 		}
-		// If either the left or the right side can benefit from distribution, we
-		// should distribute.
 		rec := recLeft.compose(recRight)
-		// If we can do a hash join, we distribute if possible.
 		if len(n.pred.leftEqualityIndices) > 0 {
-			rec = rec.compose(shouldDistribute)
+			// We can partition both streams on the equality columns.
+			if n.estimatedLeftRowCount == 0 && n.estimatedRightRowCount == 0 {
+				// In the absence of stats for both inputs, fall back to
+				// distributing.
+				rec = rec.compose(shouldDistribute)
+			} else if n.estimatedLeftRowCount+n.estimatedRightRowCount >= sd.DistributeJoinRowCountThreshold {
+				// If we have stats on at least one input, then distribute only
+				// if the join appears to be "large".
+				rec = rec.compose(shouldDistribute)
+			}
 		}
 		return rec, nil
 
@@ -757,6 +765,8 @@ func checkSupportForPlanNode(
 			if len(f.partitionIdxs) > 0 {
 				// If at least one function has PARTITION BY clause, then we
 				// should distribute the execution.
+				// TODO(yuzefovich): we might want to be smarter about this and
+				// don't force distribution with small inputs.
 				return rec.compose(shouldDistribute), nil
 			}
 		}
@@ -778,6 +788,8 @@ func checkSupportForPlanNode(
 		if err := checkExprForDistSQL(n.onCond, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
+		// TODO(yuzefovich): we might want to be smarter about this and don't
+		// force distribution with small inputs.
 		return shouldDistribute, nil
 	case *cdcValuesNode:
 		return cannotDistribute, nil
@@ -815,6 +827,8 @@ func checkSupportForInvertedFilterNode(
 	// related to #50659. Fix this in the distSQLSpecExecFactory.
 	filterRec := cannotDistribute
 	if n.expression.Left == nil && n.expression.Right == nil {
+		// TODO(yuzefovich): we might want to be smarter about this and don't
+		// force distribution with small inputs.
 		filterRec = shouldDistribute
 	}
 	return rec.compose(filterRec), nil

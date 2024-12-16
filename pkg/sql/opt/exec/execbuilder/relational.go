@@ -1356,6 +1356,10 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (_ execPlan, outputCols colOr
 		// to apply join hints to semi or anti joins. Join hints are only
 		// possible on explicit joins using the JOIN keyword, and semi and anti
 		// joins are only created from implicit joins without the JOIN keyword.
+		//
+		// Note that we use the row count estimates even when stats are
+		// unavailable so that the input that is more likely to be smaller ended
+		// up on the right side.
 		leftRowCount := leftExpr.Relational().Statistics().RowCount
 		rightRowCount := rightExpr.Relational().Statistics().RowCount
 		if leftRowCount < rightRowCount {
@@ -1430,6 +1434,13 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (_ execPlan, outputCols colOr
 
 	leftEqColsAreKey := leftExpr.Relational().FuncDeps.ColsAreStrictKey(leftEq.ToSet())
 	rightEqColsAreKey := rightExpr.Relational().FuncDeps.ColsAreStrictKey(rightEq.ToSet())
+	var leftRowCount, rightRowCount uint64
+	if leftExpr.Relational().Statistics().Available {
+		leftRowCount = uint64(leftExpr.Relational().Statistics().RowCount)
+	}
+	if rightExpr.Relational().Statistics().Available {
+		rightRowCount = uint64(rightExpr.Relational().Statistics().RowCount)
+	}
 
 	b.recordJoinType(joinType)
 	if isCrossJoin {
@@ -1444,6 +1455,7 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (_ execPlan, outputCols colOr
 		leftEqOrdinals, rightEqOrdinals,
 		leftEqColsAreKey, rightEqColsAreKey,
 		onExpr,
+		leftRowCount, rightRowCount,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -1470,6 +1482,10 @@ func (b *Builder) buildMergeJoin(
 		// We have a partial join, and we want to make sure that the relation
 		// with smaller cardinality is on the right side. Note that we assumed
 		// it during the costing.
+		//
+		// Note that we use the row count estimates even when stats are
+		// unavailable so that the input that is more likely to be smaller ended
+		// up on the right side.
 		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
 		// choosing a side.
 		leftRowCount := leftExpr.Relational().Statistics().RowCount
@@ -1527,6 +1543,13 @@ func (b *Builder) buildMergeJoin(
 	}
 	leftEqColsAreKey := leftExpr.Relational().FuncDeps.ColsAreStrictKey(leftEq.ColSet())
 	rightEqColsAreKey := rightExpr.Relational().FuncDeps.ColsAreStrictKey(rightEq.ColSet())
+	var leftRowCount, rightRowCount uint64
+	if leftExpr.Relational().Statistics().Available {
+		leftRowCount = uint64(leftExpr.Relational().Statistics().RowCount)
+	}
+	if rightExpr.Relational().Statistics().Available {
+		rightRowCount = uint64(rightExpr.Relational().Statistics().RowCount)
+	}
 	b.recordJoinType(joinType)
 	b.recordJoinAlgorithm(exec.MergeJoin)
 	var ep execPlan
@@ -1536,6 +1559,7 @@ func (b *Builder) buildMergeJoin(
 		onExpr,
 		leftOrd, rightOrd, reqOrd,
 		leftEqColsAreKey, rightEqColsAreKey,
+		leftRowCount, rightRowCount,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err

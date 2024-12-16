@@ -27,6 +27,24 @@ SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1] WHERE info LIKE 'distribut
 ----
 distribution: local
 
+# Sort (no stats) - distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv WHERE k>1 ORDER BY v] WHERE info LIKE 'distribution%'
+----
+distribution: full
+
+# Hash join (no stats) - distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k = t2.k+1 AND t1.k>1 AND t2.k>1] WHERE info LIKE 'distribution%'
+----
+distribution: full
+
+# Cross join (no stats) - don't distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k>1 AND t2.k>1] WHERE info LIKE 'distribution%'
+----
+distribution: local
+
 statement ok
 ALTER TABLE kv INJECT STATISTICS '[
   {
@@ -186,20 +204,45 @@ SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1]
 ----
 distribution: full
 
+# Hash join over large inputs - distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k = t2.k+1 AND t1.k>1 AND t2.k>1] WHERE info LIKE 'distribution%'
+----
+distribution: full
+
+# Cross join over large inputs - don't distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k>1 AND t2.k>1] WHERE info LIKE 'distribution%'
+----
+distribution: local
+
+# Now consider the inputs small.
+statement ok
+SET distribute_join_row_count_threshold = 100000;
+
+# Hash join over small inputs - don't distribute.
+query T
+SELECT info FROM [EXPLAIN SELECT * FROM kv AS t1, kv AS t2 WHERE t1.k = t2.k+1 AND t1.k>1 AND t2.k>1] WHERE info LIKE 'distribution%'
+----
+distribution: local
+
+statement ok
+RESET distribute_join_row_count_threshold;
+
 statement ok
 CREATE TABLE kw (k INT PRIMARY KEY, w INT);
 ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
 ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
 
-# Join - distribute.
+# Large hash join - distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw] WHERE info LIKE 'distribution%'
 ----
 distribution: full
 
-# Join with the data living on the remote node - distribute.
+# Large hash join with the data living on the remote node - distribute.
 query T
-SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw WHERE k=2] WHERE info LIKE 'distribution%'
+SELECT info FROM [EXPLAIN SELECT * FROM kv NATURAL JOIN kw WHERE k=2 OR k>5] WHERE info LIKE 'distribution%'
 ----
 distribution: full
 

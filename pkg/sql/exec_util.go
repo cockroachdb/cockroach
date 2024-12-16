@@ -3343,6 +3343,10 @@ func (m *sessionDataMutator) SetAlwaysDistributeFullScans(val bool) {
 	m.data.AlwaysDistributeFullScans = val
 }
 
+func (m *sessionDataMutator) SetDistributeJoinRowCountThreshold(val uint64) {
+	m.data.DistributeJoinRowCountThreshold = val
+}
+
 func (m *sessionDataMutator) SetDisableVecUnionEagerCancellation(val bool) {
 	m.data.DisableVecUnionEagerCancellation = val
 }
