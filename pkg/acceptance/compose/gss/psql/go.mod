@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/cockroachdb/errors v1.9.0
 	github.com/lib/pq v1.10.6
-	github.com/lib/pq/auth/kerberos v0.0.0-20220516182748-8c6de565f76f
+	github.com/lib/pq/auth/kerberos v0.0.0-20241116184759-b7ffbd3b47da
 )
 
 require (
@@ -25,7 +25,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
-	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
-	golang.org/x/net v0.0.0-20211008194852-3b03d305991f // indirect
-	golang.org/x/sys v0.0.0-20220209214540-3681064d5158 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/net v0.23.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
 )
