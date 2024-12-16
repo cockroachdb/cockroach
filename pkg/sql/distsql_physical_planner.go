@@ -3837,12 +3837,13 @@ func (dsp *DistSQLPlanner) planJoiners(
 		// single processor.
 		sqlInstances = []base.SQLInstanceID{dsp.gatewaySQLInstanceID}
 
-		// If either side has a single stream, put the processor on that node. We
-		// prefer the left side because that is processed first by the hash joiner.
-		if len(leftRouters) == 1 {
-			sqlInstances[0] = p.Processors[leftRouters[0]].SQLInstanceID
-		} else if len(rightRouters) == 1 {
+		// If either side has a single stream, put the processor on that node.
+		// We prefer the right side because that is processed first by the hash
+		// joiner.
+		if len(rightRouters) == 1 {
 			sqlInstances[0] = p.Processors[rightRouters[0]].SQLInstanceID
+		} else if len(leftRouters) == 1 {
+			sqlInstances[0] = p.Processors[leftRouters[0]].SQLInstanceID
 		}
 	}
 
