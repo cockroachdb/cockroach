@@ -66,6 +66,12 @@ type fileSSTSink struct {
 	elideMode   execinfrapb.ElidePrefix
 	elidePrefix roachpb.Key
 
+	// spanEndKey represents the exclusive end of a span that was being written one key
+	// at a time using writeKey. When flushing, this is used to set the end key of the final
+	// BackupManifest_File to ensure an exclusive BackupManifest_File.Span.EndKey.
+	// This resets on each flush.
+	spanEndKey roachpb.Key
+
 	// stats contain statistics about the actions of the fileSSTSink over its
 	// entire lifespan.
 	stats struct {
@@ -139,6 +145,10 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 		return errors.AssertionFailedf("backup closed file ending mid-key in %q", lastKey)
 	}
 
+	if s.spanEndKey != nil {
+		s.flushedFiles[len(s.flushedFiles)-1].Span.EndKey = s.spanEndKey
+	}
+
 	s.stats.flushes++
 
 	if err := s.sst.Finish(); err != nil {
@@ -178,6 +188,7 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 	s.flushedSize = 0
 	s.flushedRevStart.Reset()
 	s.completedSpans = 0
+	s.spanEndKey = nil
 
 	return nil
 }
@@ -331,11 +342,103 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) (roachpb.Key
 	return resp.resumeKey, err
 }
 
-// adjustFileEndKey checks if the export respsonse end key can be used as a
-// split point during restore. If the end key is not splitable (i.e. it splits
+func (s *fileSSTSink) writeKey(
+	ctx context.Context,
+	elidedPrefix []byte,
+	key storage.MVCCKey,
+	value []byte,
+	spanEndKey roachpb.Key,
+	start hlc.Timestamp,
+	end hlc.Timestamp,
+) error {
+	if s.out == nil {
+		if err := s.open(ctx); err != nil {
+			return err
+		}
+	}
+	fullKey := key
+	fullKey.Key = append(elidedPrefix, fullKey.Key...)
+	var lastFile *backuppb.BackupManifest_File
+	if len(s.flushedFiles) > 0 {
+		lastFile = &s.flushedFiles[len(s.flushedFiles)-1]
+		lastEndKey := lastFile.Span.EndKey
+		if fullKey.Key.Compare(lastEndKey) < 0 || !bytes.Equal(elidedPrefix, s.elidePrefix) {
+			log.VEventf(
+				ctx, 1, "flushing backup file %s of size %d because key %s cannot append before %s",
+				s.outName, s.flushedSize, fullKey.Key, lastEndKey,
+			)
+			lastFile.Span.EndKey = fullKey.Key
+			s.stats.oooFlushes++
+			if err := s.flushFile(ctx); err != nil {
+				return err
+			}
+		}
+	} else {
+	}
+
+	// See write() for the logic of when to extend a file.
+	var extend bool
+	if s.midRow {
+		extend = true
+	} else if lastFile != nil {
+		extend = lastFile.Span.EndKey.Equal(fullKey.Key) &&
+			lastFile.EndTime == end &&
+			lastFile.StartTime == start &&
+			lastFile.EntryCounts.DataSize < fileSpanByteLimit
+	}
+
+	endRowKey, err := keys.EnsureSafeSplitKey(key.Key)
+	if err != nil {
+		return err
+	}
+	s.midRow = !endRowKey.Equal(key.Key)
+
+	keyAsRowCount := roachpb.RowCount{
+		DataSize: int64(len(fullKey.Key)) + int64(len(value)),
+	}
+	if extend {
+		if lastFile == nil {
+			panic("extend is true but fileSink contains no cached files")
+		}
+		lastFile.EntryCounts.Add(keyAsRowCount)
+		s.stats.spanGrows++
+	} else {
+		f := backuppb.BackupManifest_File{
+			Span: roachpb.Span{
+				Key:    fullKey.Key,
+				EndKey: fullKey.Key,
+			},
+			EntryCounts: roachpb.RowCount{
+				DataSize: int64(len(fullKey.Key)) + int64(len(value)),
+			},
+			StartTime: start,
+			EndTime:   end,
+			Path:      s.outName,
+		}
+		s.flushedFiles = append(s.flushedFiles, f)
+		s.completedSpans += 1
+	}
+
+	s.flushedSize += keyAsRowCount.DataSize
+
+	s.spanEndKey = spanEndKey
+	if s.flushedSize > targetFileSize.Get(s.conf.settings) && !s.midRow {
+		s.stats.sizeFlushes++
+		log.VEventf(ctx, 2, "flushing backup file %s with size %d", s.outName, s.flushedSize)
+		if err := s.flushFile(ctx); err != nil {
+			return err
+		}
+	} else {
+		log.VEventf(ctx, 3, "continuing to write to backup file %s of size %d", s.outName, s.flushedSize)
+	}
+	return nil
+}
+
+// adjustFileEndKey checks if the export response end key can be used as a
+// split point during restore. If the end key is not splittable (i.e. it splits
 // two column families in the same row), the function will attempt to adjust the
-// endkey to become splitable. The function returns the potentially adjusted
-// end key and whether this end key is mid row/unsplitable (i.e. splits a 2
+// end key to become splittable. The function returns the potentially adjusted
+// end key and whether this end key is mid-row/un-splittable (i.e. splits a 2
 // column families or mvcc versions).
 func adjustFileEndKey(endKey, maxPointKey, maxRangeEnd roachpb.Key) (roachpb.Key, bool) {
 	maxKey := maxPointKey
