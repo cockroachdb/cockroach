@@ -3939,6 +3939,7 @@ disable_plan_gists                                         off
 disable_vec_union_eager_cancellation                       off
 disallow_full_table_scans                                  off
 distribute_group_by_row_count_threshold                    1000
+distribute_join_row_count_threshold                        1000
 distribute_scan_row_count_threshold                        10000
 distribute_sort_row_count_threshold                        1000
 distsql_plan_gateway_bias                                  2

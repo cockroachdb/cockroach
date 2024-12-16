@@ -415,6 +415,7 @@ func (ef *execFactory) ConstructHashJoin(
 	leftEqCols, rightEqCols []exec.NodeColumnOrdinal,
 	leftEqColsAreKey, rightEqColsAreKey bool,
 	extraOnCond tree.TypedExpr,
+	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) (exec.Node, error) {
 	p := ef.planner
 	leftSrc := asDataSource(left)
@@ -435,7 +436,7 @@ func (ef *execFactory) ConstructHashJoin(
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
-	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
+	return p.makeJoinNode(leftSrc, rightSrc, pred, estimatedLeftRowCount, estimatedRightRowCount), nil
 }
 
 // ConstructApplyJoin is part of the exec.Factory interface.
@@ -459,13 +460,14 @@ func (ef *execFactory) ConstructMergeJoin(
 	leftOrdering, rightOrdering colinfo.ColumnOrdering,
 	reqOrdering exec.OutputOrdering,
 	leftEqColsAreKey, rightEqColsAreKey bool,
+	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) (exec.Node, error) {
 	var err error
 	p := ef.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
 	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns, onCond)
-	node := p.makeJoinNode(leftSrc, rightSrc, pred)
+	node := p.makeJoinNode(leftSrc, rightSrc, pred, estimatedLeftRowCount, estimatedRightRowCount)
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 

@@ -578,6 +578,10 @@ message LocalOnlySessionData {
   // AlwaysDistributeFullScans determines whether full table scans always force
   // the plan to be distributed, regardless of the estimated row count.
   bool always_distribute_full_scans = 148;
+  // DistributeJoinRowCountThreshold is the minimum number of rows estimated to
+  // be processed from both inputs by the hash or merge join so that we choose
+  // to distribute the plan because of this joiner stage of DistSQL processors.
+  uint64 distribute_join_row_count_threshold = 149;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

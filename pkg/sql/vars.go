@@ -719,6 +719,29 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`distribute_join_row_count_threshold`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatUint(evalCtx.SessionData().DistributeJoinRowCountThreshold, 10), nil
+		},
+		GetStringVal: makeIntGetStringValFn(`distribute_join_row_count_threshold`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if i < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set distribute_join_row_count_threshold to a negative value: %d", i)
+			}
+			m.SetDistributeJoinRowCountThreshold(uint64(i))
+			return nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatUint(1000, 10)
+		},
+	},
+
+	// CockroachDB extension.
 	`disable_vec_union_eager_cancellation`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`disable_vec_union_eager_cancellation`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
