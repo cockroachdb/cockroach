@@ -460,7 +460,7 @@ func (c *CustomFuncs) GetEquivColsWithEquivTypeWithEquivGroups(
 	}
 
 	// Compute all equivalent columns.
-	eqCols := equivSet.Group(col)
+	eqCols := equivSet.GroupForCol(col)
 
 	eqCols.ForEach(func(i opt.ColumnID) {
 		// Only include columns that have the same type as col.
