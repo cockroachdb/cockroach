@@ -1022,10 +1022,8 @@ type changeFrontier struct {
 	metrics    *Metrics
 	sliMetrics *sliMetrics
 
-	// sliMetricsID and metricsID uniquely identify the changefeed in the metrics's
-	// map (a shared struct across all changefeeds on the node) and the sliMetrics's
-	// map (shared structure between all feeds within the same scope on the node).
-	metricsID    int
+	// sliMetricsID uniquely identifies the changefeed in the sliMetrics's map
+	// (shared structure between all feeds within the same scope on the node).
 	sliMetricsID int64
 
 	knobs TestingKnobs
@@ -1233,14 +1231,14 @@ func newChangeFrontierProcessor(
 		return nil, err
 	}
 
-	sliMertics, err := flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
+	sliMetrics, err := flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics(cf.spec.Feed.Opts[changefeedbase.OptMetricsScope])
 	if err != nil {
 		return nil, err
 	}
 
 	if cf.encoder, err = getEncoder(
 		ctx, encodingOpts, AllTargets(spec.Feed), spec.Feed.Select != "",
-		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMertics,
+		makeExternalConnectionProvider(ctx, flowCtx.Cfg.DB), sliMetrics,
 	); err != nil {
 		return nil, err
 	}
@@ -1367,13 +1365,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		}()
 	}
 
-	func() {
-		cf.metrics.mu.Lock()
-		defer cf.metrics.mu.Unlock()
-		cf.metricsID = cf.metrics.mu.id
-		cf.metrics.mu.id++
-		sli.RunningCount.Inc(1)
-	}()
+	sli.RunningCount.Inc(1)
 
 	cf.sliMetricsID = cf.sliMetrics.claimId()
 
@@ -1467,21 +1459,8 @@ func (cf *changeFrontier) close() {
 	}
 }
 
-// closeMetrics de-registers from the progress registry that powers
-// `changefeed.max_behind_nanos`. This method is idempotent.
 func (cf *changeFrontier) closeMetrics() {
-	// Delete this feed from the MaxBehindNanos metric so it's no longer
-	// considered by the gauge.
-	func() {
-		cf.metrics.mu.Lock()
-		defer cf.metrics.mu.Unlock()
-		if cf.metricsID > 0 {
-			cf.sliMetrics.RunningCount.Dec(1)
-		}
-		delete(cf.metrics.mu.resolved, cf.metricsID)
-		cf.metricsID = -1
-	}()
-
+	cf.sliMetrics.RunningCount.Dec(1)
 	cf.sliMetrics.closeId(cf.sliMetricsID)
 }
 
@@ -1639,15 +1618,6 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 		// checkpoint_progress metric which will return the lowest timestamp across
 		// all feeds in the scope.
 		cf.sliMetrics.setCheckpoint(cf.sliMetricsID, newResolved)
-
-		// This backs max_behind_nanos which is deprecated in favor of checkpoint_progress
-		func() {
-			cf.metrics.mu.Lock()
-			defer cf.metrics.mu.Unlock()
-			if cf.metricsID != -1 {
-				cf.metrics.mu.resolved[cf.metricsID] = newResolved
-			}
-		}()
 
 		return cf.maybeEmitResolved(newResolved)
 	}
