@@ -909,6 +909,92 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 	}
 }
 
+func TestFileSSTSinkWriteKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// Artificially set the target file size to 10KB for easy flushing
+	targetFileSize.Override(ctx, &st.SV, 10<<10)
+
+	type testCase struct {
+		name             string
+		exportKVs        []mvccKVSet
+		flushedSpans     []roachpb.Spans
+		unflushedSpans   []roachpb.Spans
+		manualFlushSpans []roachpb.Spans
+	}
+
+	for _, tt := range []testCase{
+		{
+			name: "single-exported-span",
+			exportKVs: []mvccKVSet{
+				newMVCCKeySetBuilder("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).build(),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+			},
+		},
+		{
+			name: "single-exported-span-size-flush",
+			exportKVs: []mvccKVSet{
+				newMVCCKeySetBuilder("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10, value: make([]byte, 20<<20)}, {key: "b", timestamp: 10}}).build(),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("b")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("b"), EndKey: s2k0("c")}},
+			},
+		},
+	} {
+		for _, elide := range []execinfrapb.ElidePrefix{execinfrapb.ElidePrefix_None, execinfrapb.ElidePrefix_TenantAndTable} {
+			t.Run(fmt.Sprintf("%s/elide=%s", tt.name, elide), func(t *testing.T) {
+				sink, store := fileSSTSinkTestSetUp(ctx, t, st)
+				defer func() {
+					require.NoError(t, sink.Close())
+				}()
+				sink.elideMode = elide
+
+				for _, ek := range tt.exportKVs {
+					span := ek.span
+					for _, kv := range ek.kvs {
+						recordedSpan, err := sink.writeKey(ctx, kv.key, kv.value, span, ek.startTime, ek.endTime)
+						require.NoError(t, err)
+						span = recordedSpan
+					}
+				}
+
+				progress := make([]backuppb.BackupManifest_File, 0)
+			Loop:
+				for {
+					select {
+					case p := <-sink.conf.progCh:
+						var progDetails backuppb.BackupManifest_Progress
+						if err := types.UnmarshalAny(&p.ProgressDetails, &progDetails); err != nil {
+							t.Fatal(err)
+						}
+
+						progress = append(progress, progDetails.Files...)
+					default:
+						break Loop
+					}
+				}
+
+				eliding := sink.elideMode != execinfrapb.ElidePrefix_None
+				require.NoError(t, checkFiles(ctx, store, progress, tt.flushedSpans, eliding))
+
+				var actualUnflushedFiles []backuppb.BackupManifest_File
+				actualUnflushedFiles = append(actualUnflushedFiles, sink.flushedFiles...)
+				require.NoError(t, sink.flush(ctx))
+				require.NoError(t, checkFiles(ctx, store, actualUnflushedFiles, tt.unflushedSpans, eliding))
+				require.Empty(t, sink.flushedFiles)
+			})
+		}
+	}
+}
+
 type kvAndTS struct {
 	key       string
 	value     []byte
@@ -1126,4 +1212,89 @@ func endKeyInclusiveSpansContainsKey(spans roachpb.Spans, key roachpb.Key, elide
 	}
 
 	return false
+}
+
+type mvccKVSet struct {
+	span roachpb.Span
+	kvs  []struct {
+		key   storage.MVCCKey
+		value []byte
+	}
+	startTime hlc.Timestamp
+	endTime   hlc.Timestamp
+}
+
+type mvccKVSetBuilder struct {
+	spanStart string
+	spanEnd   string
+	kvs       []kvAndTS
+	startTime hlc.Timestamp
+	endTime   hlc.Timestamp
+}
+
+func newMVCCKeySetBuilder(spanStart string, spanEnd string) *mvccKVSetBuilder {
+	return &mvccKVSetBuilder{
+		spanStart: spanStart,
+		spanEnd:   spanEnd,
+	}
+}
+
+func (b *mvccKVSetBuilder) withStartEndTS(startTime, endTime int64) *mvccKVSetBuilder {
+	b.startTime = hlc.Timestamp{WallTime: startTime}
+	b.endTime = hlc.Timestamp{WallTime: endTime}
+	return b
+}
+
+func (b *mvccKVSetBuilder) withKVs(kvs []kvAndTS) *mvccKVSetBuilder {
+	b.kvs = kvs
+	if !b.startTime.IsEmpty() && !b.endTime.IsEmpty() {
+		return b
+	}
+	var minTS, maxTs int64
+	for _, kv := range kvs {
+		if kv.timestamp < minTS || minTS == 0 {
+			minTS = kv.timestamp
+		}
+		if kv.timestamp > maxTs {
+			maxTs = kv.timestamp
+		}
+	}
+	b.startTime = hlc.Timestamp{WallTime: minTS}
+	b.endTime = hlc.Timestamp{WallTime: maxTs}
+	return b
+}
+
+func (b *mvccKVSetBuilder) build() mvccKVSet {
+	return b.buildWithEncoding(s2k0)
+}
+
+func (b *mvccKVSetBuilder) buildWithEncoding(stringToKey func(string) roachpb.Key) mvccKVSet {
+	var kvs []struct {
+		key   storage.MVCCKey
+		value []byte
+	}
+	for _, kv := range b.kvs {
+		v := roachpb.Value{}
+		v.SetBytes(kv.value)
+		v.InitChecksum(nil)
+		kvs = append(kvs, struct {
+			key   storage.MVCCKey
+			value []byte
+		}{
+			key: storage.MVCCKey{
+				Key:       stringToKey(kv.key),
+				Timestamp: hlc.Timestamp{WallTime: kv.timestamp},
+			},
+			value: v.RawBytes,
+		})
+	}
+	return mvccKVSet{
+		span: roachpb.Span{
+			Key:    stringToKey(b.spanStart),
+			EndKey: stringToKey(b.spanEnd),
+		},
+		kvs:       kvs,
+		startTime: b.startTime,
+		endTime:   b.endTime,
+	}
 }
