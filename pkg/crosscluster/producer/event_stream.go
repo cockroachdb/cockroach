@@ -269,7 +269,7 @@ func (s *eventStream) Close(ctx context.Context) {
 }
 
 func (s *eventStream) onInitialScanDone(ctx context.Context) {
-	log.VInfof(ctx, 2, "initial scan completed")
+	log.Infof(ctx, "initial scan completed")
 	if s.spec.InitialScanOnly {
 		s.setErr(ErrInitialScanComplete)
 	}
