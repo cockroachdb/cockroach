@@ -1356,6 +1356,64 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 }
 
+// runCDCMultipleSchemaChanges is a regression test for #136847.
+func runCDCMultipleSchemaChanges(ctx context.Context, t test.Test, c cluster.Cluster) {
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+
+	db := c.Conn(ctx, t.L(), 1)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+
+	tableNames := []string{"a", "b", "c", "d", "e", "f", "g", "h"}
+	for _, tableName := range tableNames {
+		createStmt := fmt.Sprintf(`CREATE TABLE %s (
+	id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+	col TIMESTAMP(6) NULL
+)`, tableName)
+		sqlDB.Exec(t, createStmt)
+	}
+
+	var jobID int
+	sqlDB.QueryRow(t,
+		fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://'", strings.Join(tableNames, ", ")),
+	).Scan(&jobID)
+
+	alterStmts := []string{"SET sql_safe_updates = false"}
+	for _, tableName := range tableNames {
+		alterStmts = append(alterStmts, fmt.Sprintf(`ALTER TABLE %s DROP col`, tableName))
+	}
+	sqlDB.ExecMultiple(t, alterStmts...)
+	timeAfterSchemaChanges := timeutil.Now()
+
+	t.L().Printf("waiting for changefeed highwater to pass %s", timeAfterSchemaChanges)
+highwaterLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(30 * time.Second):
+			info, err := getChangefeedInfo(db, jobID)
+			require.NoError(t, err)
+			status := info.GetStatus()
+			if status != "running" {
+				errorStr := info.GetError()
+				// Wait for job error to be populated.
+				if errorStr == "" {
+					t.L().Printf("changefeed status is %s instead of running, no error set yet", status)
+					continue
+				}
+				t.Fatalf("changefeed status is %s instead of running: %s", status, errorStr)
+			}
+			hw := info.GetHighWater()
+			if hw.After(timeAfterSchemaChanges) {
+				break highwaterLoop
+			}
+			t.L().Printf("changefeed highwater is %s <= %s", hw, timeAfterSchemaChanges)
+		}
+	}
+}
+
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:      "cdc/initial-scan-only",
@@ -2251,6 +2309,16 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
 		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/multiple-schema-changes",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        false,
+		Cluster:          r.MakeClusterSpec(3, spec.CPU(16)),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run:              runCDCMultipleSchemaChanges,
 	})
 }
 
