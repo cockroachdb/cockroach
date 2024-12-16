@@ -223,7 +223,7 @@ func (i BuildInput) validate() error {
 
 func (i BuildInput) validatePrevLeaseNodeLiveness() error {
 	epochLease := i.PrevLease.Type() == roachpb.LeaseEpoch
-	livenessSet := i.PrevLeaseNodeLiveness != livenesspb.Liveness{}
+	livenessSet := !i.PrevLeaseNodeLiveness.Equal(livenesspb.Liveness{})
 	if epochLease != livenessSet {
 		return errors.AssertionFailedf("previous lease is epoch-based: %t, "+
 			"but liveness is set: %t", epochLease, livenessSet)

@@ -182,7 +182,7 @@ func TestStatus(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			nl := &mockNodeLiveness{
 				record:  liveness.Record{Liveness: tc.liveness},
-				missing: tc.liveness == livenesspb.Liveness{},
+				missing: tc.liveness.Equal(livenesspb.Liveness{}),
 			}
 			in := StatusInput{
 				LocalStoreID:       repl1.StoreID,

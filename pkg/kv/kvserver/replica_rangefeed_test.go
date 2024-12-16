@@ -1594,7 +1594,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			nl1 := n1.NodeLiveness().(*liveness.NodeLiveness)
 			n2LivenessFromN1, _ := nl1.GetLiveness(n2.NodeID())
-			if n2Liveness != n2LivenessFromN1.Liveness {
+			if !n2Liveness.Equal(n2LivenessFromN1.Liveness) {
 				return errors.Errorf("waiting for node 2 liveness to converge on both nodes 1 and 2")
 			}
 			return nil
@@ -1812,7 +1812,7 @@ func TestNewRangefeedForceLeaseRetry(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		nl1 := n1.NodeLiveness().(*liveness.NodeLiveness)
 		n2LivenessFromN1, _ := nl1.GetLiveness(n2.NodeID())
-		if n2Liveness != n2LivenessFromN1.Liveness {
+		if !n2Liveness.Equal(n2LivenessFromN1.Liveness) {
 			return errors.Errorf("waiting for node 2 liveness to converge on both nodes 1 and 2")
 		}
 		return nil
