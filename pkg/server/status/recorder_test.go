@@ -518,6 +518,9 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testHistogram", "histogram", 10},
 		{"testAggGauge", "agggauge", 4},
 		{"testAggCounter", "aggcounter", 7},
+		{"testCounterVec", "counterVec", 7},
+		{"testGaugeVec", "gaugeVec", 7},
+		{"testHistogramVec", "histogramVec", 7},
 
 		// Stats needed for store summaries.
 		{"replicas.leaders", "gauge", 1},
@@ -616,6 +619,28 @@ func TestMetricsRecorder(t *testing.T) {
 				}
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
 				addExpected(reg.prefix, data.name+"-sum", reg.source, 100, 10, reg.isNode)
+			case "counterVec":
+				// Note that we don't call addExpected for this case. metric.PrometheusVector
+				// metrics should not be recorded into TSDB.
+				cv := metric.NewExportedCounterVec(metric.Metadata{Name: reg.prefix + data.name}, []string{"label1"})
+				reg.reg.AddMetric(cv)
+				cv.Inc(map[string]string{"label1": "label1"}, data.val)
+			case "gaugeVec":
+				// Note that we don't call addExpected for this case. metric.PrometheusVector
+				// metrics should not be recorded into TSDB.
+				gv := metric.NewExportedGaugeVec(metric.Metadata{Name: reg.prefix + data.name}, []string{"label1"})
+				reg.reg.AddMetric(gv)
+				gv.Update(map[string]string{"label1": "label1"}, data.val)
+			case "histogramVec":
+				// Note that we don't call addExpected for this case. metric.PrometheusVector
+				// metrics should not be recorded into TSDB.
+				hv := metric.NewExportedHistogramVec(
+					metric.Metadata{Name: reg.prefix + data.name},
+					metric.IOLatencyBuckets,
+					[]string{"label1"},
+				)
+				reg.reg.AddMetric(hv)
+				hv.Observe(map[string]string{"label1": "label1"}, float64(data.val))
 			default:
 				t.Fatalf("unexpected: %+v", data)
 			}

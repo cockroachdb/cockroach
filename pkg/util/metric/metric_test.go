@@ -144,29 +144,29 @@ func TestUniqueCounter(t *testing.T) {
 }
 
 func TestCounterFloat64(t *testing.T) {
-	g := NewCounterFloat64(emptyMetadata)
-	g.UpdateIfHigher(10)
-	if v := g.Count(); v != 10 {
+	c := NewCounterFloat64(emptyMetadata)
+	c.UpdateIfHigher(10)
+	if v := c.Count(); v != 10 {
 		t.Fatalf("unexpected value: %f", v)
 	}
-	testMarshal(t, g, "10")
+	testMarshal(t, c, "10")
 
 	var wg sync.WaitGroup
 	for i := int64(0); i < 10; i++ {
 		wg.Add(1)
-		go func(i int64) { g.Inc(float64(i)); wg.Done() }(i)
+		go func(i int64) { c.Inc(float64(i)); wg.Done() }(i)
 	}
 	wg.Wait()
-	if v := g.Count(); math.Abs(v-55.0) > 0.001 {
+	if v := c.Count(); math.Abs(v-55.0) > 0.001 {
 		t.Fatalf("unexpected value: %g", v)
 	}
 
 	for i := int64(55); i < 65; i++ {
 		wg.Add(1)
-		go func(i int64) { g.UpdateIfHigher(float64(i)); wg.Done() }(i)
+		go func(i int64) { c.UpdateIfHigher(float64(i)); wg.Done() }(i)
 	}
 	wg.Wait()
-	if v := g.Count(); math.Abs(v-64.0) > 0.001 {
+	if v := c.Count(); math.Abs(v-64.0) > 0.001 {
 		t.Fatalf("unexpected value: %g", v)
 	}
 }
