@@ -306,7 +306,7 @@ func (r *Replica) evalAndPropose(
 	// invoked when the command is applied. There are a handful of cases where
 	// the command may not be applied (or even processed): the process crashes
 	// or the local replica is removed from the range.
-	abandon := func() {
+	abandon := func(proposal *ProposalData) {
 		// The proposal may or may not be in the Replica's proposals map.
 		// Instead of trying to look it up, simply modify the captured object
 		// directly. The raftMu must be locked to modify the context of a
@@ -334,7 +334,7 @@ func (r *Replica) evalAndPropose(
 		ctx := r.AnnotateCtx(context.TODO())
 		last.ctx.Store(&ctx)
 	}
-	return proposalCh, abandon, idKey, writeBytes, nil
+	return proposalCh, func() { abandon(proposal) }, idKey, writeBytes, nil
 }
 
 func (r *Replica) encodePriorityForRACv2() bool {
