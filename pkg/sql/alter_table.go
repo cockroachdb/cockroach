@@ -671,16 +671,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				)
 			}
 			newPrimaryIndexDesc := n.tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
-			newImplicitCols, newPartitioning, err := CreatePartitioning(
-				params.ctx, params.p.ExecCfg().Settings,
-				params.EvalContext(),
-				n.tableDesc,
-				newPrimaryIndexDesc,
-				t.PartitionBy,
-				nil, /* allowedNewColumnNames */
-				params.p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
-					n.tableDesc.IsLocalityRegionalByRow(),
-			)
+			newImplicitCols, newPartitioning, err := CreatePartitioning(params.ctx, params.EvalContext(), n.tableDesc, newPrimaryIndexDesc, t.PartitionBy, nil, params.p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
+				n.tableDesc.IsLocalityRegionalByRow())
 			if err != nil {
 				return err
 			}

@@ -292,10 +292,8 @@ func (p *planner) AlterPrimaryKey(
 			if err != nil {
 				return err
 			}
-			partitionAllBy = multiregion.PartitionByForRegionalByRow(
-				regionConfig,
-				colName,
-			)
+			partitionAllBy = multiregion.PartitionByForRegionalByRow(tableDesc.TableDesc(), regionConfig,
+				colName)
 			if alterPrimaryKeyLocalitySwap.newColumnName != nil {
 				allowedNewColumnNames = append(
 					allowedNewColumnNames,
@@ -330,16 +328,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	if partitionAllBy != nil {
-		newImplicitCols, newPartitioning, err := CreatePartitioning(
-			ctx,
-			p.ExecCfg().Settings,
-			p.EvalContext(),
-			tableDesc,
-			*newPrimaryIndexDesc,
-			partitionAllBy,
-			allowedNewColumnNames,
-			allowImplicitPartitioning,
-		)
+		newImplicitCols, newPartitioning, err := CreatePartitioning(ctx, p.EvalContext(), tableDesc, *newPrimaryIndexDesc, partitionAllBy, allowedNewColumnNames, allowImplicitPartitioning)
 		if err != nil {
 			return err
 		}
@@ -497,16 +486,7 @@ func (p *planner) AlterPrimaryKey(
 
 		// Create partitioning if we are newly adding a PARTITION BY ALL statement.
 		if isNewPartitionAllBy {
-			newImplicitCols, newPartitioning, err := CreatePartitioning(
-				ctx,
-				p.ExecCfg().Settings,
-				p.EvalContext(),
-				tableDesc,
-				newIndex,
-				partitionAllBy,
-				allowedNewColumnNames,
-				allowImplicitPartitioning,
-			)
+			newImplicitCols, newPartitioning, err := CreatePartitioning(ctx, p.EvalContext(), tableDesc, newIndex, partitionAllBy, allowedNewColumnNames, allowImplicitPartitioning)
 			if err != nil {
 				return err
 			}

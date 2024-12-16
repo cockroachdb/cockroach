@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -650,7 +651,7 @@ func applyZoneConfigForMultiRegionTableOptionNewIndexes(
 				}
 				zoneConfig.SetSubzone(zonepb.Subzone{
 					IndexID:       uint32(indexID),
-					PartitionName: string(region),
+					PartitionName: strconv.Itoa(int(indexID)) + "-" + string(region),
 					Config:        zc,
 				})
 			}
@@ -759,7 +760,7 @@ var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 			for _, idx := range table.NonDropIndexes() {
 				zc.SetSubzone(zonepb.Subzone{
 					IndexID:       uint32(idx.GetID()),
-					PartitionName: string(region),
+					PartitionName: strconv.Itoa(int(idx.GetID())) + "-" + string(region),
 					Config:        subzoneConfig,
 				})
 			}
@@ -2180,7 +2181,6 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 			expectedZoneConfig.LeasePreferences = leasePreferences
 		}
 	}
-
 	// Compare the two zone configs to see if anything is amiss.
 	same, mismatch, err := currentZoneConfig.DiffWithZone(
 		expectedZoneConfig,
@@ -2529,20 +2529,9 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		partitionAllBy := multiregion.PartitionByForRegionalByRow(
-			regionConfig,
-			"crdb_region",
-		)
+		partitionAllBy := multiregion.PartitionByForRegionalByRow(table.TableDesc(), regionConfig, "crdb_region")
 
-		unexpectedColumns, partitioning, err := CreatePartitioning(
-			ctx,
-			p.ExecCfg().Settings,
-			p.EvalContext(),
-			table,
-			table.PrimaryIndex,
-			partitionAllBy,
-			nil, /*do not allow implicit columns, the existing crdb_region column must be used*/
-			true /*allow implicit partitioning */)
+		unexpectedColumns, partitioning, err := CreatePartitioning(ctx, p.EvalContext(), table, table.PrimaryIndex, partitionAllBy, nil, true)
 		if err != nil {
 			return err
 		}

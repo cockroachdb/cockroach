@@ -96,16 +96,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			allowImplicitPartitioning := params.p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
 				n.tableDesc.IsLocalityRegionalByRow()
 			alteredIndexDesc := n.index.IndexDescDeepCopy()
-			newImplicitCols, newPartitioning, err := CreatePartitioning(
-				params.ctx,
-				params.extendedEvalCtx.Settings,
-				params.EvalContext(),
-				n.tableDesc,
-				alteredIndexDesc,
-				t.PartitionBy,
-				nil, /* allowedNewColumnNames */
-				allowImplicitPartitioning,
-			)
+			newImplicitCols, newPartitioning, err := CreatePartitioning(params.ctx, params.EvalContext(), n.tableDesc, alteredIndexDesc, t.PartitionBy, nil, allowImplicitPartitioning)
 			if err != nil {
 				return err
 			}

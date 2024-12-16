@@ -100,11 +100,8 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		// For now just support the default `crdb_region` default column name.
 		stmt.PartitionByTable =
 			&tree.PartitionByTable{
-				All: true,
-				PartitionBy: multiregion.PartitionByForRegionalByRow(
-					regionConfig,
-					tree.RegionalByRowRegionDefaultColName,
-				),
+				All:         true,
+				PartitionBy: multiregion.PartitionByForRegionalByRow(nil, regionConfig, tree.RegionalByRowRegionDefaultColName),
 			}
 		stmt.PartitionByTable.All = true
 		// We're not in a multiregion database with an enum type to specify regions,

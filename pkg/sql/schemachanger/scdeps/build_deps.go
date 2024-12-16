@@ -402,7 +402,6 @@ func (d *buildDeps) IndexPartitioningCCLCallback() scbuild.CreatePartitioningCCL
 	if CreatePartitioningCCL == nil {
 		return func(
 			_ context.Context,
-			_ *cluster.Settings,
 			_ *eval.Context,
 			_ func(tree.Name) (catalog.Column, error),
 			_ int,

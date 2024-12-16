@@ -87,6 +87,7 @@ func GenerateSubzoneSpans(
 
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
+	// todo ANNIE check if the partitioning coverings match here
 	if err := catalog.ForEachIndex(tableDesc, catalog.IndexOpts{
 		AddMutations: true,
 	}, func(idx catalog.Index) error {

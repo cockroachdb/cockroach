@@ -6,6 +6,8 @@
 package multiregion
 
 import (
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -18,12 +20,18 @@ import (
 
 // PartitionByForRegionalByRow constructs the tree.PartitionBy clause for
 // REGIONAL BY ROW tables.
-func PartitionByForRegionalByRow(regionConfig RegionConfig, col tree.Name) *tree.PartitionBy {
-	listPartition := make([]tree.ListPartition, len(regionConfig.Regions()))
-	for i, region := range regionConfig.Regions() {
-		listPartition[i] = tree.ListPartition{
-			Name:  tree.Name(region),
-			Exprs: tree.Exprs{tree.NewStrVal(string(region))},
+func PartitionByForRegionalByRow(
+	desc *descpb.TableDescriptor, regionConfig RegionConfig, col tree.Name,
+) *tree.PartitionBy {
+	indexes := append(desc.Indexes, desc.PrimaryIndex)
+	var listPartition []tree.ListPartition
+	for _, idx := range indexes {
+		for _, region := range regionConfig.Regions() {
+			name := strconv.Itoa(int(idx.ID)) + "-" + region.String()
+			listPartition = append(listPartition, tree.ListPartition{
+				Name:  tree.Name(name),
+				Exprs: tree.Exprs{tree.NewStrVal(string(region))},
+			})
 		}
 	}
 

@@ -675,7 +675,6 @@ func (b *builderState) IndexPartitioningDescriptor(
 		tbl.IsLocalityRegionalByRow()
 	_, ret, err := b.createPartCCL(
 		b.ctx,
-		b.clusterSettings,
 		b.evalCtx,
 		func(name tree.Name) (catalog.Column, error) {
 			return catalog.MustFindColumnByTreeName(tbl, name)

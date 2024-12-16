@@ -287,7 +287,7 @@ func UpdateIndexPartitioning(
 	return true
 }
 
-// NewPartitioning creates a new catalog.paritioning from the given
+// NewPartitioning creates a new catalog.partitioning from the given
 // partitioning descriptor. If the partitioning descriptor is nil, the resulting
 // partitioning will have the default value for each entry.
 func NewPartitioning(partDesc *catpb.PartitioningDescriptor) catalog.Partitioning {

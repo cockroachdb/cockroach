@@ -9,8 +9,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -339,7 +337,6 @@ func findColumnByNameOnTable(
 // is partitioned into ranges, each addressable by zone configs.
 func createPartitioning(
 	ctx context.Context,
-	st *cluster.Settings,
 	evalCtx *eval.Context,
 	columnLookupFn func(tree.Name) (catalog.Column, error),
 	oldNumImplicitColumns int,
@@ -348,10 +345,6 @@ func createPartitioning(
 	allowedNewColumnNames []tree.Name,
 	allowImplicitPartitioning bool,
 ) (newImplicitCols []catalog.Column, newPartitioning catpb.PartitioningDescriptor, err error) {
-	if err := utilccl.CheckEnterpriseEnabled(st, "partitions"); err != nil {
-		return nil, newPartitioning, err
-	}
-
 	// Truncate existing implicitly partitioned column names.
 	newIdxColumnNames := oldKeyColumnNames[oldNumImplicitColumns:]
 

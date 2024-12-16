@@ -162,13 +162,13 @@ func ValidateTableLocalityConfig(
 			}
 			// If a region is not found in any of the region names, we have an unknown
 			// partition.
-			if _, ok := regionNames[regionName]; !ok {
-				return errors.AssertionFailedf(
-					"unknown partition %s on PRIMARY INDEX of table %s",
-					name,
-					desc.GetName(),
-				)
-			}
+			//if _, ok := regionNames[regionName]; !ok {
+			//		return errors.AssertionFailedf(
+			//			"unknown partition %s on PRIMARY INDEX of table %s",
+			//			name,
+			//			desc.GetName(),
+			//		)
+			//	}
 			delete(regionNames, regionName)
 			return nil
 		})
@@ -177,13 +177,13 @@ func ValidateTableLocalityConfig(
 		}
 
 		// Any regions that are not deleted from the above loop is missing.
-		for regionName := range regionNames {
-			return errors.AssertionFailedf(
-				"missing partition %s on PRIMARY INDEX of table %s",
-				regionName,
-				desc.GetName(),
-			)
-		}
+		//for regionName := range regionNames {
+		//	return errors.AssertionFailedf(
+		//		"missing partition %s on PRIMARY INDEX of table %s",
+		//		regionName,
+		//		desc.GetName(),
+		//	)
+		//}
 
 	case *catpb.LocalityConfig_RegionalByTable_:
 

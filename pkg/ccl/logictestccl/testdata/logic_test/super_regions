@@ -26,7 +26,7 @@ TABLE oncreate.public.rbt  ALTER TABLE oncreate.public.rbt CONFIGURE ZONE USING
                              lease_preferences = '[[+region=us-east-1]]'
 
 query TT
-SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE oncreate.rbr
+SHOW ZONE CONFIGURATION FOR PARTITION "1-us-east-1" OF TABLE oncreate.rbr
 ----
 PARTITION "us-east-1" OF TABLE oncreate.public.rbr  ALTER PARTITION "us-east-1" OF TABLE oncreate.public.rbr CONFIGURE ZONE USING
                                                       range_min_bytes = 134217728,

@@ -250,7 +250,8 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		if err != nil {
 			return nil, nil, err
 		}
-		partitionAllBy := multiregion.PartitionByForRegionalByRow(regionConfig, colName)
+		partitionAllBy := multiregion.PartitionByForRegionalByRow(tableDesc.TableDesc(), regionConfig,
+			colName)
 
 		// oldPartitionings saves the old partitionings for each
 		// index that is repartitioned. This is later used to remove zone
@@ -261,16 +262,7 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		// dropped.
 		for _, index := range tableDesc.NonDropIndexes() {
 			oldPartitionings[index.GetID()] = index.GetPartitioning().DeepCopy()
-			newImplicitCols, newPartitioning, err := CreatePartitioning(
-				ctx,
-				r.localPlanner.extendedEvalCtx.Settings,
-				r.localPlanner.EvalContext(),
-				tableDesc,
-				*index.IndexDesc(),
-				partitionAllBy,
-				nil,  /* allowedNewColumnName*/
-				true, /* allowImplicitPartitioning */
-			)
+			newImplicitCols, newPartitioning, err := CreatePartitioning(ctx, r.localPlanner.EvalContext(), tableDesc, *index.IndexDesc(), partitionAllBy, nil, true)
 			if err != nil {
 				return nil, nil, err
 			}

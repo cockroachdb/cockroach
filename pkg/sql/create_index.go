@@ -870,16 +870,7 @@ func (p *planner) configureIndexDescForNewIndexPartitioning(
 		allowImplicitPartitioning := p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
 			tableDesc.IsLocalityRegionalByRow()
 		if partitionBy != nil {
-			newImplicitCols, newPartitioning, err := CreatePartitioning(
-				ctx,
-				p.ExecCfg().Settings,
-				p.EvalContext(),
-				tableDesc,
-				indexDesc,
-				partitionBy,
-				nil, /* allowedNewColumnNames */
-				allowImplicitPartitioning,
-			)
+			newImplicitCols, newPartitioning, err := CreatePartitioning(ctx, p.EvalContext(), tableDesc, indexDesc, partitionBy, nil, allowImplicitPartitioning)
 			if err != nil {
 				return indexDesc, err
 			}

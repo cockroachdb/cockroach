@@ -240,7 +240,6 @@ func (s *TestState) IndexPartitioningCCLCallback() scbuild.CreatePartitioningCCL
 	}
 	return func(
 		ctx context.Context,
-		st *cluster.Settings,
 		evalCtx *eval.Context,
 		columnLookupFn func(tree.Name) (catalog.Column, error),
 		oldNumImplicitColumns int,

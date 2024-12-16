@@ -343,6 +343,10 @@ func (n *createTableNode) startExec(params runParams) error {
 	// Avoid the warning if we have PARTITION ALL BY as all indexes will implicitly
 	// have relevant partitioning columns prepended at the front.
 	if n.n.PartitionByTable.ContainsPartitions() {
+		// TODO (before merge): might want to add a guard for non-unique partition
+		// names
+		// another TODO: we don't enforce this in the docs; we enforce unique
+		// subpartition names (?)
 		for _, def := range n.n.Defs {
 			if d, ok := def.(*tree.IndexTableDef); ok {
 				if d.PartitionByIndex == nil && !n.n.PartitionByTable.All {
@@ -413,6 +417,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	} else {
 		affected = make(map[descpb.ID]*tabledesc.Mutable)
 		desc, err = newTableDesc(params, n.n, n.dbDesc, schema, id, creationTime, privs, affected)
+		// todo ANNIE might be interesting to see what the partitioning stuff looks like here
 		if err != nil {
 			return err
 		}
@@ -1137,7 +1142,6 @@ func ResolveFK(
 // the tree.PartitionBy clause.
 func CreatePartitioning(
 	ctx context.Context,
-	st *cluster.Settings,
 	evalCtx *eval.Context,
 	tableDesc catalog.TableDescriptor,
 	indexDesc descpb.IndexDescriptor,
@@ -1158,7 +1162,6 @@ func CreatePartitioning(
 	}
 	return CreatePartitioningCCL(
 		ctx,
-		st,
 		evalCtx,
 		func(name tree.Name) (catalog.Column, error) {
 			return catalog.MustFindColumnByTreeName(tableDesc, name)
@@ -1175,7 +1178,6 @@ func CreatePartitioning(
 // partitioning creation code.
 var CreatePartitioningCCL = func(
 	ctx context.Context,
-	st *cluster.Settings,
 	evalCtx *eval.Context,
 	columnLookupFn func(tree.Name) (catalog.Column, error),
 	oldNumImplicitColumns int,
@@ -1545,12 +1547,6 @@ func NewTableDesc(
 			cdd = append(cdd, nil)
 		}
 
-		// Construct the partitioning for the PARTITION ALL BY.
-		desc.PartitionAllBy = true
-		partitionAllBy = multiregion.PartitionByForRegionalByRow(
-			*regionConfig,
-			regionalByRowCol,
-		)
 		// Leading region column of REGIONAL BY ROW is part of the primary
 		// index column set.
 		primaryIndexColumnSet[string(regionalByRowCol)] = struct{}{}
@@ -1729,16 +1725,7 @@ func NewTableDesc(
 			// partitioning for PARTITION ALL BY.
 			if desc.PartitionAllBy {
 				var err error
-				newImplicitCols, newPartitioning, err := CreatePartitioning(
-					ctx,
-					st,
-					evalCtx,
-					&desc,
-					*implicitColumnDefIdx.idx,
-					partitionAllBy,
-					nil, /* allowedNewColumnNames */
-					allowImplicitPartitioning,
-				)
+				newImplicitCols, newPartitioning, err := CreatePartitioning(ctx, evalCtx, &desc, *implicitColumnDefIdx.idx, partitionAllBy, nil, allowImplicitPartitioning)
 				if err != nil {
 					return nil, err
 				}
@@ -1966,16 +1953,7 @@ func NewTableDesc(
 			}
 			if idxPartitionBy != nil {
 				var err error
-				newImplicitCols, newPartitioning, err := CreatePartitioning(
-					ctx,
-					st,
-					evalCtx,
-					&desc,
-					idx,
-					idxPartitionBy,
-					nil, /* allowedNewColumnNames */
-					allowImplicitPartitioning,
-				)
+				newImplicitCols, newPartitioning, err := CreatePartitioning(ctx, evalCtx, &desc, idx, idxPartitionBy, nil, allowImplicitPartitioning)
 				if err != nil {
 					return nil, err
 				}
@@ -2091,16 +2069,7 @@ func NewTableDesc(
 
 				if idxPartitionBy != nil {
 					var err error
-					newImplicitCols, newPartitioning, err := CreatePartitioning(
-						ctx,
-						st,
-						evalCtx,
-						&desc,
-						idx,
-						idxPartitionBy,
-						nil, /* allowedNewColumnNames */
-						allowImplicitPartitioning,
-					)
+					newImplicitCols, newPartitioning, err := CreatePartitioning(ctx, evalCtx, &desc, idx, idxPartitionBy, nil, allowImplicitPartitioning)
 					if err != nil {
 						return nil, err
 					}
@@ -2165,8 +2134,43 @@ func NewTableDesc(
 			})
 		}
 	}
+	// todo ANNIE we allocateIDs here for the indexes; might want to delay population for rbr tables
+	// partitions until here
 	if err := desc.AllocateIDs(ctx, version); err != nil {
 		return nil, err
+	}
+	if isRegionalByRow {
+		regionalByRowCol := tree.RegionalByRowRegionDefaultColName
+		if n.Locality.RegionalByRowColumn != "" {
+			regionalByRowCol = n.Locality.RegionalByRowColumn
+		}
+		// Construct the partitioning for the PARTITION ALL BY.
+		desc.PartitionAllBy = true
+		partitionAllBy = multiregion.PartitionByForRegionalByRow(
+			desc.TableDesc(),
+			*regionConfig,
+			regionalByRowCol,
+		)
+		// Update the partitioning for each index. We need to do this after
+		// IDs are allocated as REGIONAL BY ROW tables need the indexID to create
+		// a unique partition name.
+		for _, idx := range desc.TableDesc().Indexes {
+			newImplicitCols, newPartitioning, err := CreatePartitioning(ctx, evalCtx, &desc, idx,
+				partitionAllBy, nil, allowImplicitPartitioning)
+			if err != nil {
+				return nil, err
+			}
+			tabledesc.UpdateIndexPartitioning(&idx, false, /* isIndexPrimary */
+				newImplicitCols, newPartitioning)
+		}
+		primaryIdx := desc.TableDesc().PrimaryIndex
+		newImplicitCols, newPartitioning, err := CreatePartitioning(ctx, evalCtx, &desc, primaryIdx,
+			partitionAllBy, nil, allowImplicitPartitioning)
+		if err != nil {
+			return nil, err
+		}
+		tabledesc.UpdateIndexPartitioning(&primaryIdx, true, /* isIndexPrimary */
+			newImplicitCols, newPartitioning)
 	}
 
 	// If explicit primary keys are required, error out if a primary key was not
@@ -2194,16 +2198,7 @@ func NewTableDesc(
 		// At this point, we could have PARTITION ALL BY NOTHING, so check it is != nil.
 		if partitionBy != nil {
 			newPrimaryIndex := desc.GetPrimaryIndex().IndexDescDeepCopy()
-			newImplicitCols, newPartitioning, err := CreatePartitioning(
-				ctx,
-				st,
-				evalCtx,
-				&desc,
-				newPrimaryIndex,
-				partitionBy,
-				nil, /* allowedNewColumnNames */
-				allowImplicitPartitioning,
-			)
+			newImplicitCols, newPartitioning, err := CreatePartitioning(ctx, evalCtx, &desc, newPrimaryIndex, partitionBy, nil, allowImplicitPartitioning)
 			if err != nil {
 				return nil, err
 			}

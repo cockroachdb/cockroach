@@ -1356,7 +1356,7 @@ ElementState:
 - PartitionZoneConfig:
     indexId: 1
     oldIdxRef: -1
-    partitionName: us-east1
+    partitionName: 1-us-east1
     seqNum: 0
     subzone:
       config:
@@ -1384,17 +1384,14 @@ ElementState:
             value: us-east1
           numReplicas: 2
       indexId: 1
-      partitionName: us-east1
-    subzoneSpans:
-    - endKey: null
-      key: iRJAAAE=
-      subzoneIndex: 0
+      partitionName: 1-us-east1
+    subzoneSpans: []
     tableId: 108
   Status: PUBLIC
 - PartitionZoneConfig:
     indexId: 1
     oldIdxRef: -1
-    partitionName: us-east2
+    partitionName: 1-us-east2
     seqNum: 0
     subzone:
       config:
@@ -1422,17 +1419,14 @@ ElementState:
             value: us-east2
           numReplicas: 2
       indexId: 1
-      partitionName: us-east2
-    subzoneSpans:
-    - endKey: null
-      key: iRKAAAE=
-      subzoneIndex: 1
+      partitionName: 1-us-east2
+    subzoneSpans: []
     tableId: 108
   Status: PUBLIC
 - PartitionZoneConfig:
     indexId: 1
     oldIdxRef: -1
-    partitionName: us-east3
+    partitionName: 1-us-east3
     seqNum: 0
     subzone:
       config:
@@ -1460,11 +1454,8 @@ ElementState:
             value: us-east3
           numReplicas: 2
       indexId: 1
-      partitionName: us-east3
-    subzoneSpans:
-    - endKey: null
-      key: iRLAAAE=
-      subzoneIndex: 2
+      partitionName: 1-us-east3
+    subzoneSpans: []
     tableId: 108
   Status: PUBLIC
 - PrimaryIndex:
@@ -1520,16 +1511,7 @@ ElementState:
       numVoters: null
       rangeMaxBytes: null
       rangeMinBytes: null
-      subzoneSpans:
-      - endKey: null
-        key: iRJAAAE=
-        subzoneIndex: 0
-      - endKey: null
-        key: iRKAAAE=
-        subzoneIndex: 1
-      - endKey: null
-        key: iRLAAAE=
-        subzoneIndex: 2
+      subzoneSpans: []
       subzones:
       - config:
           constraints: []
@@ -1556,7 +1538,7 @@ ElementState:
               value: us-east1
             numReplicas: 2
         indexId: 1
-        partitionName: us-east1
+        partitionName: 1-us-east1
       - config:
           constraints: []
           gc: null
@@ -1582,7 +1564,7 @@ ElementState:
               value: us-east2
             numReplicas: 2
         indexId: 1
-        partitionName: us-east2
+        partitionName: 1-us-east2
       - config:
           constraints: []
           gc: null
@@ -1608,7 +1590,7 @@ ElementState:
               value: us-east3
             numReplicas: 2
         indexId: 1
-        partitionName: us-east3
+        partitionName: 1-us-east3
       voterConstraints: []
   Status: PUBLIC
 - UserPrivileges:
