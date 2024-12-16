@@ -104,15 +104,41 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	go func() {
 		ticker := tokenAllocationTicker{}
 		done := false
-		var systemLoaded bool // First adjustment interval is unloaded.
+		// The first adjustment interval is unloaded. We start as unloaded mainly
+		// for tests, and do a one-way transition to do 1ms ticks once we encounter
+		// load in the system.
+		var systemLoaded bool
 		ticker.adjustmentStart(false /* loaded */)
 		for !done {
 			ticker.tick()
 			remainingTicks := ticker.remainingTicks()
 			select {
 			default:
+				// We do error accounting for disk reads and writes. This is important
+				// since disk token accounting is based on estimates over adjustment
+				// intervals. Like any model, these linear models have error terms, and
+				// need to be adjusted for greater accuracy. We adjust for these errors
+				// at a higher frequency than the adjustment interval. The error
+				// adjustment interval is defined by errorAdjustmentInterval.
+				//
+				// NB: We always do error calculation prior to making adjustments to
+				// make sure we account for errors prior to starting a new adjustment
+				// interval.
+				if ticker.shouldAdjustForError(remainingTicks, systemLoaded) {
+					metrics = pebbleMetricsProvider.GetPebbleMetrics()
+					for _, m := range metrics {
+						if gc, ok := sgc.gcMap.Load(m.StoreID); ok {
+							gc.adjustDiskTokenError(m)
+						} else {
+							log.Warningf(ctx,
+								"seeing metrics for unknown storeID %d", m.StoreID)
+						}
+					}
+				}
+
+				// Start a new adjustment interval.
 				if remainingTicks == 0 {
-					metrics := pebbleMetricsProvider.GetPebbleMetrics()
+					metrics = pebbleMetricsProvider.GetPebbleMetrics()
 					if len(metrics) != sgc.numStores {
 						log.Warningf(ctx,
 							"expected %d store metrics and found %d metrics", sgc.numStores, len(metrics))
@@ -135,6 +161,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 					remainingTicks = ticker.remainingTicks()
 				}
 
+				// Allocate tokens to the store grant coordinator.
 				sgc.gcMap.Range(func(_ roachpb.StoreID, gc *GrantCoordinator) bool {
 					gc.allocateIOTokensTick(int64(remainingTicks))
 					// true indicates that iteration should continue after the
@@ -709,6 +736,17 @@ func (coord *GrantCoordinator) allocateIOTokensTick(remainingTicks int64) {
 	// GrantCoordinators used for IO, so the if-condition is always true.
 }
 
+// adjustDiskTokenError is used to account for errors in disk read and write
+// token estimation. Refer to the comment in adjustDiskTokenErrorLocked for more
+// details.
+func (coord *GrantCoordinator) adjustDiskTokenError(m StoreMetrics) {
+	coord.mu.Lock()
+	defer coord.mu.Unlock()
+	if storeGranter, ok := coord.granters[KVWork].(*kvStoreTokenGranter); ok {
+		storeGranter.adjustDiskTokenErrorLocked(m.DiskStats.BytesRead, m.DiskStats.BytesWritten)
+	}
+}
+
 // testingTryGrant is only for unit tests, since they sometimes cut out
 // support classes like the ioLoadListener.
 func (coord *GrantCoordinator) testingTryGrant() {
@@ -998,9 +1036,12 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 			case *slotGranter:
 				s.Printf("%s%s: used: %d, total: %d", curSep, kind, g.usedSlots, g.totalSlots)
 			case *kvStoreTokenGranter:
-				s.Printf(" io-avail: %d(%d), disk-write-tokens-avail: %d", g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
+				s.Printf(" io-avail: %d(%d), disk-write-tokens-avail: %d, disk-read-tokens-deducted: %d",
+					g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
 					g.coordMu.availableIOTokens[admissionpb.ElasticWorkClass],
-					g.coordMu.diskTokensAvailable.writeByteTokens)
+					g.coordMu.diskTokensAvailable.writeByteTokens,
+					g.coordMu.diskTokensError.diskReadTokensAlreadyDeducted,
+				)
 			}
 		case SQLStatementLeafStartWork, SQLStatementRootStartWork:
 			if coord.granters[i] != nil {
