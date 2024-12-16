@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEquivSet_Rand(t *testing.T) {
+func TestEquivGroups_Rand(t *testing.T) {
 	const maxCol = 512
 	const maxCols = 256
 	const numIterations = 8
@@ -70,7 +70,7 @@ func TestEquivSet_Rand(t *testing.T) {
 		return "expected columns not to be equivalent, but were"
 	}
 
-	equivSet := NewEquivSet()
+	equivGroups := NewEquivGroups()
 	for numCols := 2; numCols <= maxCols; numCols = numCols << 1 {
 		for i := 0; i < numIterations; i++ {
 			var colsUsed opt.ColSet
@@ -88,12 +88,12 @@ func TestEquivSet_Rand(t *testing.T) {
 						rightCol = getRandValueForCol(colsUsed, useExistingRight)
 					}
 					addToOracle(leftCol, rightCol)
-					equivSet.Add(opt.MakeColSet(leftCol, rightCol))
+					equivGroups.Add(opt.MakeColSet(leftCol, rightCol))
 					fds.AddEquivalency(leftCol, rightCol)
 					colsUsed.Add(leftCol)
 					colsUsed.Add(rightCol)
 				}
-				var fromFDEquivSet EquivSet
+				var fromFDEquivSet EquivGroups
 				fromFDEquivSet.AddFromFDs(&fds)
 				for leftCol, leftOk := colsUsed.Next(0); leftOk; leftCol, leftOk = colsUsed.Next(leftCol + 1) {
 					for rightCol, rightOk := colsUsed.Next(0); rightOk; rightCol, rightOk = colsUsed.Next(rightCol + 1) {
@@ -101,7 +101,7 @@ func TestEquivSet_Rand(t *testing.T) {
 							continue
 						}
 						expected := areColsEquivOracle(leftCol, rightCol)
-						actual := equivSet.AreColsEquiv(leftCol, rightCol)
+						actual := equivGroups.AreColsEquiv(leftCol, rightCol)
 						require.Equal(t, expected, actual, makeError(expected))
 						actualFromFDs := fromFDEquivSet.AreColsEquiv(leftCol, rightCol)
 						require.Equal(t, expected, actualFromFDs, makeError(expected))
@@ -109,7 +109,7 @@ func TestEquivSet_Rand(t *testing.T) {
 				}
 			})
 			testOracle = make(map[opt.ColumnID]opt.ColSet)
-			equivSet.Reset()
+			equivGroups.Reset()
 		}
 	}
 }
@@ -123,7 +123,7 @@ func TestAdd(t *testing.T) {
 		return r
 	}
 
-	eq := NewEquivSet()
+	eq := NewEquivGroups()
 	eq.Add(c(1, 2))
 	require.True(t, eq.AreColsEquiv(1, 2))
 	require.False(t, eq.AreColsEquiv(1, 3))
