@@ -17,19 +17,7 @@ import (
 //
 // TODO(drewk): incorporate EquivGroups into FuncDepSets.
 type EquivGroups struct {
-	buf    [equalityBufferSize]opt.ColSet
 	groups []opt.ColSet
-}
-
-const equalityBufferSize = 1
-
-// NewEquivGroups returns a new equality set with a starting capacity of
-// one equivalence group. This optimizes for the common case when only one
-// equivalence group is stored.
-func NewEquivGroups() EquivGroups {
-	set := EquivGroups{}
-	set.groups = set.buf[:0]
-	return set
 }
 
 // Reset prepares the EquivGroups for reuse, maintaining references to any
