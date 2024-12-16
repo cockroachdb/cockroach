@@ -244,7 +244,11 @@ sysctl --system  # reload sysctl settings
 sudo hostnamectl set-hostname {{.VMName}}
 
 {{ if .EnableFIPS }}
-sudo ua enable fips --assume-yes
+sudo apt-get install -yq ubuntu-advantage-tools jq
+# Enable FIPS (in practice, it's often already enabled at this point).
+if [ $(sudo pro status --format json | jq '.services[] | select(.name == "fips") | .status') != '"enabled"' ]; then
+  sudo ua enable fips --assume-yes
+fi
 {{ end }}
 
 sudo sed -i 's/#LoginGraceTime .*/LoginGraceTime 0/g' /etc/ssh/sshd_config
