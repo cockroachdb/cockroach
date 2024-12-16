@@ -3351,3 +3351,20 @@ func (p *planner) CanCreateCrossDBSequenceRef() error {
 	}
 	return nil
 }
+
+// UpdateDescriptorCount updates our sql.schema_changer.object_count gauge with
+// a fresh count of objects in the system.descriptor table.
+func UpdateDescriptorCount(
+	ctx context.Context, execCfg *ExecutorConfig, metric *SchemaChangerMetrics,
+) error {
+	return DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		row, err := txn.QueryRow(ctx, "sql-schema-changer-object-count", txn.KV(),
+			`SELECT count(*) FROM system.descriptor`)
+		if err != nil {
+			return err
+		}
+		count := *row[0].(*tree.DInt)
+		metric.ObjectCount.Update(int64(count))
+		return nil
+	})
+}
