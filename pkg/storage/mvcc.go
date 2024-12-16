@@ -5242,18 +5242,16 @@ func MVCCResolveWriteIntent(
 			// Intent resolution requires an MVCC iterator to look up the MVCC
 			// version associated with the intent. Create one.
 			var iter MVCCIterator
-			{
-				iter, err = rw.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
-					Prefix:       true,
-					KeyTypes:     IterKeyTypePointsAndRanges,
-					ReadCategory: fs.IntentResolutionReadCategory,
-				})
-				if err != nil {
-					return false, 0, nil, false, err
-				}
-				defer iter.Close()
+			iter, err = rw.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
+				Prefix:       true,
+				KeyTypes:     IterKeyTypePointsAndRanges,
+				ReadCategory: fs.IntentResolutionReadCategory,
+			})
+			if err != nil {
+				return false, 0, nil, false, err
 			}
 			outcome, err = mvccResolveWriteIntent(ctx, rw, iter, ms, update, &buf.meta, buf)
+			iter.Close()
 		} else {
 			outcome, err = mvccReleaseLockInternal(ctx, rw, ms, update, str, &buf.meta, buf)
 			replLocksReleased = replLocksReleased || outcome != lockNoop
