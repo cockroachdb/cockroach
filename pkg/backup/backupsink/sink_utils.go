@@ -6,6 +6,7 @@
 package backupsink
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -13,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/errors"
 )
 
 // ElidedPrefix returns the prefix of the key that is elided by the given mode.
@@ -33,6 +36,21 @@ func ElidedPrefix(key roachpb.Key, mode execinfrapb.ElidePrefix) ([]byte, error)
 		return key[: len(key)-len(rest) : len(key)-len(rest)], nil
 	}
 	return nil, nil
+}
+
+func elideMVCCKeyPrefix(
+	key storage.MVCCKey, mode execinfrapb.ElidePrefix,
+) (storage.MVCCKey, []byte, error) {
+	prefix, err := ElidedPrefix(key.Key, mode)
+	if err != nil {
+		return storage.MVCCKey{}, nil, err
+	}
+	cutKey, ok := bytes.CutPrefix(key.Key, prefix)
+	if !ok {
+		return storage.MVCCKey{}, nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", key.Key, prefix)
+	}
+	key.Key = cutKey
+	return key, prefix, nil
 }
 
 // adjustFileEndKey checks if the export respsonse end key can be used as a
@@ -81,4 +99,23 @@ func generateUniqueSSTName(nodeID base.SQLInstanceID) string {
 	// common file/bucket browse UIs.
 	return fmt.Sprintf("data/%d.sst",
 		builtins.GenerateUniqueInt(builtins.ProcessUniqueID(nodeID)))
+}
+
+// isContiguousSpan returns true if the first span ends where the second span begins.
+func isContiguousSpan(first, second roachpb.Span) bool {
+	return first.EndKey.Equal(second.Key)
+}
+
+// sameElidedPrefix returns true if the elided prefix of a and b are equal based
+// on the given mode.
+func sameElidedPrefix(a, b roachpb.Key, mode execinfrapb.ElidePrefix) (bool, error) {
+	prefixA, err := ElidedPrefix(a, mode)
+	if err != nil {
+		return false, err
+	}
+	prefixB, err := ElidedPrefix(b, mode)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(prefixA, prefixB), nil
 }
