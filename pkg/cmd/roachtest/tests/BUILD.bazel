@@ -14,6 +14,7 @@ go_library(
         "admission_control_elastic_backup.go",
         "admission_control_elastic_cdc.go",
         "admission_control_elastic_io.go",
+        "admission_control_elastic_mixed_version.go",
         "admission_control_follower_overload.go",
         "admission_control_index_backfill.go",
         "admission_control_index_overload.go",
