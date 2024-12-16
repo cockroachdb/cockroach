@@ -145,14 +145,17 @@ func (r *Replica) evalAndPropose(
 	// from this point on.
 	proposal.ec = makeReplicatedEndCmds(r, g, *st, timeutil.Now())
 
-	log.VEventf(proposal.Context(), 2,
-		"proposing command to write %d new keys, %d new values, %d new intents, "+
-			"write batch size=%d bytes",
-		proposal.command.ReplicatedEvalResult.Delta.KeyCount,
-		proposal.command.ReplicatedEvalResult.Delta.ValCount,
-		proposal.command.ReplicatedEvalResult.Delta.IntentCount,
-		proposal.command.WriteBatch.Size(),
-	)
+	if log.ExpensiveLogEnabled(proposal.Context(), 2) {
+		// Local copies to avoid allocating to heap if not logging.
+		kc := proposal.command.ReplicatedEvalResult.Delta.KeyCount
+		vc := proposal.command.ReplicatedEvalResult.Delta.ValCount
+		ic := proposal.command.ReplicatedEvalResult.Delta.IntentCount
+		sz := proposal.command.WriteBatch.Size()
+		log.VEventf(proposal.Context(), 2,
+			"proposing command to write %d new keys, %d new values, %d new intents, "+
+				"write batch size=%d bytes", kc, vc, ic, sz,
+		)
+	}
 	// NB: if ba.AsyncConsensus is true, we will tell admission control about
 	// writes that may not have happened yet. We consider this ok, since (a) the
 	// typical lag in consensus is expected to be small compared to the time
