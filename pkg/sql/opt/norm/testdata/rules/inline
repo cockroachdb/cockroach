@@ -1091,6 +1091,305 @@ project
  └── projections
       └── k:1 + 2 [as=c:8, outer=(1), immutable]
 
+exec-ddl
+CREATE TABLE t136250 (
+  col1_0 BOOL,
+  col1_1 REFCURSOR,
+  col1_2 PG_LSN,
+  col1_3 BOX2D,
+  col1_4 INT8,
+  col1_5 STRING,
+  col1_6 STRING,
+  col1_7 INT8,
+  col1_8 STRING AS (lower(NULL)) VIRTUAL,
+  col1_9 STRING,
+  foo_col DECIMAL,
+  PRIMARY KEY (col1_8),
+  INDEX (CAST(col1_3 AS STRING), CAST(col1_2 AS STRING))
+);
+----
+
+# Regression test for #136250.
+opt disable=(MergeProjects,PruneProjectCols) format=hide-all
+SELECT NULL
+  FROM t136250 AS t1
+  JOIN t136250 AS t2 ON true
+  FULL JOIN t136250 AS t3 ON true
+  JOIN t136250 ON true
+  JOIN t136250 AS t4 ON true
+ WHERE NOT EXISTS (SELECT NULL FROM t136250 AS t5 JOIN t136250 ON true)
+    OR NOT EXISTS (SELECT NULL FROM t136250 AS t6 JOIN t136250 AS t7 ON t6.col1_5 = t7.col1_5);
+----
+project
+ ├── project
+ │    ├── inner-join (cross)
+ │    │    ├── select
+ │    │    │    ├── scan t136250
+ │    │    │    │    └── computed column expressions
+ │    │    │    │         ├── col1_8
+ │    │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │         │    └── col1_3::STRING
+ │    │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │              └── col1_2::STRING
+ │    │    │    └── filters
+ │    │    │         └── or
+ │    │    │              ├── not
+ │    │    │              │    └── coalesce
+ │    │    │              │         ├── subquery
+ │    │    │              │         │    └── project
+ │    │    │              │         │         ├── inner-join (cross)
+ │    │    │              │         │         │    ├── project
+ │    │    │              │         │         │    │    ├── scan t136250
+ │    │    │              │         │         │    │    │    └── computed column expressions
+ │    │    │              │         │         │    │    │         ├── col1_8
+ │    │    │              │         │         │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │              │         │         │    │    │         ├── crdb_internal_idx_expr
+ │    │    │              │         │         │    │    │         │    └── col1_3::STRING
+ │    │    │              │         │         │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │              │         │         │    │    │              └── col1_2::STRING
+ │    │    │              │         │         │    │    └── projections
+ │    │    │              │         │         │    │         ├── col1_3::STRING
+ │    │    │              │         │         │    │         └── col1_2::STRING
+ │    │    │              │         │         │    ├── project
+ │    │    │              │         │         │    │    ├── scan t136250
+ │    │    │              │         │         │    │    │    └── computed column expressions
+ │    │    │              │         │         │    │    │         ├── col1_8
+ │    │    │              │         │         │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │              │         │         │    │    │         ├── crdb_internal_idx_expr
+ │    │    │              │         │         │    │    │         │    └── col1_3::STRING
+ │    │    │              │         │         │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │              │         │         │    │    │              └── col1_2::STRING
+ │    │    │              │         │         │    │    └── projections
+ │    │    │              │         │         │    │         ├── col1_3::STRING
+ │    │    │              │         │         │    │         └── col1_2::STRING
+ │    │    │              │         │         │    └── filters (true)
+ │    │    │              │         │         └── projections
+ │    │    │              │         │              └── true
+ │    │    │              │         └── false
+ │    │    │              └── not
+ │    │    │                   └── coalesce
+ │    │    │                        ├── subquery
+ │    │    │                        │    └── project
+ │    │    │                        │         ├── project
+ │    │    │                        │         │    ├── project
+ │    │    │                        │         │    │    ├── inner-join (lookup t136250)
+ │    │    │                        │         │    │    │    ├── lookup columns are key
+ │    │    │                        │         │    │    │    ├── project
+ │    │    │                        │         │    │    │    │    ├── scan t136250
+ │    │    │                        │         │    │    │    │    │    └── computed column expressions
+ │    │    │                        │         │    │    │    │    │         ├── col1_8
+ │    │    │                        │         │    │    │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │                        │         │    │    │    │    │         ├── crdb_internal_idx_expr
+ │    │    │                        │         │    │    │    │    │         │    └── col1_3::STRING
+ │    │    │                        │         │    │    │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │                        │         │    │    │    │    │              └── col1_2::STRING
+ │    │    │                        │         │    │    │    │    └── projections
+ │    │    │                        │         │    │    │    │         └── CAST(NULL AS STRING)
+ │    │    │                        │         │    │    │    └── filters
+ │    │    │                        │         │    │    │         └── col1_5 = col1_5
+ │    │    │                        │         │    │    └── projections
+ │    │    │                        │         │    │         ├── col1_3::STRING
+ │    │    │                        │         │    │         └── col1_2::STRING
+ │    │    │                        │         │    └── projections
+ │    │    │                        │         │         ├── col1_3::STRING
+ │    │    │                        │         │         └── col1_2::STRING
+ │    │    │                        │         └── projections
+ │    │    │                        │              └── true
+ │    │    │                        └── false
+ │    │    ├── project
+ │    │    │    ├── inner-join (cross)
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── full-join (cross)
+ │    │    │    │    │    │    ├── inner-join (cross)
+ │    │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    │    ├── scan t136250
+ │    │    │    │    │    │    │    │    │    └── computed column expressions
+ │    │    │    │    │    │    │    │    │         ├── col1_8
+ │    │    │    │    │    │    │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │    │    │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │    │    │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │    │    │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │    │    │    │    │              └── col1_2::STRING
+ │    │    │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    │    │         ├── col1_3::STRING
+ │    │    │    │    │    │    │    │         └── col1_2::STRING
+ │    │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    │    ├── scan t136250
+ │    │    │    │    │    │    │    │    │    └── computed column expressions
+ │    │    │    │    │    │    │    │    │         ├── col1_8
+ │    │    │    │    │    │    │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │    │    │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │    │    │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │    │    │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │    │    │    │    │              └── col1_2::STRING
+ │    │    │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    │    │         ├── col1_3::STRING
+ │    │    │    │    │    │    │    │         └── col1_2::STRING
+ │    │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    │    ├── project
+ │    │    │    │    │    │    │    ├── scan t136250
+ │    │    │    │    │    │    │    │    └── computed column expressions
+ │    │    │    │    │    │    │    │         ├── col1_8
+ │    │    │    │    │    │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │    │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │    │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │    │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │    │    │    │              └── col1_2::STRING
+ │    │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │    │         ├── col1_3::STRING
+ │    │    │    │    │    │    │         └── col1_2::STRING
+ │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── or
+ │    │    │    │    │              ├── not
+ │    │    │    │    │              │    └── coalesce
+ │    │    │    │    │              │         ├── subquery
+ │    │    │    │    │              │         │    └── project
+ │    │    │    │    │              │         │         ├── inner-join (cross)
+ │    │    │    │    │              │         │         │    ├── project
+ │    │    │    │    │              │         │         │    │    ├── scan t136250
+ │    │    │    │    │              │         │         │    │    │    └── computed column expressions
+ │    │    │    │    │              │         │         │    │    │         ├── col1_8
+ │    │    │    │    │              │         │         │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │              │         │         │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │              │         │         │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │              │         │         │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │              │         │         │    │    │              └── col1_2::STRING
+ │    │    │    │    │              │         │         │    │    └── projections
+ │    │    │    │    │              │         │         │    │         ├── col1_3::STRING
+ │    │    │    │    │              │         │         │    │         └── col1_2::STRING
+ │    │    │    │    │              │         │         │    ├── project
+ │    │    │    │    │              │         │         │    │    ├── scan t136250
+ │    │    │    │    │              │         │         │    │    │    └── computed column expressions
+ │    │    │    │    │              │         │         │    │    │         ├── col1_8
+ │    │    │    │    │              │         │         │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │              │         │         │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │              │         │         │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │              │         │         │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │              │         │         │    │    │              └── col1_2::STRING
+ │    │    │    │    │              │         │         │    │    └── projections
+ │    │    │    │    │              │         │         │    │         ├── col1_3::STRING
+ │    │    │    │    │              │         │         │    │         └── col1_2::STRING
+ │    │    │    │    │              │         │         │    └── filters (true)
+ │    │    │    │    │              │         │         └── projections
+ │    │    │    │    │              │         │              └── true
+ │    │    │    │    │              │         └── false
+ │    │    │    │    │              └── not
+ │    │    │    │    │                   └── coalesce
+ │    │    │    │    │                        ├── subquery
+ │    │    │    │    │                        │    └── project
+ │    │    │    │    │                        │         ├── project
+ │    │    │    │    │                        │         │    ├── project
+ │    │    │    │    │                        │         │    │    ├── inner-join (lookup t136250)
+ │    │    │    │    │                        │         │    │    │    ├── lookup columns are key
+ │    │    │    │    │                        │         │    │    │    ├── project
+ │    │    │    │    │                        │         │    │    │    │    ├── scan t136250
+ │    │    │    │    │                        │         │    │    │    │    │    └── computed column expressions
+ │    │    │    │    │                        │         │    │    │    │    │         ├── col1_8
+ │    │    │    │    │                        │         │    │    │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │                        │         │    │    │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │                        │         │    │    │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │                        │         │    │    │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │                        │         │    │    │    │    │              └── col1_2::STRING
+ │    │    │    │    │                        │         │    │    │    │    └── projections
+ │    │    │    │    │                        │         │    │    │    │         └── CAST(NULL AS STRING)
+ │    │    │    │    │                        │         │    │    │    └── filters
+ │    │    │    │    │                        │         │    │    │         └── col1_5 = col1_5
+ │    │    │    │    │                        │         │    │    └── projections
+ │    │    │    │    │                        │         │    │         ├── col1_3::STRING
+ │    │    │    │    │                        │         │    │         └── col1_2::STRING
+ │    │    │    │    │                        │         │    └── projections
+ │    │    │    │    │                        │         │         ├── col1_3::STRING
+ │    │    │    │    │                        │         │         └── col1_2::STRING
+ │    │    │    │    │                        │         └── projections
+ │    │    │    │    │                        │              └── true
+ │    │    │    │    │                        └── false
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── scan t136250
+ │    │    │    │    │    │    └── computed column expressions
+ │    │    │    │    │    │         ├── col1_8
+ │    │    │    │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │    │              └── col1_2::STRING
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── or
+ │    │    │    │    │              ├── not
+ │    │    │    │    │              │    └── coalesce
+ │    │    │    │    │              │         ├── subquery
+ │    │    │    │    │              │         │    └── project
+ │    │    │    │    │              │         │         ├── inner-join (cross)
+ │    │    │    │    │              │         │         │    ├── project
+ │    │    │    │    │              │         │         │    │    ├── scan t136250
+ │    │    │    │    │              │         │         │    │    │    └── computed column expressions
+ │    │    │    │    │              │         │         │    │    │         ├── col1_8
+ │    │    │    │    │              │         │         │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │              │         │         │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │              │         │         │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │              │         │         │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │              │         │         │    │    │              └── col1_2::STRING
+ │    │    │    │    │              │         │         │    │    └── projections
+ │    │    │    │    │              │         │         │    │         ├── col1_3::STRING
+ │    │    │    │    │              │         │         │    │         └── col1_2::STRING
+ │    │    │    │    │              │         │         │    ├── project
+ │    │    │    │    │              │         │         │    │    ├── scan t136250
+ │    │    │    │    │              │         │         │    │    │    └── computed column expressions
+ │    │    │    │    │              │         │         │    │    │         ├── col1_8
+ │    │    │    │    │              │         │         │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │              │         │         │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │              │         │         │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │              │         │         │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │              │         │         │    │    │              └── col1_2::STRING
+ │    │    │    │    │              │         │         │    │    └── projections
+ │    │    │    │    │              │         │         │    │         ├── col1_3::STRING
+ │    │    │    │    │              │         │         │    │         └── col1_2::STRING
+ │    │    │    │    │              │         │         │    └── filters (true)
+ │    │    │    │    │              │         │         └── projections
+ │    │    │    │    │              │         │              └── true
+ │    │    │    │    │              │         └── false
+ │    │    │    │    │              └── not
+ │    │    │    │    │                   └── coalesce
+ │    │    │    │    │                        ├── subquery
+ │    │    │    │    │                        │    └── project
+ │    │    │    │    │                        │         ├── project
+ │    │    │    │    │                        │         │    ├── project
+ │    │    │    │    │                        │         │    │    ├── inner-join (lookup t136250)
+ │    │    │    │    │                        │         │    │    │    ├── lookup columns are key
+ │    │    │    │    │                        │         │    │    │    ├── project
+ │    │    │    │    │                        │         │    │    │    │    ├── scan t136250
+ │    │    │    │    │                        │         │    │    │    │    │    └── computed column expressions
+ │    │    │    │    │                        │         │    │    │    │    │         ├── col1_8
+ │    │    │    │    │                        │         │    │    │    │    │         │    └── CAST(NULL AS STRING)
+ │    │    │    │    │                        │         │    │    │    │    │         ├── crdb_internal_idx_expr
+ │    │    │    │    │                        │         │    │    │    │    │         │    └── col1_3::STRING
+ │    │    │    │    │                        │         │    │    │    │    │         └── crdb_internal_idx_expr_1
+ │    │    │    │    │                        │         │    │    │    │    │              └── col1_2::STRING
+ │    │    │    │    │                        │         │    │    │    │    └── projections
+ │    │    │    │    │                        │         │    │    │    │         └── CAST(NULL AS STRING)
+ │    │    │    │    │                        │         │    │    │    └── filters
+ │    │    │    │    │                        │         │    │    │         └── col1_5 = col1_5
+ │    │    │    │    │                        │         │    │    └── projections
+ │    │    │    │    │                        │         │    │         ├── col1_3::STRING
+ │    │    │    │    │                        │         │    │         └── col1_2::STRING
+ │    │    │    │    │                        │         │    └── projections
+ │    │    │    │    │                        │         │         ├── col1_3::STRING
+ │    │    │    │    │                        │         │         └── col1_2::STRING
+ │    │    │    │    │                        │         └── projections
+ │    │    │    │    │                        │              └── true
+ │    │    │    │    │                        └── false
+ │    │    │    │    └── filters (true)
+ │    │    │    └── projections
+ │    │    │         ├── col1_3::STRING
+ │    │    │         └── col1_2::STRING
+ │    │    └── filters (true)
+ │    └── projections
+ │         ├── col1_3::STRING
+ │         └── col1_2::STRING
+ └── projections
+      └── NULL
+
 # --------------------------------------------------
 # InlineUDF
 # --------------------------------------------------
