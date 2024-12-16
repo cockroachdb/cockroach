@@ -91,7 +91,7 @@ func (r *Replica) evalAndPropose(
 	tok TrackedRequestToken,
 ) (
 	chan proposalResult,
-	func(),
+	abandonToken,
 	kvserverbase.CmdIDKey,
 	*kvadmission.StoreWriteBytes,
 	*kvpb.Error,
@@ -138,7 +138,7 @@ func (r *Replica) evalAndPropose(
 		proposal.ec = makeUnreplicatedEndCmds(r, g, *st)
 		pr := makeProposalResult(proposal.Local.Reply, pErr, intents, endTxns)
 		proposal.finishApplication(ctx, pr)
-		return proposalCh, func() {}, "", nil, nil
+		return proposalCh, nil, "", nil, nil
 	}
 
 	// Make it a truly replicated proposal. We measure the replication latency
@@ -304,10 +304,24 @@ func (r *Replica) evalAndPropose(
 	// the command may not be applied (or even processed): the process crashes
 	// or the local replica is removed from the range.
 
-	return proposalCh, func() { r.abandon(proposal) }, idKey, writeBytes, nil
+	return proposalCh, abandonToken(proposal), idKey, writeBytes, nil
 }
 
-func (r *Replica) abandon(proposal *ProposalData) {
+// abandonToken is an interface used for allowing callers to "abandon" an
+// in-flight proposal. The underlying *ProposalData (the only implementor of
+// this interface) must not be touched directly.
+type abandonToken interface {
+	isAbandonToken()
+}
+
+// abandon abandons the proposal associated with the abandon token.
+func (r *Replica) abandon(tok abandonToken) {
+	if tok == nil {
+		// A nil abandonToken is a no-op. This occurs when a write command ends up
+		// not needing to make any mutation to the state machine.
+		return
+	}
+	proposal := tok.(*ProposalData)
 	// The proposal may or may not be in the Replica's proposals map.
 	// Instead of trying to look it up, simply modify the captured object
 	// directly. The raftMu must be locked to modify the context of a
