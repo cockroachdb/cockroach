@@ -1,4 +1,4 @@
-// Copyright 2023 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -93,7 +93,7 @@ func TestFileSSTSinkExtendOneFile(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	targetFileSize.Override(ctx, &st.SV, 20)
-	sink, _ := fileSSTSinkTestSetup(t, st)
+	sink, _ := fileSSTSinkTestSetup(t, st, execinfrapb.ElidePrefix_None)
 
 	resumeKey, err := sink.Write(ctx, exportResponse1)
 	require.NoError(t, err)
@@ -381,11 +381,10 @@ func TestFileSSTSinkWrite(t *testing.T) {
 					targetFileSize.Override(ctx, &st.SV, 10<<10)
 				}
 
-				sink, store := fileSSTSinkTestSetup(t, st)
+				sink, store := fileSSTSinkTestSetup(t, st, elide)
 				defer func() {
 					require.NoError(t, sink.Close())
 				}()
-				sink.conf.ElideMode = elide
 
 				var resumeKey roachpb.Key
 				var err error
@@ -461,6 +460,10 @@ func s2k0(s string) roachpb.Key {
 	return s2kWithColFamily(s, 0)
 }
 
+func s2k1(s string) roachpb.Key {
+	return s2kWithColFamily(s, 1)
+}
+
 // TestFileSSTSinkStats tests the internal counters and stats of the FileSSTSink under
 // different write scenarios.
 func TestFileSSTSinkStats(t *testing.T) {
@@ -472,7 +475,7 @@ func TestFileSSTSinkStats(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	targetFileSize.Override(ctx, &st.SV, 10<<10)
 
-	sink, _ := fileSSTSinkTestSetup(t, st)
+	sink, _ := fileSSTSinkTestSetup(t, st, execinfrapb.ElidePrefix_None)
 
 	defer func() {
 		require.NoError(t, sink.Close())
@@ -915,6 +918,19 @@ type kvAndTS struct {
 	timestamp int64
 }
 
+func (k kvAndTS) toMVCCKV(enc func(string) roachpb.Key) mvccKV {
+	v := roachpb.Value{}
+	v.SetBytes(k.value)
+	v.InitChecksum(nil)
+	return mvccKV{
+		key: storage.MVCCKey{
+			Key:       enc(k.key),
+			Timestamp: hlc.Timestamp{WallTime: k.timestamp},
+		},
+		value: v.RawBytes,
+	}
+}
+
 type rangeKeyAndTS struct {
 	key       string
 	endKey    string
@@ -1029,23 +1045,26 @@ func (b *exportedSpanBuilder) buildWithEncoding(stringToKey func(string) roachpb
 }
 
 func fileSSTSinkTestSetup(
-	t *testing.T, settings *cluster.Settings,
+	t *testing.T, settings *cluster.Settings, elideMode execinfrapb.ElidePrefix,
 ) (*FileSSTSink, cloud.ExternalStorage) {
-
-	store := nodelocal.TestingMakeNodelocalStorage(t.TempDir(), settings, cloudpb.ExternalStorage{})
-
-	// Never block.
-	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress, 100)
-
-	sinkConf := SSTSinkConf{
-		ID:       1,
-		Enc:      nil,
-		ProgCh:   progCh,
-		Settings: &settings.SV,
-	}
-
-	sink := MakeFileSSTSink(sinkConf, store, nil /* pacer */)
+	conf, store := sinkTestSetup(t, settings, elideMode)
+	sink := MakeFileSSTSink(conf, store, nil /* pacer */)
 	return sink, store
+}
+
+func sinkTestSetup(
+	t *testing.T, settings *cluster.Settings, elideMode execinfrapb.ElidePrefix,
+) (SSTSinkConf, cloud.ExternalStorage) {
+	store := nodelocal.TestingMakeNodelocalStorage(t.TempDir(), settings, cloudpb.ExternalStorage{})
+	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress, 100)
+	sinkConf := SSTSinkConf{
+		ID:        1,
+		Enc:       nil,
+		ProgCh:    progCh,
+		Settings:  &settings.SV,
+		ElideMode: elideMode,
+	}
+	return sinkConf, store
 }
 
 func checkFiles(
@@ -1053,7 +1072,7 @@ func checkFiles(
 	store cloud.ExternalStorage,
 	files []backuppb.BackupManifest_File,
 	expectedFileSpans []roachpb.Spans,
-	elided bool,
+	eliding bool,
 ) error {
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
@@ -1101,7 +1120,7 @@ func checkFiles(
 
 			key := iter.UnsafeKey()
 
-			if !endKeyInclusiveSpansContainsKey(spans, key.Key, elided) {
+			if !endKeyInclusiveSpansContainsKey(spans, key.Key, eliding) {
 				return errors.Newf("key %v in file %s not contained by its spans [%v]", key.Key, f, spans)
 			}
 		}
@@ -1111,9 +1130,9 @@ func checkFiles(
 	return nil
 }
 
-func endKeyInclusiveSpansContainsKey(spans roachpb.Spans, key roachpb.Key, elided bool) bool {
+func endKeyInclusiveSpansContainsKey(spans roachpb.Spans, key roachpb.Key, eliding bool) bool {
 	for _, sp := range spans {
-		if elided {
+		if eliding {
 			sp.Key, _ = keys.StripTablePrefix(sp.Key)
 			sp.EndKey, _ = keys.StripTablePrefix(sp.EndKey)
 		}
