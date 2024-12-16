@@ -492,7 +492,7 @@ func (f *rowBasedFlow) Release() {
 func (f *rowBasedFlow) Cleanup(ctx context.Context) {
 	startCleanup, endCleanup := f.FlowBase.GetOnCleanupFns()
 	startCleanup()
-	defer endCleanup()
+	defer endCleanup(ctx)
 	for i := range f.monitors {
 		f.monitors[i].Stop(ctx)
 	}

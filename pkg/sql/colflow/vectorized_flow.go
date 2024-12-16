@@ -378,7 +378,7 @@ func (f *vectorizedFlow) MemUsage() int64 {
 func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	startCleanup, endCleanup := f.FlowBase.GetOnCleanupFns()
 	startCleanup()
-	defer endCleanup()
+	defer endCleanup(ctx)
 
 	// This cleans up all the memory and disk monitoring of the vectorized flow
 	// as well as closes all the closers.
