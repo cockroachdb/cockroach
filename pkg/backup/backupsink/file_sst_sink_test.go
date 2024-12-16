@@ -1,4 +1,4 @@
-// Copyright 2023 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -459,6 +460,10 @@ func s2kWithColFamily(s string, colfamily uint64) roachpb.Key {
 
 func s2k0(s string) roachpb.Key {
 	return s2kWithColFamily(s, 0)
+}
+
+func s2k1(s string) roachpb.Key {
+	return s2kWithColFamily(s, 1)
 }
 
 // TestFileSSTSinkStats tests the internal counters and stats of the FileSSTSink under
@@ -909,10 +914,376 @@ func TestFileSSTSinkCopyRangeKeys(t *testing.T) {
 	}
 }
 
+func TestFileSSTSinkWriteKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// Artificially set file size limits for testing.
+	defer testutils.HookGlobal(&fileSpanByteLimit, 8<<10)()
+	targetFileSize.Override(ctx, &st.SV, 16<<10)
+
+	gtFileSizeVal := make([]byte, 10<<10)
+	gtSSTSizeVal := make([]byte, 20<<10)
+
+	type testCase struct {
+		name      string
+		exportKVs []*mvccKVSet
+		// spans of files that should have been flushed during WriteKey and before
+		// the final manual flush.
+		flushedSpans []roachpb.Spans
+		// any spans of files that will be flushed out by the manual flush.
+		unflushedSpans []roachpb.Spans
+		// If test requires specific elide modes only -- nil to use default elide modes.
+		elideModes []execinfrapb.ElidePrefix
+	}
+
+	for _, tt := range []testCase{
+		{
+			name: "single-span",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+			},
+		},
+		{
+			name: "single-span-size-flush-last-key",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtSSTSizeVal}}),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+			},
+		},
+		// Ensure that if the size is exceeded mid-span, a flush occurs.
+		{
+			name: "single-span-size-flush-mid-span",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10, value: gtSSTSizeVal}, {key: "b", timestamp: 10}}),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("b")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("b"), EndKey: s2k0("c")}},
+			},
+		},
+		{
+			name: "double-size-flush-single-span",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "e").withKVs(
+					[]kvAndTS{
+						{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtSSTSizeVal},
+						{key: "c", timestamp: 10, value: gtSSTSizeVal}, {key: "d", timestamp: 10},
+					},
+				),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+				{{Key: s2k0("c"), EndKey: s2k0("d")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("d"), EndKey: s2k0("e")}},
+			},
+		},
+		{
+			name: "double-ooo-span-flush",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}}),
+				newMVCCKeySet("b", "d").withKVs([]kvAndTS{{key: "b", timestamp: 10}}),
+				newMVCCKeySet("c", "e").withKVs([]kvAndTS{{key: "c", timestamp: 10}}),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+				{{Key: s2k0("b"), EndKey: s2k0("d")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("c"), EndKey: s2k0("e")}},
+			},
+		},
+		{
+			name: "size-ooo-span-and-ooo-key-flush",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "d").
+					withKVs([]kvAndTS{ // size
+						{key: "a", timestamp: 10, value: gtSSTSizeVal},
+						{key: "c", timestamp: 10},
+					}).withStartEndTS(10, 15),
+				newMVCCKeySet("a", "d").
+					withKVs([]kvAndTS{{key: "b", timestamp: 10}}).
+					withStartEndTS(10, 15),
+				newMVCCKeySet("c", "f").
+					withKVs([]kvAndTS{{key: "e", timestamp: 10}}).
+					withStartEndTS(10, 15),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+				{{Key: s2k0("c"), EndKey: s2k0("d")}},
+				{{Key: s2k0("a"), EndKey: s2k0("d")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("c"), EndKey: s2k0("f")}},
+			},
+		},
+		// Ensure that when keys are written out of order, flushes occur to avoid
+		// writing keys to SST out of order.
+		{
+			name: "single-span-ooo-key",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "b", timestamp: 10}, {key: "a", timestamp: 10}}),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+			},
+		},
+		// Two spans that are contiguous with each other and have the same timestamp
+		// should be merged into one span.
+		{
+			name: "extend-metadata",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).withStartEndTS(5, 10),
+				newMVCCKeySet("c", "e").withKVs([]kvAndTS{{key: "c", timestamp: 10}, {key: "d", timestamp: 10}}).withStartEndTS(5, 10),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("e")}},
+			},
+		},
+		// Two spans that are contiguous with each other but don't have the same
+		// timestamp should not be merged.
+		{
+			name: "no-extend-metadata-diff-timestamp",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).withStartEndTS(5, 10),
+				newMVCCKeySet("c", "e").withKVs([]kvAndTS{{key: "c", timestamp: 10}, {key: "d", timestamp: 10}}).withStartEndTS(5, 11),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}, {Key: s2k0("c"), EndKey: s2k0("e")}},
+			},
+		},
+		// Two spans that have the same timestamp but are not contiguous should
+		// not be merged.
+		{
+			name: "no-extend-metadata-same-timestamp-not-contiguous",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}).withStartEndTS(5, 10),
+				newMVCCKeySet("d", "f").withKVs([]kvAndTS{{key: "d", timestamp: 10}, {key: "e", timestamp: 10}}).withStartEndTS(5, 10),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}, {Key: s2k0("d"), EndKey: s2k0("f")}},
+			},
+		},
+		// If a span overlaps its previous span, a flush must occur first.
+		{
+			name: "flush-from-overlapping-ooo-spans",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}),
+				newMVCCKeySet("b", "e").withKVs([]kvAndTS{{key: "b", timestamp: 10}, {key: "c", timestamp: 10}, {key: "d", timestamp: 10}}),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("b"), EndKey: s2k0("e")}},
+			},
+		},
+		// If a span precedes the previous span but does not overlap, a flush must
+		// occur first.
+		{
+			name: "flush-from-non-overlapping-ooo-spans",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("c", "e").withKVs([]kvAndTS{{key: "c", timestamp: 10}, {key: "d", timestamp: 10}}),
+				newMVCCKeySet("a", "c").withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10}}),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("c"), EndKey: s2k0("e")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+			},
+		},
+		// Writing keys with different prefixes should flush the previous span.
+		{
+			name: "prefixes-differ-with-eliding",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("2/a", "2/c").withKVs([]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/b", timestamp: 10}}),
+				newMVCCKeySet("2/c", "2/e").withKVs([]kvAndTS{{key: "2/c", timestamp: 10}, {key: "2/d", timestamp: 10}}),
+				newMVCCKeySet("3/e", "3/g").withKVs([]kvAndTS{{key: "3/e", timestamp: 10}, {key: "3/f", timestamp: 10}}),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("2/a"), EndKey: s2k0("2/e")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("3/e"), EndKey: s2k0("3/g")}},
+			},
+			elideModes: []execinfrapb.ElidePrefix{execinfrapb.ElidePrefix_TenantAndTable},
+		},
+		// In-order different prefixes shouldn't force a flush if no eliding is done.
+		{
+			name: "prefixes-differ-with-no-eliding",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("2/a", "2/c").withKVs([]kvAndTS{{key: "2/a", timestamp: 10}, {key: "2/b", timestamp: 10}}),
+				newMVCCKeySet("2/c", "2/e").withKVs([]kvAndTS{{key: "2/c", timestamp: 10}, {key: "2/d", timestamp: 10}}),
+				newMVCCKeySet("3/e", "3/g").withKVs([]kvAndTS{{key: "3/e", timestamp: 10}, {key: "3/f", timestamp: 10}}),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("2/a"), EndKey: s2k0("2/e")}, {Key: s2k0("3/e"), EndKey: s2k0("3/g")}},
+			},
+			elideModes: []execinfrapb.ElidePrefix{execinfrapb.ElidePrefix_None},
+		},
+		// Flush does not occur if last key written is mid-row even if size exceeded.
+		{
+			name: "no-size-flush-if-mid-row",
+			exportKVs: []*mvccKVSet{
+				newRawMVCCKeySet(s2k0("a"), s2kWithColFamily("b", 1)).
+					withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtSSTSizeVal}}).
+					withStartEndTS(10, 15),
+				newRawMVCCKeySet(s2kWithColFamily("b", 1), s2k0("d")).
+					withRawKVs([]mvccKV{
+						kvAndTS{key: "b", timestamp: 10}.toMvccKV(s2k1),
+					}).
+					withStartEndTS(10, 15),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("d")}},
+			},
+		},
+		// If size flush is blocked by mid-row key, the next key should cause a flush.
+		{
+			name: "size-flush-postponed-till-after-mid-row",
+			exportKVs: []*mvccKVSet{
+				newRawMVCCKeySet(s2k0("a"), s2kWithColFamily("b", 1)).
+					withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtSSTSizeVal}}).
+					withStartEndTS(10, 15),
+				newRawMVCCKeySet(s2kWithColFamily("b", 1), s2k0("d")).
+					withRawKVs([]mvccKV{
+						kvAndTS{key: "b", timestamp: 10}.toMvccKV(s2k1),
+						kvAndTS{key: "c", timestamp: 10}.toMvccKV(s2k0),
+					}).
+					withStartEndTS(10, 15),
+			},
+			flushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}},
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("c"), EndKey: s2k0("d")}},
+			},
+		},
+		// It is safe to flush at the range boundary.
+		{
+			name: "size-flush-at-range-boundary",
+			exportKVs: []*mvccKVSet{
+				newRawMVCCKeySet(s2k0("a"), s2k("c")).
+					withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtSSTSizeVal}}),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k("c")}},
+			},
+		},
+		// If fileSpanByteLimit is reached, extending the file should be prevented
+		// and a new file created.
+		{
+			name: "no-extend-due-to-manifest-size-limit",
+			exportKVs: []*mvccKVSet{
+				newMVCCKeySet("a", "d").
+					withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtFileSizeVal}, {key: "c", timestamp: 10}}),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}, {Key: s2k0("c"), EndKey: s2k0("d")}},
+			},
+		},
+		// If fileSpanByteLimit is reached but the last key written was mid-row,
+		// the file must be extended.
+		{
+			name: "extend-mid-row-despite-manifest-size-limit",
+			exportKVs: []*mvccKVSet{
+				newRawMVCCKeySet(s2k0("a"), s2kWithColFamily("b", 1)).
+					withKVs([]kvAndTS{{key: "a", timestamp: 10}, {key: "b", timestamp: 10, value: gtFileSizeVal}}).
+					withStartEndTS(10, 15),
+				newRawMVCCKeySet(s2kWithColFamily("b", 1), s2k0("d")).
+					withRawKVs([]mvccKV{
+						kvAndTS{key: "b", timestamp: 10}.toMvccKV(s2k1),
+						kvAndTS{key: "c", timestamp: 10}.toMvccKV(s2k0),
+					}).
+					withStartEndTS(10, 15),
+			},
+			unflushedSpans: []roachpb.Spans{
+				{{Key: s2k0("a"), EndKey: s2k0("c")}, {Key: s2k0("c"), EndKey: s2k0("d")}},
+			},
+		},
+	} {
+		elideModes := []execinfrapb.ElidePrefix{execinfrapb.ElidePrefix_None, execinfrapb.ElidePrefix_TenantAndTable}
+		if tt.elideModes != nil {
+			elideModes = tt.elideModes
+		}
+		for _, elide := range elideModes {
+			t.Run(fmt.Sprintf("%s/elide=%s", tt.name, elide), func(t *testing.T) {
+				sink, store := sstSinkKeyWriterTestSetup(t, st)
+				defer func() {
+					require.NoError(t, sink.Close())
+				}()
+				sink.conf.ElideMode = elide
+
+				for _, ek := range tt.exportKVs {
+					span := ek.span
+					for _, kv := range ek.kvs {
+						recordedSpan, err := sink.WriteKey(ctx, kv.key, kv.value, span, ek.startTime, ek.endTime)
+						require.NoError(t, err)
+						span = recordedSpan
+					}
+				}
+
+				progress := make([]backuppb.BackupManifest_File, 0)
+			Loop:
+				for {
+					select {
+					case p := <-sink.conf.ProgCh:
+						var progDetails backuppb.BackupManifest_Progress
+						if err := types.UnmarshalAny(&p.ProgressDetails, &progDetails); err != nil {
+							t.Fatal(err)
+						}
+
+						progress = append(progress, progDetails.Files...)
+					default:
+						break Loop
+					}
+				}
+
+				eliding := sink.conf.ElideMode != execinfrapb.ElidePrefix_None
+				require.NoError(t, checkFiles(ctx, store, progress, tt.flushedSpans, eliding))
+
+				var actualUnflushedFiles []backuppb.BackupManifest_File
+				actualUnflushedFiles = append(actualUnflushedFiles, sink.flushedFiles...)
+				require.NoError(t, sink.Flush(ctx))
+				require.NoError(t, checkFiles(ctx, store, actualUnflushedFiles, tt.unflushedSpans, eliding))
+				require.Empty(t, sink.flushedFiles)
+			})
+		}
+	}
+}
+
 type kvAndTS struct {
 	key       string
 	value     []byte
 	timestamp int64
+}
+
+func (k kvAndTS) toMvccKV(enc func(string) roachpb.Key) mvccKV {
+	v := roachpb.Value{}
+	v.SetBytes(k.value)
+	v.InitChecksum(nil)
+	return mvccKV{
+		key: storage.MVCCKey{
+			Key:       enc(k.key),
+			Timestamp: hlc.Timestamp{WallTime: k.timestamp},
+		},
+		value: v.RawBytes,
+	}
 }
 
 type rangeKeyAndTS struct {
@@ -1031,21 +1402,29 @@ func (b *exportedSpanBuilder) buildWithEncoding(stringToKey func(string) roachpb
 func fileSSTSinkTestSetup(
 	t *testing.T, settings *cluster.Settings,
 ) (*FileSSTSink, cloud.ExternalStorage) {
+	conf, store := sinkTestSetup(t, settings)
+	sink := MakeFileSSTSink(conf, store, nil /* pacer */)
+	return sink, store
+}
 
+func sstSinkKeyWriterTestSetup(
+	t *testing.T, settings *cluster.Settings,
+) (*SSTSinkKeyWriter, cloud.ExternalStorage) {
+	conf, store := sinkTestSetup(t, settings)
+	sink := MakeSSTSinkKeyWriter(conf, store, nil /* pacer */)
+	return sink, store
+}
+
+func sinkTestSetup(t *testing.T, settings *cluster.Settings) (SSTSinkConf, cloud.ExternalStorage) {
 	store := nodelocal.TestingMakeNodelocalStorage(t.TempDir(), settings, cloudpb.ExternalStorage{})
-
-	// Never block.
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress, 100)
-
 	sinkConf := SSTSinkConf{
 		ID:       1,
 		Enc:      nil,
 		ProgCh:   progCh,
 		Settings: &settings.SV,
 	}
-
-	sink := MakeFileSSTSink(sinkConf, store, nil /* pacer */)
-	return sink, store
+	return sinkConf, store
 }
 
 func checkFiles(
@@ -1126,4 +1505,77 @@ func endKeyInclusiveSpansContainsKey(spans roachpb.Spans, key roachpb.Key, elide
 	}
 
 	return false
+}
+
+type mvccKV struct {
+	key   storage.MVCCKey
+	value []byte
+}
+
+type mvccKVSet struct {
+	span      roachpb.Span
+	kvs       []mvccKV
+	startTime hlc.Timestamp
+	endTime   hlc.Timestamp
+}
+
+func newMVCCKeySet(spanStart string, spanEnd string) *mvccKVSet {
+	return &mvccKVSet{
+		span: roachpb.Span{
+			Key:    s2k0(spanStart),
+			EndKey: s2k0(spanEnd),
+		},
+	}
+}
+
+func newRawMVCCKeySet(spanStart roachpb.Key, spanEnd roachpb.Key) *mvccKVSet {
+	return &mvccKVSet{
+		span: roachpb.Span{
+			Key:    spanStart,
+			EndKey: spanEnd,
+		},
+	}
+}
+
+func (b *mvccKVSet) withStartEndTS(startTime, endTime int64) *mvccKVSet {
+	b.startTime = hlc.Timestamp{WallTime: startTime}
+	b.endTime = hlc.Timestamp{WallTime: endTime}
+	return b
+}
+
+func (b *mvccKVSet) withKVs(kvs []kvAndTS) *mvccKVSet {
+	return b.withKVsAndEncoding(kvs, s2k0)
+}
+
+func (b *mvccKVSet) withKVsAndEncoding(kvs []kvAndTS, enc func(string) roachpb.Key) *mvccKVSet {
+	rawKVs := make([]mvccKV, 0, len(kvs))
+	for _, kv := range kvs {
+		v := roachpb.Value{}
+		v.SetBytes(kv.value)
+		v.InitChecksum(nil)
+		rawKVs = append(rawKVs, mvccKV{
+			key: storage.MVCCKey{
+				Key:       enc(kv.key),
+				Timestamp: hlc.Timestamp{WallTime: kv.timestamp},
+			},
+			value: v.RawBytes,
+		})
+	}
+	return b.withRawKVs(rawKVs)
+}
+
+func (b *mvccKVSet) withRawKVs(kvs []mvccKV) *mvccKVSet {
+	b.kvs = kvs
+	var minTS, maxTS hlc.Timestamp
+	for _, kv := range kvs {
+		if minTS.IsEmpty() || kv.key.Timestamp.Less(minTS) {
+			minTS = kv.key.Timestamp
+		}
+		if maxTS.IsEmpty() || maxTS.Less(kv.key.Timestamp) {
+			maxTS = kv.key.Timestamp
+		}
+	}
+	b.startTime = minTS
+	b.endTime = maxTS
+	return b
 }

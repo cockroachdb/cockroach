@@ -6,13 +6,18 @@
 package backupsink
 
 import (
+	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // ElidedPrefix returns the prefix of the key that is elided by the given mode.
@@ -33,6 +38,21 @@ func ElidedPrefix(key roachpb.Key, mode execinfrapb.ElidePrefix) ([]byte, error)
 		return key[: len(key)-len(rest) : len(key)-len(rest)], nil
 	}
 	return nil, nil
+}
+
+func elideMVCCKeyPrefix(
+	key storage.MVCCKey, mode execinfrapb.ElidePrefix,
+) (storage.MVCCKey, []byte, error) {
+	prefix, err := ElidedPrefix(key.Key, mode)
+	if err != nil {
+		return storage.MVCCKey{}, nil, err
+	}
+	cutKey, ok := bytes.CutPrefix(key.Key, prefix)
+	if !ok {
+		return storage.MVCCKey{}, nil, errors.AssertionFailedf("prefix mismatch %q does not have %q", key.Key, prefix)
+	}
+	key.Key = cutKey
+	return key, prefix, nil
 }
 
 // adjustFileEndKey checks if the export respsonse end key can be used as a
@@ -81,4 +101,20 @@ func generateUniqueSSTName(nodeID base.SQLInstanceID) string {
 	// common file/bucket browse UIs.
 	return fmt.Sprintf("data/%d.sst",
 		builtins.GenerateUniqueInt(builtins.ProcessUniqueID(nodeID)))
+}
+
+// sameAsFileSpan returns true if the span, start, and end match the span, start, and end of the BackupManifest_File.
+func sameAsFileSpan(
+	span roachpb.Span, start, end hlc.Timestamp, backupFile *backuppb.BackupManifest_File,
+) bool {
+	return backupFile.Span.Equal(span) && backupFile.StartTime.Equal(start) && backupFile.EndTime.Equal(end)
+}
+
+// extendsFileSpan returns true if a span can successfully contiguously extend the span of a BackupManifest_File.
+func extendsFileSpan(
+	span roachpb.Span, start, end hlc.Timestamp, backupFile *backuppb.BackupManifest_File,
+) bool {
+	return backupFile.Span.EndKey.Equal(span.Key) &&
+		backupFile.StartTime.Equal(start) &&
+		backupFile.EndTime.Equal(end)
 }
