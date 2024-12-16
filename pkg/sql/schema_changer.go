@@ -771,9 +771,6 @@ func (sc *SchemaChanger) checkForMVCCCompliantAddIndexMutations(
 // If the txn that queued the schema changer did not commit, this will be a
 // no-op, as we'll fail to find the job for our mutation in the jobs registry.
 func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
-	sc.metrics.RunningSchemaChanges.Inc(1)
-	defer sc.metrics.RunningSchemaChanges.Dec(1)
-
 	ctx = logtags.AddTags(ctx, sc.execLogTags())
 
 	// Pull out the requested descriptor.
@@ -2747,7 +2744,6 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			scErr = sc.exec(ctx)
 			switch {
 			case scErr == nil:
-				sc.metrics.Successes.Inc(1)
 				return nil
 			case errors.Is(scErr, catalog.ErrDescriptorNotFound):
 				// If the table descriptor for the ID can't be found, we assume that
@@ -2764,16 +2760,12 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 				// Check if the error is on a allowlist of errors we should retry on,
 				// including the schema change not having the first mutation in line.
 				log.Warningf(ctx, "error while running schema change, retrying: %v", scErr)
-				sc.metrics.RetryErrors.Inc(1)
 				if IsConstraintError(scErr) {
 					telemetry.Inc(sc.metrics.ConstraintErrors)
 				} else {
 					telemetry.Inc(sc.metrics.UncategorizedErrors)
 				}
 			default:
-				if ctx.Err() == nil {
-					sc.metrics.PermanentErrors.Inc(1)
-				}
 				if IsConstraintError(scErr) {
 					telemetry.Inc(sc.metrics.ConstraintErrors)
 				} else {
