@@ -1361,6 +1361,8 @@ func (gv *GaugeVec) GetType() *prometheusgo.MetricType {
 
 // ToPrometheusMetrics implements PrometheusExportable.
 func (gv *GaugeVec) ToPrometheusMetrics() []*prometheusgo.Metric {
+	gv.RLock()
+	defer gv.RUnlock()
 	metrics := make([]*prometheusgo.Metric, 0, len(gv.encounteredLabelValues))
 
 	for _, labels := range gv.encounteredLabelValues {
@@ -1462,6 +1464,8 @@ func (cv *CounterVec) GetType() *prometheusgo.MetricType {
 
 // ToPrometheusMetrics implements PrometheusExportable.
 func (cv *CounterVec) ToPrometheusMetrics() []*prometheusgo.Metric {
+	cv.RLock()
+	defer cv.RUnlock()
 	metrics := make([]*prometheusgo.Metric, 0, len(cv.encounteredLabelValues))
 
 	for _, labels := range cv.encounteredLabelValues {
@@ -1542,6 +1546,8 @@ func (hv *HistogramVec) GetType() *prometheusgo.MetricType {
 
 // ToPrometheusMetrics implements PrometheusExportable.
 func (hv *HistogramVec) ToPrometheusMetrics() []*prometheusgo.Metric {
+	hv.RLock()
+	defer hv.RUnlock()
 	metrics := make([]*prometheusgo.Metric, 0, len(hv.encounteredLabelValues))
 
 	for _, labels := range hv.encounteredLabelValues {
