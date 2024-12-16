@@ -201,12 +201,14 @@ func (r *logicalReplicationResumer) ingest(
 		func() time.Duration {
 			return heartbeatFrequency.Get(&execCfg.Settings.SV)
 		})
-	defer func() {
-		_ = heartbeatSender.Stop()
-		stopReplanner()
-	}()
 
 	execPlan := func(ctx context.Context) error {
+
+		defer func() {
+			_ = heartbeatSender.Stop()
+			stopReplanner()
+		}()
+
 		rh := rowHandler{
 			replicatedTimeAtStart: replicatedTimeAtStart,
 			frontier:              frontier,
