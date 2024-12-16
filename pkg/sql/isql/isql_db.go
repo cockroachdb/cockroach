@@ -104,7 +104,7 @@ type Executor interface {
 	) (int, error)
 
 	// QueryRow executes the supplied SQL statement and returns a single row, or
-	// nil if no row is found, or an error if more that one row is returned.
+	// nil if no row is found, or an error if more than one row is returned.
 	//
 	// QueryRow is deprecated. Use QueryRowEx() instead.
 	QueryRow(
