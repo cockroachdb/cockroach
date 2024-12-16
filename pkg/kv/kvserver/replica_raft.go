@@ -184,9 +184,11 @@ func (r *Replica) evalAndPropose(
 
 		// Fork the proposal's context span so that the proposal's context
 		// can outlive the original proposer's context.
-		ctx, sp := tracing.ForkSpan(ctx, "async consensus")
-		proposal.ctx.Store(&ctx)
-		proposal.sp = sp
+		if s := tracing.SpanFromContext(ctx); s != nil && !s.IsNoop() {
+			ctx, sp := tracing.ForkSpan(ctx, "async consensus")
+			proposal.ctx.Store(&ctx)
+			proposal.sp = sp
+		}
 		if proposal.sp != nil {
 			// We can't leak this span if we fail to hand the proposal to the
 			// replication layer, so finish it later in this method if we are to
