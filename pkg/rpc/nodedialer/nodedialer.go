@@ -154,8 +154,7 @@ func (n *Dialer) DialInternalClient(
 	}
 	client := newBaseInternalClient(conn)
 
-	const useDRPC = true
-	if useDRPC {
+	if rpc.ExperimentalDRPCEnabled.Get(&n.rpcContext.Settings.SV) {
 		if canPool := shouldUseBatchStreamPoolClient(ctx, n.rpcContext.Settings); !canPool {
 			drpcBatchStreamPool = nil
 		}
