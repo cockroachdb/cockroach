@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -18,6 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+)
+
+var defaultAutocommitBeforeDDL = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.autocommit_before_ddl.enabled",
+	"default value for autocommit_before_ddl session setting; "+
+		"forces transactions to autocommit before running any DDL statement",
+	false,
 )
 
 // maybeAutoCommitBeforeDDL checks if the current transaction needs to be
