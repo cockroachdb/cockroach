@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var envExperimentalDRPCEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_DRPC_ENABLED", false)
+var envExperimentalDRPCEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_DRPC_ENABLED", true)
 
 // ExperimentalDRPCEnabled determines whether a drpc server accepting BatchRequest
 // is enabled. This server is experimental and completely unsuitable to production
