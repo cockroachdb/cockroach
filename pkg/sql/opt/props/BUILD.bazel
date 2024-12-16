@@ -63,6 +63,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
