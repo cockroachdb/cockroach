@@ -2383,6 +2383,7 @@ func (ex *connExecutor) commitSQLTransaction(
 	}); err != nil {
 		return ex.makeErrEvent(err, ast)
 	}
+
 	return eventTxnFinishCommitted{}, nil
 }
 

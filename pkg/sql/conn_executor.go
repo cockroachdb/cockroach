@@ -4074,11 +4074,16 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		if err := ex.waitForTxnJobs(); err != nil {
 			handleErr(err)
 		}
+		if ex.extraTxnState.descCollection.HasUncommittedNewDescriptors() {
+			execCfg := ex.planner.ExecCfg()
+			if err := UpdateDescriptorCount(ex.Ctx(), execCfg, execCfg.SchemaChangerMetrics); err != nil {
+				log.Warningf(ex.Ctx(), "failed to scan descriptor table: %+v", err)
+			}
+		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, crtime.NowMono())
 		if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs); err != nil {
 			return advanceInfo{}, err
 		}
-
 		fallthrough
 	case txnRollback, txnPrepare:
 		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, payloadErr)
