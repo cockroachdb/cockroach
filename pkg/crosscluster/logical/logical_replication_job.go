@@ -608,6 +608,7 @@ func (p *logicalReplicationPlanner) planOfflineInitialScan(
 // replication writer processors.
 type rowHandler struct {
 	replicatedTimeAtStart hlc.Timestamp
+	frontierHasUpdated    bool
 	frontier              span.Frontier
 	metrics               *Metrics
 	settings              *settings.Values
@@ -652,8 +653,15 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 		}
 	}
 
+	// On the first frontier update, always persist the resolved spans.
+	var firstFrontierUpdate bool
+	if !rh.frontierHasUpdated {
+		firstFrontierUpdate = rh.replicatedTimeAtStart.Less(rh.frontier.Frontier())
+		rh.frontierHasUpdated = firstFrontierUpdate
+	}
+
 	updateFreq := jobCheckpointFrequency.Get(rh.settings)
-	if updateFreq == 0 || timeutil.Since(rh.lastPartitionUpdate) < updateFreq {
+	if !firstFrontierUpdate && (updateFreq == 0 || timeutil.Since(rh.lastPartitionUpdate) < updateFreq) {
 		return nil
 	}
 
@@ -675,7 +683,6 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 			prog := progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 			prog.Checkpoint.ResolvedSpans = frontierResolvedSpans
 
-			// TODO (msbutler): add ldr initial and lagging range timeseries metrics.
 			aggRangeStats, fractionCompleted, status := rh.rangeStats.RollupStats()
 			progress.RunningStatus = status
 
