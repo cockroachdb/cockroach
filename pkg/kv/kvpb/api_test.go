@@ -432,3 +432,13 @@ func TestRequestHeaderRoundTrip(t *testing.T) {
 
 	require.Equal(t, exp, rh.KVNemesisSeq.Get())
 }
+
+func TestBatchRequestEmptySize(t *testing.T) {
+	ba := &BatchRequest{}
+	require.Equal(t, 22, ba.Size())
+}
+
+func TestBatchResponseEmptySize(t *testing.T) {
+	br := &BatchResponse{}
+	require.Equal(t, 6, br.Size())
+}
