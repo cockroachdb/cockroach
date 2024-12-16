@@ -562,6 +562,142 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 
 }
 
+// TestChangefeedUpdateProtectedTimestampTargets tests that changefeeds will
+// remake their PTS records if they detect that they lack required targets.
+func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		ctx := context.Background()
+
+		dontMigrate := atomic.Bool{}
+		dontMigrate.Store(true)
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		knobs.PreservePTSTargets = func() bool {
+			return dontMigrate.Load()
+		}
+
+		ptsInterval := 50 * time.Millisecond
+		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
+
+		sysDB.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'")
+		sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '20ms'`)
+		defer closeFeed(t, foo)
+
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
+		ptp := s.Server.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(s.SystemServer.DB(), s.Codec, "d", "foo")
+		fooID := fooDesc.GetID()
+		descID := descpb.ID(keys.DescriptorTableID)
+
+		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+		loadProgressErr := func() (jobspb.Progress, error) {
+			job, err := registry.LoadJob(ctx, jobFeed.JobID())
+			if err != nil {
+				return jobspb.Progress{}, err
+			}
+			return job.Progress(), nil
+		}
+
+		getPTSRecordID := func() uuid.UUID {
+			var recordID uuid.UUID
+			testutils.SucceedsSoon(t, func() error {
+				progress, err := loadProgressErr()
+				if err != nil {
+					return err
+				}
+				uid := progress.GetChangefeed().ProtectedTimestampRecord
+				if uid == uuid.Nil {
+					return errors.Newf("no pts record")
+				}
+				recordID = uid
+				return nil
+			})
+			return recordID
+		}
+
+		readPTSRecord := func(recID uuid.UUID) (rec *ptpb.Record, err error) {
+			err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				rec, err = ptp.WithTxn(txn).GetRecord(ctx, recID)
+				if err != nil {
+					return err
+				}
+				return nil
+			})
+			return
+		}
+		removePTSTarget := func(recordID uuid.UUID) error {
+			return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				if _, err := txn.ExecEx(ctx, "pts-test", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+					fmt.Sprintf(
+						"UPDATE system.protected_ts_records SET target = NULL WHERE id = '%s'",
+						recordID),
+				); err != nil {
+					return err
+				}
+				return nil
+			})
+		}
+
+		// Wipe out the targets from the changefeed PTS record, simulating an old-style PTS record.
+		oldRecordID := getPTSRecordID()
+		require.NoError(t, removePTSTarget(oldRecordID))
+		rec, err := readPTSRecord(oldRecordID)
+		require.NoError(t, err)
+		require.NotNil(t, rec)
+		require.Nil(t, rec.Target)
+
+		// Flip the knob so the changefeed migrates the old style PTS record to the new one.
+		dontMigrate.Store(false)
+
+		getNewPTSRecord := func() *ptpb.Record {
+			var recID uuid.UUID
+			var record *ptpb.Record
+			testutils.SucceedsSoon(t, func() error {
+				recID = getPTSRecordID()
+				if recID.Equal(oldRecordID) {
+					return errors.New("waiting for new PTS record")
+				}
+
+				return nil
+			})
+			record, err = readPTSRecord(recID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return record
+		}
+
+		// Read the new PTS record.
+		newRec := getNewPTSRecord()
+		require.NotNil(t, newRec.Target)
+
+		// Assert the new PTS record has the right targets.
+		targetIDs := newRec.Target.GetSchemaObjects().IDs
+		require.Contains(t, targetIDs, fooID)
+		require.Contains(t, targetIDs, descID)
+
+		// Ensure the old pts record was deleted.
+		_, err = readPTSRecord(oldRecordID)
+		require.ErrorContains(t, err, "does not exist")
+	}
+
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+}
+
 // TestChangefeedUpdateProtectedTimestamp tests that changefeeds using the
 // old style PTS records will migrate themselves to use the new style PTS
 // records.
