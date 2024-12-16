@@ -6384,13 +6384,16 @@ func MVCCGarbageCollect(
 ) (retE error) {
 
 	var count int64
-	defer func(begin time.Time) {
-		log.Eventf(ctx, "handled %d incoming point keys; deleted %d in %s",
-			len(keys), count, timeutil.Since(begin))
-		if retE != nil {
-			log.Eventf(ctx, "err: %s", retE)
-		}
-	}(timeutil.Now())
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		defer func(begin time.Time) {
+			lk, c := len(keys), count // alloc only when neeeded
+			log.Eventf(ctx, "handled %d incoming point keys; deleted %d in %s",
+				lk, c, timeutil.Since(begin))
+			if retE != nil {
+				log.Eventf(ctx, "err: %s", retE)
+			}
+		}(timeutil.Now())
+	}
 
 	// If there are no keys then there is no work.
 	if len(keys) == 0 {
