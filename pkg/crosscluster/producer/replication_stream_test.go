@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/errors"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -480,6 +481,7 @@ CREATE TABLE t3(
 
 		feed.ObserveError(ctx, func(err error) bool {
 			// TODO(msbutler): understand why errors.Is does not work here.
+			errors.As(err, &producer.ErrInitialScanComplete)
 			return strings.Contains(err.Error(), producer.ErrInitialScanComplete.Error())
 		})
 	})
