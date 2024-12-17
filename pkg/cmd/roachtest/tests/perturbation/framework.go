@@ -262,6 +262,8 @@ func setup(p perturbation, acceptableChange float64) variations {
 	}
 	v.acceptableChange = acceptableChange
 	v.clusterSettings = make(map[string]string)
+	// Having the io_load_listener logs makes it easier to debug failures.
+	v.clusterSettings["server.debug.default_vmodule"] = "io_load_listener=1"
 	return v
 }
 
