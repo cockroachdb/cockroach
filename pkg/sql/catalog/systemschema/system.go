@@ -227,7 +227,11 @@ CREATE TABLE system.jobs (
 	claim_instance_id INT8,
 	num_runs          INT8,
 	last_run          TIMESTAMP,
-	job_type              STRING,
+	job_type          STRING,
+	owner             STRING,
+	description       STRING,
+	error_msg         STRING,
+	finished          TIMESTAMPTZ,
 	CONSTRAINT "primary" PRIMARY KEY (id),
 	INDEX (status, created),
 	INDEX (created_by_type, created_by_id) STORING (status),
@@ -238,7 +242,7 @@ CREATE TABLE system.jobs (
   ) STORING(last_run, num_runs, claim_instance_id)
     WHERE ` + JobsRunStatsIdxPredicate + `,
   INDEX jobs_job_type_idx (job_type),
-	FAMILY fam_0_id_status_created_payload (id, status, created, dropped_payload, created_by_type, created_by_id, job_type),
+	FAMILY fam_0_id_status_created_payload (id, status, created, dropped_payload, created_by_type, created_by_id, job_type, owner, description, error_msg, finished),
 	FAMILY progress (dropped_progress),
 	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
 );`
@@ -1382,7 +1386,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_1_PreparedTransactionsTable.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_1_AddJobsColumns.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -2120,6 +2124,10 @@ var (
 				{Name: "num_runs", ID: 10, Type: types.Int, Nullable: true},
 				{Name: "last_run", ID: 11, Type: types.Timestamp, Nullable: true},
 				{Name: "job_type", ID: 12, Type: types.String, Nullable: true},
+				{Name: "owner", ID: 13, Type: types.String, Nullable: true},
+				{Name: "description", ID: 14, Type: types.String, Nullable: true},
+				{Name: "error_msg", ID: 15, Type: types.String, Nullable: true},
+				{Name: "finished", ID: 16, Type: types.TimestampTZ, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -2128,8 +2136,8 @@ var (
 					// that needed to be done.
 					Name:        "fam_0_id_status_created_payload",
 					ID:          0,
-					ColumnNames: []string{"id", "status", "created", "dropped_payload", "created_by_type", "created_by_id", "job_type"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 6, 7, 12},
+					ColumnNames: []string{"id", "status", "created", "dropped_payload", "created_by_type", "created_by_id", "job_type", "owner", "description", "error_msg", "finished"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 6, 7, 12, 13, 14, 15, 16},
 				},
 				{
 					// NB: We are using family name that existed prior to adding created_by_type,
