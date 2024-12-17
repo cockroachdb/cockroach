@@ -172,6 +172,10 @@ func (t *descriptorState) upsertLeaseLocked(
 	}
 	if session != nil {
 		s.mu.lease.sessionID = session.ID().UnsafeBytes()
+		// When using session based leasing, if we end up acquiring the same lease again
+		// nothing needs to be cleaned up or updated. This is because the system.lease
+		// table does not store any expiry inside the table.
+		toRelease.sessionID = nil
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "replaced lease: %s with %s", toRelease, s.mu.lease)
@@ -259,8 +263,8 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		// when the refcount drops to 0). If so, we'll need to mark the lease as
 		// invalid.
 		removeOnceDereferenced :=
-			// Release from the store if the descriptor has been dropped or taken
-			// offline.
+		// Release from the store if the descriptor has been dropped or taken
+		// offline.
 			t.mu.takenOffline ||
 				// Release from the store if the lease is not for the latest
 				// version; only leases for the latest version can be acquired.
