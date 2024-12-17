@@ -409,6 +409,9 @@ type ScanFlags struct {
 	// NoFullScan disallows use of a full scan for scanning this table.
 	NoFullScan bool
 
+	// AvoidFullScan avoids use of a full scan for scanning this table.
+	AvoidFullScan bool
+
 	// ForceIndex forces the use of a specific index (specified in Index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
 	ForceIndex bool
