@@ -1,5 +1,6 @@
 package kafkaauth
 
+// TODO: is there any reason to have these as constants? if not, remove
 const (
 	SASLUser      = "sasl_user"
 	SASLPassword  = "sasl_password"
@@ -12,6 +13,10 @@ const (
 	SASLTokenURL     = "sasl_token_url"
 	SASLGrantType    = "sasl_grant_type"
 	SASLScopes       = "sasl_scopes"
+
+	SASLAWSIAMRoleArn     = `sasl_aws_iam_role_arn`
+	SASLAWSRegion         = `sasl_aws_region`
+	SASLAWSIAMSessionName = `sasl_aws_iam_session_name`
 )
 
 var oauthOnlyParams = []string{

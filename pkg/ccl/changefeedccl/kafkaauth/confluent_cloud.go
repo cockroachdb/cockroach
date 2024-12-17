@@ -5,19 +5,18 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/twmb/franz-go/pkg/kgo"
-	kgosaslplain "github.com/twmb/franz-go/pkg/sasl/plain"
 )
 
-type saslPlain struct {
+type confluentCloud struct {
 	user      string
 	password  string
 	handshake bool
 }
 
 // PickMe implements AuthMechanism.
-func (s *saslPlain) PickMe(params queryParams) (AuthMechanism, bool) {
+func (s *confluentCloud) PickMe(params queryParams) (AuthMechanism, bool) {
 	if params.get(SASLEnabled) == "true" && params.get(SASLMechanism) == sarama.SASLTypePlaintext {
-		return &saslPlain{
+		return &confluentCloud{
 			user:      params.get(SASLUser),
 			password:  params.get(SASLPassword),
 			handshake: params.get(SASLHandshake) == "" || params.get(SASLHandshake) == "true",
@@ -27,14 +26,14 @@ func (s *saslPlain) PickMe(params queryParams) (AuthMechanism, bool) {
 }
 
 // ValidateParams implements AuthMechanism.
-func (s *saslPlain) ValidateParams(params queryParams) error {
+func (s *confluentCloud) ValidateParams(params queryParams) error {
 	requiredParams := []string{SASLUser, SASLPassword}
 	forbiddenParams := oauthOnlyParams
 	return validateParams(s.Name(), params, requiredParams, forbiddenParams)
 }
 
 // ApplySarama implements AuthMechanism.
-func (s *saslPlain) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
+func (s *confluentCloud) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 	cfg.Net.SASL.Enable = true
 	cfg.Net.SASL.Mechanism = sarama.SASLTypePlaintext
 	cfg.Net.SASL.Handshake = s.handshake
@@ -44,9 +43,9 @@ func (s *saslPlain) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 }
 
 // KgoOpts implements AuthMechanism.
-func (s *saslPlain) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
-	mech := kgosaslplain.Plain(func(ctc context.Context) (kgosaslplain.Auth, error) {
-		return kgosaslplain.Auth{
+func (s *confluentCloud) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
+	mech := kgoconfluentCloud.Plain(func(ctc context.Context) (kgoconfluentCloud.Auth, error) {
+		return kgoconfluentCloud.Auth{
 			User: s.user,
 			Pass: s.password,
 		}, nil
@@ -58,12 +57,12 @@ func (s *saslPlain) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 }
 
 // Name implements AuthMechanism.
-func (s *saslPlain) Name() AuthMechanismName {
+func (s *confluentCloud) Name() AuthMechanismName {
 	return "SASL_PLAIN"
 }
 
-var _ AuthMechanism = (*saslPlain)(nil)
+var _ AuthMechanism = (*confluentCloud)(nil)
 
 func init() {
-	Registry.Register((&saslPlain{}).PickMe)
+	Registry.Register((&confluentCloud{}).PickMe)
 }

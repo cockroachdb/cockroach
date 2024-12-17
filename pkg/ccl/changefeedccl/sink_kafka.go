@@ -913,6 +913,8 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 		}
 	}
 
+	// sarama.SASLTypeSCRAMSHA512
+
 	// dialConfig.saslMechanism = u.consumeParam(changefeedbase.SinkParamSASLMechanism)
 	// if dialConfig.saslMechanism != `` && !dialConfig.saslEnabled {
 	// 	return kafkaDialConfig{}, errors.Errorf(`%s must be enabled to configure SASL mechanism`,

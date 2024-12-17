@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/aws/aws-msk-iam-sasl-signer-go/signer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -35,7 +34,6 @@ import (
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kversion"
-	sasloauth "github.com/twmb/franz-go/pkg/sasl/oauth"
 )
 
 type kafkaSinkClientV2 struct {
@@ -696,21 +694,21 @@ func (p *kgoChangefeedTopicPartitioner) Partition(r *kgo.Record, n int) int {
 // 	}, nil
 // }
 
-// newKgoAWSIAMRoleOauthTokenProvider returns a new token provider that uses the
-// AWS MSK IAM signer to generate a SASL Oauth token. Currently only implicit
-// auth & role assumption is supported.
-func newKgoAWSIAMRoleOauthTokenProvider(
-	dialConfig kafkaDialConfig,
-) (func(ctx context.Context) (sasloauth.Auth, error), error) {
-	return func(ctx context.Context) (sasloauth.Auth, error) {
-		token, _, err := signer.GenerateAuthTokenFromRole(
-			ctx, dialConfig.saslAwsRegion, dialConfig.saslAwsIAMRoleArn, dialConfig.saslAwsIAMSessionName)
-		if err != nil {
-			return sasloauth.Auth{}, err
-		}
-		return sasloauth.Auth{Token: token}, nil
-	}, nil
-}
+// // newKgoAWSIAMRoleOauthTokenProvider returns a new token provider that uses the
+// // AWS MSK IAM signer to generate a SASL Oauth token. Currently only implicit
+// // auth & role assumption is supported.
+// func newKgoAWSIAMRoleOauthTokenProvider(
+// 	dialConfig kafkaDialConfig,
+// ) (func(ctx context.Context) (sasloauth.Auth, error), error) {
+// 	return func(ctx context.Context) (sasloauth.Auth, error) {
+// 		token, _, err := signer.GenerateAuthTokenFromRole(
+// 			ctx, dialConfig.saslAwsRegion, dialConfig.saslAwsIAMRoleArn, dialConfig.saslAwsIAMSessionName)
+// 		if err != nil {
+// 			return sasloauth.Auth{}, err
+// 		}
+// 		return sasloauth.Auth{Token: token}, nil
+// 	}, nil
+// }
 
 type kgoMetricsAdapter struct {
 	throttling metrics.Histogram

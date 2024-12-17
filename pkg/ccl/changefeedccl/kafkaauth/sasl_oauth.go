@@ -12,63 +12,52 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-type SASLOAuthBearer struct {
+type saslOAuthBearer struct {
 	clientID     string
 	clientSecret string
 	tokenURL     string
 	grantType    string
 	scopes       []string
+	handshake    bool
 }
 
 // PickMe implements AuthMechanism.
-func (s *SASLOAuthBearer) PickMe(params queryParams) (AuthMechanism, bool) {
-	if params.get(SASLEnabled) == "true" && params.get(SASLMechanism) == "OAUTHBEARER" {
-		return &SASLOAuthBearer{
+func (s *saslOAuthBearer) PickMe(params queryParams) (AuthMechanism, bool) {
+	if params.get(SASLEnabled) == "true" && params.get(SASLMechanism) == sarama.SASLTypeOAuth {
+		return &saslOAuthBearer{
 			clientID:     params.get(SASLClientID),
 			clientSecret: params.get(SASLClientSecret), // TODO: decode b64
 			tokenURL:     params.get(SASLTokenURL),
 			grantType:    params.get(SASLGrantType),
 			scopes:       params[SASLScopes],
+			handshake:    params.get(SASLHandshake) == "" || params.get(SASLHandshake) == "true",
 		}, true
 	}
 	return nil, false
 }
 
-// RequiredParams implements AuthMechanism.
-func (s *SASLOAuthBearer) RequiredParams() []string {
-	return []string{SASLClientID, SASLClientSecret}
-}
-
-// ForbiddenParams implements AuthMechanism.
-func (s *SASLOAuthBearer) ForbiddenParams() []string {
-	// TODO
-	return []string{}
-}
-
 // ValidateParams implements AuthMechanism.
-func (s *SASLOAuthBearer) ValidateParams(params queryParams) error {
-	var errs []error
-	if params.get(SASLClientID) == "" {
-		errs = append(errs, newRequiredParamError(SASLClientID))
-	}
-	if params.get(SASLClientSecret) == "" {
-		errs = append(errs, newRequiredParamError(SASLClientSecret))
-	}
-	return errors.Join(errs...)
+func (s *saslOAuthBearer) ValidateParams(params queryParams) error {
+	requiredParams := []string{SASLClientID, SASLClientSecret, SASLTokenURL}
+	return validateParams(s.Name(), params, requiredParams, nil)
 }
 
 // ApplySarama implements AuthMechanism.
-func (s *SASLOAuthBearer) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
+func (s *saslOAuthBearer) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 	tp, err := s.newSaramaTokenProvider(ctx)
 	if err != nil {
 		return err
 	}
+	cfg.Net.SASL.Enable = true
+	// TODO: commonize handshake, enable, mechanism(?)
+	cfg.Net.SASL.Handshake = s.handshake
+	cfg.Net.SASL.Mechanism = sarama.SASLTypeOAuth
 	cfg.Net.SASL.TokenProvider = tp
 	return nil
 }
 
 // KgoOpts implements AuthMechanism.
-func (s *SASLOAuthBearer) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
+func (s *saslOAuthBearer) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	tp, err := s.newKgoTokenProvider(ctx)
 	if err != nil {
 		return nil, err
@@ -78,11 +67,11 @@ func (s *SASLOAuthBearer) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 }
 
 // Name implements AuthMechanism.
-func (s *SASLOAuthBearer) Name() AuthMechanismName {
+func (s *saslOAuthBearer) Name() AuthMechanismName {
 	return "SASL_OAUTHBEARER"
 }
 
-func (s *SASLOAuthBearer) newSaramaTokenProvider(ctx context.Context) (sarama.AccessTokenProvider, error) {
+func (s *saslOAuthBearer) newSaramaTokenProvider(ctx context.Context) (sarama.AccessTokenProvider, error) {
 	// grant_type is by default going to be set to 'client_credentials' by the
 	// clientcredentials library as defined by the spec, however non-compliant
 	// auth server implementations may want a custom type
@@ -107,12 +96,12 @@ func (s *SASLOAuthBearer) newSaramaTokenProvider(ctx context.Context) (sarama.Ac
 		Scopes:         s.scopes,
 		EndpointParams: endpointParams,
 	}
-	return &saramaTokenProvider{
+	return &saramaOauthTokenProvider{
 		tokenSource: cfg.TokenSource(ctx),
 	}, nil
 }
 
-func (s *SASLOAuthBearer) newKgoTokenProvider(ctx context.Context) (func(ctx context.Context) (kgosasloauth.Auth, error), error) {
+func (s *saslOAuthBearer) newKgoTokenProvider(ctx context.Context) (func(ctx context.Context) (kgosasloauth.Auth, error), error) {
 	// grant_type is by default going to be set to 'client_credentials' by the
 	// clientcredentials library as defined by the spec, however non-compliant
 	// auth server implementations may want a custom type
@@ -149,17 +138,17 @@ func (s *SASLOAuthBearer) newKgoTokenProvider(ctx context.Context) (func(ctx con
 
 }
 
-var _ AuthMechanism = (*SASLOAuthBearer)(nil)
+var _ AuthMechanism = (*saslOAuthBearer)(nil)
 
-type saramaTokenProvider struct {
+type saramaOauthTokenProvider struct {
 	tokenSource oauth2.TokenSource
 }
 
-var _ sarama.AccessTokenProvider = (*saramaTokenProvider)(nil)
+var _ sarama.AccessTokenProvider = (*saramaOauthTokenProvider)(nil)
 
 // Token implements the sarama.AccessTokenProvider interface.  This is called by
 // Sarama when connecting to the broker.
-func (t *saramaTokenProvider) Token() (*sarama.AccessToken, error) {
+func (t *saramaOauthTokenProvider) Token() (*sarama.AccessToken, error) {
 	token, err := t.tokenSource.Token()
 	if err != nil {
 		// Errors will result in Sarama retrying the broker connection and logging
@@ -171,34 +160,6 @@ func (t *saramaTokenProvider) Token() (*sarama.AccessToken, error) {
 	return &sarama.AccessToken{Token: token.AccessToken}, nil
 }
 
-// type awsIAMRoleSASLTokenProvider struct {
-// 	ctx            context.Context
-// 	awsRegion      string
-// 	iamRoleArn     string
-// 	iamSessionName string
-// }
-
-// func (p *awsIAMRoleSASLTokenProvider) Token() (*sarama.AccessToken, error) {
-// 	token, _, err := signer.GenerateAuthTokenFromRole(
-// 		p.ctx, p.awsRegion, p.iamRoleArn, p.iamSessionName)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return &sarama.AccessToken{Token: token}, nil
-// }
-
-// func newAwsIAMRoleSASLTokenProvider(
-// 	ctx context.Context, awsRegion, iamRoleArn, iamSessionName string,
-// ) (sarama.AccessTokenProvider, error) {
-// 	return &awsIAMRoleSASLTokenProvider{
-// 		ctx:            ctx,
-// 		awsRegion:      awsRegion,
-// 		iamRoleArn:     iamRoleArn,
-// 		iamSessionName: iamSessionName,
-// 	}, nil
-// }
-
 func init() {
-	Registry.Register((&SASLOAuthBearer{}).PickMe)
+	Registry.Register((&saslOAuthBearer{}).PickMe)
 }
