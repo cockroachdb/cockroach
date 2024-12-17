@@ -312,7 +312,6 @@ func (h *Histogram) filter(
 		evalCtx:     h.evalCtx,
 		col:         h.col,
 		selectivity: h.selectivity,
-		buckets:     make([]cat.HistogramBucket, 0, bucketCount),
 	}
 	if bucketCount == 0 {
 		return filtered
@@ -372,13 +371,32 @@ func (h *Histogram) filter(
 	} else if bucIndex == bucketCount {
 		return filtered
 	}
-	iter.setIdx(bucIndex)
+
+	// In the general case, we'll need the same number of buckets as the
+	// existing histogram, minus the buckets that come before the first bucket
+	// that overlaps with the spans. In the special, yet common, case where we
+	// have a single span that overlaps one bucket, we'll need only two buckets.
+	newBucketCount := bucketCount - bucIndex + 1
+	if desc {
+		newBucketCount = bucIndex + 1
+	}
+	if spanCount == 1 && bucIndex < bucketCount-1 {
+		iter.setIdx(bucIndex + 1)
+		bucket := sb.makeSpanFromBucket(ctx, &iter, prefix)
+		if !desc && bucket.StartsAfter(&keyCtx, span) ||
+			desc && !bucket.StartsAfter(&keyCtx, span) {
+			newBucketCount = 2
+		}
+	}
+	filtered.buckets = make([]cat.HistogramBucket, 0, newBucketCount)
+
 	if !desc && bucIndex > 0 {
 		prevUpperBound := h.upperBound(bucIndex - 1)
 		filtered.addEmptyBucket(ctx, prevUpperBound, desc)
 	}
 
 	// For the remaining buckets and spans, use a variation on merge sort.
+	iter.setIdx(bucIndex)
 	for spanIndex < spanCount {
 		if spanIndex > 0 && colOffset < exactPrefix {
 			// If this column is part of the exact prefix, we don't need to look at
