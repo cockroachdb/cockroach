@@ -1976,16 +1976,19 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │           ├── • values
 │           │     size: 1 column, 1 row
 │           │
-│           └── • limit
-│               │ count: 1
+│           └── • index join
+│               │ table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
 │               │
-│               └── • filter
-│                   │ filter: ((a + b) = 2) AND ((pk != 1) OR (crdb_region != 'ap-southeast-2'))
+│               └── • limit
+│                   │ count: 1
 │                   │
-│                   └── • scan
-│                         missing stats
-│                         table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
-│                         spans: FULL SCAN (SOFT LIMIT)
+│                   └── • filter
+│                       │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
+│                       │
+│                       └── • scan
+│                             missing stats
+│                             table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
+│                             spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
 │
 └── • constraint-check
     │
@@ -2155,16 +2158,19 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │           ├── • values
 │           │     size: 1 column, 1 row
 │           │
-│           └── • limit
-│               │ count: 1
+│           └── • index join
+│               │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
 │               │
-│               └── • filter
-│                   │ filter: ((a + b) = 2) AND ((pk != 1) OR (crdb_region != 'ap-southeast-2'))
+│               └── • limit
+│                   │ count: 1
 │                   │
-│                   └── • scan
-│                         missing stats
-│                         table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-│                         spans: FULL SCAN (SOFT LIMIT)
+│                   └── • filter
+│                       │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
+│                       │
+│                       └── • scan
+│                             missing stats
+│                             table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
+│                             spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
 │
 └── • constraint-check
     │
@@ -2179,12 +2185,18 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
                 │ count: 1
                 │
                 └── • filter
-                    │ filter: ((a = 1) AND (b > -1)) AND ((pk != 1) OR (crdb_region != 'ap-southeast-2'))
+                    │ filter: (a = 1) AND (b > -1)
                     │
-                    └── • scan
-                          missing stats
-                          table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-                          spans: FULL SCAN (SOFT LIMIT)
+                    └── • index join
+                        │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+                        │
+                        └── • filter
+                            │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
+                            │
+                            └── • scan
+                                  missing stats
+                                  table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
+                                  spans: FULL SCAN (SOFT LIMIT)
 
 query T retry
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2

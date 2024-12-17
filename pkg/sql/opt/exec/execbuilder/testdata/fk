@@ -135,17 +135,13 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (anti)
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
             │ equality: (y) = (p)
-            │ right cols are key
+            │ equality cols are key
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: parent@parent_pkey
-                  spans: FULL SCAN
+            └── • scan buffer
+                  label: buffer 1
 
 # Try again with implicit locking of the parent row.
 statement ok
@@ -174,18 +170,14 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (anti)
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
             │ equality: (y) = (p)
-            │ right cols are key
+            │ equality cols are key
+            │ locking strength: for share
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: parent@parent_pkey
-                  spans: FULL SCAN
-                  locking strength: for share
+            └── • scan buffer
+                  label: buffer 1
 
 statement ok
 RESET enable_implicit_fk_locking_for_serializable
@@ -620,17 +612,13 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • merge join (anti)
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
             │ equality: (p_new) = (p)
-            │ right cols are key
+            │ equality cols are key
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: parent@parent_pkey
-                  spans: FULL SCAN
+            └── • scan buffer
+                  label: buffer 1
 
 # Try again with implicit locking of the parent row.
 statement ok
@@ -663,18 +651,14 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • merge join (anti)
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
             │ equality: (p_new) = (p)
-            │ right cols are key
+            │ equality cols are key
+            │ locking strength: for share
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: parent@parent_pkey
-                  spans: FULL SCAN
-                  locking strength: for share
+            └── • scan buffer
+                  label: buffer 1
 
 # Try again with durable locking enabled.
 statement ok
@@ -684,18 +668,20 @@ SET enable_durable_locking_for_serializable = true
 query T
 EXPLAIN (OPT) UPDATE child SET p = 4
 ----
-update child
- ├── project
- │    ├── scan child
- │    └── projections
- │         └── 4
- └── f-k-checks
-      └── f-k-checks-item: child(p) -> parent(p)
-           └── anti-join (merge)
-                ├── with-scan &1
-                ├── scan parent
-                │    └── locking: for-share,durability-guaranteed
-                └── filters (true)
+distribute
+ └── update child
+      ├── project
+      │    ├── scan child
+      │    │    └── flags: avoid-full-scan
+      │    └── projections
+      │         └── 4
+      └── f-k-checks
+           └── f-k-checks-item: child(p) -> parent(p)
+                └── anti-join (lookup parent)
+                     ├── lookup columns are key
+                     ├── locking: for-share,durability-guaranteed
+                     ├── with-scan &1
+                     └── filters (true)
 
 statement ok
 RESET enable_durable_locking_for_serializable
@@ -808,53 +794,33 @@ vectorized: true
 │   │
 │   └── • error if rows
 │       │
-│       └── • hash join
+│       └── • lookup join (semi)
+│           │ table: child@child_p_idx
 │           │ equality: (p) = (p)
-│           │ left cols are key
-│           │ right cols are key
 │           │
-│           ├── • except all
-│           │   │
-│           │   ├── • scan buffer
-│           │   │     label: buffer 1
-│           │   │
-│           │   └── • scan buffer
-│           │         label: buffer 1
-│           │
-│           └── • distinct
-│               │ distinct on: p
-│               │ order key: p
+│           └── • except all
 │               │
-│               └── • scan
-│                     missing stats
-│                     table: child@child_p_idx
-│                     spans: FULL SCAN
+│               ├── • scan buffer
+│               │     label: buffer 1
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • hash join
+        └── • lookup join (semi)
+            │ table: child_nullable@child_nullable_p_idx
             │ equality: (p) = (p)
-            │ left cols are key
-            │ right cols are key
             │
-            ├── • except all
-            │   │
-            │   ├── • scan buffer
-            │   │     label: buffer 1
-            │   │
-            │   └── • scan buffer
-            │         label: buffer 1
-            │
-            └── • distinct
-                │ distinct on: p
-                │ order key: p
+            └── • except all
                 │
-                └── • scan
-                      missing stats
-                      table: child_nullable@child_nullable_p_idx
-                      spans: FULL SCAN
+                ├── • scan buffer
+                │     label: buffer 1
+                │
+                └── • scan buffer
+                      label: buffer 1
 
 query T
 EXPLAIN UPDATE parent SET p = p+1 WHERE other = 10
@@ -941,10 +907,9 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join
+        └── • hash join (semi)
             │ equality: (c) = (c)
             │ left cols are key
-            │ right cols are key
             │
             ├── • except all
             │   │
@@ -954,13 +919,10 @@ vectorized: true
             │   └── • scan buffer
             │         label: buffer 1
             │
-            └── • distinct
-                │ distinct on: c
-                │
-                └── • scan
-                      missing stats
-                      table: grandchild@grandchild_pkey
-                      spans: FULL SCAN
+            └── • scan
+                  missing stats
+                  table: grandchild@grandchild_pkey
+                  spans: FULL SCAN
 
 # Even with implicit locking enabled, we should not acquire any shared locks
 # when checking an update of the parent (in this case the child is parent of the
@@ -995,10 +957,9 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join
+        └── • hash join (semi)
             │ equality: (c) = (c)
             │ left cols are key
-            │ right cols are key
             │
             ├── • except all
             │   │
@@ -1008,13 +969,10 @@ vectorized: true
             │   └── • scan buffer
             │         label: buffer 1
             │
-            └── • distinct
-                │ distinct on: c
-                │
-                └── • scan
-                      missing stats
-                      table: grandchild@grandchild_pkey
-                      spans: FULL SCAN
+            └── • scan
+                  missing stats
+                  table: grandchild@grandchild_pkey
+                  spans: FULL SCAN
 
 statement ok
 RESET enable_implicit_fk_locking_for_serializable
@@ -1047,17 +1005,13 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • merge join (anti)
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
             │ equality: (p_new) = (p)
-            │ right cols are key
+            │ equality cols are key
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: parent@parent_pkey
-                  spans: FULL SCAN
+            └── • scan buffer
+                  label: buffer 1
 
 # Try again with implicit locking of the parent row.
 statement ok
@@ -1090,18 +1044,14 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • merge join (anti)
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
             │ equality: (p_new) = (p)
-            │ right cols are key
+            │ equality cols are key
+            │ locking strength: for share
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: parent@parent_pkey
-                  spans: FULL SCAN
-                  locking strength: for share
+            └── • scan buffer
+                  label: buffer 1
 
 statement ok
 RESET enable_implicit_fk_locking_for_serializable
@@ -1131,17 +1081,13 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (anti)
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
             │ equality: (p) = (p)
-            │ right cols are key
+            │ equality cols are key
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: parent@parent_pkey
-                  spans: FULL SCAN
+            └── • scan buffer
+                  label: buffer 1
 
 query T
 EXPLAIN UPDATE child SET p = p+1, c = c+1
@@ -1170,26 +1116,21 @@ vectorized: true
 │   │
 │   └── • error if rows
 │       │
-│       └── • hash join (anti)
+│       └── • lookup join (anti)
+│           │ table: parent@parent_pkey
 │           │ equality: (p_new) = (p)
-│           │ right cols are key
+│           │ equality cols are key
 │           │
-│           ├── • scan buffer
-│           │     label: buffer 1
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: parent@parent_pkey
-│                 spans: FULL SCAN
+│           └── • scan buffer
+│                 label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • hash join
+        └── • hash join (semi)
             │ equality: (c) = (c)
             │ left cols are key
-            │ right cols are key
             │
             ├── • except all
             │   │
@@ -1199,13 +1140,10 @@ vectorized: true
             │   └── • scan buffer
             │         label: buffer 1
             │
-            └── • distinct
-                │ distinct on: c
-                │
-                └── • scan
-                      missing stats
-                      table: grandchild@grandchild_pkey
-                      spans: FULL SCAN
+            └── • scan
+                  missing stats
+                  table: grandchild@grandchild_pkey
+                  spans: FULL SCAN
 
 # Try again with implicit locking of the parent row.
 statement ok
@@ -1238,27 +1176,22 @@ vectorized: true
 │   │
 │   └── • error if rows
 │       │
-│       └── • hash join (anti)
+│       └── • lookup join (anti)
+│           │ table: parent@parent_pkey
 │           │ equality: (p_new) = (p)
-│           │ right cols are key
+│           │ equality cols are key
+│           │ locking strength: for share
 │           │
-│           ├── • scan buffer
-│           │     label: buffer 1
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: parent@parent_pkey
-│                 spans: FULL SCAN
-│                 locking strength: for share
+│           └── • scan buffer
+│                 label: buffer 1
 │
 └── • constraint-check
     │
     └── • error if rows
         │
-        └── • hash join
+        └── • hash join (semi)
             │ equality: (c) = (c)
             │ left cols are key
-            │ right cols are key
             │
             ├── • except all
             │   │
@@ -1268,13 +1201,10 @@ vectorized: true
             │   └── • scan buffer
             │         label: buffer 1
             │
-            └── • distinct
-                │ distinct on: c
-                │
-                └── • scan
-                      missing stats
-                      table: grandchild@grandchild_pkey
-                      spans: FULL SCAN
+            └── • scan
+                  missing stats
+                  table: grandchild@grandchild_pkey
+                  spans: FULL SCAN
 
 statement ok
 RESET enable_implicit_fk_locking_for_serializable
@@ -1310,17 +1240,13 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • merge join (anti)
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
             │ equality: (p_new) = (p)
-            │ right cols are key
+            │ equality cols are key
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: parent@parent_pkey
-                  spans: FULL SCAN
+            └── • scan buffer
+                  label: buffer 1
 
 statement ok
 CREATE TABLE self (x INT PRIMARY KEY, y INT NOT NULL REFERENCES self(x))
@@ -1352,17 +1278,13 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • merge join (anti)
+        └── • lookup join (anti)
+            │ table: self@self_pkey
             │ equality: (y_new) = (x)
-            │ right cols are key
+            │ equality cols are key
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: self@self_pkey
-                  spans: FULL SCAN
+            └── • scan buffer
+                  label: buffer 1
 
 # Try again with implicit locking of the parent row.
 statement ok
@@ -1395,18 +1317,14 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • merge join (anti)
+        └── • lookup join (anti)
+            │ table: self@self_pkey
             │ equality: (y_new) = (x)
-            │ right cols are key
+            │ equality cols are key
+            │ locking strength: for share
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: self@self_pkey
-                  spans: FULL SCAN
-                  locking strength: for share
+            └── • scan buffer
+                  label: buffer 1
 
 statement ok
 RESET enable_implicit_fk_locking_for_serializable
@@ -1438,10 +1356,9 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join
+        └── • hash join (semi)
             │ equality: (x) = (y)
             │ left cols are key
-            │ right cols are key
             │
             ├── • except all
             │   │
@@ -1451,13 +1368,10 @@ vectorized: true
             │   └── • scan buffer
             │         label: buffer 1
             │
-            └── • distinct
-                │ distinct on: y
-                │
-                └── • scan
-                      missing stats
-                      table: self@self_pkey
-                      spans: FULL SCAN
+            └── • scan
+                  missing stats
+                  table: self@self_pkey
+                  spans: FULL SCAN
 
 # Even with implicit locking enabled, we should not acquire any shared locks
 # when checking an update of the parent.
@@ -1491,10 +1405,9 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join
+        └── • hash join (semi)
             │ equality: (x) = (y)
             │ left cols are key
-            │ right cols are key
             │
             ├── • except all
             │   │
@@ -1504,13 +1417,10 @@ vectorized: true
             │   └── • scan buffer
             │         label: buffer 1
             │
-            └── • distinct
-                │ distinct on: y
-                │
-                └── • scan
-                      missing stats
-                      table: self@self_pkey
-                      spans: FULL SCAN
+            └── • scan
+                  missing stats
+                  table: self@self_pkey
+                  spans: FULL SCAN
 
 statement ok
 RESET enable_implicit_fk_locking_for_serializable
@@ -1749,33 +1659,24 @@ vectorized: true
         └── • project
             │ columns: (c)
             │
-            └── • project
+            └── • hash join (semi)
                 │ columns: (c, p)
+                │ estimated row count: 100 (missing stats)
+                │ equality: (p) = (p)
                 │
-                └── • hash join (inner)
-                    │ columns: (c, p, p)
-                    │ estimated row count: 90 (missing stats)
-                    │ equality: (p) = (p)
-                    │ right cols are key
+                ├── • scan
+                │     columns: (c, p)
+                │     estimated row count: 1,000 (missing stats)
+                │     table: cascadechild@cascadechild_pkey
+                │     spans: FULL SCAN
+                │
+                └── • project
+                    │ columns: (p)
                     │
-                    ├── • scan
-                    │     columns: (c, p)
-                    │     estimated row count: 1,000 (missing stats)
-                    │     table: cascadechild@cascadechild_pkey
-                    │     spans: FULL SCAN
-                    │
-                    └── • distinct
-                        │ columns: (p)
-                        │ estimated row count: 10
-                        │ distinct on: p
-                        │
-                        └── • project
-                            │ columns: (p)
-                            │
-                            └── • scan buffer
-                                  columns: (p, data)
-                                  estimated row count: 100
-                                  label: buffer 1000000
+                    └── • scan buffer
+                          columns: (p, data)
+                          estimated row count: 100
+                          label: buffer 1000000
 
 statement ok
 CREATE TABLE a (
@@ -1893,34 +1794,11 @@ EXPLAIN INSERT INTO c VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8
 distribution: local
 vectorized: true
 ·
-• root
-│
-├── • insert
-│   │ into: c(c, p)
-│   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • values
-│             size: 2 columns, 10 rows
-│
-└── • constraint-check
-    │
-    └── • error if rows
-        │
-        └── • hash join (anti)
-            │ estimated row count: 9
-            │ equality: (column2) = (p)
-            │ right cols are key
-            │
-            ├── • scan buffer
-            │     estimated row count: 10
-            │     label: buffer 1
-            │
-            └── • scan
-                  estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-                  table: p@p_pkey
-                  spans: FULL SCAN
+• insert fast path
+  into: c(c, p)
+  auto commit
+  FK check: p@p_pkey
+  size: 2 columns, 10 rows
 
 query T
 EXPLAIN UPDATE c SET p=p+c WHERE c > 0
@@ -1949,23 +1827,19 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (anti)
+        └── • lookup join (anti)
             │ estimated row count: 32
+            │ table: p@p_pkey
             │ equality: (p_new) = (p)
-            │ right cols are key
+            │ equality cols are key
             │
-            ├── • filter
-            │   │ estimated row count: 33
-            │   │ filter: p_new IS NOT NULL
-            │   │
-            │   └── • scan buffer
-            │         estimated row count: 33
-            │         label: buffer 1
-            │
-            └── • scan
-                  estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-                  table: p@p_pkey
-                  spans: FULL SCAN
+            └── • filter
+                │ estimated row count: 33
+                │ filter: p_new IS NOT NULL
+                │
+                └── • scan buffer
+                      estimated row count: 33
+                      label: buffer 1
 
 
 query T
@@ -2138,19 +2012,15 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (anti)
+        └── • lookup join (anti)
             │ estimated row count: 0
+            │ table: small_parent@small_parent_pkey
             │ equality: (?column?) = (p)
-            │ right cols are key
+            │ equality cols are key
             │
-            ├── • scan buffer
-            │     estimated row count: 10
-            │     label: buffer 1
-            │
-            └── • scan
-                  estimated row count: 10 (100% of the table; stats collected <hidden> ago)
-                  table: small_parent@small_parent_pkey
-                  spans: FULL SCAN
+            └── • scan buffer
+                  estimated row count: 10
+                  label: buffer 1
 
 # Test that partial indexes with IS NOT NULL predicates are used for performing
 # FK checks.
