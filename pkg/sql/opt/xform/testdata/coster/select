@@ -134,6 +134,7 @@ select
  ├── columns: n:1!null a:2!null b:3!null c:4
  ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
  ├── scan zigzag
@@ -141,6 +142,7 @@ select
  │    ├── flags: force-zigzag=a_idx,c_idx
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(2,3)=1000, null(2,3)=0.1]
  │    ├── cost: 1e+100
+ │    ├── cost-flags: huge-cost-penalty
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters
@@ -155,6 +157,7 @@ select
  ├── columns: n:1!null a:2!null b:3!null c:4
  ├── stats: [rows=0.9108108, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
  ├── scan zigzag
@@ -162,6 +165,7 @@ select
  │    ├── flags: force-zigzag=a_idx,c_idx
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(2,3)=1000, null(2,3)=0.1]
  │    ├── cost: 1e+100
+ │    ├── cost-flags: huge-cost-penalty
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters

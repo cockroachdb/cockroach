@@ -700,7 +700,7 @@ upsert bc
 query T
 EXPLAIN (OPT, MEMO, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
-memo (optimized, ~34KB, required=[presentation: info:19] [distribution: test])
+memo (optimized, ~35KB, required=[presentation: info:19] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:19] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
