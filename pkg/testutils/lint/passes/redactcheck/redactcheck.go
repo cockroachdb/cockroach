@@ -207,6 +207,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"TriggerActionTime": {},
 						"TriggerEventType":  {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop": {
+						"Phase": {},
+						"Type":  {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph": {
 						"RuleName": {},
 					},
