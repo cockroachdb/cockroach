@@ -8,29 +8,37 @@ import (
 	kgosaslplain "github.com/twmb/franz-go/pkg/sasl/plain"
 )
 
+type saslPlainBuilder struct{}
+
+// matches implements authMechanismBuilder.
+func (s saslPlainBuilder) matches(params queryParams) bool {
+	return params.peek(SASLEnabled) == "true" && params.peek(SASLMechanism) == sarama.SASLTypePlaintext
+}
+
+// validateParams implements AuthMechanism.
+func (s saslPlainBuilder) validateParams(params queryParams) error {
+	requiredParams := []string{SASLUser, SASLPassword}
+	return peekValidateParams(sarama.SASLTypePlaintext, params, requiredParams, nil)
+}
+
+// build implements authMechanismBuilder.
+func (s saslPlainBuilder) build(params queryParams) (AuthMechanism, error) {
+	_ = params.consume(SASLEnabled)
+	_ = params.consume(SASLMechanism)
+	handshake := params.consume(SASLHandshake)
+	return &saslPlain{
+		user:      params.consume(SASLUser),
+		password:  params.consume(SASLPassword),
+		handshake: handshake == "" || handshake == "true",
+	}, nil
+}
+
+var _ authMechanismBuilder = saslPlainBuilder{}
+
 type saslPlain struct {
 	user      string
 	password  string
 	handshake bool
-}
-
-// PickMe implements AuthMechanism.
-func (s *saslPlain) PickMe(params queryParams) (AuthMechanism, bool) {
-	if params.get(SASLEnabled) == "true" && params.get(SASLMechanism) == sarama.SASLTypePlaintext {
-		return &saslPlain{
-			user:      params.get(SASLUser),
-			password:  params.get(SASLPassword),
-			handshake: params.get(SASLHandshake) == "" || params.get(SASLHandshake) == "true",
-		}, true
-	}
-	return nil, false
-}
-
-// ValidateParams implements AuthMechanism.
-func (s *saslPlain) ValidateParams(params queryParams) error {
-	requiredParams := []string{SASLUser, SASLPassword}
-	forbiddenParams := oauthOnlyParams
-	return validateParams(s.Name(), params, requiredParams, forbiddenParams)
 }
 
 // ApplySarama implements AuthMechanism.
@@ -57,13 +65,8 @@ func (s *saslPlain) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	}, nil
 }
 
-// Name implements AuthMechanism.
-func (s *saslPlain) Name() AuthMechanismName {
-	return "SASL_PLAIN"
-}
-
 var _ AuthMechanism = (*saslPlain)(nil)
 
 func init() {
-	Registry.Register((&saslPlain{}).PickMe)
+	Registry.Register(saslPlainBuilder{})
 }

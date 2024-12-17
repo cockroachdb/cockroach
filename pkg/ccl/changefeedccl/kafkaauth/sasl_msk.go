@@ -9,28 +9,37 @@ import (
 	kgosasloauth "github.com/twmb/franz-go/pkg/sasl/oauth"
 )
 
+type saslMSKBuilder struct{}
+
+// matches implements authMechanismBuilder.
+func (s saslMSKBuilder) matches(params queryParams) bool {
+	return params.peek(SASLEnabled) == "true" && params.peek(SASLMechanism) == "AWS_MSK_IAM"
+}
+
+// validateParams implements authMechanismBuilder.
+func (s saslMSKBuilder) validateParams(params queryParams) error {
+	requiredParams := []string{SASLAWSRegion, SASLAWSIAMRoleArn, SASLAWSIAMSessionName}
+	return peekValidateParams(sarama.SASLTypeOAuth, params, requiredParams, nil)
+}
+
+// build implements authMechanismBuilder.
+func (s saslMSKBuilder) build(params queryParams) (AuthMechanism, error) {
+	_ = params.consume(SASLEnabled)
+	_ = params.consume(SASLMechanism)
+	handshake := params.consume(SASLHandshake)
+	return &saslMSK{
+		region:      params.consume(SASLAWSRegion),
+		roleArn:     params.consume(SASLAWSIAMRoleArn),
+		sessionName: params.consume(SASLAWSIAMSessionName),
+		handshake:   handshake == "" || handshake == "true",
+	}, nil
+}
+
+var _ authMechanismBuilder = saslMSKBuilder{}
+
 type saslMSK struct {
 	region, roleArn, sessionName string
 	handshake                    bool
-}
-
-// PickMe implements AuthMechanism.
-func (s *saslMSK) PickMe(params queryParams) (AuthMechanism, bool) {
-	if params.get(SASLEnabled) == "true" && params.get(SASLMechanism) == "AWS_MSK_IAM" {
-		return &saslMSK{
-			region:      params.get(SASLAWSRegion),
-			roleArn:     params.get(SASLAWSIAMRoleArn),
-			sessionName: params.get(SASLAWSIAMSessionName),
-			handshake:   params.get(SASLHandshake) == "" || params.get(SASLHandshake) == "true",
-		}, true
-	}
-	return nil, false
-}
-
-// ValidateParams implements AuthMechanism.
-func (s *saslMSK) ValidateParams(params queryParams) error {
-	requiredParams := []string{SASLAWSRegion, SASLAWSIAMRoleArn, SASLAWSIAMSessionName}
-	return validateParams(s.Name(), params, requiredParams, oauthOnlyParams)
 }
 
 // ApplySarama implements AuthMechanism.
@@ -103,5 +112,5 @@ func (p *saramaAWSIAMTokenProvider) Token() (*sarama.AccessToken, error) {
 var _ sarama.AccessTokenProvider = (*saramaOauthTokenProvider)(nil)
 
 func init() {
-	Registry.Register((&saslMSK{}).PickMe)
+	Registry.Register(saslMSKBuilder{})
 }

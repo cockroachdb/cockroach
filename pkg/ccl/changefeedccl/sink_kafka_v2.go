@@ -482,7 +482,10 @@ func buildKgoConfig(
 	// }
 
 	// Apply auth mechanism.
-	authMechanism, ok := kafkaauth.Registry.Pick(dialConfig.hackOriginalURL)
+	authMechanism, ok, err := kafkaauth.Registry.Pick(dialConfig.hackOriginalURL)
+	if err != nil {
+		return nil, err
+	}
 	// Not having an auth mechanism is valid.
 	if ok {
 		authOpts, err := authMechanism.KgoOpts(ctx)

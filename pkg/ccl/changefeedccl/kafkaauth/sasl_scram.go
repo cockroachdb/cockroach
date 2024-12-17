@@ -10,8 +10,33 @@ import (
 	kgosaslscram "github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
-// SCRAMSHA256, SCRAMSHA512
-// 		config.Net.SASL.SCRAMClientGeneratorFunc = sha512ClientGenerator
+type saslSCRAMBuilder struct{}
+
+// matches implements authMechanismBuilder.
+func (s saslSCRAMBuilder) matches(params queryParams) bool {
+	return params.peek(SASLEnabled) == "true" &&
+		(params.peek(SASLMechanism) == sarama.SASLTypeSCRAMSHA256 || params.peek(SASLMechanism) == sarama.SASLTypeSCRAMSHA512)
+}
+
+// validateParams implements authMechanismBuilder.
+func (s saslSCRAMBuilder) validateParams(params queryParams) error {
+	requiredParams := []string{SASLAWSRegion, SASLAWSIAMRoleArn, SASLAWSIAMSessionName}
+	return peekValidateParams(sarama.SASLTypeOAuth, params, requiredParams, nil)
+}
+
+// build implements authMechanismBuilder.
+func (s saslSCRAMBuilder) build(params queryParams) (AuthMechanism, error) {
+	_ = params.consume(SASLEnabled)
+	_ = params.consume(SASLMechanism)
+	handshake := params.consume(SASLHandshake)
+	return &saslSCRAMSHA{
+		user:      params.consume(SASLUser),
+		password:  params.consume(SASLPassword),
+		handshake: handshake == "" || handshake == "true",
+	}, nil
+}
+
+var _ authMechanismBuilder = saslSCRAMBuilder{}
 
 type shaDepth int
 
@@ -27,26 +52,6 @@ type saslSCRAMSHA struct {
 	handshake bool
 }
 
-// PickMe implements AuthMechanism.
-func (s *saslSCRAMSHA) PickMe(params queryParams) (AuthMechanism, bool) {
-	if params.get(SASLEnabled) == "true" &&
-		(params.get(SASLMechanism) == sarama.SASLTypeSCRAMSHA256 || params.get(SASLMechanism) == sarama.SASLTypeSCRAMSHA512) {
-		return &saslSCRAMSHA{
-			user:      params.get(SASLUser),
-			password:  params.get(SASLPassword),
-			handshake: params.get(SASLHandshake) == "" || params.get(SASLHandshake) == "true",
-		}, true
-	}
-	return nil, false
-}
-
-// ValidateParams implements AuthMechanism.
-func (s *saslSCRAMSHA) ValidateParams(params queryParams) error {
-	requiredParams := []string{SASLUser, SASLPassword}
-	forbiddenParams := oauthOnlyParams
-	return validateParams(s.Name(), params, requiredParams, forbiddenParams)
-}
-
 // ApplySarama implements AuthMechanism.
 func (s *saslSCRAMSHA) ApplySarama(ctx context.Context, cfg *sarama.Config) error {
 	cfg.Net.SASL.Enable = true
@@ -56,10 +61,12 @@ func (s *saslSCRAMSHA) ApplySarama(ctx context.Context, cfg *sarama.Config) erro
 	switch s.depth {
 	case sha256:
 		cfg.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+		cfg.Net.SASL.SCRAMClientGeneratorFunc = nil // TODO: sha256ClientGenerator
 	case sha512:
 		cfg.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
+		cfg.Net.SASL.SCRAMClientGeneratorFunc = nil // TODO: sha512ClientGenerator
 	default:
-		return errors.AssertionFailedf("unknown SCRAM depth %d", s.depth)
+		return errors.AssertionFailedf("unknown SCRAM SHA depth %d", s.depth)
 	}
 	return nil
 }
@@ -73,7 +80,7 @@ func (s *saslSCRAMSHA) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	case sha512:
 		fn = kgosaslscram.Sha512
 	default:
-		return nil, errors.AssertionFailedf("unknown SCRAM depth %d", s.depth)
+		return nil, errors.AssertionFailedf("unknown SCRAM SHA depth %d", s.depth)
 	}
 
 	mech := fn(func(ctc context.Context) (kgosaslscram.Auth, error) {
@@ -103,5 +110,5 @@ func (s *saslSCRAMSHA) Name() AuthMechanismName {
 var _ AuthMechanism = (*saslSCRAMSHA)(nil)
 
 func init() {
-	Registry.Register((&saslSCRAMSHA{}).PickMe)
+	Registry.Register(saslSCRAMBuilder{})
 }

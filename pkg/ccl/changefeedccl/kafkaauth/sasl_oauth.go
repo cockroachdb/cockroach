@@ -12,6 +12,36 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
+type saslOAuthBearerBuilder struct{}
+
+// matches implements authMechanismBuilder.
+func (s saslOAuthBearerBuilder) matches(params queryParams) bool {
+	return params.peek(SASLEnabled) == "true" && params.peek(SASLMechanism) == sarama.SASLTypeOAuth
+}
+
+// validateParams implements authMechanismBuilder.
+func (s saslOAuthBearerBuilder) validateParams(params queryParams) error {
+	requiredParams := []string{SASLClientID, SASLClientSecret, SASLTokenURL}
+	return peekValidateParams(sarama.SASLTypeOAuth, params, requiredParams, nil)
+}
+
+// build implements authMechanismBuilder.
+func (s saslOAuthBearerBuilder) build(params queryParams) (AuthMechanism, error) {
+	_ = params.consume(SASLEnabled)
+	_ = params.consume(SASLMechanism)
+	handshake := params.consume(SASLHandshake)
+	return &saslOAuthBearer{
+		clientID:     params.consume(SASLClientID),
+		clientSecret: params.consume(SASLClientSecret), // TODO: decode b64
+		tokenURL:     params.consume(SASLTokenURL),
+		grantType:    params.consume(SASLGrantType),
+		scopes:       params.consumeAll(SASLScopes),
+		handshake:    handshake == "" || handshake == "true",
+	}, nil
+}
+
+var _ authMechanismBuilder = saslOAuthBearerBuilder{}
+
 type saslOAuthBearer struct {
 	clientID     string
 	clientSecret string
@@ -19,27 +49,6 @@ type saslOAuthBearer struct {
 	grantType    string
 	scopes       []string
 	handshake    bool
-}
-
-// PickMe implements AuthMechanism.
-func (s *saslOAuthBearer) PickMe(params queryParams) (AuthMechanism, bool) {
-	if params.get(SASLEnabled) == "true" && params.get(SASLMechanism) == sarama.SASLTypeOAuth {
-		return &saslOAuthBearer{
-			clientID:     params.get(SASLClientID),
-			clientSecret: params.get(SASLClientSecret), // TODO: decode b64
-			tokenURL:     params.get(SASLTokenURL),
-			grantType:    params.get(SASLGrantType),
-			scopes:       params[SASLScopes],
-			handshake:    params.get(SASLHandshake) == "" || params.get(SASLHandshake) == "true",
-		}, true
-	}
-	return nil, false
-}
-
-// ValidateParams implements AuthMechanism.
-func (s *saslOAuthBearer) ValidateParams(params queryParams) error {
-	requiredParams := []string{SASLClientID, SASLClientSecret, SASLTokenURL}
-	return validateParams(s.Name(), params, requiredParams, nil)
 }
 
 // ApplySarama implements AuthMechanism.
@@ -64,11 +73,6 @@ func (s *saslOAuthBearer) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	}
 
 	return []kgo.Opt{kgo.SASL(kgosasloauth.Oauth(tp))}, nil
-}
-
-// Name implements AuthMechanism.
-func (s *saslOAuthBearer) Name() AuthMechanismName {
-	return "SASL_OAUTHBEARER"
 }
 
 func (s *saslOAuthBearer) newSaramaTokenProvider(ctx context.Context) (sarama.AccessTokenProvider, error) {
@@ -161,5 +165,5 @@ func (t *saramaOauthTokenProvider) Token() (*sarama.AccessToken, error) {
 }
 
 func init() {
-	Registry.Register((&saslOAuthBearer{}).PickMe)
+	Registry.Register(saslOAuthBearerBuilder{})
 }

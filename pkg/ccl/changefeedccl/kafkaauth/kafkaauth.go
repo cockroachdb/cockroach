@@ -11,57 +11,76 @@ import (
 
 type AuthMechanismName string
 
-type PickMeFunc func(params queryParams) (AuthMechanism, bool)
+// TODO: can i not duplicate this here and in the iface?
+type matchesFunc func(params queryParams) bool
+
+type authMechanismBuilder interface {
+	// TODO: switch to just registering and switching on mechanism name, since this is sasl only now
+	matches(params queryParams) bool
+	validateParams(params queryParams) error
+	build(params queryParams) (AuthMechanism, error)
+}
 
 type AuthMechanism interface {
-	// TODO: better name
-	// TODO: if we're just doing sasl stuff here maybe we can switch on the sasl mechanism name itself, would be simpler
-	// the scram one can be separated into 2 structs with a shared common one internally
-	// what about azure event hub tho? for that reason let's leave it as is for now.
-	PickMe(params queryParams) (AuthMechanism, bool)
-	// TODO: what's this for
-	Name() AuthMechanismName
-	ValidateParams(params queryParams) error
 	ApplySarama(ctx context.Context, cfg *sarama.Config) error
 	KgoOpts(ctx context.Context) ([]kgo.Opt, error)
 }
 
-// peter's suggestion: refactor auth to be plugin/registry based.
-
-// TODO: one per file
-// regular sasl mechanisms
-// aws
-// ""custom""
-// azure event hub
-// confluent
-// others?
-
-type AuthMechanismRegistry []PickMeFunc
+type AuthMechanismRegistry []authMechanismBuilder
 
 var Registry *AuthMechanismRegistry
 
-func (r *AuthMechanismRegistry) Register(f PickMeFunc) {
-	*r = append(*r, f)
+func (r *AuthMechanismRegistry) Register(b authMechanismBuilder) {
+	*r = append(*r, b)
 }
 
-func (r AuthMechanismRegistry) Pick(url *url.URL) (AuthMechanism, bool) {
-	for _, f := range r {
-		if m, ok := f(queryParams(url.Query())); ok {
-			return m, true
+func (r AuthMechanismRegistry) Pick(u *url.URL) (AuthMechanism, bool, error) {
+	params := queryParams(u.Query())
+	for _, b := range r {
+		if b.matches(params) {
+			if err := b.validateParams(params); err != nil {
+				return nil, false, err
+			}
+			mech, err := b.build(params)
+			if err != nil {
+				return nil, false, err
+			}
+			return mech, true, nil
 		}
 	}
-	return nil, false
+
+	// update the url with the consumed params
+	u.RawQuery = url.Values(params).Encode()
+	return nil, false, nil
 }
 
+// TODO: this is mostly a duplication of the changefeedccl.sinkURL stuff. can we share this? move it out into changefeedbase or smth?
 type queryParams map[string][]string
 
-// get(key) returns m[key][0] if it exists, else "".
-func (qp queryParams) get(key string) (val string) {
+func (qp queryParams) peek(key string) (val string) {
 	vals, ok := qp[key]
 	if !ok || len(vals) == 0 {
 		return ""
 	}
 	return vals[0]
+}
+
+func (qp queryParams) consume(key string) string {
+	vals, ok := qp[key]
+	if !ok || len(vals) == 0 {
+		return ""
+	}
+	delete(qp, key)
+	return vals[0]
+}
+
+func (qp queryParams) consumeAll(key string) []string {
+	vals, ok := qp[key]
+	if !ok {
+		return nil
+	}
+	delete(qp, key)
+	return vals
 }
 
 func newRequiredParamError(mechName AuthMechanismName, param string) error {
@@ -73,15 +92,15 @@ func newForbiddenParamError(mechName AuthMechanismName, param string) error {
 }
 
 // TODO: embedded common struct? or nah
-func validateParams(mechName AuthMechanismName, params queryParams, requiredParams, forbiddenParams []string) error {
+func peekValidateParams(mechName AuthMechanismName, params queryParams, requiredParams, forbiddenParams []string) error {
 	var errs []error
 	for _, param := range requiredParams {
-		if params.get(param) == "" {
+		if params.peek(param) == "" {
 			errs = append(errs, newRequiredParamError(mechName, param))
 		}
 	}
 	for _, param := range forbiddenParams {
-		if params.get(param) != "" {
+		if params.peek(param) != "" {
 			errs = append(errs, newForbiddenParamError(mechName, param))
 		}
 	}

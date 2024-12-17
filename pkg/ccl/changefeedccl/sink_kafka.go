@@ -1245,7 +1245,10 @@ func buildKafkaConfig(
 	// }
 
 	// Apply auth mechanism.
-	authMechanism, ok := kafkaauth.Registry.Pick(dialConfig.hackOriginalURL)
+	authMechanism, ok, err := kafkaauth.Registry.Pick(dialConfig.hackOriginalURL)
+	if err != nil {
+		return nil, err
+	}
 	// Not having an auth mechanism is valid.
 	if ok {
 		if err := authMechanism.ApplySarama(ctx, config); err != nil {
