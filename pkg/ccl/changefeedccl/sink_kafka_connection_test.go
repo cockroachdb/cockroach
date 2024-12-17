@@ -217,7 +217,7 @@ func TestChangefeedExternalConnections(t *testing.T) {
 		{
 			name:          "sasl_enabled must be enabled to configure SASL mechanism",
 			uri:           "kafka://nope/?sasl_mechanism=SCRAM-SHA-256",
-			expectedError: "sasl_enabled must be enabled to configure SASL mechanism",
+			expectedError: "sasl_enabled must be enabled if sasl_mechanism is provided",
 		},
 		{
 			name:          "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, PLAIN or AWS_MSK_IAM",

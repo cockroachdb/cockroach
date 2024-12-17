@@ -49,7 +49,7 @@ func (r saslMechanismRegistry) Pick(u *changefeedbase.SinkURL) (saslMechanism, b
 	}
 	b, ok := r[mechanism]
 	if !ok {
-		return nil, false, nil
+		return nil, false, errors.Newf("param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, PLAIN or AWS_MSK_IAM")
 	}
 	if err := b.validateParams(u); err != nil {
 		return nil, false, err
