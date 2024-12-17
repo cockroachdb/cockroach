@@ -449,6 +449,18 @@ func TestKafkaSinkClientV2_CompressionOpts(t *testing.T) {
 			expected: kgo.GzipCompression().WithLevel(9),
 		},
 		{
+			name:     "gzip level -1",
+			codec:    "GZIP",
+			level:    "-1",
+			expected: kgo.GzipCompression().WithLevel(-1),
+		},
+		{
+			name:     "gzip level -2",
+			codec:    "GZIP",
+			level:    "-2",
+			expected: kgo.GzipCompression().WithLevel(-2),
+		},
+		{
 			name:     "snappy no level",
 			codec:    "SNAPPY",
 			expected: kgo.SnappyCompression(),
@@ -479,6 +491,12 @@ func TestKafkaSinkClientV2_CompressionOpts(t *testing.T) {
 			name:      "invalid gzip level",
 			codec:     "GZIP",
 			level:     "100",
+			shouldErr: true,
+		},
+		{
+			name:      "invalid gzip level '-3'",
+			codec:     "GZIP",
+			level:     "-3",
 			shouldErr: true,
 		},
 		{
