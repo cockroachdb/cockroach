@@ -111,6 +111,11 @@ func (hi *hypotheticalIndex) IsInverted() bool {
 	return hi.inverted
 }
 
+// IsVector is part of the cat.Index interface.
+func (hi *hypotheticalIndex) IsVector() bool {
+	return false
+}
+
 // GetInvisibility is part of the cat.Index interface.
 func (hi *hypotheticalIndex) GetInvisibility() float64 {
 	// A hypotheticalIndex should not be invisible because there is no motivation
@@ -172,6 +177,11 @@ func (hi *hypotheticalIndex) InvertedColumn() cat.IndexColumn {
 		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted columns"))
 	}
 	return hi.cols[len(hi.cols)-1]
+}
+
+// VectorColumn is part of the cat.Index interface.
+func (hi *hypotheticalIndex) VectorColumn() cat.IndexColumn {
+	panic(errors.AssertionFailedf("hypothetical indexes do not have vector columns"))
 }
 
 // Predicate is part of the cat.Index interface.

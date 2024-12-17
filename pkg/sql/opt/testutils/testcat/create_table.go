@@ -879,14 +879,12 @@ func (tt *Table) addIndexWithVersion(
 	if def.Sharded != nil {
 		panic("hash-sharded indexes are not supported by the test catalog")
 	}
-	if def.Vector {
-		panic("VECTOR indexes are not yet supported by the test catalog")
-	}
 
 	idx := &Index{
 		IdxName:      tt.makeIndexName(def.Name, def.Columns, typ),
 		Unique:       typ != nonUniqueIndex,
 		Inverted:     def.Inverted,
+		Vector:       def.Vector,
 		IdxZone:      cat.EmptyZone(),
 		table:        tt,
 		version:      version,
@@ -913,8 +911,12 @@ func (tt *Table) addIndexWithVersion(
 	notNullIndex := true
 	for i, colDef := range def.Columns {
 		isLastIndexCol := i == len(def.Columns)-1
-		if def.Inverted && isLastIndexCol {
-			idx.invertedOrd = i
+		if isLastIndexCol {
+			if def.Inverted {
+				idx.invertedOrd = i
+			} else if def.Vector {
+				idx.vectorOrd = i
+			}
 		}
 		col := idx.addColumn(tt, colDef, keyCol, isLastIndexCol)
 
@@ -1069,6 +1071,8 @@ func (tt *Table) addIndexWithVersion(
 	for _, name := range def.Storing {
 		if def.Inverted {
 			panic("inverted indexes don't support stored columns")
+		} else if def.Vector {
+			panic("vector indexes don't support stored columns")
 		}
 		// Only add storing columns that weren't added as part of adding implicit
 		// key columns.
@@ -1311,6 +1315,15 @@ func (ti *Index) addColumnByOrdinal(
 					"column %s of type %s is not allowed as the last column of an inverted index",
 					col.ColName(), srcColType,
 				))
+			}
+		} else if typ.Family() == types.PGVectorFamily {
+			if !ti.Vector {
+				panic(fmt.Errorf(
+					"column %s of type %s is not allowed in a non-vector index", col.ColName(), typ,
+				))
+			}
+			if typ.Width() == 0 {
+				panic(fmt.Errorf("variable-width vector columns are not allowed in a vector index"))
 			}
 		} else if !colinfo.ColumnTypeIsIndexable(typ) {
 			panic(fmt.Errorf("column %s of type %s is not indexable", col.ColName(), typ))
