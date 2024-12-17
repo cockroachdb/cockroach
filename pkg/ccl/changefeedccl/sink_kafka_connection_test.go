@@ -235,7 +235,7 @@ func TestChangefeedExternalConnections(t *testing.T) {
 		},
 		{
 			name:          "sasl_aws_region must be provided when AWS IAM role authentication is enabled",
-			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_iam_session_name=foo&sasl_aws_iam_session_name=foo",
+			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=AWS_MSK_IAM&sasl_aws_iam_session_name=foo&sasl_aws_iam_role_arn=foo",
 			expectedError: "sasl_aws_region must be provided when SASL is enabled using mechanism AWS_MSK_IAM",
 		},
 		// confluent-cloud scheme tests

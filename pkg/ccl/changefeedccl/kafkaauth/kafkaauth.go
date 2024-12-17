@@ -2,18 +2,18 @@ package kafkaauth
 
 import (
 	"context"
-	"net/url"
 	"runtime"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/errors"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 type saslMechanismBuilder interface {
 	name() string
-	validateParams(params queryParams) error
-	build(params queryParams) (saslMechanism, error)
+	validateParams(u *changefeedbase.SinkURL) error
+	build(u *changefeedbase.SinkURL) (saslMechanism, error)
 }
 
 type saslMechanism interface {
@@ -29,62 +29,38 @@ func (r saslMechanismRegistry) Register(b saslMechanismBuilder) {
 	r[b.name()] = b
 }
 
-func (r saslMechanismRegistry) Pick(u *url.URL) (saslMechanism, bool, error) {
+func (r saslMechanismRegistry) Pick(u *changefeedbase.SinkURL) (saslMechanism, bool, error) {
 	if u == nil {
 		runtime.Breakpoint()
 		panic("why is there a nil url?")
 	}
-	params := queryParams(u.Query())
-	if queryParams.consume(params, SASLEnabled) != "true" {
+
+	var enabled bool
+	if _, err := u.ConsumeBool(SASLEnabled, &enabled); err != nil {
+		return nil, false, err
+	}
+	if !enabled {
 		return nil, false, nil
 	}
-	b, ok := r[params.consume(SASLMechanism)]
+
+	b, ok := r[u.ConsumeParam(SASLMechanism)]
 	if !ok {
 		return nil, false, nil
 	}
-	if err := b.validateParams(params); err != nil {
+	if err := b.validateParams(u); err != nil {
 		return nil, false, err
 	}
-	mech, err := b.build(params)
+	mech, err := b.build(u)
 	if err != nil {
 		return nil, false, err
 	}
-	// update the url with the consumed params
-	u.RawQuery = url.Values(params).Encode()
 	return mech, true, nil
 }
 
-// TODO: this is mostly a duplication of the changefeedccl.sinkURL stuff. can we share this? move it out into changefeedbase or smth?
-type queryParams map[string][]string
-
-func (qp queryParams) peek(key string) (val string) {
-	vals, ok := qp[key]
-	if !ok || len(vals) == 0 {
-		return ""
-	}
-	return vals[0]
-}
-
-func (qp queryParams) consume(key string) string {
-	vals, ok := qp[key]
-	if !ok || len(vals) == 0 {
-		return ""
-	}
-	delete(qp, key)
-	return vals[0]
-}
-
-func (qp queryParams) consumeAll(key string) []string {
-	vals, ok := qp[key]
-	if !ok {
-		return nil
-	}
-	delete(qp, key)
-	return vals
-}
+/// helpers
 
 func newRequiredParamError(mechName string, param string) error {
-	return errors.Newf("required parameter %s not provided for %s", param, mechName)
+	return errors.Newf("%s must be provided when SASL is enabled using mechanism %s", param, mechName)
 }
 
 func newForbiddenParamError(mechName string, param string) error {
@@ -92,17 +68,29 @@ func newForbiddenParamError(mechName string, param string) error {
 }
 
 // TODO: embedded common struct? or nah
-func peekValidateParams(mechName string, params queryParams, requiredParams, forbiddenParams []string) error {
+func peekValidateParams(mechName string, u *changefeedbase.SinkURL, requiredParams, forbiddenParams []string) error {
 	var errs []error
 	for _, param := range requiredParams {
-		if params.peek(param) == "" {
+		if u.PeekParam(param) == "" {
 			errs = append(errs, newRequiredParamError(mechName, param))
 		}
 	}
 	for _, param := range forbiddenParams {
-		if params.peek(param) != "" {
+		if u.PeekParam(param) != "" {
 			errs = append(errs, newForbiddenParamError(mechName, param))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func consumeHandshake(u *changefeedbase.SinkURL) (bool, error) {
+	var handshake bool
+	set, err := u.ConsumeBool(SASLHandshake, &handshake)
+	if err != nil {
+		return false, err
+	}
+	if !set {
+		handshake = true
+	}
+	return handshake, nil
 }

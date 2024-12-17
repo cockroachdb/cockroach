@@ -13,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kafkaauth",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
         "@com_github_aws_aws_msk_iam_sasl_signer_go//signer",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_ibm_sarama//:sarama",

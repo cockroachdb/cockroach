@@ -5,6 +5,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/aws/aws-msk-iam-sasl-signer-go/signer"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/twmb/franz-go/pkg/kgo"
 	kgosasloauth "github.com/twmb/franz-go/pkg/sasl/oauth"
 )
@@ -17,21 +18,22 @@ func (s saslMSKBuilder) name() string {
 }
 
 // validateParams implements authMechanismBuilder.
-func (s saslMSKBuilder) validateParams(params queryParams) error {
+func (s saslMSKBuilder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{SASLAWSRegion, SASLAWSIAMRoleArn, SASLAWSIAMSessionName}
-	return peekValidateParams(sarama.SASLTypeOAuth, params, requiredParams, nil)
+	return peekValidateParams(s.name(), u, requiredParams, nil)
 }
 
 // build implements authMechanismBuilder.
-func (s saslMSKBuilder) build(params queryParams) (saslMechanism, error) {
-	_ = params.consume(SASLEnabled)
-	_ = params.consume(SASLMechanism)
-	handshake := params.consume(SASLHandshake)
+func (s saslMSKBuilder) build(u *changefeedbase.SinkURL) (saslMechanism, error) {
+	handshake, err := consumeHandshake(u)
+	if err != nil {
+		return nil, err
+	}
 	return &saslMSK{
-		region:      params.consume(SASLAWSRegion),
-		roleArn:     params.consume(SASLAWSIAMRoleArn),
-		sessionName: params.consume(SASLAWSIAMSessionName),
-		handshake:   handshake == "" || handshake == "true",
+		region:      u.ConsumeParam(SASLAWSRegion),
+		roleArn:     u.ConsumeParam(SASLAWSIAMRoleArn),
+		sessionName: u.ConsumeParam(SASLAWSIAMSessionName),
+		handshake:   handshake,
 	}, nil
 }
 

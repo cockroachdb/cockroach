@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/errors"
 	"github.com/twmb/franz-go/pkg/kgo"
 	kgosasloauth "github.com/twmb/franz-go/pkg/sasl/oauth"
@@ -20,23 +21,28 @@ func (s saslOAuthBearerBuilder) name() string {
 }
 
 // validateParams implements authMechanismBuilder.
-func (s saslOAuthBearerBuilder) validateParams(params queryParams) error {
+func (s saslOAuthBearerBuilder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{SASLClientID, SASLClientSecret, SASLTokenURL}
-	return peekValidateParams(sarama.SASLTypeOAuth, params, requiredParams, nil)
+	return peekValidateParams(sarama.SASLTypeOAuth, u, requiredParams, nil)
 }
 
 // build implements authMechanismBuilder.
-func (s saslOAuthBearerBuilder) build(params queryParams) (saslMechanism, error) {
-	_ = params.consume(SASLEnabled)
-	_ = params.consume(SASLMechanism)
-	handshake := params.consume(SASLHandshake)
+func (s saslOAuthBearerBuilder) build(u *changefeedbase.SinkURL) (saslMechanism, error) {
+	handshake, err := consumeHandshake(u)
+	if err != nil {
+		return nil, err
+	}
+	var clientSecret []byte
+	if err := u.DecodeBase64(SASLClientSecret, &clientSecret); err != nil {
+		return nil, errors.Wrap(err, "decoding client secret")
+	}
 	return &saslOAuthBearer{
-		clientID:     params.consume(SASLClientID),
-		clientSecret: params.consume(SASLClientSecret), // TODO: decode b64
-		tokenURL:     params.consume(SASLTokenURL),
-		grantType:    params.consume(SASLGrantType),
-		scopes:       params.consumeAll(SASLScopes),
-		handshake:    handshake == "" || handshake == "true",
+		clientID:     u.ConsumeParam(SASLClientID),
+		clientSecret: clientSecret,
+		tokenURL:     u.ConsumeParam(SASLTokenURL),
+		grantType:    u.ConsumeParam(SASLGrantType),
+		scopes:       u.ConsumeParams(SASLScopes),
+		handshake:    handshake,
 	}, nil
 }
 
@@ -44,7 +50,7 @@ var _ saslMechanismBuilder = saslOAuthBearerBuilder{}
 
 type saslOAuthBearer struct {
 	clientID     string
-	clientSecret string
+	clientSecret []byte
 	tokenURL     string
 	grantType    string
 	scopes       []string
@@ -95,7 +101,7 @@ func (s *saslOAuthBearer) newSaramaTokenProvider(ctx context.Context) (sarama.Ac
 	// reached, and then once expired re-requesting a new token from the endpoint.
 	cfg := clientcredentials.Config{
 		ClientID:       s.clientID,
-		ClientSecret:   s.clientSecret,
+		ClientSecret:   string(s.clientSecret),
 		TokenURL:       tokenURL.String(),
 		Scopes:         s.scopes,
 		EndpointParams: endpointParams,
@@ -125,7 +131,7 @@ func (s *saslOAuthBearer) newKgoTokenProvider(ctx context.Context) (func(ctx con
 	// reached, and then once expired re-requesting a new token from the endpoint.
 	cfg := clientcredentials.Config{
 		ClientID:       s.clientID,
-		ClientSecret:   s.clientSecret,
+		ClientSecret:   string(s.clientSecret),
 		TokenURL:       tokenURL.String(),
 		Scopes:         s.scopes,
 		EndpointParams: endpointParams,

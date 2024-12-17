@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/twmb/franz-go/pkg/kgo"
 	kgosaslplain "github.com/twmb/franz-go/pkg/sasl/plain"
 )
@@ -16,20 +17,21 @@ func (s saslPlainBuilder) name() string {
 }
 
 // validateParams implements AuthMechanism.
-func (s saslPlainBuilder) validateParams(params queryParams) error {
+func (s saslPlainBuilder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{SASLUser, SASLPassword}
-	return peekValidateParams(sarama.SASLTypePlaintext, params, requiredParams, nil)
+	return peekValidateParams(sarama.SASLTypePlaintext, u, requiredParams, nil)
 }
 
 // build implements authMechanismBuilder.
-func (s saslPlainBuilder) build(params queryParams) (saslMechanism, error) {
-	_ = params.consume(SASLEnabled)
-	_ = params.consume(SASLMechanism)
-	handshake := params.consume(SASLHandshake)
+func (s saslPlainBuilder) build(u *changefeedbase.SinkURL) (saslMechanism, error) {
+	handshake, err := consumeHandshake(u)
+	if err != nil {
+		return nil, err
+	}
 	return &saslPlain{
-		user:      params.consume(SASLUser),
-		password:  params.consume(SASLPassword),
-		handshake: handshake == "" || handshake == "true",
+		user:      u.ConsumeParam(SASLUser),
+		password:  u.ConsumeParam(SASLPassword),
+		handshake: handshake,
 	}, nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/IBM/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/errors"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl"
@@ -18,20 +19,21 @@ func (s saslSCRAMSHA256Builder) name() string {
 }
 
 // validateParams implements authMechanismBuilder.
-func (s saslSCRAMSHA256Builder) validateParams(params queryParams) error {
+func (s saslSCRAMSHA256Builder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{SASLUser, SASLPassword}
-	return peekValidateParams(s.name(), params, requiredParams, nil)
+	return peekValidateParams(s.name(), u, requiredParams, nil)
 }
 
 // build implements authMechanismBuilder.
-func (s saslSCRAMSHA256Builder) build(params queryParams) (saslMechanism, error) {
-	_ = params.consume(SASLEnabled)
-	_ = params.consume(SASLMechanism)
-	handshake := params.consume(SASLHandshake)
+func (s saslSCRAMSHA256Builder) build(u *changefeedbase.SinkURL) (saslMechanism, error) {
+	handshake, err := consumeHandshake(u)
+	if err != nil {
+		return nil, err
+	}
 	return &saslSCRAMSHA{
-		user:      params.consume(SASLUser),
-		password:  params.consume(SASLPassword),
-		handshake: handshake == "" || handshake == "true",
+		user:      u.ConsumeParam(SASLUser),
+		password:  u.ConsumeParam(SASLPassword),
+		handshake: handshake,
 		depth:     sha256,
 	}, nil
 }
@@ -46,20 +48,21 @@ func (s saslSCRAMSHA512Builder) name() string {
 }
 
 // validateParams implements authMechanismBuilder.
-func (s saslSCRAMSHA512Builder) validateParams(params queryParams) error {
+func (s saslSCRAMSHA512Builder) validateParams(u *changefeedbase.SinkURL) error {
 	requiredParams := []string{SASLUser, SASLPassword}
-	return peekValidateParams(s.name(), params, requiredParams, nil)
+	return peekValidateParams(s.name(), u, requiredParams, nil)
 }
 
 // build implements authMechanismBuilder.
-func (s saslSCRAMSHA512Builder) build(params queryParams) (saslMechanism, error) {
-	_ = params.consume(SASLEnabled)
-	_ = params.consume(SASLMechanism)
-	handshake := params.consume(SASLHandshake)
+func (s saslSCRAMSHA512Builder) build(u *changefeedbase.SinkURL) (saslMechanism, error) {
+	handshake, err := consumeHandshake(u)
+	if err != nil {
+		return nil, err
+	}
 	return &saslSCRAMSHA{
-		user:      params.consume(SASLUser),
-		password:  params.consume(SASLPassword),
-		handshake: handshake == "" || handshake == "true",
+		user:      u.ConsumeParam(SASLUser),
+		password:  u.ConsumeParam(SASLPassword),
+		handshake: handshake,
 		depth:     sha512,
 	}, nil
 }
