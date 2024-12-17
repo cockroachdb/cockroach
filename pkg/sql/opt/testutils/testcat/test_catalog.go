@@ -1183,12 +1183,15 @@ func (ti *Index) LaxKeyColumnCount() int {
 	return ti.LaxKeyCount
 }
 
-// NonInvertedPrefixColumnCount is part of the cat.Index interface.
-func (ti *Index) NonInvertedPrefixColumnCount() int {
-	if !ti.IsInverted() {
-		panic("not supported for non-inverted indexes")
+// PrefixColumnCount is part of the cat.Index interface.
+func (ti *Index) PrefixColumnCount() int {
+	if ti.IsInverted() {
+		return ti.invertedOrd
 	}
-	return ti.invertedOrd
+	if ti.IsVector() {
+		return ti.vectorOrd
+	}
+	panic("only supported for inverted and vector indexes")
 }
 
 // Column is part of the cat.Index interface.
