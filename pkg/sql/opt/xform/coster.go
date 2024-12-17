@@ -190,7 +190,7 @@ var (
 	// that "violate" a hint like forcing a specific index or join algorithm.
 	// If the final expression has this cost or larger, it means that there was no
 	// plan that could satisfy the hints.
-	hugeCost = memo.Cost{C: 1e100}
+	hugeCost = memo.Cost{C: 1e100, Flags: memo.CostFlags{HugeCostPenalty: true}}
 
 	// SmallDistributeCost is the per-operation cost overhead for scans which may
 	// access remote regions, but the scanned table is unpartitioned with no lease
@@ -216,7 +216,10 @@ var (
 	// TODO(msirek): Is there a better way of preferring plans that have a home
 	//               region instead of relying on costing, which may not guarantee
 	//               the correct plan is found?
-	LargeDistributeCostWithHomeRegion = memo.Cost{C: LargeDistributeCost.C / 2}
+	LargeDistributeCostWithHomeRegion = memo.Cost{
+		C:     LargeDistributeCost.C / 2,
+		Flags: memo.CostFlags{HugeCostPenalty: true},
+	}
 )
 
 // fnCost maps some functions to an execution cost. Currently this list
@@ -864,6 +867,12 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 	extraCost := c.distributionCost(regionsAccessed)
 	cost.Add(extraCost)
+
+	// Apply a penalty for a full scan if needed.
+	if scan.Flags.AvoidFullScan && isFullScan {
+		cost.Flags.FullScanPenalty = true
+	}
+
 	return cost
 }
 
