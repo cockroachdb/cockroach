@@ -198,7 +198,7 @@ func TestHistogram(t *testing.T) {
 	}{
 		{
 			constraint:   "/1: [/0 - /0]",
-			buckets:      []cat.HistogramBucket{},
+			buckets:      nil,
 			count:        0,
 			maxDistinct:  0,
 			distinct:     0,
@@ -206,7 +206,7 @@ func TestHistogram(t *testing.T) {
 		},
 		{
 			constraint:   "/1: [/50 - /100]",
-			buckets:      []cat.HistogramBucket{},
+			buckets:      nil,
 			count:        0,
 			maxDistinct:  0,
 			distinct:     0,
