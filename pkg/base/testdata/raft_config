@@ -5,6 +5,8 @@ echo
  RaftElectionTimeoutTicks: (int64) 4,
  RaftReproposalTimeoutTicks: (int64) 6,
  RaftHeartbeatIntervalTicks: (int64) 2,
+ StoreLivenessHeartbeatInterval: (time.Duration) 1s,
+ StoreLivenessSupportDuration: (time.Duration) 3s,
  RangeLeaseDuration: (time.Duration) 6s,
  RangeLeaseRenewalFraction: (float64) 0.5,
  RaftEnableCheckQuorum: (bool) true,
@@ -24,5 +26,5 @@ RaftReproposalTimeout: 3s
 RangeLeaseDurations: active=6s renewal=3s
 RangeLeaseAcquireTimeout: 4s
 NodeLivenessDurations: active=6s renewal=3s
-StoreLivenessDurations: active=6s renewal=3s
+StoreLivenessDurations: active=3s renewal=1s
 SentinelGossipTTL: 3s
