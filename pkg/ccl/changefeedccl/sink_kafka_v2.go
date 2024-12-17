@@ -6,6 +6,7 @@
 package changefeedccl
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
 	"github.com/rcrowley/go-metrics"
 	"github.com/twmb/franz-go/pkg/kadm"
@@ -569,8 +569,8 @@ func validateCompressionLevel(compressionType compressionCodec, level int) error
 	case sarama.CompressionNone:
 		return nil
 	case sarama.CompressionGZIP:
-		if level < gzip.NoCompression || level > gzip.BestCompression {
-			return errors.Errorf(`invalid gzip compression level: %d`, level)
+		if level < gzip.HuffmanOnly || level > gzip.BestCompression {
+			return errors.Errorf(`invalid gzipgzip compression level: %d`, level)
 		}
 	case sarama.CompressionSnappy:
 		return errors.Errorf(`snappy does not support compression levels`)
