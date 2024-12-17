@@ -1323,6 +1323,13 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	return isTxnSerializable && isTxnPushed && refreshAttemptNotPossible
 }
 
+// Key is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) Key() roachpb.Key {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.Key
+}
+
 // Epoch is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) Epoch() enginepb.TxnEpoch {
 	tc.mu.Lock()

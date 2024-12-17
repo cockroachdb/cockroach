@@ -289,6 +289,10 @@ type TxnSender interface {
 	// https://github.com/cockroachdb/cockroach/issues/15012
 	Active() bool
 
+	// Key returns the current "anchor" key of the transaction, or nil if no such
+	// key has been set because the transaction has not yet acquired any locks.
+	Key() roachpb.Key
+
 	// Epoch returns the txn's epoch.
 	Epoch() enginepb.TxnEpoch
 
