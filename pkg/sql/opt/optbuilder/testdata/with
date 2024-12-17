@@ -704,7 +704,8 @@ with &1 (t)
            └── project
                 ├── columns: a_new:17 x.a:11 b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
                 ├── scan x
-                │    └── columns: x.a:11 b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
+                │    ├── columns: x.a:11 b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
+                │    └── flags: avoid-full-scan
                 └── projections
                      └── subquery [as=a_new:17]
                           └── max1-row
@@ -735,7 +736,8 @@ with &1 (t)
            └── select
                 ├── columns: x.a:11!null b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
                 ├── scan x
-                │    └── columns: x.a:11 b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
+                │    ├── columns: x.a:11 b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
+                │    └── flags: avoid-full-scan
                 └── filters
                      └── eq
                           ├── x.a:11
@@ -792,7 +794,8 @@ with &1 (t)
       └── select
            ├── columns: xy.x:18 y:19 z:20 xy.rowid:21!null xy.crdb_internal_mvcc_timestamp:22 xy.tableoid:23
            ├── scan xy
-           │    └── columns: xy.x:18 y:19 z:20 xy.rowid:21!null xy.crdb_internal_mvcc_timestamp:22 xy.tableoid:23
+           │    ├── columns: xy.x:18 y:19 z:20 xy.rowid:21!null xy.crdb_internal_mvcc_timestamp:22 xy.tableoid:23
+           │    └── flags: avoid-full-scan
            └── filters
                 └── any: eq
                      ├── with-scan &1 (t)

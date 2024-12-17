@@ -358,15 +358,17 @@ vectorized: true
 │ arbiter indexes: uniq_pkey, uniq_v_key
 │ arbiter constraints: unique_w, unique_x_y
 │
-└── • cross join (right anti)
+└── • hash join (right anti)
     │ columns: (column1, column2, column3, column4, column5)
     │ estimated row count: 0 (missing stats)
+    │ equality: (x, y) = (column4, column5)
+    │ right cols are key
     │
     ├── • scan
-    │     columns: (k)
-    │     estimated row count: 1 (missing stats)
+    │     columns: (x, y)
+    │     estimated row count: 1,000 (missing stats)
     │     table: uniq@uniq_pkey
-    │     spans: /1/0
+    │     spans: FULL SCAN
     │
     └── • hash join (right anti)
         │ columns: (column1, column2, column3, column4, column5)
@@ -387,26 +389,24 @@ vectorized: true
             │ equality: (column2) = (v)
             │ equality cols are key
             │
-            └── • hash join (right anti)
+            └── • cross join (anti)
                 │ columns: (column1, column2, column3, column4, column5)
                 │ estimated row count: 0 (missing stats)
-                │ equality: (x, y) = (column4, column5)
-                │ right cols are key
                 │
-                ├── • scan
-                │     columns: (x, y)
-                │     estimated row count: 1,000 (missing stats)
-                │     table: uniq@uniq_pkey
-                │     spans: FULL SCAN
+                ├── • values
+                │     columns: (column1, column2, column3, column4, column5)
+                │     size: 5 columns, 1 row
+                │     row 0, expr 0: 1
+                │     row 0, expr 1: 2
+                │     row 0, expr 2: 3
+                │     row 0, expr 3: 4
+                │     row 0, expr 4: 5
                 │
-                └── • values
-                      columns: (column1, column2, column3, column4, column5)
-                      size: 5 columns, 1 row
-                      row 0, expr 0: 1
-                      row 0, expr 1: 2
-                      row 0, expr 2: 3
-                      row 0, expr 3: 4
-                      row 0, expr 4: 5
+                └── • scan
+                      columns: (k)
+                      estimated row count: 1 (missing stats)
+                      table: uniq@uniq_pkey
+                      spans: /1/0
 
 # Insert with non-constant input.
 query T
@@ -3782,25 +3782,27 @@ vectorized: true
 │       │
 │       └── • render
 │           │
-│           └── • hash join (left outer)
-│               │ equality: (v) = (v)
+│           └── • lookup join (left outer)
+│               │ table: uniq@uniq_pkey
+│               │ equality: (k) = (k)
+│               │ equality cols are key
 │               │
-│               ├── • distinct
-│               │   │ distinct on: v
-│               │   │ nulls are distinct
-│               │   │ error on duplicate
-│               │   │
-│               │   └── • render
-│               │       │
-│               │       └── • scan
-│               │             missing stats
-│               │             table: other@other_pkey
-│               │             spans: FULL SCAN
-│               │
-│               └── • scan
-│                     missing stats
-│                     table: uniq@uniq_pkey
-│                     spans: FULL SCAN
+│               └── • lookup join (left outer)
+│                   │ table: uniq@uniq_v_key
+│                   │ equality: (v) = (v)
+│                   │ equality cols are key
+│                   │
+│                   └── • distinct
+│                       │ distinct on: v
+│                       │ nulls are distinct
+│                       │ error on duplicate
+│                       │
+│                       └── • render
+│                           │
+│                           └── • scan
+│                                 missing stats
+│                                 table: other@other_pkey
+│                                 spans: FULL SCAN
 │
 ├── • constraint-check
 │   │
@@ -3853,18 +3855,19 @@ vectorized: true
 │       │
 │       └── • render
 │           │
-│           └── • hash join (right outer)
-│               │ equality: (w) = (column3)
+│           └── • hash join (left outer)
+│               │ equality: (column3) = (w)
 │               │
-│               ├── • scan
-│               │     missing stats
-│               │     table: uniq@uniq_pkey
-│               │     spans: FULL SCAN
+│               ├── • render
+│               │   │
+│               │   └── • values
+│               │         size: 3 columns, 2 rows
 │               │
-│               └── • render
-│                   │
-│                   └── • values
-│                         size: 3 columns, 2 rows
+│               └── • scan
+│                     missing stats
+│                     table: uniq@uniq_pkey
+│                     spans: FULL SCAN
+│                     locking strength: for update
 │
 ├── • constraint-check
 │   │
@@ -3943,17 +3946,13 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (semi)
+        └── • lookup join (semi)
+            │ table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
             │ equality: (k) = (a)
             │ pred: v != b
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
-                  spans: FULL SCAN
+            └── • scan buffer
+                  label: buffer 1
 
 # Upsert with non-constant input.
 # Add inequality filters for the hidden primary key column.
@@ -4657,28 +4656,28 @@ vectorized: true
 │       │
 │       └── • render
 │           │
-│           └── • hash join (right outer)
-│               │ equality: (a) = (column2)
+│           └── • hash join (left outer)
+│               │ equality: (column2) = (a)
 │               │ pred: b_default > 0
 │               │
-│               ├── • filter
-│               │   │ filter: b > 0
+│               ├── • distinct
+│               │   │ estimated row count: 2
+│               │   │ distinct on: arbiter_unique_a_distinct, column2
+│               │   │ nulls are distinct
+│               │   │ error on duplicate
 │               │   │
-│               │   └── • scan
-│               │         missing stats
-│               │         table: uniq_partial@uniq_partial_pkey
-│               │         spans: FULL SCAN
+│               │   └── • render
+│               │       │
+│               │       └── • values
+│               │             size: 2 columns, 2 rows
 │               │
-│               └── • distinct
-│                   │ estimated row count: 2
-│                   │ distinct on: arbiter_unique_a_distinct, column2
-│                   │ nulls are distinct
-│                   │ error on duplicate
+│               └── • filter
+│                   │ filter: b > 0
 │                   │
-│                   └── • render
-│                       │
-│                       └── • values
-│                             size: 2 columns, 2 rows
+│                   └── • scan
+│                         missing stats
+│                         table: uniq_partial@uniq_partial_pkey
+│                         spans: FULL SCAN
 │
 ├── • constraint-check
 │   │
@@ -5705,13 +5704,70 @@ VALUES (1,1,1,1)
 distribution: local
 vectorized: true
 ·
-• insert fast path
-  into: multiple_uniq_partial(a, b, c, d, rowid)
-  auto commit
-  uniqueness check: multiple_uniq_partial@multiple_uniq_partial_b_c_idx
-  uniqueness check: multiple_uniq_partial@multiple_uniq_partial_a_b_d_idx
-  uniqueness check: multiple_uniq_partial@multiple_uniq_partial_a_b_d_idx
-  size: 7 columns, 1 row
+• root
+│
+├── • insert
+│   │ into: multiple_uniq_partial(a, b, c, d, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 7 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (b, c) = (column2, column3)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: multiple_uniq_partial@multiple_uniq_partial_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (a, b, d) = (column1, column2, column4)
+│           │ right cols are key
+│           │ pred: rowid_default != rowid
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: multiple_uniq_partial@multiple_uniq_partial_pkey
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (a) = (column1)
+            │ right cols are key
+            │ pred: rowid_default != rowid
+            │
+            ├── • scan
+            │     missing stats
+            │     table: multiple_uniq_partial@multiple_uniq_partial_pkey
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  estimated row count: 1
+                  label: buffer 1
 
 # A table with multiple unique without index checks and only partial indexes
 # to cover them is eligible for insert fast path if it is determined,
