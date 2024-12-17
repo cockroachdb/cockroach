@@ -296,6 +296,9 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 // mixedversion test is running on a multitenant deployment, and only
 // if required by the active version.
 func enableTenantSplitScatter(l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+	// Note that although TenantsAndSystemAlignedSettingsVersion generally refers to
+	// shared process deployments, the defaults for SPLIT and SCATTER were also changed
+	// for separate process in the same version.
 	if h.Context().FromVersion.AtLeast(mixedversion.TenantsAndSystemAlignedSettingsVersion) {
 		return nil
 	}

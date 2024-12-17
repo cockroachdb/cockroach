@@ -104,14 +104,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		opts = append(
 			opts,
 			mixedversion.NumUpgrades(1),
-			// Disable separate-proces deployments in local runs, as it is
-			// currently failing on the `BACKUP` step, and we don't want to
-			// disrupt CI. Once we figure out a fix for it in nightly runs,
-			// we can re-enable it.
-			mixedversion.EnabledDeploymentModes(
-				mixedversion.SystemOnlyDeployment,
-				mixedversion.SharedProcessDeployment,
-			),
 		)
 	}
 
@@ -119,6 +111,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"maybe run backup",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			// Separate process deployments do not have node local storage.
 			if h.DeploymentMode() != mixedversion.SeparateProcessDeployment {
 				// Verify that backups can be created in various configurations. This is
 				// important to test because changes in system tables might cause backups to

@@ -1220,6 +1220,8 @@ GO_TARGETS = [
     "//pkg/cmd/roachtest:roachtest_test",
     "//pkg/cmd/roachvet:roachvet",
     "//pkg/cmd/roachvet:roachvet_lib",
+    "//pkg/cmd/run-pgo-build:run-pgo-build",
+    "//pkg/cmd/run-pgo-build:run-pgo-build_lib",
     "//pkg/cmd/skip-test:skip-test",
     "//pkg/cmd/skip-test:skip-test_lib",
     "//pkg/cmd/skiperrs:skiperrs",

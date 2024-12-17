@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
+        "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

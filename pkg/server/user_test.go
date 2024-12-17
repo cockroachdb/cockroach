@@ -59,7 +59,11 @@ func TestValidRoles(t *testing.T) {
 			extraInfo = " '3000-01-01'"
 		}
 		_, err = sqlDB.Exec(fmt.Sprintf("ALTER USER %s %s%s", fooUser, name, extraInfo))
-		require.NoError(t, err)
+		if err != nil {
+			// If there is an error, we only allow the 'unimplemented' error
+			require.Contains(t, err.Error(), "unimplemented:")
+			continue
+		}
 
 		hasRole, err = privChecker.HasRoleOption(ctx, fooUser, roleoption.ByName[name])
 		require.NoError(t, err)

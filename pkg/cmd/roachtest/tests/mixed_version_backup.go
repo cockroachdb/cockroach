@@ -2657,6 +2657,15 @@ func registerBackupMixedVersion(r registry.Registry) {
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Randomized:                true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			enabledDeploymentModes := []mixedversion.DeploymentMode{
+				mixedversion.SystemOnlyDeployment,
+				mixedversion.SharedProcessDeployment,
+			}
+			// Separate process deployments do not have node local storage.
+			if !c.IsLocal() {
+				enabledDeploymentModes = append(enabledDeploymentModes, mixedversion.SeparateProcessDeployment)
+			}
+
 			mvt := mixedversion.NewTest(
 				ctx, t, t.L(), c, c.CRDBNodes(),
 				// We use a longer upgrade timeout in this test to give the
@@ -2665,12 +2674,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				// attempted.
 				mixedversion.UpgradeTimeout(30*time.Minute),
 				mixedversion.AlwaysUseLatestPredecessors,
-				// This test sometimes flake on separate-process
-				// deployments. Needs investigation.
-				mixedversion.EnabledDeploymentModes(
-					mixedversion.SystemOnlyDeployment,
-					mixedversion.SharedProcessDeployment,
-				),
+				mixedversion.EnabledDeploymentModes(enabledDeploymentModes...),
 				// We disable cluster setting mutators because this test
 				// resets the cluster to older versions when verifying cluster
 				// backups. This makes the mixed-version context inaccurate
