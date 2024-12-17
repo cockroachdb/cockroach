@@ -1,7 +1,5 @@
 package kafkaauth
 
-import "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-
 // TODO: is there any reason to have these as constants? if not, remove
 const (
 	SASLUser      = "sasl_user"
@@ -9,7 +7,6 @@ const (
 	SASLHandshake = "sasl_handshake"
 	SASLMechanism = "sasl_mechanism"
 	SASLEnabled   = "sasl_enabled"
-	TLSEnabled    = changefeedbase.SinkParamTLSEnabled
 
 	SASLClientID     = "sasl_client_id"
 	SASLClientSecret = "sasl_client_secret"
@@ -21,11 +18,3 @@ const (
 	SASLAWSRegion         = `sasl_aws_region`
 	SASLAWSIAMSessionName = `sasl_aws_iam_session_name`
 )
-
-var oauthOnlyParams = []string{
-	SASLClientID,
-	SASLClientSecret,
-	SASLTokenURL,
-	SASLGrantType,
-	SASLScopes,
-}
