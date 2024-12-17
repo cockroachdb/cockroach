@@ -1263,6 +1263,7 @@ upsert transactions
       ├── scan transactions
       │    ├── columns: dealerid:19!null isbuy:20!null date:21!null accountname:22!null customername:23!null operationid:24 version:25!null
       │    ├── constraint: /19/20/21: [/1/false/'2020-03-01 00:00:00+00' - /1/false/'2020-03-01 00:00:00+00']
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(19-25)
@@ -1407,6 +1408,7 @@ delete inventorydetails
       │    ├── [/1/294/'some-account' - /1/294/'some-account']
       │    ├── [/1/1793/'some-account' - /1/1793/'some-account']
       │    └── [/1/29483/'some-account' - /1/29483/'some-account']
+      ├── flags: avoid-full-scan
       ├── cardinality: [0 - 3]
       ├── key: (9)
       └── fd: ()-->(8,10)

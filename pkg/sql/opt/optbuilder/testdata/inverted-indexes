@@ -78,7 +78,7 @@ upsert kj
       │    │              └── column2:7
       │    ├── scan kj
       │    │    ├── columns: k:8!null j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
-      │    │    └── flags: disabled not visible index feature
+      │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    └── filters
       │         └── column1:6 = k:8
       └── projections
@@ -103,7 +103,7 @@ insert kj
       │    │    └── (1, '{"a": 2}')
       │    ├── scan kj
       │    │    ├── columns: k:8!null j:9
-      │    │    └── flags: disabled not visible index feature
+      │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    └── filters
       │         └── column1:6 = k:8
       └── aggregations
@@ -140,7 +140,7 @@ upsert kj
       │    │    │              └── column2:7
       │    │    ├── scan kj
       │    │    │    ├── columns: k:8!null j:9 crdb_internal_mvcc_timestamp:10 tableoid:11
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── filters
       │    │         └── column1:6 = k:8
       │    └── projections
@@ -162,7 +162,8 @@ update kj
       ├── select
       │    ├── columns: k:6!null j:7 crdb_internal_mvcc_timestamp:8 tableoid:9
       │    ├── scan kj
-      │    │    └── columns: k:6!null j:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    │    ├── columns: k:6!null j:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    │    └── flags: avoid-full-scan
       │    └── filters
       │         └── k:6 > 0
       └── projections
@@ -177,6 +178,7 @@ delete kj
  └── select
       ├── columns: k:6!null j:7!null crdb_internal_mvcc_timestamp:8 tableoid:9
       ├── scan kj
-      │    └── columns: k:6!null j:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    ├── columns: k:6!null j:7 crdb_internal_mvcc_timestamp:8 tableoid:9
+      │    └── flags: avoid-full-scan
       └── filters
            └── j:7 @> '{"a": 2}'

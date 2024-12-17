@@ -602,6 +602,7 @@ with &1 (update_last_trade)
  │    │         ├── scan last_trade
  │    │         │    ├── columns: lt_s_symb:8!null lt_dts:9!null lt_price:10!null lt_open_price:11!null lt_vol:12!null
  │    │         │    ├── constraint: /8: [/'ROACH' - /'ROACH']
+ │    │         │    ├── flags: avoid-full-scan
  │    │         │    ├── cardinality: [0 - 1]
  │    │         │    ├── key: ()
  │    │         │    └── fd: ()-->(8-12)
@@ -3718,6 +3719,7 @@ update holding_summary
       ├── scan holding_summary
       │    ├── columns: hs_ca_id:6!null hs_s_symb:7!null hs_qty:8!null
       │    ├── constraint: /6/7: [/0/'ROACH' - /0/'ROACH']
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(6-8)
@@ -3849,6 +3851,7 @@ update holding
       ├── scan holding
       │    ├── columns: h_t_id:9!null h_ca_id:10!null h_s_symb:11!null h_dts:12!null h_price:13!null h_qty:14!null
       │    ├── constraint: /9: [/0 - /0]
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(9-14)
@@ -3868,6 +3871,7 @@ delete holding
  └── scan holding
       ├── columns: h_t_id:9!null h_ca_id:10!null h_s_symb:11!null h_dts:12!null
       ├── constraint: /9: [/0 - /5]
+      ├── flags: avoid-full-scan
       ├── cardinality: [0 - 6]
       ├── key: (9)
       └── fd: (9)-->(10-12)
@@ -3953,6 +3957,7 @@ delete holding_summary
  ├── scan holding_summary
  │    ├── columns: holding_summary.hs_ca_id:6!null holding_summary.hs_s_symb:7!null
  │    ├── constraint: /6/7: [/0/'ROACH' - /0/'ROACH']
+ │    ├── flags: avoid-full-scan
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    └── fd: ()-->(6,7)
@@ -4020,6 +4025,7 @@ project
  │         │    ├── scan trade
  │         │    │    ├── columns: t_id:18!null trade.t_tax:31!null
  │         │    │    ├── constraint: /18: [/0 - /0]
+ │         │    │    ├── flags: avoid-full-scan
  │         │    │    ├── cardinality: [0 - 1]
  │         │    │    ├── key: ()
  │         │    │    └── fd: ()-->(18,31)
@@ -4247,6 +4253,7 @@ with &2 (update_trade_commission)
  │    │    │    ├── scan trade
  │    │    │    │    ├── columns: t_id:18!null t_dts:19!null trade.t_st_id:20!null t_tt_id:21!null t_is_cash:22!null t_s_symb:23!null t_qty:24!null t_bid_price:25!null t_ca_id:26!null t_exec_name:27!null t_trade_price:28 t_chrg:29!null t_comm:30!null t_lifo:32!null
  │    │    │    │    ├── constraint: /18: [/0 - /0]
+ │    │    │    │    ├── flags: avoid-full-scan
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    └── fd: ()-->(18-30,32)
@@ -4308,6 +4315,7 @@ with &2 (update_trade_commission)
       │    │         ├── scan broker
       │    │         │    ├── columns: b_id:60!null b_num_trades:63!null b_comm_total:64!null
       │    │         │    ├── constraint: /60: [/0 - /0]
+      │    │         │    ├── flags: avoid-full-scan
       │    │         │    ├── cardinality: [0 - 1]
       │    │         │    ├── key: ()
       │    │         │    └── fd: ()-->(60,63,64)
@@ -4546,6 +4554,7 @@ with &2 (insert_settlement)
            │         ├── scan customer_account
            │         │    ├── columns: ca_id:71!null ca_b_id:72!null ca_c_id:73!null ca_name:74 ca_tax_st:75!null customer_account.ca_bal:76!null
            │         │    ├── constraint: /71: [/0 - /0]
+           │         │    ├── flags: avoid-full-scan
            │         │    ├── cardinality: [0 - 1]
            │         │    ├── key: ()
            │         │    └── fd: ()-->(71-76)
@@ -5124,6 +5133,7 @@ update trade
       ├── scan trade
       │    ├── columns: t_id:18!null t_dts:19!null t_st_id:20!null t_tt_id:21!null t_is_cash:22!null t_s_symb:23!null t_qty:24!null t_bid_price:25!null t_ca_id:26!null t_exec_name:27!null t_trade_price:28 t_chrg:29!null t_comm:30!null t_lifo:32!null
       │    ├── constraint: /18: [/0 - /3]
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 4]
       │    ├── key: (18)
       │    └── fd: (18)-->(19-30,32)
@@ -5729,6 +5739,7 @@ update address
       ├── scan address
       │    ├── columns: ad_id:8!null ad_line1:9 ad_line2:10 ad_zc_code:11!null ad_ctry:12
       │    ├── constraint: /8: [/0 - /0]
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(8-12)
@@ -5755,6 +5766,7 @@ update company
       ├── scan company
       │    ├── columns: co_id:12!null co_st_id:13!null co_name:14!null co_in_id:15!null co_sp_rate:16!null co_ceo:17!null co_ad_id:18!null co_desc:19!null co_open_date:20!null
       │    ├── constraint: /12: [/0 - /0]
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(12-20)
@@ -5785,6 +5797,7 @@ update customer
       ├── scan customer
       │    ├── columns: c_id:27!null c_tax_id:28!null c_st_id:29!null c_l_name:30!null c_f_name:31!null c_m_name:32 c_gndr:33 c_tier:34!null c_dob:35!null c_ad_id:36!null c_ctry_1:37 c_area_1:38 c_local_1:39 c_ext_1:40 c_ctry_2:41 c_area_2:42 c_local_2:43 c_ext_2:44 c_ctry_3:45 c_area_3:46 c_local_3:47 c_ext_3:48 c_email_1:49 c_email_2:50
       │    ├── constraint: /27: [/0 - /0]
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(27-50)
@@ -5828,6 +5841,7 @@ update customer_taxrate
  │    │    ├── constraint: /6/5
  │    │    │    ├── [/0/'CN' - /0/'CO')
  │    │    │    └── [/0/'US' - /0/'UT')
+ │    │    ├── flags: avoid-full-scan
  │    │    ├── key: (5)
  │    │    └── fd: ()-->(6)
  │    └── projections
@@ -5871,6 +5885,7 @@ update daily_market
       │    ├── scan daily_market@daily_market_dm_s_symb_dm_date_key
       │    │    ├── columns: dm_date:9!null dm_s_symb:10!null dm_close:11!null dm_high:12!null dm_low:13!null dm_vol:14!null
       │    │    ├── constraint: /10/9: [/'ROACH' - /'ROACH']
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (9)
       │    │    └── fd: ()-->(10), (9)-->(11-14)
       │    └── filters
@@ -5902,6 +5917,7 @@ update exchange
       ├── fd: (10)-->(11-16), (15)-->(20)
       ├── scan exchange
       │    ├── columns: ex_id:10!null ex_name:11!null ex_num_symb:12!null ex_open:13!null ex_close:14!null ex_desc:15 ex_ad_id:16!null
+      │    ├── flags: avoid-full-scan
       │    ├── key: (10)
       │    └── fd: (10)-->(11-16)
       └── projections
@@ -5933,6 +5949,7 @@ update financial
       ├── scan financial
       │    ├── columns: fi_co_id:17!null fi_year:18!null fi_qtr:19!null fi_qtr_start_date:20!null fi_revenue:21!null fi_net_earn:22!null fi_basic_eps:23!null fi_dilut_eps:24!null fi_margin:25!null fi_inventory:26!null fi_assets:27!null fi_liability:28!null fi_out_basic:29!null fi_out_dilut:30!null
       │    ├── constraint: /17/18/19: [/0 - /0]
+      │    ├── flags: avoid-full-scan
       │    ├── key: (18,19)
       │    └── fd: ()-->(17), (18,19)-->(20-30)
       └── projections
@@ -5999,6 +6016,7 @@ update security
       ├── scan security
       │    ├── columns: s_symb:19!null s_issue:20!null s_st_id:21!null s_name:22!null s_ex_id:23!null s_co_id:24!null s_num_out:25!null s_start_date:26!null s_exch_date:27!null s_pe:28!null s_52wk_high:29!null s_52wk_high_date:30!null s_52wk_low:31!null s_52wk_low_date:32!null s_dividend:33!null s_yield:34!null
       │    ├── constraint: /19: [/'ROACH' - /'ROACH']
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(19-34)
@@ -6031,6 +6049,7 @@ update taxrate
       ├── scan taxrate
       │    ├── columns: tx_id:6!null tx_name:7!null tx_rate:8!null
       │    ├── constraint: /6: [/'US1' - /'US1']
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(6-8)
@@ -6303,6 +6322,7 @@ update trade
  │    ├── scan trade
  │    │    ├── columns: t_id:18!null t_dts:19!null trade.t_st_id:20!null t_tt_id:21!null t_is_cash:22!null t_s_symb:23!null t_qty:24!null t_bid_price:25!null t_ca_id:26!null t_exec_name:27!null t_trade_price:28 t_chrg:29!null t_comm:30!null t_lifo:32!null
  │    │    ├── constraint: /18: [/1 - /5]
+ │    │    ├── flags: avoid-full-scan
  │    │    ├── cardinality: [0 - 5]
  │    │    ├── key: (18)
  │    │    └── fd: (18)-->(19-30,32)
@@ -6356,6 +6376,7 @@ with &1 (empty_trade_requests)
  │         │    ├── columns: trade_request.tr_t_id:9!null tr_tt_id:10!null tr_s_symb:11!null tr_b_id:14!null
  │         │    ├── constraint: /9: [/1 - ]
  │         │    ├── limit: 20
+ │         │    ├── flags: avoid-full-scan
  │         │    ├── key: (9)
  │         │    └── fd: (9)-->(10,11,14)
  │         └── projections

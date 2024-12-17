@@ -913,22 +913,17 @@ vectorized: true
         │   └── • buffer
         │       │ label: buffer 1
         │       │
-        │       └── • hash join
+        │       └── • hash join (semi)
         │           │ equality: (b) = (a)
-        │           │ right cols are key
         │           │
         │           ├── • scan
         │           │     missing stats
         │           │     table: self@self_pkey
         │           │     spans: FULL SCAN
         │           │
-        │           └── • distinct
-        │               │ estimated row count: 10
-        │               │ distinct on: a
-        │               │
-        │               └── • scan buffer
-        │                     estimated row count: 100
-        │                     label: buffer 1000000
+        │           └── • scan buffer
+        │                 estimated row count: 100
+        │                 label: buffer 1000000
         │
         └── • fk-cascade
               fk: self_b_fkey
@@ -998,22 +993,17 @@ vectorized: true
         │   └── • buffer
         │       │ label: buffer 1
         │       │
-        │       └── • hash join
+        │       └── • hash join (semi)
         │           │ equality: (cascade_delete) = (id)
-        │           │ right cols are key
         │           │
         │           ├── • scan
         │           │     missing stats
         │           │     table: loop_b@loop_b_pkey
         │           │     spans: FULL SCAN
         │           │
-        │           └── • distinct
-        │               │ estimated row count: 10
-        │               │ distinct on: id
-        │               │
-        │               └── • scan buffer
-        │                     estimated row count: 100
-        │                     label: buffer 1000000
+        │           └── • scan buffer
+        │                 estimated row count: 100
+        │                 label: buffer 1000000
         │
         └── • fk-cascade
             │ fk: cascade_delete_constraint
@@ -1251,22 +1241,17 @@ vectorized: true
 │       │   └── • buffer
 │       │       │ label: buffer 1
 │       │       │
-│       │       └── • hash join
+│       │       └── • hash join (semi)
 │       │           │ equality: (t4_id3_1) = (id3)
-│       │           │ right cols are key
 │       │           │
 │       │           ├── • scan
 │       │           │     missing stats
 │       │           │     table: t4@t4_pkey
 │       │           │     spans: FULL SCAN
 │       │           │
-│       │           └── • distinct
-│       │               │ estimated row count: 10
-│       │               │ distinct on: id3
-│       │               │
-│       │               └── • scan buffer
-│       │                     estimated row count: 100
-│       │                     label: buffer 1000000
+│       │           └── • scan buffer
+│       │                 estimated row count: 100
+│       │                 label: buffer 1000000
 │       │
 │       └── • fk-cascade
 │           │ fk: fk3
@@ -1277,22 +1262,17 @@ vectorized: true
 │               │
 │               └── • render
 │                   │
-│                   └── • hash join
+│                   └── • hash join (semi)
 │                       │ equality: (t5_id4) = (id4)
-│                       │ right cols are key
 │                       │
 │                       ├── • scan
 │                       │     missing stats
 │                       │     table: t5@t5_pkey
 │                       │     spans: FULL SCAN
 │                       │
-│                       └── • distinct
-│                           │ estimated row count: 10
-│                           │ distinct on: id4
-│                           │
-│                           └── • scan buffer
-│                                 estimated row count: 100
-│                                 label: buffer 1000000
+│                       └── • scan buffer
+│                             estimated row count: 100
+│                             label: buffer 1000000
 │
 ├── • fk-cascade
 │   │ fk: fk2
@@ -1305,22 +1285,17 @@ vectorized: true
 │       │   └── • buffer
 │       │       │ label: buffer 1
 │       │       │
-│       │       └── • hash join
+│       │       └── • hash join (semi)
 │       │           │ equality: (t4_id3_2) = (id3)
-│       │           │ right cols are key
 │       │           │
 │       │           ├── • scan
 │       │           │     missing stats
 │       │           │     table: t4@t4_pkey
 │       │           │     spans: FULL SCAN
 │       │           │
-│       │           └── • distinct
-│       │               │ estimated row count: 10
-│       │               │ distinct on: id3
-│       │               │
-│       │               └── • scan buffer
-│       │                     estimated row count: 100
-│       │                     label: buffer 1000000
+│       │           └── • scan buffer
+│       │                 estimated row count: 100
+│       │                 label: buffer 1000000
 │       │
 │       └── • fk-cascade
 │           │ fk: fk3
@@ -1331,22 +1306,17 @@ vectorized: true
 │               │
 │               └── • render
 │                   │
-│                   └── • hash join
+│                   └── • hash join (semi)
 │                       │ equality: (t5_id4) = (id4)
-│                       │ right cols are key
 │                       │
 │                       ├── • scan
 │                       │     missing stats
 │                       │     table: t5@t5_pkey
 │                       │     spans: FULL SCAN
 │                       │
-│                       └── • distinct
-│                           │ estimated row count: 10
-│                           │ distinct on: id4
-│                           │
-│                           └── • scan buffer
-│                                 estimated row count: 100
-│                                 label: buffer 1000000
+│                       └── • scan buffer
+│                             estimated row count: 100
+│                             label: buffer 1000000
 │
 ├── • fk-cascade
 │   │ fk: fk1
@@ -1354,22 +1324,17 @@ vectorized: true
 │   └── • delete
 │       │ from: t5
 │       │
-│       └── • hash join
+│       └── • hash join (semi)
 │           │ equality: (t5_id3_1) = (id3)
-│           │ right cols are key
 │           │
 │           ├── • scan
 │           │     missing stats
 │           │     table: t5@t5_pkey
 │           │     spans: FULL SCAN
 │           │
-│           └── • distinct
-│               │ estimated row count: 10
-│               │ distinct on: id3
-│               │
-│               └── • scan buffer
-│                     estimated row count: 100
-│                     label: buffer 1000000
+│           └── • scan buffer
+│                 estimated row count: 100
+│                 label: buffer 1000000
 │
 └── • fk-cascade
     │ fk: fk2
@@ -1377,19 +1342,14 @@ vectorized: true
     └── • delete
         │ from: t5
         │
-        └── • hash join
+        └── • hash join (semi)
             │ equality: (t5_id3_2) = (id3)
-            │ right cols are key
             │
             ├── • scan
             │     missing stats
             │     table: t5@t5_pkey
             │     spans: FULL SCAN
             │
-            └── • distinct
-                │ estimated row count: 10
-                │ distinct on: id3
-                │
-                └── • scan buffer
-                      estimated row count: 100
-                      label: buffer 1000000
+            └── • scan buffer
+                  estimated row count: 100
+                  label: buffer 1000000

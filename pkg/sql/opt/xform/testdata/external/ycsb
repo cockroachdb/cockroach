@@ -38,6 +38,7 @@ update usertable
       ├── scan usertable
       │    ├── columns: ycsb_key:14!null field5:20
       │    ├── constraint: /14: [/'user123' - /'user123']
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(14,20)
@@ -182,6 +183,7 @@ update usertable
       ├── scan usertable
       │    ├── columns: ycsb_key:14!null field5:20
       │    ├── constraint: /14: [/'user123' - /'user123']
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(14,20)
