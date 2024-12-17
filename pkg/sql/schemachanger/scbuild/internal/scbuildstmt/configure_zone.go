@@ -181,9 +181,6 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	}
 
 	izo := indexZoneConfigObj{tableZoneConfigObj: tzo}
-	// We are an index object. Determine the index ID and fill this
-	// information out in our zoneConfigObject.
-	izo.fillIndexFromZoneSpecifier(b, zs)
 	if targetsIndex && !zs.TargetsPartition() {
 		return &izo, nil
 	}
