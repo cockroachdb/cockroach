@@ -1382,7 +1382,7 @@ update e
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPDATE e SET e = 'eee' WHERE e > 'a'
 ----
-memo (optimized, ~16KB, required=[presentation: info:17] [distribution: test])
+memo (optimized, ~17KB, required=[presentation: info:17] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:17] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
