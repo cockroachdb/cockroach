@@ -22,7 +22,7 @@ type saslMechanism interface {
 
 type saslMechanismRegistry map[string]saslMechanismBuilder
 
-var Registry saslMechanismRegistry
+var Registry saslMechanismRegistry = make(map[string]saslMechanismBuilder)
 
 func (r saslMechanismRegistry) Register(b saslMechanismBuilder) {
 	r[b.name()] = b
