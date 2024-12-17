@@ -514,6 +514,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if private.Flags.NoFullScan {
 				b.WriteString(" no-full-scan")
 			}
+			if private.Flags.AvoidFullScan {
+				b.WriteString(" avoid-full-scan")
+			}
 			if private.Flags.ForceZigzag {
 				if private.Flags.ZigzagIndexes.Empty() {
 					b.WriteString(" force-zigzag")
