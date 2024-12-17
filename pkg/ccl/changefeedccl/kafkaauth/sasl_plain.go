@@ -10,9 +10,9 @@ import (
 
 type saslPlainBuilder struct{}
 
-// matches implements authMechanismBuilder.
-func (s saslPlainBuilder) matches(params queryParams) bool {
-	return params.peek(SASLEnabled) == "true" && params.peek(SASLMechanism) == sarama.SASLTypePlaintext
+// name implements authMechanismBuilder.
+func (s saslPlainBuilder) name() string {
+	return sarama.SASLTypePlaintext
 }
 
 // validateParams implements AuthMechanism.
@@ -22,7 +22,7 @@ func (s saslPlainBuilder) validateParams(params queryParams) error {
 }
 
 // build implements authMechanismBuilder.
-func (s saslPlainBuilder) build(params queryParams) (AuthMechanism, error) {
+func (s saslPlainBuilder) build(params queryParams) (saslMechanism, error) {
 	_ = params.consume(SASLEnabled)
 	_ = params.consume(SASLMechanism)
 	handshake := params.consume(SASLHandshake)
@@ -33,7 +33,7 @@ func (s saslPlainBuilder) build(params queryParams) (AuthMechanism, error) {
 	}, nil
 }
 
-var _ authMechanismBuilder = saslPlainBuilder{}
+var _ saslMechanismBuilder = saslPlainBuilder{}
 
 type saslPlain struct {
 	user      string
@@ -65,7 +65,7 @@ func (s *saslPlain) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	}, nil
 }
 
-var _ AuthMechanism = (*saslPlain)(nil)
+var _ saslMechanism = (*saslPlain)(nil)
 
 func init() {
 	Registry.Register(saslPlainBuilder{})

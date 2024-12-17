@@ -11,9 +11,9 @@ import (
 
 type saslMSKBuilder struct{}
 
-// matches implements authMechanismBuilder.
-func (s saslMSKBuilder) matches(params queryParams) bool {
-	return params.peek(SASLEnabled) == "true" && params.peek(SASLMechanism) == "AWS_MSK_IAM"
+// name implements authMechanismBuilder.
+func (s saslMSKBuilder) name() string {
+	return "AWS_MSK_IAM"
 }
 
 // validateParams implements authMechanismBuilder.
@@ -23,7 +23,7 @@ func (s saslMSKBuilder) validateParams(params queryParams) error {
 }
 
 // build implements authMechanismBuilder.
-func (s saslMSKBuilder) build(params queryParams) (AuthMechanism, error) {
+func (s saslMSKBuilder) build(params queryParams) (saslMechanism, error) {
 	_ = params.consume(SASLEnabled)
 	_ = params.consume(SASLMechanism)
 	handshake := params.consume(SASLHandshake)
@@ -35,7 +35,7 @@ func (s saslMSKBuilder) build(params queryParams) (AuthMechanism, error) {
 	}, nil
 }
 
-var _ authMechanismBuilder = saslMSKBuilder{}
+var _ saslMechanismBuilder = saslMSKBuilder{}
 
 type saslMSK struct {
 	region, roleArn, sessionName string
@@ -65,11 +65,6 @@ func (s *saslMSK) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	return []kgo.Opt{kgo.SASL(kgosasloauth.Oauth(tp))}, nil
 }
 
-// Name implements AuthMechanism.
-func (s *saslMSK) Name() AuthMechanismName {
-	return "SASL_OAUTHBEARER"
-}
-
 func (s *saslMSK) newSaramaTokenProvider(ctx context.Context) (sarama.AccessTokenProvider, error) {
 	return &saramaAWSIAMTokenProvider{
 		ctx:            ctx,
@@ -90,7 +85,7 @@ func (s *saslMSK) newKgoTokenProvider(_ context.Context) (func(ctx context.Conte
 	}, nil
 }
 
-var _ AuthMechanism = (*saslMSK)(nil)
+var _ saslMechanism = (*saslMSK)(nil)
 
 type saramaAWSIAMTokenProvider struct {
 	ctx            context.Context

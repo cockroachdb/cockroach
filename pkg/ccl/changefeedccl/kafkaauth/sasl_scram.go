@@ -10,22 +10,21 @@ import (
 	kgosaslscram "github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
-type saslSCRAMBuilder struct{}
+type saslSCRAMSHA256Builder struct{}
 
-// matches implements authMechanismBuilder.
-func (s saslSCRAMBuilder) matches(params queryParams) bool {
-	return params.peek(SASLEnabled) == "true" &&
-		(params.peek(SASLMechanism) == sarama.SASLTypeSCRAMSHA256 || params.peek(SASLMechanism) == sarama.SASLTypeSCRAMSHA512)
+// name implements authMechanismBuilder.
+func (s saslSCRAMSHA256Builder) name() string {
+	return sarama.SASLTypeSCRAMSHA256
 }
 
 // validateParams implements authMechanismBuilder.
-func (s saslSCRAMBuilder) validateParams(params queryParams) error {
-	requiredParams := []string{SASLAWSRegion, SASLAWSIAMRoleArn, SASLAWSIAMSessionName}
-	return peekValidateParams(sarama.SASLTypeOAuth, params, requiredParams, nil)
+func (s saslSCRAMSHA256Builder) validateParams(params queryParams) error {
+	requiredParams := []string{SASLUser, SASLPassword}
+	return peekValidateParams(s.name(), params, requiredParams, nil)
 }
 
 // build implements authMechanismBuilder.
-func (s saslSCRAMBuilder) build(params queryParams) (AuthMechanism, error) {
+func (s saslSCRAMSHA256Builder) build(params queryParams) (saslMechanism, error) {
 	_ = params.consume(SASLEnabled)
 	_ = params.consume(SASLMechanism)
 	handshake := params.consume(SASLHandshake)
@@ -33,10 +32,39 @@ func (s saslSCRAMBuilder) build(params queryParams) (AuthMechanism, error) {
 		user:      params.consume(SASLUser),
 		password:  params.consume(SASLPassword),
 		handshake: handshake == "" || handshake == "true",
+		depth:     sha256,
 	}, nil
 }
 
-var _ authMechanismBuilder = saslSCRAMBuilder{}
+var _ saslMechanismBuilder = saslSCRAMSHA256Builder{}
+
+type saslSCRAMSHA512Builder struct{}
+
+// name implements authMechanismBuilder.
+func (s saslSCRAMSHA512Builder) name() string {
+	return sarama.SASLTypeSCRAMSHA512
+}
+
+// validateParams implements authMechanismBuilder.
+func (s saslSCRAMSHA512Builder) validateParams(params queryParams) error {
+	requiredParams := []string{SASLUser, SASLPassword}
+	return peekValidateParams(s.name(), params, requiredParams, nil)
+}
+
+// build implements authMechanismBuilder.
+func (s saslSCRAMSHA512Builder) build(params queryParams) (saslMechanism, error) {
+	_ = params.consume(SASLEnabled)
+	_ = params.consume(SASLMechanism)
+	handshake := params.consume(SASLHandshake)
+	return &saslSCRAMSHA{
+		user:      params.consume(SASLUser),
+		password:  params.consume(SASLPassword),
+		handshake: handshake == "" || handshake == "true",
+		depth:     sha512,
+	}, nil
+}
+
+var _ saslMechanismBuilder = saslSCRAMSHA512Builder{}
 
 type shaDepth int
 
@@ -58,6 +86,7 @@ func (s *saslSCRAMSHA) ApplySarama(ctx context.Context, cfg *sarama.Config) erro
 	cfg.Net.SASL.Handshake = s.handshake
 	cfg.Net.SASL.User = s.user
 	cfg.Net.SASL.Password = s.password
+	// TODO: better
 	switch s.depth {
 	case sha256:
 		cfg.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
@@ -95,20 +124,9 @@ func (s *saslSCRAMSHA) KgoOpts(ctx context.Context) ([]kgo.Opt, error) {
 	}, nil
 }
 
-// Name implements AuthMechanism.
-func (s *saslSCRAMSHA) Name() AuthMechanismName {
-	switch s.depth {
-	case sha256:
-		return sarama.SASLTypeSCRAMSHA256
-	case sha512:
-		return sarama.SASLTypeSCRAMSHA512
-	default:
-		return "unknown"
-	}
-}
-
-var _ AuthMechanism = (*saslSCRAMSHA)(nil)
+var _ saslMechanism = (*saslSCRAMSHA)(nil)
 
 func init() {
-	Registry.Register(saslSCRAMBuilder{})
+	Registry.Register(saslSCRAMSHA256Builder{})
+	Registry.Register(saslSCRAMSHA512Builder{})
 }

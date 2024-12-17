@@ -9,49 +9,44 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-type AuthMechanismName string
-
-// TODO: can i not duplicate this here and in the iface?
-type matchesFunc func(params queryParams) bool
-
-type authMechanismBuilder interface {
-	// TODO: switch to just registering and switching on mechanism name, since this is sasl only now
-	matches(params queryParams) bool
+type saslMechanismBuilder interface {
+	name() string
 	validateParams(params queryParams) error
-	build(params queryParams) (AuthMechanism, error)
+	build(params queryParams) (saslMechanism, error)
 }
 
-type AuthMechanism interface {
+type saslMechanism interface {
 	ApplySarama(ctx context.Context, cfg *sarama.Config) error
 	KgoOpts(ctx context.Context) ([]kgo.Opt, error)
 }
 
-type AuthMechanismRegistry []authMechanismBuilder
+type saslMechanismRegistry map[string]saslMechanismBuilder
 
-var Registry *AuthMechanismRegistry
+var Registry saslMechanismRegistry
 
-func (r *AuthMechanismRegistry) Register(b authMechanismBuilder) {
-	*r = append(*r, b)
+func (r saslMechanismRegistry) Register(b saslMechanismBuilder) {
+	r[b.name()] = b
 }
 
-func (r AuthMechanismRegistry) Pick(u *url.URL) (AuthMechanism, bool, error) {
+func (r saslMechanismRegistry) Pick(u *url.URL) (saslMechanism, bool, error) {
 	params := queryParams(u.Query())
-	for _, b := range r {
-		if b.matches(params) {
-			if err := b.validateParams(params); err != nil {
-				return nil, false, err
-			}
-			mech, err := b.build(params)
-			if err != nil {
-				return nil, false, err
-			}
-			return mech, true, nil
-		}
+	if queryParams.consume(params, SASLEnabled) != "true" {
+		return nil, false, nil
 	}
-
+	b, ok := r[params.consume(SASLMechanism)]
+	if !ok {
+		return nil, false, nil
+	}
+	if err := b.validateParams(params); err != nil {
+		return nil, false, err
+	}
+	mech, err := b.build(params)
+	if err != nil {
+		return nil, false, err
+	}
 	// update the url with the consumed params
 	u.RawQuery = url.Values(params).Encode()
-	return nil, false, nil
+	return mech, true, nil
 }
 
 // TODO: this is mostly a duplication of the changefeedccl.sinkURL stuff. can we share this? move it out into changefeedbase or smth?
@@ -83,16 +78,16 @@ func (qp queryParams) consumeAll(key string) []string {
 	return vals
 }
 
-func newRequiredParamError(mechName AuthMechanismName, param string) error {
+func newRequiredParamError(mechName string, param string) error {
 	return errors.Newf("required parameter %s not provided for %s", param, mechName)
 }
 
-func newForbiddenParamError(mechName AuthMechanismName, param string) error {
+func newForbiddenParamError(mechName string, param string) error {
 	return errors.Newf("forbidden parameter %s provided for %s", param, mechName)
 }
 
 // TODO: embedded common struct? or nah
-func peekValidateParams(mechName AuthMechanismName, params queryParams, requiredParams, forbiddenParams []string) error {
+func peekValidateParams(mechName string, params queryParams, requiredParams, forbiddenParams []string) error {
 	var errs []error
 	for _, param := range requiredParams {
 		if params.peek(param) == "" {
