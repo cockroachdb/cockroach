@@ -153,6 +153,8 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 	restartedAndPushedHeaderTxn.WriteTimestamp.Forward(ts3)
 	committedHeaderTxn := txn.Clone()
 	committedHeaderTxn.Status = roachpb.COMMITTED
+	preparedHeaderTxn := txn.Clone()
+	preparedHeaderTxn.Status = roachpb.PREPARED
 
 	pendingRecord := func() *roachpb.TransactionRecord {
 		record := txn.AsRecord()
@@ -178,6 +180,12 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		record.LockSpans = intents
 		return &record
 	}()
+	preparedRecord := func() *roachpb.TransactionRecord {
+		record := txn.AsRecord()
+		record.Status = roachpb.PREPARED
+		record.LockSpans = intents
+		return &record
+	}()
 
 	testCases := []struct {
 		name string
@@ -188,6 +196,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		// Request state.
 		headerTxn      *roachpb.Transaction
 		commit         bool
+		prepare        bool
 		noLockSpans    bool
 		inFlightWrites []roachpb.SequencedWrite
 		deadline       hlc.Timestamp
@@ -254,6 +263,21 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expError: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
 		},
 		{
+			// Either a PushTxn(ABORT) request succeeded or this is a replay
+			// and the transaction has already been finalized. Either way,
+			// the request isn't allowed to create a new transaction record.
+			name: "record missing, can't create, try prepare",
+			// Replica state.
+			existingTxn:  nil,
+			canCreateTxn: false,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expError: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
+		},
+		{
 			// Standard case where a transaction record is created during a
 			// parallel commit.
 			name: "record missing, can create, try stage",
@@ -279,6 +303,20 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:    true,
 			// Expected result.
 			expTxn: committedRecord,
+		},
+		{
+			// Standard case where a transaction record is created in the prepared
+			// state during an XA two-phase commit.
+			name: "record missing, can create, try prepare",
+			// Replica state.
+			existingTxn:  nil,
+			canCreateTxn: true,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expTxn: preparedRecord,
 		},
 		{
 			// Standard case where a transaction record is created during a
@@ -318,6 +356,25 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expTxn: nil,
 		},
 		{
+			// Non-standard case where a transaction record is created during the
+			// prepare stage of an XA two-phase commit when there are no intents.
+			name: "record missing, can create, try prepare without intents",
+			// Replica state.
+			existingTxn:  nil,
+			canCreateTxn: true,
+			// Request state.
+			headerTxn:   headerTxn,
+			commit:      true,
+			prepare:     true,
+			noLockSpans: true,
+			// Expected result.
+			expTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.LockSpans = nil
+				return &record
+			}(),
+		},
+		{
 			// The transaction's commit timestamp was increased during its
 			// lifetime, but it hasn't refreshed up to its new commit timestamp.
 			// The stage will be rejected.
@@ -343,6 +400,21 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Request state.
 			headerTxn: pushedHeaderTxn,
 			commit:    true,
+			// Expected result.
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+		},
+		{
+			// The transaction's commit timestamp was increased during its
+			// lifetime, but it hasn't refreshed up to its new commit timestamp.
+			// The prepare will be rejected.
+			name: "record missing, can create, try prepare at pushed timestamp",
+			// Replica state.
+			existingTxn:  nil,
+			canCreateTxn: true,
+			// Request state.
+			headerTxn: pushedHeaderTxn,
+			commit:    true,
+			prepare:   true,
 			// Expected result.
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
@@ -384,6 +456,25 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
+			// The transaction's commit timestamp was increased during its
+			// lifetime and it has refreshed up to this timestamp. The prepare
+			// will succeed.
+			name: "record missing, can create, try prepare at pushed timestamp after refresh",
+			// Replica state.
+			existingTxn:  nil,
+			canCreateTxn: true,
+			// Request state.
+			headerTxn: refreshedHeaderTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.WriteTimestamp.Forward(ts2)
+				return &record
+			}(),
+		},
+		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
 			// transaction can be committed with. This will trigger a retry error.
 			name: "record missing, can commit with min timestamp, try stage",
@@ -409,6 +500,22 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Request state.
 			headerTxn: headerTxn,
 			commit:    true,
+			// Expected result.
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+		},
+		{
+			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
+			// transaction can be committed (or prepared) with. This will trigger
+			// a retry error.
+			name: "record missing, can commit with min timestamp, try prepare",
+			// Replica state.
+			existingTxn:    nil,
+			canCreateTxn:   true,
+			minTxnCommitTS: ts2,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			prepare:   true,
 			// Expected result.
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
@@ -452,6 +559,27 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
+			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that
+			// the transaction can be committed (or prepared) with. Luckily, the
+			// transaction has already refreshed above this time, so it can
+			// avoid a retry error.
+			name: "record missing, can commit with min timestamp, try prepare at pushed timestamp after refresh",
+			// Replica state.
+			existingTxn:    nil,
+			canCreateTxn:   true,
+			minTxnCommitTS: ts2,
+			// Request state.
+			headerTxn: refreshedHeaderTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.WriteTimestamp.Forward(ts2)
+				return &record
+			}(),
+		},
+		{
 			// The transaction has run into a WriteTooOld error during its
 			// lifetime. The stage will be rejected.
 			name: "record missing, can create, try stage after write too old",
@@ -471,7 +599,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		},
 		{
 			// The transaction has run into a WriteTooOld error during its
-			// lifetime. The stage will be rejected.
+			// lifetime. The commit will be rejected.
 			name: "record missing, can create, try commit after write too old",
 			// Replica state.
 			existingTxn:  nil,
@@ -483,6 +611,24 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				return clone
 			}(),
 			commit: true,
+			// Expected result.
+			expError: "TransactionRetryError: retry txn (RETRY_WRITE_TOO_OLD)",
+		},
+		{
+			// The transaction has run into a WriteTooOld error during its
+			// lifetime. The prepare will be rejected.
+			name: "record missing, can create, try prepare after write too old",
+			// Replica state.
+			existingTxn:  nil,
+			canCreateTxn: true,
+			// Request state.
+			headerTxn: func() *roachpb.Transaction {
+				clone := txn.Clone()
+				clone.WriteTooOld = true
+				return clone
+			}(),
+			commit:  true,
+			prepare: true,
 			// Expected result.
 			expError: "TransactionRetryError: retry txn (RETRY_WRITE_TOO_OLD)",
 		},
@@ -525,6 +671,20 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expTxn: committedRecord,
 		},
 		{
+			// Standard case where a transaction record is updated to the prepared
+			// state during an XA two-phase commit. The record already exists because
+			// it has been heartbeated.
+			name: "record pending, try prepare",
+			// Replica state.
+			existingTxn: pendingRecord,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expTxn: preparedRecord,
+		},
+		{
 			// The transaction's commit timestamp was increased during its
 			// lifetime, but it hasn't refreshed up to its new commit timestamp.
 			// The stage will be rejected.
@@ -548,6 +708,20 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Request state.
 			headerTxn: pushedHeaderTxn,
 			commit:    true,
+			// Expected result.
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+		},
+		{
+			// The transaction's commit timestamp was increased during its
+			// lifetime, but it hasn't refreshed up to its new commit timestamp.
+			// The prepare will be rejected.
+			name: "record pending, try prepare at pushed timestamp",
+			// Replica state.
+			existingTxn: pendingRecord,
+			// Request state.
+			headerTxn: pushedHeaderTxn,
+			commit:    true,
+			prepare:   true,
 			// Expected result.
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
@@ -587,6 +761,24 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
+			// The transaction's commit timestamp was increased during its
+			// lifetime and it has refreshed up to this timestamp. The prepare
+			// will succeed.
+			name: "record pending, try prepare at pushed timestamp after refresh",
+			// Replica state.
+			existingTxn: pendingRecord,
+			// Request state.
+			headerTxn: refreshedHeaderTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.WriteTimestamp.Forward(ts2)
+				return &record
+			}(),
+		},
+		{
 			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
 			// transaction can be committed with. The record already exists because
 			// it has been heartbeated. This will trigger a retry error.
@@ -612,6 +804,21 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Request state.
 			headerTxn: headerTxn,
 			commit:    true,
+			// Expected result.
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+		},
+		{
+			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
+			// transaction can be committed with. The record already exists because
+			// it has been heartbeated. This will trigger a retry error.
+			name: "record pending, can commit with min timestamp, try prepare",
+			// Replica state.
+			existingTxn:    pendingRecord,
+			minTxnCommitTS: ts2,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			prepare:   true,
 			// Expected result.
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
@@ -655,6 +862,26 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
+			// A PushTxn(TIMESTAMP) request bumped the minimum timestamp that the
+			// transaction can be committed (or prepared) with. The record already
+			// exists because it has been heartbeated. Luckily, the transaction has
+			// already refreshed above this time, so it can avoid a retry error.
+			name: "record pending, can commit with min timestamp, try prepare at pushed timestamp after refresh",
+			// Replica state.
+			existingTxn:    pendingRecord,
+			minTxnCommitTS: ts2,
+			// Request state.
+			headerTxn: refreshedHeaderTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.WriteTimestamp.Forward(ts2)
+				return &record
+			}(),
+		},
+		{
 			// The transaction has run into a WriteTooOld error during its
 			// lifetime. The stage will be rejected.
 			name: "record pending, try stage after write too old",
@@ -673,7 +900,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		},
 		{
 			// The transaction has run into a WriteTooOld error during its
-			// lifetime. The stage will be rejected.
+			// lifetime. The commit will be rejected.
 			name: "record pending, try commit after write too old",
 			// Replica state.
 			existingTxn: pendingRecord,
@@ -684,6 +911,23 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				return clone
 			}(),
 			commit: true,
+			// Expected result.
+			expError: "TransactionRetryError: retry txn (RETRY_WRITE_TOO_OLD)",
+		},
+		{
+			// The transaction has run into a WriteTooOld error during its
+			// lifetime. The prepare will be rejected.
+			name: "record pending, try prepare after write too old",
+			// Replica state.
+			existingTxn: pendingRecord,
+			// Request state.
+			headerTxn: func() *roachpb.Transaction {
+				clone := txn.Clone()
+				clone.WriteTooOld = true
+				return clone
+			}(),
+			commit:  true,
+			prepare: true,
 			// Expected result.
 			expError: "TransactionRetryError: retry txn (RETRY_WRITE_TOO_OLD)",
 		},
@@ -743,6 +987,25 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
+			// Standard case where a transaction record is updated to the prepared
+			// state during an XA two-phase commit after it has written a record at a
+			// lower epoch. The existing record is upgraded.
+			name: "record pending, try prepare at higher epoch",
+			// Replica state.
+			existingTxn: pendingRecord,
+			// Request state.
+			headerTxn: restartedHeaderTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.Epoch++
+				record.WriteTimestamp.Forward(ts2)
+				return &record
+			}(),
+		},
+		{
 			// The transaction's commit timestamp was increased during the
 			// current epoch, but it hasn't refreshed up to its new commit
 			// timestamp. The stage will be rejected.
@@ -766,6 +1029,20 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Request state.
 			headerTxn: restartedAndPushedHeaderTxn,
 			commit:    true,
+			// Expected result.
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+		},
+		{
+			// The transaction's commit timestamp was increased during the
+			// current epoch, but it hasn't refreshed up to its new commit
+			// timestamp. The prepare will be rejected.
+			name: "record pending, try prepare at higher epoch and pushed timestamp",
+			// Replica state.
+			existingTxn: pendingRecord,
+			// Request state.
+			headerTxn: restartedAndPushedHeaderTxn,
+			commit:    true,
+			prepare:   true,
 			// Expected result.
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
@@ -929,6 +1206,22 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
+			name: "record staging, try prepare at higher epoch",
+			// Replica state.
+			existingTxn: stagingRecord,
+			// Request state.
+			headerTxn: restartedHeaderTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.Epoch++
+				record.WriteTimestamp.Forward(ts2)
+				return &record
+			}(),
+		},
+		{
 			// Non-standard case where a transaction record is re-staged during
 			// a parallel commit. The record already exists because of a failed
 			// parallel commit attempt in a prior epoch. The re-stage will fail
@@ -958,6 +1251,17 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
 		},
 		{
+			name: "record staging, try prepare at higher epoch and pushed timestamp",
+			// Replica state.
+			existingTxn: stagingRecord,
+			// Request state.
+			headerTxn: restartedAndPushedHeaderTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expError: "TransactionRetryError: retry txn (RETRY_SERIALIZABLE)",
+		},
+		{
 			// The transaction has already been aborted. The client will often
 			// send a rollback to resolve any intents and start cleaning up the
 			// transaction.
@@ -969,6 +1273,76 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:    false,
 			// Expected result.
 			expTxn: abortedRecord,
+		},
+		{
+			// The transaction has been prepared. The client rolls it back.
+			name: "record prepared, try rollback",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    false,
+			// Expected result.
+			expTxn: abortedRecord,
+		},
+		{
+			// The transaction has been prepared. The client commits it.
+			name: "record prepared, try commit",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			// Expected result.
+			expTxn: committedRecord,
+		},
+		{
+			// The transaction has been prepared. The client sends another prepare
+			// request. This is a no-op.
+			name: "record prepared, try re-prepare",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expTxn: preparedRecord,
+		},
+		{
+			// The transaction has been prepared. The client rolls it back.
+			name: "record and header prepared, try rollback",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn: preparedHeaderTxn,
+			commit:    false,
+			// Expected result.
+			expTxn: abortedRecord,
+		},
+		{
+			// The transaction has been prepared. The client commits it.
+			name: "record and header prepared, try commit",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn: preparedHeaderTxn,
+			commit:    true,
+			// Expected result.
+			expTxn: committedRecord,
+		},
+		{
+			// The transaction has been prepared. The client sends another prepare
+			// request. This is a no-op.
+			name: "record and header prepared, try re-prepare",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn: preparedHeaderTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expTxn: preparedRecord,
 		},
 		///////////////////////////////////////////////////////////////////////
 		//                    INVALID REQUEST ERROR CASES                    //
@@ -1015,6 +1389,66 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			commit:    true,
 			// Expected result.
 			expError: "programming error: epoch regression",
+		},
+		{
+			name: "record pending, try prepare at lower epoch",
+			// Replica state.
+			existingTxn: func() *roachpb.TransactionRecord {
+				record := *pendingRecord
+				record.Epoch++
+				return &record
+			}(),
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expError: "programming error: epoch regression",
+		},
+		{
+			name: "record pending, try prepare without commit",
+			// Replica state.
+			existingTxn: pendingRecord,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    false,
+			prepare:   true,
+			// Expected result.
+			expError: "cannot prepare a rollback",
+		},
+		{
+			name: "record pending, try prepare with in-flight writes",
+			// Replica state.
+			existingTxn: pendingRecord,
+			// Request state.
+			headerTxn:      headerTxn,
+			commit:         true,
+			prepare:        true,
+			inFlightWrites: writes,
+			// Expected result.
+			expError: "cannot prepare a parallel commit",
+		},
+		{
+			name: "record staging, try prepare",
+			// Replica state.
+			existingTxn: stagingRecord,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expError: "cannot prepare a staging transaction",
+		},
+		{
+			name: "record staging, try prepare at pushed timestamp",
+			// Replica state.
+			existingTxn: stagingRecord,
+			// Request state.
+			headerTxn: pushedHeaderTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expError: "cannot prepare a staging transaction",
 		},
 		{
 			name: "record committed, try rollback",
@@ -1088,6 +1522,140 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			// Expected result.
 			expError: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
 		},
+		{
+			name: "record aborted, try prepare",
+			// Replica state.
+			existingTxn: abortedRecord,
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expError: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
+		},
+		{
+			name: "record prepared, try stage",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn:      headerTxn,
+			commit:         true,
+			inFlightWrites: writes,
+			// Expected result.
+			expError: "cannot parallel commit a prepared transaction",
+		},
+		{
+			name: "record prepared, try rollback at higher epoch",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn: restartedHeaderTxn,
+			commit:    false,
+			// Expected result.
+			expError: "epoch mismatch with prepared transaction",
+		},
+		{
+			name: "record prepared, try stage at higher epoch",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn:      restartedHeaderTxn,
+			commit:         true,
+			inFlightWrites: writes,
+			// Expected result.
+			expError: "epoch mismatch with prepared transaction",
+		},
+		{
+			name: "record prepared, try commit at higher epoch",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn: restartedHeaderTxn,
+			commit:    true,
+			// Expected result.
+			expError: "epoch mismatch with prepared transaction",
+		},
+		{
+			name: "record prepared, try re-prepare at higher epoch",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn: restartedHeaderTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expError: "epoch mismatch with prepared transaction",
+		},
+		{
+			name: "record prepared, try rollback at lower epoch",
+			// Replica state.
+			existingTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.Epoch++
+				return &record
+			}(),
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    false,
+			// Expected result.
+			expError: "epoch mismatch with prepared transaction",
+		},
+		{
+			name: "record prepared, try stage at lower epoch",
+			// Replica state.
+			existingTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.Epoch++
+				return &record
+			}(),
+			// Request state.
+			headerTxn:      headerTxn,
+			commit:         true,
+			inFlightWrites: writes,
+			// Expected result.
+			expError: "epoch mismatch with prepared transaction",
+		},
+		{
+			name: "record prepared, try commit at lower epoch",
+			// Replica state.
+			existingTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.Epoch++
+				return &record
+			}(),
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			// Expected result.
+			expError: "epoch mismatch with prepared transaction",
+		},
+		{
+			name: "record prepared, try re-prepare at lower epoch",
+			// Replica state.
+			existingTxn: func() *roachpb.TransactionRecord {
+				record := *preparedRecord
+				record.Epoch++
+				return &record
+			}(),
+			// Request state.
+			headerTxn: headerTxn,
+			commit:    true,
+			prepare:   true,
+			// Expected result.
+			expError: "epoch mismatch with prepared transaction",
+		},
+		{
+			// The transaction has been prepared. The client tries to stage it.
+			name: "record and header prepared, try stage",
+			// Replica state.
+			existingTxn: preparedRecord,
+			// Request state.
+			headerTxn:      preparedHeaderTxn,
+			commit:         true,
+			inFlightWrites: writes,
+			// Expected result.
+			expError: "cannot parallel commit a prepared transaction",
+		},
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
@@ -1114,6 +1682,7 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			req := kvpb.EndTxnRequest{
 				RequestHeader: kvpb.RequestHeader{Key: txn.Key},
 				Commit:        c.commit,
+				Prepare:       c.prepare,
 
 				InFlightWrites: c.inFlightWrites,
 				Deadline:       c.deadline,

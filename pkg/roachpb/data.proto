@@ -317,10 +317,18 @@ enum TransactionStatus {
   option (gogoproto.goproto_enum_prefix) = false;
 
   // PENDING is the default state for a new transaction. Transactions
-  // move from PENDING to one of COMMITTED or ABORTED. Mutations made
-  // as part of a PENDING transactions are recorded as "intents" in
-  // the underlying MVCC model.
+  // move from PENDING to one of PREPARED, STAGING, COMMITTED, or
+  // ABORTED. Mutations made as part of a PENDING transactions are
+  // recorded as "intents" in the underlying MVCC model.
   PENDING = 0;
+  // PREPARED is the state for a transaction which has been prepared as
+  // part of the XA two-phase commit protocol. Transactions in state
+  // PREPARED can be subsequently moved to either state COMMITTED or
+  // ABORTED. Once a transaction is in state PREPARED, it is guaranteed
+  // to be able to commit if the coordinator node decides to do so;
+  // conflicting transactions cannot prevent it from doing so by pushing
+  // it to a higher timestamp or aborting it.
+  PREPARED = 4;
   // STAGING is the state for a transaction which has issued all of
   // its writes and is in the process of committing. Mutations made
   // as part of a transaction in this state may still be in-flight

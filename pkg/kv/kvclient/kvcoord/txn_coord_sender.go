@@ -58,6 +58,11 @@ const (
 	// batches except EndTxn(commit=false) will be rejected.
 	txnError
 
+	// txnPrepared means that an EndTxn(commit=true,prepare=true) has been
+	// executed successfully. Further batches except EndTxn(commit=*) will
+	// be rejected.
+	txnPrepared
+
 	// txnFinalized means that an EndTxn(commit=true) has been executed
 	// successfully, or an EndTxn(commit=false) was sent - regardless of
 	// whether it executed successfully or not. Further batches except
@@ -453,19 +458,23 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 			ba.Txn = txn
 			return tc.updateStateLocked(ctx, ba, nil /* br */, pErr)
 		}
-		// Mark the transaction as committed so that, in case this commit is done by
-		// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
-		// Also so that the correct metric gets incremented.
-		tc.mu.txn.Status = roachpb.COMMITTED
 		tc.interceptorAlloc.txnMetricRecorder.setReadOnlyCommit()
-	} else {
-		tc.mu.txn.Status = roachpb.ABORTED
-	}
-	tc.finalizeAndCleanupTxnLocked(ctx)
-	if et.Commit {
+		if et.Prepare {
+			tc.mu.txn.Status = roachpb.PREPARED
+			tc.markTxnPreparedLocked(ctx)
+		} else {
+			// Mark the transaction as committed so that, in case this commit is done
+			// by the closure passed to db.Txn()), db.Txn() doesn't attempt to commit
+			// again. Also, so that the correct metric gets incremented.
+			tc.mu.txn.Status = roachpb.COMMITTED
+			tc.finalizeAndCleanupTxnLocked(ctx)
+		}
 		if err := tc.maybeCommitWait(ctx, false /* deferred */); err != nil {
 			return kvpb.NewError(err)
 		}
+	} else {
+		tc.mu.txn.Status = roachpb.ABORTED
+		tc.finalizeAndCleanupTxnLocked(ctx)
 	}
 	return nil
 }
@@ -536,16 +545,22 @@ func (tc *TxnCoordSender) Send(
 	pErr = tc.updateStateLocked(ctx, ba, br, pErr)
 
 	// If we succeeded to commit, or we attempted to rollback, we move to
-	// txnFinalized.
+	// txnFinalized. If we succeeded to prepare, we move to txnPrepared.
 	if req, ok := ba.GetArg(kvpb.EndTxn); ok {
 		et := req.(*kvpb.EndTxnRequest)
-		if (et.Commit && pErr == nil) || !et.Commit {
-			tc.finalizeAndCleanupTxnLocked(ctx)
-			if et.Commit {
+		if et.Commit {
+			if pErr == nil {
+				if et.Prepare {
+					tc.markTxnPreparedLocked(ctx)
+				} else {
+					tc.finalizeAndCleanupTxnLocked(ctx)
+				}
 				if err := tc.maybeCommitWait(ctx, false /* deferred */); err != nil {
 					return nil, kvpb.NewError(err)
 				}
 			}
+		} else /* !et.Commit */ {
+			tc.finalizeAndCleanupTxnLocked(ctx)
 		}
 	}
 
@@ -630,8 +645,8 @@ func (tc *TxnCoordSender) Send(
 // For more, see https://www.cockroachlabs.com/blog/consistency-model/ and
 // docs/RFCS/20200811_non_blocking_txns.md.
 func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context, deferred bool) error {
-	if tc.mu.txn.Status != roachpb.COMMITTED {
-		log.Fatalf(ctx, "maybeCommitWait called when not committed")
+	if tc.mu.txn.Status != roachpb.PREPARED && tc.mu.txn.Status != roachpb.COMMITTED {
+		log.Fatalf(ctx, "maybeCommitWait called when not prepared/committed")
 	}
 	if tc.mu.commitWaitDeferred && !deferred {
 		// If this is an automatic commit-wait call and the user of this
@@ -727,6 +742,15 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		return kvpb.NewError(tc.mu.storedRetryableErr)
 	case txnError:
 		return tc.mu.storedErr
+	case txnPrepared:
+		endTxn := ba != nil && ba.IsSingleEndTxnRequest()
+		if endTxn {
+			return nil
+		}
+		msg := redact.Sprintf("client already prepared the transaction. "+
+			"Trying to execute: %s", ba.Summary())
+		reason := kvpb.TransactionStatusError_REASON_UNKNOWN
+		return kvpb.NewErrorWithTxn(kvpb.NewTransactionStatusError(reason, msg), &tc.mu.txn)
 	case txnFinalized:
 		msg := redact.Sprintf("client already committed or rolled back the transaction. "+
 			"Trying to execute: %s", ba.Summary())
@@ -781,6 +805,13 @@ func (tc *TxnCoordSender) ClientFinalized() bool {
 // closes all interceptors.
 func (tc *TxnCoordSender) finalizeAndCleanupTxnLocked(ctx context.Context) {
 	tc.mu.txnState = txnFinalized
+	tc.cleanupTxnLocked(ctx)
+}
+
+// markTxnPreparedLocked marks the transaction state as prepared and closes all
+// interceptors.
+func (tc *TxnCoordSender) markTxnPreparedLocked(ctx context.Context) {
+	tc.mu.txnState = txnPrepared
 	tc.cleanupTxnLocked(ctx)
 }
 
