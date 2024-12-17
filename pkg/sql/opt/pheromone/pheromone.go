@@ -14,5 +14,11 @@ func CanProvide(expr memo.RelExpr, required physical.Pheromone) bool {
 	if required.Any() {
 		return true
 	}
-	return expr.Op() == required.Op
+	if expr.Op() != required.Op {
+		return false
+	}
+	if required.Children != nil && expr.ChildCount() != len(required.Children) {
+		return false
+	}
+	return true
 }

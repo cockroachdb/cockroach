@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -270,6 +271,7 @@ func (b *Builder) Build() (err error) {
 	b.semaCtx.TypeResolver = typeTracker
 
 	// Special case for CannedOptPlan.
+	// Should this check the pheromone??
 	if canned, ok := b.stmt.(*tree.CannedOptPlan); ok {
 		b.factory.DisableOptimizations()
 		_, err := exprgen.Build(b.ctx, b.catalog, b.factory, canned.Plan)
@@ -280,7 +282,15 @@ func (b *Builder) Build() (err error) {
 	// and physical properties.
 	outScope := b.buildStmtAtRoot(b.stmt, nil /* desiredTypes */)
 
+	// Get the pheromone from session data. Not sure if this is the right way to
+	// pass this in, maybe it should be part of New?
+	pheromone, err := physical.PheromoneFromString(b.evalCtx.SessionData().Pheromone)
+	if err != nil {
+		return err
+	}
+
 	physical := outScope.makePhysicalProps()
+	physical.Pheromone = pheromone
 	b.factory.Memo().SetRoot(outScope.expr, physical)
 	return nil
 }

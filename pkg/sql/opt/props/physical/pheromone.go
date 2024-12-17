@@ -7,6 +7,7 @@ package physical
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -19,6 +20,9 @@ type Pheromone struct {
 }
 
 func (p Pheromone) String() string {
+	if p.Any() {
+		return ""
+	}
 	return p.ToJSON().String()
 }
 
@@ -85,6 +89,17 @@ func PheromoneFromJSON(j json.JSON) (Pheromone, error) {
 	}, nil
 }
 
+func PheromoneFromString(s string) (Pheromone, error) {
+	if s == "" {
+		return Pheromone{}, nil
+	}
+	j, err := json.ParseJSON(s)
+	if err != nil {
+		return Pheromone{}, err
+	}
+	return PheromoneFromJSON(j)
+}
+
 func (p Pheromone) Any() bool {
 	return p.Op == opt.UnknownOp && p.Children == nil
 }
@@ -108,5 +123,6 @@ func (p Pheromone) Child(nth int) Pheromone {
 	if p.Children == nil {
 		return Pheromone{}
 	}
+	fmt.Println("Child", nth, p)
 	return p.Children[nth]
 }

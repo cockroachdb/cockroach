@@ -7,6 +7,7 @@ package xform
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -263,11 +264,17 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	// Now optimize the entire expression tree.
 	root := o.mem.RootExpr().(memo.RelExpr)
 	rootProps := o.mem.RootProps()
+	if !rootProps.Pheromone.Any() {
+		fmt.Println("optimizing root group with", rootProps.Pheromone)
+	}
 	o.optimizeGroup(root, rootProps)
 
 	// Walk the tree from the root, updating child pointers so that the memo
 	// root points to the lowest cost tree by default (rather than the normalized
 	// tree by default.
+	if !rootProps.Pheromone.Any() {
+		fmt.Println("setting lowest cost tree with", rootProps.Pheromone)
+	}
 	root = o.setLowestCostTree(root, rootProps).(memo.RelExpr)
 	o.mem.SetRoot(root, rootProps)
 
@@ -727,6 +734,12 @@ func (o *Optimizer) enforceProps(
 		return fullyOptimized
 	}
 
+	/*
+		if !pheromone.CanProvide(member, required.Pheromone) {
+			return false
+		}
+	*/
+
 	return true
 }
 
@@ -766,7 +779,7 @@ func (o *Optimizer) optimizeEnforcer(
 // shouldExplore ensures that exploration is only triggered for optimizeGroup
 // calls that will not recurse via a call from enforceProps.
 func (o *Optimizer) shouldExplore(required *physical.Required) bool {
-	return required.Ordering.Any() && required.Distribution.Any()
+	return required.Ordering.Any() && required.Distribution.Any() && required.Pheromone.Any()
 }
 
 // setLowestCostTree traverses the memo and recursively updates child pointers
