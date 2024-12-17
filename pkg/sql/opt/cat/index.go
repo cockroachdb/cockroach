@@ -124,12 +124,12 @@ type Index interface {
 	// columns is data-dependent, not schema-dependent.
 	LaxKeyColumnCount() int
 
-	// NonInvertedPrefixColumnCount returns the number of non-inverted columns
-	// in the inverted index. An inverted index only has non-inverted columns if
-	// it is a multi-column inverted index. Therefore, a non-zero value is only
-	// returned for multi-column inverted indexes. This function panics if the
-	// index is not an inverted index.
-	NonInvertedPrefixColumnCount() int
+	// PrefixColumnCount can only be called for inverted or vector indexes, and
+	// will panic otherwise. It returns the number of forward-indexed columns that
+	// prefix the inverted or vector column. This is only the case for a
+	// multi-column inverted/vector index. Therefore, a non-zero value is only
+	// returned for multi-column inverted/vector indexes.
+	PrefixColumnCount() int
 
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
