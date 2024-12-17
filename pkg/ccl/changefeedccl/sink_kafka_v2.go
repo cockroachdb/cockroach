@@ -570,7 +570,7 @@ func validateCompressionLevel(compressionType compressionCodec, level int) error
 		return nil
 	case sarama.CompressionGZIP:
 		if level < gzip.HuffmanOnly || level > gzip.BestCompression {
-			return errors.Errorf(`invalid gzipgzip compression level: %d`, level)
+			return errors.Errorf(`invalid gzip compression level: %d`, level)
 		}
 	case sarama.CompressionSnappy:
 		return errors.Errorf(`snappy does not support compression levels`)
