@@ -1069,9 +1069,22 @@ func (n *AlterTenantReplication) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+// copyNode makes a copy of this Statement without recursing in any child Statements.
+func (n *CreateTenant) copyNode() *CreateTenant {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
 // walkStmt is part of the walkableStmt interface.
 func (n *CreateTenant) walkStmt(v Visitor) Statement {
 	ret := n
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.TenantSpec = ts
+	}
 	return ret
 }
 
@@ -1084,6 +1097,13 @@ func (n *CreateTenantFromReplication) copyNode() *CreateTenantFromReplication {
 // walkStmt is part of the walkableStmt interface.
 func (n *CreateTenantFromReplication) walkStmt(v Visitor) Statement {
 	ret := n
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.TenantSpec = ts
+	}
 	e, changed := WalkExpr(v, n.ReplicationSourceTenantName.Expr)
 	if changed {
 		if ret == n {

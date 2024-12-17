@@ -59,7 +59,11 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 		sysSQL.ExpectErr(t, `pq: the destination tenant "system" \(0\) cannot be the system tenant`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1", srcPgURL.String())
 	})
-	t.Run("cannot set expiration window on creat tenant from replication", func(t *testing.T) {
+	t.Run("destination cannot be tenant with id 1", func(t *testing.T) {
+		sysSQL.ExpectErr(t, `pq: the destination tenant "" \(1\) cannot be the system tenant`,
+			"CREATE TENANT [1] FROM REPLICATION OF source ON $1", srcPgURL.String())
+	})
+	t.Run("cannot set expiration window on create tenant from replication", func(t *testing.T) {
 		sysSQL.ExpectErr(t, `pq: cannot specify EXPIRATION WINDOW option while starting a physical replication stream`,
 			"CREATE TENANT system FROM REPLICATION OF source ON $1 WITH EXPIRATION WINDOW='42s'", srcPgURL.String())
 	})
@@ -67,6 +71,11 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 		sysSQL.Exec(t, "CREATE TENANT foo")
 		sysSQL.ExpectErr(t, "pq: tenant with name \"foo\" already exists",
 			"CREATE TENANT foo FROM REPLICATION OF source ON $1", srcPgURL.String())
+	})
+	t.Run("tenant id destination cannot exist without resume timestamp", func(t *testing.T) {
+		sysSQL.Exec(t, "CREATE TENANT [10]")
+		sysSQL.ExpectErr(t, "pq: a tenant with ID 10 or with name \"cluster-10\" already exists",
+			"CREATE TENANT [10] FROM REPLICATION OF source ON $1", srcPgURL.String())
 	})
 	t.Run("external connection must be reachable", func(t *testing.T) {
 		badPgURL := srcPgURL
@@ -77,7 +86,6 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	})
 	counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 	require.Equal(t, int32(0), counts["physical_replication.started"])
-
 }
 
 func TestTenantStreamingFailback(t *testing.T) {
@@ -154,7 +162,7 @@ func TestTenantStreamingFailback(t *testing.T) {
 	// The overall test plan looks like:
 	//
 	// SETUP
-	//   Create tenant f on severA
+	//   Create tenant f on serverA
 	//   Start service for tenant f
 	//   Write to tenant f
 	//   Replicate tenant f on serverA to tenant g on serverB
