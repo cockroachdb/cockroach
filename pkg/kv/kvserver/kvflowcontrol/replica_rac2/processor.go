@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -362,7 +363,15 @@ type Processor interface {
 	// InspectRaftMuLocked returns a handle to inspect the state of the
 	// underlying range controller. It is used to power /inspectz-style debugging
 	// pages.
+	//
+	// raftMu is held.
 	InspectRaftMuLocked(ctx context.Context) (kvflowinspectpb.Handle, bool)
+	// StatusRaftMuLocked returns basic information about the underlying range
+	// controller and its send streams.
+	//
+	// raftMu is held.
+	StatusRaftMuLocked() serverpb.RACStatus
+
 	// SendStreamStats sets the stats for the replica send streams that belong to
 	// the range controller. It is only populated on the leader. The stats struct
 	// is provided by the caller and should be empty, it is then populated before
@@ -1185,6 +1194,15 @@ func (p *processorImpl) InspectRaftMuLocked(ctx context.Context) (kvflowinspectp
 		return kvflowinspectpb.Handle{}, false
 	}
 	return p.leader.rc.InspectRaftMuLocked(ctx), true
+}
+
+// StatusRaftMuLocked implements Processor.
+func (p *processorImpl) StatusRaftMuLocked() serverpb.RACStatus {
+	p.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
+	if p.leader.rc == nil {
+		return serverpb.RACStatus{}
+	}
+	return p.leader.rc.StatusRaftMuLocked()
 }
 
 // SendStreamStats implements Processor.
