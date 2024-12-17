@@ -4741,39 +4741,39 @@ logical_replication_options:
 // CREATE VIRTUAL CLUSTER [ IF NOT EXISTS ] name [ <replication> ]
 //
 // Replication option:
-//    FROM REPLICATION OF <virtual_cluster_spec> ON <location> [ WITH OPTIONS ... ]
+//    FROM REPLICATION OF name ON <location> [ WITH OPTIONS ... ]
 create_virtual_cluster_stmt:
-  CREATE virtual_cluster d_expr
+  CREATE virtual_cluster virtual_cluster_spec
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
-      TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
+      TenantSpec: $3.tenantSpec(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr
+| CREATE virtual_cluster IF NOT EXISTS virtual_cluster_spec
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenant{
       IfNotExists: true,
-      TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
+      TenantSpec: $6.tenantSpec(),
     }
   }
-| CREATE virtual_cluster d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
+| CREATE virtual_cluster virtual_cluster_spec FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
-      TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
+      TenantSpec: $3.tenantSpec(),
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
       ReplicationSourceAddress: $9.expr(),
       Options: *$10.tenantReplicationOptions(),
     }
   }
-| CREATE virtual_cluster IF NOT EXISTS d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
+| CREATE virtual_cluster IF NOT EXISTS virtual_cluster_spec FROM REPLICATION OF d_expr ON d_expr opt_with_replication_options
   {
     /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
       IfNotExists: true,
-      TenantSpec: &tree.TenantSpec{IsName: true, Expr: $6.expr()},
+      TenantSpec: $6.tenantSpec(),
       ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $10.expr()},
       ReplicationSourceAddress: $12.expr(),
       Options: *$13.tenantReplicationOptions(),
