@@ -314,6 +314,12 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
 		indexFlags = source.IndexFlags
 	}
+	if mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
+		if indexFlags == nil {
+			indexFlags = &tree.IndexFlags{}
+		}
+		indexFlags.AvoidFullScan = true
+	}
 
 	// Build the right side of the anti-join. Use a new metadata instance
 	// of the mutation table so that a different set of column IDs are used for
@@ -443,6 +449,12 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	var indexFlags *tree.IndexFlags
 	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
 		indexFlags = source.IndexFlags
+	}
+	if mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
+		if indexFlags == nil {
+			indexFlags = &tree.IndexFlags{}
+		}
+		indexFlags.AvoidFullScan = true
 	}
 
 	// Build the right side of the left outer join. Use a different instance of
@@ -669,13 +681,18 @@ func (h *arbiterPredicateHelper) init(mb *mutationBuilder, arbiterPredicate tree
 // used to fully normalize predicate expressions.
 func (h *arbiterPredicateHelper) tableScope() *scope {
 	if h.tableScopeLazy == nil {
+		var indexFlags *tree.IndexFlags
+		if h.mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
+			indexFlags = &tree.IndexFlags{AvoidFullScan: true}
+		}
+
 		h.tableScopeLazy = h.mb.b.buildScan(
 			h.tabMeta, tableOrdinals(h.tabMeta.Table, columnKinds{
 				includeMutations: false,
 				includeSystem:    false,
 				includeInverted:  false,
 			}),
-			nil, /* indexFlags */
+			indexFlags,
 			noRowLocking,
 			h.mb.b.allocScope(),
 			false, /* disableNotVisibleIndex */

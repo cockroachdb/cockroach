@@ -36,7 +36,7 @@ query T kvtrace(prefix=/Table/106/)
 UPSERT INTO t SELECT a + 1 FROM t
 ----
 Scan /Table/106/{1-2}
-Scan /Table/106/{1-2}
+Scan /Table/106/1/10{1-2}, /Table/106/1/10{2-3}
 Put /Table/106/1/101/0 -> /TUPLE/2:2:Decimal/1000.2/1:3:Bytes/empty
 Put /Table/106/1/101/1/1 -> /TUPLE/4:4:Decimal/0.00/2:6:Decimal/1101.2
 CPut /Table/106/1/102/0 -> /TUPLE/2:2:Decimal/1000.2/1:3:Bytes/empty

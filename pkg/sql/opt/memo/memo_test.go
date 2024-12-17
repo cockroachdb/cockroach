@@ -294,6 +294,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().DisallowFullTableScans = false
 	notStale()
 
+	// Stale avoid full table scan.
+	evalCtx.SessionData().AvoidFullTableScansInMutations = true
+	stale()
+	evalCtx.SessionData().AvoidFullTableScansInMutations = false
+	notStale()
+
 	// Stale large full scan rows.
 	evalCtx.SessionData().LargeFullScanRows = 1000
 	stale()

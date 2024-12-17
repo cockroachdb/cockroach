@@ -82,6 +82,7 @@ update xy
       ├── fd: (5)-->(6,9,10), (9)-->(10)
       ├── scan xy
       │    ├── columns: x:5!null y:6
+      │    ├── flags: avoid-full-scan
       │    ├── key: (5)
       │    └── fd: (5)-->(6)
       ├── scan uv
@@ -134,6 +135,7 @@ upsert xy
       │    │    │    └── (3, 4)
       │    │    ├── scan xy
       │    │    │    ├── columns: x:7!null y:8
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (7)
       │    │    │    └── fd: (7)-->(8)
       │    │    └── filters
@@ -162,6 +164,7 @@ delete xy
       ├── key: (5)
       ├── scan xy
       │    ├── columns: x:5!null
+      │    ├── flags: avoid-full-scan
       │    └── key: (5)
       ├── scan uv
       │    ├── columns: u:9!null
