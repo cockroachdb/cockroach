@@ -3493,7 +3493,7 @@ func writeCreateTypeDescRow(
 		return false, errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind())
 	}
 
-	name, err := tree.NewUnresolvedObjectName(2, [3]string{typeDesc.GetName(), sc.GetName()}, 0)
+	name, err := tree.NewUnresolvedObjectName(3, [3]string{typeDesc.GetName(), sc.GetName(), db.GetName()}, 0)
 	if err != nil {
 		return false, err
 	}
