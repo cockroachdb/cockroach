@@ -257,6 +257,7 @@ type Config struct {
 	// CRDBVersion exposes the active version to Raft. This helps version-gating
 	// features.
 	CRDBVersion clusterversion.Handle
+	Metrics     *Metrics
 }
 
 func (c *Config) validate() error {
@@ -428,6 +429,7 @@ type raft struct {
 	logger        raftlogger.Logger
 	storeLiveness raftstoreliveness.StoreLiveness
 	crdbVersion   clusterversion.Handle
+	metrics       *Metrics
 }
 
 func newRaft(c *Config) *raft {
@@ -458,6 +460,7 @@ func newRaft(c *Config) *raft {
 		disableConfChangeValidation: c.DisableConfChangeValidation,
 		storeLiveness:               c.StoreLiveness,
 		crdbVersion:                 c.CRDBVersion,
+		metrics:                     c.Metrics,
 	}
 	lastID := r.raftLog.lastEntryID()
 
@@ -800,6 +803,8 @@ func (r *raft) maybeSendFortify(id pb.PeerID) {
 				"%x leader at term %d does not support itself in the liveness fabric", r.id, r.Term,
 			)
 		}
+
+		r.metrics.SkippedFortificationDueToLackOfSupport.Inc(1)
 		return
 	}
 
@@ -2393,8 +2398,11 @@ func (r *raft) handleFortifyResp(m pb.Message) {
 		// the follower isn't supporting the leader's store in StoreLiveness or the
 		// follower is down. We'll try to fortify the follower again later in
 		// tickHeartbeat.
+		r.metrics.RejectedFortificationResponses.Inc(1)
 		return
 	}
+
+	r.metrics.AcceptedFortificationResponses.Inc(1)
 	r.fortificationTracker.RecordFortification(m.From, m.LeadEpoch)
 }
 

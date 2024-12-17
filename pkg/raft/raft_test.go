@@ -4162,6 +4162,37 @@ func TestLogReplicationWithReorderedMessage(t *testing.T) {
 	require.Equal(t, r1.trk.Progress(2).Match, m.Index)
 }
 
+func TestFortificationMetrics(t *testing.T) {
+	fabric := raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3, 4)
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3, 4)),
+		withStoreLiveness(fabric.GetStoreLiveness(1)))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3, 4)),
+		withStoreLiveness(fabric.GetStoreLiveness(2)))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3, 4)),
+		withStoreLiveness(fabric.GetStoreLiveness(3)))
+	n4 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3, 4)),
+		withStoreLiveness(fabric.GetStoreLiveness(4)))
+
+	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3, n4)
+
+	// Withdraw 2's SupportFor() 1. This should cause 2 to reject the
+	// fortification request.
+	nt.livenessFabric.WithdrawSupportFor(2, 1)
+
+	// Withdraw 1's SupportFrom() 3. This should cause 1 to skip sending the
+	// fortification message to 3.
+	nt.livenessFabric.WithdrawSupportFrom(1, 3)
+
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+
+	// The leader should receive an accepted MsgFortifyResp from itself and 4.
+	require.Equal(t, int64(2), n1.metrics.AcceptedFortificationResponses.Count())
+	// The leader should receive a rejected MsgFortifyResp from 2.
+	require.Equal(t, int64(1), n1.metrics.RejectedFortificationResponses.Count())
+	// The leader should skip sending a MsgFortify to 3.
+	require.Equal(t, int64(1), n1.metrics.SkippedFortificationDueToLackOfSupport.Count())
+}
+
 func expectOneMessage(t *testing.T, r *raft) pb.Message {
 	msgs := r.readMessages()
 	require.Len(t, msgs, 1, "expect one message")
@@ -4193,20 +4224,40 @@ func newNetwork(peers ...stateMachine) *network {
 // newNetworkWithConfig is like newNetwork but calls the given func to
 // modify the configuration of any state machines it creates.
 func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *network {
+	return newNetworkWithConfigAndLivenessFabric(configFunc, nil /* fabric */, peers...)
+}
+
+// newNetworkWithConfig is like newNetwork but calls the given func to
+// modify the configuration of any state machines it creates and uses the store
+// liveness fabric if provided.
+func newNetworkWithConfigAndLivenessFabric(
+	configFunc func(*Config), fabric *raftstoreliveness.LivenessFabric, peers ...stateMachine,
+) *network {
 	size := len(peers)
 	peerAddrs := idsBySize(size)
 
 	npeers := make(map[pb.PeerID]stateMachine, size)
 	nstorage := make(map[pb.PeerID]*MemoryStorage, size)
-	livenessFabric := raftstoreliveness.NewLivenessFabric()
+
+	createNewFabric := fabric == nil
+
+	if createNewFabric {
+		fabric = raftstoreliveness.NewLivenessFabric()
+		if createNewFabric {
+			for j := range peers {
+				id := peerAddrs[j]
+				fabric.AddPeer(id)
+			}
+		}
+	}
+
 	for j, p := range peers {
 		id := peerAddrs[j]
-		livenessFabric.AddPeer(id)
 		switch v := p.(type) {
 		case nil:
 			nstorage[id] = newTestMemoryStorage(withPeers(peerAddrs...))
 			cfg := newTestConfig(id, 10, 1, nstorage[id],
-				withStoreLiveness(livenessFabric.GetStoreLiveness(id)))
+				withStoreLiveness(fabric.GetStoreLiveness(id)))
 			if configFunc != nil {
 				configFunc(cfg)
 			}
@@ -4246,7 +4297,7 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 		storage:        nstorage,
 		dropm:          make(map[connem]float64),
 		ignorem:        make(map[pb.MessageType]bool),
-		livenessFabric: livenessFabric,
+		livenessFabric: fabric,
 	}
 }
 
@@ -4416,6 +4467,7 @@ func newTestConfig(
 		MaxInflightMsgs: 256,
 		StoreLiveness:   storeLiveness,
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 }
 

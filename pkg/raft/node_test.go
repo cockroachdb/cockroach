@@ -300,6 +300,7 @@ func TestNodeStart(t *testing.T) {
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 
 	rn, err := NewRawNode(c)
@@ -364,6 +365,7 @@ func TestNodeRestart(t *testing.T) {
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 	rn, err := NewRawNode(c)
 	require.NoError(t, err)
@@ -412,6 +414,7 @@ func TestNodeRestartFromSnapshot(t *testing.T) {
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 	rn, err := NewRawNode(c)
 	require.NoError(t, err)
@@ -434,6 +437,7 @@ func TestNodeAdvance(t *testing.T) {
 		MaxInflightMsgs: 256,
 		StoreLiveness:   raftstoreliveness.AlwaysLive{},
 		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 	rn, err := NewRawNode(c)
 	require.NoError(t, err)
