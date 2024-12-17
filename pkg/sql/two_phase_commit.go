@@ -89,11 +89,11 @@ func (ex *connExecutor) execPrepareTransactionInOpenStateInternal(
 			"cannot prepare a transaction that has already performed schema changes")
 	}
 
-	// TODO(nvanbenschoten): add a Txn.Key method to get the transaction's key,
-	// instead of using TestingCloneTxn.
-	txnProto := ex.state.mu.txn.TestingCloneTxn()
-	if txnProto.Status != roachpb.PENDING {
-		return errors.AssertionFailedf("cannot prepare transaction: not in PENDING state")
+	txn := ex.state.mu.txn
+	txnID := txn.ID()
+	txnKey := txn.Key()
+	if !txn.IsOpen() {
+		return errors.AssertionFailedf("cannot prepare a transaction that is not open")
 	}
 
 	// Insert the prepared transaction's row into the system table. We do this
@@ -104,8 +104,8 @@ func (ex *connExecutor) execPrepareTransactionInOpenStateInternal(
 		ex.server.cfg.InternalDB.Executor(),
 		nil, /* sqlTxn */
 		globalID,
-		txnProto.ID,
-		txnProto.Key,
+		txnID,
+		txnKey,
 		ex.sessionData().User().Normalized(),
 		ex.sessionData().Database,
 	); err != nil {
@@ -155,8 +155,10 @@ func (ex *connExecutor) cleanupAfterFailedPrepareTransaction(ctx context.Context
 
 	// We believe we've rolled back the transaction successfully. Query the
 	// transaction record again to confirm, to be extra safe.
-	txnProto := ex.state.mu.txn.TestingCloneTxn()
-	txnRecord, err := queryPreparedTransactionRecord(ctx, ex.server.cfg.DB, txnProto.ID, txnProto.Key)
+	txn := ex.state.mu.txn
+	txnID := txn.ID()
+	txnKey := txn.Key()
+	txnRecord, err := queryPreparedTransactionRecord(ctx, ex.server.cfg.DB, txnID, txnKey)
 	if err != nil {
 		log.Warningf(ctx, "query prepared transaction record after rollback failed: %s", err)
 		return
