@@ -52,10 +52,7 @@ func registerElasticWorkloadMixedVersion(r registry.Registry) {
 				mixedversion.ClusterSettingOption(
 					install.ClusterSettingsOption(settings.ClusterSettings),
 				),
-				mixedversion.EnabledDeploymentModes(
-					mixedversion.SystemOnlyDeployment,
-					mixedversion.SharedProcessDeployment,
-				),
+				mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 				mixedversion.AlwaysUseLatestPredecessors,
 				// Don't go back too far. We are mostly interested in upgrading to v24.3
 				// where RACv2 was introduced.
