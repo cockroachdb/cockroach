@@ -836,7 +836,9 @@ func getSaramaConfig(
 }
 
 type kafkaDialConfig struct {
-	// temporary, while i move stuff
+	// temporary, while i move stuff TODO: how to do this cleanly? currently the
+	// validation/consuming is done in a separate step (building this struct)
+	// from the creation of the client (sarama/kgo) config
 	hackOriginalURL *url.URL
 
 	tlsEnabled    bool
@@ -845,20 +847,20 @@ type kafkaDialConfig struct {
 	clientCert    []byte
 	clientKey     []byte
 
-	// rm
-	saslEnabled           bool
-	saslHandshake         bool
-	saslUser              string
-	saslPassword          string
-	saslMechanism         string
-	saslTokenURL          string
-	saslClientID          string
-	saslClientSecret      string
-	saslScopes            []string
-	saslGrantType         string
-	saslAwsIAMRoleArn     string
-	saslAwsRegion         string
-	saslAwsIAMSessionName string
+	// // rm
+	// saslEnabled           bool
+	// saslHandshake         bool
+	// saslUser              string
+	// saslPassword          string
+	// saslMechanism         string
+	// saslTokenURL          string
+	// saslClientID          string
+	// saslClientSecret      string
+	// saslScopes            []string
+	// saslGrantType         string
+	// saslAwsIAMRoleArn     string
+	// saslAwsRegion         string
+	// saslAwsIAMSessionName string
 }
 
 func buildDialConfig(u sinkURL) (kafkaDialConfig, error) {
@@ -902,18 +904,16 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 		return kafkaDialConfig{}, err
 	}
 
-	if wasSet, err := u.consumeBool(changefeedbase.SinkParamSASLHandshake, &dialConfig.saslHandshake); !wasSet && err == nil {
-		dialConfig.saslHandshake = true
-	} else {
-		if err != nil {
-			return kafkaDialConfig{}, err
-		}
-		if !dialConfig.saslEnabled {
-			return kafkaDialConfig{}, errors.Errorf(`%s must be enabled to configure SASL handshake behavior`, changefeedbase.SinkParamSASLEnabled)
-		}
-	}
-
-	// sarama.SASLTypeSCRAMSHA512
+	// if wasSet, err := u.consumeBool(changefeedbase.SinkParamSASLHandshake, &dialConfig.saslHandshake); !wasSet && err == nil {
+	// 	dialConfig.saslHandshake = true
+	// } else {
+	// 	if err != nil {
+	// 		return kafkaDialConfig{}, err
+	// 	}
+	// 	if !dialConfig.saslEnabled {
+	// 		return kafkaDialConfig{}, errors.Errorf(`%s must be enabled to configure SASL handshake behavior`, changefeedbase.SinkParamSASLEnabled)
+	// 	}
+	// }
 
 	// dialConfig.saslMechanism = u.consumeParam(changefeedbase.SinkParamSASLMechanism)
 	// if dialConfig.saslMechanism != `` && !dialConfig.saslEnabled {
@@ -1070,9 +1070,9 @@ func setDefaultParametersForConfluentAndAzure(
 
 	// Set values.
 	dialConfig.tlsEnabled = true
-	dialConfig.saslHandshake = true
-	dialConfig.saslEnabled = true
-	dialConfig.saslMechanism = sarama.SASLTypePlaintext
+	// dialConfig.saslHandshake = true
+	// dialConfig.saslEnabled = true
+	// dialConfig.saslMechanism = sarama.SASLTypePlaintext
 
 	// Ignore all other configurations.
 	return dialConfig, nil
@@ -1090,14 +1090,14 @@ func setDefaultParametersForConfluentAndAzure(
 func buildConfluentKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 	dialConfig := kafkaDialConfig{}
 	// Check for api_key and api_secret.
-	if dialConfig.saslUser = u.consumeParam(changefeedbase.SinkParamConfluentAPIKey); dialConfig.saslUser == "" {
-		return kafkaDialConfig{},
-			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamConfluentAPIKey /*param*/)
-	}
-	if dialConfig.saslPassword = u.consumeParam(changefeedbase.SinkParamConfluentAPISecret); dialConfig.saslPassword == "" {
-		return kafkaDialConfig{},
-			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamConfluentAPISecret /*param*/)
-	}
+	// if dialConfig.saslUser = u.consumeParam(changefeedbase.SinkParamConfluentAPIKey); dialConfig.saslUser == "" {
+	// 	return kafkaDialConfig{},
+	// 		newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamConfluentAPIKey /*param*/)
+	// }
+	// if dialConfig.saslPassword = u.consumeParam(changefeedbase.SinkParamConfluentAPISecret); dialConfig.saslPassword == "" {
+	// 	return kafkaDialConfig{},
+	// 		newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamConfluentAPISecret /*param*/)
+	// }
 
 	dialConfig, err := setDefaultParametersForConfluentAndAzure(&u, dialConfig)
 	if err != nil {
@@ -1106,6 +1106,8 @@ func buildConfluentKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 	if _, err := u.consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
 		return kafkaDialConfig{}, err
 	}
+
+	// here
 
 	remaining := u.remainingQueryParams()
 	if len(remaining) > 0 {
@@ -1142,6 +1144,7 @@ func buildAzureKafkaConfig(u sinkURL) (dialConfig kafkaDialConfig, _ error) {
 			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKey /*param*/)
 	}
 
+	// TODO: how to get these into the auth stuff
 	dialConfig.saslUser = "$ConnectionString"
 	dialConfig.saslPassword = fmt.Sprintf(
 		"Endpoint=sb://%s/;SharedAccessKeyName=%s;SharedAccessKey=%s",
@@ -1150,6 +1153,10 @@ func buildAzureKafkaConfig(u sinkURL) (dialConfig kafkaDialConfig, _ error) {
 	if err != nil {
 		return kafkaDialConfig{}, err
 	}
+
+	// TODO: this check seems to make sure that no other opts are set for this (& confluent)
+	// we check again after doing all the other stuff but....
+	// so maybe we need to do auth here too also/instead
 
 	remaining := u.remainingQueryParams()
 	if len(remaining) > 0 {
