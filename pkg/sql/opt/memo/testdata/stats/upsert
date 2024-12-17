@@ -169,6 +169,7 @@ with &1
  │         │    │    │              └── z_default:12 [type=float]
  │         │    │    ├── scan xyz
  │         │    │    │    ├── columns: xyz.x:13(string!null) xyz.y:14(int!null) xyz.z:15(float) xyz.crdb_internal_mvcc_timestamp:16(decimal) xyz.tableoid:17(oid)
+ │         │    │    │    ├── flags: avoid-full-scan
  │         │    │    │    ├── stats: [rows=1000, distinct(13)=1000, null(13)=0]
  │         │    │    │    ├── key: (13)
  │         │    │    │    └── fd: (13)-->(14-17)
@@ -306,6 +307,7 @@ upsert uv
       │    │    │              └── u_default:11 [type=int]
       │    │    ├── scan uv
       │    │    │    ├── columns: u:12(int!null) v:13(int) uv.crdb_internal_mvcc_timestamp:14(decimal) uv.tableoid:15(oid)
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── stats: [rows=1000, distinct(13)=991, null(13)=10]
       │    │    │    ├── key: (12)
       │    │    │    └── fd: (12)-->(13-15), (13)~~>(12,14,15)
@@ -380,6 +382,7 @@ upsert mno
       │    │    │              └── m:6 [type=int]
       │    │    ├── scan mno
       │    │    │    ├── columns: m:11(int!null) n:12(int) o:13(int) crdb_internal_mvcc_timestamp:14(decimal) tableoid:15(oid)
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── stats: [rows=2000, distinct(12)=100, null(12)=10, distinct(13)=1900, null(13)=100]
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-15), (12,13)~~>(11,14,15)

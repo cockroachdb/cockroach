@@ -504,6 +504,7 @@ upsert t64570
       ├── scan t64570
       │    ├── columns: x:9!null y:10!null v:11
       │    ├── constraint: /9/10: [/10/10 - /10/10]
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── stats: [rows=6e-10, distinct(9)=6e-10, null(9)=0, distinct(10)=6e-10, null(10)=0, distinct(9,10)=6e-10, null(9,10)=0]
       │    │   histogram(9)=

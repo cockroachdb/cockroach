@@ -488,7 +488,7 @@ func TestTelemetryLogging(t *testing.T) {
 
 					logCount++
 
-					costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.[0-9]*")
+					costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.?[0-9]*")
 					if !costRe.MatchString(e.Message) {
 						t.Errorf("expected to find CostEstimate but none was found")
 					}
