@@ -108,6 +108,7 @@ inner-join (hash)
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
  ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty
  ├── fd: (1)==(7), (7)==(1)
  ├── scan a
  │    ├── columns: k:1!null
@@ -146,6 +147,7 @@ New expression 1 of 1:
   right-join (hash)
    ├── flags: disallow hash join (store right side) and lookup join (into right side) and inverted join (into right side)
    ├── cost: 1e+100
+   ├── cost-flags: huge-cost-penalty
    ├── scan a
    │    └── cost: 1078.52
    ├── scan b
@@ -170,6 +172,7 @@ Source expression:
   left-join (hash)
    ├── flags: disallow hash join (store right side) and lookup join (into right side) and inverted join (into right side)
    ├── cost: 1e+100
+   ├── cost-flags: huge-cost-penalty
    ├── scan a
    │    └── cost: 1078.52
    ├── scan b
@@ -233,6 +236,7 @@ inner-join (cross)
  ├── immutable
  ├── stats: [rows=333333.3]
  ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty
  ├── key: (1,6)
  ├── fd: (1)-->(2), (6)-->(7)
  ├── scan g [as=g1]
