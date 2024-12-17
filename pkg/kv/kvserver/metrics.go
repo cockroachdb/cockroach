@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
@@ -93,6 +94,25 @@ var (
 		Name:        "replicas.uninitialized",
 		Help:        "Number of uninitialized replicas, this does not include uninitialized replicas that can lie dormant in a persistent state.",
 		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaRaftFlowsReplicate = metric.Metadata{
+		Name:        "raft.flows.state_replicate",
+		Help:        "Number of leader->peer flows in StateReplicate",
+		Measurement: "Flows",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftFlowsProbe = metric.Metadata{
+		Name:        "raft.flows.state_probe",
+		Help:        "Number of leader->peer flows in StateProbe",
+		Measurement: "Flows",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRaftFlowsSnapshot = metric.Metadata{
+		Name:        "raft.flows.state_snapshot",
+		Help:        "Number of leader->peer flows in StateSnapshot",
+		Measurement: "Flows",
 		Unit:        metric.Unit_COUNT,
 	}
 
@@ -2596,6 +2616,7 @@ type StoreMetrics struct {
 	LeaseHolderCount              *metric.Gauge
 	QuiescentCount                *metric.Gauge
 	UninitializedCount            *metric.Gauge
+	RaftFlowStateCounts           [tracker.StateCount]*metric.Gauge
 
 	// Range metrics.
 	RangeCount                *metric.Gauge
@@ -3298,6 +3319,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		LeaseHolderCount:              metric.NewGauge(metaLeaseHolderCount),
 		QuiescentCount:                metric.NewGauge(metaQuiescentCount),
 		UninitializedCount:            metric.NewGauge(metaUninitializedCount),
+		RaftFlowStateCounts:           raftFlowStateGaugeSlice(),
 
 		// Range metrics.
 		RangeCount:                metric.NewGauge(metaRangeCount),
@@ -4057,6 +4079,16 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 	if metric != (result.Metrics{}) {
 		log.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)
 	}
+}
+
+func raftFlowStateGaugeSlice() [tracker.StateCount]*metric.Gauge {
+	// NB: explicitly initialize each index so that this does not depend on int
+	// values of StateProbe, StateReplicate and StateSnapshot.
+	var gauges [tracker.StateCount]*metric.Gauge
+	gauges[tracker.StateProbe] = metric.NewGauge(metaRaftFlowsProbe)
+	gauges[tracker.StateReplicate] = metric.NewGauge(metaRaftFlowsReplicate)
+	gauges[tracker.StateSnapshot] = metric.NewGauge(metaRaftFlowsSnapshot)
+	return gauges
 }
 
 func storageLevelMetricMetadata(
