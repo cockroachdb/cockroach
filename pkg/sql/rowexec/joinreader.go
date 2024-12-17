@@ -343,7 +343,7 @@ func newJoinReader(
 		// in order to ensure the lookups are ordered, so set shouldLimitBatches.
 		spec.MaintainOrdering, shouldLimitBatches = true, true
 	}
-	useStreamer, txn, err := flowCtx.UseStreamer()
+	useStreamer, txn, err := flowCtx.UseStreamer(ctx)
 	if err != nil {
 		return nil, err
 	}
