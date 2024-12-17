@@ -75,6 +75,10 @@ func parseClientProvidedSessionParameters(
 
 		// Case-fold for the key for easier comparison.
 		key = strings.ToLower(key)
+		// Intentionally clone the string from above, so that the ReaderBuffer life
+		// is limited. Otherwise, the buffer will remain allocated for the life of
+		// the connection.
+		value = strings.Clone(value)
 
 		// Load the parameter.
 		switch key {
