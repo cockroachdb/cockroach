@@ -1189,7 +1189,7 @@ func restoreTypeCheck(
 	} else if restoreStmt.Options.ExperimentalOnline {
 		header = jobs.OnlineRestoreJobExecutionResultHeader
 	} else {
-		header = jobs.BulkJobExecutionResultHeader
+		header = jobs.BackupRestoreJobResultHeader
 	}
 	return true, header, nil
 }
@@ -1426,7 +1426,7 @@ func restorePlanHook(
 	} else if restoreStmt.Options.ExperimentalOnline {
 		header = jobs.OnlineRestoreJobExecutionResultHeader
 	} else {
-		header = jobs.BulkJobExecutionResultHeader
+		header = jobs.BackupRestoreJobResultHeader
 	}
 	return fn, header, nil, false, nil
 }
