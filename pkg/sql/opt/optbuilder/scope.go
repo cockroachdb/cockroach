@@ -563,6 +563,17 @@ func (s *scope) colList() opt.ColList {
 	return colList
 }
 
+// forEachColWithExtras applies the given function to every column in the scope,
+// including extra columns.
+func (s *scope) forEachColWithExtras(fn func(col *scopeColumn)) {
+	for i := range s.cols {
+		fn(&s.cols[i])
+	}
+	for i := range s.extraCols {
+		fn(&s.extraCols[i])
+	}
+}
+
 // hasSameColumns returns true if this scope has the same columns
 // as the other scope.
 //
