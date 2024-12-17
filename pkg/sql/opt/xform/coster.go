@@ -190,7 +190,7 @@ var (
 	// that "violate" a hint like forcing a specific index or join algorithm.
 	// If the final expression has this cost or larger, it means that there was no
 	// plan that could satisfy the hints.
-	hugeCost = memo.Cost{Cost: 1e100}
+	hugeCost = memo.Cost{Cost: 1e100, Flags: memo.CostFlags{HugeCostPenalty: true}}
 
 	// SmallDistributeCost is the per-operation cost overhead for scans which may
 	// access remote regions, but the scanned table is unpartitioned with no lease
@@ -216,7 +216,10 @@ var (
 	// TODO(msirek): Is there a better way of preferring plans that have a home
 	//               region instead of relying on costing, which may not guarantee
 	//               the correct plan is found?
-	LargeDistributeCostWithHomeRegion = memo.Cost{Cost: LargeDistributeCost.Cost / 2}
+	LargeDistributeCostWithHomeRegion = memo.Cost{
+		Cost:  LargeDistributeCost.Cost / 2,
+		Flags: memo.CostFlags{HugeCostPenalty: true},
+	}
 )
 
 // fnCost maps some functions to an execution cost. Currently this list
@@ -757,14 +760,14 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 
 	isUnfiltered := scan.IsUnfiltered(c.mem.Metadata())
-	if scan.Flags.NoFullScan {
-		// Normally a full scan of a partial index would be allowed with the
-		// NO_FULL_SCAN hint (isUnfiltered is false for partial indexes), but if the
-		// user has explicitly forced the partial index *and* used NO_FULL_SCAN, we
-		// disallow the full index scan.
-		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan()) {
-			return hugeCost
-		}
+
+	// Normally a full scan of a partial index would not be considered a "full
+	// scan" for the purposes of the NO_FULL_SCAN and AVOID_FULL_SCAN hints
+	// (isUnfiltered is false for partial indexes), but if the user has explicitly
+	// forced the partial index, we do consider it a full scan.
+	isFullScan := isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan())
+	if scan.Flags.NoFullScan && isFullScan {
+		return hugeCost
 	}
 
 	if scan.Flags.ForceInvertedIndex && !scan.IsInvertedScan(c.mem.Metadata()) {
@@ -864,6 +867,12 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 	extraCost := c.distributionCost(regionsAccessed)
 	cost.Add(extraCost)
+
+	// Apply a penalty for a full scan if needed.
+	if scan.Flags.AvoidFullScan && isFullScan {
+		cost.Flags.FullScanPenalty = true
+	}
+
 	return cost
 }
 

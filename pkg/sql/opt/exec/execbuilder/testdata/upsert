@@ -410,6 +410,112 @@ vectorized: true
 query error could not produce a query plan conforming to the NO_FULL_SCAN hint
 EXPLAIN (VERBOSE) UPSERT INTO indexed@{FORCE_INDEX=secondary,NO_FULL_SCAN} VALUES (1)
 
+# AVOID_FULL_SCAN also works to ensure a constrained scan, and does not error if
+# one is not possible.
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed@{AVOID_FULL_SCAN} VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, b_default, c_default, d_comp, a, b, c, d)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, b_default, c_default, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: CAST(NULL AS INT8)
+            │     row 0, expr 2: 10
+            │     row 0, expr 3: 11
+            │
+            └── • scan
+                  columns: (a, b, c, d)
+                  estimated row count: 1 (missing stats)
+                  table: indexed@indexed_pkey
+                  spans: /1/0
+                  locking strength: for update
+
+query T
+EXPLAIN (VERBOSE) UPSERT INTO indexed@{FORCE_INDEX=secondary,AVOID_FULL_SCAN} VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ into: indexed(a, b, c, d)
+│ auto commit
+│ arbiter indexes: indexed_pkey
+│
+└── • project
+    │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
+    │
+    └── • render
+        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
+        │ render check1: c_default > 0
+        │ render column1: column1
+        │ render b_default: b_default
+        │ render c_default: c_default
+        │ render d_comp: d_comp
+        │ render a: a
+        │ render b: b
+        │ render c: c
+        │ render d: d
+        │
+        └── • cross join (left outer)
+            │ columns: (column1, b_default, c_default, d_comp, a, b, c, d)
+            │ estimated row count: 1 (missing stats)
+            │
+            ├── • values
+            │     columns: (column1, b_default, c_default, d_comp)
+            │     size: 4 columns, 1 row
+            │     row 0, expr 0: 1
+            │     row 0, expr 1: CAST(NULL AS INT8)
+            │     row 0, expr 2: 10
+            │     row 0, expr 3: 11
+            │
+            └── • filter
+                │ columns: (a, b, c, d)
+                │ estimated row count: 1 (missing stats)
+                │ filter: a = 1
+                │
+                └── • index join
+                    │ columns: (a, b, c, d)
+                    │ estimated row count: 1,000 (missing stats)
+                    │ table: indexed@indexed_pkey
+                    │ key columns: a
+                    │
+                    └── • scan
+                          columns: (a, b, d)
+                          estimated row count: 1,000 (missing stats)
+                          table: indexed@secondary
+                          spans: FULL SCAN
+
 query T
 EXPLAIN (VERBOSE)
 INSERT INTO indexed@indexed_pkey AS indexed_pk

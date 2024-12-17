@@ -26,6 +26,15 @@ func TestCostLess(t *testing.T) {
 		{memo.Cost{Cost: 1}, memo.Cost{Cost: 1.00000001}, true},
 		{memo.Cost{Cost: 1000}, memo.Cost{Cost: 1000.00000000001}, false},
 		{memo.Cost{Cost: 1000}, memo.Cost{Cost: 1000.00001}, true},
+		{memo.Cost{Cost: 1.0, Flags: memo.CostFlags{FullScanPenalty: true}}, memo.Cost{Cost: 1.0}, false},
+		{memo.Cost{Cost: 1.0}, memo.Cost{Cost: 1.0, Flags: memo.CostFlags{HugeCostPenalty: true}}, true},
+		{memo.Cost{Cost: 1.0, Flags: memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}}, memo.Cost{Cost: 1.0}, false},
+		{memo.Cost{Cost: 1.0, Flags: memo.CostFlags{FullScanPenalty: true}}, memo.Cost{Cost: 1.0, Flags: memo.CostFlags{HugeCostPenalty: true}}, true},
+		{memo.MaxCost, memo.Cost{Cost: 1.0}, false},
+		{memo.Cost{Cost: 0.0}, memo.MaxCost, true},
+		{memo.MaxCost, memo.MaxCost, false},
+		{memo.MaxCost, memo.Cost{Cost: 1.0, Flags: memo.CostFlags{FullScanPenalty: true}}, false},
+		{memo.Cost{Cost: 1.0, Flags: memo.CostFlags{HugeCostPenalty: true}}, memo.MaxCost, true},
 	}
 	for _, tc := range testCases {
 		if tc.left.Less(tc.right) != tc.expected {
@@ -40,10 +49,46 @@ func TestCostAdd(t *testing.T) {
 	}{
 		{memo.Cost{Cost: 1.0}, memo.Cost{Cost: 2.0}, memo.Cost{Cost: 3.0}},
 		{memo.Cost{Cost: 0.0}, memo.Cost{Cost: 0.0}, memo.Cost{Cost: 0.0}},
-		{memo.Cost{Cost: -1.0}, memo.Cost{Cost: 1.0}, memo.Cost{Cost: 0.0}},
 		{memo.Cost{Cost: 1.5}, memo.Cost{Cost: 2.5}, memo.Cost{Cost: 4.0}},
+		{memo.Cost{Cost: 1.0, Flags: memo.CostFlags{FullScanPenalty: true}}, memo.Cost{Cost: 2.0}, memo.Cost{Cost: 3.0, Flags: memo.CostFlags{FullScanPenalty: true}}},
+		{memo.Cost{Cost: 1.0}, memo.Cost{Cost: 2.0, Flags: memo.CostFlags{HugeCostPenalty: true}}, memo.Cost{Cost: 3.0, Flags: memo.CostFlags{HugeCostPenalty: true}}},
 	}
+	for _, tc := range testCases {
+		tc.left.Add(tc.right)
+		if tc.left != tc.expected {
+			t.Errorf("expected %v.Add(%v) to be %v, got %v", tc.left, tc.right, tc.expected, tc.left)
+		}
+	}
+}
 
+func TestCostFlagsLess(t *testing.T) {
+	testCases := []struct {
+		left, right memo.CostFlags
+		expected    bool
+	}{
+		{memo.CostFlags{FullScanPenalty: false, HugeCostPenalty: false}, memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}, true},
+		{memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}, memo.CostFlags{FullScanPenalty: false, HugeCostPenalty: false}, false},
+		{memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}, memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}, false},
+		{memo.CostFlags{FullScanPenalty: false}, memo.CostFlags{FullScanPenalty: true}, true},
+		{memo.CostFlags{HugeCostPenalty: false}, memo.CostFlags{HugeCostPenalty: true}, true},
+	}
+	for _, tc := range testCases {
+		if tc.left.Less(tc.right) != tc.expected {
+			t.Errorf("expected %v.Less(%v) to be %v", tc.left, tc.right, tc.expected)
+		}
+	}
+}
+
+func TestCostFlagsAdd(t *testing.T) {
+	testCases := []struct {
+		left, right, expected memo.CostFlags
+	}{
+		{memo.CostFlags{FullScanPenalty: false, HugeCostPenalty: false}, memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}, memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}},
+		{memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}, memo.CostFlags{FullScanPenalty: false, HugeCostPenalty: false}, memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}},
+		{memo.CostFlags{FullScanPenalty: false}, memo.CostFlags{FullScanPenalty: true}, memo.CostFlags{FullScanPenalty: true}},
+		{memo.CostFlags{HugeCostPenalty: false}, memo.CostFlags{HugeCostPenalty: true}, memo.CostFlags{HugeCostPenalty: true}},
+		{memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: false}, memo.CostFlags{FullScanPenalty: false, HugeCostPenalty: true}, memo.CostFlags{FullScanPenalty: true, HugeCostPenalty: true}},
+	}
 	for _, tc := range testCases {
 		tc.left.Add(tc.right)
 		if tc.left != tc.expected {
