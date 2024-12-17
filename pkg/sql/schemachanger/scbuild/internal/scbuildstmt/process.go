@@ -44,7 +44,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// supportedAlterTableStatements list, so we will consider it fully supported
 	// here.
 	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, statementTags: []string{tree.AlterTableTag}, on: true, checks: alterTableChecks},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, statementTags: []string{tree.CreateIndexTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.AlterPolicy)(nil)):         {fn: AlterPolicy, statementTags: []string{tree.AlterPolicyTag}, on: true, checks: isV251Active},
 	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, statementTags: []string{tree.CommentOnColumnTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, statementTags: []string{tree.CommentOnConstraintTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, statementTags: []string{tree.CommentOnDatabaseTag}, on: true, checks: nil},
@@ -53,6 +53,8 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, statementTags: []string{tree.CommentOnTableTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CommentOnType)(nil)):       {fn: CommentOnType, statementTags: []string{tree.CommentOnTypeTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateDatabase)(nil)):      {fn: CreateDatabase, statementTags: []string{tree.CreateDatabaseTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, statementTags: []string{tree.CreateIndexTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.CreatePolicy)(nil)):        {fn: CreatePolicy, statementTags: []string{tree.CreatePolicyTag}, on: true, checks: isV251Active},
 	reflect.TypeOf((*tree.CreateRoutine)(nil)):       {fn: CreateFunction, statementTags: []string{tree.CreateFunctionTag, tree.CreateProcedureTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateSchema)(nil)):        {fn: CreateSchema, statementTags: []string{tree.CreateSchemaTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.CreateSequence)(nil)):      {fn: CreateSequence, statementTags: []string{tree.CreateSequenceTag}, on: true, checks: nil},
@@ -61,6 +63,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.DropRoutine)(nil)):         {fn: DropFunction, statementTags: []string{tree.DropFunctionTag, tree.DropProcedureTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, statementTags: []string{tree.DropIndexTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, statementTags: []string{tree.DropOwnedByTag}, on: true, checks: nil},
+	reflect.TypeOf((*tree.DropPolicy)(nil)):          {fn: DropPolicy, statementTags: []string{tree.DropPolicyTag}, on: true, checks: isV251Active},
 	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, statementTags: []string{tree.DropSchemaTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropSequence)(nil)):        {fn: DropSequence, statementTags: []string{tree.DropSequenceTag}, on: true, checks: nil},
 	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, statementTags: []string{tree.DropTableTag}, on: true, checks: nil},

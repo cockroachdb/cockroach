@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "scbuildstmt",
     srcs = [
+        "alter_policy.go",
         "alter_table.go",
         "alter_table_add_column.go",
         "alter_table_add_constraint.go",
@@ -18,6 +19,7 @@ go_library(
         "create_database.go",
         "create_function.go",
         "create_index.go",
+        "create_policy.go",
         "create_schema.go",
         "create_sequence.go",
         "create_trigger.go",
@@ -27,6 +29,7 @@ go_library(
         "drop_function.go",
         "drop_index.go",
         "drop_owned_by.go",
+        "drop_policy.go",
         "drop_schema.go",
         "drop_sequence.go",
         "drop_table.go",
