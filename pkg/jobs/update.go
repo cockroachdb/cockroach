@@ -133,6 +133,7 @@ WHERE id = $1
 		return err
 	}
 	beforeProgress := *progress
+	beforePayload := *payload
 	if j.session != nil {
 		if row[3] == tree.DNull {
 			return errors.Errorf(
@@ -304,6 +305,57 @@ WHERE id = $1
 				if err := j.Messages().Record(ctx, u.txn, "trace-id", fmt.Sprintf("%d", progress.TraceID)); err != nil {
 					return err
 				}
+			}
+		}
+	}
+	if v.AtLeast(clusterversion.V25_1_AddJobsColumns.Version()) {
+
+		vals := []interface{}{j.ID()}
+
+		var update strings.Builder
+
+		if payloadBytes != nil {
+			if beforePayload.Description != payload.Description {
+				if update.Len() > 0 {
+					update.WriteString(", ")
+				}
+				vals = append(vals, payload.Description)
+				fmt.Fprintf(&update, "description = $%d", len(vals))
+			}
+
+			if beforePayload.UsernameProto.Decode() != payload.UsernameProto.Decode() {
+				if update.Len() > 0 {
+					update.WriteString(", ")
+				}
+				vals = append(vals, payload.UsernameProto.Decode().Normalized())
+				fmt.Fprintf(&update, "owner = $%d", len(vals))
+			}
+
+			if beforePayload.Error != payload.Error {
+				if update.Len() > 0 {
+					update.WriteString(", ")
+				}
+				vals = append(vals, payload.Error)
+				fmt.Fprintf(&update, "error_msg = $%d", len(vals))
+			}
+
+			if beforePayload.FinishedMicros != payload.FinishedMicros {
+				if update.Len() > 0 {
+					update.WriteString(", ")
+				}
+				vals = append(vals, time.UnixMicro(payload.FinishedMicros))
+				fmt.Fprintf(&update, "finished = $%d", len(vals))
+			}
+
+		}
+		if len(vals) > 1 {
+			stmt := fmt.Sprintf("UPDATE system.jobs SET %s WHERE id = $1", update.String())
+			if _, err := u.txn.ExecEx(
+				ctx, "job-update-row", u.txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				stmt, vals...,
+			); err != nil {
+				return err
 			}
 		}
 	}

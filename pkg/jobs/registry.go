@@ -415,7 +415,11 @@ func createJobsInBatchWithTxn(
 		jobs[i] = j
 	}
 
-	stmt, args, jobIDs, err := batchJobInsertStmt(ctx, r, s.ID(), jobs, modifiedMicros)
+	v, err := txn.GetSystemSchemaVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stmt, args, jobIDs, err := batchJobInsertStmt(ctx, r, s.ID(), jobs, modifiedMicros, v)
 	if err != nil {
 		return nil, err
 	}
@@ -470,6 +474,7 @@ func batchJobInsertStmt(
 	sessionID sqlliveness.SessionID,
 	jobs []*Job,
 	modifiedMicros int64,
+	schemaVersion roachpb.Version,
 ) (string, []interface{}, []jobspb.JobID, error) {
 	created, err := tree.MakeDTimestamp(timeutil.FromUnixMicros(modifiedMicros), time.Microsecond)
 	if err != nil {
@@ -488,6 +493,13 @@ func batchJobInsertStmt(
 			return payload.Type().String(), nil
 		},
 	}
+
+	if schemaVersion.AtLeast(clusterversion.V25_1_AddJobsColumns.Version()) {
+		columns = append(columns, `owner`, `description`)
+		valueFns[`owner`] = func(job *Job) (interface{}, error) { return job.Payload().UsernameProto.Decode().Normalized(), nil }
+		valueFns[`description`] = func(job *Job) (interface{}, error) { return job.Payload().Description, nil }
+	}
+
 	appendValues := func(job *Job, vals *[]interface{}) (err error) {
 		defer func() {
 			switch r := recover(); r.(type) {
@@ -578,6 +590,15 @@ func (r *Registry) CreateJobWithTxn(
 
 		cols := []string{"id", "created", "status", "claim_session_id", "claim_instance_id", "job_type"}
 		vals := []interface{}{jobID, created, StatusRunning, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
+		v, err := txn.GetSystemSchemaVersion(ctx)
+		if err != nil {
+			return err
+		}
+		if v.AtLeast(clusterversion.V25_1_AddJobsColumns.Version()) {
+			cols = append(cols, "owner", "description")
+			vals = append(vals, j.mu.payload.UsernameProto.Decode().Normalized(), j.mu.payload.Description)
+		}
+
 		totalNumCols := len(cols)
 		numCols := totalNumCols
 		placeholders := func() string {
@@ -597,6 +618,7 @@ func (r *Registry) CreateJobWithTxn(
 		override.Database = catconstants.SystemDatabaseName
 		insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`,
 			strings.Join(cols[:numCols], ","), placeholders())
+
 		_, err = txn.ExecEx(
 			ctx, "job-row-insert", txn.KV(),
 			override,
@@ -708,6 +730,17 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 
 		cols := []string{"id", "created", "status", "created_by_type", "created_by_id", "job_type"}
 		placeholders := []string{"$1", "now() at time zone 'utc'", "$2", "$3", "$4", "$5"}
+		vals := []interface{}{jobID, StatusRunning, createdByType, createdByID, typ}
+		v, err := txn.GetSystemSchemaVersion(ctx)
+		if err != nil {
+			return err
+		}
+		if v.AtLeast(clusterversion.V25_1_AddJobsColumns.Version()) {
+			cols = append(cols, "owner", "description")
+			placeholders = append(placeholders, "$6", "$7")
+			vals = append(vals, j.mu.payload.UsernameProto.Decode().Normalized(), j.mu.payload.Description)
+		}
+
 		// Insert the job row, but do not set a `claim_session_id`. By not
 		// setting the claim, the job can be adopted by any node and will
 		// be adopted by the node which next runs the adoption loop.
@@ -718,7 +751,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 		_, err = txn.ExecEx(ctx, "job-insert", txn.KV(), sessiondata.InternalExecutorOverride{
 			User:     username.NodeUserName(),
 			Database: catconstants.SystemDatabaseName,
-		}, stmt, jobID, StatusRunning, createdByType, createdByID, typ)
+		}, stmt, vals...)
 		if err != nil {
 			return err
 		}
