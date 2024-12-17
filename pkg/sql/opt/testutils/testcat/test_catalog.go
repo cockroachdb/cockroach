@@ -1087,6 +1087,9 @@ type Index struct {
 	// Inverted is true when this index is an inverted index.
 	Inverted bool
 
+	// Vector is true when this index is a vector index.
+	Vector bool
+
 	// Invisibility specifies the invisibility of an index and can be any float64
 	// between [0.0, 1.0]. An index with invisibility 0.0 means that the index is
 	// visible. An index with invisibility 1.0 means that the index is fully not
@@ -1115,6 +1118,10 @@ type Index struct {
 	// invertedOrd is the ordinal of the Inverted column, if the index is
 	// an inverted index.
 	invertedOrd int
+
+	// vectorOrd is the ordinal of the vector column, if the index is a vector
+	// index.
+	vectorOrd int
 
 	// geoConfig is the geospatial index configuration, if this is a geospatial
 	// inverted index.
@@ -1158,6 +1165,11 @@ func (ti *Index) IsInverted() bool {
 	return ti.Inverted
 }
 
+// IsVector is part of the cat.Index interface.
+func (ti *Index) IsVector() bool {
+	return ti.Vector
+}
+
 // GetInvisibility is part of the cat.Index interface.
 func (ti *Index) GetInvisibility() float64 {
 	return ti.Invisibility
@@ -1188,6 +1200,9 @@ func (ti *Index) PrefixColumnCount() int {
 	if ti.IsInverted() {
 		return ti.invertedOrd
 	}
+	if ti.IsVector() {
+		return ti.vectorOrd
+	}
 	panic("only supported for inverted and vector indexes")
 }
 
@@ -1202,6 +1217,14 @@ func (ti *Index) InvertedColumn() cat.IndexColumn {
 		panic("non-inverted indexes do not have inverted columns")
 	}
 	return ti.Column(ti.invertedOrd)
+}
+
+// VectorColumn is part of the cat.Index interface.
+func (ti *Index) VectorColumn() cat.IndexColumn {
+	if !ti.IsVector() {
+		panic("non-vector indexes do not have indexed vector columns")
+	}
+	return ti.Column(ti.vectorOrd)
 }
 
 // Zone is part of the cat.Index interface.

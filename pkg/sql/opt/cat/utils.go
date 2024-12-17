@@ -125,6 +125,8 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node, redactableValue
 		idxType = "UNIQUE "
 	} else if idx.IsInverted() {
 		idxType = "INVERTED "
+	} else if idx.IsVector() {
+		idxType = "VECTOR "
 	}
 	mutation := ""
 	if IsMutationIndex(tab, ord) {
