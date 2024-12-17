@@ -1678,10 +1678,10 @@ func (oi *optIndex) LaxKeyColumnCount() int {
 	return oi.numLaxKeyCols
 }
 
-// NonInvertedPrefixColumnCount is part of the cat.Index interface.
-func (oi *optIndex) NonInvertedPrefixColumnCount() int {
+// PrefixColumnCount is part of the cat.Index interface.
+func (oi *optIndex) PrefixColumnCount() int {
 	if !oi.IsInverted() {
-		panic("non-inverted indexes do not have inverted prefix columns")
+		panic(errors.AssertionFailedf("only inverted and vector indexes have prefix columns"))
 	}
 	return oi.idx.NumKeyColumns() - 1
 }
@@ -2614,9 +2614,9 @@ func (oi *optVirtualIndex) LaxKeyColumnCount() int {
 	return 2
 }
 
-// NonInvertedPrefixColumnCount is part of the cat.Index interface.
-func (oi *optVirtualIndex) NonInvertedPrefixColumnCount() int {
-	panic("virtual indexes are not inverted")
+// PrefixColumnCount is part of the cat.Index interface.
+func (oi *optVirtualIndex) PrefixColumnCount() int {
+	panic(errors.AssertionFailedf("virtual indexes cannot be inverted or vector indexes"))
 }
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A

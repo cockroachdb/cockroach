@@ -694,7 +694,7 @@ func (u *unknownIndex) LaxKeyColumnCount() int {
 	return 0
 }
 
-func (u *unknownIndex) NonInvertedPrefixColumnCount() int {
+func (u *unknownIndex) PrefixColumnCount() int {
 	return 0
 }
 

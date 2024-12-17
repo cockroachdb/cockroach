@@ -143,10 +143,10 @@ func (hi *hypotheticalIndex) LaxKeyColumnCount() int {
 	return hi.KeyColumnCount()
 }
 
-// NonInvertedPrefixColumnCount is part of the cat.Index interface.
-func (hi *hypotheticalIndex) NonInvertedPrefixColumnCount() int {
+// PrefixColumnCount is part of the cat.Index interface.
+func (hi *hypotheticalIndex) PrefixColumnCount() int {
 	if !hi.IsInverted() {
-		panic(errors.AssertionFailedf("non-inverted indexes do not have inverted prefix columns"))
+		panic(errors.AssertionFailedf("only inverted and vector indexes have prefix columns"))
 	}
 	return len(hi.cols) - 1
 }
