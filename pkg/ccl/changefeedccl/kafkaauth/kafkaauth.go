@@ -40,7 +40,7 @@ func (r saslMechanismRegistry) Pick(u *changefeedbase.SinkURL) (saslMechanism, b
 		return nil, false, err
 	}
 	if !enabled {
-		return nil, false, nil
+		return nil, false, maybeHelpfulErrorMessage(u)
 	}
 
 	b, ok := r[u.ConsumeParam(SASLMechanism)]
@@ -93,4 +93,28 @@ func consumeHandshake(u *changefeedbase.SinkURL) (bool, error) {
 		handshake = true
 	}
 	return handshake, nil
+}
+
+func maybeHelpfulErrorMessage(u *changefeedbase.SinkURL) error {
+	userErrorSetParams := []string{
+		SASLUser,
+		SASLPassword,
+		SASLHandshake,
+		SASLMechanism,
+		SASLEnabled,
+		SASLClientID,
+		SASLClientSecret,
+		SASLTokenURL,
+		SASLGrantType,
+		SASLScopes,
+		SASLAWSIAMRoleArn,
+		SASLAWSRegion,
+		SASLAWSIAMSessionName,
+	}
+	for _, p := range userErrorSetParams {
+		if u.PeekParam(p) != "" {
+			return errors.Newf("sasl_enabled must be enabled if %s is provided", p)
+		}
+	}
+	return nil
 }
