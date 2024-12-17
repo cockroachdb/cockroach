@@ -517,7 +517,7 @@ func NewColIndexJoin(
 	cFetcherMemoryLimit := totalMemoryLimit
 
 	var kvFetcher *row.KVFetcher
-	useStreamer, txn, err := flowCtx.UseStreamer()
+	useStreamer, txn, err := flowCtx.UseStreamer(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -50,9 +50,9 @@ func convertToVecTree(
 		// the creator.
 		&fakeBatchReceiver{},
 		localProcessors,
-		nil,       /* localVectorSources */
-		func() {}, /* onFlowCleanupEnd */
-		"",        /* statementSQL */
+		nil, /* localVectorSources */
+		nil, /* onFlowCleanupEnd */
+		"",  /* statementSQL */
 	)
 	creator := newVectorizedFlowCreator(
 		flowBase, nil /* componentCreator */, recordingStats,
