@@ -6603,7 +6603,9 @@ func TestRaftCheckQuorum(t *testing.T) {
 		}, 10*time.Second, 500*time.Millisecond)
 		t.Logf("n1 stepped down as a leader")
 
-		// n2 or n3 should elect a new leader.
+		// n2 or n3 should elect a new leader. At this point, the store liveness
+		// SupportWithdrawalGracePeriod may not have expired yet, so this step waits
+		// a little longer.
 		var leaderStatus *raft.Status
 		require.Eventually(t, func() bool {
 			for _, status := range []*raft.Status{repl2.RaftStatus(), repl3.RaftStatus()} {
@@ -6614,7 +6616,7 @@ func TestRaftCheckQuorum(t *testing.T) {
 				}
 			}
 			return false
-		}, 10*time.Second, 500*time.Millisecond)
+		}, 20*time.Second, 500*time.Millisecond)
 		t.Logf("n%d became leader", leaderStatus.ID)
 
 		// n1 shouldn't become a leader.
