@@ -185,3 +185,7 @@ func (t *Tracker) Inspect() ([]kvflowinspectpb.TrackedDeduction, kvflowcontrol.T
 	}
 	return res, totalTokens
 }
+
+func (t *Tracker) Deducted() [raftpb.NumPriorities]kvflowcontrol.Tokens {
+	return t.deducted
+}
