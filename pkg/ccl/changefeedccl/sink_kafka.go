@@ -900,9 +900,9 @@ func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 	if err := u.decodeBase64(changefeedbase.SinkParamClientKey, &dialConfig.clientKey); err != nil {
 		return kafkaDialConfig{}, err
 	}
-	if _, err := u.consumeBool(changefeedbase.SinkParamSASLEnabled, &dialConfig.saslEnabled); err != nil {
-		return kafkaDialConfig{}, err
-	}
+	// if _, err := u.consumeBool(changefeedbase.SinkParamSASLEnabled, &dialConfig.saslEnabled); err != nil {
+	// 	return kafkaDialConfig{}, err
+	// }
 
 	// if wasSet, err := u.consumeBool(changefeedbase.SinkParamSASLHandshake, &dialConfig.saslHandshake); !wasSet && err == nil {
 	// 	dialConfig.saslHandshake = true
@@ -1144,11 +1144,15 @@ func buildAzureKafkaConfig(u sinkURL) (dialConfig kafkaDialConfig, _ error) {
 			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKey /*param*/)
 	}
 
-	// TODO: how to get these into the auth stuff
-	dialConfig.saslUser = "$ConnectionString"
-	dialConfig.saslPassword = fmt.Sprintf(
-		"Endpoint=sb://%s/;SharedAccessKeyName=%s;SharedAccessKey=%s",
-		hostName, sharedAccessKeyName, sharedAccessKey)
+	// TODO: how to do this better
+	u.URL.Query().Set(changefeedbase.SinkParamSASLUser, "$ConnectionString")
+	u.URL.Query().Set(changefeedbase.SinkParamSASLPassword,
+		fmt.Sprintf("Endpoint=sb://%s/;SharedAccessKeyName=%s;SharedAccessKey=%s",
+			hostName, sharedAccessKeyName, sharedAccessKey))
+	// dialConfig.saslUser = "$ConnectionString"
+	// dialConfig.saslPassword = fmt.Sprintf(
+	// 	"Endpoint=sb://%s/;SharedAccessKeyName=%s;SharedAccessKey=%s",
+	// 	hostName, sharedAccessKeyName, sharedAccessKey)
 	dialConfig, err := setDefaultParametersForConfluentAndAzure(&u, dialConfig)
 	if err != nil {
 		return kafkaDialConfig{}, err
