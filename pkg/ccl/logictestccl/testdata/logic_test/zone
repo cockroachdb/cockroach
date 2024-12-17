@@ -1407,3 +1407,15 @@ statement ok
 RESET use_declarative_schema_changer;
 
 subtest end
+
+# Regression test for #137541: in some cases (like for sequences), we cannot
+# default to getting the primary index on our physical table.
+subtest bad_partition_on_sequence
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS "foo_seq";
+
+statement error partition "nonexistent" does not exist on table "foo_seq"
+ALTER PARTITION nonexistent OF TABLE foo_seq CONFIGURE ZONE USING DEFAULT;
+
+subtest end
