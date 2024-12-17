@@ -90,7 +90,7 @@ func restoreOldSequencesTest(exportDir string, isSchemaOnly bool) func(t *testin
 			restoreQuery = restoreQuery + ", schema_only"
 		}
 		sqlDB.QueryRow(t, restoreQuery, localFoo).Scan(
-			&unused, &unused, &unused, &importedRows, &unused, &unused,
+			&unused, &unused, &unused, &importedRows,
 		)
 		totalRows := 4
 		if isSchemaOnly {
