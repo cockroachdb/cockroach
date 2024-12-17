@@ -1385,7 +1385,9 @@ var varGen = map[string]sessionVar{
 			m.SetAutoCommitBeforeDDL(b)
 			return nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(defaultAutocommitBeforeDDL.Get(sv))
+		},
 	},
 
 	// See https://www.postgresql.org/docs/10/static/ddl-schemas.html#DDL-SCHEMAS-PATH

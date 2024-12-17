@@ -250,11 +250,18 @@ var retiredSettings = map[InternalKey]struct{}{
 	"sql.auth.resolve_membership_single_scan.enabled": {},
 }
 
-// sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
+// grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
 // cluster settings. In 22.2 and later, new session settings do not need an
 // associated sql.defaults cluster setting. Instead they can have their default
 // changed with ALTER ROLE ... SET.
-var sqlDefaultSettings = map[InternalKey]struct{}{
+// Caveat: in some cases, we may still add new sql.defaults cluster settings,
+// but the new ones *must* be marked as non-public. Undocumented settings are
+// excluded from the check that prevents new sql.defaults settings. The
+// reason for this is that the rollout automation framework used in
+// CockroachCloud works by using cluster settings. If we want to slowly roll out
+// a feature that is gated behind a session setting, using a non-public
+// sql.defaults cluster setting is the recommended way to do so.
+var grandfatheredDefaultSettings = map[InternalKey]struct{}{
 	// PLEASE DO NOT ADD NEW SETTINGS TO THIS MAP. THANK YOU.
 	"sql.defaults.cost_scans_with_default_col_size.enabled":                     {},
 	"sql.defaults.datestyle":                                                    {},
@@ -318,18 +325,19 @@ func checkNameFound(keyOrName string) {
 	if a, ok := aliasRegistry[SettingName(keyOrName)]; ok {
 		panic(fmt.Sprintf("setting already defined: %s (with key %s)", keyOrName, a.key))
 	}
-	if strings.Contains(keyOrName, "sql.defaults") {
-		if _, ok := sqlDefaultSettings[InternalKey(keyOrName)]; !ok {
-			panic(fmt.Sprintf(
-				"new sql.defaults cluster settings: %s is not needed now that `ALTER ROLE ... SET` syntax "+
-					"is supported; please remove the new sql.defaults cluster setting", keyOrName))
-		}
-	}
 }
 
 // register adds a setting to the registry.
 func register(class Class, key InternalKey, desc string, s internalSetting) {
 	checkNameFound(string(key))
+	if strings.Contains(string(key), "sql.defaults") {
+		_, grandfathered := grandfatheredDefaultSettings[key]
+		if !grandfathered && s.Visibility() != Reserved {
+			panic(fmt.Sprintf(
+				"new sql.defaults cluster settings: %s is not needed now that `ALTER ROLE ... SET` syntax "+
+					"is supported; please remove the new sql.defaults cluster setting or make it non-public", key))
+		}
+	}
 
 	slot := slotIdx(len(registry))
 	s.init(class, key, desc, slot)
