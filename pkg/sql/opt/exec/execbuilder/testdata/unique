@@ -3782,25 +3782,27 @@ vectorized: true
 │       │
 │       └── • render
 │           │
-│           └── • hash join (left outer)
-│               │ equality: (v) = (v)
+│           └── • lookup join (left outer)
+│               │ table: uniq@uniq_pkey
+│               │ equality: (k) = (k)
+│               │ equality cols are key
 │               │
-│               ├── • distinct
-│               │   │ distinct on: v
-│               │   │ nulls are distinct
-│               │   │ error on duplicate
-│               │   │
-│               │   └── • render
-│               │       │
-│               │       └── • scan
-│               │             missing stats
-│               │             table: other@other_pkey
-│               │             spans: FULL SCAN
-│               │
-│               └── • scan
-│                     missing stats
-│                     table: uniq@uniq_pkey
-│                     spans: FULL SCAN
+│               └── • lookup join (left outer)
+│                   │ table: uniq@uniq_v_key
+│                   │ equality: (v) = (v)
+│                   │ equality cols are key
+│                   │
+│                   └── • distinct
+│                       │ distinct on: v
+│                       │ nulls are distinct
+│                       │ error on duplicate
+│                       │
+│                       └── • render
+│                           │
+│                           └── • scan
+│                                 missing stats
+│                                 table: other@other_pkey
+│                                 spans: FULL SCAN
 │
 ├── • constraint-check
 │   │
@@ -3943,17 +3945,13 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join (semi)
+        └── • lookup join (semi)
+            │ table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
             │ equality: (k) = (a)
             │ pred: v != b
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • scan
-                  missing stats
-                  table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
-                  spans: FULL SCAN
+            └── • scan buffer
+                  label: buffer 1
 
 # Upsert with non-constant input.
 # Add inequality filters for the hidden primary key column.

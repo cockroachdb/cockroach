@@ -203,6 +203,7 @@ update computed
       │    ├── computed column expressions
       │    │    └── c:8
       │    │         └── (a:6 + b:7) + 1
+      │    ├── flags: avoid-full-scan
       │    ├── key: (6)
       │    └── fd: (6)-->(7,8)
       └── projections

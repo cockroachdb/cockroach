@@ -1987,6 +1987,7 @@ delete a
  ├── volatile, mutations
  └── scan a
       ├── columns: k:7!null
+      ├── flags: avoid-full-scan
       └── key: (7)
 
 # Prune when computed ordering column is present.
@@ -2023,6 +2024,7 @@ delete a
       │         │    ├── fd: (7)-->(8)
       │         │    ├── scan a
       │         │    │    ├── columns: k:7!null i:8
+      │         │    │    ├── flags: avoid-full-scan
       │         │    │    ├── key: (7)
       │         │    │    └── fd: (7)-->(8)
       │         │    └── filters
@@ -2046,6 +2048,7 @@ delete abcde
       ├── fd: (8)-->(9,10), (9,10)~~>(8)
       ├── scan abcde
       │    ├── columns: a:8!null b:9 c:10
+      │    ├── flags: avoid-full-scan
       │    ├── key: (8)
       │    └── fd: (8)-->(9,10), (9,10)~~>(8)
       └── filters
@@ -2062,6 +2065,7 @@ delete mutation
  ├── volatile, mutations
  └── scan mutation
       ├── columns: a:8!null b:9 d:11 e:12
+      ├── flags: avoid-full-scan
       ├── key: (8)
       └── fd: (8)-->(9,11,12)
 
@@ -2079,6 +2083,7 @@ delete a
  ├── fd: (1)-->(4)
  └── scan a
       ├── columns: k:7!null s:10
+      ├── flags: avoid-full-scan
       ├── key: (7)
       └── fd: (7)-->(10)
 
@@ -2110,6 +2115,7 @@ update computed
       │    │    ├── computed column expressions
       │    │    │    └── d:11
       │    │    │         └── c:10 + 1
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,10,12)
       │    └── filters
@@ -2150,6 +2156,7 @@ update computed
       │    │    │    ├── computed column expressions
       │    │    │    │    └── d:11
       │    │    │    │         └── c:10 + 1
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (8)
       │    │    │    └── fd: (8)-->(9-12), (10)-->(11)
       │    │    └── filters
@@ -2191,6 +2198,7 @@ update partial_indexes
       │    │    ├── partial index predicates
       │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(10)
       │    └── filters
@@ -2230,6 +2238,7 @@ update partial_indexes
       │    │    ├── partial index predicates
       │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8-10)
       │    └── filters
@@ -2289,6 +2298,7 @@ upsert partial_indexes
       │    │    │    ├── partial index predicates
       │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12,14)
       │    │    └── filters
@@ -2347,6 +2357,7 @@ upsert partial_indexes
       │    │    │    ├── partial index predicates
       │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-14)
       │    │    └── filters
@@ -2405,6 +2416,7 @@ upsert partial_indexes
       │    │    │    ├── partial index predicates
       │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12,14)
       │    │    └── filters
@@ -2469,6 +2481,7 @@ upsert partial_indexes
       │    │    │    │    ├── partial index predicates
       │    │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │    │         └── b:12 > 1 [outer=(12), constraints=(/12: [/2 - ]; tight)]
+      │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    ├── key: (11)
       │    │    │    │    └── fd: (11)-->(12-14)
       │    │    │    └── filters
@@ -2506,6 +2519,7 @@ delete partial_indexes
       │    │    ├── partial index predicates
       │    │    │    └── partial_indexes_c_idx: filters
       │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8,9)
       │    └── filters
@@ -2547,6 +2561,7 @@ update virt_partial_idx
       │    │    ├── partial index predicates
       │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(12)
       │    └── filters
@@ -2596,6 +2611,7 @@ update virt_partial_idx
       │    │    │    ├── partial index predicates
       │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (8)
       │    │    │    └── fd: (8)-->(9,11,12)
       │    │    └── filters
@@ -2670,6 +2686,7 @@ upsert virt_partial_idx
       │    │    │    │    ├── partial index predicates
       │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
+      │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13,16)
       │    │    │    └── filters
@@ -2743,6 +2760,7 @@ upsert virt_partial_idx
       │    │    │    │    ├── partial index predicates
       │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:14 > 0 [outer=(14), constraints=(/14: [/1 - ]; tight)]
+      │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    ├── key: (13)
       │    │    │    │    └── fd: (13)-->(14,16,17)
       │    │    │    └── filters
@@ -2815,6 +2833,7 @@ upsert virt_partial_idx
       │    │    │    │    ├── partial index predicates
       │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
+      │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    ├── key: (12)
       │    │    │    │    └── fd: (12)-->(13,16)
       │    │    │    └── filters
@@ -2895,6 +2914,7 @@ upsert virt_partial_idx
       │    │    │    │    │    ├── partial index predicates
       │    │    │    │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │    │    │    │         └── b:13 > 0 [outer=(13), constraints=(/13: [/1 - ]; tight)]
+      │    │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    │    ├── key: (12)
       │    │    │    │    │    └── fd: (12)-->(13,15,16)
       │    │    │    │    └── filters
@@ -2939,6 +2959,7 @@ delete virt_partial_idx
       │    │    ├── partial index predicates
       │    │    │    └── virt_partial_idx_c_idx: filters
       │    │    │         └── b:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,11)
       │    └── filters
@@ -2982,6 +3003,7 @@ update partial_indexes
       │    │    │    ├── partial index predicates
       │    │    │    │    └── partial_indexes_c_idx: filters
       │    │    │    │         └── b:8 > 1 [outer=(8), constraints=(/8: [/2 - ]; tight)]
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (7)
       │    │    │    └── fd: (7)-->(8,9)
       │    │    └── filters
@@ -3009,6 +3031,7 @@ update family
       ├── fd: (8)-->(9,10)
       ├── scan family
       │    ├── columns: a:8!null b:9 c:10
+      │    ├── flags: avoid-full-scan
       │    ├── key: (8)
       │    └── fd: (8)-->(9,10)
       └── filters
@@ -3036,6 +3059,7 @@ update family
       │    ├── fd: (8)-->(9-12)
       │    ├── scan family
       │    │    ├── columns: a:8!null b:9 c:10 d:11 e:12
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9-12)
       │    └── filters
@@ -3068,6 +3092,7 @@ project
            ├── fd: (8)-->(9-11), (10)-->(15)
            ├── scan family
            │    ├── columns: a:8!null b:9 c:10 d:11
+           │    ├── flags: avoid-full-scan
            │    ├── key: (8)
            │    └── fd: (8)-->(9-11)
            └── projections
@@ -3097,6 +3122,7 @@ update multi_col_inv_idx
       │    ├── fd: ()-->(8-11)
       │    ├── scan multi_col_inv_idx
       │    │    ├── columns: a:8!null b:9 c:10 j:11
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9-11)
       │    └── filters
@@ -3147,6 +3173,7 @@ upsert a
       │    │    ├── fd: ()-->(11-14)
       │    │    ├── scan a
       │    │    │    ├── columns: k:11!null i:12 f:13 s:14
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-14)
       │    │    └── filters
@@ -3206,6 +3233,7 @@ upsert a
       │    │    ├── fd: ()-->(11-14)
       │    │    ├── scan a
       │    │    │    ├── columns: k:11!null i:12 f:13 s:14
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (11)
       │    │    │    └── fd: (11)-->(12-14)
       │    │    └── filters
@@ -3255,6 +3283,7 @@ upsert family
       │    ├── fd: ()-->(11,12)
       │    ├── scan family
       │    │    ├── columns: a:11!null b:12
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (11)
       │    │    └── fd: (11)-->(12)
       │    └── filters
@@ -3314,6 +3343,7 @@ project
            │    │    ├── fd: ()-->(13,15-17)
            │    │    ├── scan family
            │    │    │    ├── columns: a:13!null c:15 d:16 e:17
+           │    │    │    ├── flags: avoid-full-scan
            │    │    │    ├── key: (13)
            │    │    │    └── fd: (13)-->(15-17)
            │    │    └── filters
@@ -3368,6 +3398,7 @@ upsert family
       │    │    ├── fd: ()-->(13,15,16)
       │    │    ├── scan family
       │    │    │    ├── columns: a:13!null c:15 d:16
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (13)
       │    │    │    └── fd: (13)-->(15,16)
       │    │    └── filters
@@ -3419,6 +3450,7 @@ upsert mutation
       │    │    ├── fd: ()-->(12-16)
       │    │    ├── scan mutation
       │    │    │    ├── columns: a:12!null b:13 c:14 d:15 e:16
+      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (12)
       │    │    │    └── fd: (12)-->(13-16)
       │    │    └── filters
@@ -3458,6 +3490,7 @@ update checks
       │    ├── columns: a:7!null b:8 c:9 d:10
       │    ├── check constraint expressions
       │    │    └── a:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+      │    ├── flags: avoid-full-scan
       │    ├── key: (7)
       │    └── fd: (7)-->(8-10)
       └── projections
@@ -3483,6 +3516,7 @@ update checks
       │    ├── columns: a:7!null b:8 c:9 d:10
       │    ├── check constraint expressions
       │    │    └── a:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+      │    ├── flags: avoid-full-scan
       │    ├── key: (7)
       │    └── fd: (7)-->(8-10)
       └── projections
@@ -3584,6 +3618,7 @@ upsert checks
       │    │    │    │    ├── columns: a:11!null b:12 c:13 d:14
       │    │    │    │    ├── check constraint expressions
       │    │    │    │    │    └── a:11 > 0 [outer=(11), constraints=(/11: [/1 - ]; tight)]
+      │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    ├── key: (11)
       │    │    │    │    └── fd: (11)-->(12-14)
       │    │    │    └── filters
@@ -3622,6 +3657,7 @@ update uniq
  │    │    ├── fd: ()-->(9,11-13)
  │    │    ├── scan uniq
  │    │    │    ├── columns: uniq.k:9!null uniq.w:11 uniq.x:12 uniq.y:13
+ │    │    │    ├── flags: avoid-full-scan
  │    │    │    ├── key: (9)
  │    │    │    └── fd: (9)-->(11-13), (11)~~>(9,12,13), (12,13)~~>(9,11)
  │    │    └── filters
@@ -3651,6 +3687,7 @@ update uniq
       │              │    └── fd: ()-->(27,29)
       │              ├── scan uniq
       │              │    ├── columns: uniq.k:19!null uniq.w:21
+      │              │    ├── flags: avoid-full-scan
       │              │    ├── key: (19)
       │              │    └── fd: (19)-->(21)
       │              └── filters
@@ -3678,6 +3715,7 @@ update uniq
                      │    └── fd: ()-->(41,44,45)
                      ├── scan uniq
                      │    ├── columns: uniq.k:33!null uniq.x:36 uniq.y:37
+                     │    ├── flags: avoid-full-scan
                      │    ├── key: (33)
                      │    └── fd: (33)-->(36,37)
                      └── filters
@@ -3709,6 +3747,7 @@ update uniq_partial
  │    │    ├── fd: ()-->(7-9)
  │    │    ├── scan uniq_partial
  │    │    │    ├── columns: uniq_partial.k:7!null uniq_partial.v:8 uniq_partial.w:9
+ │    │    │    ├── flags: avoid-full-scan
  │    │    │    ├── key: (7)
  │    │    │    └── fd: (7)-->(8,9)
  │    │    └── filters
@@ -3749,6 +3788,7 @@ update uniq_partial
                      │    ├── fd: (14)-->(15,16)
                      │    ├── scan uniq_partial
                      │    │    ├── columns: uniq_partial.k:14!null uniq_partial.v:15 uniq_partial.w:16
+                     │    │    ├── flags: avoid-full-scan
                      │    │    ├── key: (14)
                      │    │    └── fd: (14)-->(15,16)
                      │    └── filters
@@ -3803,6 +3843,7 @@ upsert uniq_fk_parent
  │    │    │    ├── fd: ()-->(11-14)
  │    │    │    ├── scan uniq_fk_parent
  │    │    │    │    ├── columns: uniq_fk_parent.k:11!null uniq_fk_parent.a:12 uniq_fk_parent.b:13 uniq_fk_parent.c:14
+ │    │    │    │    ├── flags: avoid-full-scan
  │    │    │    │    ├── key: (11)
  │    │    │    │    └── fd: (11)-->(12-14), (12)~~>(11,13,14), (13,14)~~>(11,12)
  │    │    │    └── filters
@@ -3835,6 +3876,7 @@ upsert uniq_fk_parent
       │              │    └── fd: ()-->(31,32)
       │              ├── scan uniq_fk_parent
       │              │    ├── columns: uniq_fk_parent.k:24!null uniq_fk_parent.a:25
+      │              │    ├── flags: avoid-full-scan
       │              │    ├── key: (24)
       │              │    └── fd: (24)-->(25)
       │              └── filters
@@ -3862,6 +3904,7 @@ upsert uniq_fk_parent
                      │    └── fd: ()-->(43,45,46)
                      ├── scan uniq_fk_parent
                      │    ├── columns: uniq_fk_parent.k:36!null uniq_fk_parent.b:38 uniq_fk_parent.c:39
+                     │    ├── flags: avoid-full-scan
                      │    ├── key: (36)
                      │    └── fd: (36)-->(38,39)
                      └── filters
@@ -3913,6 +3956,7 @@ upsert uniq_fk_parent
  │    │    │    ├── fd: ()-->(10-14)
  │    │    │    ├── scan uniq_fk_parent
  │    │    │    │    ├── columns: uniq_fk_parent.k:10!null uniq_fk_parent.a:11 uniq_fk_parent.b:12 uniq_fk_parent.c:13 uniq_fk_parent.d:14
+ │    │    │    │    ├── flags: avoid-full-scan
  │    │    │    │    ├── key: (10)
  │    │    │    │    └── fd: (10)-->(11-14), (11)~~>(10,12-14), (12,13)~~>(10,11,14)
  │    │    │    └── filters
@@ -3946,6 +3990,7 @@ upsert uniq_fk_parent
       │              │    └── fd: ()-->(30,31)
       │              ├── scan uniq_fk_parent
       │              │    ├── columns: uniq_fk_parent.k:23!null uniq_fk_parent.a:24
+      │              │    ├── flags: avoid-full-scan
       │              │    ├── key: (23)
       │              │    └── fd: (23)-->(24)
       │              └── filters
@@ -3973,6 +4018,7 @@ upsert uniq_fk_parent
                      │    └── fd: ()-->(42,44,45)
                      ├── scan uniq_fk_parent
                      │    ├── columns: uniq_fk_parent.k:35!null uniq_fk_parent.b:37 uniq_fk_parent.c:38
+                     │    ├── flags: avoid-full-scan
                      │    ├── key: (35)
                      │    └── fd: (35)-->(37,38)
                      └── filters
@@ -3997,6 +4043,7 @@ delete uniq_fk_parent
  │    ├── fd: ()-->(8-11)
  │    ├── scan uniq_fk_parent
  │    │    ├── columns: k:8!null uniq_fk_parent.a:9 uniq_fk_parent.b:10 uniq_fk_parent.c:11
+ │    │    ├── flags: avoid-full-scan
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9-11), (9)~~>(8,10,11), (10,11)~~>(8,9)
  │    └── filters
@@ -4018,6 +4065,7 @@ delete uniq_fk_parent
       │         │    └── fd: ()-->(15,16)
       │         ├── scan uniq_fk_child
       │         │    ├── columns: uniq_fk_child.b:18 uniq_fk_child.c:19
+      │         │    ├── flags: avoid-full-scan
       │         │    ├── lax-key: (18,19)
       │         │    └── fd: (19)~~>(18)
       │         └── filters
@@ -4037,7 +4085,8 @@ delete uniq_fk_parent
                 │    ├── key: ()
                 │    └── fd: ()-->(24)
                 ├── scan uniq_fk_child
-                │    └── columns: uniq_fk_child.a:25
+                │    ├── columns: uniq_fk_child.a:25
+                │    └── flags: avoid-full-scan
                 └── filters
                      └── a:24 = uniq_fk_child.a:25 [outer=(24,25), constraints=(/24: (/NULL - ]; /25: (/NULL - ]), fd=(24)==(25), (25)==(24)]
 
@@ -4058,6 +4107,7 @@ delete virt
       │    ├── computed column expressions
       │    │    └── v:8
       │    │         └── a:6 + b:7
+      │    ├── flags: avoid-full-scan
       │    └── key: (6)
       └── filters
            └── a:6 > 1 [outer=(6), constraints=(/6: [/2 - ]; tight)]
@@ -4092,6 +4142,7 @@ project
            │    │    ├── computed column expressions
            │    │    │    └── v:8
            │    │    │         └── a:6 + b:7
+           │    │    ├── flags: avoid-full-scan
            │    │    ├── key: (6)
            │    │    └── fd: (6)-->(7)
            │    └── filters
@@ -4122,6 +4173,7 @@ delete virt_idx
       │    │    ├── computed column expressions
       │    │    │    └── v:10
       │    │    │         └── a:7 + b:8
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8)
       │    └── filters
@@ -4156,6 +4208,7 @@ update virt_idx
       │    │    ├── computed column expressions
       │    │    │    └── v:10
       │    │    │         └── a:7 + b:8
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8,9)
       │    └── projections
@@ -4191,6 +4244,7 @@ update virt_idx
       │    │    ├── computed column expressions
       │    │    │    └── v:10
       │    │    │         └── a:7 + b:8
+      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(8)
       │    └── projections
@@ -4220,6 +4274,7 @@ update virt_idx
       │    ├── computed column expressions
       │    │    └── v:10
       │    │         └── a:7 + b:8
+      │    ├── flags: avoid-full-scan
       │    ├── key: (7)
       │    └── fd: (7)-->(9)
       └── projections
@@ -4247,6 +4302,7 @@ update virt_idx2
       │    ├── computed column expressions
       │    │    └── v:10
       │    │         └── b:8 + 1
+      │    ├── flags: avoid-full-scan
       │    ├── key: (7)
       │    └── fd: (7)-->(8,9)
       └── projections
@@ -4275,6 +4331,7 @@ update virt_idx3
       │    ├── computed column expressions
       │    │    └── v:10
       │    │         └── b:8 + 1
+      │    ├── flags: avoid-full-scan
       │    ├── key: (7)
       │    └── fd: (7)-->(8,9)
       └── projections
@@ -4482,6 +4539,7 @@ project
            ├── fd: (18)-->(11-17), (11)~~>(12-18), (11)-->(21)
            ├── scan returning_test
            │    ├── columns: a:11 b:12 c:13 d:14 e:15 f:16 g:17 rowid:18!null
+           │    ├── flags: avoid-full-scan
            │    ├── key: (18)
            │    └── fd: (18)-->(11-17), (11)~~>(12-18)
            └── projections
@@ -4516,6 +4574,7 @@ project
            ├── fd: (18)-->(11,14-17), (11)~~>(14-18), (11,14)-->(21)
            ├── scan returning_test
            │    ├── columns: a:11 d:14 e:15 f:16 g:17 rowid:18!null
+           │    ├── flags: avoid-full-scan
            │    ├── key: (18)
            │    └── fd: (18)-->(11,14-17), (11)~~>(14-18)
            └── projections
@@ -4546,6 +4605,7 @@ project
            ├── fd: (18)-->(11,21), (11)~~>(18,21)
            ├── scan returning_test
            │    ├── columns: a:11 d:14 rowid:18!null
+           │    ├── flags: avoid-full-scan
            │    ├── key: (18)
            │    └── fd: (18)-->(11,14), (11)~~>(14,18)
            └── projections
@@ -4581,6 +4641,7 @@ project
            ├── fd: (18)-->(11-13), (11)~~>(12,13,18), (11,12)-->(21)
            ├── scan returning_test
            │    ├── columns: a:11 b:12 c:13 rowid:18!null
+           │    ├── flags: avoid-full-scan
            │    ├── key: (18)
            │    └── fd: (18)-->(11-13), (11)~~>(12,13,18)
            └── projections
@@ -4619,6 +4680,7 @@ with &1
  │              ├── fd: (18)-->(11-13), (11)~~>(12,13,18), (11)-->(21)
  │              ├── scan returning_test
  │              │    ├── columns: returning_test.a:11 returning_test.b:12 returning_test.c:13 rowid:18!null
+ │              │    ├── flags: avoid-full-scan
  │              │    ├── key: (18)
  │              │    └── fd: (18)-->(11-13), (11)~~>(12,13,18)
  │              └── projections
@@ -4665,6 +4727,7 @@ with &1
  │              ├── fd: (18)-->(11-13), (11)~~>(12,13,18), (11)-->(21)
  │              ├── scan returning_test
  │              │    ├── columns: returning_test.a:11 returning_test.b:12 returning_test.c:13 rowid:18!null
+ │              │    ├── flags: avoid-full-scan
  │              │    ├── key: (18)
  │              │    └── fd: (18)-->(11-13), (11)~~>(12,13,18)
  │              └── projections
@@ -4717,6 +4780,7 @@ with &2
  │              ├── fd: (30)-->(23-25), (23)~~>(24,25,30), (23)-->(33)
  │              ├── scan returning_test
  │              │    ├── columns: returning_test.a:23 returning_test.b:24 returning_test.c:25 rowid:30!null
+ │              │    ├── flags: avoid-full-scan
  │              │    ├── key: (30)
  │              │    └── fd: (30)-->(23-25), (23)~~>(24,25,30)
  │              └── projections
@@ -4813,6 +4877,7 @@ project
            │    │    ├── fd: ()-->(16-18,23)
            │    │    ├── scan returning_test
            │    │    │    ├── columns: a:16 b:17 c:18 rowid:23!null
+           │    │    │    ├── flags: avoid-full-scan
            │    │    │    ├── key: (23)
            │    │    │    └── fd: (23)-->(16-18), (16)~~>(17,18,23)
            │    │    └── filters
@@ -4850,6 +4915,7 @@ project
            ├── fd: (18)-->(11,12,14), (11)-->(12,14,18)
            ├── scan returning_test
            │    ├── columns: a:11 b:12 d:14 rowid:18!null
+           │    ├── flags: avoid-full-scan
            │    ├── key: (18)
            │    └── fd: (18)-->(11,12,14), (11)~~>(12,14,18)
            └── filters
@@ -4914,6 +4980,7 @@ project
            │    │    └── (1, 2, 'c', CAST(NULL AS INT8), unique_rowid())
            │    ├── scan returning_test
            │    │    ├── columns: a:16 b:17 c:18 d:19 rowid:23!null
+           │    │    ├── flags: avoid-full-scan
            │    │    ├── key: (23)
            │    │    └── fd: (23)-->(16-19), (16)~~>(17-19,23)
            │    └── filters
@@ -4953,6 +5020,7 @@ update abcde
       ├── fd: (8)-->(9-12), (9,10)~~>(8,11,12), (15)-->(16,17), (8)==(15), (15)==(8)
       ├── scan abcde
       │    ├── columns: abcde.a:8!null abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12
+      │    ├── flags: avoid-full-scan
       │    ├── key: (8)
       │    └── fd: (8)-->(9-12), (9,10)~~>(8,11,12)
       ├── scan family

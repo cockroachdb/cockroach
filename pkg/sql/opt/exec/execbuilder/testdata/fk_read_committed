@@ -122,7 +122,8 @@ EXPLAIN (OPT) UPDATE cookies SET j = 2 WHERE c = 1
 update cookies
  ├── project
  │    ├── scan cookies
- │    │    └── constraint: /7: [/1 - /1]
+ │    │    ├── constraint: /7: [/1 - /1]
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 2
  └── f-k-checks
@@ -194,6 +195,7 @@ EXPLAIN (OPT) UPDATE jars SET j = j + 4
 update jars
  ├── project
  │    ├── scan jars
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── jars.j + 4
  └── f-k-checks
@@ -205,6 +207,7 @@ update jars
                      │    └── with-scan &1
                      ├── distinct-on
                      │    └── scan cookies
+                     │         └── flags: avoid-full-scan
                      └── filters
                           └── j = cookies.j
 
@@ -290,12 +293,14 @@ EXPLAIN (OPT) DELETE FROM jars WHERE j = 1
 ----
 delete jars
  ├── scan jars
- │    └── constraint: /6: [/1 - /1]
+ │    ├── constraint: /6: [/1 - /1]
+ │    └── flags: avoid-full-scan
  └── f-k-checks
       └── f-k-checks-item: cookies(j) -> jars(j)
            └── semi-join (hash)
                 ├── with-scan &1
                 ├── scan cookies
+                │    └── flags: avoid-full-scan
                 └── filters
                      └── j = cookies.j
 

@@ -43,14 +43,10 @@ vectorized: true
 └── • distinct
     │ distinct on: a
     │
-    └── • hash join
+    └── • lookup join
+        │ table: abc@abc_pkey
         │ equality: (a) = (a)
-        │ left cols are key
-        │
-        ├── • scan
-        │     missing stats
-        │     table: abc@abc_pkey
-        │     spans: FULL SCAN
+        │ equality cols are key
         │
         └── • scan
               missing stats
@@ -180,14 +176,10 @@ vectorized: true
         │     table: ab@ab_pkey
         │     spans: FULL SCAN
         │
-        └── • hash join
+        └── • lookup join
+            │ table: abc@abc_pkey
             │ equality: (a) = (a)
-            │ left cols are key
-            │
-            ├── • scan
-            │     missing stats
-            │     table: abc@abc_pkey
-            │     spans: FULL SCAN
+            │ equality cols are key
             │
             └── • scan
                   missing stats
@@ -226,14 +218,10 @@ vectorized: true
         │     table: ab@ab_pkey
         │     spans: FULL SCAN
         │
-        └── • hash join
+        └── • lookup join
+            │ table: abc@abc_pkey
             │ equality: (a) = (a)
-            │ left cols are key
-            │
-            ├── • scan
-            │     missing stats
-            │     table: abc@abc_pkey
-            │     spans: FULL SCAN
+            │ equality cols are key
             │
             └── • scan
                   missing stats

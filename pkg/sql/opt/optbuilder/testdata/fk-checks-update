@@ -18,7 +18,8 @@ update child
  ├── project
  │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    ├── scan child
- │    │    └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    ├── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 4 [as=p_new:9]
  └── f-k-checks
@@ -31,7 +32,7 @@ update child
                 │         └──  p_new:9 => p:10
                 ├── scan parent
                 │    ├── columns: parent.p:12!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:10 = parent.p:12
 
@@ -47,7 +48,8 @@ update parent
  ├── project
  │    ├── columns: p_new:11!null x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
  │    ├── scan parent
- │    │    └── columns: x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    │    ├── columns: x:6 parent.p:7!null other:8 parent.crdb_internal_mvcc_timestamp:9 parent.tableoid:10
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── parent.p:7 + 1 [as=p_new:11]
  └── f-k-checks
@@ -68,7 +70,7 @@ update parent
                 │              └──  p_new:11 => p:13
                 ├── scan child
                 │    ├── columns: child.p:15!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:12 = child.p:15
 
@@ -88,7 +90,8 @@ update child
  ├── project
  │    ├── columns: c_new:9!null child.c:5!null p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    ├── scan child
- │    │    └── columns: child.c:5!null p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    ├── columns: child.c:5!null p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 4 [as=c_new:9]
  └── f-k-checks
@@ -109,7 +112,7 @@ update child
                 │              └──  c_new:9 => c:11
                 ├── scan grandchild
                 │    ├── columns: grandchild.c:13!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── c:10 = grandchild.c:13
 
@@ -126,7 +129,8 @@ update child
  ├── project
  │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    ├── scan child
- │    │    └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    ├── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 4 [as=p_new:9]
  └── f-k-checks
@@ -139,7 +143,7 @@ update child
                 │         └──  p_new:9 => p:10
                 ├── scan parent
                 │    ├── columns: parent.p:12!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:10 = parent.p:12
 
@@ -153,7 +157,8 @@ update child
  │    └── child.p:6 => child.p:2
  ├── input binding: &1
  ├── scan child
- │    └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    ├── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    └── flags: avoid-full-scan
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
@@ -164,7 +169,7 @@ update child
                 │         └──  child.p:6 => p:9
                 ├── scan parent
                 │    ├── columns: parent.p:11!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:9 = parent.p:11
 
@@ -181,7 +186,8 @@ update child
  ├── project
  │    ├── columns: p_new:9!null c_new:10!null child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    ├── scan child
- │    │    └── columns: child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    ├── columns: child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         ├── child.p:6 + 1 [as=p_new:9]
  │         └── child.c:5 + 1 [as=c_new:10]
@@ -195,7 +201,7 @@ update child
       │         │         └──  p_new:9 => p:11
       │         ├── scan parent
       │         │    ├── columns: parent.p:13!null
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              └── p:11 = parent.p:13
       └── f-k-checks-item: grandchild(c) -> child(c)
@@ -215,7 +221,7 @@ update child
                 │              └──  c_new:10 => c:18
                 ├── scan grandchild
                 │    ├── columns: grandchild.c:20!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── c:17 = grandchild.c:20
 
@@ -236,7 +242,8 @@ update child_nullable
  └── project
       ├── columns: p_new:9 c:5!null p:6 crdb_internal_mvcc_timestamp:7 tableoid:8
       ├── scan child_nullable
-      │    └── columns: c:5!null p:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    ├── columns: c:5!null p:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    └── flags: avoid-full-scan
       └── projections
            └── NULL::INT8 [as=p_new:9]
 
@@ -257,7 +264,8 @@ update child
  ├── project
  │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    ├── scan child
- │    │    └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    ├── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 4 [as=p_new:9]
  └── f-k-checks
@@ -270,7 +278,7 @@ update child
                 │         └──  p_new:9 => p:10
                 ├── scan parent
                 │    ├── columns: parent.p:12!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:10 = parent.p:12
 
@@ -290,7 +298,8 @@ update self
  ├── project
  │    ├── columns: y_new:9!null x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
  │    ├── scan self
- │    │    └── columns: x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    ├── columns: x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 3 [as=y_new:9]
  └── f-k-checks
@@ -303,7 +312,7 @@ update self
                 │         └──  y_new:9 => y:10
                 ├── scan self
                 │    ├── columns: x:11!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── y:10 = x:11
 
@@ -319,7 +328,8 @@ update self
  ├── project
  │    ├── columns: x_new:9!null self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
  │    ├── scan self
- │    │    └── columns: self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    ├── columns: self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 3 [as=x_new:9]
  └── f-k-checks
@@ -340,7 +350,7 @@ update self
                 │              └──  x_new:9 => x:11
                 ├── scan self
                 │    ├── columns: y:13!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── x:10 = y:13
 
@@ -372,7 +382,8 @@ update child_multicol_simple
       ├── select
       │    ├── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan child_multicol_simple
-      │    │    └── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    └── flags: avoid-full-scan
       │    └── filters
       │         └── k:7 = 1
       └── projections
@@ -404,7 +415,8 @@ update child_multicol_full
  │    ├── select
  │    │    ├── columns: k:7!null child_multicol_full.a:8 child_multicol_full.b:9 child_multicol_full.c:10 child_multicol_full.crdb_internal_mvcc_timestamp:11 child_multicol_full.tableoid:12
  │    │    ├── scan child_multicol_full
- │    │    │    └── columns: k:7!null child_multicol_full.a:8 child_multicol_full.b:9 child_multicol_full.c:10 child_multicol_full.crdb_internal_mvcc_timestamp:11 child_multicol_full.tableoid:12
+ │    │    │    ├── columns: k:7!null child_multicol_full.a:8 child_multicol_full.b:9 child_multicol_full.c:10 child_multicol_full.crdb_internal_mvcc_timestamp:11 child_multicol_full.tableoid:12
+ │    │    │    └── flags: avoid-full-scan
  │    │    └── filters
  │    │         └── k:7 = 1
  │    └── projections
@@ -422,7 +434,7 @@ update child_multicol_full
                 │         └──  a_new:13 => c:17
                 ├── scan parent_multicol
                 │    ├── columns: parent_multicol.a:18!null parent_multicol.b:19!null parent_multicol.c:20!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── a:15 = parent_multicol.a:18
                      ├── b:16 = parent_multicol.b:19
@@ -443,7 +455,8 @@ update child_multicol_full
       ├── select
       │    ├── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan child_multicol_full
-      │    │    └── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    ├── columns: k:7!null a:8 b:9 c:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    └── flags: avoid-full-scan
       │    └── filters
       │         └── k:7 = 1
       └── projections
@@ -482,7 +495,8 @@ update fam
  ├── project
  │    ├── columns: c_new:17!null fam.a:9 fam.b:10 fam.c:11 fam.d:12 rowid:14!null
  │    ├── scan fam
- │    │    └── columns: fam.a:9 fam.b:10 fam.c:11 fam.d:12 rowid:14!null
+ │    │    ├── columns: fam.a:9 fam.b:10 fam.c:11 fam.d:12 rowid:14!null
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 3 [as=c_new:17]
  └── f-k-checks
@@ -500,7 +514,7 @@ update fam
                 │         └── d:19 IS NOT NULL
                 ├── scan two
                 │    ├── columns: two.a:20!null two.b:21!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── c:18 = two.a:20
                      └── d:19 = two.b:21
@@ -517,7 +531,8 @@ update fam
  ├── project
  │    ├── columns: d_new:17!null fam.c:11 fam.d:12 e:13 rowid:14!null
  │    ├── scan fam
- │    │    └── columns: fam.c:11 fam.d:12 e:13 rowid:14!null
+ │    │    ├── columns: fam.c:11 fam.d:12 e:13 rowid:14!null
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 3 [as=d_new:17]
  └── f-k-checks
@@ -535,7 +550,7 @@ update fam
                 │         └── c:18 IS NOT NULL
                 ├── scan two
                 │    ├── columns: two.a:20!null two.b:21!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── c:18 = two.a:20
                      └── d:19 = two.b:21
@@ -553,7 +568,8 @@ update child
  ├── project
  │    ├── columns: p_new:9!null c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    ├── scan child
- │    │    └── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    ├── columns: c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 4 [as=p_new:9]
  └── f-k-checks
@@ -567,7 +583,7 @@ update child
                 │         └──  p_new:9 => p:10
                 ├── scan parent
                 │    ├── columns: parent.p:12!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:10 = parent.p:12
 
@@ -585,7 +601,8 @@ update child
  ├── project
  │    ├── columns: p_new:9!null c_new:10!null child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
  │    ├── scan child
- │    │    └── columns: child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    ├── columns: child.c:5!null child.p:6!null child.crdb_internal_mvcc_timestamp:7 child.tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         ├── child.p:6 + 1 [as=p_new:9]
  │         └── child.c:5 + 1 [as=c_new:10]
@@ -599,7 +616,7 @@ update child
       │         │         └──  p_new:9 => p:11
       │         ├── scan parent
       │         │    ├── columns: parent.p:13!null
-      │         │    ├── flags: disabled not visible index feature
+      │         │    ├── flags: avoid-full-scan disabled not visible index feature
       │         │    └── locking: for-share
       │         └── filters
       │              └── p:11 = parent.p:13
@@ -620,7 +637,7 @@ update child
       │         │              └──  c_new:10 => c:18
       │         ├── scan grandchild
       │         │    ├── columns: grandchild.c:20!null
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              └── c:17 = grandchild.c:20
       └── f-k-checks-item: grandchild2(c) -> child(c)
@@ -640,7 +657,7 @@ update child
                 │              └──  c_new:10 => c:24
                 ├── scan grandchild2
                 │    ├── columns: grandchild2.c:26!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── c:23 = grandchild2.c:26
 
@@ -656,7 +673,8 @@ update self
  ├── project
  │    ├── columns: y_new:9!null x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
  │    ├── scan self
- │    │    └── columns: x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    ├── columns: x:5!null self.y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 3 [as=y_new:9]
  └── f-k-checks
@@ -669,7 +687,7 @@ update self
                 │         └──  y_new:9 => y:10
                 ├── scan self
                 │    ├── columns: x:11!null
-                │    ├── flags: disabled not visible index feature
+                │    ├── flags: avoid-full-scan disabled not visible index feature
                 │    └── locking: for-share
                 └── filters
                      └── y:10 = x:11
@@ -686,7 +704,8 @@ update self
  ├── project
  │    ├── columns: x_new:9!null self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
  │    ├── scan self
- │    │    └── columns: self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    ├── columns: self.x:5!null y:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+ │    │    └── flags: avoid-full-scan
  │    └── projections
  │         └── 3 [as=x_new:9]
  └── f-k-checks
@@ -707,6 +726,6 @@ update self
                 │              └──  x_new:9 => x:11
                 ├── scan self
                 │    ├── columns: y:13!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── x:10 = y:13

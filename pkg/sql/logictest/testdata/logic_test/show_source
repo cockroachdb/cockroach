@@ -35,6 +35,7 @@ application_name                                           ·
 authentication_method                                      cert-password
 autocommit_before_ddl                                      off
 avoid_buffering                                            off
+avoid_full_table_scans_in_mutations                        on
 backslash_quote                                            safe_encoding
 bypass_pcr_reader_catalog_aost                             off
 bytea_output                                               hex

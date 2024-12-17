@@ -2047,6 +2047,7 @@ sort
       │              ├── fd: ()-->(15,16), (12)-->(8-11)
       │              ├── scan abcd
       │              │    ├── columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12!null
+      │              │    ├── flags: avoid-full-scan
       │              │    ├── key: (12)
       │              │    └── fd: (12)-->(8-11)
       │              └── projections
@@ -2104,6 +2105,7 @@ sort
       │              ├── scan abcd@cd
       │              │    ├── columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12!null
       │              │    ├── limit: 10
+      │              │    ├── flags: avoid-full-scan
       │              │    ├── key: (12)
       │              │    └── fd: (12)-->(8-11)
       │              └── projections
@@ -2164,6 +2166,7 @@ sort
       │              ├── scan abcd@cd
       │              │    ├── columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12!null
       │              │    ├── limit: 10
+      │              │    ├── flags: avoid-full-scan
       │              │    ├── key: (12)
       │              │    └── fd: (12)-->(8-11)
       │              └── projections
@@ -2292,6 +2295,7 @@ sort
       │         ├── fd: (5)-->(1-4)
       │         └── scan abcd
       │              ├── columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12!null
+      │              ├── flags: avoid-full-scan
       │              ├── key: (12)
       │              └── fd: (12)-->(8-11)
       └── with-scan &1
@@ -2337,6 +2341,7 @@ sort
       │         └── scan abcd@cd
       │              ├── columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12!null
       │              ├── limit: 10
+      │              ├── flags: avoid-full-scan
       │              ├── key: (12)
       │              └── fd: (12)-->(8-11)
       └── with-scan &1
@@ -2387,6 +2392,7 @@ sort
       │         └── scan abcd@cd
       │              ├── columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12!null
       │              ├── limit: 10
+      │              ├── flags: avoid-full-scan
       │              ├── key: (12)
       │              └── fd: (12)-->(8-11)
       └── select
