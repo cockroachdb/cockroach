@@ -585,13 +585,25 @@ scan t@abc
  ├── key: (1)
  └── fd: ()-->(2,3), (1)-->(4)
 
-# Test that the NO_FULL_SCAN hint creates a huge cost for full scans.
+# Test that the NO_FULL_SCAN and AVOID_FULL_SCAN hints create a huge cost for
+# full scans.
 opt
 SELECT * FROM t@{NO_FULL_SCAN}
 ----
 scan t
  ├── columns: k:1!null a:2 b:3 c:4
  ├── flags: no-full-scan
+ ├── stats: [rows=100000]
+ ├── cost: 1e+100
+ ├── key: (1)
+ └── fd: (1)-->(2-4)
+
+opt
+SELECT * FROM t@{AVOID_FULL_SCAN}
+----
+scan t
+ ├── columns: k:1!null a:2 b:3 c:4
+ ├── flags: avoid-full-scan
  ├── stats: [rows=100000]
  ├── cost: 1e+100
  ├── key: (1)
@@ -620,6 +632,23 @@ index-join t
       └── fd: (1)-->(3)
 
 opt
+SELECT * FROM t@{AVOID_FULL_SCAN} WHERE c > 0
+----
+index-join t
+ ├── columns: k:1!null a:2 b:3 c:4!null
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+ ├── cost: 234671.505
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t@b_partial,partial
+      ├── columns: k:1!null b:3
+      ├── flags: avoid-full-scan
+      ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+      ├── cost: 34341.4524
+      ├── key: (1)
+      └── fd: (1)-->(3)
+
+opt
 SELECT * FROM t@{FORCE_INDEX=b_partial,NO_FULL_SCAN} WHERE c > 0
 ----
 select
@@ -634,6 +663,28 @@ select
  │    │    └── b_partial: filters
  │    │         └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
  │    ├── flags: force-index=b_partial no-full-scan
+ │    ├── stats: [rows=100000, distinct(1)=3, null(1)=0, distinct(4)=10000, null(4)=1000]
+ │    ├── cost: 1e+100
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+
+opt
+SELECT * FROM t@{FORCE_INDEX=b_partial,AVOID_FULL_SCAN} WHERE c > 0
+----
+select
+ ├── columns: k:1!null a:2 b:3 c:4!null
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+ ├── cost: 1e+100
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan t
+ │    ├── columns: k:1!null a:2 b:3 c:4
+ │    ├── partial index predicates
+ │    │    └── b_partial: filters
+ │    │         └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+ │    ├── flags: force-index=b_partial avoid-full-scan
  │    ├── stats: [rows=100000, distinct(1)=3, null(1)=0, distinct(4)=10000, null(4)=1000]
  │    ├── cost: 1e+100
  │    ├── key: (1)

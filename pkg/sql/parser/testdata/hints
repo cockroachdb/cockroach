@@ -47,6 +47,14 @@ SELECT '_' FROM t@{NO_FULL_SCAN} -- literals removed
 SELECT 'a' FROM _@{NO_FULL_SCAN} -- identifiers removed
 
 parse
+SELECT 'a' FROM t@{AVOID_FULL_SCAN}
+----
+SELECT 'a' FROM t@{AVOID_FULL_SCAN}
+SELECT ('a') FROM t@{AVOID_FULL_SCAN} -- fully parenthesized
+SELECT '_' FROM t@{AVOID_FULL_SCAN} -- literals removed
+SELECT 'a' FROM _@{AVOID_FULL_SCAN} -- identifiers removed
+
+parse
 SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}
 ----
 SELECT 'a' FROM t@{IGNORE_FOREIGN_KEYS}
