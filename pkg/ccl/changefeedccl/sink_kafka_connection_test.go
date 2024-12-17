@@ -185,7 +185,7 @@ func TestChangefeedExternalConnections(t *testing.T) {
 		},
 		{
 			name:          "param sasl_handshake must be a bool",
-			uri:           "kafka://nope/?sasl_enabled=true&sasl_handshake=maybe",
+			uri:           "kafka://nope/?sasl_enabled=true&sasl_user=x&sasl_password=y&sasl_handshake=maybe",
 			expectedError: "param sasl_handshake must be a bool",
 		},
 		// TODO: these more helpful error msgs

@@ -43,7 +43,11 @@ func (r saslMechanismRegistry) Pick(u *changefeedbase.SinkURL) (saslMechanism, b
 		return nil, false, maybeHelpfulErrorMessage(u)
 	}
 
-	b, ok := r[u.ConsumeParam(SASLMechanism)]
+	mechanism := u.ConsumeParam(SASLMechanism)
+	if mechanism == "" {
+		mechanism = sarama.SASLTypePlaintext
+	}
+	b, ok := r[mechanism]
 	if !ok {
 		return nil, false, nil
 	}
