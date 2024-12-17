@@ -247,7 +247,7 @@ func EndTxn(
 	ms := cArgs.Stats
 	reply := resp.(*kvpb.EndTxnResponse)
 
-	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING, roachpb.ABORTED); err != nil {
+	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.PREPARED, roachpb.STAGING, roachpb.ABORTED); err != nil {
 		return result.Result{}, err
 	}
 	if args.Require1PC {
@@ -258,6 +258,14 @@ func EndTxn(
 	}
 	if args.Commit && args.Poison {
 		return result.Result{}, errors.AssertionFailedf("cannot poison during a committing EndTxn request")
+	}
+	if args.Prepare {
+		if !args.Commit {
+			return result.Result{}, errors.AssertionFailedf("cannot prepare a rollback")
+		}
+		if args.IsParallelCommit() {
+			return result.Result{}, errors.AssertionFailedf("cannot prepare a parallel commit")
+		}
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
@@ -345,17 +353,34 @@ func EndTxn(
 					"programming error: epoch regression: %d", h.Txn.Epoch)
 			}
 
+		case roachpb.PREPARED:
+			if h.Txn.Epoch != reply.Txn.Epoch {
+				return result.Result{}, errors.AssertionFailedf(
+					"programming error: epoch mismatch with prepared transaction: %d != %d", h.Txn.Epoch, reply.Txn.Epoch)
+			}
+			if args.IsParallelCommit() {
+				return result.Result{}, errors.AssertionFailedf(
+					"programming error: cannot parallel commit a prepared transaction")
+			}
+
 		case roachpb.STAGING:
-			if h.Txn.Epoch < reply.Txn.Epoch {
+			switch {
+			case h.Txn.Epoch < reply.Txn.Epoch:
 				return result.Result{}, errors.AssertionFailedf(
 					"programming error: epoch regression: %d", h.Txn.Epoch)
-			}
-			if h.Txn.Epoch > reply.Txn.Epoch {
+			case h.Txn.Epoch == reply.Txn.Epoch:
+				if args.Prepare {
+					return result.Result{}, errors.AssertionFailedf(
+						"programming error: cannot prepare a staging transaction")
+				}
+			case h.Txn.Epoch > reply.Txn.Epoch:
 				// If the EndTxn carries a newer epoch than a STAGING txn record, we do
 				// not consider the transaction to be performing a parallel commit and
 				// potentially already implicitly committed because we know that the
 				// transaction restarted since entering the STAGING state.
 				reply.Txn.Status = roachpb.PENDING
+			default:
+				panic("unreachable")
 			}
 
 		default:
@@ -374,6 +399,12 @@ func EndTxn(
 		switch {
 		case !recordAlreadyExisted, existingTxn.Status == roachpb.PENDING:
 			BumpToMinTxnCommitTS(ctx, cArgs.EvalCtx, reply.Txn)
+		case existingTxn.Status == roachpb.PREPARED:
+			// Don't check timestamp cache. The transaction could not have been pushed
+			// while its record was in the PREPARED state. Furthermore, checking the
+			// timestamp cache and increasing the commit timestamp at this point would
+			// be incorrect, because the transaction must not fail to commit after
+			// being prepared.
 		case existingTxn.Status == roachpb.STAGING:
 			// Don't check timestamp cache. The transaction could not have been pushed
 			// while its record was in the STAGING state so checking is unnecessary.
@@ -391,6 +422,16 @@ func EndTxn(
 		// assert this in txnCommitter.makeTxnCommitExplicitAsync.
 		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args.Deadline); retry {
 			return result.Result{}, kvpb.NewTransactionRetryError(reason, extraMsg)
+		}
+
+		// If the transaction is being prepared to commit, mark it as such. Do not
+		// proceed to release locks or resolve intents.
+		if args.Prepare {
+			reply.Txn.Status = roachpb.PREPARED
+			if err := updatePreparedTxn(ctx, readWriter, ms, key, args, reply.Txn); err != nil {
+				return result.Result{}, err
+			}
+			return result.Result{}, nil
 		}
 
 		// If the transaction needs to be staged as part of an implicit commit
@@ -456,9 +497,13 @@ func EndTxn(
 
 	// Resolve locks on the local range synchronously so that their resolution
 	// ends up in the same Raft entry. There should always be at least one because
-	// we position the transaction record next to the first write of a transaction.
-	// This avoids the need for the intentResolver to have to return to this range
-	// to resolve locks for this transaction in the future.
+	// we position the transaction record next to the first lock acquired by a
+	// transaction. This avoids the need for the intentResolver to have to return
+	// to this range to resolve locks for this transaction in the future.
+	// TODO(nvanbenschoten): clean up the handling of args and reply.Txn in these
+	// functions. Ideally, only reply.Txn would be passed through and fields from
+	// args would be extracted. This would help us re-use LockSpans from the txn
+	// record when they're not provided in args.
 	resolvedLocks, releasedReplLocks, externalLocks, err := resolveLocalLocks(
 		ctx, readWriter, cArgs.EvalCtx, ms, args, reply.Txn)
 	if err != nil {
@@ -712,6 +757,25 @@ func resolveLocalLocksWithPagination(
 		}
 	}
 	return resolvedLocks, releasedReplLocks, externalLocks, nil
+}
+
+// updatePreparedTxn persists the PREPARED transaction record with updated
+// status (and possibly timestamp). It persists the record with all of the
+// transaction's (local and remote) locks.
+func updatePreparedTxn(
+	ctx context.Context,
+	readWriter storage.ReadWriter,
+	ms *enginepb.MVCCStats,
+	key []byte,
+	args *kvpb.EndTxnRequest,
+	txn *roachpb.Transaction,
+) error {
+	txn.LockSpans = args.LockSpans
+	txn.InFlightWrites = nil
+	txnRecord := txn.AsRecord()
+	return storage.MVCCPutProto(
+		ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
+		storage.MVCCWriteOptions{Stats: ms, Category: fs.BatchEvalReadCategory})
 }
 
 // updateStagingTxn persists the STAGING transaction record with updated status

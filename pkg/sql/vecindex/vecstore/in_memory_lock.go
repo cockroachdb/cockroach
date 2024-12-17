@@ -6,16 +6,22 @@
 package vecstore
 
 import (
+	"sync"
 	"sync/atomic"
-
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // inMemoryLock wraps a read-write lock, adding support for reentrancy and
 // ownership tracking.
+// NOTE: This is only used in testing and benchmarking code.
 type inMemoryLock struct {
 	mu struct {
-		syncutil.RWMutex
+		// NOTE: Do not use syncutil.RWMutex here, because deadlock detection
+		// reports spurious failures. Different partitions in the vector index
+		// can be locked in different orders by merge, split, format and other
+		// operations. In all these cases, we first acquire the in-memory store's
+		// structure lock to prevent deadlocks. But the deadlock detection package
+		// is not smart enough to realize this and reports false positives.
+		sync.RWMutex
 
 		// reentrancy counts how many times the same owner has acquired the same
 		// lock.
