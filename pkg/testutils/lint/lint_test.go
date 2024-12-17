@@ -2967,4 +2967,54 @@ func TestLint(t *testing.T) {
 			}
 		}
 	})
+
+	// This test verifies that all version-specific tests in pkg/upgrade/upgrades
+	// contain a clusterversion.SkipWhenMinSupportedVersionIsAtLeast() check. This
+	// check makes it easier to bump the minimum supported version (specifically
+	// it allows cleaning up the deprecated upgrades in a separate PR).
+	t.Run("TestUpgradesTestsCheckVersion", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-oEh",
+			`^func Test[^(]*|clusterversion.SkipWhenMinSupportedVersionIsAtLeast`,
+			"--",
+			"upgrade/upgrades/v[0-9]*_test.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		testExpectingSkip := ""
+		if err := stream.ForEach(filter, func(s string) {
+			if strings.HasPrefix(s, "func Test") {
+				if testExpectingSkip != "" {
+					t.Errorf("\n%s is missing a clusterversion.SkipWhenMinSupportedVersionIsAtLeast() check", testExpectingSkip)
+				}
+				testExpectingSkip = strings.TrimPrefix(s, "func ")
+			} else {
+				if !strings.Contains(s, "clusterversion.SkipWhenMinSupportedVersionIsAtLeast") {
+					panic("unexpected line: " + s)
+				}
+				testExpectingSkip = ""
+			}
+		}); err != nil {
+			t.Error(err)
+		}
+		if testExpectingSkip != "" {
+			t.Errorf("\n%s is missing a clusterversion.SkipWhenMinSupportedVersionIsAtLeast() check", testExpectingSkip)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
 }
