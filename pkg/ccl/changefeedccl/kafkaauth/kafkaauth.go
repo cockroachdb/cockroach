@@ -3,6 +3,7 @@ package kafkaauth
 import (
 	"context"
 	"net/url"
+	"runtime"
 
 	"github.com/IBM/sarama"
 	"github.com/cockroachdb/errors"
@@ -29,6 +30,10 @@ func (r saslMechanismRegistry) Register(b saslMechanismBuilder) {
 }
 
 func (r saslMechanismRegistry) Pick(u *url.URL) (saslMechanism, bool, error) {
+	if u == nil {
+		runtime.Breakpoint()
+		panic("why is there a nil url?")
+	}
 	params := queryParams(u.Query())
 	if queryParams.consume(params, SASLEnabled) != "true" {
 		return nil, false, nil

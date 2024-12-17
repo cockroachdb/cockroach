@@ -395,6 +395,8 @@ func buildKgoConfig(
 		return nil, err
 	}
 
+	dialConfig.hackOriginalURL = u.URL
+
 	if dialConfig.tlsEnabled {
 		tlsCfg := &tls.Config{InsecureSkipVerify: dialConfig.tlsSkipVerify}
 		if dialConfig.caCert != nil {
