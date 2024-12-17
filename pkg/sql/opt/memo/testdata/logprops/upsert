@@ -151,6 +151,7 @@ project
            │    │    │    │    │         └── plus [type=int]
            │    │    │    │    │              ├── variable: b:15 [type=int]
            │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    ├── flags: avoid-full-scan
            │    │    │    │    ├── key: (17)
            │    │    │    │    ├── fd: (17)-->(14-16,18,19), (14)-->(15-19), (15,16)~~>(14,17-19), (15)-->(16)
            │    │    │    │    ├── prune: (14-19)
@@ -316,6 +317,7 @@ project
            │    │    │    │    │    │    │         └── plus [type=int]
            │    │    │    │    │    │    │              ├── variable: b:15 [type=int]
            │    │    │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │    │    ├── flags: avoid-full-scan
            │    │    │    │    │    │    ├── key: (17)
            │    │    │    │    │    │    ├── fd: (17)-->(14-16), (14)-->(15-17), (15,16)~~>(14,17), (15)-->(16)
            │    │    │    │    │    │    ├── prune: (14-17)
@@ -332,6 +334,7 @@ project
            │    │    │    │    │    │         └── plus [type=int]
            │    │    │    │    │    │              ├── variable: b:21 [type=int]
            │    │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    │    ├── flags: avoid-full-scan
            │    │    │    │    │    ├── key: (23)
            │    │    │    │    │    ├── fd: (23)-->(20-22), (20)-->(21-23), (21,22)~~>(20,23), (21)-->(22)
            │    │    │    │    │    ├── prune: (20-23)
@@ -348,6 +351,7 @@ project
            │    │    │    │    │         └── plus [type=int]
            │    │    │    │    │              ├── variable: b:27 [type=int]
            │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    ├── flags: avoid-full-scan
            │    │    │    │    ├── key: (29)
            │    │    │    │    ├── fd: (29)-->(26-28), (26)-->(27-29), (27,28)~~>(26,29), (27)-->(28)
            │    │    │    │    ├── prune: (26-29)
@@ -485,6 +489,7 @@ project
  │         │    │    │    │         └── plus [type=int]
  │         │    │    │    │              ├── variable: b:12 [type=int]
  │         │    │    │    │              └── const: 1 [type=int]
+ │         │    │    │    ├── flags: avoid-full-scan
  │         │    │    │    ├── key: (14)
  │         │    │    │    ├── fd: (14)-->(11-13,15,16), (11)-->(12-16), (12,13)~~>(11,14-16), (12)-->(13)
  │         │    │    │    ├── prune: (11-16)
@@ -644,6 +649,7 @@ upsert abc
       │    │    │    │    │         └── plus [type=int]
       │    │    │    │    │              ├── variable: b:16 [type=int]
       │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    ├── key: (18)
       │    │    │    │    ├── fd: (18)-->(15-17,19,20), (15)-->(16-20), (16,17)~~>(15,18-20), (16)-->(17)
       │    │    │    │    ├── prune: (15-20)

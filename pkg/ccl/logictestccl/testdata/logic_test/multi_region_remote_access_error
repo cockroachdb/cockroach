@@ -502,7 +502,7 @@ DELETE FROM messages_rbr WHERE account_id NOT IN (SELECT account_id FROM message
 
 # Delete accessing all regions should fail.
 retry
-statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.message\)\. For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region
 DELETE FROM messages_rbr WHERE message = 'Hello World!'
 
 # Insert should fail accessing all rows in messages_rbr.
