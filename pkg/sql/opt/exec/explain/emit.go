@@ -1262,11 +1262,43 @@ func (e *emitter) emitTuples(rows tree.ExprContainer, numColumns int) {
 		rows.NumRows(), util.Pluralize(int64(rows.NumRows())),
 	)
 	if e.ob.flags.Verbose {
-		for i := 0; i < rows.NumRows(); i++ {
-			for j := 0; j < rows.NumCols(); j++ {
-				expr := rows.Get(i, j).(tree.TypedExpr)
-				e.ob.Expr(fmt.Sprintf("row %d, expr %d", i, j), expr, nil /* varColumns */)
+		const maxLines = 30
+		if rows.NumRows()*rows.NumCols() <= maxLines || rows.NumRows() <= 2 {
+			// Emit all rows fully when we'll use a handful of lines, or we have
+			// at most two rows.
+			e.emitTuplesRange(rows, 0 /* rowStartIdx */, rows.NumRows())
+		} else {
+			// We have at least three rows and need to collapse the output.
+			//
+			// Always emit the first and the last rows.
+			headEndIdx, tailStartIdx := 1, rows.NumRows()-1
+			// Split the remaining "line budget" evenly, favoring the "head" a
+			// bit, without exceeding the limit.
+			availableLines := (maxLines - 2*rows.NumCols()) / rows.NumCols()
+			extraHeadLength, extraTailLength := availableLines-availableLines/2, availableLines/2
+			headEndIdx += extraHeadLength
+			tailStartIdx -= extraTailLength
+			if headEndIdx >= tailStartIdx {
+				// This should never happen, but just to be safe we'll handle
+				// the case when "head" and "tail" combine, and we end up
+				// emitting all rows.
+				e.emitTuplesRange(rows, 0 /* rowStartIdx */, rows.NumRows())
+			} else {
+				e.emitTuplesRange(rows, 0 /* rowStartIdx */, headEndIdx)
+				e.ob.AddField("...", "")
+				e.emitTuplesRange(rows, tailStartIdx, rows.NumRows())
 			}
+		}
+	}
+}
+
+// emitTuplesRange emits all tuples in the [rowStartIdx, rowEndIdx) range from
+// the given container.
+func (e *emitter) emitTuplesRange(rows tree.ExprContainer, rowStartIdx, rowEndIdx int) {
+	for i := rowStartIdx; i < rowEndIdx; i++ {
+		for j := 0; j < rows.NumCols(); j++ {
+			expr := rows.Get(i, j).(tree.TypedExpr)
+			e.ob.Expr(fmt.Sprintf("row %d, expr %d", i, j), expr, nil /* varColumns */)
 		}
 	}
 }
