@@ -961,7 +961,7 @@ func (u *sqlSymUnion) indexType() tree.IndexType {
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC AS_JSON AT_AT
-%token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
+%token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY AVOID_FULL_SCAN
 
 %token <str> BACKUP BACKUPS BACKWARD BATCH BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
 %token <str> BUCKET_COUNT
@@ -14318,6 +14318,10 @@ index_flags_param:
   {
     $$.val = &tree.IndexFlags{NoFullScan: true}
   }
+| AVOID_FULL_SCAN
+  {
+    $$.val = &tree.IndexFlags{AvoidFullScan: true}
+  }
 | IGNORE_FOREIGN_KEYS
   {
     /* SKIP DOC */
@@ -14407,6 +14411,7 @@ opt_index_flags:
 //   '{' NO_INDEX_JOIN [, ...] '}'
 //   '{' NO_ZIGZAG_JOIN [, ...] '}'
 //   '{' NO_FULL_SCAN [, ...] '}'
+//   '{' AVOID_FULL_SCAN [, ...] '}'
 //   '{' IGNORE_FOREIGN_KEYS [, ...] '}'
 //   '{' FORCE_ZIGZAG = <idxname> [, ...]  '}'
 //
@@ -17889,6 +17894,7 @@ unreserved_keyword:
 | ATTRIBUTE
 | AUTOMATIC
 | AVAILABILITY
+| AVOID_FULL_SCAN
 | BACKUP
 | BACKUPS
 | BACKWARD
@@ -18390,6 +18396,7 @@ bare_label_keywords:
 | AUTHORIZATION
 | AUTOMATIC
 | AVAILABILITY
+| AVOID_FULL_SCAN
 | BACKUP
 | BACKUPS
 | BACKWARD
