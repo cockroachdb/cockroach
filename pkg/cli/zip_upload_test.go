@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -100,6 +101,9 @@ func setupZipDir(t *testing.T, inputs zipUploadTestContents) (string, func()) {
 			require.NoError(t, err)
 			require.NoError(t, file.Close())
 		}
+
+		// setup table dumps - copy the test table dumps to the debug directory
+		copyZipFiles(t, "testdata/table_dumps/", debugDir)
 	}
 
 	return debugDir, func() {
@@ -190,6 +194,8 @@ func TestUploadZipEndToEnd(t *testing.T) {
 					d.ScanArgs(t, "log-format", &logFormat)
 					includeFlag = fmt.Sprintf("%s --log-format=%s", includeFlag, logFormat)
 				}
+			case "upload-tables":
+				includeFlag = "--include=tables"
 			}
 
 			debugDir, cleanup := setupZipDir(t, testInput)
@@ -342,6 +348,8 @@ func setupDDArchiveHook(t *testing.T, req *http.Request) ([]byte, error) {
 
 func setupDDLogsHook(t *testing.T, req *http.Request) ([]byte, error) {
 	t.Helper()
+	printLock.Lock()
+	defer printLock.Unlock()
 
 	// validate the headers
 	require.Equal(t, "dd-api-key", req.Header.Get(datadogAPIKeyHeader))
@@ -361,20 +369,44 @@ func setupDDLogsHook(t *testing.T, req *http.Request) ([]byte, error) {
 
 	fmt.Println("Logs API Hook:", req.URL)
 
-	// remove timestamp from the logs to make the test deterministic
-	var lines []ddLogsAPIEntry
-	if err := json.Unmarshal(body.Bytes(), &lines); err != nil {
-		return nil, err
-	}
-
-	for _, line := range lines {
-		line.Timestamp = 0
-		raw, err := json.Marshal(line)
-		if err != nil {
+	// capture body contents for the log upload use case
+	if bytes.Contains(body.Bytes(), []byte("source:cockroachdb")) {
+		// remove timestamp from the logs to make the test deterministic
+		var lines []ddLogsAPIEntry
+		if err := json.Unmarshal(body.Bytes(), &lines); err != nil {
 			return nil, err
 		}
 
-		fmt.Println("Logs API Hook:", string(raw))
+		for _, line := range lines {
+			line.Timestamp = 0
+			raw, err := json.Marshal(line)
+			if err != nil {
+				return nil, err
+			}
+
+			fmt.Println("Logs API Hook:", string(raw))
+		}
+	}
+
+	// capture the body contents for the table dump upload use case
+	if bytes.Contains(body.Bytes(), []byte("source:debug-zip")) {
+		var lines []map[string]any
+		require.NoError(t, json.Unmarshal(body.Bytes(), &lines))
+
+		for _, parsedLine := range lines {
+			// sort the keys to make the test deterministic
+			keys := make([]string, 0, len(lines))
+			for k := range parsedLine {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+
+			fmt.Print("Logs API Hook: ")
+			for _, k := range keys {
+				fmt.Printf("%s=%v\t", k, parsedLine[k])
+			}
+			fmt.Println()
+		}
 	}
 
 	return []byte("200 OK"), nil
@@ -521,5 +553,32 @@ func TestLogUploadSigSplit(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func copyZipFiles(t *testing.T, src, dest string) {
+	t.Helper()
+
+	paths, err := expandPatterns([]string{
+		path.Join(src, "*.txt"),
+		path.Join(src, "nodes/*/*.txt"),
+	})
+	require.NoError(t, err)
+
+	for _, p := range paths {
+		destPath := path.Join(dest, strings.TrimPrefix(p, src))
+
+		if err := os.MkdirAll(path.Dir(destPath), 0744); err != nil && !oserror.IsExist(err) {
+			require.FailNow(t, "failed to create directory:", err)
+		}
+
+		destFile, err := os.Create(destPath)
+		require.NoError(t, err)
+
+		srcFile, err := os.Open(p)
+		require.NoError(t, err)
+
+		_, err = io.Copy(destFile, srcFile)
+		require.NoError(t, err)
 	}
 }
