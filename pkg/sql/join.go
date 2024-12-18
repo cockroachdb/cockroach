@@ -31,16 +31,28 @@ type joinNode struct {
 
 	// columns contains the metadata for the results of this node.
 	columns colinfo.ResultColumns
+
+	// estimatedLeftRowCount, when set, is the estimated number of rows that
+	// the left input will produce.
+	estimatedLeftRowCount uint64
+	// estimatedRightRowCount, when set, is the estimated number of rows that
+	// the right input will produce.
+	estimatedRightRowCount uint64
 }
 
 func (p *planner) makeJoinNode(
-	left planDataSource, right planDataSource, pred *joinPredicate,
+	left planDataSource,
+	right planDataSource,
+	pred *joinPredicate,
+	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) *joinNode {
 	n := &joinNode{
-		left:    left,
-		right:   right,
-		pred:    pred,
-		columns: pred.cols,
+		left:                   left,
+		right:                  right,
+		pred:                   pred,
+		columns:                pred.cols,
+		estimatedLeftRowCount:  estimatedLeftRowCount,
+		estimatedRightRowCount: estimatedRightRowCount,
 	}
 	return n
 }

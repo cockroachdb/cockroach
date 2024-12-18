@@ -1973,7 +1973,7 @@ func getPlanDistribution(
 		return physicalplan.LocalPlan, nil
 	}
 
-	rec, err := checkSupportForPlanNode(plan.planNode, distSQLVisitor, sd)
+	rec, err := checkSupportForPlanNode(ctx, plan.planNode, distSQLVisitor, sd)
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
@@ -3341,6 +3341,10 @@ func (m *sessionDataMutator) SetDistributeScanRowCountThreshold(val uint64) {
 
 func (m *sessionDataMutator) SetAlwaysDistributeFullScans(val bool) {
 	m.data.AlwaysDistributeFullScans = val
+}
+
+func (m *sessionDataMutator) SetDistributeJoinRowCountThreshold(val uint64) {
+	m.data.DistributeJoinRowCountThreshold = val
 }
 
 func (m *sessionDataMutator) SetDisableVecUnionEagerCancellation(val bool) {
