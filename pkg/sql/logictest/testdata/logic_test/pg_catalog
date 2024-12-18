@@ -2939,6 +2939,7 @@ disable_plan_gists                                         off                 N
 disable_vec_union_eager_cancellation                       off                 NULL      NULL        NULL        string
 disallow_full_table_scans                                  off                 NULL      NULL        NULL        string
 distribute_group_by_row_count_threshold                    1000                NULL      NULL        NULL        string
+distribute_join_row_count_threshold                        1000                NULL      NULL        NULL        string
 distribute_scan_row_count_threshold                        10000               NULL      NULL        NULL        string
 distribute_sort_row_count_threshold                        1000                NULL      NULL        NULL        string
 distsql                                                    off                 NULL      NULL        NULL        string
@@ -3141,6 +3142,7 @@ disable_plan_gists                                         off                 N
 disable_vec_union_eager_cancellation                       off                 NULL  user     NULL      off                 off
 disallow_full_table_scans                                  off                 NULL  user     NULL      off                 off
 distribute_group_by_row_count_threshold                    1000                NULL  user     NULL      1000                1000
+distribute_join_row_count_threshold                        1000                NULL  user     NULL      1000                1000
 distribute_scan_row_count_threshold                        10000               NULL  user     NULL      10000               10000
 distribute_sort_row_count_threshold                        1000                NULL  user     NULL      1000                1000
 distsql                                                    off                 NULL  user     NULL      off                 off
@@ -3339,6 +3341,7 @@ disable_plan_gists                                         NULL    NULL     NULL
 disable_vec_union_eager_cancellation                       NULL    NULL     NULL     NULL        NULL
 disallow_full_table_scans                                  NULL    NULL     NULL     NULL        NULL
 distribute_group_by_row_count_threshold                    NULL    NULL     NULL     NULL        NULL
+distribute_join_row_count_threshold                        NULL    NULL     NULL     NULL        NULL
 distribute_scan_row_count_threshold                        NULL    NULL     NULL     NULL        NULL
 distribute_sort_row_count_threshold                        NULL    NULL     NULL     NULL        NULL
 distsql                                                    NULL    NULL     NULL     NULL        NULL
