@@ -4238,4 +4238,63 @@ CREATE SEQUENCE public.t1_serial_columns_l_seq MINVALUE 1 MAXVALUE 9223372036854
 CREATE SEQUENCE public.t1_serial_columns_z_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 CREATE SEQUENCE public.t1_serial_columns_z_seq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
+# Regression tests for issue #137326. Add column with IF NOT EXIST.
+subtest add_col_if_not_exists
+
+statement ok
+CREATE TABLE t1_add ();
+
+statement ok
+ALTER TABLE t1_add ADD COLUMN c1 BIGINT;
+
+statement ok
+INSERT INTO t1_add VALUES (100);
+
+statement error pgcode 42601 pq: variable sub-expressions are not allowed in ON UPDATE
+ALTER TABLE t1_add ADD COLUMN IF NOT EXISTS c1 TEXT ON UPDATE EXISTS ( TABLE error );
+
+statement ok
+ALTER TABLE t1_add ADD COLUMN IF NOT EXISTS c1 TEXT ON UPDATE 10;
+
+query TT
+SHOW CREATE TABLE t1_add
+----
+t1_add  CREATE TABLE public.t1_add (
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          c1 INT8 NULL,
+          CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
+        )
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+set use_declarative_schema_changer = 'unsafe_always';
+
+statement ok;
+BEGIN;
+ALTER TABLE t1_add DROP COLUMN c1;
+ALTER TABLE t1_add ADD COLUMN IF NOT EXISTS c1 date DEFAULT '2024-08-31';
+COMMIT;
+
+query T
+SELECT c1 FROM t1_add
+----
+2024-08-31 00:00:00 +0000 +0000
+
+query TT
+SHOW CREATE TABLE t1_add
+----
+t1_add  CREATE TABLE public.t1_add (
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          c1 DATE NULL DEFAULT '2024-08-31':::DATE,
+          CONSTRAINT t1_add_pkey PRIMARY KEY (rowid ASC)
+        )
+
+statement ok
+DROP TABLE t1_add
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc;
+
 subtest end
