@@ -33,7 +33,7 @@ type applyJoinNode struct {
 	joinType descpb.JoinType
 
 	// The data source with no outer columns.
-	input planNode
+	singleInputPlanNode
 
 	// pred represents the join predicate.
 	pred *joinPredicate
@@ -90,12 +90,12 @@ func newApplyJoinNode(
 	}
 
 	return &applyJoinNode{
-		joinType:        joinType,
-		input:           left,
-		pred:            pred,
-		rightTypes:      getTypesFromResultColumns(rightCols),
-		planRightSideFn: planRightSideFn,
-		columns:         pred.cols,
+		joinType:            joinType,
+		singleInputPlanNode: singleInputPlanNode{left},
+		pred:                pred,
+		rightTypes:          getTypesFromResultColumns(rightCols),
+		planRightSideFn:     planRightSideFn,
+		columns:             pred.cols,
 	}, nil
 }
 

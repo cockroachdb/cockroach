@@ -28,22 +28,27 @@ import (
 )
 
 type alterFunctionOptionsNode struct {
+	zeroInputPlanNode
 	n *tree.AlterFunctionOptions
 }
 
 type alterFunctionRenameNode struct {
+	zeroInputPlanNode
 	n *tree.AlterRoutineRename
 }
 
 type alterFunctionSetOwnerNode struct {
+	zeroInputPlanNode
 	n *tree.AlterRoutineSetOwner
 }
 
 type alterFunctionSetSchemaNode struct {
+	zeroInputPlanNode
 	n *tree.AlterRoutineSetSchema
 }
 
 type alterFunctionDepExtensionNode struct {
+	zeroInputPlanNode
 	n *tree.AlterFunctionDepExtension
 }
 

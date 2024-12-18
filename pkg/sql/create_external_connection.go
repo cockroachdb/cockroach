@@ -25,6 +25,7 @@ import (
 const externalConnectionOp = "CREATE EXTERNAL CONNECTION"
 
 type createExternalConnectionNode struct {
+	zeroInputPlanNode
 	n *tree.CreateExternalConnection
 }
 

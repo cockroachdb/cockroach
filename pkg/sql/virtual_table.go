@@ -172,6 +172,7 @@ func setupGenerator(
 // virtualTableNode is a planNode that constructs its rows by repeatedly
 // invoking a virtualTableGenerator function.
 type virtualTableNode struct {
+	zeroInputPlanNode
 	columns    colinfo.ResultColumns
 	next       virtualTableGenerator
 	cleanup    func(ctx context.Context)
@@ -215,7 +216,7 @@ func (n *virtualTableNode) Close(ctx context.Context) {
 // virtual index on the equality columns. For each row of the input, a virtual
 // table index lookup is performed, and the rows are joined together.
 type vTableLookupJoinNode struct {
-	input planNode
+	singleInputPlanNode
 
 	dbName string
 	db     catalog.DatabaseDescriptor

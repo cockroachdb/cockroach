@@ -22,6 +22,7 @@ import (
 // used without a planNode by the connExecutor when running SHOW
 // COMPLETIONS as an observer statement.
 type completionsNode struct {
+	zeroInputPlanNode
 	optColumnsSlot
 
 	n       *tree.ShowCompletions

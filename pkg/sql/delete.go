@@ -22,7 +22,7 @@ var deleteNodePool = sync.Pool{
 }
 
 type deleteNode struct {
-	source planNode
+	singleInputPlanNode
 
 	// columns is set if this DELETE is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a
@@ -97,7 +97,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Advance one individual row.
-		if next, err := d.source.Next(params); !next {
+		if next, err := d.input.Next(params); !next {
 			lastBatch = true
 			if err != nil {
 				return false, err
@@ -105,9 +105,9 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 			break
 		}
 
-		// Process the deletion of the current source row,
+		// Process the deletion of the current input row,
 		// potentially accumulating the result row for later.
-		if err := d.processSourceRow(params, d.source.Values()); err != nil {
+		if err := d.processSourceRow(params, d.input.Values()); err != nil {
 			return false, err
 		}
 
@@ -218,11 +218,11 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 // BatchedCount implements the batchedPlanNode interface.
 func (d *deleteNode) BatchedCount() int { return d.run.td.lastBatchSize }
 
-// BatchedCount implements the batchedPlanNode interface.
+// BatchedValues implements the batchedPlanNode interface.
 func (d *deleteNode) BatchedValues(rowIdx int) tree.Datums { return d.run.td.rows.At(rowIdx) }
 
 func (d *deleteNode) Close(ctx context.Context) {
-	d.source.Close(ctx)
+	d.input.Close(ctx)
 	d.run.td.close(ctx)
 	*d = deleteNode{}
 	deleteNodePool.Put(d)

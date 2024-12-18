@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 )
 
 // planHookFn is a function that can intercept a statement being planned and
@@ -219,4 +220,15 @@ func (f *hookFnNode) Close(ctx context.Context) {
 	for _, sub := range f.subplans {
 		sub.Close(ctx)
 	}
+}
+
+func (f *hookFnNode) InputCount() int {
+	return len(f.subplans)
+}
+
+func (f *hookFnNode) Input(i int) (planNode, error) {
+	if i < len(f.subplans) {
+		return f.subplans[i], nil
+	}
+	return nil, errors.AssertionFailedf("input index %d is out of range", i)
 }

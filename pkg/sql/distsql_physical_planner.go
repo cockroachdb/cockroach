@@ -544,10 +544,10 @@ func checkSupportForPlanNode(
 		return shouldDistribute, nil
 
 	case *distinctNode:
-		return checkSupportForPlanNode(ctx, n.plan, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 
 	case *exportNode:
-		return checkSupportForPlanNode(ctx, n.source, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 
 	case *filterNode:
 		if err := checkExprForDistSQL(n.filter, distSQLVisitor); err != nil {
@@ -556,7 +556,7 @@ func checkSupportForPlanNode(
 		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 
 	case *groupNode:
-		rec, err := checkSupportForPlanNode(ctx, n.plan, distSQLVisitor, sd)
+		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -644,7 +644,7 @@ func checkSupportForPlanNode(
 		// Note that we don't need to check whether we support distribution of
 		// n.countExpr or n.offsetExpr because those expressions are evaluated
 		// locally, during the physical planning.
-		return checkSupportForPlanNode(ctx, n.plan, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 
 	case *lookupJoinNode:
 		if n.remoteLookupExpr != nil || n.remoteOnlyLookups {
@@ -685,7 +685,7 @@ func checkSupportForPlanNode(
 				return cannotDistribute, err
 			}
 		}
-		return checkSupportForPlanNode(ctx, n.source, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 
 	case *renderNode:
 		for _, e := range n.render {
@@ -693,7 +693,7 @@ func checkSupportForPlanNode(
 				return cannotDistribute, err
 			}
 		}
-		return checkSupportForPlanNode(ctx, n.source, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 
 	case *scanNode:
 		if n.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -724,7 +724,7 @@ func checkSupportForPlanNode(
 		return scanRec, nil
 
 	case *sortNode:
-		rec, err := checkSupportForPlanNode(ctx, n.plan, distSQLVisitor, sd)
+		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -741,7 +741,7 @@ func checkSupportForPlanNode(
 		return rec.compose(sortRec), nil
 
 	case *topKNode:
-		rec, err := checkSupportForPlanNode(ctx, n.plan, distSQLVisitor, sd)
+		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -789,7 +789,7 @@ func checkSupportForPlanNode(
 		return canDistribute, nil
 
 	case *windowNode:
-		rec, err := checkSupportForPlanNode(ctx, n.plan, distSQLVisitor, sd)
+		rec, err := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -2575,7 +2575,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		isScalar:             n.isScalar,
 		groupCols:            n.groupCols,
 		groupColOrdering:     n.groupColOrdering,
-		inputMergeOrdering:   dsp.convertOrdering(planReqOrdering(n.plan), p.PlanToStreamColMap),
+		inputMergeOrdering:   dsp.convertOrdering(planReqOrdering(n.input), p.PlanToStreamColMap),
 		reqOrdering:          n.reqOrdering,
 		estimatedRowCount:    n.estimatedRowCount,
 	})
@@ -3973,7 +3973,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		}
 
 	case *groupNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.plan)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 		if err != nil {
 			return nil, err
 		}
@@ -4002,7 +4002,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createPlanForJoin(ctx, planCtx, n)
 
 	case *limitNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.plan)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 		if err != nil {
 			return nil, err
 		}
@@ -4024,7 +4024,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createPlanForProjectSet(ctx, planCtx, n)
 
 	case *renderNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.source)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 		if err != nil {
 			return nil, err
 		}
@@ -4036,9 +4036,9 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 	case *rowCountNode:
 		if in, ok := n.source.(*insertNode); ok {
 			// Skip over any renderNodes.
-			nod := in.source
-			for r, ok := nod.(*renderNode); ok; r, ok = r.source.(*renderNode) {
-				nod = r.source
+			nod := in.input
+			for r, ok := nod.(*renderNode); ok; r, ok = r.input.(*renderNode) {
+				nod = r.input
 			}
 			if v, ok := nod.(*valuesNode); ok {
 				if v.coldataBatch != nil {
@@ -4057,7 +4057,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createTableReaders(ctx, planCtx, n)
 
 	case *sortNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.plan)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 		if err != nil {
 			return nil, err
 		}
@@ -4065,7 +4065,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		dsp.addSorters(ctx, plan, n.ordering, n.alreadyOrderedPrefix, 0 /* limit */)
 
 	case *topKNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.plan)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 		if err != nil {
 			return nil, err
 		}
@@ -4384,7 +4384,7 @@ func (dsp *DistSQLPlanner) createDistinctSpec(
 func (dsp *DistSQLPlanner) createPlanForDistinct(
 	ctx context.Context, planCtx *PlanningCtx, n *distinctNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.plan)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 	if err != nil {
 		return nil, err
 	}
@@ -4424,7 +4424,7 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 func (dsp *DistSQLPlanner) createPlanForOrdinality(
 	ctx context.Context, planCtx *PlanningCtx, n *ordinalityNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.source)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 	if err != nil {
 		return nil, err
 	}
@@ -4475,7 +4475,7 @@ func createProjectSetSpec(
 func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	ctx context.Context, planCtx *PlanningCtx, n *projectSetNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.source)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 	if err != nil {
 		return nil, err
 	}
@@ -4817,7 +4817,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 func (dsp *DistSQLPlanner) createPlanForWindow(
 	ctx context.Context, planCtx *PlanningCtx, n *windowNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.plan)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 	if err != nil {
 		return nil, err
 	}
@@ -4961,7 +4961,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 func (dsp *DistSQLPlanner) createPlanForExport(
 	ctx context.Context, planCtx *PlanningCtx, n *exportNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.source)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 	if err != nil {
 		return nil, err
 	}
@@ -5339,7 +5339,7 @@ func (dsp *DistSQLPlanner) createPlanForRowCount(
 func (dsp *DistSQLPlanner) createPlanForInsert(
 	ctx context.Context, planCtx *PlanningCtx, n *insertNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.source)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 	if err != nil {
 		return nil, err
 	}

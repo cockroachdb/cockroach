@@ -42,6 +42,7 @@ import (
 
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
+	zeroInputPlanNode
 	createView *tree.CreateView
 	// viewQuery contains the view definition, with all table names fully
 	// qualified.

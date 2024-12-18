@@ -15,7 +15,9 @@ func (p *planner) SetSessionAuthorizationDefault() (planNode, error) {
 	return &setSessionAuthorizationDefaultNode{}, nil
 }
 
-type setSessionAuthorizationDefaultNode struct{}
+type setSessionAuthorizationDefaultNode struct {
+	zeroInputPlanNode
+}
 
 func (n *setSessionAuthorizationDefaultNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setSessionAuthorizationDefaultNode) Values() tree.Datums            { return nil }
