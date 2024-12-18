@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
@@ -158,6 +159,11 @@ func EncDatumFromBuffer(enc catenumpb.DatumEncoding, buf []byte) (EncDatum, []by
 		}
 		ed := EncDatumFromEncoded(enc, buf[typeOffset:encLen])
 		return ed, buf[encLen:], nil
+	case catenumpb.DatumEncoding_VALUE_LEGACY:
+		// The legacy value encoding is only used for individual datums occupying
+		// entire roachpb.Values, and therefore we don't expect to call
+		// EncDatumFromBuffer with the legacy encoding.
+		panic(errors.AssertionFailedf("EncDatumFromBuffer unimplemented for VALUE_LEGACY"))
 	default:
 		panic(errors.AssertionFailedf("unknown encoding %s", enc))
 	}
@@ -177,6 +183,17 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 	}
 	ed := EncDatumFromEncoded(catenumpb.DatumEncoding_VALUE, buf[typeOffset:encLen])
 	return ed, buf[encLen:], nil
+}
+
+// EncDatumValueLegacyFromValue
+func EncDatumValueLegacyFromValue(value roachpb.Value) EncDatum {
+	if value.RawBytes == nil {
+		return EncDatum{
+			encoding: catenumpb.DatumEncoding_VALUE_LEGACY,
+			Datum:    tree.DNull,
+		}
+	}
+	return EncDatumFromEncoded(catenumpb.DatumEncoding_VALUE_LEGACY, value.TagAndDataBytes())
 }
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
@@ -242,6 +259,9 @@ func (ed *EncDatum) IsNull() bool {
 		}
 		return typ == encoding.Null
 
+	case catenumpb.DatumEncoding_VALUE_LEGACY:
+		return ed.encoded == nil
+
 	default:
 		panic(errors.AssertionFailedf("unknown encoding %s", ed.encoding))
 	}
@@ -264,6 +284,16 @@ func (ed *EncDatum) EnsureDecoded(typ *types.T, a *tree.DatumAlloc) error {
 		ed.Datum, rem, err = keyside.Decode(a, typ, ed.encoded, encoding.Descending)
 	case catenumpb.DatumEncoding_VALUE:
 		ed.Datum, rem, err = valueside.Decode(a, typ, ed.encoded)
+	case catenumpb.DatumEncoding_VALUE_LEGACY:
+		var v roachpb.Value
+		v.SetTagAndData(ed.encoded)
+		// NULL is not stored in legacy-encoded values. We use an UNKNOWN tag to
+		// satisfy the EncDatum invariants that encoded != nil, and must check for
+		// that here.
+		if v.GetTag() == roachpb.ValueType_UNKNOWN {
+			v.RawBytes = nil
+		}
+		ed.Datum, err = valueside.UnmarshalLegacy(a, typ, v)
 	default:
 		return errors.AssertionFailedf("unknown encoding %d", redact.Safe(ed.encoding))
 	}
@@ -308,6 +338,21 @@ func (ed *EncDatum) Encode(
 		return keyside.Encode(appendTo, ed.Datum, encoding.Descending)
 	case catenumpb.DatumEncoding_VALUE:
 		return valueside.Encode(appendTo, valueside.NoColumnID, ed.Datum)
+	case catenumpb.DatumEncoding_VALUE_LEGACY:
+		// The legacy value encoding is only used for individual datums occupying
+		// entire roachpb.Values. Because of this, we don't expect to call Encode
+		// with the legacy encoding, bue we implement it anyway for testing
+		// purposes.
+		v, err := valueside.MarshalLegacy(typ, ed.Datum)
+		if err != nil {
+			return nil, err
+		}
+		// NULL is not stored in legacy-encoded values. We use an UNKNOWN tag here
+		// to satisfy the EncDatum invariants that encoded != nil.
+		if v.RawBytes == nil {
+			v.SetTag(roachpb.ValueType_UNKNOWN)
+		}
+		return v.TagAndDataBytes(), nil
 	default:
 		panic(errors.AssertionFailedf("unknown encoding requested %s", enc))
 	}
@@ -465,6 +510,11 @@ func (ed *EncDatum) GetInt() (int64, error) {
 
 		_, val, err := encoding.DecodeUntaggedIntValue(ed.encoded[dataOffset:])
 		return val, err
+
+	case catenumpb.DatumEncoding_VALUE_LEGACY:
+		var v roachpb.Value
+		v.SetTagAndData(ed.encoded)
+		return v.GetInt()
 
 	default:
 		return 0, errors.Errorf("unknown encoding %s", ed.encoding)

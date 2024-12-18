@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -1076,21 +1075,17 @@ func (rf *Fetcher) processValueSingle(
 		return prettyKey, "", nil
 	}
 	typ := table.spec.FetchedColumns[idx].Type
-	// TODO(arjun): The value is a directly marshaled single value, so we
-	// unmarshal it eagerly here. This can potentially be optimized out,
-	// although that would require changing UnmarshalColumnValue to operate
-	// on bytes, and for Encode/DecodeTableValue to operate on marshaled
-	// single values.
-	value, err := valueside.UnmarshalLegacy(rf.args.Alloc, typ, kv.Value)
-	if err != nil {
-		return "", "", err
-	}
+	encValue := rowenc.EncDatumValueLegacyFromValue(kv.Value)
 	if rf.args.TraceKV {
-		prettyValue = value.String()
+		err := encValue.EnsureDecoded(typ, rf.args.Alloc)
+		if err != nil {
+			return "", "", err
+		}
+		prettyValue = encValue.Datum.String()
 	}
-	table.row[idx] = rowenc.DatumToEncDatum(typ, value)
+	table.row[idx] = encValue
 	if DebugRowFetch {
-		log.Infof(ctx, "Scan %s -> %v", kv.Key, value)
+		log.Infof(ctx, "Scan %d -> %v", kv.Key, encValue)
 	}
 	return prettyKey, prettyValue, nil
 }

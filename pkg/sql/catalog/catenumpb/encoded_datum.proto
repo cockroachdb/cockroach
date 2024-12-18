@@ -20,4 +20,6 @@ enum DatumEncoding {
     DESCENDING_KEY = 1;
     // Indicates that the datum is encoded using the encoding used for values.
     VALUE = 2;
+    // Indicates that the datum is encoded using the legacy encoding for values.
+    VALUE_LEGACY = 3;
 }
