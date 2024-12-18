@@ -19,9 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -6137,6 +6140,265 @@ ORDER BY streams DESC;
 	h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
 	h.comment(`
 -- Send queue and flow token metrics from n1, all tokens should be returned.`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+}
+
+func TestFlowControlSendQueueRangeFeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// rangeFeed will create a rangefeed suitable for testing. It will start a
+	// rangefeed and return a function that can be used to stop it.
+	rangeFeed := func(
+		ctx context.Context,
+		dsI interface{},
+		sp roachpb.Span,
+		startFrom hlc.Timestamp,
+		onValue func(event kvcoord.RangeFeedMessage),
+		opts ...kvcoord.RangeFeedOption,
+	) func() {
+		ds := dsI.(*kvcoord.DistSender)
+		events := make(chan kvcoord.RangeFeedMessage)
+		cancelCtx, cancel := context.WithCancel(ctx)
+
+		g := ctxgroup.WithContext(cancelCtx)
+		g.GoCtx(func(ctx context.Context) (err error) {
+			return ds.RangeFeed(ctx, []kvcoord.SpanTimePair{{Span: sp, StartAfter: startFrom}}, events, opts...)
+		})
+		g.GoCtx(func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case ev := <-events:
+					onValue(ev)
+				}
+			}
+		})
+
+		return func() {
+			cancel()
+			_ = g.Wait()
+		}
+	}
+	// We will use the below logic later to assert on the node that the rangefeed
+	// is running on.
+	var curRangeFeedNodeID atomic.Value
+	curRangeFeedNodeID.Store(roachpb.NodeID(0))
+	checkRangeFeedNodeID := func(nodeID roachpb.NodeID, include bool) error {
+		curNodeID := curRangeFeedNodeID.Load().(roachpb.NodeID)
+		if curNodeID == 0 {
+			return errors.New("no rangefeed node yet")
+		}
+		if curNodeID != nodeID && include {
+			return errors.Errorf("expected rangefeed on n%v, got n%v", nodeID, curNodeID)
+		}
+		if curNodeID == nodeID && !include {
+			return errors.Errorf("expected rangefeed not on n%v", nodeID)
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	const numNodes = 3
+	settings := cluster.MakeTestingClusterSettings()
+	kvflowcontrol.Mode.Override(ctx, &settings.SV, kvflowcontrol.ApplyToAll)
+	// We want to exhaust tokens but not overload the test, so we set the limits
+	// lower (8 and 16 MiB default).
+	kvflowcontrol.ElasticTokensPerStream.Override(ctx, &settings.SV, 2<<20)
+	kvflowcontrol.RegularTokensPerStream.Override(ctx, &settings.SV, 4<<20)
+	kvserver.RangefeedEnabled.Override(ctx, &settings.SV, true)
+	// Speed up cancellation, default is 20x the target duration.
+	kvserver.RangeFeedLaggingCTCancelMultiple.Override(ctx, &settings.SV, 6)
+	// Also speed up cancellation by shortening the required lag duration,
+	// default is 60s.
+	kvserver.RangeFeedLaggingCTCancelDuration.Override(ctx, &settings.SV, 3*time.Second)
+	// Likewise, the default target duration is 3s, lower it by a factor of 20.
+	closedts.TargetDuration.Override(ctx, &settings.SV, 150*time.Millisecond)
+
+	disableWorkQueueGrantingServers := make([]atomic.Bool, numNodes)
+	setTokenReturnEnabled := func(enabled bool, serverIdxs ...int) {
+		for _, serverIdx := range serverIdxs {
+			disableWorkQueueGrantingServers[serverIdx].Store(!enabled)
+		}
+	}
+
+	argsPerServer := make(map[int]base.TestServerArgs)
+	for i := range disableWorkQueueGrantingServers {
+		disableWorkQueueGrantingServers[i].Store(true)
+		argsPerServer[i] = base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
+						UseOnlyForScratchRanges: true,
+						OverrideTokenDeduction: func(tokens kvflowcontrol.Tokens) kvflowcontrol.Tokens {
+							// Deduct every write as 1 MiB, regardless of how large it
+							// actually is.
+							return kvflowcontrol.Tokens(1 << 20)
+						},
+						// We want to test the behavior of the send queue, so we want to
+						// always have up-to-date stats. This ensures that the send queue
+						// stats are always refreshed on each call to
+						// RangeController.HandleRaftEventRaftMuLocked.
+						OverrideAlwaysRefreshSendStreamStats: true,
+					},
+				},
+				AdmissionControl: &admission.TestingKnobs{
+					DisableWorkQueueFastPath: true,
+					DisableWorkQueueGranting: func() bool {
+						idx := i
+						return disableWorkQueueGrantingServers[idx].Load()
+					},
+				},
+			},
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: argsPerServer,
+	})
+	defer tc.Stopper().Stop(ctx)
+	setTokenReturnEnabled(true /* enabled */, 0, 1, 2)
+
+	k := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, k, tc.Targets(1, 2)...)
+
+	h := newFlowControlTestHelper(
+		t, tc, "flow_control_integration_v2", /* testdata */
+		kvflowcontrol.V2EnabledWhenLeaderV2Encoding, true, /* isStatic */
+	)
+	h.init(kvflowcontrol.ApplyToAll)
+	defer h.close("send_queue_range_feed")
+
+	desc, err := tc.LookupRange(k)
+	require.NoError(t, err)
+	h.enableVerboseRaftMsgLoggingForRange(desc.RangeID)
+	n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	n3 := sqlutils.MakeSQLRunner(tc.ServerConn(2))
+	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
+	h.resetV2TokenMetrics(ctx)
+	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
+
+	ts := tc.Server(2)
+	span := desc.KeySpan().AsRawSpanWithNoLocals()
+	ignoreValues := func(event kvcoord.RangeFeedMessage) {}
+
+	ctx2, cancel := context.WithCancel(context.Background())
+	g := ctxgroup.WithContext(ctx2)
+	defer func() {
+		cancel()
+		err := g.Wait()
+		require.True(t, testutils.IsError(err, "context canceled"))
+	}()
+	observer := func(fn kvcoord.ForEachRangeFn) {
+		g.GoCtx(func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(200 * time.Millisecond):
+				}
+				err := fn(func(rfCtx kvcoord.RangeFeedContext, feed kvcoord.PartialRangeFeed) error {
+					curRangeFeedNodeID.Store(feed.NodeID)
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+			}
+		})
+	}
+
+	// We will use this metric to observe the server-side rangefeed cancellation,
+	// which should be zero prior to the send queue developing. Then, non-zero
+	// shortly after.
+	const rangeFeedCancelMetricQueryStr = `
+  SELECT
+    name,
+    value
+  FROM crdb_internal.node_metrics
+  WHERE name LIKE 'kv.rangefeed.closed_timestamp.slow_ranges.cancelled'
+  ORDER BY name ASC;
+`
+
+	closeFeed := rangeFeed(
+		ctx,
+		ts.DistSenderI(),
+		span,
+		tc.Server(0).Clock().Now(),
+		ignoreValues,
+		kvcoord.WithRangeObserver(observer),
+	)
+	defer closeFeed()
+	testutils.SucceedsSoon(t, func() error { return checkRangeFeedNodeID(3, true /* include */) })
+	h.comment(`(Rangefeed on n3)`)
+
+	h.comment(`
+-- We will exhaust the tokens across all streams while admission is blocked on
+-- n3, using 4x1 MiB (deduction, the write itself is small) writes. Then,
+-- we will write 1 MiB to the range and wait for the closedTS to fall
+-- behind on n3. We expect that the closedTS falling behind will trigger
+-- an error that is returned to the mux rangefeed client, which will in turn 
+-- allows the rangefeed  request to be re-routed to another replica.`)
+	// Block admission on n3, while allowing every other node to admit.
+	setTokenReturnEnabled(true /* enabled */, 0, 1)
+	setTokenReturnEnabled(false /* enabled */, 2)
+	// Drain the tokens to n3 by blocking admission and issuing the buffer
+	// size of writes to the range.
+	h.put(ctx, roachpb.Key(desc.StartKey), 1, admissionpb.NormalPri)
+	h.put(ctx, roachpb.Key(desc.StartKey), 1, admissionpb.NormalPri)
+	h.put(ctx, roachpb.Key(desc.StartKey), 1, admissionpb.NormalPri)
+	h.put(ctx, roachpb.Key(desc.StartKey), 1, admissionpb.NormalPri)
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 4<<20 /* 4 MiB */, 0 /* serverIdx */)
+
+	h.comment(`
+-- Observe the server-side rangefeed cancellation metric on n3, before a send
+-- queue develops, it should be zero:`)
+	h.query(n3, rangeFeedCancelMetricQueryStr)
+
+	h.comment(`(Sending 1 MiB put request to develop a send queue)`)
+	h.put(ctx, roachpb.Key(desc.StartKey), 1, admissionpb.NormalPri)
+	h.comment(`(Sent 1 MiB put request)`)
+	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 4<<20 /* 4 MiB */, 0 /* serverIdx */)
+	h.waitForAllTokensReturnedForStreamsV2(ctx, 0, /* serverIdx */
+		testingMkFlowStream(0), testingMkFlowStream(1))
+	h.waitForSendQueueSize(ctx, desc.RangeID, 1<<20 /* expSize 1 MiB */, 0 /* serverIdx */)
+
+	h.comment(`
+-- Send queue metrics from n1, n3's send queue should have 1 MiB for s3.`)
+	h.query(n1, flowSendQueueQueryStr)
+	h.comment(`
+-- Observe the total tracked tokens per-stream on n1, s3's entries will still
+-- be tracked here.`)
+	h.query(n1, `
+  SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
+`, "range_id", "store_id", "total_tracked_tokens")
+	h.comment(`
+-- Per-store tokens available from n1, these should reflect the lack of tokens 
+-- for s3.`)
+	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
+
+	testutils.SucceedsSoon(t, func() error {
+		return checkRangeFeedNodeID(3, false /* include */)
+	})
+	newNode := curRangeFeedNodeID.Load().(roachpb.NodeID)
+	h.comment(fmt.Sprintf(`(Rangefeed moved to n%v)`, newNode))
+
+	h.comment(`
+-- Observe the server-side rangefeed cancellation metric increased on n3:`)
+	h.query(n3, rangeFeedCancelMetricQueryStr)
+
+	h.comment(`-- (Allowing below-raft admission to proceed on n3.)`)
+	setTokenReturnEnabled(true /* enabled */, 2)
+	h.waitForAllTokensReturned(ctx, 3, 0 /* serverIdx */)
+	h.waitForSendQueueSize(ctx, desc.RangeID, 0 /* expSize 0 MiB */, 0 /* serverIdx */)
+
+	h.comment(`
+-- Send queue and flow token metrics from n1. All tokens should be returned.`)
 	h.query(n1, flowSendQueueQueryStr)
 	h.query(n1, flowPerStoreTokenQueryStr, flowPerStoreTokenQueryHeaderStrs...)
 }
