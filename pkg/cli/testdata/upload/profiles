@@ -119,5 +119,5 @@ upload-profiles tags=foo:bar skip-cluster-name=true
   }
 }
 ----
-ERROR: cluster name is required for uploading profiles
+ERROR: cluster name is required for uploading artifacts
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --tags=foo:bar --include=profiles
