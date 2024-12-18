@@ -207,14 +207,6 @@ func (ef *execFactory) constructVirtualScan(
 	)
 }
 
-func asDataSource(n exec.Node) planDataSource {
-	plan := n.(planNode)
-	return planDataSource{
-		columns: planColumns(plan),
-		plan:    plan,
-	}
-}
-
 // ConstructFilter is part of the exec.Factory interface.
 func (ef *execFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
@@ -1144,13 +1136,14 @@ func (ef *execFactory) ConstructRecursiveCTE(
 func (ef *execFactory) ConstructProjectSet(
 	n exec.Node, exprs tree.TypedExprs, zipCols colinfo.ResultColumns, numColsPerGen []int,
 ) (exec.Node, error) {
-	src := asDataSource(n)
-	cols := append(src.columns, zipCols...)
+	p := n.(planNode)
+	cols := planColumns(p)
+	allCols := append(cols, zipCols...)
 	return &projectSetNode{
-		source: src.plan,
+		source: p,
 		projectSetPlanningInfo: projectSetPlanningInfo{
-			columns:         cols,
-			numColsInSource: len(src.columns),
+			columns:         allCols,
+			numColsInSource: len(cols),
 			exprs:           exprs,
 			numColsPerGen:   numColsPerGen,
 		},
