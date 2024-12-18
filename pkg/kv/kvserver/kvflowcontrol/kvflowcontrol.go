@@ -436,12 +436,12 @@ func (s Stream) String() string {
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (s Stream) SafeFormat(p redact.SafePrinter, verb rune) {
+func (s Stream) SafeFormat(p redact.SafePrinter, _ rune) {
 	tenantSt := s.TenantID.String()
 	if s.TenantID.IsSystem() {
 		tenantSt = "1"
 	}
-	p.Printf("t%s/s%s", tenantSt, s.StoreID.String())
+	p.Printf("t%s/s%s", redact.SafeString(tenantSt), s.StoreID)
 }
 
 type raftAdmissionMetaKey struct{}
