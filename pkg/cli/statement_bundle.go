@@ -23,6 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -119,6 +121,55 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 		return err
 	}
 
+	var demoLocalityInfo string
+	schema := string(bundle.schema)
+	if strings.Contains(schema, "REGIONS = ") {
+		// We have at least one multi-region DB, so we'll extract all regions.
+		regions := make(map[string]struct{})
+		for _, line := range strings.Split(schema, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "CREATE DATABASE") &&
+				strings.Contains(line, "REGIONS = ") {
+				// We expect the stmt to be of the form
+				//   CREATE DATABASE eu_mr PRIMARY REGION "gcp-eu-central1" REGIONS = "gcp-eu-central1", "gcp-eu-east1", "gcp-eu-west1" SURVIVE ZONE FAILURE;
+				// Need to get the regions' names, without quotes.
+				parts := strings.Split(line, "REGIONS = ")
+				if len(parts) != 2 {
+					return errors.Newf("unexpected CREATE DATABASE format: %s", line)
+				}
+				parts = strings.Split(parts[1], " SURVIVE")
+				if len(parts) != 2 {
+					return errors.Newf("unexpected CREATE DATABASE format: %s", line)
+				}
+				dbRegions := strings.Split(parts[0], ", ")
+				for _, region := range dbRegions {
+					region = strings.Trim(strings.TrimSpace(region), `"`)
+					if _, ok := regions[region]; !ok {
+						regions[region] = struct{}{}
+					}
+				}
+			}
+		}
+		// Every region will get exactly one node.
+		demoCtx.NumNodes = len(regions)
+		demoCtx.Localities = make(democluster.DemoLocalityList, 0, len(regions))
+		var regionsString string
+		for region := range regions {
+			demoCtx.Localities = append(demoCtx.Localities, roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "region", Value: region},
+					{Key: "az", Value: "1"}, // this shouldn't matter
+				},
+			})
+			if regionsString != "" {
+				regionsString += `, "` + region + `"`
+			} else {
+				regionsString += `"` + region + `"`
+			}
+		}
+		demoLocalityInfo = fmt.Sprintf("\n# Started %d nodes with regions %s.", len(regions), regionsString)
+	}
+
 	demoCtx.UseEmptyDatabase = true
 	demoCtx.Multitenant = false
 	return runDemoInternal(cmd, nil /* gen */, func(ctx context.Context, conn clisqlclient.Conn) error {
@@ -156,13 +207,13 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 		}
 
 		cliCtx.PrintfUnlessEmbedded(`#
-# Statement bundle %s loaded.
+# Statement bundle %s loaded.%s
 # Autostats disabled.
 #
 # Statement %swas:
 #
 # %s
-`, zipdir, placeholderInfo, stmt+";")
+`, zipdir, demoLocalityInfo, placeholderInfo, stmt+";")
 
 		if placeholderPairs != nil {
 			placeholderToColMap := make(map[int]string)
