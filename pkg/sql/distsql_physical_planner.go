@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -431,13 +432,23 @@ func newQueryNotSupportedErrorf(format string, args ...interface{}) error {
 	return &queryNotSupportedError{msg: fmt.Sprintf(format, args...)}
 }
 
-// planNodeNotSupportedErr is the catch-all error value returned from
-// checkSupportForPlanNode when a planNode type does not support distributed
-// execution.
-var planNodeNotSupportedErr = newQueryNotSupportedError("unsupported node")
-
-var cannotDistributeRowLevelLockingErr = newQueryNotSupportedError(
-	"scans with row-level locking are not supported by distsql",
+var (
+	// planNodeNotSupportedErr is the catch-all error value returned from
+	// checkSupportForPlanNode when a planNode type does not support distributed
+	// execution.
+	planNodeNotSupportedErr            = newQueryNotSupportedError("unsupported node")
+	cannotDistributeRowLevelLockingErr = newQueryNotSupportedError(
+		"scans with row-level locking are not supported by distsql",
+	)
+	invertedFilterNotDistributableErr = newQueryNotSupportedError(
+		"inverted filter is only distributable when it's a union of spans",
+	)
+	localityOptimizedOpNotDistributableErr = newQueryNotSupportedError(
+		"locality-optimized operation cannot be distributed",
+	)
+	ordinalityNotDistributableErr = newQueryNotSupportedError(
+		"ordinality operation cannot be distributed",
+	)
 )
 
 // mustWrapNode returns true if a node has no DistSQL-processor equivalent.
@@ -516,7 +527,14 @@ func checkSupportForPlanNode(
 	node planNode,
 	distSQLVisitor *distSQLExprCheckVisitor,
 	sd *sessiondata.SessionData,
-) (distRecommendation, error) {
+) (retRec distRecommendation, retErr error) {
+	if buildutil.CrdbTestBuild {
+		defer func() {
+			if retRec == cannotDistribute && retErr == nil {
+				panic(errors.AssertionFailedf("all 'cannotDistribute' recommendations must be accompanied by an error"))
+			}
+		}()
+	}
 	switch n := node.(type) {
 	// Keep these cases alphabetized, please!
 	case *createStatsNode:
@@ -631,7 +649,7 @@ func checkSupportForPlanNode(
 	case *lookupJoinNode:
 		if n.remoteLookupExpr != nil || n.remoteOnlyLookups {
 			// This is a locality optimized join.
-			return cannotDistribute, nil
+			return cannotDistribute, localityOptimizedOpNotDistributableErr
 		}
 		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Lookup joins that are performing row-level locking cannot
@@ -659,7 +677,7 @@ func checkSupportForPlanNode(
 	case *ordinalityNode:
 		// WITH ORDINALITY never gets distributed so that the gateway node can
 		// always number each row in order.
-		return cannotDistribute, nil
+		return cannotDistribute, ordinalityNotDistributableErr
 
 	case *projectSetNode:
 		for i := range n.exprs {
@@ -688,7 +706,7 @@ func checkSupportForPlanNode(
 
 		if n.localityOptimized {
 			// This is a locality optimized scan.
-			return cannotDistribute, nil
+			return cannotDistribute, localityOptimizedOpNotDistributableErr
 		}
 		// TODO(yuzefovich): consider using the soft limit in making a decision
 		// here.
@@ -807,8 +825,6 @@ func checkSupportForPlanNode(
 		// force distribution with small inputs.
 		log.VEventf(ctx, 2, "zigzag join recommends plan distribution")
 		return shouldDistribute, nil
-	case *cdcValuesNode:
-		return cannotDistribute, nil
 
 	default:
 		return cannotDistribute, planNodeNotSupportedErr
@@ -844,14 +860,13 @@ func checkSupportForInvertedFilterNode(
 	// the inverted column as the original type (e.g. for geospatial, tries to
 	// decode the int cell-id as a geometry) which obviously fails -- this is
 	// related to #50659. Fix this in the distSQLSpecExecFactory.
-	filterRec := cannotDistribute
-	if n.expression.Left == nil && n.expression.Right == nil {
-		// TODO(yuzefovich): we might want to be smarter about this and don't
-		// force distribution with small inputs.
-		log.VEventf(ctx, 2, "inverted filter (union of inverted spans) recommends plan distribution")
-		filterRec = shouldDistribute
+	if n.expression.Left != nil || n.expression.Right != nil {
+		return cannotDistribute, invertedFilterNotDistributableErr
 	}
-	return rec.compose(filterRec), nil
+	// TODO(yuzefovich): we might want to be smarter about this and don't force
+	// distribution with small inputs.
+	log.VEventf(ctx, 2, "inverted filter (union of inverted spans) recommends plan distribution")
+	return rec.compose(shouldDistribute), nil
 }
 
 //go:generate stringer -type=NodeStatus
