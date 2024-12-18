@@ -1078,7 +1078,7 @@ func (t *Tracer) StartSpanCtx(
 		opts = os[i].apply(opts)
 	}
 
-	return t.startSpanFast(ctx, operationName, opts)
+	return t.startSpanFast(ctx, operationName, &opts)
 }
 
 // AlwaysTrace returns true if operations should be traced regardless of the
@@ -1098,8 +1098,12 @@ func (t *Tracer) forceOpNameVerbose(opName string) bool {
 	return false
 }
 
+// startSpanFast implements a fast path for the common case of tracing
+// being disabled on the current span and its parent. We make only the
+// checks necessary to ensure that recording is disabled and wrap the
+// context in a `noopSpan`.
 func (t *Tracer) startSpanFast(
-	ctx context.Context, opName string, opts spanOptions,
+	ctx context.Context, opName string, opts *spanOptions,
 ) (context.Context, *Span) {
 	if opts.RefType != childOfRef && opts.RefType != followsFromRef {
 		panic(errors.AssertionFailedf("unexpected RefType %v", opts.RefType))
@@ -1136,7 +1140,7 @@ func (t *Tracer) startSpanFast(
 // the latter case, ctx == noCtx and the returned Context is the supplied one;
 // otherwise the returned Context embeds the returned Span.
 func (t *Tracer) startSpanGeneric(
-	ctx context.Context, opName string, opts spanOptions,
+	ctx context.Context, opName string, opts *spanOptions,
 ) (context.Context, *Span) {
 	if opts.RefType != childOfRef && opts.RefType != followsFromRef {
 		panic(errors.AssertionFailedf("unexpected RefType %v", opts.RefType))
