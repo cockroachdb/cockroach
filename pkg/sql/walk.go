@@ -120,7 +120,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.source.plan = v.visit(n.source.plan)
 
 	case *renderNode:
-		n.source.plan = v.visit(n.source.plan)
+		n.source = v.visit(n.source)
 
 	case *indexJoinNode:
 		n.input = v.visit(n.input)
