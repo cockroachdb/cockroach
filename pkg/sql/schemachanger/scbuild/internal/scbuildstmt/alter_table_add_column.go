@@ -48,25 +48,21 @@ func alterTableAddColumn(
 	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
 
 	// Check column non-existence.
-	{
-		elts := b.ResolveColumn(tbl.TableID, d.Name, ResolveParams{
-			IsExistenceOptional: true,
-			RequiredPrivilege:   privilege.CREATE,
-		})
-		_, colTargetStatus, col := scpb.FindColumn(elts)
-		if col != nil {
-			if t.IfNotExists {
-				return
-			}
-			if col.IsSystemColumn {
-				panic(pgerror.Newf(pgcode.DuplicateColumn,
-					"column name %q conflicts with a system column name",
-					d.Name))
-			}
-			if colTargetStatus != scpb.ToAbsent {
-				panic(sqlerrors.NewColumnAlreadyExistsInRelationError(string(d.Name), tn.Object()))
-			}
+	elts := b.ResolveColumn(tbl.TableID, d.Name, ResolveParams{
+		IsExistenceOptional: true,
+		RequiredPrivilege:   privilege.CREATE,
+	})
+	_, colTargetStatus, col := scpb.FindColumn(elts)
+	columnAlreadyExists := col != nil && colTargetStatus != scpb.ToAbsent
+	// If the column exists and IF NOT EXISTS is specified, continue parsing
+	// to ensure there are no other errors before treating the operation as a no-op.
+	if columnAlreadyExists && !t.IfNotExists {
+		if col.IsSystemColumn {
+			panic(pgerror.Newf(pgcode.DuplicateColumn,
+				"column name %q conflicts with a system column name",
+				d.Name))
 		}
+		panic(sqlerrors.NewColumnAlreadyExistsInRelationError(string(d.Name), tn.Object()))
 	}
 	var colSerialDefaultExpression *scpb.Expression
 	if d.IsSerial {
@@ -115,6 +111,13 @@ func alterTableAddColumn(
 	if err != nil {
 		panic(err)
 	}
+
+	// Parsing of the ALTER statement is complete, and no further errors are possible.
+	// If the column already exists, exit here to make the operation a no-op.
+	if columnAlreadyExists {
+		return
+	}
+
 	desc := cdd.ColumnDescriptor
 	desc.ID = b.NextTableColumnID(tbl)
 	spec := addColumnSpec{
