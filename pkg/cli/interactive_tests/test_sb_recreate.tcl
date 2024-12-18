@@ -53,7 +53,7 @@ system "$python $pyfile stmt-bundle-$id1.zip bundle"
 spawn $argv debug sb recreate bundle
 eexpect "Statement was:"
 eexpect "SELECT"
-eexpect "db_view>"
+eexpect "defaultdb>"
 
 send_eof
 eexpect eof
