@@ -166,7 +166,6 @@ func OverrideDefaultLeaseType(ctx context.Context, sv *settings.Values, typ roac
 	switch typ {
 	case roachpb.LeaseExpiration:
 		ExpirationLeasesOnly.Override(ctx, sv, true)
-		RaftLeaderFortificationFractionEnabled.Override(ctx, sv, 0.0)
 	case roachpb.LeaseEpoch:
 		ExpirationLeasesOnly.Override(ctx, sv, false)
 		RaftLeaderFortificationFractionEnabled.Override(ctx, sv, 0.0)
@@ -827,15 +826,11 @@ func (r *Replica) requiresExpirationLeaseRLocked() bool {
 
 // shouldUseExpirationLeaseRLocked returns true if this range should be using an
 // expiration-based lease.
+//
+// We use an expiration-based lease if the range requires one or if the
+// kv.expiration_leases_only.enabled setting is enabled and the number of ranges
+// (replicas) per node is fewer than kv.expiration_leases.max_replicas_per_node.
 func (r *Replica) shouldUseExpirationLeaseRLocked() bool {
-	return r.desiredLeaseTypeRLocked() == roachpb.LeaseExpiration
-}
-
-// desiredLeaseTypeRLocked returns the desired lease type for this replica.
-func (r *Replica) desiredLeaseTypeRLocked() roachpb.LeaseType {
-	// Use an expiration-based lease if the range requires one or if the
-	// kv.expiration_leases_only.enabled setting is enabled and the number of ranges
-	// (replicas) per node is fewer than kv.expiration_leases.max_replicas_per_node.
 	expirationLeaseRequired := r.requiresExpirationLeaseRLocked()
 	expirationLeaseOnly := func() bool {
 		settingEnabled := ExpirationLeasesOnly.Get(&r.ClusterSettings().SV) && !DisableExpirationLeasesOnly
@@ -847,6 +842,14 @@ func (r *Replica) desiredLeaseTypeRLocked() roachpb.LeaseType {
 		return settingEnabled
 	}()
 	if expirationLeaseRequired || expirationLeaseOnly {
+		return true
+	}
+	return false
+}
+
+// desiredLeaseTypeRLocked returns the desired lease type for this replica.
+func (r *Replica) desiredLeaseTypeRLocked() roachpb.LeaseType {
+	if r.shouldUseExpirationLeaseRLocked() {
 		return roachpb.LeaseExpiration
 	}
 
