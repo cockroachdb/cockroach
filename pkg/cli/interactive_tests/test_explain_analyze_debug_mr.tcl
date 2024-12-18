@@ -21,9 +21,10 @@ send "CREATE TABLE us_mr.public.t (k INT PRIMARY KEY, e us_mr.public.enum1) LOCA
 send "CREATE DATABASE eu_mr PRIMARY REGION \"eu-central1\" REGIONS = \"eu-central1\", \"eu-east1\", \"eu-west1\";\r"
 send "CREATE TYPE eu_mr.public.enum1 AS ENUM ('a', 'b', 'c');\r"
 send "CREATE TABLE eu_mr.public.t (k INT PRIMARY KEY, e eu_mr.public.enum1) LOCALITY REGIONAL BY ROW;\r"
-eexpect "defaultdb>"
+send "USE us_mr;\r"
+eexpect "us_mr>"
 
-send "EXPLAIN ANALYZE (DEBUG) SELECT * FROM us_mr.public.t, eu_mr.public.t;\r"
+send "EXPLAIN ANALYZE (DEBUG) SELECT * FROM t, eu_mr.public.t;\r"
 eexpect "Statement diagnostics bundle generated."
 expect -re "SQL shell: \\\\statement-diag download (\\d+)" {
   set id1 $expect_out(1,string)
@@ -47,7 +48,7 @@ spawn $argv debug statement-bundle recreate bundle
 eexpect "Started 6 nodes with regions"
 eexpect "Statement was:"
 eexpect "SELECT"
-eexpect "defaultdb>"
+eexpect "us_mr>"
 
 send_eof
 eexpect eof

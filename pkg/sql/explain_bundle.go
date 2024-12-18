@@ -885,13 +885,6 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 			// parsable.
 			value = "''"
 		}
-		if varName == "database" {
-			// Special case the 'database' session variable - since env.sql is
-			// executed _before_ schema.sql when recreating the bundle, the
-			// target database might not exist yet.
-			fmt.Fprintf(w, "-- SET database = '%s';\n", value)
-			continue
-		}
 		fmt.Fprintf(w, formatStr+"\n", varName, value, defaultValue)
 	}
 	return nil
@@ -1139,18 +1132,19 @@ var skipReadOnlySessionVar = map[string]struct{}{
 // sessionVarNeedsQuotes contains all writable session variables that have
 // values that need single quotes around them in SET statements.
 var sessionVarNeedsQuotes = map[string]struct{}{
-	"application_name":                            {},
-	"datestyle":                                   {},
-	"distsql_workmem":                             {},
-	"index_join_streamer_batch_size":              {},
+	"application_name":               {},
+	"database":                       {},
+	"datestyle":                      {},
+	"distsql_workmem":                {},
+	"index_join_streamer_batch_size": {},
 	"join_reader_index_join_strategy_batch_size":  {},
 	"join_reader_no_ordering_strategy_batch_size": {},
 	"join_reader_ordering_strategy_batch_size":    {},
-	"lc_messages":                                 {},
-	"lc_monetary":                                 {},
-	"lc_numeric":                                  {},
-	"lc_time":                                     {},
-	"password_encryption":                         {},
-	"prepared_statements_cache_size":              {},
-	"timezone":                                    {},
+	"lc_messages":                    {},
+	"lc_monetary":                    {},
+	"lc_numeric":                     {},
+	"lc_time":                        {},
+	"password_encryption":            {},
+	"prepared_statements_cache_size": {},
+	"timezone":                       {},
 }
