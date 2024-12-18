@@ -619,11 +619,11 @@ func checkSupportForPlanNode(
 		if err := checkExprForDistSQL(n.pred.onCond, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		recLeft, err := checkSupportForPlanNode(ctx, n.left.plan, distSQLVisitor, sd)
+		recLeft, err := checkSupportForPlanNode(ctx, n.left, distSQLVisitor, sd)
 		if err != nil {
 			return cannotDistribute, err
 		}
-		recRight, err := checkSupportForPlanNode(ctx, n.right.plan, distSQLVisitor, sd)
+		recRight, err := checkSupportForPlanNode(ctx, n.right, distSQLVisitor, sd)
 		if err != nil {
 			return cannotDistribute, err
 		}
@@ -3789,11 +3789,11 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) ([]*types.T,
 func (dsp *DistSQLPlanner) createPlanForJoin(
 	ctx context.Context, planCtx *PlanningCtx, n *joinNode,
 ) (*PhysicalPlan, error) {
-	leftPlan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.left.plan)
+	leftPlan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.left)
 	if err != nil {
 		return nil, err
 	}
-	rightPlan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.right.plan)
+	rightPlan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.right)
 	if err != nil {
 		return nil, err
 	}

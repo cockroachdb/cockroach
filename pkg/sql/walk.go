@@ -137,8 +137,8 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.input = v.visit(n.input)
 
 	case *joinNode:
-		n.left.plan = v.visit(n.left.plan)
-		n.right.plan = v.visit(n.right.plan)
+		n.left = v.visit(n.left)
+		n.right = v.visit(n.right)
 
 	case *invertedFilterNode:
 		n.input = v.visit(n.input)
