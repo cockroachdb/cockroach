@@ -210,6 +210,16 @@ const (
 	// V25_1_AddJobsColumns added new columns to system.jobs.
 	V25_1_AddJobsColumns
 
+	// V25_1_JobsWritesFence is an empty version that is used to add a "fence"
+	// between the column addition version and the backfill version. This allows
+	// the backfill version's upgrade step to make the assumption that all nodes
+	// will be writing to the new columns, since moving from fence to backfill can
+	// only start once no nodes are still on add-columnns.
+	V25_1_JobsWritesFence
+
+	// V25_1_JobsBackfill backfills the new jobs tables and columns.
+	V25_1_JobsBackfill
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -255,6 +265,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_1_BatchStreamRPC:            {Major: 24, Minor: 3, Internal: 10},
 	V25_1_PreparedTransactionsTable: {Major: 24, Minor: 3, Internal: 12},
 	V25_1_AddJobsColumns:            {Major: 24, Minor: 3, Internal: 14},
+	V25_1_JobsWritesFence:           {Major: 24, Minor: 3, Internal: 16},
+	V25_1_JobsBackfill:              {Major: 24, Minor: 3, Internal: 18},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
