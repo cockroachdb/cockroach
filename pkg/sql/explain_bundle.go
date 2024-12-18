@@ -610,7 +610,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		}
 	}
 	blankLine()
-	c.printCreateAllDatabases(&buf, dbNames)
+	if err = c.printCreateAllDatabases(&buf, dbNames); err != nil {
+		b.printError(fmt.Sprintf("-- error getting all databases: %v", err), &buf)
+	}
 	if err := c.printCreateAllSchemas(&buf, schemaNames); err != nil {
 		b.printError(fmt.Sprintf("-- error getting all schemas: %v", err), &buf)
 	}
@@ -1066,7 +1068,7 @@ func (c *stmtEnvCollector) PrintCreateView(
 	return nil
 }
 
-func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[string]struct{}) {
+func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[string]struct{}) error {
 	for db := range dbNames {
 		switch db {
 		case catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName, catconstants.SystemDatabaseName:
@@ -1074,8 +1076,15 @@ func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[stri
 			// exclude them to ease the recreation of the bundle.
 			continue
 		}
-		fmt.Fprintf(w, "CREATE DATABASE %s;\n", db)
+		createStatement, err := c.query(fmt.Sprintf(
+			"SELECT create_statement FROM crdb_internal.databases WHERE name = '%s'", db,
+		))
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "%s;\n", createStatement)
 	}
+	return nil
 }
 
 func (c *stmtEnvCollector) printCreateAllSchemas(
