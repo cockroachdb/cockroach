@@ -341,6 +341,11 @@ type Replica struct {
 		msgAppScratchForFlowControl map[roachpb.ReplicaID][]raftpb.Message
 		// Scratch for populating rac2.RaftEvent.ReplicaSateInfo for flowContrlV2.
 		replicaStateScratchForFlowControl map[roachpb.ReplicaID]rac2.ReplicaStateInfo
+
+		// rangefeedCTLagObserver is used to observe the closed timestamp lag of
+		// the replica and generate a signal to potentially nudge or cancel the
+		// rangefeed based on observed lag.
+		rangefeedCTLagObserver *rangeFeedCTLagObserver
 	}
 
 	// localMsgs contains a collection of raftpb.Message that target the local

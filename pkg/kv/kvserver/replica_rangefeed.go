@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -868,17 +867,20 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 
 	// If the closed timestamp is sufficiently stale, signal that we want an
 	// update to the leaseholder so that it will eventually begin to progress
-	// again.
-	behind := r.Clock().PhysicalTime().Sub(closedTS.GoTime())
-	slowClosedTSThresh := 5 * closedts.TargetDuration.Get(&r.store.cfg.Settings.SV)
-	exceedsSlowLagThresh = behind > slowClosedTSThresh
-	if exceedsSlowLagThresh {
+	// again. Or, if the closed timestamp has been lagging by more than the
+	// cancel threshold for a while, cancel the rangefeed.
+	if signal := r.raftMu.rangefeedCTLagObserver.observeClosedTimestampUpdate(ctx,
+		closedTS.GoTime(),
+		r.Clock().PhysicalTime(),
+		&r.store.cfg.Settings.SV,
+	); signal.exceedsNudgeLagThreshold {
 		m := r.store.metrics.RangeFeedMetrics
 		if m.RangeFeedSlowClosedTimestampLogN.ShouldLog() {
 			if closedTS.IsEmpty() {
 				log.Infof(ctx, "RangeFeed closed timestamp is empty")
 			} else {
-				log.Infof(ctx, "RangeFeed closed timestamp %s is behind by %s", closedTS, behind)
+				log.Infof(ctx, "RangeFeed closed timestamp %s is behind by %s (%v)",
+					closedTS, signal.lag, signal)
 			}
 		}
 
@@ -906,6 +908,22 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 				defer func() { <-m.RangeFeedSlowClosedTimestampNudgeSem }()
 				if err := r.ensureClosedTimestampStarted(ctx); err != nil {
 					log.Infof(ctx, `RangeFeed failed to nudge: %s`, err)
+				} else if signal.exceedsCancelLagThreshold {
+					// We have successfully nudged the leaseholder to make progress on
+					// the closed timestamp. If the lag was already persistently too
+					// high, we cancel the rangefeed, so that it can be replanned on
+					// another replica. The hazard this avoids with replanning earlier,
+					// is that we know the range at least has a leaseholder so we won't
+					// fail open, thrashing the rangefeed around the cluster.
+					//
+					// Note that we use the REASON_RANGEFEED_CLOSED, as adding a new
+					// reason would require a new version of the proto, which would
+					// prohibit us from cancelling the rangefeed in the current version,
+					// due to mixed version compatibility.
+					log.Warningf(ctx,
+						`RangeFeed is too far behind, cancelling for replanning [%v]`, signal)
+					r.disconnectRangefeedWithReason(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)
+					r.store.metrics.RangeFeedMetrics.RangeFeedSlowClosedTimestampCancelledRanges.Inc(1)
 				}
 				return nil, nil
 			})
