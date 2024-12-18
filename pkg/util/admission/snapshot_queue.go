@@ -49,8 +49,7 @@ var snapshotWorkItemPool = sync.Pool{
 var DiskBandwidthForSnapshotIngest = settings.RegisterBoolSetting(
 	settings.SystemOnly, "kvadmission.store.snapshot_ingest_bandwidth_control.enabled",
 	"if set to true, snapshot ingests will be subject to disk write control in AC",
-	// TODO(aaditya): Enable by default once enough experimentation is done.
-	metamorphic.ConstantWithTestBool("kvadmission.store.snapshot_ingest_bandwidth_control.enabled", false),
+	metamorphic.ConstantWithTestBool("kvadmission.store.snapshot_ingest_bandwidth_control.enabled", true),
 	settings.WithPublic,
 )
 
