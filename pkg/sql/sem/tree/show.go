@@ -821,18 +821,16 @@ const (
 	ShowCreateModeSecondaryIndexes
 )
 
-type ShowCreateFormatOption int
-
-const (
-	ShowCreateFormatOptionNone ShowCreateFormatOption = iota
-	ShowCreateFormatOptionRedactedValues
-)
+type ShowCreateFormatOptions struct {
+	RedactedValues bool
+	FullyQualified bool
+}
 
 // ShowCreate represents a SHOW CREATE statement.
 type ShowCreate struct {
 	Mode   ShowCreateMode
 	Name   *UnresolvedObjectName
-	FmtOpt ShowCreateFormatOption
+	FmtOpt ShowCreateFormatOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -849,9 +847,13 @@ func (node *ShowCreate) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(node.Name)
 
-	switch node.FmtOpt {
-	case ShowCreateFormatOptionRedactedValues:
+	switch {
+	case node.FmtOpt.RedactedValues && !node.FmtOpt.FullyQualified:
 		ctx.WriteString(" WITH REDACT")
+	case !node.FmtOpt.RedactedValues && node.FmtOpt.FullyQualified:
+		ctx.WriteString(" WITH FULLY_QUALIFIED")
+	case node.FmtOpt.RedactedValues && node.FmtOpt.FullyQualified:
+		ctx.WriteString(" WITH REDACT, FULLY_QUALIFIED")
 	}
 }
 

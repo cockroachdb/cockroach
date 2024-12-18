@@ -983,15 +983,11 @@ func (c *stmtEnvCollector) PrintCreateTable(
 ) error {
 	var formatOption string
 	if redactValues {
-		formatOption = " WITH REDACT"
+		formatOption = ", REDACT"
 	}
 	createStatement, err := c.query(
-		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s%s]", tn.FQString(), formatOption),
+		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s WITH FULLY_QUALIFIED%s]", tn.FQString(), formatOption),
 	)
-	// We need to replace schema.table_name in the create statement with the fully
-	// qualified table name.
-	createStatement = strings.Replace(createStatement,
-		fmt.Sprintf("%s.%s", tn.SchemaName, tn.Table()), tn.FQString(), 1)
 	if err != nil {
 		return err
 	}
