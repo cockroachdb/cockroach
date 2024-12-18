@@ -291,6 +291,8 @@ message LogicalReplicationProgress {
 
   // StreamAddresses are the source cluster addresses read from the latest topology.
   repeated string stream_addresses = 8;
+
+  bool published_new_tables = 9;
 }
 
 message StreamReplicationDetails {
