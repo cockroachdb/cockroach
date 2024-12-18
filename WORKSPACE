@@ -640,6 +640,14 @@ load("//build/bazelutil:repositories.bzl", "distdir_repositories")
 
 distdir_repositories()
 
+load("//build:pgo.bzl", "pgo_profile")
+
+pgo_profile(
+    name = "pgo_profile",
+    url = "https://storage.googleapis.com/cockroach-profiles/20241218165031.pprof",
+    sha256 = "976ceda1deda3494db56cbd95e7e2399d432f2d02c45da04d22b4e6b8eafe72d",
+)
+
 # Download and register the FIPS enabled Go toolchain at the end to avoid toolchain conflicts for gazelle.
 go_download_sdk(
     name = "go_sdk_fips",
