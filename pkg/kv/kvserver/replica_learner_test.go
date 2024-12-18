@@ -2301,6 +2301,17 @@ func TestRebalancingAndCrossRegionZoneSnapshotMetrics(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	scratchStartKey := tc.ScratchRange(t)
+	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+	// Wait for the expiration lease to upgrade to an epoch or leader lease.
+	// Otherwise, the lease upgrade may race with the snapshot calculation below
+	// and result in a different size snapshot than expected. For epoch leases
+	// this is actually not necessary because the first lease that's proposed is
+	// an epoch lease. For leader leases, however, the range starts off with no
+	// leader so the first lease that's proposed is an expiration lease, which
+	// gets upgraded to a leader lease once a leader is elected.
+	if !kvserver.ExpirationLeasesOnly.Get(&tc.Server(0).ClusterSettings().SV) {
+		tc.WaitForLeaseUpgrade(ctx, t, desc)
+	}
 	// sendSnapshotFromServer is a testing helper that sends a learner snapshot
 	// from server[0] to server[serverIndex] and returns the expected size (in
 	// bytes) of the snapshot sent.
