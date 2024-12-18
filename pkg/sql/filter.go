@@ -18,7 +18,7 @@ import (
 // during plan optimizations in order to avoid instantiating a fully
 // blown selectTopNode/renderNode pair.
 type filterNode struct {
-	input       planNode
+	singleInputPlanNode
 	columns     colinfo.ResultColumns
 	filter      tree.TypedExpr
 	reqOrdering ReqOrdering

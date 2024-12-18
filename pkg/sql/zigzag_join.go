@@ -23,6 +23,7 @@ import (
 // For a more detailed description of zigzag joins, as well as when they can
 // be planned, see the comment in rowexec/zigzagjoiner.go.
 type zigzagJoinNode struct {
+	zeroInputPlanNode
 	// sides contains information about each individual "side" of a
 	// zigzag join. Must contain 2 or more zigzagJoinSides.
 	sides []zigzagJoinSide

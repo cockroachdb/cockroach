@@ -25,6 +25,7 @@ import (
 )
 
 type dropViewNode struct {
+	zeroInputPlanNode
 	n  *tree.DropView
 	td []toDelete
 }

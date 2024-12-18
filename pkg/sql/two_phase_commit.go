@@ -200,6 +200,7 @@ func (p *planner) RollbackPrepared(
 }
 
 type endPreparedTxnNode struct {
+	zeroInputPlanNode
 	globalID string
 	commit   bool
 }

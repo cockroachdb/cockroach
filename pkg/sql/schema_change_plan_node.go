@@ -204,6 +204,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 // schemaChangePlanNode is the planNode utilized by the new schema changer to
 // perform all schema changes, unified in the new schema changer.
 type schemaChangePlanNode struct {
+	zeroInputPlanNode
 	sql  string
 	stmt tree.Statement
 	// lastState was the state observed so far while planning for the current
@@ -212,7 +213,7 @@ type schemaChangePlanNode struct {
 	// plannedState contains the state produced by the builder combining
 	// the nodes that existed preceding the current statement with the output of
 	// the built current statement. There maybe cases like CTE's, where we will
-	// need to re-plan if the lastState and the plannedState do not match, since
+	// need to re-input if the lastState and the plannedState do not match, since
 	// we are executing DDL statements in an unexpected way.
 	plannedState scpb.CurrentState
 	// logSchemaChangesFn is used to log schema change events before execution.

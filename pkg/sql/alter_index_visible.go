@@ -19,6 +19,7 @@ import (
 )
 
 type alterIndexVisibleNode struct {
+	zeroInputPlanNode
 	n         *tree.AlterIndexVisible
 	tableDesc *tabledesc.Mutable
 	index     catalog.Index

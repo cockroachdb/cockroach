@@ -34,6 +34,7 @@ import (
 // DropRoleNode deletes entries from the system.users table.
 // This is called from DROP USER and DROP ROLE.
 type DropRoleNode struct {
+	zeroInputPlanNode
 	ifExists  bool
 	isRole    bool
 	roleNames []username.SQLUsername
