@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -125,6 +126,10 @@ type TestingKnobs struct {
 	// StoreInternConfigsInDryRuns, if set, will intern span configs even when
 	// applying mutations in dry run mode.
 	StoreInternConfigsInDryRuns bool
+
+	// OverrideFallbackConf, if set, allows tests to override fields in the
+	// fallback config that will be applied to the span.
+	OverrideFallbackConf func(roachpb.SpanConfig) roachpb.SpanConfig
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
