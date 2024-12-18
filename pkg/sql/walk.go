@@ -117,7 +117,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *scanNode:
 
 	case *filterNode:
-		n.source.plan = v.visit(n.source.plan)
+		n.input = v.visit(n.input)
 
 	case *renderNode:
 		n.source = v.visit(n.source)

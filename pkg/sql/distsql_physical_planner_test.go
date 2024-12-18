@@ -1973,7 +1973,7 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &filterNode{source: planDataSource{plan: scanToParallelize}}}},
+			plan: planComponents{main: planMaybePhysical{planNode: &filterNode{input: scanToParallelize}}},
 			// filterNode might be handled via wrapping a row-execution
 			// processor, so we safely prohibit the parallelization.
 			prohibitParallelization: true,

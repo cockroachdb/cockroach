@@ -219,17 +219,17 @@ func asDataSource(n exec.Node) planDataSource {
 func (ef *execFactory) ConstructFilter(
 	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
-	// Create a filterNode.
-	src := asDataSource(n)
+	p := n.(planNode)
 	f := &filterNode{
-		source: src,
+		input:   p,
+		columns: planColumns(p),
 	}
 	f.filter = filter
 	f.reqOrdering = ReqOrdering(reqOrdering)
 
 	// If there's a spool, pull it up.
-	if spool, ok := f.source.plan.(*spoolNode); ok {
-		f.source.plan = spool.source
+	if spool, ok := f.input.(*spoolNode); ok {
+		f.input = spool.source
 		spool.source = f
 		return spool, nil
 	}
