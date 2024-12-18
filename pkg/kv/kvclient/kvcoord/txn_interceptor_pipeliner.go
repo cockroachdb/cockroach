@@ -738,7 +738,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	// Similar to the in-flight writes case above, we may have gone over the
 	// rejectTxnMaxCount threshold because we don't accurately estimate the
 	// number of ranged locking reads before sending the request.
-	if tp.writeCount > rejectTxnMaxCount {
+	if rejectTxnMaxCount > 0 && tp.writeCount > rejectTxnMaxCount {
 		if tp.inflightOverBudgetEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
 			log.Warningf(ctx, "a transaction has exceeded the maximum number of writes "+
 				"allowed by kv.transaction.max_intents_and_locks: "+
