@@ -70,12 +70,12 @@ func (m ModeT) String() string {
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (m ModeT) SafeFormat(p redact.SafePrinter, verb rune) {
+func (m ModeT) SafeFormat(p redact.SafePrinter, _ rune) {
 	if s, ok := modeDict[m]; ok {
-		p.Print(s)
+		p.SafeString(redact.SafeString(s))
 		return
 	}
-	p.Print("unknown-mode")
+	p.SafeString("unknown-mode")
 }
 
 // RegularTokensPerStream determines the flow tokens available for regular work
