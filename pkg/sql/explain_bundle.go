@@ -712,8 +712,14 @@ func makeStmtEnvCollector(ctx context.Context, p *planner, ie *InternalExecutor)
 	return stmtEnvCollector{ctx: ctx, p: p, ie: ie}
 }
 
-// query is a helper to run a query that returns a single string value.
+// query is a helper to run a query that returns a single string value. It
+// returns an error if the query didn't return exactly one row.
 func (c *stmtEnvCollector) query(query string) (string, error) {
+	return c.queryEx(query, false /* emptyOk */)
+}
+
+// queryEx is the same as query but allows no rows to be returned.
+func (c *stmtEnvCollector) queryEx(query string, emptyOk bool) (string, error) {
 	row, err := c.ie.QueryRowEx(
 		c.ctx,
 		"stmtEnvCollector",
@@ -724,14 +730,21 @@ func (c *stmtEnvCollector) query(query string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
+	if row == nil {
+		// The query returned no rows.
+		if emptyOk {
+			return "", nil
+		}
+		return "", errors.AssertionFailedf(
+			"expected env query %q to return one row, returned none", query,
+		)
+	}
 	if len(row) != 1 {
 		return "", errors.AssertionFailedf(
 			"expected env query %q to return a single column, returned %d",
 			query, len(row),
 		)
 	}
-
 	s, ok := row[0].(*tree.DString)
 	if !ok {
 		return "", errors.AssertionFailedf(
@@ -739,43 +752,7 @@ func (c *stmtEnvCollector) query(query string) (string, error) {
 			query, row[0],
 		)
 	}
-
 	return string(*s), nil
-}
-
-// queryRows is similar to query() for the case when multiple rows with single
-// string values can be returned.
-func (c *stmtEnvCollector) queryRows(query string) ([]string, error) {
-	rows, err := c.ie.QueryBufferedEx(
-		c.ctx,
-		"stmtEnvCollector",
-		nil, /* txn */
-		sessiondata.NoSessionDataOverride,
-		query,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var values []string
-	for _, row := range rows {
-		if len(row) != 1 {
-			return nil, errors.AssertionFailedf(
-				"expected env query %q to return a single column, returned %d",
-				query, len(row),
-			)
-		}
-		s, ok := row[0].(*tree.DString)
-		if !ok {
-			return nil, errors.AssertionFailedf(
-				"expected env query %q to return a DString, returned %T",
-				query, row[0],
-			)
-		}
-		values = append(values, string(*s))
-	}
-
-	return values, nil
 }
 
 var testingOverrideExplainEnvVersion string
@@ -1022,12 +999,14 @@ func (c *stmtEnvCollector) PrintCreateUDT(w io.Writer, id oid.Oid, redactValues 
 	if redactValues {
 		query = fmt.Sprintf("SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)", query)
 	}
-	createStatement, err := c.queryRows(query)
+	// Implicit crdb_internal_region type won't be found via the vtable, so we
+	// allow empty result.
+	createStatement, err := c.queryEx(query, true /* emptyOk */)
 	if err != nil {
 		return err
 	}
-	for _, cs := range createStatement {
-		fmt.Fprintf(w, "%s\n", cs)
+	if createStatement != "" {
+		fmt.Fprintf(w, "%s;\n", createStatement)
 	}
 	return nil
 }
