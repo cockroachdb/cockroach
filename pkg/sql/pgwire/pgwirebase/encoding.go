@@ -213,8 +213,10 @@ func (b *ReadBuffer) ReadTypedMsg(rd BufferedReader) (ClientMessageType, int, er
 	return ClientMessageType(typ), n, err
 }
 
-// GetString reads a null-terminated string.
-func (b *ReadBuffer) GetString() (string, error) {
+// GetUnsafeString reads a null-terminated string as a reference.
+// Note: The underlying buffer will be prevented from GCing, so long lived
+// objects should never use this.
+func (b *ReadBuffer) GetUnsafeString() (string, error) {
 	pos := bytes.IndexByte(b.Msg, 0)
 	if pos == -1 {
 		return "", NewProtocolViolationErrorf("NUL terminator not found")
@@ -224,6 +226,16 @@ func (b *ReadBuffer) GetString() (string, error) {
 	s := encoding.UnsafeConvertBytesToString(b.Msg[:pos])
 	b.Msg = b.Msg[pos+1:]
 	return s, nil
+}
+
+// GetSafeString reads a null-terminated string as a copy of the original data
+// out.
+func (b *ReadBuffer) GetSafeString() (string, error) {
+	s, err := b.GetUnsafeString()
+	if err != nil {
+		return "", err
+	}
+	return strings.Clone(s), nil
 }
 
 // GetPrepareType returns the buffer's contents as a PrepareType.
