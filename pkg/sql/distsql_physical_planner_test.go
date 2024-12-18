@@ -2011,14 +2011,14 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
-				source: planDataSource{plan: scanToParallelize},
+				source: scanToParallelize,
 				render: []tree.TypedExpr{&tree.IndexedVar{Idx: 0}},
 			}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
-				source: planDataSource{plan: scanToParallelize},
+				source: scanToParallelize,
 				render: []tree.TypedExpr{&tree.IsNullExpr{}},
 			}}},
 			// Not a simple projection (some expressions might be handled by
