@@ -8,6 +8,7 @@ package tenantcapabilitiesccl
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -112,7 +113,10 @@ func TestDataDriven(t *testing.T) {
 				})
 				_, err := tenantSQLDB.Exec(d.Input)
 				if err != nil {
-					return err.Error()
+					errStr := err.Error()
+					// Redact transaction IDs from error strings, for determinism.
+					errStr = regexp.MustCompile(`\[txn: [0-9a-f]+]`).ReplaceAllString(errStr, `[txn: ‹×›]`)
+					return errStr
 				}
 
 			case "exec-sql-tenant":

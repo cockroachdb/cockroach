@@ -1012,7 +1012,8 @@ func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) 
 
 func (c *stmtEnvCollector) PrintCreateUDT(w io.Writer, id oid.Oid, redactValues bool) error {
 	descID := catid.UserDefinedOIDToID(id)
-	query := fmt.Sprintf("SELECT create_statement FROM crdb_internal.create_type_statements WHERE descriptor_id = %d", descID)
+	// Use "".crdb_internal to allow for cross-DB lookups.
+	query := fmt.Sprintf(`SELECT create_statement FROM "".crdb_internal.create_type_statements WHERE descriptor_id = %d::OID`, descID)
 	if redactValues {
 		query = fmt.Sprintf("SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)", query)
 	}
@@ -1031,7 +1032,8 @@ func (c *stmtEnvCollector) PrintCreateRoutine(
 ) error {
 	var createRoutineQuery string
 	descID := catid.UserDefinedOIDToID(id)
-	queryTemplate := "SELECT create_statement FROM crdb_internal.create_%[1]s_statements WHERE %[1]s_id = %[2]d"
+	// Use "".crdb_internal to allow for cross-DB lookups.
+	queryTemplate := `SELECT create_statement FROM "".crdb_internal.create_%[1]s_statements WHERE %[1]s_id = %[2]d::OID`
 	if procedure {
 		createRoutineQuery = fmt.Sprintf(queryTemplate, "procedure", descID)
 	} else {

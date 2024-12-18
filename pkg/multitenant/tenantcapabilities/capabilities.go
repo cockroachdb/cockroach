@@ -92,6 +92,10 @@ const (
 	// metrics, but this implementation is simpler).
 	CanViewAllMetrics // can_view_all_metrics
 
+	// CanPrepareTxns describes the ability of a tenant to prepare transactions as
+	// part of the XA two-phase commit protocol.
+	CanPrepareTxns // can_prepare_txns
+
 	MaxCapabilityID ID = iota - 1
 )
 
@@ -124,6 +128,7 @@ var capabilities = [MaxCapabilityID + 1]Capability{
 	TenantSpanConfigBounds: spanConfigBoundsCapability(TenantSpanConfigBounds),
 	CanDebugProcess:        boolCapability(CanDebugProcess),
 	CanViewAllMetrics:      boolCapability(CanViewAllMetrics),
+	CanPrepareTxns:         boolCapability(CanPrepareTxns),
 }
 
 // EnableAll enables maximum access to services.
