@@ -30,9 +30,8 @@ import (
 )
 
 type exportNode struct {
+	singleInputPlanNode
 	optColumnsSlot
-
-	source planNode
 
 	// destination represents the destination URI for the export,
 	// typically a directory
@@ -59,7 +58,7 @@ func (e *exportNode) Values() tree.Datums {
 }
 
 func (e *exportNode) Close(ctx context.Context) {
-	e.source.Close(ctx)
+	e.input.Close(ctx)
 }
 
 const (
@@ -250,12 +249,12 @@ func (ef *execFactory) ConstructExport(
 	exportFilePattern := exportFilePatternPart + "." + fileSuffix
 	namePattern := fmt.Sprintf("export%s-%s", exportID, exportFilePattern)
 	return &exportNode{
-		source:          input.(planNode),
-		destination:     string(*destination),
-		fileNamePattern: namePattern,
-		format:          format,
-		chunkRows:       chunkRows,
-		chunkSize:       chunkSize,
-		colNames:        colNames,
+		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+		destination:         string(*destination),
+		fileNamePattern:     namePattern,
+		format:              format,
+		chunkRows:           chunkRows,
+		chunkSize:           chunkSize,
+		colNames:            colNames,
 	}, nil
 }

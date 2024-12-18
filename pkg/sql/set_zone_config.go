@@ -37,6 +37,7 @@ import (
 )
 
 type setZoneConfigNode struct {
+	zeroInputPlanNode
 	stmt          *tree.SetZoneConfig
 	zoneSpecifier tree.ZoneSpecifier
 	allIndexes    bool

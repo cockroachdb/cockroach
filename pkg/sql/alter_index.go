@@ -23,6 +23,7 @@ import (
 )
 
 type alterIndexNode struct {
+	zeroInputPlanNode
 	n         *tree.AlterIndex
 	tableDesc *tabledesc.Mutable
 	index     catalog.Index

@@ -35,6 +35,7 @@ import (
 
 // alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
 type alterRoleNode struct {
+	zeroInputPlanNode
 	roleName    username.SQLUsername
 	ifExists    bool
 	isRole      bool
@@ -43,6 +44,7 @@ type alterRoleNode struct {
 
 // alterRoleSetNode represents an `ALTER ROLE ... SET` statement.
 type alterRoleSetNode struct {
+	zeroInputPlanNode
 	roleName username.SQLUsername
 	ifExists bool
 	isRole   bool

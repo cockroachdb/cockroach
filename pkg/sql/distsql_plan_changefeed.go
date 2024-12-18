@@ -265,6 +265,7 @@ func (p CDCExpressionPlan) CollectPlanColumns(collector func(column colinfo.Resu
 // datums must match the number of inputs (and types) expected by this flow
 // (verified below).
 type cdcValuesNode struct {
+	zeroInputPlanNode
 	source        execinfra.RowSource
 	datumRow      []tree.Datum
 	colOrd        []int

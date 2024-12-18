@@ -38,6 +38,8 @@ type scanNode struct {
 	// Enforce this using NoCopy.
 	_ util.NoCopy
 
+	zeroInputPlanNode
+
 	desc  catalog.TableDescriptor
 	index catalog.Index
 

@@ -67,9 +67,9 @@ import (
 )
 
 type createTableNode struct {
-	n          *tree.CreateTable
-	dbDesc     catalog.DatabaseDescriptor
-	sourcePlan planNode
+	n      *tree.CreateTable
+	dbDesc catalog.DatabaseDescriptor
+	input  planNode
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -390,7 +390,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				"has a hidden rowid primary key column"),
 		)
 
-		asCols := planColumns(n.sourcePlan)
+		asCols := planColumns(n.input)
 		if !n.n.AsHasUserSpecifiedPrimaryKey() {
 			// rowID column is already present in the input as the last column
 			// if the user did not specify a PRIMARY KEY. So ignore it for the
@@ -579,7 +579,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			}
 
 			// Prepare the buffer for row values. At this point, one more column has
-			// been added by ensurePrimaryKey() to the list of columns in sourcePlan, if
+			// been added by ensurePrimaryKey() to the list of columns in input, if
 			// a PRIMARY KEY is not specified by the user.
 			rowBuffer := make(tree.Datums, len(desc.Columns))
 
@@ -587,7 +587,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				if err := params.p.cancelChecker.Check(); err != nil {
 					return err
 				}
-				if next, err := n.sourcePlan.Next(params); !next {
+				if next, err := n.input.Next(params); !next {
 					if err != nil {
 						return err
 					}
@@ -607,7 +607,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				}
 
 				// Populate the buffer.
-				copy(rowBuffer, n.sourcePlan.Values())
+				copy(rowBuffer, n.input.Values())
 
 				// CREATE TABLE AS does not copy indexes from the input table.
 				// An empty row.PartialIndexUpdateHelper is used here because
@@ -631,10 +631,24 @@ func (*createTableNode) Next(runParams) (bool, error) { return false, nil }
 func (*createTableNode) Values() tree.Datums          { return tree.Datums{} }
 
 func (n *createTableNode) Close(ctx context.Context) {
-	if n.sourcePlan != nil {
-		n.sourcePlan.Close(ctx)
-		n.sourcePlan = nil
+	if n.input != nil {
+		n.input.Close(ctx)
+		n.input = nil
 	}
+}
+
+func (n *createTableNode) InputCount() int {
+	if n.n.As() {
+		return 1
+	}
+	return 0
+}
+
+func (n *createTableNode) Input(i int) (planNode, error) {
+	if i == 0 && n.n.As() {
+		return n.input, nil
+	}
+	return nil, errors.AssertionFailedf("input index %d is out of range", i)
 }
 
 func qualifyFKColErrorWithDB(
