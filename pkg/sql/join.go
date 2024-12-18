@@ -15,8 +15,8 @@ import (
 // joinNode is a planNode whose rows are the result of a join operation.
 type joinNode struct {
 	// The data sources.
-	left  planDataSource
-	right planDataSource
+	left  planNode
+	right planNode
 
 	// pred represents the join predicate.
 	pred *joinPredicate
@@ -41,8 +41,8 @@ type joinNode struct {
 }
 
 func (p *planner) makeJoinNode(
-	left planDataSource,
-	right planDataSource,
+	left planNode,
+	right planNode,
 	pred *joinPredicate,
 	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) *joinNode {
@@ -73,6 +73,6 @@ func (n *joinNode) Values() tree.Datums {
 
 // Close implements the planNode interface.
 func (n *joinNode) Close(ctx context.Context) {
-	n.right.plan.Close(ctx)
-	n.left.plan.Close(ctx)
+	n.right.Close(ctx)
+	n.left.Close(ctx)
 }

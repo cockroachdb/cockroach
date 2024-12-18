@@ -418,9 +418,11 @@ func (ef *execFactory) ConstructHashJoin(
 	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) (exec.Node, error) {
 	p := ef.planner
-	leftSrc := asDataSource(left)
-	rightSrc := asDataSource(right)
-	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns, extraOnCond)
+	leftPlan := left.(planNode)
+	rightPlan := right.(planNode)
+	leftCols := planColumns(leftPlan)
+	rightCols := planColumns(rightPlan)
+	pred := makePredicate(joinType, leftCols, rightCols, extraOnCond)
 
 	numEqCols := len(leftEqCols)
 	pred.leftEqualityIndices = leftEqCols
@@ -430,13 +432,13 @@ func (ef *execFactory) ConstructHashJoin(
 	pred.rightColNames = nameBuf[numEqCols:]
 
 	for i := range leftEqCols {
-		pred.leftColNames[i] = tree.Name(leftSrc.columns[leftEqCols[i]].Name)
-		pred.rightColNames[i] = tree.Name(rightSrc.columns[rightEqCols[i]].Name)
+		pred.leftColNames[i] = tree.Name(leftCols[leftEqCols[i]].Name)
+		pred.rightColNames[i] = tree.Name(rightCols[rightEqCols[i]].Name)
 	}
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
-	return p.makeJoinNode(leftSrc, rightSrc, pred, estimatedLeftRowCount, estimatedRightRowCount), nil
+	return p.makeJoinNode(leftPlan, rightPlan, pred, estimatedLeftRowCount, estimatedRightRowCount), nil
 }
 
 // ConstructApplyJoin is part of the exec.Factory interface.
@@ -465,10 +467,12 @@ func (ef *execFactory) ConstructMergeJoin(
 ) (exec.Node, error) {
 	var err error
 	p := ef.planner
-	leftSrc := asDataSource(left)
-	rightSrc := asDataSource(right)
-	pred := makePredicate(joinType, leftSrc.columns, rightSrc.columns, onCond)
-	node := p.makeJoinNode(leftSrc, rightSrc, pred, estimatedLeftRowCount, estimatedRightRowCount)
+	leftPlan := left.(planNode)
+	rightPlan := right.(planNode)
+	leftCols := planColumns(leftPlan)
+	rightCols := planColumns(rightPlan)
+	pred := makePredicate(joinType, leftCols, rightCols, onCond)
+	node := p.makeJoinNode(leftPlan, rightPlan, pred, estimatedLeftRowCount, estimatedRightRowCount)
 	pred.leftEqKey = leftEqColsAreKey
 	pred.rightEqKey = rightEqColsAreKey
 
@@ -481,8 +485,8 @@ func (ef *execFactory) ConstructMergeJoin(
 	pred.rightColNames = make(tree.NameList, n)
 	for i := 0; i < n; i++ {
 		leftColIdx, rightColIdx := leftOrdering[i].ColIdx, rightOrdering[i].ColIdx
-		pred.leftColNames[i] = tree.Name(leftSrc.columns[leftColIdx].Name)
-		pred.rightColNames[i] = tree.Name(rightSrc.columns[rightColIdx].Name)
+		pred.leftColNames[i] = tree.Name(leftCols[leftColIdx].Name)
+		pred.rightColNames[i] = tree.Name(rightCols[rightColIdx].Name)
 	}
 
 	// Set up node.props, which tells the distsql planner to maintain the
