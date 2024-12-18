@@ -12,6 +12,18 @@ echo
 -- allows the rangefeed  request to be re-routed to another replica.
 
 
+-- Observe the server-side rangefeed cancellation metric on n3, before a send
+-- queue develops, it should be zero:
+SELECT
+    name,
+    value
+  FROM crdb_internal.node_metrics
+  WHERE name LIKE 'kv.rangefeed.closed_timestamp.slow_ranges.cancelled'
+  ORDER BY name ASC;
+
+  kv.rangefeed.closed_timestamp.slow_ranges.cancelled | 0  
+
+
 (Sending 1 MiB put request to develop a send queue)
 
 
@@ -64,6 +76,17 @@ SELECT store_id,
 
 
 (Rangefeed moved to n1)
+
+
+-- Observe the server-side rangefeed cancellation metric increased on n3:
+SELECT
+    name,
+    value
+  FROM crdb_internal.node_metrics
+  WHERE name LIKE 'kv.rangefeed.closed_timestamp.slow_ranges.cancelled'
+  ORDER BY name ASC;
+
+  kv.rangefeed.closed_timestamp.slow_ranges.cancelled | 1  
 
 
 -- (Allowing below-raft admission to proceed on n3.)

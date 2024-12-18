@@ -52,6 +52,13 @@ var (
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRangeFeedSlowClosedTimestampCancelledRanges = metric.Metadata{
+		Name: "kv.rangefeed.closed_timestamp.slow_ranges.cancelled",
+		Help: "Number of rangefeeds that were cancelled due to a chronically " +
+			"lagging closed timestamp",
+		Measurement: "Cancellation Count",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRangeFeedProcessorsGO = metric.Metadata{
 		Name:        "kv.rangefeed.processors_goroutine",
 		Help:        "Number of active RangeFeed processors using goroutines",
@@ -86,14 +93,15 @@ var (
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
-	RangeFeedCatchUpScanNanos              *metric.Counter
-	RangeFeedBudgetExhausted               *metric.Counter
-	RangefeedProcessorQueueTimeout         *metric.Counter
-	RangeFeedBudgetBlocked                 *metric.Counter
-	RangeFeedRegistrations                 *metric.Gauge
-	RangeFeedClosedTimestampMaxBehindNanos *metric.Gauge
-	RangeFeedSlowClosedTimestampRanges     *metric.Gauge
-	RangeFeedSlowClosedTimestampLogN       log.EveryN
+	RangeFeedCatchUpScanNanos                   *metric.Counter
+	RangeFeedBudgetExhausted                    *metric.Counter
+	RangefeedProcessorQueueTimeout              *metric.Counter
+	RangeFeedBudgetBlocked                      *metric.Counter
+	RangeFeedSlowClosedTimestampCancelledRanges *metric.Counter
+	RangeFeedRegistrations                      *metric.Gauge
+	RangeFeedClosedTimestampMaxBehindNanos      *metric.Gauge
+	RangeFeedSlowClosedTimestampRanges          *metric.Gauge
+	RangeFeedSlowClosedTimestampLogN            log.EveryN
 	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
 	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
 	// limit, but it's here to limit the effect on stability in case something
@@ -112,17 +120,18 @@ func (*Metrics) MetricStruct() {}
 // NewMetrics makes the metrics for RangeFeeds monitoring.
 func NewMetrics() *Metrics {
 	return &Metrics{
-		RangeFeedCatchUpScanNanos:              metric.NewCounter(metaRangeFeedCatchUpScanNanos),
-		RangefeedProcessorQueueTimeout:         metric.NewCounter(metaQueueTimeout),
-		RangeFeedBudgetExhausted:               metric.NewCounter(metaRangeFeedExhausted),
-		RangeFeedBudgetBlocked:                 metric.NewCounter(metaRangeFeedBudgetBlocked),
-		RangeFeedRegistrations:                 metric.NewGauge(metaRangeFeedRegistrations),
-		RangeFeedClosedTimestampMaxBehindNanos: metric.NewGauge(metaRangeFeedClosedTimestampMaxBehindNanos),
-		RangeFeedSlowClosedTimestampRanges:     metric.NewGauge(metaRangefeedSlowClosedTimestampRanges),
-		RangeFeedSlowClosedTimestampLogN:       log.Every(5 * time.Second),
-		RangeFeedSlowClosedTimestampNudgeSem:   make(chan struct{}, 1024),
-		RangeFeedProcessorsGO:                  metric.NewGauge(metaRangeFeedProcessorsGO),
-		RangeFeedProcessorsScheduler:           metric.NewGauge(metaRangeFeedProcessorsScheduler),
+		RangeFeedCatchUpScanNanos:                   metric.NewCounter(metaRangeFeedCatchUpScanNanos),
+		RangefeedProcessorQueueTimeout:              metric.NewCounter(metaQueueTimeout),
+		RangeFeedBudgetExhausted:                    metric.NewCounter(metaRangeFeedExhausted),
+		RangeFeedBudgetBlocked:                      metric.NewCounter(metaRangeFeedBudgetBlocked),
+		RangeFeedSlowClosedTimestampCancelledRanges: metric.NewCounter(metaRangeFeedSlowClosedTimestampCancelledRanges),
+		RangeFeedRegistrations:                      metric.NewGauge(metaRangeFeedRegistrations),
+		RangeFeedClosedTimestampMaxBehindNanos:      metric.NewGauge(metaRangeFeedClosedTimestampMaxBehindNanos),
+		RangeFeedSlowClosedTimestampRanges:          metric.NewGauge(metaRangefeedSlowClosedTimestampRanges),
+		RangeFeedSlowClosedTimestampLogN:            log.Every(5 * time.Second),
+		RangeFeedSlowClosedTimestampNudgeSem:        make(chan struct{}, 1024),
+		RangeFeedProcessorsGO:                       metric.NewGauge(metaRangeFeedProcessorsGO),
+		RangeFeedProcessorsScheduler:                metric.NewGauge(metaRangeFeedProcessorsScheduler),
 	}
 }
 

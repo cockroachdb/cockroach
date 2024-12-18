@@ -923,6 +923,7 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 					log.Warningf(ctx,
 						`RangeFeed is too far behind, cancelling for replanning [%v]`, signal)
 					r.disconnectRangefeedWithReason(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)
+					r.store.metrics.RangeFeedMetrics.RangeFeedSlowClosedTimestampCancelledRanges.Inc(1)
 				}
 				return nil, nil
 			})

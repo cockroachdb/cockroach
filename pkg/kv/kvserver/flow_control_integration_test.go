@@ -6277,6 +6277,7 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	require.NoError(t, err)
 	h.enableVerboseRaftMsgLoggingForRange(desc.RangeID)
 	n1 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	n3 := sqlutils.MakeSQLRunner(tc.ServerConn(2))
 	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
 	h.resetV2TokenMetrics(ctx)
 	h.waitForConnectedStreams(ctx, desc.RangeID, 3, 0 /* serverIdx */)
@@ -6311,6 +6312,18 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 		})
 	}
 
+	// We will use this metric to observe the server-side rangefeed cancellation,
+	// which should be zero prior to the send queue developing. Then, non-zero
+	// shortly after.
+	const rangeFeedCancelMetricQueryStr = `
+  SELECT
+    name,
+    value
+  FROM crdb_internal.node_metrics
+  WHERE name LIKE 'kv.rangefeed.closed_timestamp.slow_ranges.cancelled'
+  ORDER BY name ASC;
+`
+
 	closeFeed := rangeFeed(
 		ctx,
 		ts.DistSenderI(),
@@ -6341,6 +6354,11 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	h.put(ctx, roachpb.Key(desc.StartKey), 1, admissionpb.NormalPri)
 	h.waitForTotalTrackedTokens(ctx, desc.RangeID, 4<<20 /* 4 MiB */, 0 /* serverIdx */)
 
+	h.comment(`
+-- Observe the server-side rangefeed cancellation metric on n3, before a send
+-- queue develops, it should be zero:`)
+	h.query(n3, rangeFeedCancelMetricQueryStr)
+
 	h.comment(`(Sending 1 MiB put request to develop a send queue)`)
 	h.put(ctx, roachpb.Key(desc.StartKey), 1, admissionpb.NormalPri)
 	h.comment(`(Sent 1 MiB put request)`)
@@ -6369,6 +6387,10 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	})
 	newNode := curRangeFeedNodeID.Load().(roachpb.NodeID)
 	h.comment(fmt.Sprintf(`(Rangefeed moved to n%v)`, newNode))
+
+	h.comment(`
+-- Observe the server-side rangefeed cancellation metric increased on n3:`)
+	h.query(n3, rangeFeedCancelMetricQueryStr)
 
 	h.comment(`-- (Allowing below-raft admission to proceed on n3.)`)
 	setTokenReturnEnabled(true /* enabled */, 2)
