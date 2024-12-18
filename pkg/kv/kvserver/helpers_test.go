@@ -696,3 +696,15 @@ func NewRangefeedTxnPusher(
 		span: span,
 	}
 }
+
+// SupportFromEnabled exports (replicaRLockedStoreLiveness).SupportFromEnabled
+// for testing purposes.
+func (r *Replica) SupportFromEnabled() bool {
+	return (*replicaRLockedStoreLiveness)(r).SupportFromEnabled()
+}
+
+// RaftFortificationEnabledForRangeID exports raftFortificationEnabledForRangeID
+// for use in tests.
+func RaftFortificationEnabledForRangeID(fracEnabled float64, rangeID roachpb.RangeID) bool {
+	return raftFortificationEnabledForRangeID(fracEnabled, rangeID)
+}
