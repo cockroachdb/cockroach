@@ -1,0 +1,17 @@
+# LogicTest: local-mixed-24.3
+
+statement ok
+BEGIN
+
+statement error pgcode 0A000 PREPARE TRANSACTION unsupported in mixed-version cluster
+PREPARE TRANSACTION 'txn'
+
+statement error pgcode 0A000 COMMIT PREPARED unsupported in mixed-version cluster
+COMMIT PREPARED 'txn'
+
+statement error pgcode 0A000 ROLLBACK PREPARED unsupported in mixed-version cluster
+ROLLBACK PREPARED 'txn'
+
+query ITTTT
+SELECT * FROM pg_catalog.pg_prepared_xacts
+----

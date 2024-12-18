@@ -692,6 +692,36 @@ func TestTransitions(t *testing.T) {
 			// performed any operations, but it's not easy to do the test.
 			expTxn: &expKVTxn{},
 		},
+		{
+			// PREPARE TRANSACTION.
+			name: "Open + prepare",
+			init: func() (fsm.State, *txnState, uuid.UUID, error) {
+				s, ts := testCon.createOpenState(explicitTxn)
+				return s, ts, ts.mu.txn.ID(), nil
+			},
+			ev:       eventTxnFinishPrepared{},
+			expState: stateNoTxn{},
+			expAdv: expAdvance{
+				expCode: advanceOne,
+				expEv:   txnPrepare,
+			},
+			expTxn: nil,
+		},
+		{
+			// PREPARE TRANSACTION on an upgraded txn.
+			name: "Open (upgraded) + prepare",
+			init: func() (fsm.State, *txnState, uuid.UUID, error) {
+				s, ts := testCon.createOpenState(upgradedExplicitTxn)
+				return s, ts, ts.mu.txn.ID(), nil
+			},
+			ev:       eventTxnFinishPrepared{},
+			expState: stateNoTxn{},
+			expAdv: expAdvance{
+				expCode: advanceOne,
+				expEv:   txnPrepare,
+			},
+			expTxn: nil,
+		},
 		//
 		// Tests starting from the Aborted state.
 		//

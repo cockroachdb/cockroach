@@ -17,8 +17,9 @@ func _() {
 	_ = x[txnStart-1]
 	_ = x[txnCommit-2]
 	_ = x[txnRollback-3]
-	_ = x[txnRestart-4]
-	_ = x[txnUpgradeToExplicit-5]
+	_ = x[txnPrepare-4]
+	_ = x[txnRestart-5]
+	_ = x[txnUpgradeToExplicit-6]
 }
 
 func (i txnEventType) String() string {
@@ -31,6 +32,8 @@ func (i txnEventType) String() string {
 		return "txnCommit"
 	case txnRollback:
 		return "txnRollback"
+	case txnPrepare:
+		return "txnPrepare"
 	case txnRestart:
 		return "txnRestart"
 	case txnUpgradeToExplicit:
