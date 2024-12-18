@@ -440,6 +440,27 @@ CREATE INVERTED INDEX ON opclasses(c DESC)
 statement ok
 CREATE INVERTED INDEX ON opclasses(a DESC, c)
 
+# Regression test for GH issue #137404
+subtest disallow_full_table_scans
+
+let $disallow_full_table_scans
+select value from [show cluster settings] where variable = 'sql.defaults.disallow_full_table_scans.enabled';
+
+statement ok
+SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = true;
+
+statement ok
+CREATE TABLE t_disable_full_ts (id UUID PRIMARY KEY);
+
+statement ok
+CREATE INDEX ON t_disable_full_ts (id);
+
+statement ok
+SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = $disallow_full_table_scans;
+
+statement ok
+DROP TABLE t_disable_full_ts
+
 subtest create_index_on_materialized_view
 
 statement ok
@@ -521,3 +542,25 @@ CREATE INDEX IF NOT EXISTS idx ON tbl_ifne (b) STORING (a)
 
 statement ok
 DROP TABLE tbl_ifne CASCADE
+
+subtest disallow_full_table_scans
+
+let $disallow_full_table_scans
+select value from [show cluster settings] where variable = 'sql.defaults.disallow_full_table_scans.enabled';
+
+statement ok
+SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = true;
+
+statement ok
+CREATE TABLE t_disable_full_ts (id UUID PRIMARY KEY);
+
+statement ok
+CREATE INDEX ON t_disable_full_ts (id);
+
+statement ok
+SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = $disallow_full_table_scans;
+
+statement ok
+DROP TABLE t_disable_full_ts
+
+subtest end
