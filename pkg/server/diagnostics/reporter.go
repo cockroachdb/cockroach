@@ -192,7 +192,11 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 			// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 			// stat reset periods for reporting.
 			if shouldReportDiagnostics(ctx, r.Settings) {
-				r.ReportDiagnostics(ctx)
+				func() {
+					ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+					defer cancel()
+					r.ReportDiagnostics(ctx)
+				}()
 			}
 
 			nextReport = nextReport.Add(reportFrequency.Get(&r.Settings.SV))
