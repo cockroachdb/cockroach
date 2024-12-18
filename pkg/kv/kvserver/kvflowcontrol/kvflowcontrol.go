@@ -416,12 +416,13 @@ func (t Tokens) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (t Tokens) SafeFormat(p redact.SafePrinter, verb rune) {
-	sign := "+"
 	if t < 0 {
-		sign = "-"
+		p.SafeRune('-')
 		t = -t
+	} else {
+		p.SafeRune('+')
 	}
-	p.Printf("%s%s", sign, humanize.IBytes(uint64(t)))
+	p.SafeString(redact.SafeString(humanize.IBytes(uint64(t))))
 }
 
 func (s Stream) String() string {
