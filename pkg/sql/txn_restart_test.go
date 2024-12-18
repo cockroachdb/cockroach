@@ -669,7 +669,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 // rollbackStrategy is the type of statement which a client can use to
 // rollback aborted txns from retryable errors. We accept two statements
 // for rolling back to the cockroach_restart savepoint. See
-// *Executor.execStmtInAbortedTxn for more about transaction retries.
+// *connExecutor.execStmtInAbortedState for more about transaction retries.
 type rollbackStrategy int
 
 const (

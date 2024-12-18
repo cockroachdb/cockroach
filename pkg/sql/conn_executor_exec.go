@@ -780,6 +780,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		ev, payload := ex.execRollbackToSavepointInOpenState(ctx, s, res)
 		return ev, payload, nil
 
+	case *tree.PrepareTransaction:
+		ev, payload := ex.execPrepareTransactionInOpenState(ctx, s)
+		return ev, payload, nil
+
 	case *tree.ShowCommitTimestamp:
 		ev, payload := ex.execShowCommitTimestampInOpenState(ctx, s, res, canAutoCommit)
 		return ev, payload, nil
@@ -1797,6 +1801,10 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 	case *tree.RollbackToSavepoint:
 		ev, payload := ex.execRollbackToSavepointInOpenState(ctx, s, res)
+		return ev, payload, nil
+
+	case *tree.PrepareTransaction:
+		ev, payload := ex.execPrepareTransactionInOpenState(ctx, s)
 		return ev, payload, nil
 
 	case *tree.ShowCommitTimestamp:
@@ -3450,8 +3458,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			)
 	case *tree.ShowCommitTimestamp:
 		return ex.execShowCommitTimestampInNoTxnState(ctx, s, res)
-	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
-		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
+	case *tree.CommitTransaction, *tree.RollbackTransaction, *tree.PrepareTransaction,
+		*tree.SetTransaction, *tree.Savepoint, *tree.ReleaseSavepoint:
 		if ex.sessionData().AutoCommitBeforeDDL {
 			// If autocommit_before_ddl is set, we allow these statements to be
 			// executed, and send a warning rather than an error.
@@ -3523,7 +3531,7 @@ func (ex *connExecutor) beginImplicitTxn(
 
 // execStmtInAbortedState executes a statement in a txn that's in state
 // Aborted or RestartWait. All statements result in error events except:
-//   - COMMIT / ROLLBACK: aborts the current transaction.
+//   - COMMIT / ROLLBACK / PREPARE TRANSACTION: aborts the current transaction.
 //   - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
 //     allowing it to be retried.
 func (ex *connExecutor) execStmtInAbortedState(
@@ -3545,9 +3553,10 @@ func (ex *connExecutor) execStmtInAbortedState(
 	}
 
 	switch s := ast.(type) {
-	case *tree.CommitTransaction, *tree.RollbackTransaction:
-		if _, ok := s.(*tree.CommitTransaction); ok {
-			// Note: Postgres replies to COMMIT of failed txn with "ROLLBACK" too.
+	case *tree.CommitTransaction, *tree.RollbackTransaction, *tree.PrepareTransaction:
+		if _, ok := s.(*tree.RollbackTransaction); !ok {
+			// Note: Postgres replies to COMMIT and PREPARE TRANSACTION of failed
+			// transactions with "ROLLBACK" too.
 			res.ResetStmtType((*tree.RollbackTransaction)(nil))
 		}
 		return ex.rollbackSQLTransaction(ctx, s)

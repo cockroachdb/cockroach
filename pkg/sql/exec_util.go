@@ -881,6 +881,24 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaTxnPrepareStarted = metric.Metadata{
+		Name:        "sql.txn.prepare.started.count",
+		Help:        "Number of SQL PREPARE TRANSACTION statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnCommitPreparedStarted = metric.Metadata{
+		Name:        "sql.txn.commit_prepared.started.count",
+		Help:        "Number of SQL COMMIT PREPARED statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnRollbackPreparedStarted = metric.Metadata{
+		Name:        "sql.txn.rollback_prepared.started.count",
+		Help:        "Number of SQL ROLLBACK PREPARED statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaSQLTxnContended = metric.Metadata{
 		Name:        "sql.txn.contended.count",
 		Help:        "Number of SQL transactions experienced contention",
@@ -1006,6 +1024,24 @@ var (
 	MetaTxnUpgradedFromWeakIsolation = metric.Metadata{
 		Name:        "sql.txn.upgraded_iso_level.count",
 		Help:        "Number of times a weak isolation level was automatically upgraded to a stronger one",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnPrepareExecuted = metric.Metadata{
+		Name:        "sql.txn.prepare.count",
+		Help:        "Number of SQL PREPARE TRANSACTION statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnCommitPreparedExecuted = metric.Metadata{
+		Name:        "sql.txn.commit_prepared.count",
+		Help:        "Number of SQL COMMIT PREPARED statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnRollbackPreparedExecuted = metric.Metadata{
+		Name:        "sql.txn.rollback_prepared.count",
+		Help:        "Number of SQL ROLLBACK PREPARED statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -2024,6 +2060,8 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 			d = dd
 		case username.SQLUsername:
 			d = tree.NewDString(t.Normalized())
+		case uuid.UUID:
+			d = tree.NewDUuid(tree.DUuid{UUID: t})
 		}
 		if d == nil {
 			// Handle all types which have an underlying type that can be stored in the

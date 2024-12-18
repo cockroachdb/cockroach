@@ -2190,6 +2190,13 @@ func TestReadCommittedLogic_tuple_local(
 	runLogicTest(t, "tuple_local")
 }
 
+func TestReadCommittedLogic_two_phase_commit(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "two_phase_commit")
+}
+
 func TestReadCommittedLogic_txn(
 	t *testing.T,
 ) {

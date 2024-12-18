@@ -262,6 +262,14 @@ func (txn *Txn) ID() uuid.UUID {
 	return txn.mu.ID
 }
 
+// Key returns the current "anchor" key of the transaction, or nil if no such
+// key has been set because the transaction has not yet acquired any locks.
+func (txn *Txn) Key() roachpb.Key {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.Key()
+}
+
 // Epoch exports the txn's epoch.
 func (txn *Txn) Epoch() enginepb.TxnEpoch {
 	txn.mu.Lock()

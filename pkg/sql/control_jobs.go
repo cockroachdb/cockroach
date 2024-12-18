@@ -31,7 +31,7 @@ var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
 	tree.PauseJob:  jobs.StatusPaused,
 }
 
-// FastPathResults implements the planNodeFastPath inteface.
+// FastPathResults implements the planNodeFastPath interface.
 func (n *controlJobsNode) FastPathResults() (int, bool) {
 	return n.numRows, true
 }
