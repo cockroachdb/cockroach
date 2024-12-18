@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -101,6 +102,11 @@ func WithSkipInvalidDescriptorCheck() BackupTestArg {
 func StartBackupRestoreTestCluster(
 	t testing.TB, clusterSize int, args ...BackupTestArg,
 ) (*testcluster.TestCluster, *sqlutils.SQLRunner, string, func()) {
+
+	// Because the deadlock detector can increase the runtime of a test by 10-100x
+	// and has not found anything in recent memory for backup/restore tests.
+	skip.UnderDeadlock(t)
+
 	ctx := logtags.AddTag(context.Background(), "start-backup-restore-test-cluster", nil)
 	opts := backupTestOptions{}
 	for _, a := range args {

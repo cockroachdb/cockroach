@@ -347,7 +347,7 @@ FROM (
 )
 ----
 ["e"] "mydb.public.e" "x"
-["a"] "public.e[]" "ARRAY['y':::public.e,'z':::public.e]"
+["a"] "mydb.public.e[]" "ARRAY['y':::mydb.public.e,'z':::mydb.public.e]"
 
 query-sql cluster=c2
 SELECT * FROM mydb.public.t
