@@ -435,7 +435,7 @@ func (s Stream) SafeFormat(p redact.SafePrinter, verb rune) {
 	if s.TenantID.IsSystem() {
 		tenantSt = "1"
 	}
-	p.Printf("t%s/s%s", tenantSt, s.StoreID.String())
+	p.Printf("t%s/s%s", redact.SafeString(tenantSt), redact.SafeString(s.StoreID.String()))
 }
 
 var raftAdmissionMetaKey = ctxutil.RegisterFastValueKey()
