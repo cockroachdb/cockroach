@@ -23,7 +23,7 @@ var upsertNodePool = sync.Pool{
 }
 
 type upsertNode struct {
-	source planNode
+	singleInputPlanNode
 
 	// columns is set if this UPDATE is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a
@@ -85,7 +85,7 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Advance one individual row.
-		if next, err := n.source.Next(params); !next {
+		if next, err := n.input.Next(params); !next {
 			lastBatch = true
 			if err != nil {
 				return false, err
@@ -93,9 +93,9 @@ func (n *upsertNode) BatchedNext(params runParams) (bool, error) {
 			break
 		}
 
-		// Process the insertion for the current source row, potentially
+		// Process the insertion for the current input row, potentially
 		// accumulating the result row for later.
-		if err := n.processSourceRow(params, n.source.Values()); err != nil {
+		if err := n.processSourceRow(params, n.input.Values()); err != nil {
 			return false, err
 		}
 
@@ -218,7 +218,7 @@ func (n *upsertNode) BatchedCount() int { return n.run.tw.lastBatchSize }
 func (n *upsertNode) BatchedValues(rowIdx int) tree.Datums { return n.run.tw.rows.At(rowIdx) }
 
 func (n *upsertNode) Close(ctx context.Context) {
-	n.source.Close(ctx)
+	n.input.Close(ctx)
 	n.run.tw.close(ctx)
 	*n = upsertNode{}
 	upsertNodePool.Put(n)

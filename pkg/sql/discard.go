@@ -22,6 +22,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 }
 
 type discardNode struct {
+	zeroInputPlanNode
 	mode tree.DiscardMode
 }
 

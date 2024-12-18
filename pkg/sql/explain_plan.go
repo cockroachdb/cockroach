@@ -30,6 +30,7 @@ import (
 // explainPlanNode implements EXPLAIN (PLAN) and EXPLAIN (DISTSQL); it produces
 // the output of EXPLAIN given an explain.Plan.
 type explainPlanNode struct {
+	zeroInputPlanNode
 	optColumnsSlot
 
 	options *tree.ExplainOptions

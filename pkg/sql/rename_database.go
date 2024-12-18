@@ -23,6 +23,7 @@ import (
 )
 
 type renameDatabaseNode struct {
+	zeroInputPlanNode
 	n       *tree.RenameDatabase
 	dbDesc  *dbdesc.Mutable
 	newName string
