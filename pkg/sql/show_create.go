@@ -53,6 +53,10 @@ type ShowCreateDisplayOptions struct {
 	// RedactableValues causes all constants, literals, and other user-provided
 	// values to be surrounded with redaction markers.
 	RedactableValues bool
+	// FullyQualifyUDTNames causes all names of user-defined types to be
+	// fully-qualified (i.e. use the 'db.schema.name' notation instead of the
+	// 'schema.name' notation).
+	FullyQualifyUDTNames bool
 }
 
 // ShowCreateTable returns a valid SQL representation of the CREATE
@@ -96,7 +100,7 @@ func ShowCreateTable(
 		f.WriteString("\n\t")
 		colstr, err := schemaexpr.FormatColumnForDisplay(
 			ctx, desc, col, p.EvalContext(), &p.semaCtx, p.SessionData(),
-			displayOptions.RedactableValues,
+			displayOptions.RedactableValues, displayOptions.FullyQualifyUDTNames,
 		)
 		if err != nil {
 			return "", err

@@ -85,12 +85,17 @@ func FormatColumnForDisplay(
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	redactableValues bool,
+	fullyQualifyUDTNames bool,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	name := col.GetName()
 	f.FormatNameP(&name)
 	f.WriteByte(' ')
-	f.WriteString(col.GetType().SQLString())
+	if fullyQualifyUDTNames {
+		f.WriteString(col.GetType().SQLStringFullyQualified())
+	} else {
+		f.WriteString(col.GetType().SQLString())
+	}
 	if col.IsHidden() {
 		f.WriteString(" NOT VISIBLE")
 	}
@@ -102,6 +107,9 @@ func FormatColumnForDisplay(
 	fmtFlags := tree.FmtParsable
 	if redactableValues {
 		fmtFlags |= tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+	}
+	if fullyQualifyUDTNames {
+		fmtFlags |= tree.FmtAlwaysQualifyUserDefinedTypeNames
 	}
 	if col.HasDefault() {
 		if col.IsGeneratedAsIdentity() {

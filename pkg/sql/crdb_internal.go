@@ -3770,11 +3770,13 @@ CREATE TABLE crdb_internal.create_statements (
   descriptor_type               STRING NOT NULL,
   descriptor_name               STRING NOT NULL,
   create_statement              STRING NOT NULL,
+  create_statement_fq           STRING NOT NULL,
   state                         STRING NOT NULL,
   create_nofks                  STRING NOT NULL,
   alter_statements              STRING[] NOT NULL,
   validate_statements           STRING[] NOT NULL,
   create_redactable             STRING NOT NULL,
+  create_redactable_fq          STRING NOT NULL,
   has_partitions                BOOL NOT NULL,
   is_multi_region               BOOL NOT NULL,
   is_virtual                    BOOL NOT NULL,
@@ -3785,24 +3787,35 @@ CREATE TABLE crdb_internal.create_statements (
 	func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
 		table catalog.TableDescriptor, lookup simpleSchemaResolver, addRow func(...tree.Datum) error,
 	) error {
-		contextName := ""
+		dbPrefix := ""
 		parentNameStr := tree.DNull
 		if db != nil {
-			contextName = db.GetName()
-			parentNameStr = tree.NewDString(contextName)
+			dbPrefix = db.GetName()
+			parentNameStr = tree.NewDString(dbPrefix)
 		}
 		scNameStr := tree.NewDString(sc.GetName())
 
 		var descType tree.Datum
-		var stmt, createNofk, createRedactable string
+		var createStmt, createStmtFQ, createNofk, createRedactable, createRedactableFQ string
 		alterStmts := tree.NewDArray(types.String)
 		validateStmts := tree.NewDArray(types.String)
 		namePrefix := tree.ObjectNamePrefix{SchemaName: tree.Name(sc.GetName()), ExplicitSchema: true}
 		name := tree.MakeTableNameFromPrefix(namePrefix, tree.Name(table.GetName()))
+		var fqName tree.TableName
+		if db != nil {
+			fqNamePrefix := tree.ObjectNamePrefix{
+				CatalogName: tree.Name(db.GetName()), ExplicitCatalog: true,
+				SchemaName: tree.Name(sc.GetName()), ExplicitSchema: true,
+			}
+			fqName = tree.MakeTableNameFromPrefix(fqNamePrefix, tree.Name(table.GetName()))
+		} else {
+			// TODO: think through this.
+			fqName = tree.MakeUnqualifiedTableName(tree.Name(table.GetName()))
+		}
 		var err error
 		if table.IsView() {
 			descType = typeView
-			stmt, err = ShowCreateView(
+			createStmt, err = ShowCreateView(
 				ctx, p.EvalContext(), &p.semaCtx, p.SessionData(), &name, table, false, /* redactableValues */
 			)
 			if err != nil {
@@ -3813,28 +3826,41 @@ CREATE TABLE crdb_internal.create_statements (
 			)
 		} else if table.IsSequence() {
 			descType = typeSequence
-			stmt, err = ShowCreateSequence(ctx, &name, table)
-			createRedactable = stmt
+			createStmt, err = ShowCreateSequence(ctx, &name, table)
+			createRedactable = createStmt
 		} else {
 			descType = typeTable
 			displayOptions := ShowCreateDisplayOptions{
 				FKDisplayMode: OmitFKClausesFromCreate,
 			}
-			createNofk, err = ShowCreateTable(ctx, p, &name, contextName, table, lookup, displayOptions)
+			createNofk, err = ShowCreateTable(ctx, p, &name, dbPrefix, table, lookup, displayOptions)
 			if err != nil {
 				return err
 			}
-			if err := showAlterStatement(ctx, &name, contextName, lookup, table, alterStmts, validateStmts); err != nil {
+			if err := showAlterStatement(ctx, &name, dbPrefix, lookup, table, alterStmts, validateStmts); err != nil {
 				return err
 			}
 			displayOptions.FKDisplayMode = IncludeFkClausesInCreate
-			stmt, err = ShowCreateTable(ctx, p, &name, contextName, table, lookup, displayOptions)
+			createStmt, err = ShowCreateTable(ctx, p, &name, dbPrefix, table, lookup, displayOptions)
 			if err != nil {
 				return err
 			}
+			displayOptions.FullyQualifyUDTNames = true
+			createStmtFQ, err = ShowCreateTable(ctx, p, &fqName, "" /* dbPrefix */, table, lookup, displayOptions)
+			if err != nil {
+				return err
+			}
+			displayOptions.FullyQualifyUDTNames = false
 			displayOptions.RedactableValues = true
 			createRedactable, err = ShowCreateTable(
-				ctx, p, &name, contextName, table, lookup, displayOptions,
+				ctx, p, &name, dbPrefix, table, lookup, displayOptions,
+			)
+			if err != nil {
+				return err
+			}
+			displayOptions.FullyQualifyUDTNames = true
+			createRedactableFQ, err = ShowCreateTable(
+				ctx, p, &fqName, "" /* dbPrefix */, table, lookup, displayOptions,
 			)
 		}
 		if err != nil {
@@ -3844,7 +3870,7 @@ CREATE TABLE crdb_internal.create_statements (
 		descID := tree.NewDInt(tree.DInt(table.GetID()))
 		dbDescID := tree.NewDInt(tree.DInt(table.GetParentID()))
 		if createNofk == "" {
-			createNofk = stmt
+			createNofk = createStmt
 		}
 		hasPartitions := nil != catalog.FindIndex(table, catalog.IndexOpts{}, func(idx catalog.Index) bool {
 			return idx.PartitioningColumnCount() != 0
@@ -3856,12 +3882,14 @@ CREATE TABLE crdb_internal.create_statements (
 			descID,
 			descType,
 			tree.NewDString(table.GetName()),
-			tree.NewDString(stmt),
+			tree.NewDString(createStmt),
+			tree.NewDString(createStmtFQ),
 			tree.NewDString(table.GetState().String()),
 			tree.NewDString(createNofk),
 			alterStmts,
 			validateStmts,
 			tree.NewDString(createRedactable),
+			tree.NewDString(createRedactableFQ),
 			tree.MakeDBool(tree.DBool(hasPartitions)),
 			tree.MakeDBool(tree.DBool(db != nil && db.IsMultiRegion())),
 			tree.MakeDBool(tree.DBool(table.IsVirtualTable())),
