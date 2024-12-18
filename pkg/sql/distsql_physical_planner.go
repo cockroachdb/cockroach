@@ -553,7 +553,7 @@ func checkSupportForPlanNode(
 		if err := checkExprForDistSQL(n.filter, distSQLVisitor); err != nil {
 			return cannotDistribute, err
 		}
-		return checkSupportForPlanNode(ctx, n.source.plan, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd)
 
 	case *groupNode:
 		rec, err := checkSupportForPlanNode(ctx, n.plan, distSQLVisitor, sd)
@@ -3963,7 +3963,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createPlanForExport(ctx, planCtx, n)
 
 	case *filterNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.source.plan)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
 		if err != nil {
 			return nil, err
 		}
