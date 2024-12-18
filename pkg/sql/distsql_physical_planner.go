@@ -4148,26 +4148,27 @@ func (dsp *DistSQLPlanner) wrapPlan(
 	// DistSQL-enabled planNode in the tree. If we find one, we ask the planner to
 	// continue the DistSQL planning recursion on that planNode.
 	seenTop := false
-	nParents := uint32(0)
-	p := planCtx.NewPhysicalPlan()
-	// This will be set to first DistSQL-enabled planNode we find, if any. We'll
-	// modify its parent later to connect its source to the DistSQL-planned
-	// subtree.
-	var firstNotWrapped planNode
-	if err := walkPlan(ctx, n, planObserver{
-		enterNode: func(ctx context.Context, nodeName string, plan planNode) (bool, error) {
-			switch plan.(type) {
-			case *explainVecNode, *explainPlanNode, *explainDDLNode:
-				// Don't continue recursing into explain nodes - they need to be left
-				// alone since they handle their own planning later.
-				return false, nil
+	var planFirstDistSQLNode func(plan planNode) (planNode, *PhysicalPlan, error)
+	planFirstDistSQLNode = func(plan planNode) (planNode, *PhysicalPlan, error) {
+		switch plan.(type) {
+		case *explainVecNode, *explainPlanNode, *explainDDLNode:
+			// Don't continue recursing into explain nodes - they need to be left
+			// alone since they handle their own planning later.
+			return nil, nil, nil
+		}
+		if !seenTop {
+			seenTop = true
+		} else if !dsp.mustWrapNode(planCtx, plan) || shouldWrapPlanNodeForExecStats(planCtx, plan) {
+			p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, plan)
+			if err != nil {
+				return nil, nil, err
 			}
-			if !seenTop {
-				// We know we're wrapping the first node, so ignore it.
-				seenTop = true
-				return true, nil
-			}
-			var err error
+			return plan, p, nil
+		}
+		switch plan.InputCount() {
+		case 0:
+			return nil, nil, nil
+		case 1:
 			// Continue walking until we find a node that has a DistSQL
 			// representation - that's when we'll quit the wrapping process and
 			// hand control of planning back to the DistSQL physical planner.
@@ -4177,22 +4178,22 @@ func (dsp *DistSQLPlanner) wrapPlan(
 			// rowSourceToPlanNode adapters so that the execution statistics
 			// are collected for each planNode independently. This should have
 			// low enough overhead.
-			if !dsp.mustWrapNode(planCtx, plan) || shouldWrapPlanNodeForExecStats(planCtx, plan) {
-				firstNotWrapped = plan
-				p, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, plan)
-				if err != nil {
-					return false, err
-				}
-				nParents++
-				return false, nil
+			input, err := plan.Input(0)
+			if err != nil {
+				return nil, nil, err
 			}
-			return true, nil
-		},
-	}); err != nil {
+			return planFirstDistSQLNode(input)
+		default:
+			// Can't wrap plans with more than 1 input.
+			return nil, nil, nil
+		}
+	}
+	firstNotWrapped, p, err := planFirstDistSQLNode(n)
+	if err != nil {
 		return nil, err
 	}
-	if nParents > 1 {
-		return nil, errors.Errorf("can't wrap plan %v %T with more than one input", n, n)
+	if p == nil {
+		p = planCtx.NewPhysicalPlan()
 	}
 
 	// Copy the evalCtx.
@@ -4228,7 +4229,7 @@ func (dsp *DistSQLPlanner) wrapPlan(
 			Input: input,
 			Core: execinfrapb.ProcessorCoreUnion{LocalPlanNode: &execinfrapb.LocalPlanNodeSpec{
 				RowSourceIdx: uint32(localProcIdx),
-				NumInputs:    nParents,
+				NumInputs:    uint32(len(input)),
 				Name:         name,
 			}},
 			Post: execinfrapb.PostProcessSpec{},
