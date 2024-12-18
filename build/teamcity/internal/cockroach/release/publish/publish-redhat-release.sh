@@ -54,6 +54,7 @@ cat build/deploy-redhat/Dockerfile
 docker build --no-cache \
   --pull \
   --label release=$rhel_release \
+  --label version=$version \
   --tag="${rhel_repository}:${version}" \
   build/deploy-redhat
 tc_end_block "Rebuild docker image"
