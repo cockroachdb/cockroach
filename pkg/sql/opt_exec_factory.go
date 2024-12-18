@@ -447,9 +447,10 @@ func (ef *execFactory) ConstructApplyJoin(
 	onCond tree.TypedExpr,
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
 ) (exec.Node, error) {
-	leftSrc := asDataSource(left)
-	pred := makePredicate(joinType, leftSrc.columns, rightColumns, onCond)
-	return newApplyJoinNode(joinType, leftSrc, rightColumns, pred, planRightSideFn)
+	l := left.(planNode)
+	leftCols := planColumns(l)
+	pred := makePredicate(joinType, leftCols, rightColumns, onCond)
+	return newApplyJoinNode(joinType, l, rightColumns, pred, planRightSideFn)
 }
 
 // ConstructMergeJoin is part of the exec.Factory interface.

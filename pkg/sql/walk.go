@@ -134,7 +134,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *zigzagJoinNode:
 
 	case *applyJoinNode:
-		n.input.plan = v.visit(n.input.plan)
+		n.input = v.visit(n.input)
 
 	case *joinNode:
 		n.left.plan = v.visit(n.left.plan)
