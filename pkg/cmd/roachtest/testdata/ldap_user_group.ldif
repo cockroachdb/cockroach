@@ -1,0 +1,63 @@
+# User 1: John Doe
+dn: cn=John Doe,ou=Users,dc=example,dc=com
+objectClass: top
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: jdoe
+cn: John Doe
+sn: Doe
+givenName: John
+displayName: John Doe
+mail: jdoe@example.com
+uidNumber: 1001
+gidNumber: 5000
+homeDirectory: /home/jdoe
+loginShell: /bin/bash
+userPassword: {SSHA}UweAl2O1Zh95nijbT+SaQB5FuaHi7xnE
+
+# User 2: Alice Smith
+dn: cn=Alice Smith,ou=Users,dc=example,dc=com
+objectClass: top
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: asmith
+cn: Alice Smith
+sn: Smith
+givenName: Alice
+displayName: Alice Smith
+mail: asmith@example.com
+uidNumber: 1002
+gidNumber: 5000
+homeDirectory: /home/asmith
+loginShell: /bin/bash
+userPassword: {SSHA}PK9Mq7jpwPR4hslWym9zFpGDyz92iiSs
+
+# User 3: Robert Brown
+dn: cn=Robert Brown,ou=Users,dc=example,dc=com
+objectClass: top
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: rbrown
+cn: Robert Brown
+sn: Brown
+givenName: Robert
+displayName: Robert Brown
+mail: rbrown@example.com
+uidNumber: 1003
+gidNumber: 5000
+homeDirectory: /home/rbrown
+loginShell: /bin/bash
+userPassword: {SSHA}WA/veP8/qFKW74DrCjTw+6DEGxm6Pqb9
+
+# Group: Developers
+dn: cn=Developers,ou=Groups,dc=example,dc=com
+objectClass: top
+objectClass: groupOfUniqueNames
+cn: Developers
+description: Group for software development team members
+uniqueMember: cn=John Doe,ou=Users,dc=example,dc=com
+uniqueMember: cn=Alice Smith,ou=Users,dc=example,dc=com
+uniqueMember: cn=Robert Brown,ou=Users,dc=example,dc=com
