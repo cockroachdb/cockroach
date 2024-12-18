@@ -35,6 +35,7 @@ import (
 type functionDependencies map[catid.DescID]struct{}
 
 type createFunctionNode struct {
+	zeroInputPlanNode
 	cf *tree.CreateRoutine
 
 	dbDesc       catalog.DatabaseDescriptor

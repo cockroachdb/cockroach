@@ -167,12 +167,9 @@ type changePrivilegesNode struct {
 }
 
 type changeDescriptorBackedPrivilegesNode struct {
+	zeroInputPlanNode
 	changePrivilegesNode
 	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername) (changed bool, retErr error)
-}
-
-type changeNonDescriptorBackedPrivilegesNode struct {
-	changePrivilegesNode
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.

@@ -187,3 +187,18 @@ func (n *unionNode) Close(ctx context.Context) {
 	n.right.Close(ctx)
 	n.left.Close(ctx)
 }
+
+func (n *unionNode) InputCount() int {
+	return 2
+}
+
+func (n *unionNode) Input(i int) (planNode, error) {
+	switch i {
+	case 0:
+		return n.right, nil
+	case 1:
+		return n.left, nil
+	default:
+		return nil, errors.AssertionFailedf("input index %d is out of range", i)
+	}
+}

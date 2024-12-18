@@ -14,7 +14,7 @@ import (
 )
 
 type lookupJoinNode struct {
-	input planNode
+	singleInputPlanNode
 	table *scanNode
 
 	// joinType is either INNER, LEFT_OUTER, LEFT_SEMI, or LEFT_ANTI.

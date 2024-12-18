@@ -40,6 +40,7 @@ type showTenantNodeCapability struct {
 }
 
 type showTenantNode struct {
+	zeroInputPlanNode
 	tenantSpec           tenantSpec
 	withReplication      bool
 	withPriorReplication bool

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // delayedNode wraps a planNode in cases where the planNode
@@ -19,32 +20,46 @@ type delayedNode struct {
 	name        string
 	columns     colinfo.ResultColumns
 	constructor nodeConstructor
-	plan        planNode
+	input       planNode
 }
 
 type nodeConstructor func(context.Context, *planner) (planNode, error)
 
-func (d *delayedNode) Next(params runParams) (bool, error) { return d.plan.Next(params) }
-func (d *delayedNode) Values() tree.Datums                 { return d.plan.Values() }
+func (d *delayedNode) Next(params runParams) (bool, error) { return d.input.Next(params) }
+func (d *delayedNode) Values() tree.Datums                 { return d.input.Values() }
 
 func (d *delayedNode) Close(ctx context.Context) {
-	if d.plan != nil {
-		d.plan.Close(ctx)
-		d.plan = nil
+	if d.input != nil {
+		d.input.Close(ctx)
+		d.input = nil
 	}
+}
+
+func (n *delayedNode) InputCount() int {
+	if n.input != nil {
+		return 1
+	}
+	return 0
+}
+
+func (n *delayedNode) Input(i int) (planNode, error) {
+	if i == 0 && n.input != nil {
+		return n.input, nil
+	}
+	return nil, errors.AssertionFailedf("input index %d is out of range", i)
 }
 
 // startExec constructs the wrapped planNode now that execution is underway.
 func (d *delayedNode) startExec(params runParams) error {
-	if d.plan != nil {
-		panic("wrapped plan should not yet exist")
+	if d.input != nil {
+		panic("wrapped input should not yet exist")
 	}
 
 	plan, err := d.constructor(params.ctx, params.p)
 	if err != nil {
 		return err
 	}
-	d.plan = plan
+	d.input = plan
 
 	// Recursively invoke startExec on new plan. Normally, startExec doesn't
 	// recurse - calling children is handled by the planNode walker. The reason

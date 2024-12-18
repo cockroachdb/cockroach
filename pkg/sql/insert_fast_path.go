@@ -40,6 +40,7 @@ var insertFastPathNodePool = sync.Pool{
 // performed via a direct lookup in an index, and when the input is VALUES of
 // limited size (at most mutations.MaxBatchSize).
 type insertFastPathNode struct {
+	zeroInputPlanNode
 	// input values, similar to a valuesNode.
 	input [][]tree.TypedExpr
 

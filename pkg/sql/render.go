@@ -28,10 +28,7 @@ type renderNode struct {
 	// Enforce this using NoCopy.
 	_ util.NoCopy
 
-	// source describes where the data is coming from.
-	// populated initially by initFrom().
-	// potentially modified by index selection.
-	source planNode
+	singleInputPlanNode
 
 	// Rendering expressions for rows and corresponding output columns.
 	render []tree.TypedExpr
@@ -66,7 +63,7 @@ func (r *renderNode) Values() tree.Datums {
 	panic("renderNode can't be run in local mode")
 }
 
-func (r *renderNode) Close(ctx context.Context) { r.source.Close(ctx) }
+func (r *renderNode) Close(ctx context.Context) { r.input.Close(ctx) }
 
 // getTimestamp will get the timestamp for an AS OF clause. It will also
 // verify the timestamp against the transaction. If AS OF SYSTEM TIME is

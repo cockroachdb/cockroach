@@ -32,8 +32,7 @@ import (
 // Therefore, the schema of the source node will be changed to look as follows:
 // pass through column | OVER clauses columns | arguments to window functions.
 type windowNode struct {
-	// The source node.
-	plan planNode
+	singleInputPlanNode
 	// columns is the set of result columns.
 	columns colinfo.ResultColumns
 
@@ -54,7 +53,7 @@ func (n *windowNode) Values() tree.Datums {
 }
 
 func (n *windowNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+	n.input.Close(ctx)
 }
 
 var _ tree.TypedExpr = &windowFuncHolder{}
