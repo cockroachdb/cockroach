@@ -174,10 +174,28 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 		for i := 1; i < len(initStmts); i++ {
 			initStmts[i] = "SET CLUSTER SETTING " + initStmts[i]
 		}
+		// All stmts before the first SET CLUSTER SETTING are SET stmts. We need
+		// to handle 'SET database = ' stmt separately if found - the target
+		// database might not exist yet.
+		setStmts := strings.Split(initStmts[0], "\n")
+		initStmts = initStmts[1:]
+		var setDBStmt string
+		for i, stmt := range setStmts {
+			stmt = strings.TrimSpace(stmt)
+			if strings.HasPrefix(stmt, "SET database = ") {
+				setDBStmt = stmt
+				setStmts = append(setStmts[:i], setStmts[i+1:]...)
+				break
+			}
+		}
+		initStmts = append(initStmts, setStmts...)
 		// Disable auto stats collection (which would override the injected
 		// stats).
 		initStmts = append(initStmts, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
 		initStmts = append(initStmts, string(bundle.schema))
+		if setDBStmt != "" {
+			initStmts = append(initStmts, setDBStmt)
+		}
 		for _, stats := range bundle.stats {
 			initStmts = append(initStmts, string(stats))
 		}
