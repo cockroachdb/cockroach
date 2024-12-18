@@ -2262,15 +2262,16 @@ type renderBuilder struct {
 
 // init initializes the renderNode with render expressions.
 func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering) {
-	src := asDataSource(n)
+	p := n.(planNode)
 	rb.r = &renderNode{
-		source: src,
+		source:  p,
+		columns: planColumns(p),
 	}
 	rb.r.reqOrdering = ReqOrdering(reqOrdering)
 
 	// If there's a spool, pull it up.
-	if spool, ok := rb.r.source.plan.(*spoolNode); ok {
-		rb.r.source.plan = spool.source
+	if spool, ok := rb.r.source.(*spoolNode); ok {
+		rb.r.source = spool.source
 		spool.source = rb.r
 		rb.res = spool
 	} else {

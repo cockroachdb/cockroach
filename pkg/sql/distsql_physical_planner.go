@@ -693,7 +693,7 @@ func checkSupportForPlanNode(
 				return cannotDistribute, err
 			}
 		}
-		return checkSupportForPlanNode(ctx, n.source.plan, distSQLVisitor, sd)
+		return checkSupportForPlanNode(ctx, n.source, distSQLVisitor, sd)
 
 	case *scanNode:
 		if n.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
@@ -4024,7 +4024,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createPlanForProjectSet(ctx, planCtx, n)
 
 	case *renderNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.source.plan)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.source)
 		if err != nil {
 			return nil, err
 		}
@@ -4037,8 +4037,8 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		if in, ok := n.source.(*insertNode); ok {
 			// Skip over any renderNodes.
 			nod := in.source
-			for r, ok := nod.(*renderNode); ok; r, ok = r.source.plan.(*renderNode) {
-				nod = r.source.plan
+			for r, ok := nod.(*renderNode); ok; r, ok = r.source.(*renderNode) {
+				nod = r.source
 			}
 			if v, ok := nod.(*valuesNode); ok {
 				if v.coldataBatch != nil {
