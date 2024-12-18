@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/redact"
-	"github.com/dustin/go-humanize"
 )
 
 // Enabled determines whether we use flow control for replication traffic in KV.
@@ -415,13 +415,12 @@ func (t Tokens) String() string {
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (t Tokens) SafeFormat(p redact.SafePrinter, verb rune) {
-	sign := "+"
+func (t Tokens) SafeFormat(p redact.SafePrinter, _ rune) {
 	if t < 0 {
-		sign = "-"
-		t = -t
+		p.SafeString(humanizeutil.IBytes(int64(t)))
+		return
 	}
-	p.Printf("%s%s", sign, humanize.IBytes(uint64(t)))
+	p.Printf("+%s", humanizeutil.IBytes(int64(t)))
 }
 
 func (s Stream) String() string {
