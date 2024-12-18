@@ -119,6 +119,8 @@ build:macos --host_action_env=PATH=/opt/homebrew/bin:/opt/local/bin:/usr/local/b
 build:macos --linkopt="-Xlinker"
 build:macos --linkopt="-no_warn_duplicate_libraries"
 
+build:pgo --@io_bazel_rules_go//go/config:pgoprofile=@pgo_profile//:profile.pprof
+
 build:engflowbase --define=EXECUTOR=remote
 build:engflowbase --disk_cache=
 build:engflowbase --experimental_inmemory_dotd_files
