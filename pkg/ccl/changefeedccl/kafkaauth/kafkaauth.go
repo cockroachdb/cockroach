@@ -87,6 +87,7 @@ func peekValidateParams(mechName string, u *changefeedbase.SinkURL, requiredPara
 	return errors.Join(errs...)
 }
 
+// because it's default true
 func consumeHandshake(u *changefeedbase.SinkURL) (bool, error) {
 	var handshake bool
 	set, err := u.ConsumeBool(SASLHandshake, &handshake)
@@ -100,6 +101,7 @@ func consumeHandshake(u *changefeedbase.SinkURL) (bool, error) {
 }
 
 func maybeHelpfulErrorMessage(u *changefeedbase.SinkURL) error {
+	// TODO: don't repeat these here
 	userErrorSetParams := []string{
 		SASLUser,
 		SASLPassword,
