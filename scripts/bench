@@ -55,6 +55,6 @@ for (( i=0; i<${#shas[@]}; i+=1 )); do
   (set -x; ./dev bench ${PKG} --timeout=${BENCHTIMEOUT:-5m} --filter=${BENCHES} --count=${N:-10} $benchtime --bench-mem -v --stream-output --ignore-cache --test-args='-test.cpu 8' | tee "${dest}/bench.${name}" 2> "${dest}/log.txt")
 done
 
-benchstat "${dest}/bench.$OLDNAME" "${dest}/bench.$NEWNAME"
+(cd "${dest}" && benchstat "./bench.$OLDNAME" "./bench.$NEWNAME")
 
 git checkout "$ORIG"
