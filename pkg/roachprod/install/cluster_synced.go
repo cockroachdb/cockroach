@@ -3013,6 +3013,13 @@ func (c *SyncedCluster) WithNodes(nodes Nodes) *SyncedCluster {
 	return &clusterCopy
 }
 
+func (c *SyncedCluster) GetCPUArchitecture(l *logger.Logger) (vm.CPUArch, error) {
+	if len(c.VMs) == 0 {
+		return vm.ArchUnknown, nil
+	}
+	return c.VMs[0].GetCPUArchitecture(l)
+}
+
 // GenFilenameFromArgs given a list of cmd args, returns an alphahumeric string up to
 // `maxLen` in length with hyphen delimiters, suitable for use in a filename.
 // e.g. ["/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg
