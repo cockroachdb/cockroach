@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "cloudtestutils",
-    srcs = ["cloud_test_helpers.go"],
+    srcs = [
+        "cloud_test_helpers.go",
+        "leak_detector_storage_factory.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils",
     visibility = ["//visibility:public"],
     deps = [
@@ -14,6 +17,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/isql",
         "//pkg/testutils",
+        "//pkg/util/closetest",
         "//pkg/util/ioctx",
         "//pkg/util/randutil",
         "//pkg/util/sysutil",
