@@ -25,6 +25,7 @@ go_library(
         "parquet.go",
         "parquet_sink_cloudstorage.go",
         "protected_timestamps.go",
+        "resolved_span_frontier.go",
         "retry.go",
         "scheduled_changefeed.go",
         "schema_registry.go",
