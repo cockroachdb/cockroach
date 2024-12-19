@@ -4545,10 +4545,10 @@ def go_deps():
         name = "com_github_guptarohit_asciigraph",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/guptarohit/asciigraph",
-        sha256 = "c2b81da57a50425d313a684efd13d9741c4e9df4c3cca92dea34d562d34271a1",
-        strip_prefix = "github.com/guptarohit/asciigraph@v0.5.5",
+        sha256 = "ec30034bd6d082f3242a5410ae1d02d9a4d164504e735f8448766461207be5a5",
+        strip_prefix = "github.com/guptarohit/asciigraph@v0.7.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/guptarohit/asciigraph/com_github_guptarohit_asciigraph-v0.5.5.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/guptarohit/asciigraph/com_github_guptarohit_asciigraph-v0.7.3.zip",
         ],
     )
     go_repository(

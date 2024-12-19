@@ -1,0 +1,104 @@
+# ----------
+# Add 20% random noise to rate of operation arrival and fixup completion.
+# ----------
+
+# Expect allowed ops/sec to stay ~500 +- the noise.
+plot ops-per-fixup=50 fixups-per-sec=10 noise=0.2
+----
+ Allowed ops per second = 512.73 ops/sec (avg), 499.65 ops/sec (final)
+ 596 ┤      ╭╮
+ 582 ┤      │╰╮
+ 569 ┤     ╭╯ ╰╮
+ 556 ┤     │   ╰──╮                   ╭────╮
+ 543 ┤    ╭╯      │                 ╭─╯    ╰─╮
+ 530 ┤╭╮ ╭╯       ╰╮             ╭──╯        ╰────╮                       ╭╮
+ 516 ┤│╰─╯         ╰─╮          ╭╯                ╰──╮    ╭─────╮        ╭╯╰─╮
+ 503 ┼╯              ╰╮       ╭─╯                    ╰────╯     ╰──╮   ╭─╯   ╰───╮            ╭
+ 490 ┤                ╰──╮╭───╯                                    ╰───╯         ╰───╮      ╭─╯
+ 477 ┤                   ╰╯                                                          ╰──╮  ╭╯
+ 464 ┤                                                                                  ╰──╯
+
+# Show actual ops/sec. Note that the scale starts at 0, so it appears smoother.
+plot ops-per-fixup=50 fixups-per-sec=10 noise=0.2 show-actual-ops-per-sec
+----
+ Actual ops per second = 488.69 ops/sec (avg), 477.00 ops/sec (final)
+ 561 ┤        ╭────────╮                ╭───────────╮
+ 504 ┤       ╭╯        ╰────────────────╯           ╰──────────────────────────────────────╮  ╭
+ 448 ┤       │                                                                             ╰──╯
+ 392 ┤      ╭╯
+ 336 ┤     ╭╯
+ 280 ┤    ╭╯
+ 224 ┤   ╭╯
+ 168 ┤  ╭╯
+ 112 ┤ ╭╯
+  56 ┤╭╯
+   0 ┼╯
+
+# Fixup queue size will fluctuate a bit more with noise.
+plot ops-per-fixup=50 fixups-per-sec=10 noise=0.2 show-queue-size
+----
+ Fixup queue size = 3.43 fixups (avg), 4 fixups (final)
+ 5.00 ┤                                          ╭╮                           ╭───╮     ╭──╮
+ 4.50 ┤                                          ││                           │   │     │  │
+ 4.00 ┤             ╭╮      ╭╮              ╭────╯╰───────────╮╭──────────────╯   ╰─────╯  ╰────
+ 3.50 ┤            ╭╯│      ││              │                 ╰╯
+ 3.00 ┤        ╭───╯ ╰──────╯╰────╮╭───╮╭───╯
+ 2.50 ┤        │                  ││   ││
+ 2.00 ┤     ╭──╯                  ╰╯   ╰╯
+ 1.50 ┤     │
+ 1.00 ┤╭────╯
+ 0.50 ┤│
+ 0.00 ┼╯
+
+# Delay will fluctuate a bit more with noise.
+plot ops-per-fixup=50 fixups-per-sec=10 noise=0.2 show-delay-millis
+----
+ Delay (ms) = 1.98 ms (avg), 2.32 ms (final)
+ 2.40 ┤                   ╭╮╭╮                        ╭─╮           ╭╮ ╭╮            ╭╮╭╮╭╮    ╭
+ 2.32 ┤                   ││││                        │ │╭╮  ╭╮     ││ ││           ╭╯│││││    │
+ 2.23 ┤   ╭╮              ││││  ╭╮    ╭╮        ╭╮    │ │││  ││╭╮╭╮╭╯│ │╰╮      ╭╮ ╭╯ ││╰╯╰╮ ╭╮│
+ 2.15 ┤   ││        ╭╮    │╰╯│╭─╯│ ╭╮ ││        ││   ╭╯ ││╰╮ │││││╰╯ │ │ │ ╭──╮ ││ │  ││   │ │││
+ 2.06 ┼╮╭╮││   ╭╮   ││    │  ││  │╭╯│╭╯│        ││╭╮ │  ││ ╰╮│╰╯││   │╭╯ │ │  ╰╮││ │  ││   ╰╮│││
+ 1.98 ┤││││╰╮ ╭╯│   ││    │  ││  ╰╯ ││ │    ╭╮  │││╰╮│  ╰╯  ││  ││   ││  │ │   │││ │  ││    ╰╯╰╯
+ 1.89 ┤╰╯││ │ │ │╭─╮│╰─╮╭─╯  ││     ││ │    ││ ╭╯││ ││      ││  ││   ││  │ │   │││╭╯  ││
+ 1.81 ┤  ││ │ │ ││ ╰╯  ╰╯    ││     ││ ╰╮╭╮ │╰╮│ ││ ╰╯      ││  ╰╯   ││  ╰╮│   ││││   ╰╯
+ 1.73 ┤  ╰╯ │ │ ││           ││     ││  ││╰╮│ ││ ││         ╰╯       ╰╯   ╰╯   ││││
+ 1.64 ┤     ╰╮│ ╰╯           ╰╯     ╰╯  ╰╯ ╰╯ ╰╯ ╰╯                            ╰╯╰╯
+ 1.56 ┤      ╰╯
+
+# ----------
+# Add 60% random noise to rate of operation arrival and fixup completion.
+# ----------
+
+# Halve the fixups per second and show 20 seconds of data rather than 10.
+# Allowed ops/sec should hover ~250.
+plot seconds=20 ops-per-fixup=50 fixups-per-sec=5 noise=0.6
+----
+ Allowed ops per second = 250.62 ops/sec (avg), 202.05 ops/sec (final)
+ 575 ┤╭╮
+ 536 ┤│╰╮
+ 497 ┼╯ ╰╮
+ 458 ┤   ╰╮
+ 420 ┤    ╰─╮
+ 381 ┤      ╰╮
+ 342 ┤       ╰─╮
+ 303 ┤         ╰─╮
+ 264 ┤           ╰─╮                          ╭────╮
+ 225 ┤             ╰──────────────────────────╯    ╰─────────────╮   ╭────────╮      ╭╮
+ 187 ┤                                                           ╰───╯        ╰──────╯╰────────
+
+# Show actual ops/sec.
+plot seconds=20 ops-per-fixup=50 fixups-per-sec=5 noise=0.6 show-actual-ops-per-sec
+----
+ Actual ops per second = 245.76 ops/sec (avg), 192.00 ops/sec (final)
+ 518 ┤    ╭╮
+ 466 ┤   ╭╯╰─╮
+ 414 ┤   │   ╰─╮
+ 363 ┤  ╭╯     ╰─╮
+ 311 ┤  │        ╰─╮
+ 259 ┤ ╭╯          ╰───╮                   ╭────────────╮
+ 207 ┤ │               ╰───────────────────╯            ╰──────────────────────────────────────
+ 155 ┤ │
+ 104 ┤╭╯
+  52 ┤│
+   0 ┼╯
