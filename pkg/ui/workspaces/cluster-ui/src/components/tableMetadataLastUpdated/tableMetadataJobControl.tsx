@@ -42,9 +42,13 @@ export const TableMetadataJobControl: React.FC<
 
   const triggerUpdateTableMetaJob = useCallback(
     async (onlyIfStale = true) => {
-      const resp = await triggerUpdateTableMetaJobApi({ onlyIfStale });
-      if (resp.jobTriggered) {
-        return refreshJobStatus();
+      try {
+        const resp = await triggerUpdateTableMetaJobApi({ onlyIfStale });
+        if (resp.jobTriggered) {
+          return refreshJobStatus();
+        }
+      } catch {
+        // We don't need to do anything with additional errors right now.
       }
     },
     [refreshJobStatus],
