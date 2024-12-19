@@ -230,6 +230,13 @@ func TestDockerCLI_test_explain_analyze_debug(t *testing.T) {
 	runTestDockerCLI(t, "test_explain_analyze_debug", "../cli/interactive_tests/test_explain_analyze_debug.tcl")
 }
 
+func TestDockerCLI_test_explain_analyze_debug_mr(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_explain_analyze_debug_mr", "../cli/interactive_tests/test_explain_analyze_debug_mr.tcl")
+}
+
 func TestDockerCLI_test_extern_dir(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
