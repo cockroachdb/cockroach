@@ -535,6 +535,20 @@ func TestChangefeedProgressMetrics(t *testing.T) {
 				})
 			}
 
+			// Verify that max_behind_nanos has recurring updates
+			var lastValue int64 = 0
+			for i := 0; i < 3; i++ {
+				testutils.SucceedsSoon(t, func() error {
+					value := sliA.MaxBehindNanos.Value()
+					if value != lastValue {
+						lastValue = value
+						return nil
+					}
+					return errors.Newf("waiting for max_behind_nanos to update %d",
+						lastValue)
+				})
+			}
+
 			sliB, err := registry.MetricsStruct().Changefeed.(*Metrics).getSLIMetrics("label_b")
 			require.Equal(t, int64(0), sliB.AggregatorProgress.Value())
 			fooB := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='label_b', resolved='100ms'`)
@@ -553,7 +567,8 @@ func TestChangefeedProgressMetrics(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				aggregatorProgress := sliA.AggregatorProgress.Value()
 				checkpointProgress := sliA.CheckpointProgress.Value()
-				if aggregatorProgress == 0 && checkpointProgress == 0 {
+				maxBehindNanos := sliA.MaxBehindNanos.Value()
+				if aggregatorProgress == 0 && checkpointProgress == 0 && maxBehindNanos == 0 {
 					return nil
 				}
 				return errors.Newf("waiting for progress metrics to be 0 (ap=%d, cp=%d)",
