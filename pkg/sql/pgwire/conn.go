@@ -345,7 +345,7 @@ func (c *conn) handleSimpleQuery(
 	timeReceived time.Time,
 	unqualifiedIntSize *types.T,
 ) error {
-	query, err := buf.GetString()
+	query, err := buf.GetUnsafeString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -492,11 +492,11 @@ func (c *conn) handleSimpleQuery(
 // the connection should be considered toast.
 func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 	telemetry.Inc(sqltelemetry.ParseRequestCounter)
-	name, err := c.readBuf.GetString()
+	name, err := c.readBuf.GetUnsafeString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	query, err := c.readBuf.GetString()
+	query, err := c.readBuf.GetUnsafeString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -607,7 +607,7 @@ func (c *conn) handleDescribe(ctx context.Context) error {
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	name, err := c.readBuf.GetString()
+	name, err := c.readBuf.GetUnsafeString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -627,7 +627,7 @@ func (c *conn) handleClose(ctx context.Context) error {
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	name, err := c.readBuf.GetString()
+	name, err := c.readBuf.GetUnsafeString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -649,11 +649,11 @@ var formatCodesAllText = []pgwirebase.FormatCode{pgwirebase.FormatText}
 // the connection should be considered toast.
 func (c *conn) handleBind(ctx context.Context) error {
 	telemetry.Inc(sqltelemetry.BindRequestCounter)
-	portalName, err := c.readBuf.GetString()
+	portalName, err := c.readBuf.GetUnsafeString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	statementName, err := c.readBuf.GetString()
+	statementName, err := c.readBuf.GetUnsafeString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
@@ -775,7 +775,7 @@ func (c *conn) handleExecute(
 	ctx context.Context, timeReceived time.Time, followedBySync bool,
 ) error {
 	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
-	portalName, err := c.readBuf.GetString()
+	portalName, err := c.readBuf.GetUnsafeString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
