@@ -279,7 +279,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: t@t_b_idx
+│           │     table: t@t_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
@@ -296,7 +296,7 @@ vectorized: true
             │
             ├── • scan
             │     missing stats
-            │     table: t@t_c_key
+            │     table: t@t_pkey
             │     spans: FULL SCAN
             │
             └── • scan buffer
@@ -764,21 +764,18 @@ vectorized: true
 │   │
 │   └── • error if rows
 │       │
-│       └── • cross join
+│       └── • cross join (right semi)
 │           │
-│           ├── • values
-│           │     size: 1 column, 1 row
+│           ├── • filter
+│           │   │ filter: (b = 1) AND ((pk != 1) OR (partition_by != 1))
+│           │   │
+│           │   └── • scan
+│           │         missing stats
+│           │         table: t@t_pkey
+│           │         spans: FULL SCAN
 │           │
-│           └── • limit
-│               │ count: 1
-│               │
-│               └── • filter
-│                   │ filter: (b = 1) AND ((pk != 1) OR (partition_by != 1))
-│                   │
-│                   └── • scan
-│                         missing stats
-│                         table: t@t_b_key
-│                         spans: FULL SCAN (SOFT LIMIT)
+│           └── • values
+│                 size: 1 column, 1 row
 │
 └── • constraint-check
     │
@@ -837,7 +834,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     missing stats
-│           │     table: t@t_b_key
+│           │     table: t@t_pkey
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer

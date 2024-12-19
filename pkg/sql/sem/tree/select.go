@@ -311,6 +311,7 @@ type FamilyID = catid.FamilyID
 //   - NO_INDEX_JOIN
 //   - NO_ZIGZAG_JOIN
 //   - NO_FULL_SCAN
+//   - AVOID_FULL_SCAN
 //   - IGNORE_FOREIGN_KEYS
 //   - FORCE_INVERTED_INDEX
 //   - FORCE_ZIGZAG
@@ -330,6 +331,8 @@ type IndexFlags struct {
 	NoZigzagJoin bool
 	// NoFullScan indicates we should constrain this scan.
 	NoFullScan bool
+	// AvoidFullScan indicates we should constrain this scan if possible.
+	AvoidFullScan bool
 	// IgnoreForeignKeys disables optimizations based on outbound foreign key
 	// references from this table. This is useful in particular for scrub queries
 	// used to verify the consistency of foreign key relations.
@@ -372,6 +375,9 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	if ih.NoFullScan && other.NoFullScan {
 		return errors.New("NO_FULL_SCAN specified multiple times")
 	}
+	if ih.AvoidFullScan && other.AvoidFullScan {
+		return errors.New("AVOID_FULL_SCAN specified multiple times")
+	}
 	if ih.IgnoreForeignKeys && other.IgnoreForeignKeys {
 		return errors.New("IGNORE_FOREIGN_KEYS specified multiple times")
 	}
@@ -385,6 +391,7 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	result.NoIndexJoin = ih.NoIndexJoin || other.NoIndexJoin
 	result.NoZigzagJoin = ih.NoZigzagJoin || other.NoZigzagJoin
 	result.NoFullScan = ih.NoFullScan || other.NoFullScan
+	result.AvoidFullScan = ih.AvoidFullScan || other.AvoidFullScan
 	result.IgnoreForeignKeys = ih.IgnoreForeignKeys || other.IgnoreForeignKeys
 	result.IgnoreUniqueWithoutIndexKeys = ih.IgnoreUniqueWithoutIndexKeys ||
 		other.IgnoreUniqueWithoutIndexKeys
@@ -525,6 +532,11 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 			ctx.WriteString("NO_FULL_SCAN")
 		}
 
+		if ih.AvoidFullScan {
+			sep()
+			ctx.WriteString("AVOID_FULL_SCAN")
+		}
+
 		if ih.IgnoreForeignKeys {
 			sep()
 			ctx.WriteString("IGNORE_FOREIGN_KEYS")
@@ -572,9 +584,9 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 }
 
 func (ih *IndexFlags) indexOnlyHint() bool {
-	return !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.NoFullScan && !ih.IgnoreForeignKeys &&
-		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.ForceInvertedIndex &&
-		!ih.zigzagForced() && ih.FamilyID == nil
+	return !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.NoFullScan && !ih.AvoidFullScan &&
+		!ih.IgnoreForeignKeys && !ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 &&
+		!ih.ForceInvertedIndex && !ih.zigzagForced() && ih.FamilyID == nil
 }
 
 func (ih *IndexFlags) zigzagForced() bool {
