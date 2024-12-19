@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -490,12 +491,41 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 			return
 		}
 		newConn = tls.Server(conn, tlsConfig)
+		// Conditionally perform handshake connection and determine additional restrictions.
+		serverErr = sqlTLSRestrictFn(newConn)
+		if serverErr != nil {
+			_ = newConn.Close()
+		}
 		newConnType = hba.ConnHostSSL
 	}
 	s.tenantIndependentMetrics.PreServeBytesOutCount.Inc(int64(n))
 
 	// Finally, re-read the version/command from the client.
 	newVersion, *buf, serverErr = s.readVersion(newConn)
+	if serverErr != nil {
+		return
+	}
+	return
+}
+
+func sqlTLSRestrictFn(conn net.Conn) (err error) {
+	tlsConn, ok := conn.(*tls.Conn)
+	if !ok {
+		return nil
+	}
+
+	if len(security.GetTLSCipherSuitesConfigured()) != 0 {
+		if !tlsConn.ConnectionState().HandshakeComplete {
+			// we provide a timebound context for handshake as it ensures client
+			// failures are properly handled.
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second) // nolint:context
+			defer cancel()
+			if err = tlsConn.HandshakeContext(ctx); err != nil {
+				return
+			}
+		}
+		return security.TLSCipherRestrict(conn)
+	}
 	return
 }
 
