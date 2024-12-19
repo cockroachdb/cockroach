@@ -75,13 +75,13 @@ func (p Priority) String() string {
 func (p Priority) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch p {
 	case LowPri:
-		w.Printf("LowPri")
+		w.SafeString("LowPri")
 	case NormalPri:
-		w.Printf("NormalPri")
+		w.SafeString("NormalPri")
 	case AboveNormalPri:
-		w.Printf("AboveNormalPri")
+		w.SafeString("AboveNormalPri")
 	case HighPri:
-		w.Printf("HighPri")
+		w.SafeString("HighPri")
 	default:
 		panic("invalid raft priority")
 	}
