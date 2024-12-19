@@ -382,6 +382,24 @@ message RaftState {
   util.hlc.Timestamp lead_support_until = 8 [(gogoproto.nullable) = false];
 }
 
+// RACStatus contains the status of the Replication Admission Control component
+// of a range.
+message RACStatus {
+  uint64 next_raft_index = 1;
+  uint64 force_flush_index = 2;
+
+  message Stream {
+    uint64 index_to_send = 1;
+    uint64 next_raft_index_initial = 2;
+    uint64 next_raft_index = 3;
+    uint64 force_flush_stop_index = 4;
+
+    repeated int64 eval_tokens_held = 5;
+    repeated int64 send_tokens_held = 6;
+  }
+  map<uint64, Stream> streams = 6 [ (gogoproto.nullable) = false ];
+}
+
 // RangeProblems describes issues reported by a range. For internal use only.
 message RangeProblems {
   bool unavailable = 1;
@@ -496,6 +514,7 @@ message TenantRangeInfo {
 message RangeInfo {
   PrettySpan span = 1 [ (gogoproto.nullable) = false ];
   RaftState raft_state = 2 [ (gogoproto.nullable) = false ];
+  RACStatus rac_status = 25 [ (gogoproto.nullable) = false, (gogoproto.customname) = "RACStatus" ];
   kv.kvserver.storagepb.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
   int32 source_node_id = 5 [
     (gogoproto.customname) = "SourceNodeID",
@@ -532,6 +551,7 @@ message RangeInfo {
   Locality locality = 22;
   bool is_leaseholder = 23;
   bool lease_valid = 24;
+  // Next tag: 26
 }
 
 message RangesRequest {

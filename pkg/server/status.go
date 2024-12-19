@@ -2489,9 +2489,12 @@ func (s *systemStatusServer) rangesHelper(
 	constructRangeInfo := func(
 		rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
 	) serverpb.RangeInfo {
+		// TODO(pav-kv): lock once, instead of doing it in every call below (some
+		// doing it more than once).
 		raftStatus := rep.RaftStatus()
 		leaseHistory := rep.GetLeaseHistory()
 		desc := rep.Desc()
+		rac2Status := rep.RACv2Status()
 		span := serverpb.PrettySpan{StartKey: desc.StartKey.String(), EndKey: desc.EndKey.String()}
 		state := rep.State(ctx)
 		var topKLocksByWaiters []serverpb.RangeInfo_LockInfo
@@ -2520,6 +2523,7 @@ func (s *systemStatusServer) rangesHelper(
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     convertRaftStatus(raftStatus),
+			RACStatus:     rac2Status,
 			State:         state,
 			SourceNodeID:  nodeID,
 			SourceStoreID: storeID,
