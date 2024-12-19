@@ -116,6 +116,30 @@ func MustParseVersion(v string) *Version {
 	return &Version{*version.MustParse(versionStr)}
 }
 
+// ParseVersion parses the version string given (with or without
+// leading 'v') and returns the corresponding `Version` object. Returns
+// an error if the version string is not valid.
+func ParseVersion(v string) (*Version, error) {
+	// The current version is rendered differently (see String()
+	// implementation). If the user passed that string representation,
+	// return the current version object.
+	if currentVersion := CurrentVersion(); v == currentVersion.String() {
+		return currentVersion, nil
+	}
+
+	versionStr := v
+	if !strings.HasPrefix(v, "v") {
+		versionStr = "v" + v
+	}
+
+	parsedVersion, err := version.Parse(versionStr)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Version{*parsedVersion}, nil
+}
+
 // BinaryVersion returns the binary version running on the node
 // associated with the given database connection.
 // NB: version means major.minor[-internal]; the patch level isn't
