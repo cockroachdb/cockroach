@@ -1529,6 +1529,7 @@ func TestRestoreRetryProcErr(t *testing.T) {
 func TestRestoreReplanOnLag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 137098, "move logic to roachtest")
 
 	skip.UnderRace(t, "slow test under stress race")
 
