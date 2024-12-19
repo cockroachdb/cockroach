@@ -192,6 +192,7 @@ type beforeAfterValidator struct {
 	primaryKeyCols []string
 	resolved       map[string]hlc.Timestamp
 	fullTableName  bool
+	keyInValue     bool
 
 	failures []string
 }
@@ -199,7 +200,9 @@ type beforeAfterValidator struct {
 // NewBeforeAfterValidator returns a Validator verifies that the "before" and
 // "after" fields in each row agree with the source table when performing AS OF
 // SYSTEM TIME lookups before and at the row's timestamp.
-func NewBeforeAfterValidator(sqlDB *gosql.DB, table string, fullTableName bool) (Validator, error) {
+func NewBeforeAfterValidator(
+	sqlDB *gosql.DB, table string, option ChangefeedOption,
+) (Validator, error) {
 	primaryKeyCols, err := fetchPrimaryKeyCols(sqlDB, table)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetchPrimaryKeyCols failed")
@@ -208,7 +211,8 @@ func NewBeforeAfterValidator(sqlDB *gosql.DB, table string, fullTableName bool) 
 	return &beforeAfterValidator{
 		sqlDB:          sqlDB,
 		table:          table,
-		fullTableName:  fullTableName,
+		fullTableName:  option.FullTableName,
+		keyInValue:     option.KeyInValue,
 		primaryKeyCols: primaryKeyCols,
 		resolved:       make(map[string]hlc.Timestamp),
 	}, nil
@@ -218,7 +222,6 @@ func NewBeforeAfterValidator(sqlDB *gosql.DB, table string, fullTableName bool) 
 func (v *beforeAfterValidator) NoteRow(
 	partition, key, value string, updated hlc.Timestamp, topic string,
 ) error {
-	keyJSON, err := json.ParseJSON(key)
 	if v.fullTableName {
 		// TODO: fetch the actual database and schema name for the full table name
 		if topic != fmt.Sprintf(`d.public.%s`, v.table) {
@@ -233,6 +236,7 @@ func (v *beforeAfterValidator) NoteRow(
 			))
 		}
 	}
+	keyJSON, err := json.ParseJSON(key)
 	if err != nil {
 		return err
 	}
@@ -246,6 +250,20 @@ func (v *beforeAfterValidator) NoteRow(
 	valueJSON, err := json.ParseJSON(value)
 	if err != nil {
 		return err
+	}
+
+	if v.keyInValue {
+		fmt.Println("we have key in value")
+		keyInValueJSON, err := valueJSON.FetchValKey("key")
+		fmt.Println(keyInValueJSON, err)
+		//	if err != nil {
+		//		return err
+		//	}
+		//	comparison, err := keyJSON.Compare(keyInValueJSON)
+		//	fmt.Println(keyInValueJSON.String(), keyJSON.String(), comparison, err)
+		//	//if keyJSON != keyInValueJSON {
+		//	//	v.failures = append(v.failures, fmt.Sprintf("key %s does not match expected value %s", key, keyInValueJSON))
+		//	//}
 	}
 
 	afterJSON, err := valueJSON.FetchValKey("after")

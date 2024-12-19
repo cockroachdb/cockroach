@@ -19,28 +19,46 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type ChangefeedOption struct {
+	FullTableName bool
+	Format        string
+	KeyInValue    bool
+}
+
+func newChangefeedOption() ChangefeedOption {
+	cfo := ChangefeedOption{
+		FullTableName: true,    //rand.Intn(2) < 1,
+		KeyInValue:    true,    //rand.Intn(2) < 1,
+		Format:        "cloud", // fix
+	}
+	//if rand.Intn(2) < 1 {
+	//	cfo.Format = "parquet"
+	//}
+	return cfo
+}
+
 type NemesesOption struct {
 	EnableFpValidator bool
 	EnableSQLSmith    bool
-	FullTableName     bool
+	ChangefeedOption  ChangefeedOption
 }
 
 var NemesesOptions = []NemesesOption{
 	{
 		EnableFpValidator: true,
 		EnableSQLSmith:    false,
-		FullTableName:     true, // rand.Intn(2) < 1,
+		ChangefeedOption:  newChangefeedOption(),
 	},
 	{
 		EnableFpValidator: false,
 		EnableSQLSmith:    true,
-		FullTableName:     true, // rand.Intn(2) < 1,
+		ChangefeedOption:  newChangefeedOption(),
 	},
 }
 
 func (no NemesesOption) String() string {
-	return fmt.Sprintf("fp_validator=%t,sql_smith=%t,full_table_name=%t",
-		no.EnableFpValidator, no.EnableSQLSmith, no.FullTableName)
+	return fmt.Sprintf("fp_validator=%t,sql_smith=%t",
+		no.EnableFpValidator, no.EnableSQLSmith)
 }
 
 // RunNemesis runs a jepsen-style validation of whether a changefeed meets our
@@ -203,18 +221,20 @@ func RunNemesis(
 		}
 	}
 
-	withFormatParquet := ""
-	if isCloudstorage && rand.Intn(2) < 1 {
-		withFormatParquet = ", format=parquet"
+	cfo := nOp.ChangefeedOption
+	options := ""
+	if cfo.Format == "parquet" {
+		options = ", format=parquet"
 	}
-	withFullTableName := ""
-	if nOp.FullTableName {
-		withFormatParquet = ", full_table_name"
+	if cfo.FullTableName {
+		options = options + ", full_table_name"
 	}
+	if cfo.KeyInValue {
+		options = options + ", key_in_value"
+	}
+	fmt.Println("running with these options:", options)
 	foo, err := f.Feed(fmt.Sprintf(
-		`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff %s%s`,
-		withFormatParquet,
-		withFullTableName,
+		`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff%s`, options,
 	))
 	if err != nil {
 		return nil, err
@@ -231,7 +251,7 @@ func RunNemesis(
 		return nil, err
 	}
 
-	baV, err := NewBeforeAfterValidator(db, `foo`, nOp.FullTableName)
+	baV, err := NewBeforeAfterValidator(db, `foo`, nOp.ChangefeedOption)
 	if err != nil {
 		return nil, err
 	}
@@ -806,6 +826,7 @@ func noteFeedMessage(a fsm.Args) error {
 	}
 	for {
 		m, err := ns.f.Next()
+		fmt.Println("feed message", m)
 		if err != nil {
 			return err
 		} else if m == nil {
