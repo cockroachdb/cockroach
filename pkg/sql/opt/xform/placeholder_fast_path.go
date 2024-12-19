@@ -121,7 +121,7 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 	var foundIndex cat.Index
 	for ord, n := 0, tabMeta.Table.IndexCount(); ord < n; ord++ {
 		index := tabMeta.Table.Index(ord)
-		if index.IsInverted() {
+		if index.IsInverted() || index.IsVector() {
 			continue
 		}
 

@@ -223,6 +223,14 @@ func (l *IndexElemList) doc(p *PrettyCfg) pretty.Doc {
 	return p.commaSeparated(d...)
 }
 
+type IndexType uint8
+
+const (
+	IndexTypeForward IndexType = iota
+	IndexTypeInverted
+	IndexTypeVector
+)
+
 type IndexInvisibility struct {
 	Value         float64
 	FloatProvided bool
@@ -234,6 +242,7 @@ type CreateIndex struct {
 	Table       TableName
 	Unique      bool
 	Inverted    bool
+	Vector      bool
 	IfNotExists bool
 	Columns     IndexElemList
 	Sharded     *ShardedIndexDef
@@ -258,6 +267,9 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	}
 	if node.Inverted {
 		ctx.WriteString("INVERTED ")
+	}
+	if node.Vector {
+		ctx.WriteString("VECTOR ")
 	}
 	ctx.WriteString("INDEX ")
 	if node.Concurrently {
@@ -1031,6 +1043,7 @@ type IndexTableDef struct {
 	Sharded          *ShardedIndexDef
 	Storing          NameList
 	Inverted         bool
+	Vector           bool
 	PartitionByIndex *PartitionByIndex
 	StorageParams    StorageParams
 	Predicate        Expr
@@ -1041,6 +1054,9 @@ type IndexTableDef struct {
 func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	if node.Inverted {
 		ctx.WriteString("INVERTED ")
+	}
+	if node.Vector {
+		ctx.WriteString("VECTOR ")
 	}
 	ctx.WriteString("INDEX ")
 	if node.Name != "" {
