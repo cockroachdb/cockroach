@@ -821,7 +821,7 @@ func purgeOldVersions(
 	// if we hit this case. Note: This scenario is impossible to hit in the real
 	// world since the lease duration is never set to 0.
 	desc, _, err := t.findForTimestamp(ctx, m.storage.clock.Now())
-	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive || errors.Is(err, errRenewLease) {
+	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive {
 		removeInactives(isInactive)
 		if desc != nil {
 			t.release(ctx, desc)
