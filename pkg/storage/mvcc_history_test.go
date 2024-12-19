@@ -1336,6 +1336,9 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 }
 
 func cmdDeleteRangePredicate(e *evalCtx) error {
+	// TODO(jeffswenson): make this metamorphically test the non-range key
+	// delete.
+
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(nil)
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
