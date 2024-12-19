@@ -286,7 +286,7 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	}
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
-	livenessInterval := sm.options.LivenessInterval
+	livenessInterval := sm.options.SupportDuration
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		log.Warningf(ctx, "failed to write requester meta: %v", err)
