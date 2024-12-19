@@ -674,6 +674,10 @@ func (u *unknownIndex) IsInverted() bool {
 	return false
 }
 
+func (u *unknownIndex) IsVector() bool {
+	return false
+}
+
 func (u *unknownIndex) GetInvisibility() float64 {
 	return 0.0
 }
@@ -695,6 +699,10 @@ func (u *unknownIndex) LaxKeyColumnCount() int {
 }
 
 func (u *unknownIndex) NonInvertedPrefixColumnCount() int {
+	return 0
+}
+
+func (u *unknownIndex) NonVectorPrefixColumnCount() int {
 	return 0
 }
 
@@ -721,6 +729,10 @@ func (u *unknownIndex) Column(i int) cat.IndexColumn {
 }
 
 func (u *unknownIndex) InvertedColumn() cat.IndexColumn {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+func (u *unknownIndex) VectorColumn() cat.IndexColumn {
 	panic(errors.AssertionFailedf("not implemented"))
 }
 
