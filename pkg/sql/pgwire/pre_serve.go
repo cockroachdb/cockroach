@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -489,6 +490,12 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 			return
 		}
 		newConn = tls.Server(conn, tlsConfig)
+		// Conditionally perform handshake connection and determine additional restrictions.
+		serverErr = security.TLSCipherRestrict(newConn)
+		if serverErr != nil {
+			_ = newConn.Close()
+			return
+		}
 		newConnType = hba.ConnHostSSL
 	}
 	s.tenantIndependentMetrics.PreServeBytesOutCount.Inc(int64(n))
