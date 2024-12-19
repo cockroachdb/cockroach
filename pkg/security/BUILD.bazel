@@ -53,6 +53,7 @@ go_library(
         "@com_github_go_ldap_ldap_v3//:ldap",
         "@org_golang_x_crypto//bcrypt",
         "@org_golang_x_crypto//ocsp",
+        "@org_golang_x_exp//slices",
         "@org_golang_x_sync//errgroup",
     ],
 )
@@ -96,10 +97,12 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_go_ldap_ldap_v3//:ldap",
+        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_stretchr_testify//require",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
