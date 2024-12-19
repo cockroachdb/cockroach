@@ -19,6 +19,7 @@ go_library(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxutil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/metamorphic",
         "@com_github_cockroachdb_redact//:redact",
     ],
 )

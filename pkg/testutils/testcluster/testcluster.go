@@ -1479,7 +1479,9 @@ func (tc *TestCluster) WaitForFullReplication() error {
 				// Force upreplication. Otherwise, if we rely on the scanner to do it,
 				// it'll take a while.
 				if err := s.ForceReplicationScanAndProcess(); err != nil {
-					return err
+					log.Infof(context.TODO(), "%v", err)
+					notReplicated = true
+					return nil
 				}
 				if err := s.ComputeMetrics(context.TODO()); err != nil {
 					// This can sometimes fail since ComputeMetrics calls
