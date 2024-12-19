@@ -2019,8 +2019,6 @@ func (t *T) SQLString() string {
 		}
 		return t.ArrayContents().SQLString() + "[]"
 	case EnumFamily:
-		// TODO(125934): Include composite type names in this branch as well, so
-		// they can be properly identified in SHOW CREATE.
 		if t.Oid() == oid.T_anyenum {
 			return "anyenum"
 		}
@@ -2037,6 +2035,16 @@ func (t *T) SQLString() string {
 		// databases when this function is called to produce DDL like in SHOW
 		// CREATE.
 		return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
+	case TupleFamily:
+		if t.UserDefined() {
+			// Do not include the catalog name. We do not allow a table to reference
+			// a type in another database, so it will always be for the current database.
+			// Removing the catalog name makes the output more portable for other
+			// databases when this function is called to produce DDL like in SHOW
+			// CREATE.
+			return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
+		}
+		return strings.ToUpper(t.Name())
 	case PGVectorFamily:
 		if t.Width() == 0 {
 			return "VECTOR"
@@ -2049,8 +2057,8 @@ func (t *T) SQLString() string {
 // SQLStringFullyQualified is a wrapper for SQLString() for when we need the
 // type name to be a fully-qualified 3-part name.
 func (t *T) SQLStringFullyQualified() string {
-	// TODO(125934): include composite type names here
-	if t.TypeMeta.Name != nil && t.Family() == EnumFamily {
+	if t.TypeMeta.Name != nil &&
+		(t.Family() == EnumFamily || (t.Family() == TupleFamily && t.UserDefined())) {
 		// Include the catalog in the type name. This is necessary to properly
 		// resolve the type, as some code paths require the database name to
 		// correctly distinguish cross-database references.

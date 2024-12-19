@@ -119,7 +119,7 @@ query TT
 SHOW CREATE FUNCTION f_allcolsel_alias
 ----
 f_allcolsel_alias  CREATE FUNCTION public.f_allcolsel_alias()
-                     RETURNS T_TWOCOL
+                     RETURNS public.t_twocol
                      VOLATILE
                      NOT LEAKPROOF
                      CALLED ON NULL INPUT

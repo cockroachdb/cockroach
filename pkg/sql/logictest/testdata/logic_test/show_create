@@ -198,3 +198,40 @@ SHOW CREATE INDEXES FROM nonexistent
 
 statement error relation "nonexistent" does not exist
 SHOW CREATE SECONDARY INDEXES FROM nonexistent
+
+subtest comp_type
+
+statement ok
+CREATE SCHEMA SC1;
+
+statement ok
+CREATE SCHEMA SC2;
+
+statement ok
+CREATE TYPE SC1.COMP1 AS (A INT, B TEXT);
+
+statement ok
+CREATE TYPE SC2.COMP1 AS (C SMALLINT, D BOOL);
+
+statement ok
+CREATE TABLE T_WITH_COMPS (C1 INT PRIMARY KEY, SC1 SC1.COMP1, SC2 SC2.COMP1, FAMILY F1(C1, SC1, SC2));
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE T_WITH_COMPS];
+----
+CREATE TABLE public.t_with_comps (
+  c1 INT8 NOT NULL,
+  sc1 sc1.comp1 NULL,
+  sc2 sc2.comp1 NULL,
+  CONSTRAINT t_with_comps_pkey PRIMARY KEY (c1 ASC),
+  FAMILY f1 (c1, sc1, sc2)
+)
+
+statement ok
+DROP TABLE T_WITH_COMPS;
+DROP TYPE SC1.COMP1;
+DROP TYPE SC2.COMP1;
+DROP SCHEMA SC1;
+DROP SCHEMA SC2;
+
+subtest end
