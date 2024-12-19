@@ -2,10 +2,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "queue",
-    srcs = ["queue.go"],
+    srcs = [
+        "queue.go",
+        "queue_test_helper.go",
+        "queue_with_fixed_chunk_size.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/queue",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 go_test(
@@ -13,8 +20,8 @@ go_test(
     srcs = ["queue_test.go"],
     embed = [":queue"],
     deps = [
+        "//pkg/testutils",
         "//pkg/util/randutil",
-        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
