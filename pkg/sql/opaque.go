@@ -201,8 +201,6 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropFunction(ctx, n)
 	case *tree.DropIndex:
 		return p.DropIndex(ctx, n)
-	case *tree.DropOwnedBy:
-		return p.DropOwnedBy(ctx)
 	case *tree.DropPolicy:
 		return p.DropPolicy(ctx, n)
 	case *tree.DropRole:

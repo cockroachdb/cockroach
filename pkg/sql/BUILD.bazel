@@ -102,7 +102,6 @@ go_library(
         "drop_external_connection.go",
         "drop_function.go",
         "drop_index.go",
-        "drop_owned_by.go",
         "drop_policy.go",
         "drop_role.go",
         "drop_schema.go",
