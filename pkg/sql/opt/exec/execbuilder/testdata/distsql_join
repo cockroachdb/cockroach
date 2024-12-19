@@ -284,7 +284,7 @@ EXPLAIN (VEC)
 RESET vectorize
 
 statement ok
-CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v));
 ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
 ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i);
 
