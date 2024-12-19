@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1690,6 +1691,15 @@ func (r *Replica) raftLeadSupportStatusRLocked() raft.LeadSupportStatus {
 		return rg.LeadSupportStatus()
 	}
 	return raft.LeadSupportStatus{}
+}
+
+// RACv2Status returns the status of the RACv2 range controller of this replica.
+// Returns an empty struct if there is no RACv2 range controller, i.e. this
+// replica is not the leader or is not running RACv2.
+func (r *Replica) RACv2Status() serverpb.RACStatus {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	return r.flowControlV2.StatusRaftMuLocked()
 }
 
 // State returns a copy of the internal state of the Replica, along with some
