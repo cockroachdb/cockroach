@@ -1236,7 +1236,7 @@ func TestSQLStringForError(t *testing.T) {
 		},
 		{ // Case 10: redacted because user-defined
 			typ:      userDefinedTuple,
-			expected: "USER DEFINED RECORD: ‹FOO›",
+			expected: "USER DEFINED RECORD: ‹foo›",
 		},
 		{ // Case 11: un-redacted
 			typ:      MakeArray(Int),
