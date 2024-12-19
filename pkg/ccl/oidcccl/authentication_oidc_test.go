@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -85,7 +84,7 @@ func TestOIDCEnabled(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// OIDC does not yet support multi-tenancy with independent
 		// configurations. Only system tenant OIDC is currently supported.
 		DisableDefaultTestTenant: true,
@@ -179,13 +178,12 @@ func TestOIDCEnabled(t *testing.T) {
 	issuer = testOIDCServer.URL
 
 	// Set minimum settings to successfully enable the OIDC client
-	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.provider_url = "`+testOIDCServer.URL+`"`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.client_id = "fake_client_id"`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret"`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.redirect_url = "https://cockroachlabs.com/oidc/v1/callback"`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.oidc_authentication.enabled = "true"`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING server.http.base_path = "some/random/path"`)
+	OIDCProviderURL.Override(ctx, &s.ClusterSettings().SV, testOIDCServer.URL)
+	OIDCClientID.Override(ctx, &s.ClusterSettings().SV, "fake_client_id")
+	OIDCClientSecret.Override(ctx, &s.ClusterSettings().SV, "fake_client_secret")
+	OIDCRedirectURL.Override(ctx, &s.ClusterSettings().SV, "https://cockroachlabs.com/oidc/v1/callback")
+	server.ServerHTTPBasePath.Override(ctx, &s.ClusterSettings().SV, "some/random/path")
+	OIDCEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	plainHTTPCfg := testutils.NewTestBaseContext(username.TestUserName())
 	testCertsContext := newRPCContext(plainHTTPCfg)
