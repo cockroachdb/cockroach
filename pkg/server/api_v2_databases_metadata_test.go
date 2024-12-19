@@ -825,6 +825,55 @@ func TestTriggerMetadataUpdateJob(t *testing.T) {
 	})
 }
 
+// TestTriggerMetadataUpdateJobTriggerFailed tests that when we
+// fail to trigger the job for expected reasons, the api returns without
+// an error and with the correct message describing the failure.
+// The expected reasons are:
+// 1. The job is unclaimed - this can happen on startup.
+// 2. The job signal is unavailable - this can happen directly
+// after the job starting or when a run is already in progress.
+func TestTriggerMetadataUpdateJobTriggerFailed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	// Set the adoption time to 1 hour in the future so the job
+	// won't be adopted in this test run.
+	adoptDuration := time.Hour
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: &jobs.TestingKnobs{
+				IntervalOverrides: jobs.TestingIntervalOverrides{
+					Adopt: &adoptDuration,
+				},
+			},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+	client, err := ts.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	t.Run("job is unclaimed", func(t *testing.T) {
+		resp := makeApiRequest[tmJobTriggeredResponse](t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/updatejob/").String(), http.MethodPost)
+		require.False(t, resp.JobTriggered)
+		require.Contains(t, resp.Message, JobUnclaimed)
+	})
+
+	t.Run("job signal is unavailable", func(t *testing.T) {
+		// The job signal can be unavailable because the job is running an
+		// update or the job was just claimed and has yet to get to the point
+		// where it can be signalled. These are expected and the api should
+		// return without error.
+		conn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
+		// Mimic the job being claimed by the node by setting the claim_instance_id to 1.
+		// The job won't be running since we delayed adoptions, so the signal is still
+		// unavailable.
+		conn.Exec(t, `UPDATE system.jobs SET claim_instance_id = 1 WHERE id = $1`, jobs.UpdateTableMetadataCacheJobID)
+		resp := makeApiRequest[tmJobTriggeredResponse](t, client, ts.AdminURL().WithPath("/api/v2/table_metadata/updatejob/").String(), http.MethodPost)
+		require.False(t, resp.JobTriggered)
+		require.Contains(t, resp.Message, JobRunning)
+	})
+}
+
 func makeApiRequest[T any](
 	t *testing.T, client http.Client, uri string, httpMethod string,
 ) (mdResp T) {
