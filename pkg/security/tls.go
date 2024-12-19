@@ -8,6 +8,7 @@ package security
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"net"
 
 	"github.com/cockroachdb/errors"
 )
@@ -127,4 +128,44 @@ func newBaseTLSConfig(settings TLSSettings, caPEM []byte) (*tls.Config, error) {
 
 		MinVersion: tls.VersionTLS12,
 	}, nil
+}
+
+// TLSCipherRestrictLn provides a TLS listener used for restricting tls
+// connections. It accepts to a custom function which can be used to intercept
+// the connection and validate requirements for TLS like ciphers used.
+type TLSCipherRestrictLn struct {
+	net.Listener
+	fn func(conn net.Conn) error
+}
+
+// Accept accepts the connection
+func (cl *TLSCipherRestrictLn) Accept() (conn net.Conn, err error) {
+	if conn, err = cl.Accept(); err == nil {
+		if cl.fn != nil {
+			if err := cl.fn(conn); err != nil {
+				conn.Close()
+				return nil, err
+			}
+		}
+	}
+	return
+}
+
+// NewTLSCipherRestrictListener initializes a new TLSCipherRestrictLn listener
+func NewTLSCipherRestrictListener(ln net.Listener, config *tls.Config) *TLSCipherRestrictLn {
+	return &TLSCipherRestrictLn{
+		Listener: tls.NewListener(ln, config),
+		fn:       TLSCipherRestrict,
+	}
+}
+
+// Server returns a new TLS connection after validate requirements for TLS like
+// ciphers used.
+func Server(conn net.Conn, config *tls.Config) (c *tls.Conn, err error) {
+	c = tls.Server(conn, config)
+	if err := TLSCipherRestrict(c); err != nil {
+		c.Close()
+		return nil, err
+	}
+	return
 }

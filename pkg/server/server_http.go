@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -330,7 +331,7 @@ func startHTTPService(
 			return err
 		}
 
-		httpLn = tls.NewListener(tlsL, uiTLSConfig)
+		httpLn = security.NewTLSCipherRestrictListener(tlsL, uiTLSConfig)
 	}
 
 	// The connManager is responsible for tearing down the net.Conn
