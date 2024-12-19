@@ -62,13 +62,21 @@ type HTTPServer struct {
 	*http.Server
 }
 
+type tlsState int
+
+const (
+	tlsInit tlsState = iota
+	tlsDone
+	tlsCipherRestrictFailed
+)
+
 // MakeHTTPServer constructs a http.Server that tracks active connections,
 // closing them when signaled by stopper.
 func MakeHTTPServer(
 	ctx context.Context, stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler,
 ) HTTPServer {
 	var mu syncutil.Mutex
-	activeConns := make(map[net.Conn]struct{})
+	activeConns := make(map[net.Conn]tlsState)
 	server := HTTPServer{
 		Server: &http.Server{
 			Handler:   handler,
@@ -78,7 +86,15 @@ func MakeHTTPServer(
 				defer mu.Unlock()
 				switch state {
 				case http.StateNew:
-					activeConns[conn] = struct{}{}
+					activeConns[conn] = tlsInit
+				//case http.StateActive:
+				//if activeConns[conn] == tlsInit {
+				//activeConns[conn] = tlsDone
+				//if security.TLSCipherRestrict(conn) != nil {
+				//	delete(activeConns, conn)
+				//	_ = conn.Close()
+				//}
+				//	}
 				case http.StateClosed:
 					delete(activeConns, conn)
 				}
