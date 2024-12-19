@@ -145,14 +145,17 @@ func (r *Replica) evalAndPropose(
 	// from this point on.
 	proposal.ec = makeReplicatedEndCmds(r, g, *st, timeutil.Now())
 
-	log.VEventf(proposal.Context(), 2,
-		"proposing command to write %d new keys, %d new values, %d new intents, "+
-			"write batch size=%d bytes",
-		proposal.command.ReplicatedEvalResult.Delta.KeyCount,
-		proposal.command.ReplicatedEvalResult.Delta.ValCount,
-		proposal.command.ReplicatedEvalResult.Delta.IntentCount,
-		proposal.command.WriteBatch.Size(),
-	)
+	if log.ExpensiveLogEnabled(proposal.Context(), 2) {
+		// Local copies to avoid allocating to heap if not logging.
+		kc := proposal.command.ReplicatedEvalResult.Delta.KeyCount
+		vc := proposal.command.ReplicatedEvalResult.Delta.ValCount
+		ic := proposal.command.ReplicatedEvalResult.Delta.IntentCount
+		sz := proposal.command.WriteBatch.Size()
+		log.VEventf(proposal.Context(), 2,
+			"proposing command to write %d new keys, %d new values, %d new intents, "+
+				"write batch size=%d bytes", kc, vc, ic, sz,
+		)
+	}
 	// NB: if ba.AsyncConsensus is true, we will tell admission control about
 	// writes that may not have happened yet. We consider this ok, since (a) the
 	// typical lag in consensus is expected to be small compared to the time
@@ -181,9 +184,11 @@ func (r *Replica) evalAndPropose(
 
 		// Fork the proposal's context span so that the proposal's context
 		// can outlive the original proposer's context.
-		ctx, sp := tracing.ForkSpan(ctx, "async consensus")
-		proposal.ctx.Store(&ctx)
-		proposal.sp = sp
+		if s := tracing.SpanFromContext(ctx); s != nil && !s.IsNoop() {
+			ctx, sp := tracing.ForkSpan(ctx, "async consensus")
+			proposal.ctx.Store(&ctx)
+			proposal.sp = sp
+		}
 		if proposal.sp != nil {
 			// We can't leak this span if we fail to hand the proposal to the
 			// replication layer, so finish it later in this method if we are to
@@ -258,7 +263,10 @@ func (r *Replica) evalAndPropose(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
 	}
-	log.VEventf(proposal.Context(), 2, "acquiring proposal quota (%d bytes)", quotaSize)
+	if log.ExpensiveLogEnabled(proposal.Context(), 2) {
+		quotaSize := quotaSize // avoid heap alloc when conditional not taken
+		log.VEventf(proposal.Context(), 2, "acquiring proposal quota (%d bytes)", quotaSize)
+	}
 	var err error
 	proposal.quotaAlloc, err = r.maybeAcquireProposalQuota(ctx, ba, quotaSize)
 	if err != nil {
