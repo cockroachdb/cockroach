@@ -75,6 +75,14 @@ func (b *Builder) buildValuesClause(
 			// resolving the column types.
 			elems[elemPos] = b.buildScalar(texpr, inScope, nil, nil, nil)
 			elemPos += numCols
+			// Type-check the expression once again in order to update expressions
+			// that wrap a UDF to reflect the modified type. Make sure to use the
+			// previously resolved type as the desired type, since the AST may have
+			// been modified to remove type annotations.
+			texpr, err = tree.TypeCheck(b.ctx, texpr, b.semaCtx, texpr.ResolvedType())
+			if err != nil {
+				panic(err)
+			}
 			if typ := texpr.ResolvedType(); typ.Family() != types.UnknownFamily {
 				if colTypes[colIdx].Family() == types.UnknownFamily {
 					colTypes[colIdx] = typ
