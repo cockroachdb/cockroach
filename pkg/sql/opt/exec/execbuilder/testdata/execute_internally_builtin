@@ -248,4 +248,33 @@ SELECT crdb_internal.execute_internally('SHOW statement_timeout;', true);
 statement ok
 RESET CLUSTER SETTING sql.defaults.statement_timeout;
 
+subtest disallow_full_table_scans
+
+statement ok
+SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = true;
+
+statement ok
+SET disallow_full_table_scans = 'true';
+
+query T
+SELECT crdb_internal.execute_internally('SHOW disallow_full_table_scans;');
+----
+off
+
+query T
+SELECT crdb_internal.execute_internally('SHOW disallow_full_table_scans;', true);
+----
+on
+
+statement ok
+RESET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled;
+
+statement ok
+RESET disallow_full_table_scans;
+
+query T
+SELECT crdb_internal.execute_internally('SHOW disallow_full_table_scans;', true);
+----
+off
+
 subtest end
