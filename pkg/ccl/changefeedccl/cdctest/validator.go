@@ -253,17 +253,17 @@ func (v *beforeAfterValidator) NoteRow(
 	}
 
 	if v.keyInValue {
-		fmt.Println("we have key in value")
 		keyInValueJSON, err := valueJSON.FetchValKey("key")
-		fmt.Println(keyInValueJSON, err)
-		//	if err != nil {
-		//		return err
-		//	}
-		//	comparison, err := keyJSON.Compare(keyInValueJSON)
-		//	fmt.Println(keyInValueJSON.String(), keyJSON.String(), comparison, err)
-		//	//if keyJSON != keyInValueJSON {
-		//	//	v.failures = append(v.failures, fmt.Sprintf("key %s does not match expected value %s", key, keyInValueJSON))
-		//	//}
+		if err != nil {
+			return err
+		}
+		keyInValueString := keyInValueJSON.String()
+		keyString := keyJSON.String()
+		if keyInValueString != keyString {
+			v.failures = append(v.failures, fmt.Sprintf(
+				"key in value %s does not match expected key value %s",
+				keyInValueString, keyString))
+		}
 	}
 
 	afterJSON, err := valueJSON.FetchValKey("after")

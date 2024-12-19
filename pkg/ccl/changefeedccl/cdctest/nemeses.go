@@ -27,13 +27,18 @@ type ChangefeedOption struct {
 
 func newChangefeedOption() ChangefeedOption {
 	cfo := ChangefeedOption{
-		FullTableName: true,    //rand.Intn(2) < 1,
-		KeyInValue:    true,    //rand.Intn(2) < 1,
-		Format:        "cloud", // fix
+		FullTableName: rand.Intn(2) < 1,
+		KeyInValue:    rand.Intn(2) < 1,
+		Format:        "json",
 	}
-	//if rand.Intn(2) < 1 {
-	//	cfo.Format = "parquet"
-	//}
+
+	// TODO: work out why parquet and key_in_value are not compatible here
+	// error is "this sink is incompatible with format=parquet"
+	// but before we were apparenly applying this parquet format without issue
+	if !cfo.KeyInValue && rand.Intn(2) < 1 {
+		cfo.Format = "parquet"
+	}
+
 	return cfo
 }
 
@@ -232,7 +237,6 @@ func RunNemesis(
 	if cfo.KeyInValue {
 		options = options + ", key_in_value"
 	}
-	fmt.Println("running with these options:", options)
 	foo, err := f.Feed(fmt.Sprintf(
 		`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff%s`, options,
 	))
@@ -826,7 +830,6 @@ func noteFeedMessage(a fsm.Args) error {
 	}
 	for {
 		m, err := ns.f.Next()
-		fmt.Println("feed message", m)
 		if err != nil {
 			return err
 		} else if m == nil {
