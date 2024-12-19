@@ -165,6 +165,7 @@ func (lc LoadedCluster) Regions() []state.Region {
 type BasicCluster struct {
 	Nodes         int
 	StoresPerNode int
+	Locality      string
 }
 
 func (bc BasicCluster) String() string {
@@ -182,6 +183,29 @@ func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings)
 
 func (bc BasicCluster) Regions() []state.Region {
 	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
+	return info.Regions
+}
+
+type ClusterWithLocality struct {
+	StoresPerNode  int
+	Region         []string
+	NodesPerRegion []int
+}
+
+func (bc ClusterWithLocality) String() string {
+	return fmt.Sprintf("cluster with locality with region=%v, nodes_per_region=%v",
+		bc.Region, bc.NodesPerRegion)
+}
+
+func (bc ClusterWithLocality) Generate(
+	seed int64, settings *config.SimulationSettings,
+) state.State {
+	info := state.ClusterInfoWithLocality(bc.StoresPerNode, bc.Region, bc.NodesPerRegion)
+	return state.LoadClusterInfo(info, settings)
+}
+
+func (bc ClusterWithLocality) Regions() []state.Region {
+	info := state.ClusterInfoWithLocality(bc.StoresPerNode, bc.Region, bc.NodesPerRegion)
 	return info.Regions
 }
 
