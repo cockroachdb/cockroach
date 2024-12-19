@@ -29,7 +29,7 @@ build --flag_alias=heavy=//build/toolchains:heavy_flag
 
 build:crdb_test_off --crdb_test_off
 build:cross --cross
-build:dev --dev
+build:dev --dev --strip=always
 build:force_build_cdeps --force_build_cdeps
 build:heavy --heavy
 build:lintonbuild --run_validations
@@ -73,7 +73,7 @@ test:ci --test_output=errors
 test:ci --test_tmpdir=/artifacts/tmp
 build:ci --config=cibase
 
-build:cross --stamp
+build:cross --stamp --strip=never
 
 # Cross-compilation configurations. Add e.g. --config=crosslinux to turn these on.
 # Generally these should be used for development builds. Each cross config has
