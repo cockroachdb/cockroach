@@ -1,0 +1,128 @@
+# ----------
+# Start pacer with backlog of 100 fixups.
+# ----------
+
+# Pacer takes several seconds to discover the optimal allowed ops/sec (~400)
+# that will reduce the fixup queue by the target of ~2 fixups per second. While
+# it's possible to reduce it faster by throttling ops/sec more aggressively,
+# it's a better user experience to reduce the queue more gradually over time.
+plot initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10
+----
+ Allowed ops per second = 419.40 ops/sec (avg), 407.78 ops/sec (final)
+ 500 ┼─╮
+ 489 ┤ ╰────╮
+ 478 ┤      ╰─╮
+ 467 ┤        ╰─╮
+ 456 ┤          ╰─╮
+ 445 ┤            ╰╮
+ 434 ┤             ╰─╮
+ 423 ┤               ╰──╮                        ╭──╮ ╭──╮╭────╮╭───╮╭───╮╭───╮╭───╮  ╭╮  ╭───╮
+ 412 ┤                  ╰──╮          ╭──────────╯  ╰─╯  ╰╯    ╰╯   ╰╯   ╰╯   ╰╯   ╰──╯╰──╯   ╰
+ 401 ┤                     ╰─────╮╭───╯
+ 390 ┤                           ╰╯
+
+# Query delay should converge to 1000 / 400 = ~2.5 milliseconds during backlog
+# reduction.
+plot initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10 show-delay-millis
+----
+ Delay (ms) = 2.39 ms (avg), 2.45 ms (final)
+ 2.59 ┤                       ╭╮
+ 2.53 ┤                      ╭╯╰────╮
+ 2.47 ┤                   ╭──╯      ╰───╮   ╭╮  ╭╮                                       ╭╮
+ 2.42 ┤                 ╭─╯             ╰───╯╰──╯╰──────────╮  ╭───────╮ ╭──╮ ╭──╮ ╭─────╯╰─────
+ 2.36 ┤              ╭──╯                                   ╰──╯       ╰─╯  ╰─╯  ╰─╯
+ 2.30 ┤             ╭╯
+ 2.24 ┤           ╭─╯
+ 2.18 ┤         ╭─╯
+ 2.12 ┤       ╭─╯
+ 2.06 ┤  ╭────╯
+ 2.00 ┼──╯
+
+# Fixup queue size should steadily decrease over the 10 second period.
+plot initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10 show-queue-size
+----
+ Fixup queue size = 91.66 fixups (avg), 83 fixups (final)
+ 99.00 ┼────────╮
+ 97.40 ┤        ╰───────────────╮
+ 95.80 ┤                        │
+ 94.20 ┤                        ╰────────╮
+ 92.60 ┤                                 ╰───────────╮
+ 91.00 ┤                                             ╰──╮
+ 89.40 ┤                                                ╰──────────╮
+ 87.80 ┤                                                           ╰────╮
+ 86.20 ┤                                                                ╰─────────╮
+ 84.60 ┤                                                                          ╰────────────╮
+ 83.00 ┤                                                                                       ╰─
+
+# Average queue size reduction should be ~2 fixups per second.
+plot initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10 show-queue-size-rate
+----
+ Fixup queue size rate = -1.54 fixups/sec (avg)
+ -0.37 ┤     ╭──╮              ╭╮
+ -0.59 ┤  ╭──╯  │      ╭╮     ╭╯│
+ -0.82 ┼──╯     │    ╭─╯│    ╭╯ │      ╭╮                                      ╭╮             ╭╮
+ -1.04 ┤        │╭───╯  │   ╭╯  │      ││                      ╭╮             ╭╯│            ╭╯│
+ -1.26 ┤        ╰╯      │ ╭─╯   │     ╭╯│      ╭╮   ╭╮        ╭╯│ ╭╮         ╭╯ │           ╭╯ │
+ -1.49 ┤                ╰─╯     │    ╭╯ │     ╭╯│  ╭╯│       ╭╯ │╭╯│   ╭╮   ╭╯  │╭╮    ╭╮  ╭╯  │
+ -1.71 ┤                        │  ╭─╯  ╰╮   ╭╯ │ ╭╯ │ ╭╮   ╭╯  ╰╯ │  ╭╯│  ╭╯   ╰╯│  ╭─╯│ ╭╯   │╭
+ -1.93 ┤                        │ ╭╯     │  ╭╯  ╰─╯  │╭╯│ ╭─╯      │ ╭╯ │ ╭╯      │ ╭╯  │╭╯    ╰╯
+ -2.16 ┤                        │╭╯      │ ╭╯        ╰╯ │╭╯        ╰─╯  ╰─╯       │╭╯   ╰╯
+ -2.38 ┤                        ╰╯       │╭╯            ╰╯                        ╰╯
+ -2.60 ┤                                 ╰╯
+
+# Plot again, this time over 60 seconds to show point where fixup queue has been
+# reduced below the allowed level. Ensure that allowed ops/sec rises back up to
+# ~500 ops/sec that maintains a constant queue size.
+plot seconds=60 initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10
+----
+ Allowed ops per second = 426.83 ops/sec (avg), 469.82 ops/sec (final)
+ 500 ┼╮
+ 489 ┤│                                                                                 ╭─╮ ╭─╮
+ 478 ┤╰╮                                                                             ╭─╮│ │ │ │
+ 467 ┤ │                                                                       ╭╮╭╮╭╮│ ││ ╰─╯ ╰
+ 456 ┤ │                                                                       │╰╯││╰╯ ╰╯
+ 445 ┤ ╰╮                                                                   ╭──╯  ╰╯
+ 434 ┤  │                                                                 ╭─╯
+ 424 ┤  │                  ╭╮          ╭╮          ╭╮    ╭─╮            ╭─╯
+ 413 ┤  ╰╮    ╭────────────╯╰╮ ╭───╮ ╭─╯╰─╮╭───╮ ╭─╯╰╮╭──╯ │╭╮╭──╮╭─────╯
+ 402 ┤   │╭───╯              ╰─╯   ╰─╯    ╰╯   ╰─╯   ╰╯    ╰╯╰╯  ╰╯
+ 391 ┤   ╰╯
+
+# Over the same period, delay should decrease to 1000 / 500 = ~2 milliseconds
+# from ~2.5 ms.
+plot seconds=60 initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10 show-delay-millis
+----
+ Delay (ms) = 2.35 ms (avg), 2.13 ms (final)
+ 2.59 ┤   ╭╮
+ 2.53 ┤   ││
+ 2.47 ┤   │╰╮╭╮                ╭╮   ╭─╮    ╭╮    ╭╮   ╭╮
+ 2.42 ┤  ╭╯ ╰╯╰╮╭╮╭───────╮╭╮╭─╯│ ╭─╯ │  ╭─╯╰─╮╭─╯╰╮ ╭╯╰╮   ╭──────╮  ╭╮
+ 2.36 ┤  │     ╰╯╰╯       ╰╯╰╯  ╰─╯   ╰──╯    ╰╯   ╰─╯  ╰───╯      ╰──╯╰─╮
+ 2.30 ┤  │                                                               ╰──╮
+ 2.24 ┤ ╭╯                                                                  ╰──╮   ╭╮
+ 2.18 ┤ │                                                                      ╰╮╭╮││
+ 2.12 ┤ │                                                                       ╰╯╰╯╰─╮ ╭╮ ╭─╮ ╭
+ 2.06 ┤╭╯                                                                             ╰─╯│ │ │ │
+ 2.00 ┼╯                                                                                 ╰─╯ ╰─╯
+
+# Show the fixup queue over the 60 second interval. It should steadily drop down
+# closer to the target.
+plot seconds=60 height=15 initial-fixups=100 ops-per-fixup=50 fixups-per-sec=10 show-queue-size
+----
+ Fixup queue size = 49.75 fixups (avg), 12 fixups (final)
+ 99.00 ┼────╮
+ 93.13 ┤    ╰───╮
+ 87.27 ┤        ╰───╮
+ 81.40 ┤            ╰────╮
+ 75.53 ┤                 ╰────╮
+ 69.67 ┤                      ╰─────╮
+ 63.80 ┤                            ╰────╮
+ 57.93 ┤                                 ╰───╮
+ 52.07 ┤                                     ╰─────╮
+ 46.20 ┤                                           ╰───╮
+ 40.33 ┤                                               ╰────╮
+ 34.47 ┤                                                    ╰────╮
+ 28.60 ┤                                                         ╰─────╮
+ 22.73 ┤                                                               ╰────╮
+ 16.87 ┤                                                                    ╰─────────╮
+ 11.00 ┤                                                                              ╰──────────

@@ -10,6 +10,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -31,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDataDriven(t *testing.T) {
+func TestVectorIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -40,6 +41,10 @@ func TestDataDriven(t *testing.T) {
 	defer state.Stopper.Stop(ctx)
 
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+		if regexp.MustCompile("/.+/").MatchString(path) {
+			// Skip files that are in subdirs.
+			return
+		}
 		if !strings.HasSuffix(path, ".ddt") {
 			// Skip files that are not data-driven tests.
 			return

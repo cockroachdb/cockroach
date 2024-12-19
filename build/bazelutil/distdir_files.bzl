@@ -616,7 +616,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/grpc-ecosystem/go-grpc-prometheus/com_github_grpc_ecosystem_go_grpc_prometheus-v1.2.0.zip": "124dfc63aa52611a2882417e685c0452d4d99d64c13836a6a6747675e911fc17",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/grpc-ecosystem/grpc-gateway/com_github_grpc_ecosystem_grpc_gateway-v1.16.0.zip": "377b03aef288b34ed894449d3ddba40d525dd7fb55de6e79045cdf499e7fe565",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/gsterjov/go-libsecret/com_github_gsterjov_go_libsecret-v0.0.0-20161001094733-a6f4afe4910c.zip": "cffe0a452fd3f00e4d07730caeb254417a720d907294b5b4a3428322655fb130",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/guptarohit/asciigraph/com_github_guptarohit_asciigraph-v0.5.5.zip": "c2b81da57a50425d313a684efd13d9741c4e9df4c3cca92dea34d562d34271a1",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/guptarohit/asciigraph/com_github_guptarohit_asciigraph-v0.7.3.zip": "ec30034bd6d082f3242a5410ae1d02d9a4d164504e735f8448766461207be5a5",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hailocab/go-hostpool/com_github_hailocab_go_hostpool-v0.0.0-20160125115350-e80d13ce29ed.zip": "faf2b985681cda77ab928976b620b790585e364b6aff351483227d474db85e9a",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/consul/api/com_github_hashicorp_consul_api-v1.10.1.zip": "a84081dcb2361b540bb787871abedc0f9569c09637f5b5c40e973500a4402a82",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/consul/sdk/com_github_hashicorp_consul_sdk-v0.8.0.zip": "cf29fff6c000ee67eda1b8cacec9648d06944e3cdbb80e2e22dc0165708974c6",

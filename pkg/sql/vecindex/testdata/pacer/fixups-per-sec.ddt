@@ -1,0 +1,88 @@
+# ----------
+# Simulate edge case where fixups have slowed to only 1 per second.
+# ----------
+
+# Query rate starts high, which results in a rapidly increasing fixup queue. The
+# pacer should react by increasing the delay until it has the fixup queue under
+# control and it begins steadily decreasing.
+plot seconds=60 ops-per-fixup=50 fixups-per-sec=1
+----
+ Allowed ops per second = 55.88 ops/sec (avg), 53.19 ops/sec (final)
+ 500 ┼╮
+ 451 ┤╰╮
+ 403 ┤ │
+ 354 ┤ ╰╮
+ 306 ┤  │
+ 257 ┤  │
+ 209 ┤  ╰─╮
+ 160 ┤    ╰╮
+ 112 ┤     ╰──╮
+  63 ┤        ╰────────╮                    ╭──────────────────────────────────────────────────
+  15 ┤                 ╰────────────────────╯
+
+# Delay rises rapidly until fixup queue size starts decreasing and pacer can
+# begin reducing delay. It should stabilize at 1000 / (50 * 1) = ~20 ms.
+plot seconds=60 ops-per-fixup=50 fixups-per-sec=1 show-delay-millis
+----
+ Delay (ms) = 28.29 ms (avg), 18.80 ms (final)
+ 67.25 ┤                         ╭──╮
+ 60.73 ┤                    ╭────╯  ╰──╮
+ 54.20 ┤                    │          ╰╮╭─╮
+ 47.68 ┤                 ╭──╯           ╰╯ ╰─╮
+ 41.15 ┤                ╭╯                   ╰──╮
+ 34.63 ┤              ╭─╯                       ╰╮╭╮
+ 28.10 ┤           ╭──╯                          ╰╯╰─╮        ╭─╮       ╭╮╭─╮         ╭─╮
+ 21.58 ┤        ╭──╯                                 ╰──╮ ╭───╯ ╰──╮╭───╯╰╯ ╰─────────╯ ╰────────
+ 15.05 ┤     ╭──╯                                       ╰─╯        ╰╯
+  8.53 ┤  ╭──╯
+  2.00 ┼──╯
+
+# Fixup queue size grows rapidly and then is slowly reduced at 2 fixups / second
+# until it stabilizes at something closer to 5 fixups.
+plot seconds=60 ops-per-fixup=50 fixups-per-sec=1 show-queue-size
+----
+ Fixup queue size = 10.17 fixups (avg), 8 fixups (final)
+ 19.00 ┤         ╭╮ ╭╮
+ 17.10 ┤     ╭───╯╰─╯╰─────╮
+ 15.20 ┤   ╭─╯             ╰───╮╭╮
+ 13.30 ┤  ╭╯                   ╰╯╰──╮
+ 11.40 ┤  │                         ╰───╮╭╮
+  9.50 ┤ ╭╯                             ╰╯╰───╮
+  7.60 ┤ │                                    ╰──────╮╭─╮╭───────╮╭──────────╮╭──────────────────
+  5.70 ┤╭╯                                           ╰╯ ╰╯       ╰╯          ╰╯
+  3.80 ┤│
+  1.90 ┤│
+  0.00 ┼╯
+
+# Fixup queue size increases at high rate and then goes negative once throttling
+# kicks in.
+plot seconds=60 ops-per-fixup=50 fixups-per-sec=1 show-queue-size-rate
+----
+ Fixup queue size rate = 0.10 fixups/sec (avg)
+  4.79 ┤╭─╮
+  4.21 ┤│ │╭╮
+  3.63 ┤│ ╰╯│
+  3.05 ┤│   ╰╮
+  2.47 ┤│    │
+  1.89 ┤│    │╭╮
+  1.32 ┤│    ╰╯│ ╭╮                                                  ╭╮ ╭╮                      ╭
+  0.74 ┤│      ╰╮││ ╭╮          ╭╮       ╭╮       ╭╮                 ││ ││                      │
+  0.16 ┼╯       ╰╯│ ││╭─╮   ╭─╮ │╰╮  ╭─╮ ││  ╭╮ ╭╮││╭╮╭─╮╭───────╮╭──╯│ ││╭──╮╭─────────────────╯
+ -0.42 ┤          ╰─╯╰╯ │╭─╮│ │ │ │  │ │ │╰╮ ││ │││╰╯││ ││       ││   ╰─╯╰╯  ││
+ -1.00 ┤                ╰╯ ╰╯ ╰─╯ ╰──╯ ╰─╯ ╰─╯╰─╯╰╯  ╰╯ ╰╯       ╰╯          ╰╯
+
+# Show actual ops/sec, which should average ~50.
+plot seconds=60 ops-per-fixup=50 fixups-per-sec=1 show-actual-ops-per-sec
+----
+ Actual ops per second = 55.41 ops/sec (avg), 59.00 ops/sec (final)
+ 406 ┤ ╭╮
+ 365 ┤ ││
+ 325 ┤╭╯│
+ 284 ┤│ ╰╮
+ 244 ┤│  │
+ 203 ┤│  ╰╮
+ 162 ┤│   ╰╮
+ 122 ┤│    ╰╮
+  81 ┤│     ╰──╮                                                  ╭╮
+  41 ┤│        ╰───────────╮              ╭───────────────────────╯╰───────────────────────────
+   0 ┼╯                    ╰──────────────╯
