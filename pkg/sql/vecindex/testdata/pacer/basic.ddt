@@ -1,0 +1,225 @@
+# ----------
+# 50 queries per fixup and 10 fixups per second.
+# ----------
+
+# Pacer should stabilize at 50 * 10 = ~500 ops/sec. Initially, the pacer raises
+# allowed ops/sec to determine if a higher rate can be sustained. Upon realizing
+# it cannot be, the pacer drops allowed ops/sec to a rate that sustains a stable
+# non-zero fixup queue size.
+plot ops-per-fixup=50 fixups-per-sec=10
+----
+ Allowed ops per second = 507.78 ops/sec (avg), 499.76 ops/sec (final)
+ 563 ┤     ╭───╮
+ 555 ┤    ╭╯   ╰─╮
+ 548 ┤   ╭╯      ╰─╮
+ 540 ┤  ╭╯         ╰╮
+ 533 ┤ ╭╯           ╰─╮
+ 526 ┤ │              ╰─╮
+ 518 ┤╭╯                ╰─╮
+ 511 ┤│                   ╰─╮
+ 503 ┼╯                     ╰─╮                             ╭──────────────────────────────────
+ 496 ┤                        ╰───╮              ╭──────────╯
+ 489 ┤                            ╰──────────────╯
+
+# Ensure that actual ops/sec eventually converges to the allowed ops/sec.
+plot ops-per-fixup=50 fixups-per-sec=10 show-actual-ops-per-sec
+----
+ Actual ops per second = 482.70 ops/sec (avg), 501.00 ops/sec (final)
+ 558 ┤        ╭───────────╮
+ 502 ┤       ╭╯           ╰────────────────────────────────────────────────────────────────────
+ 446 ┤      ╭╯
+ 390 ┤      │
+ 335 ┤     ╭╯
+ 279 ┤    ╭╯
+ 223 ┤   ╭╯
+ 167 ┤  ╭╯
+ 112 ┤ ╭╯
+  56 ┤╭╯
+   0 ┼╯
+
+# Fixup queue size should rise to ~1-2 and stabilize there.
+plot ops-per-fixup=50 fixups-per-sec=10 show-queue-size
+----
+ Fixup queue size = 1.49 fixups (avg)
+ 2.00 ┤            ╭───╮╭──────────────╮ ╭─────╮  ╭────╮   ╭───╮   ╭───╮   ╭───╮   ╭───╮   ╭────
+ 1.80 ┤            │   ││              │ │     │  │    │   │   │   │   │   │   │   │   ╰╮  │
+ 1.60 ┤            │   ││              │ │     │  │    │   │   │   │   │   │   │   │    │  │
+ 1.40 ┤            │   ││              │ │     │  │    │   │   │   │   │   │   │   │    │  │
+ 1.20 ┤            │   ││              │ │     │  │    │   │   │   │   │   │   │   │    │  │
+ 1.00 ┤    ╭───────╯   ╰╯              ╰─╯     ╰──╯    ╰───╯   ╰───╯   ╰───╯   ╰───╯    ╰──╯
+ 0.80 ┤    │
+ 0.60 ┤    │
+ 0.40 ┤    │
+ 0.20 ┤    │
+ 0.00 ┼────╯
+
+# Rate of change in fixup queue size should stay low.
+plot ops-per-fixup=50 fixups-per-sec=10 show-queue-size-rate
+----
+ Fixup queue size rate = 0.16 fixups/sec (avg)
+  1.39 ┤            ╭──╮
+  1.17 ┤            │  ╰╮
+  0.96 ┤     ╭──╮   │   │╭──╮
+  0.74 ┤     │  ╰──╮│   ││  ╰──╮
+  0.53 ┤     │     ╰╯   ││     ╰────╮               ╭───╮    ╭──╮    ╭──╮   ╭───╮   ╭───╮   ╭────
+  0.32 ┤     │          ││          ╰───╮ ╭─────╮   │   │    │  │    │  │   │   │   │   ╰╮  │
+  0.10 ┼─────╯          ╰╯              │ │     │   │   │   ╭╯  │    │  │   │   ╰╮  │    │  │
+ -0.11 ┤                                │ │     │   │   │   │   │   ╭╯  │   │    │  │    │  │
+ -0.32 ┤                                │ │     │   │   │   │   │╭──╯   ╰───╯    ╰──╯    │  │
+ -0.54 ┤                                │ │     ╰───╯   ╰───╯   ╰╯                       ╰──╯
+ -0.75 ┤                                ╰─╯
+
+# Query delay should converge to ~1-2 milliseconds.
+plot ops-per-fixup=50 fixups-per-sec=10 show-delay-millis
+----
+ Delay (ms) = 1.6038 ms (avg)
+ 2.00 ┤╭╮╭╮   ╭╮       ╭─╮╭╮╭─╮╭╮   ╭╮╭╮╭╮╭─╮╭─╮ ╭──╮ ╭╮╭──╮  ╭╮╭─╮   ╭───╮╭─╮ ╭╮ ╭╮ ╭─╮╭─╮ ╭╮
+ 1.90 ┤││││   │╰╮   ╭╮ │ ││││ │││   │││││││ ││ │ │  │ │││  │  │││ │   │   ││ │ ││ ││ │ ││ │ ││
+ 1.80 ┤││││   │ │   ││ │ ││││ │││   │││││││ ││ │ │  │ │││  │╭─╯││ │   │   ││ │ ││ ││ │ ││ │ ││
+ 1.70 ┤││││   │ │   ││ │ ││││ │││   │││││││ ││ │ │  │ │││  ││  ││ │   │   ││ ╰╮││ ││ │ ││ │ │╰╮
+ 1.60 ┤││││   │ │   ││ │ ││││ ╰╯│╭╮ │││││││ ││ │ │  │╭╯││  ││  ││ │   │   ││  │││ ││ │ ││ │╭╯ │
+ 1.50 ┤││││   │ │  ╭╯│ │ ││││   │││ │││╰╯││ ││ │ │  ││ ││  ││  ││ │   │   ││  │││ ││ │ ││ ││  │
+ 1.40 ┤││││   │ │  │ │ │ ╰╯││   │││ │││  ││ ││ │ │  ││ ││  ││  ││ │   │   ││  │││ ││ │ ││ ││  │
+ 1.30 ┤│╰╯│   │ │  │ │ │   ╰╯   │││ │││  ││ ││ ╰╮│  ││ ││  ││  ││ │   │   ││  │││ ││ │ ││ ││  ╰╮
+ 1.20 ┤│  │   │ │╭─╯ │ │        │││ │││  ╰╯ ││  ││  ││ ││  ││  ││ │╭╮ │   ││  │││ ││╭╯ ╰╯ ││   │
+ 1.10 ┤│  │ ╭╮│ ││   │ │        ╰╯│ │││     ││  ││  ││ ╰╯  ││  ╰╯ ╰╯│╭╯   ││  │││╭╯││     ││   │
+ 1.00 ┼╯  ╰─╯╰╯ ╰╯   ╰─╯          ╰─╯╰╯     ╰╯  ╰╯  ╰╯     ╰╯       ╰╯    ╰╯  ╰╯╰╯ ╰╯     ╰╯   ╰
+
+# ----------
+# 50 queries per fixup and 20 fixups per second.
+# ----------
+
+# With more fixups per second (20 vs. 10), the pacer should double the allowed
+# ops/sec, to ~1000.
+plot ops-per-fixup=50 fixups-per-sec=20
+----
+ Allowed ops per second = 823.84 ops/sec (avg), 1014.89 ops/sec (final)
+ 1015 ┤                                                                     ╭───────────────────
+  964 ┤                                                              ╭──────╯
+  912 ┤                                                    ╭─────────╯
+  861 ┤                                             ╭──────╯
+  809 ┤                                      ╭──────╯
+  758 ┤                              ╭───────╯
+  706 ┤                       ╭──────╯
+  655 ┤               ╭───────╯
+  603 ┤         ╭─────╯
+  552 ┤   ╭─────╯
+  500 ┼───╯
+
+# Ensure that actual ops/sec eventually converges to the allowed ops/sec.
+plot ops-per-fixup=50 fixups-per-sec=20 show-actual-ops-per-sec
+----
+ Actual ops per second = 771.05 ops/sec (avg), 1000.00 ops/sec (final)
+ 1000 ┤                                                                 ╭───────────────────────
+  900 ┤                                                 ╭───────────────╯
+  800 ┤                                   ╭─────────────╯
+  700 ┤                    ╭──────────────╯
+  600 ┤        ╭───────────╯
+  500 ┤       ╭╯
+  400 ┤     ╭─╯
+  300 ┤    ╭╯
+  200 ┤  ╭─╯
+  100 ┤╭─╯
+    0 ┼╯
+
+# Fixup queue size should stay ~0-1.
+plot ops-per-fixup=50 fixups-per-sec=20 show-queue-size
+----
+ Fixup queue size = 0.35 fixups (avg)
+ 1.00 ┤    ╭╮     ╭╮╭╮   ╭╮  ╭─╮╭╮╭─╮╭─╮ ╭╮  ╭─╮  ╭╮ ╭─╮╭──╮╭──╮  ╭╮╭──╮  ╭╮  ╭╮  ╭╮       ╭╮  ╭
+ 0.90 ┤    ││     ││││   ││  │ ││││ ││ │ ││  │ │  ││ │ ││  ││  │  │││  │  ││  ││  ││  ╭╮   ││  │
+ 0.80 ┤    ││     ││││   ││  │ ││││ ││ │ ││  │ │  ││ │ ││  ││  │  │││  │  ││  ││  ││  │╰╮  ││  │
+ 0.70 ┤    ││     ││││   ││  │ ││││ ││ │ ││  │ │  ││ │ ││  ││  │  │││  │  ││  ││  ││  │ │  ││  │
+ 0.60 ┤    ││     ││││   ││  │ ││││ ││ │ ││  │ │  ││ │ ││  ││  │  │││  │  ││  ││  ││  │ │  ││  │
+ 0.50 ┤    ││     ││││   ││  │ ││││ ││ │ ││  │ │  ││ │ ││  ││  │  │││  │  ││  ││  ││  │ │  ││  │
+ 0.40 ┤    ││     ││││   ││  │ ││││ ││ │ ││  │ │  ││ │ ││  ││  │  │││  │  ││  ││  ││  │ │  ││  │
+ 0.30 ┤    ││     ││││   ││  │ ││││ ││ │ ││  │ │  ││ │ ││  ││  │  │││  │  ││  ││  ││  │ │ ╭╯│  │
+ 0.20 ┤    ││     ││││   ││  │ ││││ ││ │ ││  │ │  ││ │ ││  ││  │  │││  │  ││  ││  │╰╮ │ │ │ │  │
+ 0.10 ┤    ││     ││││   ││  │ ││││ ││ │ ││  │ │  ││ │ ││  ││  │  │││  │  ││  ││  │ │ │ │ │ │  │
+ 0.00 ┼────╯╰─────╯╰╯╰───╯╰──╯ ╰╯╰╯ ╰╯ ╰─╯╰──╯ ╰──╯╰─╯ ╰╯  ╰╯  ╰──╯╰╯  ╰──╯╰──╯╰──╯ ╰─╯ ╰─╯ ╰──╯
+
+# Query delay should drop to ~0, since the max query rate is only once per
+# millisecond, which is <= the allowed ops/sec rate of ~1000.
+plot ops-per-fixup=50 fixups-per-sec=20 show-delay-millis
+----
+ Delay (ms) = 0.7013 ms (avg)
+ 2.00 ┤╭╮╭╮      ╭╮   ╭╮
+ 1.80 ┤││││   ╭╮ ││   ││
+ 1.60 ┤││││   ││ │╰╮  ││
+ 1.40 ┤│╰╯│   ││ │ │  ││
+ 1.20 ┤│  │   ││ │ │  ││
+ 1.00 ┼╯  ╰───╯╰─╯ ╰──╯╰──────────────╮╭─╮╭─╮ ╭─╮╭──╮  ╭╮╭╮╭╮╭╮ ╭─╮╭╮╭╮╭╮╭╮
+ 0.80 ┤                               ╰╯ ││ ╰╮│ ││  │  ││││││││╭╯ │││││││││
+ 0.60 ┤                                  ││  ╰╯ ╰╯  │╭╮│││││││││  │││││││││
+ 0.40 ┤                                  ││         ││││││││││││  │││││││││
+ 0.20 ┤                                  ╰╯         ││││││╰╯╰╯││  │││││││││
+ 0.00 ┤                                             ╰╯╰╯╰╯    ╰╯  ╰╯╰╯╰╯╰╯╰─────────────────────
+
+# ----------
+# 50 queries per fixup and 5 fixups per second.
+# ----------
+
+# With fewer fixups per second 5 vs. 10), the pacer should halve the allowed
+# ops/sec, to ~250.
+plot ops-per-fixup=50 fixups-per-sec=5
+----
+ Allowed ops per second = 267.92 ops/sec (avg), 246.36 ops/sec (final)
+ 514 ┤╭╮
+ 479 ┼╯╰───╮
+ 444 ┤     ╰─╮
+ 409 ┤       ╰─╮
+ 374 ┤         ╰─╮
+ 338 ┤           ╰─╮
+ 303 ┤             ╰─╮
+ 268 ┤               ╰─╮                                    ╭──────╮
+ 233 ┤                 ╰─╮                     ╭────────────╯      ╰───────────────────────────
+ 198 ┤                   ╰─╮            ╭──────╯
+ 163 ┤                     ╰────────────╯
+
+# Ensure that actual ops/sec eventually converges to the allowed ops/sec.
+plot ops-per-fixup=50 fixups-per-sec=5 show-actual-ops-per-sec
+----
+ Actual ops per second = 255.40 ops/sec (avg), 248.00 ops/sec (final)
+ 477 ┤        ╭─╮
+ 429 ┤       ╭╯ ╰──╮
+ 381 ┤      ╭╯     ╰──╮
+ 334 ┤     ╭╯         ╰──╮
+ 286 ┤    ╭╯             ╰─╮                                    ╭─────────╮
+ 238 ┤   ╭╯                ╰──╮                  ╭──────────────╯         ╰────────────────────
+ 191 ┤  ╭╯                    ╰──────────────────╯
+ 143 ┤  │
+  95 ┤ ╭╯
+  48 ┤╭╯
+   0 ┼╯
+
+# Fixup queue size should rise to ~3-4 and stabilize there.
+plot ops-per-fixup=50 fixups-per-sec=5 show-queue-size
+----
+ Fixup queue size = 3.86 fixups (avg)
+ 7.00 ┤               ╭╮
+ 6.30 ┤           ╭───╯╰───────╮
+ 5.60 ┤           │            │
+ 4.90 ┤         ╭─╯            ╰───╮╭╮╭╮
+ 4.20 ┤      ╭──╯                  ╰╯╰╯╰╮╭╮╭╮╭╮              ╭╮   ╭╮╭╮╭╮ ╭╮╭╮╭─╮╭╮╭╮╭───╮╭╮╭╮╭──
+ 3.50 ┤      │                          │││││││              ││   ││││││ │││││ ││││││   ││││││
+ 2.80 ┤    ╭─╯                          ╰╯╰╯╰╯╰──────────────╯╰───╯╰╯╰╯╰─╯╰╯╰╯ ╰╯╰╯╰╯   ╰╯╰╯╰╯
+ 2.10 ┤  ╭─╯
+ 1.40 ┤  │
+ 0.70 ┤╭─╯
+ 0.00 ┼╯
+
+# Query delay should converge to ~4 milliseconds.
+plot ops-per-fixup=50 fixups-per-sec=5 show-delay-millis
+----
+ Delay (ms) = 3.6125 ms (avg)
+ 6.00 ┤                          ╭──╮╭╮╭╮
+ 5.50 ┤                          │  ││╰╯│
+ 5.00 ┤                   ╭╮╭────╯  ╰╯  │╭─╮
+ 4.50 ┤                   │││           ││ │
+ 4.00 ┤                 ╭╮│╰╯           ╰╯ ╰──╮  ╭───╮╭─╮   ╭──╮   ╭╮ ╭╮╭╮   ╭──╮╭╮╭───╮╭─╮╭─╮ ╭
+ 3.50 ┤                 │││                   │ ╭╯   ││ │   │  │   │╰╮││││╭╮ │  ││││   ││ ╰╯ │ │
+ 3.00 ┤           ╭─────╯╰╯                   ╰─╯    ╰╯ ╰───╯  ╰───╯ ╰╯╰╯╰╯╰─╯  ╰╯╰╯   ╰╯    ╰─╯
+ 2.50 ┤           │
+ 2.00 ┤╭╮ ╭─╮ ╭───╯
+ 1.50 ┤││ │ │╭╯
+ 1.00 ┼╯╰─╯ ╰╯
