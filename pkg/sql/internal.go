@@ -90,6 +90,7 @@ func NewInternalSessionData(
 	sd.SequenceState = sessiondata.NewSequenceState()
 	sd.Location = time.UTC
 	sd.StmtTimeout = 0
+	sd.DisallowFullTableScans = false
 	return sd
 }
 
