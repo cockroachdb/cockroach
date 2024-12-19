@@ -71,5 +71,5 @@ func (a PiggybackedAdmittedState) String() string {
 
 func (a PiggybackedAdmittedState) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("[r%s,s%s,%d->%d] %s",
-		a.RangeID, a.ToStoreID, a.FromReplicaID, a.ToReplicaID, a.Admitted.String())
+		a.RangeID, a.ToStoreID, a.FromReplicaID, a.ToReplicaID, a.Admitted)
 }
