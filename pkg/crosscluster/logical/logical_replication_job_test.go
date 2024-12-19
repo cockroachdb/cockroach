@@ -1358,6 +1358,9 @@ func setupServerWithNumDBs(
 	[]*sqlutils.SQLRunner,
 	[]string,
 ) {
+	// Deadlock increases test runtime by 10 to 100x.
+	skip.UnderDeadlock(t)
+
 	server := testcluster.StartTestCluster(t, numNodes, clusterArgs)
 	s := server.Server(0).ApplicationLayer()
 

@@ -447,6 +447,9 @@ func CreateMultiTenantStreamingCluster(
 	ctx context.Context, t *testing.T, args TenantStreamingClustersArgs,
 ) (*TenantStreamingClusters, func()) {
 
+	// Deadlock tool slows these tests down by 10 to 100x.
+	skip.UnderDeadlock(t)
+
 	serverArgs := CreateServerArgs(args)
 	cluster, url, cleanup := startC2CTestCluster(ctx, t, serverArgs,
 		args.MultitenantSingleClusterNumNodes, args.MultiTenantSingleClusterTestRegions)
