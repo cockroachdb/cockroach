@@ -316,7 +316,7 @@ func (p *PreparedPortal) close(
 	prepStmtsNamespaceMemAcc.Shrink(ctx, p.size(portalName))
 	p.Stmt.decRef(ctx)
 	if p.pauseInfo != nil {
-		p.pauseInfo.cleanupAll()
+		p.pauseInfo.cleanupAll(ctx)
 		p.pauseInfo = nil
 	}
 }
@@ -334,26 +334,19 @@ func (p *PreparedPortal) isPausable() bool {
 // functions are added during the first-time execution of a portal. When the
 // first-time execution is finished, we mark isComplete to true.
 type cleanupFuncStack struct {
-	stack      []namedFunc
+	stack      []func(context.Context)
 	isComplete bool
 }
 
-func (n *cleanupFuncStack) appendFunc(f namedFunc) {
+func (n *cleanupFuncStack) appendFunc(f func(context.Context)) {
 	n.stack = append(n.stack, f)
 }
 
-func (n *cleanupFuncStack) run() {
+func (n *cleanupFuncStack) run(ctx context.Context) {
 	for i := 0; i < len(n.stack); i++ {
-		n.stack[i].f()
+		n.stack[i](ctx)
 	}
 	*n = cleanupFuncStack{}
-}
-
-// namedFunc is function with name, which makes the debugging easier. It is
-// used just for clean up functions of a pausable portal.
-type namedFunc struct {
-	fName string
-	f     func()
 }
 
 // instrumentationHelperWrapper wraps the instrumentation helper.
@@ -465,11 +458,11 @@ type portalPauseInfo struct {
 }
 
 // cleanupAll is to run all the cleanup layers.
-func (pm *portalPauseInfo) cleanupAll() {
-	pm.resumableFlow.cleanup.run()
-	pm.dispatchToExecutionEngine.cleanup.run()
-	pm.execStmtInOpenState.cleanup.run()
-	pm.exhaustPortal.cleanup.run()
+func (pm *portalPauseInfo) cleanupAll(ctx context.Context) {
+	pm.resumableFlow.cleanup.run(ctx)
+	pm.dispatchToExecutionEngine.cleanup.run(ctx)
+	pm.execStmtInOpenState.cleanup.run(ctx)
+	pm.exhaustPortal.cleanup.run(ctx)
 }
 
 // isQueryIDSet returns true if the query id for the portal is set.

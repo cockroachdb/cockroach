@@ -238,15 +238,15 @@ func (ex *connExecutor) execPortal(
 	defer func() {
 		if portal.isPausable() {
 			if !portal.pauseInfo.exhaustPortal.cleanup.isComplete {
-				portal.pauseInfo.exhaustPortal.cleanup.appendFunc(namedFunc{fName: "exhaust portal", f: func() {
+				portal.pauseInfo.exhaustPortal.cleanup.appendFunc(func(_ context.Context) {
 					ex.exhaustPortal(portalName)
-				}})
+				})
 				portal.pauseInfo.exhaustPortal.cleanup.isComplete = true
 			}
 			// If we encountered an error when executing a pausable portal, clean up
 			// the retained resources.
 			if retErr != nil {
-				portal.pauseInfo.cleanupAll()
+				portal.pauseInfo.cleanupAll(ctx)
 			}
 		}
 	}()
@@ -1181,18 +1181,15 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// For pausable portals, we delay the clean-up until closing the portal by
 	// adding the function to the execStmtInOpenStateCleanup.
 	// Otherwise, perform the clean-up step within every execution.
-	processCleanupFunc := func(fName string, f func()) {
+	processCleanupFunc := func(f func()) {
 		if !portal.isPausable() {
 			f()
 		} else if !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
-			portal.pauseInfo.execStmtInOpenState.cleanup.appendFunc(namedFunc{
-				fName: fName,
-				f: func() {
-					f()
-					// Some cleanup steps modify the retErr and retPayload. We need to
-					// ensure that cleanup after them can see the update.
-					updateRetErrAndPayload(retErr, retPayload)
-				},
+			portal.pauseInfo.execStmtInOpenState.cleanup.appendFunc(func(_ context.Context) {
+				f()
+				// Some cleanup steps modify the retErr and retPayload. We need to
+				// ensure that cleanup after them can see the update.
+				updateRetErrAndPayload(retErr, retPayload)
 			})
 		}
 	}
@@ -1205,9 +1202,9 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// If there's any error, do the cleanup right here.
 		if (retErr != nil || payloadHasError(retPayload)) && portal.isPausable() {
 			updateRetErrAndPayload(retErr, retPayload)
-			portal.pauseInfo.resumableFlow.cleanup.run()
-			portal.pauseInfo.dispatchToExecutionEngine.cleanup.run()
-			portal.pauseInfo.execStmtInOpenState.cleanup.run()
+			portal.pauseInfo.resumableFlow.cleanup.run(ctx)
+			portal.pauseInfo.dispatchToExecutionEngine.cleanup.run(ctx)
+			portal.pauseInfo.execStmtInOpenState.cleanup.run(ctx)
 		}
 	}()
 
@@ -1232,7 +1229,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			portal.pauseInfo.execStmtInOpenState.spCtx = ctx
 		}
 		defer func() {
-			processCleanupFunc("cleanup span", sp.Finish)
+			processCleanupFunc(sp.Finish)
 		}()
 	} else {
 		ctx = portal.pauseInfo.execStmtInOpenState.spCtx
@@ -1294,7 +1291,6 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		}
 		defer func() {
 			processCleanupFunc(
-				"increment executed stmt cnt",
 				func() {
 					// We need to check the latest errors rather than the ones evaluated
 					// when this function is created.
@@ -1315,7 +1311,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 	// Make sure that we always unregister the query.
 	defer func() {
-		processCleanupFunc("cancel query", func() {
+		processCleanupFunc(func() {
 			ex.removeActiveQuery(queryID, vars.ast)
 			vars.cancelQuery()
 		})
@@ -1499,7 +1495,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// of finishing the instrumentation helper. This is needed since in order to
 	// support plan-gist-matching of the statement diagnostics we might not know
 	// right now whether Finish needs to happen.
-	defer processCleanupFunc("finish instrumentation helper", func() {
+	defer processCleanupFunc(func() {
 		// We need this weird thing because we need to make sure we're
 		// closing the correct instrumentation helper for the paused portal.
 		ihToFinish := ih
@@ -1625,7 +1621,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// some special plan initialization for logging.
 	dispatchToExecEngine := false
 
-	defer processCleanupFunc("log statement", func() {
+	defer processCleanupFunc(func() {
 		// If we did not dispatch to the execution engine, we need to initialize
 		// the plan here.
 		if !dispatchToExecEngine {
@@ -1693,7 +1689,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			}
 		}
 
-		processCleanupFunc("set query error", func() {
+		processCleanupFunc(func() {
 			cancelQueryCtx := ctx
 			if portal.isPausable() {
 				cancelQueryCtx = portal.pauseInfo.execStmtInOpenState.cancelQueryCtx
@@ -2682,8 +2678,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				ppInfo.dispatchToExecutionEngine.cleanup.isComplete = true
 			}
 			if retErr != nil || res.Err() != nil {
-				ppInfo.resumableFlow.cleanup.run()
-				ppInfo.dispatchToExecutionEngine.cleanup.run()
+				ppInfo.resumableFlow.cleanup.run(ctx)
+				ppInfo.dispatchToExecutionEngine.cleanup.run(ctx)
 			}
 		}
 	}()
@@ -2715,9 +2711,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				defer planner.curPlan.close(ctx)
 			} else {
 				ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
-				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
-					fName: "close planTop",
-					f:     func() { ppInfo.dispatchToExecutionEngine.planTop.close(ctx) },
+				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
+					ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
 				})
 			}
 		} else {
@@ -2894,15 +2889,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		// We need to ensure that we're using the planner bound to the first-time
 		// execution of a portal.
 		curPlanner := *planner
-		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
-			fName: "populate query level stats and regions",
-			f: func() {
-				populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
-				ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
-					ctx, &curPlanner,
-					int(ex.state.mu.autoRetryCounter), ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(), *ppInfo.dispatchToExecutionEngine.queryStats,
-				)
-			},
+		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
+			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
+			ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
+				ctx, &curPlanner,
+				int(ex.state.mu.autoRetryCounter), ppInfo.dispatchToExecutionEngine.rowsAffected, ppInfo.curRes.ErrAllowReleased(), *ppInfo.dispatchToExecutionEngine.queryStats,
+			)
 		})
 	} else {
 		populateQueryLevelStats(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
