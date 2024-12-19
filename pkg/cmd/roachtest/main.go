@@ -250,9 +250,7 @@ func testsToRun(
 		return nil, errors.Newf("%s", msg)
 	}
 
-	// selective-tests is considered only if the select-probability is 1.0. This is because select probability already
-	// takes care of running limited tests.
-	if roachtestflags.SelectiveTests && roachtestflags.SelectProbability == 1.0 {
+	if roachtestflags.SelectiveTests {
 		fmt.Printf("selective Test enabled\n")
 		// the test categorization must be complete in 30 seconds
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -514,5 +512,11 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 			printErrAndExit(fmt.Errorf("unsupported option value %q for option %q; Usage: %s",
 				roachtestflags.UseSpotVM, spotFlagInfo.Name, spotFlagInfo.Usage))
 		}
+	}
+
+	// Test selection and select probability flags are mutually exclusive.
+	selectProbFlagInfo := roachtestflags.Changed(&roachtestflags.SelectProbability)
+	if roachtestflags.SelectiveTests && selectProbFlagInfo != nil {
+		printErrAndExit(fmt.Errorf("select-probability and selective-tests=true are incompatible. Disable one of them"))
 	}
 }

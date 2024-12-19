@@ -87,7 +87,7 @@ var (
 	SelectiveTests = false
 	_              = registerRunFlag(&SelectiveTests, FlagInfo{
 		Name:  "selective-tests",
-		Usage: `Use selective tests to run based on previous test execution. this is considered only if the select-probability is 1.0`,
+		Usage: `Use selective tests to run based on previous test execution. Incompatible with --select-probability`,
 	})
 
 	SuccessfulTestsSelectPct = 0.35
@@ -451,8 +451,8 @@ var (
 	_                         = registerRunFlag(&SelectProbability, FlagInfo{
 		Name: "select-probability",
 		Usage: `
-			The probability of a matched test being selected to run. Note: this will
-			run at least one test per prefix.`,
+			The probability of a matched test being selected to run. Incompatible with --selective-tests.
+			Note: this will run at least one test per prefix.`,
 	})
 
 	UseSpotVM = NeverUseSpot
