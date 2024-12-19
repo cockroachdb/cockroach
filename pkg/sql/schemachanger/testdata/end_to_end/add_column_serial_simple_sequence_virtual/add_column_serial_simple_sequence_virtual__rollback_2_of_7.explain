@@ -7,7 +7,7 @@ SET serial_normalization='virtual_sequence';
 ALTER TABLE db.public.tbl ADD COLUMN serial_id SERIAL;
 EXPLAIN (DDL) rollback at post-commit stage 2 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹serial_id› INT8;
+Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_id INT8;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 11 elements transitioning toward ABSENT

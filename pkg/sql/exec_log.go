@@ -437,7 +437,7 @@ func (p *planner) maybeLogStatementInternal(
 			SchemaChangerMode:                     p.curPlan.instrumentation.schemaChangerMode.String(),
 		}
 
-		p.logOperationalEventsOnlyExternally(ctx, sampledQuery)
+		p.logEventsOnlyExternally(ctx, sampledQuery)
 	}
 }
 
@@ -531,19 +531,5 @@ func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...logpb.
 	_ = p.logEventsWithOptions(ctx,
 		2, /* depth: we want to use the caller location */
 		eventLogOptions{dst: LogExternally},
-		entries...)
-}
-
-// logOperationalEventsOnlyExternally is a helper that sets redaction
-// options to omit SQL Name redaction. This is used when logging to
-// the telemetry channel when we want additional metadata available.
-func (p *planner) logOperationalEventsOnlyExternally(
-	ctx context.Context, entries ...logpb.EventPayload,
-) {
-	// The API contract for logEventsWithOptions() is that it returns
-	// no error when system.eventlog is not written to.
-	_ = p.logEventsWithOptions(ctx,
-		2, /* depth: we want to use the caller location */
-		eventLogOptions{dst: LogExternally, rOpts: redactionOptions{omitSQLNameRedaction: true}},
 		entries...)
 }

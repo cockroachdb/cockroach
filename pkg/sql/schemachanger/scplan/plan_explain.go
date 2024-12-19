@@ -410,14 +410,14 @@ func (p Plan) rootNodeLabel() string {
 		sb.WriteString("rolling back ")
 	}
 	lastStmt := p.Statements[len(p.Statements)-1].RedactedStatement
-	sb.WriteString(strings.TrimSuffix(lastStmt, ";"))
+	sb.WriteString(strings.TrimSuffix(string(lastStmt), ";"))
 	if len(p.Statements) > 1 {
 		sb.WriteString("; following ")
 		for i, stmt := range p.Statements[:len(p.Statements)-1] {
 			if i > 0 {
 				sb.WriteString("; ")
 			}
-			sb.WriteString(strings.TrimSuffix(stmt.RedactedStatement, ";"))
+			sb.WriteString(strings.TrimSuffix(string(stmt.RedactedStatement), ";"))
 		}
 	}
 	sb.WriteString(";")
