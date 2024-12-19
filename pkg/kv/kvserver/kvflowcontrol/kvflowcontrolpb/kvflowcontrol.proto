@@ -125,28 +125,6 @@ message RaftLogPosition {
   uint64 index = 2;
 }
 
-// AdmittedResponseForRange is only used in RACv2. It contains a MsgAppResp
-// from a follower to a leader, that was generated to advance the admitted
-// vector for that follower, maintained by the leader.
-//
-// TODO(pav-kv): remove this type and use PiggybackedAdmittedState.
-message AdmittedResponseForRange {
-  option (gogoproto.goproto_stringer) = false;
-
-  // LeaderStoreID is used to route the request when this message is received
-  // at the leader node.
-  uint64 leader_store_id = 1 [(gogoproto.customname) = "LeaderStoreID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
-
-  // RangeID of the raft group to which the MsgAppResp is directed. Used for
-  // routing at the leader node.
-  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-
-  // Msg is the MsgAppResp containing the admitted vector.
-  raftpb.Message msg = 3 [(gogoproto.nullable) = false];
-}
-
 // AdmittedState communicates a replica's vector of admitted log indices at
 // different priorities to the leader of a range.
 //

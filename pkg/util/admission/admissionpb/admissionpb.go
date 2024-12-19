@@ -52,7 +52,7 @@ func (w WorkPriority) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (w WorkPriority) SafeFormat(p redact.SafePrinter, verb rune) {
 	if s, ok := WorkPriorityDict[w]; ok {
-		p.Print(s)
+		p.SafeString(redact.SafeString(s))
 		return
 	}
 	p.Printf("custom-pri=%d", int8(w))
@@ -232,11 +232,11 @@ func (w WorkClass) String() string {
 func (w WorkClass) SafeFormat(p redact.SafePrinter, verb rune) {
 	switch w {
 	case RegularWorkClass:
-		p.Printf("regular")
+		p.SafeString("regular")
 	case ElasticWorkClass:
-		p.Printf("elastic")
+		p.SafeString("elastic")
 	default:
-		p.Printf("<unknown-class>")
+		p.SafeString("<unknown-class>")
 	}
 }
 
