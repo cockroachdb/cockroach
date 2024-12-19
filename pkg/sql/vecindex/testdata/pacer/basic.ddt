@@ -1,0 +1,308 @@
+# ----------
+# Fixup processing keeps up with 1000 ops/sec test load.
+# ----------
+
+# At 50 ops per fixup, 20 fixups/sec must be processed to keep up with 1000
+# ops/sec. Therefore, no throttling should be needed.
+plot ops-per-fixup=50 fixups-per-sec=20
+----
+ Allowed ops per second = 1031.03 ops/sec (avg), 1068.02 ops/sec (final)
+ 1068 ┤         ╭───────────────────────────────────────────────────────────────────────────────
+ 1011 ┤        ╭╯
+  954 ┤        │
+  898 ┤       ╭╯
+  841 ┤      ╭╯
+  784 ┤     ╭╯
+  727 ┤    ╭╯
+  670 ┤   ╭╯
+  614 ┤  ╭╯
+  557 ┤ ╭╯
+  500 ┼─╯
+
+# Actual ops/sec should converge to exactly 1000 ops/sec (unthrottled rate).
+plot ops-per-fixup=50 fixups-per-sec=20 show-actual-ops-per-sec
+----
+ Actual ops per second = 920.15 ops/sec (avg), 1000.00 ops/sec (final)
+ 1000 ┤              ╭──────────────────────────────────────────────────────────────────────────
+  900 ┤           ╭──╯
+  800 ┤         ╭─╯
+  700 ┤        ╭╯
+  600 ┤       ╭╯
+  500 ┤      ╭╯
+  400 ┤     ╭╯
+  300 ┤   ╭─╯
+  200 ┤  ╭╯
+  100 ┤╭─╯
+    0 ┼╯
+
+# Delay should quickly decrease to ~0.
+plot ops-per-fixup=50 fixups-per-sec=20 show-delay-millis
+----
+ Delay (ms) = 0.15 ms (avg), 0.00 ms (final)
+ 2.00 ┼╮
+ 1.80 ┤╰─╮
+ 1.60 ┤  ╰─╮
+ 1.40 ┤    ╰╮
+ 1.20 ┤     ╰─╮
+ 1.00 ┤       ╰─╮
+ 0.80 ┤         │
+ 0.60 ┤         │
+ 0.40 ┤         │
+ 0.20 ┤         │
+ 0.00 ┤         ╰───────────────────────────────────────────────────────────────────────────────
+
+# Fixup queue size should stay between 0 and 1.
+plot ops-per-fixup=50 fixups-per-sec=20 show-queue-size
+----
+ Fixup queue size = 0.08 fixups (avg), 1 fixups (final)
+ 1.00 ┤     ╭──╮  ╭╮  ╭╮  ╭╮                                                                   ╭
+ 0.90 ┤     │  │  ││  ││  ││                                                                   │
+ 0.80 ┤     │  │  ││  ││  ││                                                                   │
+ 0.70 ┤     │  │  ││  ││  ││                                                                   │
+ 0.60 ┤   ╭╮│  │  ││  ││  ││                                                                   │
+ 0.50 ┤   │││  │  ││  ││  ││                                                                   │
+ 0.40 ┤   │││  │  ││  ││  ││  ╭╮                                                           ╭╮  │
+ 0.30 ┤   │││  │  ││  ││  ││  ││                                                           ││  │
+ 0.20 ┤   │││  │  ││  ││  ││  ││                                                           ││  │
+ 0.10 ┤   │││  │  ││  ││  ││  ││                                                           ││  │
+ 0.00 ┼───╯╰╯  ╰──╯╰──╯╰──╯╰──╯╰───────────────────────────────────────────────────────────╯╰──╯
+
+# ----------
+# Fixup processing is 10% below sustainable rate.
+# ----------
+
+# The test load requires 20 fixups/sec to keep up. At only 18 fixups/sec, the
+# pacer needs to throttle traffic. Allowed ops/sec should converge to
+# 50 * 18 = ~900.
+plot ops-per-fixup=50 fixups-per-sec=18
+----
+ Allowed ops per second = 890.37 ops/sec (avg), 889.17 ops/sec (final)
+ 1062 ┤        ╭────╮
+ 1005 ┤        │    ╰───╮
+  949 ┤       ╭╯        ╰───╮                               ╭╮           ╭╮
+  893 ┤      ╭╯             ╰───╮         ╭─────────────────╯╰───────────╯╰─────────────────────
+  837 ┤     ╭╯                  ╰─────────╯
+  781 ┤     │
+  725 ┤    ╭╯
+  668 ┤   ╭╯
+  612 ┤  ╭╯
+  556 ┤╭─╯
+  500 ┼╯
+
+# This represents a delay of 1000 / (50 * 18) = ~1.1 ms.
+plot ops-per-fixup=50 fixups-per-sec=18 show-delay-millis
+----
+ Delay (ms) = 0.98 ms (avg), 1.12 ms (final)
+ 2.00 ┼╮
+ 1.80 ┤╰╮
+ 1.60 ┤ ╰─╮
+ 1.40 ┤   ╰─╮
+ 1.20 ┤     ╰─╮               ╭───────────────────────╮ ╭───╮  ╭────╮╭───╮  ╭───╮ ╭───╮ ╭───╮╭──
+ 1.00 ┤       ╰╮              │                       ╰─╯   ╰──╯    ╰╯   ╰──╯   ╰─╯   ╰─╯   ╰╯
+ 0.80 ┤        │              │
+ 0.60 ┤        │              │
+ 0.40 ┤        │              │
+ 0.20 ┤        │              │
+ 0.00 ┤        ╰──────────────╯
+
+# Ensure that actual ops/sec converges to ~900.
+plot ops-per-fixup=50 fixups-per-sec=18 show-actual-ops-per-sec
+----
+ Actual ops per second = 845.08 ops/sec (avg), 902.00 ops/sec (final)
+ 1000 ┤              ╭───────────╮
+  900 ┤           ╭──╯           ╰──────╮  ╭────────────────────────────────────────────────────
+  800 ┤         ╭─╯                     ╰──╯
+  700 ┤        ╭╯
+  600 ┤       ╭╯
+  500 ┤      ╭╯
+  400 ┤     ╭╯
+  300 ┤   ╭─╯
+  200 ┤  ╭╯
+  100 ┤╭─╯
+    0 ┼╯
+
+# Fixup queue size should stay <= ~5.
+plot ops-per-fixup=50 fixups-per-sec=18 show-queue-size
+----
+ Fixup queue size = 2.06 fixups (avg), 3 fixups (final)
+ 4.00 ┤                      ╭────╮
+ 3.60 ┤                      │    ╰╮
+ 3.20 ┤                  ╭───╯     ╰───────────────╮                                         ╭──
+ 2.80 ┤                  │                         │                                         │
+ 2.40 ┤                  │                         ╰╮                                        │
+ 2.00 ┤              ╭───╯                          ╰────────────────────────────────────────╯
+ 1.60 ┤              │
+ 1.20 ┤          ╭───╯
+ 0.80 ┤          │
+ 0.40 ┤          │
+ 0.00 ┼──────────╯
+
+# ----------
+# Fixup processing is 50% below sustainable rate.
+# ----------
+
+# Allowed ops/sec should converge to 50 * 10 = ~500.
+plot ops-per-fixup=50 fixups-per-sec=10
+----
+ Allowed ops per second = 520.64 ops/sec (avg), 509.11 ops/sec (final)
+ 717 ┤    ╭───╮
+ 691 ┤    │   ╰╮
+ 665 ┤   ╭╯    ╰─╮
+ 639 ┤   │       ╰─╮
+ 613 ┤  ╭╯         ╰╮
+ 586 ┤ ╭╯           ╰─╮
+ 560 ┤ │              ╰──╮
+ 534 ┤╭╯                 ╰─╮                       ╭────╮          ╭─╮       ╭──╮         ╭───╮
+ 508 ┼╯                    ╰╮                    ╭─╯    ╰─────╮ ╭──╯ ╰────╮╭─╯  ╰─────╮╭──╯   ╰
+ 482 ┤                      ╰──╮╭────────────────╯            ╰─╯         ╰╯          ╰╯
+ 456 ┤                         ╰╯
+
+# Delay should converge to 1000 / (50 * 10) = ~2 milliseconds.
+plot ops-per-fixup=50 fixups-per-sec=10 show-delay-millis
+----
+ Delay (ms) = 1.94 ms (avg), 1.96 ms (final)
+ 2.19 ┤                        ╭──────╮        ╭─╮
+ 2.11 ┤                      ╭─╯      ╰────────╯ ╰╮           ╭───╮       ╭─╮         ╭──╮
+ 2.03 ┼╮                    ╭╯                    ╰─╮   ╭─────╯   ╰─╮ ╭───╯ ╰─╮  ╭────╯  ╰─╮   ╭
+ 1.95 ┤╰╮                 ╭─╯                       ╰───╯           ╰─╯       ╰──╯         ╰───╯
+ 1.87 ┤ │               ╭─╯
+ 1.79 ┤ ╰╮           ╭──╯
+ 1.71 ┤  ╰╮         ╭╯
+ 1.63 ┤   │       ╭─╯
+ 1.55 ┤   ╰╮    ╭─╯
+ 1.47 ┤    ╰─╮╭─╯
+ 1.39 ┤      ╰╯
+
+# Actual ops/sec should converge to ~500.
+plot ops-per-fixup=50 fixups-per-sec=10 show-actual-ops-per-sec
+----
+ Actual ops per second = 494.92 ops/sec (avg), 504.00 ops/sec (final)
+ 677 ┤         ╭─────╮
+ 609 ┤        ╭╯     ╰────╮
+ 542 ┤       ╭╯           ╰────╮                         ╭───╮
+ 474 ┤      ╭╯                 ╰─────────────────────────╯   ╰─────────────────────────────────
+ 406 ┤     ╭╯
+ 338 ┤    ╭╯
+ 271 ┤   ╭╯
+ 203 ┤  ╭╯
+ 135 ┤ ╭╯
+  68 ┤╭╯
+   0 ┼╯
+
+# Fixup queue size should stay <= ~5.
+plot ops-per-fixup=50 fixups-per-sec=10 show-queue-size
+----
+ Fixup queue size = 3.91 fixups (avg), 5 fixups (final)
+ 6.00 ┤                      ╭─╮
+ 5.40 ┤                      │ │
+ 4.80 ┤             ╭──╮╭────╯ ╰───────╮     ╭─╮              ╭╮                               ╭
+ 4.20 ┤           ╭─╯  ╰╯              ╰─────╯ ╰──────────────╯╰───────────────────────────────╯
+ 3.60 ┤           │
+ 3.00 ┤       ╭╮╭─╯
+ 2.40 ┤       │││
+ 1.80 ┤     ╭─╯╰╯
+ 1.20 ┤   ╭─╯
+ 0.60 ┤   │
+ 0.00 ┼───╯
+
+# Rate of change in fixup queue size should initially be positive, then
+# negative, and then stabilize at ~0.
+plot ops-per-fixup=50 fixups-per-sec=10 show-queue-size-rate
+----
+ Fixup queue size rate = 0.40 fixups/sec (avg)
+  2.90 ┤             ╭─╮
+  2.56 ┤       ╭╮  ╭─╯ ╰╮
+  2.22 ┤       ││╭╮│    │╭╮   ╭╮
+  1.87 ┤     ╭─╯││╰╯    ││╰─╮ │╰╮
+  1.53 ┤     │  ││      ││  ╰─╯ │
+  1.18 ┤   ╭─╯  ╰╯      ╰╯      │                              ╭╮                               ╭
+  0.84 ┤   │                    ╰────╮         ╭╮              ││                               │
+  0.49 ┤   │                         ╰──╮      ││              ││                               │
+  0.15 ┼───╯                            │     ╭╯│     ╭────────╯╰───────────────────────────────╯
+ -0.20 ┤                                │  ╭──╯ ╰─────╯
+ -0.54 ┤                                ╰──╯
+
+# ----------
+# Fixup processing is 75% below sustainable rate.
+# ----------
+
+# Allowed ops/sec should converge to 50 * 5 = ~250.
+plot ops-per-fixup=50 fixups-per-sec=5
+----
+ Allowed ops per second = 290.59 ops/sec (avg), 259.24 ops/sec (final)
+ 529 ┤╭╮
+ 500 ┼╯╰──╮
+ 470 ┤    ╰─╮
+ 440 ┤      ╰─╮
+ 410 ┤        ╰─╮
+ 380 ┤          ╰──╮
+ 350 ┤             ╰──╮
+ 320 ┤                ╰─╮
+ 290 ┤                  ╰──╮
+ 260 ┤                     ╰────────╮         ╭──────╮            ╭────────╮           ╭───────
+ 231 ┤                              ╰─────────╯      ╰────────────╯        ╰───────────╯
+
+# Delay should converge to 1000 / (50 * 5) = ~4 milliseconds.
+plot height=15 ops-per-fixup=50 fixups-per-sec=5 show-delay-millis
+----
+ Delay (ms) = 3.62 ms (avg), 3.86 ms (final)
+ 4.40 ┤                               ╭╮                    ╭─╮                  ╭─╮
+ 4.23 ┤                               │╰────╮             ╭─╯ ╰╮              ╭──╯ ╰─╮
+ 4.06 ┤                              ╭╯     ╰──╮      ╭───╯    ╰───╮        ╭─╯      ╰──╮
+ 3.89 ┤                            ╭─╯         ╰───╮ ╭╯            ╰───╮╭───╯           ╰───╮ ╭─
+ 3.73 ┤                       ╭────╯               ╰─╯                 ╰╯                   ╰─╯
+ 3.56 ┤                    ╭──╯
+ 3.39 ┤                  ╭─╯
+ 3.23 ┤                 ╭╯
+ 3.06 ┤                ╭╯
+ 2.89 ┤             ╭──╯
+ 2.72 ┤            ╭╯
+ 2.56 ┤          ╭─╯
+ 2.39 ┤        ╭─╯
+ 2.22 ┤     ╭──╯
+ 2.06 ┼╮ ╭──╯
+ 1.89 ┤╰─╯
+
+# Actual ops/sec should converge to ~250.
+plot height=15 ops-per-fixup=50 fixups-per-sec=5 show-actual-ops-per-sec
+----
+ Actual ops per second = 277.22 ops/sec (avg), 263.00 ops/sec (final)
+ 486 ┤        ╭─╮
+ 453 ┤       ╭╯ ╰─╮
+ 421 ┤       │    ╰──╮
+ 389 ┤      ╭╯       ╰─╮
+ 356 ┤      │          ╰──╮
+ 324 ┤     ╭╯             ╰──╮
+ 292 ┤    ╭╯                 ╰─────╮
+ 259 ┤    │                        ╰────────╮ ╭───────────────╮    ╭──────────────╮     ╭──────
+ 227 ┤   ╭╯                                 ╰─╯               ╰────╯              ╰─────╯
+ 194 ┤   │
+ 162 ┤  ╭╯
+ 130 ┤ ╭╯
+  97 ┤ │
+  65 ┤╭╯
+  32 ┤│
+   0 ┼╯
+
+# Fixup queue size rises above limit. Because it's not too far from the target
+# queue size, the pacer doesn't push to bring it down further towards the
+# target.
+plot height=15 seconds=60 ops-per-fixup=50 fixups-per-sec=5 show-queue-size
+----
+ Fixup queue size = 7.88 fixups (avg), 9 fixups (final)
+ 9.00 ┤       ╭╮      ╭╮              ╭╮      ╭╮         ╭╮         ╭╮      ╭╮                 ╭
+ 8.40 ┤       ││      ││              ││      ││         ││         ││      ││                 │
+ 7.80 ┤   ╭───╯╰──────╯╰─────────╮╭─╮╭╯╰────╮╭╯╰─────────╯╰─────────╯╰──────╯╰─────────────────╯
+ 7.20 ┤  ╭╯                      ╰╯ ╰╯      ╰╯
+ 6.60 ┤  │
+ 6.00 ┤ ╭╯
+ 5.40 ┤ │
+ 4.80 ┤ │
+ 4.20 ┤ │
+ 3.60 ┤ │
+ 3.00 ┤╭╯
+ 2.40 ┤│
+ 1.80 ┤│
+ 1.20 ┤│
+ 0.60 ┤│
+ 0.00 ┼╯

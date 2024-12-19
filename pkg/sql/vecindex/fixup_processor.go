@@ -34,8 +34,8 @@ const (
 
 // maxFixups specifies the maximum number of pending index fixups that can be
 // enqueued by foreground threads, waiting for processing. Hitting this limit
-// indicates the background goroutines have fallen far behind.
-const maxFixups = 100
+// indicates the background goroutine has fallen far behind.
+const maxFixups = 200
 
 // fixup describes an index fixup so that it can be enqueued for processing.
 // Each fixup type needs to have some subset of the fields defined.
