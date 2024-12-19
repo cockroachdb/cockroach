@@ -1817,7 +1817,7 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 	// NB: Node.Batch is called directly for "local" calls. We don't want to
 	// carry the associated log tags forward as doing so makes adding additional
 	// log tags more expensive and makes local calls differ from remote calls.
-	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
+	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtxPrealloc(ctx)
 
 	comparisonResult := n.getLocalityComparison(ctx, args.GatewayNodeID)
 	n.metrics.updateCrossLocalityMetricsOnBatchRequest(comparisonResult, int64(args.Size()))
