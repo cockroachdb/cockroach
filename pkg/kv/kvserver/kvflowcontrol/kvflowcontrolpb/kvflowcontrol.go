@@ -49,14 +49,6 @@ func (a AdmittedRaftLogEntries) SafeFormat(w redact.SafePrinter, _ rune) {
 		a.RangeID, a.StoreID, admissionpb.WorkPriority(a.AdmissionPriority), a.UpToRaftLogPosition)
 }
 
-func (a AdmittedResponseForRange) String() string {
-	return redact.StringWithoutMarkers(a)
-}
-
-func (a AdmittedResponseForRange) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("admitted-response (s%s r%s %s)", a.LeaderStoreID, a.RangeID, a.Msg.String())
-}
-
 func (a AdmittedState) String() string {
 	return redact.StringWithoutMarkers(a)
 }
@@ -71,5 +63,5 @@ func (a PiggybackedAdmittedState) String() string {
 
 func (a PiggybackedAdmittedState) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("[r%s,s%s,%d->%d] %s",
-		a.RangeID, a.ToStoreID, a.FromReplicaID, a.ToReplicaID, a.Admitted.String())
+		a.RangeID, a.ToStoreID, a.FromReplicaID, a.ToReplicaID, a.Admitted)
 }
