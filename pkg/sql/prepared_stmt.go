@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -54,9 +55,13 @@ type PreparedStatement struct {
 	// optimizer during prepare of a SQL statement.
 	BaseMemo *memo.Memo
 
+	BaseFingerPrint cat.DataSourcesFingerprint
+
 	// GenericMemo, if present, is a fully-optimized memo that can be executed
 	// as-is.
 	GenericMemo *memo.Memo
+
+	GenericFingerPrint cat.DataSourcesFingerprint
 
 	// IdealGenericPlan is true if GenericMemo is guaranteed to be optimal
 	// across all executions of the prepared statement. Ideal generic plans are
