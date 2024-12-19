@@ -848,10 +848,10 @@ func init() {
 				PSFunc: parseUnsupported,
 			},
 		}},
-		{Name: "/NamespaceTable", start: NamespaceTableMin, end: NamespaceTableMax, Entries: []DictEntry{
+		{Name: "/NamespaceTable", start: PrefixlessNamespaceTableMin, end: PrefixlessNamespaceTableMax, Entries: []DictEntry{
 			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: parseUnsupported},
 		}},
-		{Name: "/Table", start: TableDataMin, end: TableDataMax, Entries: []DictEntry{
+		{Name: "/Table", start: PrefixlessTableDataMin, end: PrefixlessTableDataMax, Entries: []DictEntry{
 			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse, sfFunc: formatTableKey},
 		}},
 		{Name: "/Tenant", start: TenantTableDataMin, end: TenantTableDataMax, Entries: []DictEntry{
