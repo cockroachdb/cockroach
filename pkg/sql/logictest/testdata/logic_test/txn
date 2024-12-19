@@ -1520,12 +1520,15 @@ SET SESSION AUTHORIZATION DEFAULT
 statement ok
 BEGIN
 
-# DECLARE and FETCH CURSOR should work in a read-only txn.
+# DECLARE, FETCH, and CLOSE CURSOR should work in a read-only txn.
 statement ok
 DECLARE foo CURSOR FOR SELECT 1
 
 statement ok
 FETCH 1 foo
+
+statement ok
+CLOSE foo
 
 statement ok
 COMMIT

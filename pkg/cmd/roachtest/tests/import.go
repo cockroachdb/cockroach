@@ -150,7 +150,7 @@ func registerImportTPCC(r registry.Registry) {
 			} else {
 				defer hc.Done()
 			}
-			cmd := fmt.Sprintf(workloadStr, 1)
+			cmd := fmt.Sprintf(workloadStr, warehouses)
 			// Tick once before starting the import, and once after to capture the
 			// total elapsed time. This is used by roachperf to compute and display
 			// the average MB/sec per node.

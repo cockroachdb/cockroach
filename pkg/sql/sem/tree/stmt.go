@@ -768,7 +768,7 @@ func (*CannedOptPlan) StatementTag() string { return "PREPARE AS OPT PLAN" }
 func (*CloseCursor) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*CloseCursor) StatementType() StatementType { return TypeDCL }
+func (*CloseCursor) StatementType() StatementType { return TypeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CloseCursor) StatementTag() string { return "CLOSE" }
