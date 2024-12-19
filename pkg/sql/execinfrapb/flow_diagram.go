@@ -584,6 +584,31 @@ func (s *LogicalReplicationWriterSpec) summary() (string, []string) {
 	return "LogicalReplicationWriter", annotations
 }
 
+func (s *LogicalReplicationOfflineScanSpec) summary() (string, []string) {
+	const spanLimit = 9
+
+	srcTableIDs := []string{}
+	for _, pair := range s.Rekey {
+		srcTableIDs = append(srcTableIDs, fmt.Sprintf("%d", pair.OldID))
+	}
+
+	annotations := []string{
+		fmt.Sprintf("Src Table IDs: %s", strings.Join(srcTableIDs, ",")),
+		fmt.Sprintf("Source node %s", s.PartitionSpec.SrcInstanceID),
+		"Spans:",
+	}
+
+	for i, span := range s.PartitionSpec.Spans {
+		if i == spanLimit {
+			annotations = append(annotations, fmt.Sprintf("and %d more spans", len(s.PartitionSpec.Spans)-spanLimit))
+			break
+		}
+		annotations = append(annotations, fmt.Sprintf("%v", span))
+	}
+
+	return "LogicalReplicationOfflineScanWriter", annotations
+}
+
 // summary implements the diagramCellType interface.
 func (s *StreamIngestionFrontierSpec) summary() (string, []string) {
 	annotations := []string{

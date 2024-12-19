@@ -370,6 +370,12 @@ func NewProcessor(
 		}
 		return NewLogicalReplicationWriterProcessor(ctx, flowCtx, processorID, *core.LogicalReplicationWriter, post)
 	}
+	if core.LogicalReplicationOfflineScan != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		return NewLogicalReplicationOfflineScanProcessor(ctx, flowCtx, processorID, *core.LogicalReplicationOfflineScan, post)
+	}
 	if core.HashGroupJoiner != nil {
 		if err := checkNumIn(inputs, 2); err != nil {
 			return nil, err
@@ -428,3 +434,5 @@ var NewTTLProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb
 var NewGenerativeSplitAndScatterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.GenerativeSplitAndScatterSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 var NewLogicalReplicationWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.LogicalReplicationWriterSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+var NewLogicalReplicationOfflineScanProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.LogicalReplicationOfflineScanSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
