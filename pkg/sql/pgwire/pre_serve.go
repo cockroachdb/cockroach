@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -496,6 +497,11 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 
 	// Finally, re-read the version/command from the client.
 	newVersion, *buf, serverErr = s.readVersion(newConn)
+	// Probe connection and determine additional restrictions.
+	serverErr = security.TLSCipherRestrict(newConn)
+	if serverErr != nil {
+		return
+	}
 	return
 }
 

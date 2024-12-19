@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cmux"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -68,7 +69,7 @@ func MakeHTTPServer(
 	ctx context.Context, stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler,
 ) HTTPServer {
 	var mu syncutil.Mutex
-	activeConns := make(map[net.Conn]struct{})
+	activeConns := make(map[net.Conn]http.ConnState)
 	server := HTTPServer{
 		Server: &http.Server{
 			Handler:   handler,
@@ -78,7 +79,15 @@ func MakeHTTPServer(
 				defer mu.Unlock()
 				switch state {
 				case http.StateNew:
-					activeConns[conn] = struct{}{}
+					activeConns[conn] = http.StateNew
+				case http.StateActive:
+					if activeConns[conn] == http.StateNew {
+						activeConns[conn] = http.StateActive
+						if security.TLSCipherRestrict(conn) != nil {
+							delete(activeConns, conn)
+							_ = conn.Close()
+						}
+					}
 				case http.StateClosed:
 					delete(activeConns, conn)
 				}
