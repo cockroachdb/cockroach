@@ -167,6 +167,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	}
 	var rowsDeletedSoFar atomic.Int64
 	var spansProccessedSoFar atomic.Int64
+	var spansProccessedSinceLastLog atomic.Int64
 
 	// Log progress approximately every 1% of spans processed.
 	updateEvery := max(1, processorSpanCount/100)
@@ -221,6 +222,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 					// add before returning err in case of partial success
 					rowsDeletedSoFar.Add(spanRowCount)
 					spansProccessedSoFar.Add(1)
+					spansProccessedSinceLastLog.Add(1)
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
@@ -257,8 +259,10 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				// If the span has no rows, we still need to increment the processed
 				// count.
 				spansProccessedSoFar.Add(1)
+				spansProccessedSinceLastLog.Add(1)
 			}
-			if spansProccessedSoFar.Load() >= updateEvery {
+			if spansProccessedSinceLastLog.Load() >= updateEvery {
+				spansProccessedSinceLastLog.Store(0)
 				if err := logProgress(); err != nil {
 					return err
 				}
