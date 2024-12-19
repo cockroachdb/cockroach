@@ -399,16 +399,16 @@ query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM system.jobs;
 ----
 scan jobs
- ├── columns: id:1 status:2 created:3 created_by_type:6 created_by_id:7 claim_session_id:8 claim_instance_id:9 num_runs:10 last_run:11 job_type:12
+ ├── columns: id:1 status:2 created:3 created_by_type:6 created_by_id:7 claim_session_id:8 claim_instance_id:9 num_runs:10 last_run:11 job_type:12 owner:13 description:14 error_msg:15 finished:16
  ├── partial index predicates
  │    └── jobs_run_stats_idx: filters
  │         └── status:2 IN ('cancel-requested', 'pause-requested', 'pending', 'reverting', 'running') [outer=(2), constraints=(/2: [/'cancel-requested' - /'cancel-requested'] [/'pause-requested' - /'pause-requested'] [/'pending' - /'pending'] [/'reverting' - /'reverting'] [/'running' - /'running']; tight)]
  ├── stats: [rows=19]
- ├── cost: 60.65
+ ├── cost: 65.29
  ├── key: (1)
- ├── fd: (1)-->(2,3,6-12)
+ ├── fd: (1)-->(2,3,6-16)
  ├── distribution: test
- └── prune: (1-3,6-12)
+ └── prune: (1-3,6-16)
 
 # Regression test for #125963. Ensure that we get reasonable stats estimates if
 # histograms are empty. (The test is here since the bug in #125963 doesn't

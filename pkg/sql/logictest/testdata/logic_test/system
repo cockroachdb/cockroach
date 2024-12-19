@@ -109,21 +109,26 @@ key          STRING     false  NULL  ·  {primary}  false
 value        BYTES      true   NULL  ·  {primary}  false
 lastUpdated  TIMESTAMP  false  NULL  ·  {primary}  false
 
+skipif config local-mixed-24.3
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.jobs
 ----
-id                 INT8       false  unique_rowid()  ·  {jobs_created_by_type_created_by_id_idx,jobs_job_type_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}  false
-status             STRING     false  NULL            ·  {jobs_created_by_type_created_by_id_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}                    false
-created            TIMESTAMP  false  now()           ·  {jobs_run_stats_idx,jobs_status_created_idx,primary}                                                           false
-dropped_payload    BYTES      true   NULL            ·  {primary}                                                                                                      true
-dropped_progress   BYTES      true   NULL            ·  {primary}                                                                                                      true
-created_by_type    STRING     true   NULL            ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
-created_by_id      INT8       true   NULL            ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
-claim_session_id   BYTES      true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
-claim_instance_id  INT8       true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
-num_runs           INT8       true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
-last_run           TIMESTAMP  true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
-job_type           STRING     true   NULL            ·  {jobs_job_type_idx,primary}                                                                                    false
+id                 INT8         false  unique_rowid()  ·  {jobs_created_by_type_created_by_id_idx,jobs_job_type_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}  false
+status             STRING       false  NULL            ·  {jobs_created_by_type_created_by_id_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}                    false
+created            TIMESTAMP    false  now()           ·  {jobs_run_stats_idx,jobs_status_created_idx,primary}                                                           false
+dropped_payload    BYTES        true   NULL            ·  {primary}                                                                                                      true
+dropped_progress   BYTES        true   NULL            ·  {primary}                                                                                                      true
+created_by_type    STRING       true   NULL            ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
+created_by_id      INT8         true   NULL            ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
+claim_session_id   BYTES        true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+claim_instance_id  INT8         true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+num_runs           INT8         true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+last_run           TIMESTAMP    true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+job_type           STRING       true   NULL            ·  {jobs_job_type_idx,primary}                                                                                    false
+owner              STRING       true   NULL            ·  {primary}                                                                                                      false
+description        STRING       true   NULL            ·  {primary}                                                                                                      false
+error_msg          STRING       true   NULL            ·  {primary}                                                                                                      false
+finished           TIMESTAMPTZ  true   NULL            ·  {primary}                                                                                                      false
 
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.settings
