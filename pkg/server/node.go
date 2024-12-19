@@ -790,7 +790,7 @@ func (n *Node) start(
 		// sequence ID generator stored in a system key.
 		n.additionalStoreInitCh = make(chan struct{})
 		if err := n.stopper.RunAsyncTask(workersCtx, "initialize-additional-stores", func(ctx context.Context) {
-			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines, n.stopper); err != nil {
+			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines); err != nil {
 				log.Fatalf(ctx, "while initializing additional stores: %v", err)
 			}
 			close(n.additionalStoreInitCh)
@@ -989,13 +989,46 @@ func (n *Node) validateStores(ctx context.Context) error {
 	})
 }
 
+// AddStore adds a store to a running node. The store will be started and
+// shutdown when the nodes stopper is stopped.
+func (n *Node) AddStore(ctx context.Context, eng storage.Engine, cfg kvserver.StoreConfig) error {
+	if n.clusterID.Get() == uuid.Nil {
+		return errors.New("missing cluster ID during initialization of additional store")
+	}
+	// Initialize all waiting stores by allocating a new store id for each
+	// and invoking kvserver.InitEngine() to persist it. We'll then
+	// construct a new store out of the initialized engine and attach it to
+	// ourselves.
+	// TODO: What is the best way to get an id?
+	storeID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, 1, n.storeCfg.DB)
+	if err != nil {
+		return errors.Wrap(err, "error allocating store ids")
+	}
+	sIdent := roachpb.StoreIdent{
+		ClusterID: n.clusterID.Get(),
+		NodeID:    n.Descriptor.NodeID,
+		StoreID:   storeID,
+	}
+	if err := kvstorage.InitEngine(ctx, eng, sIdent); err != nil {
+		return err
+	}
+
+	s := kvserver.NewStore(ctx, n.storeCfg, eng, &n.Descriptor)
+	if err := s.Start(ctx, n.stopper); err != nil {
+		return err
+	}
+
+	n.addStore(ctx, s)
+	log.Infof(ctx, "initialized new store after startup s%s", s.StoreID())
+
+	return nil
+}
+
 // initializeAdditionalStores initializes the given set of engines once the
 // cluster and node ID have been established for this node. Store IDs are
 // allocated via a sequence id generator stored at a system key per node. The
 // new stores are added to n.stores.
-func (n *Node) initializeAdditionalStores(
-	ctx context.Context, engines []storage.Engine, stopper *stop.Stopper,
-) error {
+func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage.Engine) error {
 	if n.clusterID.Get() == uuid.Nil {
 		return errors.New("missing cluster ID during initialization of additional store")
 	}
@@ -1022,7 +1055,7 @@ func (n *Node) initializeAdditionalStores(
 			}
 
 			s := kvserver.NewStore(ctx, n.storeCfg, eng, &n.Descriptor)
-			if err := s.Start(ctx, stopper); err != nil {
+			if err := s.Start(ctx, n.stopper); err != nil {
 				return err
 			}
 
