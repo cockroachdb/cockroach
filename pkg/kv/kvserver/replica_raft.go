@@ -91,7 +91,7 @@ func (r *Replica) evalAndPropose(
 	tok TrackedRequestToken,
 ) (
 	chan proposalResult,
-	func(),
+	abandonToken,
 	kvserverbase.CmdIDKey,
 	*kvadmission.StoreWriteBytes,
 	*kvpb.Error,
@@ -138,7 +138,7 @@ func (r *Replica) evalAndPropose(
 		proposal.ec = makeUnreplicatedEndCmds(r, g, *st)
 		pr := makeProposalResult(proposal.Local.Reply, pErr, intents, endTxns)
 		proposal.finishApplication(ctx, pr)
-		return proposalCh, func() {}, "", nil, nil
+		return proposalCh, nil, "", nil, nil
 	}
 
 	// Make it a truly replicated proposal. We measure the replication latency
@@ -311,35 +311,51 @@ func (r *Replica) evalAndPropose(
 	// invoked when the command is applied. There are a handful of cases where
 	// the command may not be applied (or even processed): the process crashes
 	// or the local replica is removed from the range.
-	abandon := func() {
-		// The proposal may or may not be in the Replica's proposals map.
-		// Instead of trying to look it up, simply modify the captured object
-		// directly. The raftMu must be locked to modify the context of a
-		// proposal because as soon as we propose a command to Raft, ownership
-		// passes to the "below Raft" machinery.
-		//
-		// See the comment on ProposalData.
-		r.raftMu.Lock()
-		defer r.raftMu.Unlock()
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		// When the caller abandons the request, it Finishes its trace. By that
-		// time, multiple reproposals can have occurred, and still running and
-		// attempting to post tracing updates through the context. This can cause a
-		// "use after Finish" race in the span. All the (re-)proposal contexts have
-		// been unbound except for the latest one. Unbind it to eliminate the race.
-		//
-		// See https://github.com/cockroachdb/cockroach/issues/107521
-		last := proposal
-		if p := proposal.lastReproposal; p != nil {
-			last = p
-		}
-		// TODO(radu): Should this context be created via tracer.ForkSpan?
-		// We'd need to make sure the span is finished eventually.
-		ctx := r.AnnotateCtx(context.TODO())
-		last.ctx.Store(&ctx)
+
+	return proposalCh, abandonToken(proposal), idKey, writeBytes, nil
+}
+
+// abandonToken is an interface used for allowing callers to "abandon" an
+// in-flight proposal. The underlying *ProposalData (the only implementor of
+// this interface) must not be touched directly.
+type abandonToken interface {
+	isAbandonToken()
+}
+
+// abandon abandons the proposal associated with the abandon token.
+func (r *Replica) abandon(tok abandonToken) {
+	if tok == nil {
+		// A nil abandonToken is a no-op. This occurs when a write command ends up
+		// not needing to make any mutation to the state machine.
+		return
 	}
-	return proposalCh, abandon, idKey, writeBytes, nil
+	proposal := tok.(*ProposalData)
+	// The proposal may or may not be in the Replica's proposals map.
+	// Instead of trying to look it up, simply modify the captured object
+	// directly. The raftMu must be locked to modify the context of a
+	// proposal because as soon as we propose a command to Raft, ownership
+	// passes to the "below Raft" machinery.
+	//
+	// See the comment on ProposalData.
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// When the caller abandons the request, it Finishes its trace. By that
+	// time, multiple reproposals can have occurred, and still running and
+	// attempting to post tracing updates through the context. This can cause a
+	// "use after Finish" race in the span. All the (re-)proposal contexts have
+	// been unbound except for the latest one. Unbind it to eliminate the race.
+	//
+	// See https://github.com/cockroachdb/cockroach/issues/107521
+	last := proposal
+	if p := proposal.lastReproposal; p != nil {
+		last = p
+	}
+	// TODO(radu): Should this context be created via tracer.ForkSpan?
+	// We'd need to make sure the span is finished eventually.
+	ctx := r.AnnotateCtx(context.TODO())
+	last.ctx.Store(&ctx)
 }
 
 func (r *Replica) encodePriorityForRACv2() bool {
