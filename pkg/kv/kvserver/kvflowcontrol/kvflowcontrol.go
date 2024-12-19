@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/redact"
-	"github.com/dustin/go-humanize"
 )
 
 // Enabled determines whether we use flow control for replication traffic in KV.
@@ -70,12 +70,12 @@ func (m ModeT) String() string {
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (m ModeT) SafeFormat(p redact.SafePrinter, verb rune) {
+func (m ModeT) SafeFormat(p redact.SafePrinter, _ rune) {
 	if s, ok := modeDict[m]; ok {
-		p.Print(s)
+		p.SafeString(redact.SafeString(s))
 		return
 	}
-	p.Print("unknown-mode")
+	p.SafeString("unknown-mode")
 }
 
 // RegularTokensPerStream determines the flow tokens available for regular work
@@ -423,13 +423,12 @@ func (t Tokens) String() string {
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (t Tokens) SafeFormat(p redact.SafePrinter, verb rune) {
-	sign := "+"
+func (t Tokens) SafeFormat(p redact.SafePrinter, _ rune) {
 	if t < 0 {
-		sign = "-"
-		t = -t
+		p.SafeString(humanizeutil.IBytes(int64(t)))
+		return
 	}
-	p.Printf("%s%s", sign, humanize.IBytes(uint64(t)))
+	p.Printf("+%s", humanizeutil.IBytes(int64(t)))
 }
 
 func (s Stream) String() string {
@@ -437,12 +436,12 @@ func (s Stream) String() string {
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (s Stream) SafeFormat(p redact.SafePrinter, verb rune) {
+func (s Stream) SafeFormat(p redact.SafePrinter, _ rune) {
 	tenantSt := s.TenantID.String()
 	if s.TenantID.IsSystem() {
 		tenantSt = "1"
 	}
-	p.Printf("t%s/s%s", tenantSt, s.StoreID.String())
+	p.Printf("t%s/s%s", redact.SafeString(tenantSt), s.StoreID)
 }
 
 type raftAdmissionMetaKey struct{}
