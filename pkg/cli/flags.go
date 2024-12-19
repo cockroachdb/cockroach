@@ -555,6 +555,9 @@ func init() {
 		// Node cert distinguished name
 		cliflagcfg.StringFlag(f, &startCtx.serverNodeCertDN, cliflags.NodeCertDistinguishedName)
 
+		// TLS Cipher Suites configured
+		cliflagcfg.StringSliceFlag(f, &startCtx.serverTLSCipherSuites, cliflags.TLSCipherSuites)
+
 		// Cluster name verification.
 		cliflagcfg.VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		cliflagcfg.BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
@@ -1159,6 +1162,12 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		return err
 	}
 	if err := security.SetNodeSubject(startCtx.serverNodeCertDN); err != nil {
+		return err
+	}
+	// Currently we don't handle the case where we are setting the --insecure flag
+	// as well as providing the --tls-cipher-suites, we should probably error out
+	// if both are set, issue: #144935.
+	if err := security.SetTLSCipherSuitesConfigured(startCtx.serverTLSCipherSuites); err != nil {
 		return err
 	}
 	serverCfg.User = username.NodeUserName()
