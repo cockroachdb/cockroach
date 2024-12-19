@@ -734,9 +734,7 @@ func remapAndFilterRelevantStatistics(
 						if _, ok := descriptorRewrites[typDescID]; !ok {
 							continue
 						}
-						if err := rewrite.RewriteIDsInTypesT(typ, descriptorRewrites); err != nil {
-							continue
-						}
+						rewrite.RewriteIDsInTypesT(typ, descriptorRewrites)
 					}
 				}
 				relevantTableStatistics = append(relevantTableStatistics, stat)
