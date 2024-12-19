@@ -276,11 +276,18 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	})
 
 	t.Run("foreign keys", func(t *testing.T) {
+		// All tables should be included in the stmt bundle, regardless of which
+		// one we query because all of them are considered "related" (even
+		// though we don't specify ON DELETE and ON UPDATE actions).
+		tableNames := []string{"parent", "child1", "child2", "grandchild1", "grandchild2"}
 		r.Exec(t, "CREATE TABLE parent (pk INT PRIMARY KEY, v INT);")
-		r.Exec(t, "CREATE TABLE child (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE child1 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE child2 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE grandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES child1(pk));")
+		r.Exec(t, "CREATE TABLE grandchild2 (pk INT PRIMARY KEY, fk INT REFERENCES child2(pk));")
 		contentCheck := func(name, contents string) error {
 			if name == "schema.sql" {
-				for _, tableName := range []string{"parent", "child"} {
+				for _, tableName := range tableNames {
 					if regexp.MustCompile("CREATE TABLE defaultdb.public."+tableName).FindString(contents) == "" {
 						return errors.Newf(
 							"could not find 'CREATE TABLE defaultdb.public.%s' in schema.sql:\n%s", tableName, contents)
@@ -289,12 +296,12 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			}
 			return nil
 		}
-		for _, tableName := range []string{"parent", "child"} {
+		for _, tableName := range tableNames {
 			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM "+tableName)
 			checkBundle(
 				t, fmt.Sprint(rows), "child", contentCheck, false, /* expectErrors */
-				base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child.sql",
-				"distsql.html vec.txt vec-v.txt",
+				base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child1.sql", "stats-defaultdb.public.child2.sql",
+				"stats-defaultdb.public.grandchild1.sql", "stats-defaultdb.public.grandchild2.sql", "distsql.html vec.txt vec-v.txt",
 			)
 		}
 	})

@@ -1007,49 +1007,43 @@ func (md *Metadata) getAllReferenceTables(
 	var tableSet intsets.Fast
 	var tableList []cat.DataSource
 	var addForeignKeyReferencedTables func(tab cat.Table)
+	var addForeignKeyReferencingTables func(tab cat.Table)
+	// handleRelatedTables is a helper function that processes the given table
+	// if it hasn't been handled yet by adding all referenced and referencing
+	// table of the given one, including via transient (recursive) FK
+	// relationships.
+	handleRelatedTables := func(tabID cat.StableID) {
+		if !tableSet.Contains(int(tabID)) {
+			tableSet.Add(int(tabID))
+			ds, _, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, tabID)
+			if err != nil {
+				// This is a best-effort attempt to get all the tables, so don't
+				// error.
+				return
+			}
+			refTab, ok := ds.(cat.Table)
+			if !ok {
+				// This is a best-effort attempt to get all the tables, so don't
+				// error.
+				return
+			}
+			// We want to include all tables that we reference before adding
+			// ourselves, followed by all tables that reference us.
+			addForeignKeyReferencedTables(refTab)
+			tableList = append(tableList, ds)
+			addForeignKeyReferencingTables(refTab)
+		}
+	}
 	addForeignKeyReferencedTables = func(tab cat.Table) {
 		for i := 0; i < tab.OutboundForeignKeyCount(); i++ {
 			tabID := tab.OutboundForeignKey(i).ReferencedTableID()
-			if !tableSet.Contains(int(tabID)) {
-				tableSet.Add(int(tabID))
-				ds, _, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, tabID)
-				if err != nil {
-					// This is a best-effort attempt to get all the tables, so don't error.
-					continue
-				}
-				refTab, ok := ds.(cat.Table)
-				if !ok {
-					// This is a best-effort attempt to get all the tables, so don't error.
-					continue
-				}
-				// We want to include all tables that we reference before adding
-				// ourselves.
-				addForeignKeyReferencedTables(refTab)
-				tableList = append(tableList, ds)
-			}
+			handleRelatedTables(tabID)
 		}
 	}
-	var addForeignKeyReferencingTables func(tab cat.Table)
 	addForeignKeyReferencingTables = func(tab cat.Table) {
 		for i := 0; i < tab.InboundForeignKeyCount(); i++ {
 			tabID := tab.InboundForeignKey(i).OriginTableID()
-			if !tableSet.Contains(int(tabID)) {
-				tableSet.Add(int(tabID))
-				ds, _, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, tabID)
-				if err != nil {
-					// This is a best-effort attempt to get all the tables, so don't error.
-					continue
-				}
-				refTab, ok := ds.(cat.Table)
-				if !ok {
-					// This is a best-effort attempt to get all the tables, so don't error.
-					continue
-				}
-				// We want to include ourselves before all tables that reference
-				// us.
-				tableList = append(tableList, ds)
-				addForeignKeyReferencingTables(refTab)
-			}
+			handleRelatedTables(tabID)
 		}
 	}
 	for i := range md.tables {
