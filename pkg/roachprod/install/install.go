@@ -115,7 +115,9 @@ var installLocalCmds = map[string]map[string]*exec.Cmd{
 	},
 }
 
-var sideEyeSecretCmd = exec.Command("gcloud", "secrets", "versions", "access", "latest", "--secret", "side-eye-key")
+var sideEyeSecretCmd = exec.Command("gcloud",
+	"--project", "cockroach-ephemeral",
+	"secrets", "versions", "access", "latest", "--secret", "side-eye-key")
 
 // SortedCmds TODO(peter): document
 func SortedCmds() []string {
