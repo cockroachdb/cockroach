@@ -159,7 +159,7 @@ func TestHotRangesStats(t *testing.T) {
 			_, ok := rangeIDs[l.RangeID]
 			if ok {
 				t.Fatalf(`Logged ranges should be unique per node for this test.
-found range on node %d and node %d: %s %s %s %s %d`, i, l.LeaseholderNodeID, l.DatabaseName, l.SchemaName, l.TableName, l.IndexName, l.RangeID)
+found range on node %d and node %d: %s %s %s %s %d`, i, l.LeaseholderNodeID, l.Databases, l.SchemaName, l.Tables, l.Indexes, l.RangeID)
 			}
 			rangeIDs[l.RangeID] = struct{}{}
 		}
