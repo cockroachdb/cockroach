@@ -350,7 +350,7 @@ func scramAuthenticator(
 			// SASLResponse messages contain just the SASL payload.
 			//
 			rb := pgwirebase.ReadBuffer{Msg: resp}
-			reqMethod, err := rb.GetString()
+			reqMethod, err := rb.GetUnsafeString()
 			if err != nil {
 				c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 				return err

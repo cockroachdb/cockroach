@@ -54,7 +54,9 @@ func parseClientProvidedSessionParameters(
 	hasTenantSelectOption := false
 	for {
 		// Read a key-value pair from the client.
-		key, err := buf.GetString()
+		// Note: GetSafeString is used since the key/value will live well past the
+		// life of the message.
+		key, err := buf.GetSafeString()
 		if err != nil {
 			return args, pgerror.Wrap(
 				err, pgcode.ProtocolViolation,
@@ -65,7 +67,7 @@ func parseClientProvidedSessionParameters(
 			// End of parameter list.
 			break
 		}
-		value, err := buf.GetString()
+		value, err := buf.GetSafeString()
 		if err != nil {
 			return args, pgerror.Wrapf(
 				err, pgcode.ProtocolViolation,
@@ -75,10 +77,6 @@ func parseClientProvidedSessionParameters(
 
 		// Case-fold for the key for easier comparison.
 		key = strings.ToLower(key)
-		// Intentionally clone the string from above, so that the ReaderBuffer life
-		// is limited. Otherwise, the buffer will remain allocated for the life of
-		// the connection.
-		value = strings.Clone(value)
 
 		// Load the parameter.
 		switch key {

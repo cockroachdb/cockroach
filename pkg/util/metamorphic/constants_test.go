@@ -16,3 +16,14 @@ import (
 func TestMetamorphicEligible(t *testing.T) {
 	require.True(t, metamorphicEligible())
 }
+
+// TestMetamorphicFromOverride checks that overrides are used.
+func TestMetamorphicFromOverride(t *testing.T) {
+	setOverridesFromString("val2=7")
+	var (
+		_ = ConstantWithTestRange("val1", 1, 1, 100)
+		v = ConstantWithTestRange("val2", 2, 1, 100)
+		_ = ConstantWithTestRange("val3", 3, 1, 100)
+	)
+	require.Equal(t, 7, v)
+}
