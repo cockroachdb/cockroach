@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc/credentials"
 )
 
 type lazyHTTPClient struct {
@@ -324,4 +325,35 @@ func certAddrs(cert *x509.Certificate) string {
 		strings.Join(addrs, ","),
 		strings.Join(cert.DNSNames, ","),
 		cert.Subject.CommonName)
+}
+
+// TLSCipherRestrictCred allows to set transport credentials for grpc
+// connections. It accepts to a function which can be used to intercept the
+// connection and validate requirements for TLS like ciphers used.
+type TLSCipherRestrictCred struct {
+	credentials.TransportCredentials
+	fn func(conn net.Conn) error
+}
+
+// ServerHandshake performs TLS handshake for the connection
+func (cred *TLSCipherRestrictCred) ServerHandshake(
+	conn net.Conn,
+) (c net.Conn, authInfo credentials.AuthInfo, err error) {
+	if c, authInfo, err = cred.TransportCredentials.ServerHandshake(conn); err == nil {
+		if cred.fn != nil {
+			if err := cred.fn(conn); err != nil {
+				c.Close()
+				return nil, nil, err
+			}
+		}
+	}
+	return
+}
+
+// NewTLSCipherRestrictCred initializes a new TLSCipherRestrictCred credentials
+func NewTLSCipherRestrictCred(config *tls.Config) *TLSCipherRestrictCred {
+	return &TLSCipherRestrictCred{
+		TransportCredentials: credentials.NewTLS(config),
+		fn:                   security.TLSCipherRestrict,
+	}
 }
