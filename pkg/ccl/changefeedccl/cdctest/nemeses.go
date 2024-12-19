@@ -19,24 +19,70 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type ChangefeedOption struct {
+	FullTableName bool
+	Format        string
+	KeyInValue    bool
+}
+
+func newChangefeedOption() ChangefeedOption {
+	cfo := ChangefeedOption{
+		FullTableName: false,
+		KeyInValue:    false, //rand.Intn(2) < 1,
+		Format:        "parquet",
+	}
+
+	// TODO: work out why parquet and key_in_value are not compatible here
+	// error is "this sink is incompatible with format=parquet"
+	// but before we were apparenly applying this parquet format without issue
+	//if !cfo.KeyInValue && rand.Intn(2) < 1 {
+	//	cfo.Format = "parquet"
+	//}
+
+	return cfo
+}
+
+func (co ChangefeedOption) String() string {
+	return fmt.Sprintf("full_table_name=%t,key_in_value=%t,format=%s",
+		co.FullTableName, co.KeyInValue, co.Format)
+}
+
+func (cfo ChangefeedOption) OptionString() string {
+	options := ""
+	if cfo.Format == "parquet" {
+		options = ", format=parquet"
+	}
+	if cfo.FullTableName {
+		options = options + ", full_table_name"
+	}
+	if cfo.KeyInValue {
+		options = options + ", key_in_value"
+	}
+	return options
+}
+
 type NemesesOption struct {
 	EnableFpValidator bool
 	EnableSQLSmith    bool
+	ChangefeedOption  ChangefeedOption
 }
 
 var NemesesOptions = []NemesesOption{
 	{
 		EnableFpValidator: true,
 		EnableSQLSmith:    false,
+		ChangefeedOption:  newChangefeedOption(),
 	},
 	{
 		EnableFpValidator: false,
 		EnableSQLSmith:    true,
+		ChangefeedOption:  newChangefeedOption(),
 	},
 }
 
 func (no NemesesOption) String() string {
-	return fmt.Sprintf("fp_validator=%t,sql_smith=%t", no.EnableFpValidator, no.EnableSQLSmith)
+	return fmt.Sprintf("fp_validator=%t,sql_smith=%t",
+		no.EnableFpValidator, no.EnableSQLSmith)
 }
 
 // RunNemesis runs a jepsen-style validation of whether a changefeed meets our
@@ -199,11 +245,12 @@ func RunNemesis(
 		}
 	}
 
-	withFormatParquet := ""
-	if isCloudstorage && rand.Intn(2) < 1 {
-		withFormatParquet = ", format=parquet"
-	}
-	foo, err := f.Feed(fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff %s`, withFormatParquet))
+	cfo := nOp.ChangefeedOption
+	fmt.Println("running with cfo", cfo.String())
+	foo, err := f.Feed(fmt.Sprintf(
+		`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff%s`,
+		cfo.OptionString(),
+	))
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +265,8 @@ func RunNemesis(
 	if _, err := db.Exec(createFprintStmtBuf.String()); err != nil {
 		return nil, err
 	}
-	baV, err := NewBeforeAfterValidator(db, `foo`)
+
+	baV, err := NewBeforeAfterValidator(db, `foo`, nOp.ChangefeedOption)
 	if err != nil {
 		return nil, err
 	}
@@ -817,7 +865,7 @@ func noteFeedMessage(a fsm.Args) error {
 			}
 			ns.availableRows--
 			log.Infof(a.Ctx, "%s->%s", m.Key, m.Value)
-			return ns.v.NoteRow(m.Partition, string(m.Key), string(m.Value), ts)
+			return ns.v.NoteRow(m.Partition, string(m.Key), string(m.Value), ts, m.Topic)
 		}
 	}
 }
