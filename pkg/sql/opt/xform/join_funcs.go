@@ -806,7 +806,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		invertedJoin := memo.InvertedJoinExpr{Input: input}
-		numPrefixCols := index.NonInvertedPrefixColumnCount()
+		numPrefixCols := index.PrefixColumnCount()
 
 		var allFilters memo.FiltersExpr
 		if numPrefixCols > 0 {
@@ -926,7 +926,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		// doesn't actually, and it is only valid to extract the primary key
 		// columns and non-inverted prefix columns from it.
 		indexCols = pkCols.ToSet()
-		for i, n := 0, index.NonInvertedPrefixColumnCount(); i < n; i++ {
+		for i, n := 0, index.PrefixColumnCount(); i < n; i++ {
 			prefixCol := scanPrivate.Table.IndexColumnID(index, i)
 			indexCols.Add(prefixCol)
 		}
@@ -1049,7 +1049,7 @@ func (c *CustomFuncs) mapInvertedJoin(
 	// columns and non-inverted prefix columns from it.
 	newPkCols := c.getPkCols(newTabID)
 	newIndexCols := newPkCols.ToSet()
-	for i, n := 0, index.NonInvertedPrefixColumnCount(); i < n; i++ {
+	for i, n := 0, index.PrefixColumnCount(); i < n; i++ {
 		prefixCol := newTabID.IndexColumnID(index, i)
 		newIndexCols.Add(prefixCol)
 	}

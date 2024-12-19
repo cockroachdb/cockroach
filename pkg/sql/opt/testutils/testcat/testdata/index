@@ -198,3 +198,47 @@ TABLE t_invisible
  └── INDEX idx_v_invisible NOT VISIBLE
       ├── v int
       └── k int not null
+
+exec-ddl
+CREATE TABLE t_vec (k INT PRIMARY KEY, v VECTOR(1024), VECTOR INDEX (v))
+----
+
+exec-ddl
+SHOW CREATE t_vec
+----
+TABLE t_vec
+ ├── k int not null
+ ├── v vector
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t_vec_pkey
+ │    └── k int not null
+ └── VECTOR INDEX t_vec_v_idx
+      ├── v vector
+      └── k int not null
+
+exec-ddl
+DROP TABLE t_vec
+----
+
+exec-ddl
+CREATE TABLE t (k INT PRIMARY KEY, v INT)
+----
+
+exec-ddl
+CREATE VECTOR INDEX ON t (v)
+----
+
+exec-ddl
+SHOW CREATE t
+----
+TABLE t
+ ├── k int not null
+ ├── v int
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── PRIMARY INDEX t_pkey
+ │    └── k int not null
+ └── VECTOR INDEX t_v_idx
+      ├── v int
+      └── k int not null
