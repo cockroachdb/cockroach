@@ -1703,7 +1703,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 			ppInfo.resumableFlow.cleanup.isComplete = true
 		}
 		if retErr != nil && planCtx.getPortalPauseInfo() != nil {
-			planCtx.getPortalPauseInfo().resumableFlow.cleanup.run()
+			planCtx.getPortalPauseInfo().resumableFlow.cleanup.run(ctx)
 		}
 	}()
 	if len(planner.curPlan.subqueryPlans) != 0 {
@@ -1747,7 +1747,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		}
 		if !p.resumableFlow.cleanup.isComplete {
 			p.resumableFlow.cleanup.appendFunc(namedFunc{
-				fName: "cleanup flow", f: func() {
+				fName: "cleanup flow", f: func(ctx context.Context) {
 					p.resumableFlow.flow.Cleanup(ctx)
 				},
 			})
