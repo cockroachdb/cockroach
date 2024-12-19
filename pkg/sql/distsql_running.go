@@ -1746,10 +1746,8 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 			}
 		}
 		if !p.resumableFlow.cleanup.isComplete {
-			p.resumableFlow.cleanup.appendFunc(namedFunc{
-				fName: "cleanup flow", f: func(ctx context.Context) {
-					p.resumableFlow.flow.Cleanup(ctx)
-				},
+			p.resumableFlow.cleanup.appendFunc(func(ctx context.Context) {
+				p.resumableFlow.flow.Cleanup(ctx)
 			})
 		}
 	}
