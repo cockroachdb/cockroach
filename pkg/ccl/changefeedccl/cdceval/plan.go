@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -162,6 +163,7 @@ func withPlanner(
 	fn func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error,
 ) error {
 	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		log.Infof(ctx, "initializing planner with schemaTS=%s", schemaTS)
 		if err := txn.KV().SetFixedTimestamp(ctx, schemaTS); err != nil {
 			return err
 		}
