@@ -24,7 +24,7 @@ func TestPreparedTransactionsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, 25, 1)
+	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, clusterversion.V25_1)
 
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
