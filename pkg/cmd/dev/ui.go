@@ -312,6 +312,10 @@ Replaces 'make ui-watch'.`,
 			}
 			if !isOss {
 				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib")
+				args = append(args, "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client_files")
+				args = append(args, "//pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client")
+				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl_files")
+				args = append(args, "//pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl")
 			}
 			logCommand("bazel", args...)
 			err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
