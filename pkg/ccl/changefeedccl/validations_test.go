@@ -75,7 +75,7 @@ func TestCatchupScanOrdering(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					err = v.NoteRow(m.Partition, string(m.Key), string(m.Value), updated)
+					err = v.NoteRow(m.Partition, string(m.Key), string(m.Value), updated, m.Topic)
 					if err != nil {
 						t.Fatal(err)
 					}
