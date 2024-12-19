@@ -927,6 +927,17 @@ provided for node user if this flag is set.
 `,
 	}
 
+	TLSCipherSuites = FlagInfo{
+		Name: "tls-cipher-suites",
+		Description: `
+A string of comma separated list of cipher suites to be used for all incoming
+TLS connections to the node. For TLS 1.2, this should strictly be a subset of
+suites defined in security/tls_ciphersuites.go as RecommendedCipherSuites or
+OldCipherSuites. For TLS 1.3, this should be configured to a subset of ciphers
+in crypto/tls/cipher_suites.go, e.g. TLS_AES_256_GCM_SHA384.
+`,
+	}
+
 	CAKey = FlagInfo{
 		Name:        "ca-key",
 		EnvVar:      "COCKROACH_CA_KEY",

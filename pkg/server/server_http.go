@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"net"
 	"net/http"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -330,7 +332,7 @@ func startHTTPService(
 			return err
 		}
 
-		httpLn = tls.NewListener(tlsL, uiTLSConfig)
+		httpLn = newTLSRestrictLn(tlsL, uiTLSConfig)
 	}
 
 	// The connManager is responsible for tearing down the net.Conn
@@ -344,6 +346,46 @@ func startHTTPService(
 	return stopper.RunAsyncTask(workersCtx, "server-http", func(context.Context) {
 		netutil.FatalIfUnexpected(connManager.Serve(httpLn))
 	})
+}
+
+type tlsRestrictLn struct {
+	net.Listener
+	tlsConfig *tls.Config
+	fn        func(conn net.Conn) error
+}
+
+func (l tlsRestrictLn) Accept() (c net.Conn, err error) {
+	if c, err = l.Listener.Accept(); err == nil {
+		if l.fn != nil {
+			if err = l.fn(c); err != nil {
+				_ = c.Close()
+				return // returning the error here causes the server to crash.
+			}
+		}
+	}
+	return
+}
+
+func newTLSRestrictLn(ln net.Listener, config *tls.Config) tlsRestrictLn {
+	return tlsRestrictLn{
+		Listener: tls.NewListener(ln, config),
+		fn:       httpTLSRestrictFn,
+	}
+}
+
+func httpTLSRestrictFn(conn net.Conn) (err error) {
+	tlsConn, ok := conn.(*tls.Conn)
+	if !ok {
+		return nil
+	}
+
+	if !tlsConn.ConnectionState().HandshakeComplete {
+		if err = tlsConn.Handshake(); err != nil {
+			return
+		}
+	}
+	err = security.TLSCipherRestrict(conn)
+	return
 }
 
 // baseHandler is the top-level HTTP handler for all HTTP traffic, before
