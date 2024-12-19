@@ -904,8 +904,8 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 func (u *sqlSymUnion) showLogicalReplicationJobsOpts() tree.ShowLogicalReplicationJobsOptions {
 		return u.val.(tree.ShowLogicalReplicationJobsOptions)
 }
-func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
-    return u.val.(tree.ShowCreateFormatOption)
+func (u *sqlSymUnion) showCreateFormatOptions() tree.ShowCreateFormatOptions {
+    return u.val.(tree.ShowCreateFormatOptions)
 }
 func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
     return u.val.(*tree.BeginTransaction)
@@ -988,7 +988,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_INVERTED_INDEX
 %token <str> FORCE_NOT_NULL FORCE_NULL FORCE_QUOTE FORCE_ZIGZAG
-%token <str> FOREIGN FORMAT FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
+%token <str> FOREIGN FORMAT FORWARD FREEZE FROM FULL FULLY_QUALIFIED FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
@@ -1341,7 +1341,7 @@ func (u *sqlSymUnion) triggerForEach() tree.TriggerForEach {
 %type <tree.Statement> show_constraints_stmt
 %type <tree.Statement> show_triggers_stmt
 %type <tree.Statement> show_create_stmt
-%type <tree.ShowCreateFormatOption> opt_show_create_format_options
+%type <tree.ShowCreateFormatOptions> opt_show_create_format_options show_create_format_options opt_show_create_format_options_view
 %type <tree.Statement> show_create_schedules_stmt
 %type <tree.Statement> show_create_external_connections_stmt
 %type <tree.Statement> show_csettings_stmt show_local_or_virtual_cluster_csettings_stmt
@@ -9482,7 +9482,7 @@ show_create_stmt:
   SHOW CREATE table_name opt_show_create_format_options
   {
     $$.val = &tree.ShowCreate{
-      Name: $3.unresolvedObjectName(), FmtOpt: $4.showCreateFormatOption(),
+      Name: $3.unresolvedObjectName(), FmtOpt: $4.showCreateFormatOptions(),
     }
   }
 | SHOW CREATE TABLE table_name opt_show_create_format_options
@@ -9491,16 +9491,16 @@ show_create_stmt:
     $$.val = &tree.ShowCreate{
       Mode: tree.ShowCreateModeTable,
       Name: $4.unresolvedObjectName(),
-      FmtOpt: $5.showCreateFormatOption(),
+      FmtOpt: $5.showCreateFormatOptions(),
     }
   }
-| SHOW CREATE VIEW table_name opt_show_create_format_options
+| SHOW CREATE VIEW table_name opt_show_create_format_options_view
   {
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{
       Mode: tree.ShowCreateModeView,
       Name: $4.unresolvedObjectName(),
-      FmtOpt: $5.showCreateFormatOption(),
+      FmtOpt: $5.showCreateFormatOptions(),
     }
   }
 | SHOW CREATE SEQUENCE sequence_name
@@ -9567,11 +9567,46 @@ show_create_stmt:
 opt_show_create_format_options:
   /* EMPTY */
   {
-    $$.val = tree.ShowCreateFormatOptionNone
+    $$.val = tree.ShowCreateFormatOptions{}
+  }
+| WITH show_create_format_options
+  {
+    $$.val = $2.showCreateFormatOptions()
+  }
+
+show_create_format_options:
+REDACT
+  {
+    $$.val = tree.ShowCreateFormatOptions{RedactedValues: true}
+  }
+| FULLY_QUALIFIED
+  {
+    /* SKIP DOC */
+    $$.val = tree.ShowCreateFormatOptions{FullyQualified: true}
+  }
+| show_create_format_options ',' REDACT
+  {
+    /* SKIP DOC */
+    o := $1.showCreateFormatOptions()
+    o.RedactedValues = true
+    $$.val = o
+  }
+| show_create_format_options ',' FULLY_QUALIFIED
+  {
+    /* SKIP DOC */
+    o := $1.showCreateFormatOptions()
+    o.FullyQualified = true
+    $$.val = o
+  }
+
+opt_show_create_format_options_view:
+  /* EMPTY */
+  {
+    $$.val = tree.ShowCreateFormatOptions{}
   }
 | WITH REDACT
   {
-    $$.val = tree.ShowCreateFormatOptionRedactedValues
+    $$.val = tree.ShowCreateFormatOptions{RedactedValues: true}
   }
 
 // %Help: SHOW CREATE SCHEDULES - list CREATE statements for scheduled jobs
@@ -17934,6 +17969,7 @@ unreserved_keyword:
 | FORCE_ZIGZAG
 | FORWARD
 | FREEZE
+| FULLY_QUALIFIED
 | FUNCTION
 | FUNCTIONS
 | GENERATED
@@ -18473,6 +18509,7 @@ bare_label_keywords:
 | FORWARD
 | FREEZE
 | FULL
+| FULLY_QUALIFIED
 | FUNCTION
 | FUNCTIONS
 | GENERATED

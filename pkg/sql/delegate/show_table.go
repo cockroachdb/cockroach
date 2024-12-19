@@ -50,9 +50,13 @@ WHERE name = %s
 
 func (d *delegator) delegateShowCreateTable(n *tree.ShowCreate) (tree.Statement, error) {
 	createField := "create_statement"
-	switch n.FmtOpt {
-	case tree.ShowCreateFormatOptionRedactedValues:
+	switch {
+	case n.FmtOpt.RedactedValues && !n.FmtOpt.FullyQualified:
 		createField = "crdb_internal.redact(create_redactable)"
+	case !n.FmtOpt.RedactedValues && n.FmtOpt.FullyQualified:
+		createField = "create_statement_fq"
+	case n.FmtOpt.RedactedValues && n.FmtOpt.FullyQualified:
+		createField = "crdb_internal.redact(create_redactable_fq)"
 	}
 
 	showCreateQuery := `
