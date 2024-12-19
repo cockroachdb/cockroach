@@ -364,6 +364,7 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_gogo_protobuf//proto",
         "@com_github_gogo_protobuf//types",
         "@com_github_golang_mock//gomock",
         "@com_github_ibm_sarama//:sarama",
