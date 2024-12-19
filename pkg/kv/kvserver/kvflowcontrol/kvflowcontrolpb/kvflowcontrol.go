@@ -54,7 +54,8 @@ func (a AdmittedResponseForRange) String() string {
 }
 
 func (a AdmittedResponseForRange) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("admitted-response (s%s r%s %s)", a.LeaderStoreID, a.RangeID, a.Msg.String())
+	w.Printf("admitted-response (s%s r%s %s)", a.LeaderStoreID, a.RangeID,
+		redact.SafeString(a.Msg.String()))
 }
 
 func (a AdmittedState) String() string {
