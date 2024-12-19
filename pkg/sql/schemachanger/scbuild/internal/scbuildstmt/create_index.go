@@ -133,6 +133,11 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	panicIfSchemaChangeIsDisallowed(relationElements, n)
 
+	// Vector indexes are note yet supported.
+	if n.Vector {
+		panic(unimplemented.NewWithIssuef(137370, "VECTOR indexes are not yet supported"))
+	}
+
 	// Inverted indexes do not support hash sharding or unique.
 	if n.Inverted {
 		if n.Sharded != nil {

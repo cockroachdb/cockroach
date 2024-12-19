@@ -479,7 +479,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if ic := private.InvertedConstraint; ic != nil {
 			idx := md.Table(private.Table).Index(private.Index)
 			var b strings.Builder
-			for i := idx.NonInvertedPrefixColumnCount(); i < idx.KeyColumnCount(); i++ {
+			for i := idx.PrefixColumnCount(); i < idx.KeyColumnCount(); i++ {
 				b.WriteRune('/')
 				b.WriteString(fmt.Sprintf("%d", private.Table.ColumnID(idx.Column(i).Ordinal())))
 			}
