@@ -34,6 +34,7 @@ import (
 // CreateRoleNode creates entries in the system.users table.
 // This is called from CREATE USER and CREATE ROLE.
 type CreateRoleNode struct {
+	zeroInputPlanNode
 	ifNotExists bool
 	isRole      bool
 	roleOptions roleoption.List

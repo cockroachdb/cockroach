@@ -19,6 +19,7 @@ import (
 )
 
 type refreshMaterializedViewNode struct {
+	zeroInputPlanNode
 	n    *tree.RefreshMaterializedView
 	desc *tabledesc.Mutable
 }

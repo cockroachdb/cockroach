@@ -25,6 +25,7 @@ import (
 )
 
 type renameTableNode struct {
+	zeroInputPlanNode
 	n            *tree.RenameTable
 	oldTn, newTn *tree.TableName
 	tableDesc    *tabledesc.Mutable

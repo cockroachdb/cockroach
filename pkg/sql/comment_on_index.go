@@ -17,6 +17,7 @@ import (
 )
 
 type commentOnIndexNode struct {
+	zeroInputPlanNode
 	n         *tree.CommentOnIndex
 	tableDesc *tabledesc.Mutable
 	index     catalog.Index

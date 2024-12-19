@@ -28,6 +28,7 @@ import (
 )
 
 type dropFunctionNode struct {
+	zeroInputPlanNode
 	toDrop       []*funcdesc.Mutable
 	dropBehavior tree.DropBehavior
 }

@@ -36,6 +36,7 @@ import (
 )
 
 type createTypeNode struct {
+	zeroInputPlanNode
 	n        *tree.CreateType
 	typeName *tree.TypeName
 	dbDesc   catalog.DatabaseDescriptor

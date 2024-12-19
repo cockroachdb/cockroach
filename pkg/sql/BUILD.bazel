@@ -72,7 +72,6 @@ go_library(
         "create_type.go",
         "create_view.go",
         "created_sequence.go",
-        "data_source.go",
         "database.go",
         "database_region_change_finalizer.go",
         "deallocate.go",
