@@ -301,7 +301,7 @@ func (cmvt *cdcMixedVersionTester) validate(
 
 		partitionStr := strconv.Itoa(int(m.Partition))
 		if len(m.Key) > 0 {
-			if err := cmvt.validator.NoteRow(partitionStr, string(m.Key), string(m.Value), updated); err != nil {
+			if err := cmvt.validator.NoteRow(partitionStr, string(m.Key), string(m.Value), updated, m.Topic); err != nil {
 				return err
 			}
 		} else {
