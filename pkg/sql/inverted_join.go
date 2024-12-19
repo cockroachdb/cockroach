@@ -14,7 +14,7 @@ import (
 )
 
 type invertedJoinNode struct {
-	input planNode
+	singleInputPlanNode
 	table *scanNode
 
 	// joinType is one of INNER, LEFT_OUTER, LEFT_SEMI, LEFT_ANTI.

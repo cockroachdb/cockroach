@@ -27,6 +27,7 @@ import (
 )
 
 type dropIndexNode struct {
+	zeroInputPlanNode
 	n        *tree.DropIndex
 	idxNames []fullIndexName
 }

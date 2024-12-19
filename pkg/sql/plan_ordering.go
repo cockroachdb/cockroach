@@ -18,18 +18,18 @@ type ReqOrdering = colinfo.ColumnOrdering
 func planReqOrdering(plan planNode) ReqOrdering {
 	switch n := plan.(type) {
 	case *limitNode:
-		return planReqOrdering(n.plan)
+		return planReqOrdering(n.input)
 	case *max1RowNode:
-		return planReqOrdering(n.plan)
+		return planReqOrdering(n.input)
 	case *spoolNode:
-		return planReqOrdering(n.source)
+		return planReqOrdering(n.input)
 	case *saveTableNode:
-		return planReqOrdering(n.source)
+		return planReqOrdering(n.input)
 	case *serializeNode:
 		return planReqOrdering(n.source)
 	case *deleteNode:
 		if n.run.rowsNeeded {
-			return planReqOrdering(n.source)
+			return planReqOrdering(n.input)
 		}
 
 	case *filterNode:

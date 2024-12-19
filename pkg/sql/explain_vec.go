@@ -146,3 +146,21 @@ func (n *explainVecNode) Values() tree.Datums { return n.run.values }
 func (n *explainVecNode) Close(ctx context.Context) {
 	n.plan.close(ctx)
 }
+
+func (n *explainVecNode) InputCount() int {
+	// We check whether planNode is nil because the input might be represented
+	// physically, which we can't traverse into currently.
+	// TODO(yuzefovich/mgartner): Figure out a way to traverse into physical
+	// plans, if necessary.
+	if n.plan.main.planNode != nil {
+		return 1
+	}
+	return 0
+}
+
+func (n *explainVecNode) Input(i int) (planNode, error) {
+	if i == 0 && n.plan.main.planNode != nil {
+		return n.plan.main.planNode, nil
+	}
+	return nil, errors.AssertionFailedf("input index %d is out of range", i)
+}

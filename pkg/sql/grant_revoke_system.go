@@ -24,6 +24,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+type changeNonDescriptorBackedPrivilegesNode struct {
+	zeroInputPlanNode
+	changePrivilegesNode
+}
+
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
 // This is because GRANT/REVOKE performs multiple KV operations on descriptors
 // and expects to see its own writes.

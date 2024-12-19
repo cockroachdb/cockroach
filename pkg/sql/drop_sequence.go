@@ -25,6 +25,7 @@ import (
 )
 
 type dropSequenceNode struct {
+	zeroInputPlanNode
 	n  *tree.DropSequence
 	td []toDelete
 }

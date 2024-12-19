@@ -25,6 +25,7 @@ import (
 const alterTenantCapabilityOp = "ALTER VIRTUAL CLUSTER CAPABILITY"
 
 type alterTenantCapabilityNode struct {
+	zeroInputPlanNode
 	n          *tree.AlterTenantCapability
 	tenantSpec tenantSpec
 

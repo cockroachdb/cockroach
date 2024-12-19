@@ -30,6 +30,7 @@ import (
 )
 
 type createSchemaNode struct {
+	zeroInputPlanNode
 	n *tree.CreateSchema
 }
 

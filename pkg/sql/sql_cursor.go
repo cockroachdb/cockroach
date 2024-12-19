@@ -171,6 +171,7 @@ func (p *planner) newFetchNode(s *tree.CursorStmt) (*fetchNode, error) {
 }
 
 type fetchNode struct {
+	zeroInputPlanNode
 	cursor *sqlCursor
 	// n is the number of rows requested.
 	n int64
