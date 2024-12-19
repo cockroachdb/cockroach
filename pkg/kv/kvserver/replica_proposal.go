@@ -225,6 +225,8 @@ type ProposalData struct {
 	lastReproposal *ProposalData
 }
 
+func (*ProposalData) isAbandonToken() {}
+
 // Context returns the context associated with the proposal. The context may
 // change during the lifetime of the proposal.
 func (proposal *ProposalData) Context() context.Context {
