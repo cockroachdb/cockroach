@@ -225,9 +225,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	var args []string
 	var goTags []string
 	args = append(args, "test")
-	if numCPUs != 0 {
-		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
-	}
+	addCommonBazelArguments(&args)
 	if race {
 		args = append(args, "--config=race", "--test_sharding_strategy=disabled")
 	}
