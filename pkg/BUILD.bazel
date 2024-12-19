@@ -1182,6 +1182,7 @@ GO_TARGETS = [
     "//pkg/cmd/roachprod-microbench:roachprod-microbench_test",
     "//pkg/cmd/roachprod-stress:roachprod-stress",
     "//pkg/cmd/roachprod-stress:roachprod-stress_lib",
+    "//pkg/cmd/roachprod/cli:cli",
     "//pkg/cmd/roachprod/grafana:grafana",
     "//pkg/cmd/roachprod/update:update",
     "//pkg/cmd/roachprod:roachprod",

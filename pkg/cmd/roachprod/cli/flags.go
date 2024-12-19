@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package main
+package cli
 
 import (
 	"fmt"
@@ -107,7 +107,7 @@ var (
 	fetchLogsTimeout time.Duration
 )
 
-func initFlags() {
+func initFlags(rootCmd, syncCmd *cobra.Command) {
 	rootCmd.PersistentFlags().BoolVarP(&config.Quiet, "quiet", "q",
 		false || !term.IsTerminal(int(os.Stdout.Fd())), "disable fancy progress output")
 	rootCmd.PersistentFlags().IntVarP(&config.MaxConcurrency, "max-concurrency", "", 32,
