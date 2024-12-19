@@ -51,7 +51,7 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) (numE
 			}
 			defer iter.Close()
 			counter := 0
-			err = iter.CatchUpScan(ctx, func(*kvpb.RangeFeedEvent) error {
+			err = iter.CatchUpScan(ctx, context.Background(), func(*kvpb.RangeFeedEvent) error {
 				counter++
 				return nil
 			}, opts.withDiff, false /* withFiltering */, false /* withOmitRemote */)
