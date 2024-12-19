@@ -1595,7 +1595,7 @@ func (r *importResumer) dropTables(
 			ctx,
 			execCfg.DB,
 			execCfg.Codec,
-			&execCfg.Settings.SV,
+			execCfg.Settings,
 			execCfg.DistSender,
 			intoTable.GetID(),
 			predicates, sql.RevertTableDefaultBatchSize); err != nil {

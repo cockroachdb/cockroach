@@ -162,15 +162,6 @@ func TestDeleteRangeTombstone(t *testing.T) {
 			ts:        1e9,
 			expectErr: &kvpb.WriteTooOldError{},
 		},
-		"predicate without UsingRangeTombstone error": {
-			start:              "a",
-			end:                "f",
-			ts:                 10e9,
-			predicateStartTime: 1,
-			maxBatchSize:       maxDeleteRangeBatchBytes,
-			onlyPointKeys:      true,
-			expectErr:          "UseRangeTombstones must be passed with predicate based Delete Range",
-		},
 		"predicate maxBatchSize error": {
 			start:              "a",
 			end:                "f",
@@ -181,15 +172,21 @@ func TestDeleteRangeTombstone(t *testing.T) {
 		},
 	}
 	for name, tc := range testcases {
+		type predicateKind string
+		const (
+			noPredicate             predicateKind = "none"
+			rangeTombstonePredicate predicateKind = "range-tombstone"
+			pointTombstonePredicate predicateKind = "point-tobmstone"
+		)
 		t.Run(name, func(t *testing.T) {
-			for _, runWithPredicates := range []bool{false, true} {
-				if tc.predicateStartTime > 0 && !runWithPredicates {
+			for _, predicateKind := range []predicateKind{noPredicate, rangeTombstonePredicate, pointTombstonePredicate} {
+				if tc.predicateStartTime > 0 && predicateKind == noPredicate {
 					continue
 				}
-				if runWithPredicates && tc.idempotent {
+				if predicateKind != noPredicate && tc.idempotent {
 					continue
 				}
-				t.Run(fmt.Sprintf("Predicates=%v", runWithPredicates), func(t *testing.T) {
+				t.Run(fmt.Sprintf("Predicates=%v", predicateKind), func(t *testing.T) {
 					ctx := context.Background()
 					st := cluster.MakeTestingClusterSettings()
 					engine := storage.NewDefaultInMemForTesting()
@@ -222,7 +219,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 						h.Txn = &txn
 					}
 					var predicates kvpb.DeleteRangePredicates
-					if runWithPredicates {
+					if predicateKind != noPredicate {
 						predicates = kvpb.DeleteRangePredicates{
 							StartTime: hlc.Timestamp{WallTime: 1},
 						}
@@ -240,7 +237,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 							Key:    rangeKey.StartKey,
 							EndKey: rangeKey.EndKey,
 						},
-						UseRangeTombstone:   !tc.onlyPointKeys,
+						UseRangeTombstone:   !(tc.onlyPointKeys || predicateKind == pointTombstonePredicate),
 						IdempotentTombstone: tc.idempotent,
 						Inline:              tc.inline,
 						ReturnKeys:          tc.returnKeys,
@@ -288,7 +285,7 @@ func TestDeleteRangeTombstone(t *testing.T) {
 					require.NoError(t, err)
 					require.NoError(t, batch.Commit(true))
 
-					if runWithPredicates {
+					if predicateKind != noPredicate {
 						checkPredicateDeleteRange(t, engine, rangeKey)
 					} else {
 						checkDeleteRangeTombstone(t, engine, rangeKey, !tc.expectNoWrite, now)
@@ -309,7 +306,6 @@ func TestDeleteRangeTombstone(t *testing.T) {
 // the passed in rangekey contains info on the span PredicateDeleteRange
 // operated on. The command should not have written an actual rangekey!
 func checkPredicateDeleteRange(t *testing.T, engine storage.Reader, rKeyInfo storage.MVCCRangeKey) {
-
 	iter, err := engine.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: rKeyInfo.StartKey,
@@ -326,19 +322,20 @@ func checkPredicateDeleteRange(t *testing.T, engine storage.Reader, rKeyInfo sto
 		if !ok {
 			break
 		}
-		hasPoint, hashRange := iter.HasPointAndRange()
-		if !hasPoint && hashRange {
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasRange {
 			// PredicateDeleteRange should not have written any delete tombstones;
 			// therefore, any range key tombstones in the span should have been
 			// written before the request was issued.
 			for _, v := range iter.RangeKeys().Versions {
 				require.True(t, v.Timestamp.Less(rKeyInfo.Timestamp))
 			}
-			continue
 		}
-		value, err := storage.DecodeMVCCValueAndErr(iter.UnsafeValue())
-		require.NoError(t, err)
-		require.True(t, value.IsTombstone())
+		if hasPoint {
+			value, err := storage.DecodeMVCCValueAndErr(iter.UnsafeValue())
+			require.NoError(t, err)
+			require.True(t, value.IsTombstone())
+		}
 	}
 }
 
