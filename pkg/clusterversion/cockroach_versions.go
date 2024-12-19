@@ -207,6 +207,9 @@ const (
 	// that are part of the XA two-phase commit protocol.
 	V25_1_PreparedTransactionsTable
 
+	// V25_1_AddJobsColumns added new columns to system.jobs.
+	V25_1_AddJobsColumns
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -251,6 +254,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_1_AddRangeForceFlushKey:     {Major: 24, Minor: 3, Internal: 8},
 	V25_1_BatchStreamRPC:            {Major: 24, Minor: 3, Internal: 10},
 	V25_1_PreparedTransactionsTable: {Major: 24, Minor: 3, Internal: 12},
+	V25_1_AddJobsColumns:            {Major: 24, Minor: 3, Internal: 14},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
@@ -296,10 +300,12 @@ const DevelopmentBranch = true
 // TestFinalVersion).
 const finalVersion Key = -1
 
-// TestingExtraVersions may be set to true in tests which will intentionally use
-// Keys greater than Latest, which typically would crash and/or cause errors.
-// Test packages that utilize this may encounter odd behavior. Resetting it is
-// not required.
+// TestingExtraVersions may be set to true by packages of tests which will
+// intentionally use Keys greater than Latest, which otherwise would crash
+// and/or cause errors. This should only be done in packages of tests
+// specifically focused on upgrade infrastructure, as it may make mistaken use
+// of Keys greater than latest, which would likely cause odd behavior, harder to
+// notice and debug.
 var TestingExtraVersions = false
 
 // Version returns the roachpb.Version corresponding to a key.

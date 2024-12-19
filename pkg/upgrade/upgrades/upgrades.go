@@ -76,6 +76,13 @@ var upgrades = []upgradebase.Upgrade{
 		createPreparedTransactionsTable,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
+	upgrade.NewTenantUpgrade(
+		"add new jobs tables",
+		clusterversion.V25_1_AddJobsColumns.Version(),
+		upgrade.NoPrecondition,
+		addJobsColumns,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new field"),
+	),
 
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
