@@ -27,19 +27,38 @@ type ChangefeedOption struct {
 
 func newChangefeedOption() ChangefeedOption {
 	cfo := ChangefeedOption{
-		FullTableName: rand.Intn(2) < 1,
-		KeyInValue:    rand.Intn(2) < 1,
-		Format:        "json",
+		FullTableName: false,
+		KeyInValue:    false, //rand.Intn(2) < 1,
+		Format:        "parquet",
 	}
 
 	// TODO: work out why parquet and key_in_value are not compatible here
 	// error is "this sink is incompatible with format=parquet"
 	// but before we were apparenly applying this parquet format without issue
-	if !cfo.KeyInValue && rand.Intn(2) < 1 {
-		cfo.Format = "parquet"
-	}
+	//if !cfo.KeyInValue && rand.Intn(2) < 1 {
+	//	cfo.Format = "parquet"
+	//}
 
 	return cfo
+}
+
+func (co ChangefeedOption) String() string {
+	return fmt.Sprintf("full_table_name=%t,key_in_value=%t,format=%s",
+		co.FullTableName, co.KeyInValue, co.Format)
+}
+
+func (cfo ChangefeedOption) OptionString() string {
+	options := ""
+	if cfo.Format == "parquet" {
+		options = ", format=parquet"
+	}
+	if cfo.FullTableName {
+		options = options + ", full_table_name"
+	}
+	if cfo.KeyInValue {
+		options = options + ", key_in_value"
+	}
+	return options
 }
 
 type NemesesOption struct {
@@ -227,18 +246,10 @@ func RunNemesis(
 	}
 
 	cfo := nOp.ChangefeedOption
-	options := ""
-	if cfo.Format == "parquet" {
-		options = ", format=parquet"
-	}
-	if cfo.FullTableName {
-		options = options + ", full_table_name"
-	}
-	if cfo.KeyInValue {
-		options = options + ", key_in_value"
-	}
+	fmt.Println("running with cfo", cfo.String())
 	foo, err := f.Feed(fmt.Sprintf(
-		`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff%s`, options,
+		`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff%s`,
+		cfo.OptionString(),
 	))
 	if err != nil {
 		return nil, err
