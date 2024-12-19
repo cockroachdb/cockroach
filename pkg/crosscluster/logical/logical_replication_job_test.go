@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1505,15 +1507,17 @@ func WaitUntilReplicatedTime(
 	})
 }
 
-type mockBatchHandler bool
+type mockBatchHandler struct {
+	err error
+}
 
-var _ BatchHandler = mockBatchHandler(true)
+var _ BatchHandler = &mockBatchHandler{}
 
 func (m mockBatchHandler) HandleBatch(
 	_ context.Context, _ []streampb.StreamEvent_KV,
 ) (batchStats, error) {
-	if m {
-		return batchStats{}, errors.New("batch processing failure")
+	if m.err != nil {
+		return batchStats{}, m.err
 	}
 	return batchStats{}, nil
 }
@@ -1558,7 +1562,7 @@ func TestFlushErrorHandling(t *testing.T) {
 	lrw.purgatory.eventsGauge = lrw.metrics.RetryQueueEvents
 	lrw.purgatory.debug = &streampb.DebugLogicalConsumerStatus{}
 
-	lrw.bh = []BatchHandler{(mockBatchHandler(true))}
+	lrw.bh = []BatchHandler{(mockBatchHandler{pgerror.New(pgcode.UniqueViolation, "index write conflict")})}
 	lrw.bhStats = make([]flushStats, 1)
 
 	lrw.purgatory.byteLimit = func() int64 { return 1 }
