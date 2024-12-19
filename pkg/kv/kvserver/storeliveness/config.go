@@ -11,10 +11,9 @@ import (
 )
 
 // Options includes all Store Liveness durations needed by the SupportManager.
-// TODO(mira): make sure these are initialized correctly as part of #125066.
 type Options struct {
-	// LivenessInterval determines the Store Liveness support expiration time.
-	LivenessInterval time.Duration
+	// SupportDuration determines the Store Liveness support expiration time.
+	SupportDuration time.Duration
 	// HeartbeatInterval determines how often Store Liveness sends heartbeats.
 	HeartbeatInterval time.Duration
 	// SupportExpiryInterval determines how often Store Liveness checks if support
@@ -31,12 +30,12 @@ type Options struct {
 
 // NewOptions instantiates the Store Liveness Options.
 func NewOptions(
-	livenessInterval time.Duration,
+	supportDuration time.Duration,
 	heartbeatInterval time.Duration,
 	supportWithdrawalGracePeriod time.Duration,
 ) Options {
 	return Options{
-		LivenessInterval:             livenessInterval,
+		SupportDuration:              supportDuration,
 		HeartbeatInterval:            heartbeatInterval,
 		SupportExpiryInterval:        100 * time.Millisecond,
 		IdleSupportFromInterval:      1 * time.Minute,
