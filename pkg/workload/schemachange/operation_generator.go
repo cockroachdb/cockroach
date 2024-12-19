@@ -1345,9 +1345,9 @@ func (og *operationGenerator) createType(
 	var statement tree.Statement
 
 	if isEnum {
-		statement = randgen.RandCreateEnumType(og.params.rng, typName.Object(), letters)
+		statement, _ = randgen.RandCreateEnumType(og.params.rng, typName.Object(), letters)
 	} else {
-		statement = randgen.RandCreateCompositeType(og.params.rng, typName.Object(), letters)
+		statement, _ = randgen.RandCreateCompositeType(og.params.rng, typName.Object(), letters)
 	}
 
 	statement.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
