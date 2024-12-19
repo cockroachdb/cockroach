@@ -57,7 +57,7 @@ PreCommitPhase stage 2 of 2 with 4 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 2 with 1 ValidationType op pending
       Statements:
       - statement: ALTER TABLE t ADD CHECK (i > 0)
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹t› ADD CHECK (‹i› > ‹0›)
+        redactedstatement: ALTER TABLE defaultdb.public.t ADD CHECK (i > ‹0›)
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 2 with 1 ValidationType op
   transitions:

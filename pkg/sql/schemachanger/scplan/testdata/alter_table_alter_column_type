@@ -100,7 +100,7 @@ PreCommitPhase stage 2 of 2 with 3 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 1 with 1 ValidationType op pending
       Statements:
       - statement: ALTER TABLE defaultdb.act ALTER COLUMN c1 SET DATA TYPE INT2
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹act› ALTER COLUMN ‹c1› SET DATA TYPE INT2
+        redactedstatement: ALTER TABLE defaultdb.public.act ALTER COLUMN c1 SET DATA TYPE INT2
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 1 with 1 ValidationType op
   transitions:
@@ -430,7 +430,7 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 15 with 2 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.act ALTER COLUMN c1 SET DATA TYPE STRING
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹act› ALTER COLUMN ‹c1› SET DATA TYPE STRING
+        redactedstatement: ALTER TABLE defaultdb.public.act ALTER COLUMN c1 SET DATA TYPE STRING
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 15 with 4 MutationType ops
   transitions:

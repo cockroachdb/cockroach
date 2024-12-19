@@ -6,7 +6,7 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE NOT NULL;
 EXPLAIN (DDL) rollback at post-commit stage 6 of 8;
 ----
-Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL UNIQUE;
+Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL UNIQUE;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 11 elements transitioning toward ABSENT

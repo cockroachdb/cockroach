@@ -102,7 +102,7 @@ message TargetState {
 
 message Statement {
   string statement = 1;
-  string redacted_statement = 2;
+  string redacted_statement = 2 [(gogoproto.casttype) = "github.com/cockroachdb/redact.RedactableString"];
   string statement_tag = 3;
 }
 
