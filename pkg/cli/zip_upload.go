@@ -641,7 +641,28 @@ func makeProtoColumnParser[T protoutil.Message]() tsvColumnParserFn {
 // column, it is assumed to be plain text.
 var clusterWideTableDumps = map[string]columnParserMap{
 	// table dumps with only plain text columns
-	"system.namespace.txt": {},
+	"system.namespace.txt":                          {},
+	"crdb_internal.kv_node_liveness.txt":            {},
+	"crdb_internal.cluster_database_privileges.txt": {},
+	"system.rangelog.txt":                           {},
+	"crdb_internal.table_indexes.txt":               {},
+	"crdb_internal.index_usage_statistics.txt":      {},
+	"crdb_internal.create_statements.txt":           {},
+	"system.job_info.txt":                           {},
+	"crdb_internal.create_schema_statements.txt":    {},
+	"crdb_internal.default_privileges.txt":          {},
+	"system.role_members.txt":                       {},
+	"crdb_internal.cluster_settings.txt":            {},
+	"system.role_id_seq.txt":                        {},
+	"crdb_internal.cluster_sessions.txt":            {},
+	"system.migrations.txt":                         {},
+	"crdb_internal.kv_store_status.txt":             {},
+	"system.locations.txt":                          {},
+	"crdb_internal.cluster_transactions.txt":        {},
+	"crdb_internal.kv_node_status.txt":              {},
+	"crdb_internal.cluster_contention_events.txt":   {},
+	"crdb_internal.cluster_queries.txt":             {},
+	"crdb_internal.jobs.txt":                        {},
 
 	// table dumps with columns that need to be interpreted as protos
 	"crdb_internal.system_jobs.txt": {
@@ -750,6 +771,10 @@ func processTableDump(
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	if len(lines) == 0 {
+		return nil
 	}
 
 	// datadog's logs API only allows 1000 lines of logs per request. So, split
