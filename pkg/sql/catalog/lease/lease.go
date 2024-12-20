@@ -812,16 +812,8 @@ func purgeOldVersions(
 	// Acquire a refcount on the descriptor on the latest version to maintain an
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
-	//
-	// If the lease ends up being expired anyway it's okay to purge all previous
-	// versions (assuming no one has a ref count). With the session based
-	// leasing upgrade and tests with zero lease duration, we can have the lease
-	// expire right after acquiring it. Because renewals are disabled in later
-	// stages of this migration there is no other mechanism to purge old versions
-	// if we hit this case. Note: This scenario is impossible to hit in the real
-	// world since the lease duration is never set to 0.
 	desc, _, err := t.findForTimestamp(ctx, m.storage.clock.Now())
-	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive || errors.Is(err, errRenewLease) {
+	if isInactive := catalog.HasInactiveDescriptorError(err); err == nil || isInactive {
 		removeInactives(isInactive)
 		if desc != nil {
 			t.release(ctx, desc)
