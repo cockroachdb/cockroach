@@ -1219,6 +1219,7 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | span | [PrettySpan](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.PrettySpan) |  |  | [reserved](#support-status) |
 | raft_state | [RaftState](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RaftState) |  |  | [reserved](#support-status) |
+| rac_status | [RACStatus](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RACStatus) |  |  | [reserved](#support-status) |
 | state | [cockroach.kv.kvserver.storagepb.RangeInfo](#cockroach.server.serverpb.RaftDebugResponse-cockroach.kv.kvserver.storagepb.RangeInfo) |  |  | [reserved](#support-status) |
 | source_node_id | [int32](#cockroach.server.serverpb.RaftDebugResponse-int32) |  |  | [reserved](#support-status) |
 | source_store_id | [int32](#cockroach.server.serverpb.RaftDebugResponse-int32) |  |  | [reserved](#support-status) |
@@ -1237,7 +1238,7 @@ Support status: [reserved](#support-status)
 | top_k_locks_by_wait_queue_waiters | [RangeInfo.LockInfo](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RangeInfo.LockInfo) | repeated |  | [reserved](#support-status) |
 | locality | [Locality](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.Locality) |  |  | [reserved](#support-status) |
 | is_leaseholder | [bool](#cockroach.server.serverpb.RaftDebugResponse-bool) |  |  | [reserved](#support-status) |
-| lease_valid | [bool](#cockroach.server.serverpb.RaftDebugResponse-bool) |  |  | [reserved](#support-status) |
+| lease_valid | [bool](#cockroach.server.serverpb.RaftDebugResponse-bool) |  | Next tag: 26 | [reserved](#support-status) |
 
 
 
@@ -1304,6 +1305,54 @@ Closely mirrors the upstream definitions in github.com/etcd-io/raft.
 | state | [string](#cockroach.server.serverpb.RaftDebugResponse-string) |  |  | [reserved](#support-status) |
 | paused | [bool](#cockroach.server.serverpb.RaftDebugResponse-bool) |  |  | [reserved](#support-status) |
 | pending_snapshot | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RACStatus"></a>
+#### RACStatus
+
+RACStatus contains the status of the Replication Admission Control component
+of a range.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| next_raft_index | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
+| force_flush_index | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
+| streams | [RACStatus.StreamsEntry](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RACStatus.StreamsEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RACStatus.StreamsEntry"></a>
+#### RACStatus.StreamsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  |  |
+| value | [RACStatus.Stream](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RACStatus.Stream) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RACStatus.Stream"></a>
+#### RACStatus.Stream
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| index_to_send | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
+| next_raft_index_initial | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
+| next_raft_index | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
+| force_flush_stop_index | [uint64](#cockroach.server.serverpb.RaftDebugResponse-uint64) |  |  | [reserved](#support-status) |
+| eval_tokens_held | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) | repeated |  | [reserved](#support-status) |
+| send_tokens_held | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) | repeated |  | [reserved](#support-status) |
 
 
 
@@ -1469,6 +1518,7 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | span | [PrettySpan](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.PrettySpan) |  |  | [reserved](#support-status) |
 | raft_state | [RaftState](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RaftState) |  |  | [reserved](#support-status) |
+| rac_status | [RACStatus](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RACStatus) |  |  | [reserved](#support-status) |
 | state | [cockroach.kv.kvserver.storagepb.RangeInfo](#cockroach.server.serverpb.RangesResponse-cockroach.kv.kvserver.storagepb.RangeInfo) |  |  | [reserved](#support-status) |
 | source_node_id | [int32](#cockroach.server.serverpb.RangesResponse-int32) |  |  | [reserved](#support-status) |
 | source_store_id | [int32](#cockroach.server.serverpb.RangesResponse-int32) |  |  | [reserved](#support-status) |
@@ -1487,7 +1537,7 @@ Support status: [reserved](#support-status)
 | top_k_locks_by_wait_queue_waiters | [RangeInfo.LockInfo](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RangeInfo.LockInfo) | repeated |  | [reserved](#support-status) |
 | locality | [Locality](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.Locality) |  |  | [reserved](#support-status) |
 | is_leaseholder | [bool](#cockroach.server.serverpb.RangesResponse-bool) |  |  | [reserved](#support-status) |
-| lease_valid | [bool](#cockroach.server.serverpb.RangesResponse-bool) |  |  | [reserved](#support-status) |
+| lease_valid | [bool](#cockroach.server.serverpb.RangesResponse-bool) |  | Next tag: 26 | [reserved](#support-status) |
 
 
 
@@ -1554,6 +1604,54 @@ Closely mirrors the upstream definitions in github.com/etcd-io/raft.
 | state | [string](#cockroach.server.serverpb.RangesResponse-string) |  |  | [reserved](#support-status) |
 | paused | [bool](#cockroach.server.serverpb.RangesResponse-bool) |  |  | [reserved](#support-status) |
 | pending_snapshot | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RACStatus"></a>
+#### RACStatus
+
+RACStatus contains the status of the Replication Admission Control component
+of a range.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| next_raft_index | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
+| force_flush_index | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
+| streams | [RACStatus.StreamsEntry](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RACStatus.StreamsEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RACStatus.StreamsEntry"></a>
+#### RACStatus.StreamsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  |  |
+| value | [RACStatus.Stream](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RACStatus.Stream) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.RACStatus.Stream"></a>
+#### RACStatus.Stream
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| index_to_send | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
+| next_raft_index_initial | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
+| next_raft_index | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
+| force_flush_stop_index | [uint64](#cockroach.server.serverpb.RangesResponse-uint64) |  |  | [reserved](#support-status) |
+| eval_tokens_held | [int64](#cockroach.server.serverpb.RangesResponse-int64) | repeated |  | [reserved](#support-status) |
+| send_tokens_held | [int64](#cockroach.server.serverpb.RangesResponse-int64) | repeated |  | [reserved](#support-status) |
 
 
 
@@ -3857,6 +3955,7 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | span | [PrettySpan](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.PrettySpan) |  |  | [reserved](#support-status) |
 | raft_state | [RaftState](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RaftState) |  |  | [reserved](#support-status) |
+| rac_status | [RACStatus](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RACStatus) |  |  | [reserved](#support-status) |
 | state | [cockroach.kv.kvserver.storagepb.RangeInfo](#cockroach.server.serverpb.RangeResponse-cockroach.kv.kvserver.storagepb.RangeInfo) |  |  | [reserved](#support-status) |
 | source_node_id | [int32](#cockroach.server.serverpb.RangeResponse-int32) |  |  | [reserved](#support-status) |
 | source_store_id | [int32](#cockroach.server.serverpb.RangeResponse-int32) |  |  | [reserved](#support-status) |
@@ -3875,7 +3974,7 @@ Support status: [reserved](#support-status)
 | top_k_locks_by_wait_queue_waiters | [RangeInfo.LockInfo](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RangeInfo.LockInfo) | repeated |  | [reserved](#support-status) |
 | locality | [Locality](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.Locality) |  |  | [reserved](#support-status) |
 | is_leaseholder | [bool](#cockroach.server.serverpb.RangeResponse-bool) |  |  | [reserved](#support-status) |
-| lease_valid | [bool](#cockroach.server.serverpb.RangeResponse-bool) |  |  | [reserved](#support-status) |
+| lease_valid | [bool](#cockroach.server.serverpb.RangeResponse-bool) |  | Next tag: 26 | [reserved](#support-status) |
 
 
 
@@ -3942,6 +4041,54 @@ Closely mirrors the upstream definitions in github.com/etcd-io/raft.
 | state | [string](#cockroach.server.serverpb.RangeResponse-string) |  |  | [reserved](#support-status) |
 | paused | [bool](#cockroach.server.serverpb.RangeResponse-bool) |  |  | [reserved](#support-status) |
 | pending_snapshot | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RACStatus"></a>
+#### RACStatus
+
+RACStatus contains the status of the Replication Admission Control component
+of a range.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| next_raft_index | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
+| force_flush_index | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
+| streams | [RACStatus.StreamsEntry](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RACStatus.StreamsEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RACStatus.StreamsEntry"></a>
+#### RACStatus.StreamsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  |  |
+| value | [RACStatus.Stream](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RACStatus.Stream) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.RACStatus.Stream"></a>
+#### RACStatus.Stream
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| index_to_send | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
+| next_raft_index_initial | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
+| next_raft_index | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
+| force_flush_stop_index | [uint64](#cockroach.server.serverpb.RangeResponse-uint64) |  |  | [reserved](#support-status) |
+| eval_tokens_held | [int64](#cockroach.server.serverpb.RangeResponse-int64) | repeated |  | [reserved](#support-status) |
+| send_tokens_held | [int64](#cockroach.server.serverpb.RangeResponse-int64) | repeated |  | [reserved](#support-status) |
 
 
 

@@ -192,6 +192,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
+        "//pkg/server/serverpb",
         "//pkg/server/status",
         "//pkg/server/telemetry",
         "//pkg/settings",

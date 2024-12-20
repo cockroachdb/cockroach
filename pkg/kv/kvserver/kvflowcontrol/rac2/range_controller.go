@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -113,7 +114,14 @@ type RangeController interface {
 	CloseRaftMuLocked(ctx context.Context)
 	// InspectRaftMuLocked returns a handle containing the state of the range
 	// controller. It's used to power /inspectz-style debugging pages.
+	//
+	// Requires replica.raftMu to be held.
 	InspectRaftMuLocked(ctx context.Context) kvflowinspectpb.Handle
+	// StatusRaftMuLocked returns basic information about the range controller and
+	// its send streams.
+	//
+	// Requires replica.raftMu to be held.
+	StatusRaftMuLocked() serverpb.RACStatus
 	// SendStreamStats sets the stats for the replica send streams that belong to
 	// the range controller. It is only populated on the leader. The stats struct
 	// is provided by the caller and should be empty, it is then populated before
@@ -1642,6 +1650,50 @@ func (rc *rangeController) InspectRaftMuLocked(ctx context.Context) kvflowinspec
 		RangeID:          rc.opts.RangeID,
 		ConnectedStreams: streams,
 	}
+}
+
+// StatusRaftMuLocked returns basic information about the range controller and
+// its send streams.
+//
+// Requires replica.raftMu to be held.
+func (rc *rangeController) StatusRaftMuLocked() serverpb.RACStatus {
+	rc.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
+	status := serverpb.RACStatus{
+		NextRaftIndex:   rc.nextRaftIndex,
+		ForceFlushIndex: rc.forceFlushIndex,
+		Streams:         map[uint64]serverpb.RACStatus_Stream{},
+	}
+	for id, rs := range rc.replicaMap {
+		if rs.sendStream == nil {
+			continue
+		}
+		var s serverpb.RACStatus_Stream
+		func() {
+			// TODO(pav-kv): locking is unnecessary, since indexToSend, nextRaftIndex,
+			// and eval.tokensDeducted are always updated under raftMu. Update the
+			// locking semantics in rs.sendStream.
+			rs.sendStream.mu.Lock()
+			defer rs.sendStream.mu.Unlock()
+			s.IndexToSend = rs.sendStream.mu.sendQueue.indexToSend
+			s.NextRaftIndexInitial = rs.sendStream.mu.nextRaftIndexInitial
+			s.NextRaftIndex = rs.sendStream.mu.sendQueue.nextRaftIndex
+			s.ForceFlushStopIndex = uint64(rs.sendStream.mu.sendQueue.forceFlushStopIndex)
+			s.EvalTokensHeld = convertTokensSlice(rs.sendStream.mu.eval.tokensDeducted[:])
+		}()
+		if rs.sendStream.holdsTokensRaftMuLocked() {
+			s.SendTokensHeld = convertTokensSlice(rs.sendStream.raftMu.tracker.deducted[:])
+		}
+		status.Streams[uint64(id)] = s
+	}
+	return status
+}
+
+func convertTokensSlice(tokens []kvflowcontrol.Tokens) []int64 {
+	result := make([]int64, len(tokens))
+	for i, tok := range tokens {
+		result[i] = int64(tok)
+	}
+	return result
 }
 
 func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {

@@ -70,6 +70,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -134,6 +135,22 @@ const (
 	SystemOnlyDeployment      = DeploymentMode("system-only")
 	SharedProcessDeployment   = DeploymentMode("shared-process")
 	SeparateProcessDeployment = DeploymentMode("separate-process")
+)
+
+// These env vars are used by the planner to generate plans with
+// certain specs regardless of the seed. This can be useful for
+// forcing certain plans to be generated for debugging without needing
+// trial and error.
+const (
+	// deploymentModeOverrideEnv overrides the deployment mode used.
+	// 	- MVT_DEPLOYMENT_MODE=system
+	deploymentModeOverrideEnv = "MVT_DEPLOYMENT_MODE"
+
+	// upgradePathOverrideEnv is parsed to override the upgrade path used.
+	// Specifying a release series uses the latest patch release.
+	// 	- MVT_UPGRADE_PATH=24.1.5,24.2.0,current
+	// 	- MVT_UPGRADE_PATH=24.1,24.2,current
+	upgradePathOverrideEnv = "MVT_UPGRADE_PATH"
 )
 
 var (
@@ -785,19 +802,28 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 
 	// Pick a random deployment mode to use in this test run among the
 	// list of enabled deployment modes enabled for this test.
-	deploymentMode := t.options.enabledDeploymentModes[t.prng.Intn(len(t.options.enabledDeploymentModes))]
+	deploymentMode := t.deploymentMode()
 	t.updateOptionsForDeploymentMode(deploymentMode)
 
-	previousReleases, err := t.choosePreviousReleases()
+	upgradePath, err := t.choosePreviousReleases()
 	if err != nil {
 		return nil, err
 	}
+	upgradePath = append(upgradePath, clusterupgrade.CurrentVersion())
+
+	if override := os.Getenv(upgradePathOverrideEnv); override != "" {
+		upgradePath, err = parseUpgradePathOverride(override)
+		if err != nil {
+			return nil, err
+		}
+		t.logger.Printf("%s override set: %s", upgradePathOverrideEnv, upgradePath)
+	}
 
 	tenantDescriptor := t.tenantDescriptor(deploymentMode)
-	initialRelease := previousReleases[0]
+	initialRelease := upgradePath[0]
 
 	planner := testPlanner{
-		versions:       append(previousReleases, clusterupgrade.CurrentVersion()),
+		versions:       upgradePath,
 		deploymentMode: deploymentMode,
 		seed:           t.seed,
 		currentContext: newInitialContext(initialRelease, t.crdbNodes, tenantDescriptor),
@@ -933,6 +959,15 @@ func (t *Test) numUpgrades() int {
 	return t.prng.Intn(
 		t.options.maxUpgrades-t.options.minUpgrades+1,
 	) + t.options.minUpgrades
+}
+
+func (t *Test) deploymentMode() DeploymentMode {
+	deploymentMode := t.options.enabledDeploymentModes[t.prng.Intn(len(t.options.enabledDeploymentModes))]
+	if deploymentModeOverride := os.Getenv(deploymentModeOverrideEnv); deploymentModeOverride != "" {
+		deploymentMode = DeploymentMode(deploymentModeOverride)
+		t.logger.Printf("%s override set: %s", deploymentModeOverrideEnv, deploymentModeOverride)
+	}
+	return deploymentMode
 }
 
 // latestPredecessor is an implementation of `predecessorFunc` that
@@ -1328,4 +1363,39 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 			SeparateProcessDeployment, minSeparateProcessNodes,
 		))
 	}
+}
+
+// parseUpgradePathOverride parses the upgrade path override and returns it as a list
+// of versions for the framework to use instead of generating a path based on
+// the seed. It assumes the user knows what it's doing and forgoes validation
+// of legal upgrade paths.
+func parseUpgradePathOverride(override string) ([]*clusterupgrade.Version, error) {
+	versions := strings.Split(override, ",")
+	var upgradePath []*clusterupgrade.Version
+	for _, v := range versions {
+		// Special case for the current version, as the current version on
+		// master is usually a long prerelease.
+		if v == "current" || v == "<current>" {
+			upgradePath = append(upgradePath, clusterupgrade.CurrentVersion())
+			continue
+		}
+
+		parsedVersion, err := clusterupgrade.ParseVersion(v)
+		if err == nil {
+			upgradePath = append(upgradePath, parsedVersion)
+			continue
+		}
+
+		// If the supplied version is invalid, it might be a release series.
+		// Support parsing release series as well since the user might not
+		// care about the exact patch version.
+		parsedVersion, err = clusterupgrade.LatestPatchRelease(v)
+		if err != nil {
+			return nil, errors.Newf("unable to parse version: %s", v)
+		}
+
+		upgradePath = append(upgradePath, parsedVersion)
+	}
+
+	return upgradePath, nil
 }
