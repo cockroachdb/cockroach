@@ -31,3 +31,4 @@ type TestNamedFatalerLogger interface {
 	TestFatalerLogger
 	Name() string
 }
+
