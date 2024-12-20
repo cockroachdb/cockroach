@@ -704,6 +704,7 @@ func TestLint(t *testing.T) {
 					":!acceptance/test_acceptance.go",           // For COCKROACH_RUN_ACCEPTANCE
 					":!compose/compare/compare/compare_test.go", // For COCKROACH_RUN_COMPOSE_COMPARE
 					":!compose/compose_test.go",                 // For COCKROACH_RUN_COMPOSE
+					":!testutils/sideeye.go",                    // For SIDE_EYE_API_TOKEN
 				},
 			},
 		} {
