@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"math"
 	"strings"
 	"sync"
@@ -797,6 +798,13 @@ func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
 	}
 	if err := sc.checkForMVCCCompliantAddIndexMutations(ctx, desc); err != nil {
 		return err
+	}
+	// Check that the DSC is not active for this descriptor.
+	if catalog.HasConcurrentDeclarativeSchemaChange(desc) {
+		log.Infof(ctx,
+			"aborting legacy schema change job execution because DSC was already active for %q (%d)",
+			desc.GetName(), desc.GetID())
+		return scerrors.ConcurrentSchemaChangeError(desc)
 	}
 
 	log.Infof(ctx,
@@ -3162,7 +3170,8 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 func DeleteTableDescAndZoneConfig(
 	ctx context.Context, execCfg *ExecutorConfig, tableDesc catalog.TableDescriptor,
 ) error {
-	log.Infof(ctx, "removing table descriptor and zone config for table %d", tableDesc.GetID())
+	log.Infof(ctx, "removing table descriptor and zone config for table %d (has active dsc=%t)",
+		tableDesc.GetID(), catalog.HasConcurrentDeclarativeSchemaChange(tableDesc))
 	const kvTrace = false
 	return DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		b := txn.KV().NewBatch()
