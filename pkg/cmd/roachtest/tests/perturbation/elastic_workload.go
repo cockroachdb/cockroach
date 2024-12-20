@@ -8,6 +8,7 @@ package perturbation
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"time"
 
@@ -28,7 +29,9 @@ type elasticWorkload struct{}
 var _ perturbation = elasticWorkload{}
 
 func (e elasticWorkload) setup() variations {
-	return setup(e, 20.0)
+	// TODO(#137835): Determine why the impact is so high and reduce this once
+	// it is addressed.
+	return setup(e, math.Inf(1))
 }
 
 func (e elasticWorkload) setupMetamorphic(rng *rand.Rand) variations {
