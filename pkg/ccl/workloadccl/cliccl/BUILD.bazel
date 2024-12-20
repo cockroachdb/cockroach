@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/workloadccl",
-        "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/workload",
