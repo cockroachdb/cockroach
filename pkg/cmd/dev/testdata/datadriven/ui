@@ -3,7 +3,7 @@ dev ui watch
 ----
 bazel info workspace --color=no
 pnpm --dir crdb-checkout/pkg/ui install
-bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib
+bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client_files //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl_files //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl
 bazel info bazel-bin --color=no
 bazel info workspace --color=no
 cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.js crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.js
@@ -37,7 +37,7 @@ dev ui watch --secure
 ----
 bazel info workspace --color=no
 pnpm --dir crdb-checkout/pkg/ui install
-bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib
+bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client_files //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl_files //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl
 bazel info bazel-bin --color=no
 bazel info workspace --color=no
 cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.js crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.js
@@ -55,7 +55,7 @@ dev ui watch --db http://example.crdb.io:4848
 ----
 bazel info workspace --color=no
 pnpm --dir crdb-checkout/pkg/ui install
-bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib
+bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client_files //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl_files //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl
 bazel info bazel-bin --color=no
 bazel info workspace --color=no
 cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.js crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.js
@@ -73,7 +73,7 @@ dev ui watch --port 12345
 ----
 bazel info workspace --color=no
 pnpm --dir crdb-checkout/pkg/ui install
-bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib
+bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client_files //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl_files //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl
 bazel info bazel-bin --color=no
 bazel info workspace --color=no
 cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.js crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.js
@@ -91,7 +91,7 @@ dev ui watch --cluster-ui-dst /path/to/foo --cluster-ui-dst /path/to/bar
 ----
 bazel info workspace --color=no
 pnpm --dir crdb-checkout/pkg/ui install
-bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib
+bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui-lib //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl-lib //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client_files //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl_files //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl
 bazel info bazel-bin --color=no
 bazel info workspace --color=no
 cp sandbox/pkg/ui/workspaces/db-console/src/js/protos.js crdb-checkout/pkg/ui/workspaces/db-console/src/js/protos.js
