@@ -172,6 +172,10 @@ func (t *descriptorState) upsertLeaseLocked(
 	}
 	if session != nil {
 		s.mu.lease.sessionID = session.ID().UnsafeBytes()
+		// When using session based leasing, if we end up acquiring the same lease again
+		// nothing needs to be cleaned up or updated. This is because the system.lease
+		// table does not store any expiry inside the table.
+		toRelease.sessionID = nil
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "replaced lease: %s with %s", toRelease, s.mu.lease)
