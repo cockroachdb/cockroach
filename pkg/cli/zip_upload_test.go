@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -125,9 +126,22 @@ func TestUploadZipEndToEnd(t *testing.T) {
 	})()
 
 	origConc := debugZipUploadOpts.maxConcurrentUploads
-	debugZipUploadOpts.maxConcurrentUploads = 2
+	debugZipUploadOpts.maxConcurrentUploads = 1
 	defer func() {
 		debugZipUploadOpts.maxConcurrentUploads = origConc
+	}()
+
+	// the test debug dir will only contain two test table dumps. So, keep only
+	// those two in this list to avoid unnecessary errors
+	origTableDumps := clusterWideTableDumps
+	clusterWideTableDumps = map[string]columnParserMap{
+		"system.namespace.txt": {},
+		"crdb_internal.system_jobs.txt": {
+			"progress": makeProtoColumnParser[*jobspb.Progress](),
+		},
+	}
+	defer func() {
+		clusterWideTableDumps = origTableDumps
 	}()
 
 	defer testutils.TestingHook(&doUploadReq,
