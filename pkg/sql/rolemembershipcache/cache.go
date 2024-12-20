@@ -80,7 +80,11 @@ func (m *MembershipCache) RunAtCacheReadTS(
 		if tableDesc.IsUncommittedVersion() {
 			return
 		}
-		if tableDesc.GetVersion() != m.tableVersion {
+		if tableDesc.GetVersion() > m.tableVersion {
+			return
+		}
+		if tableDesc.GetVersion() < m.tableVersion {
+			readTS = tableDesc.GetModificationTime()
 			return
 		}
 		// The cached ts could be from long ago, so use the table modification
