@@ -269,6 +269,10 @@ func TestStorage(t *testing.T) {
 			require.False(t, exists)
 			require.Equal(t, int64(1), metrics.WriteFailures.Count())
 		}
+		// Ensure it cannot be inserted again.
+		{
+			require.Error(t, storage.Insert(ctx, id, exp))
+		}
 	})
 	t.Run("test-jitter", func(t *testing.T) {
 		// We want to test that the GC runs a number of times but is jitterred.
