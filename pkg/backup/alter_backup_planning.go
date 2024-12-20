@@ -43,10 +43,10 @@ func alterBackupTypeCheck(
 
 func alterBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	alterBackupStmt, ok := stmt.(*tree.AlterBackup)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	if err := featureflag.CheckEnabled(
@@ -55,20 +55,20 @@ func alterBackupPlanHook(
 		featureBackupEnabled,
 		"ALTER BACKUP",
 	); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	exprEval := p.ExprEvaluator("ALTER BACKUP")
 	backup, err := exprEval.String(ctx, alterBackupStmt.Backup)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	var subdir string
 	if alterBackupStmt.Subdir != nil {
 		subdir, err = exprEval.String(ctx, alterBackupStmt.Subdir)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
@@ -80,11 +80,11 @@ func alterBackupPlanHook(
 		case *tree.AlterBackupKMS:
 			newKms, err = exprEval.StringArray(ctx, tree.Exprs(v.KMSInfo.NewKMSURI))
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 			oldKms, err = exprEval.StringArray(ctx, tree.Exprs(v.KMSInfo.OldKMSURI))
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 		}
 	}
@@ -119,7 +119,7 @@ func alterBackupPlanHook(
 		return doAlterBackupPlan(ctx, alterBackupStmt, p, backup, newKms, oldKms)
 	}
 
-	return fn, nil, nil, false, nil
+	return fn, nil, false, nil
 }
 
 func doAlterBackupPlan(
