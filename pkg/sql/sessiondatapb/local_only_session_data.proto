@@ -509,6 +509,10 @@ message LocalOnlySessionData {
   // performed by the vectorized engine when transitioning into the draining
   // state in some cases.
   bool disable_vec_union_eager_cancellation = 143;
+  // LegacyVarcharTyping controls the legacy behavior of allowing some invalid
+  // mix-typed comparisons with VARCHAR types. See #137837, #133037, and
+  // #132268.
+  bool legacy_varchar_typing = 150;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

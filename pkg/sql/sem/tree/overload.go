@@ -841,6 +841,13 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		s.overloadIdxs[i] = uint8(i)
 	}
 
+	if semaCtx != nil && semaCtx.Properties.IgnoreUnpreferredOverloads {
+		// Filter out unpreferred overloads.
+		s.overloadIdxs = filterOverloads(s.overloadIdxs, s.overloads, func(ov overloadImpl) bool {
+			return ov.preference() != OverloadPreferenceUnpreferred
+		})
+	}
+
 	// Filter out incorrect parameter length overloads.
 	exprsLen := len(s.exprs)
 	matchLen := func(params TypeList) bool { return params.MatchLen(exprsLen) }
