@@ -121,7 +121,7 @@ func ingestionPlanHook(
 		return nil, nil, false, CannotSetExpirationWindowErr
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) (err error) {
+	fn := func(ctx context.Context, _ chan<- tree.Datums) (err error) {
 		defer func() {
 			if err == nil {
 				telemetry.Count("physical_replication.started")
