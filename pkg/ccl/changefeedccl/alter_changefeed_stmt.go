@@ -76,10 +76,10 @@ var alterChangefeedHeader = colinfo.ResultColumns{
 // alterChangefeedPlanHook implements sql.PlanHookFn.
 func alterChangefeedPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	alterChangefeedStmt, ok := stmt.(*tree.AlterChangefeed)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -261,7 +261,7 @@ func alterChangefeedPlanHook(
 		}
 	}
 
-	return fn, alterChangefeedHeader, nil, false, nil
+	return fn, alterChangefeedHeader, false, nil
 }
 
 func getTargetDesc(

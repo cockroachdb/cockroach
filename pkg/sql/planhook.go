@@ -38,13 +38,11 @@ import (
 //
 // To intercept a statement the function should return a non-nil function for
 // `fn` as well as the appropriate sqlbase.ResultColumns describing the results
-// it will return (if any). If the hook plan requires sub-plans to be planned
-// and started by the usual machinery (e.g. to run a subquery), it must return
-// then as well. `fn` will be called in a goroutine during the `Start` phase of
-// plan execution.
+// it will return (if any). `fn` will be called in a goroutine during the
+// `Start` phase of plan execution.
 type planHookFn func(
 	context.Context, tree.Statement, PlanHookState,
-) (fn PlanHookRowFn, header colinfo.ResultColumns, subplans []planNode, avoidBuffering bool, err error)
+) (fn PlanHookRowFn, header colinfo.ResultColumns, avoidBuffering bool, err error)
 
 // PlanHookTypeCheckFn is a function that can intercept a statement being
 // prepared and type check its arguments. It exists in parallel to PlanHookFn.

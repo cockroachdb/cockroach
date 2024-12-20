@@ -132,10 +132,10 @@ func changefeedTypeCheck(
 // changefeedPlanHook implements sql.planHookFn.
 func changefeedPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	changefeedStmt := getChangefeedStatement(stmt)
 	if changefeedStmt == nil {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	exprEval := p.ExprEvaluator("CREATE CHANGEFEED")
@@ -157,11 +157,11 @@ func changefeedPlanHook(
 		var err error
 		sinkURI, err = exprEval.String(ctx, changefeedStmt.SinkURI)
 		if err != nil {
-			return nil, nil, nil, false, changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
+			return nil, nil, false, changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
 		}
 		if sinkURI == `` {
 			// Error if someone specifies an INTO with the empty string.
-			return nil, nil, nil, false, errors.New(`omit the SINK clause for inline results`)
+			return nil, nil, false, errors.New(`omit the SINK clause for inline results`)
 		}
 		header = withSinkHeader
 	}
@@ -170,13 +170,13 @@ func changefeedPlanHook(
 		ctx, changefeedStmt.Options, changefeedvalidators.CreateOptionValidations,
 	)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 	opts := changefeedbase.MakeStatementOptions(rawOpts)
 
 	description, err := makeChangefeedDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	// rowFn implements sql.PlanHookRowFn.
@@ -329,7 +329,7 @@ func changefeedPlanHook(
 		}
 		return err
 	}
-	return rowFnLogErrors, header, nil, avoidBuffering, nil
+	return rowFnLogErrors, header, avoidBuffering, nil
 }
 
 func coreChangefeed(

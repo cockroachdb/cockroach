@@ -584,13 +584,13 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 			}, header, nil /* subplans */, p.execCfg.Stopper), nil
 		}
 
-		if fn, header, subplans, avoidBuffering, err := planHook.fn(ctx, stmt, p); err != nil {
+		if fn, header, avoidBuffering, err := planHook.fn(ctx, stmt, p); err != nil {
 			return nil, err
 		} else if fn != nil {
 			if avoidBuffering {
 				p.curPlan.avoidBuffering = true
 			}
-			return newHookFnNode(planHook.name, fn, header, subplans, p.execCfg.Stopper), nil
+			return newHookFnNode(planHook.name, fn, header, nil /* subplans */, p.execCfg.Stopper), nil
 		}
 	}
 	return nil, nil
