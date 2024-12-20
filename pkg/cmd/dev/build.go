@@ -188,7 +188,7 @@ func (d *dev) crossBuild(
 	volume string,
 	dockerArgs []string,
 ) error {
-	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=nolintonbuild", "-c", "opt")
+	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=nolintonbuild", "-c", "opt", "--config=pgo")
 	configArgs := getConfigArgs(bazelArgs)
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, dockerArgs)
 	if err != nil {
@@ -377,9 +377,7 @@ func (d *dev) getBasicBuildArgs(
 	}
 
 	args = append(args, "build")
-	if numCPUs != 0 {
-		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
-	}
+	addCommonBazelArguments(&args)
 
 	canDisableNogo := true
 	shouldBuildWithTestConfig := false
