@@ -142,11 +142,9 @@ func (n *noopPutter) CPutWithOriginTimestamp(
 ) {
 }
 func (n *noopPutter) Put(key, value interface{})                                {}
-func (n *noopPutter) InitPut(key, value interface{}, failOnTombstones bool)     {}
 func (n *noopPutter) Del(key ...interface{})                                    {}
+func (n *noopPutter) CPutBytesEmpty(kys []roachpb.Key, values [][]byte)         {}
 func (n *noopPutter) CPutValuesEmpty(kys []roachpb.Key, values []roachpb.Value) {}
 func (n *noopPutter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte)        {}
 func (n *noopPutter) PutBytes(kys []roachpb.Key, values [][]byte)               {}
-func (n *noopPutter) InitPutBytes(kys []roachpb.Key, values [][]byte)           {}
 func (n *noopPutter) PutTuples(kys []roachpb.Key, values [][]byte)              {}
-func (n *noopPutter) InitPutTuples(kys []roachpb.Key, values [][]byte)          {}

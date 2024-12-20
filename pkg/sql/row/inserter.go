@@ -110,9 +110,9 @@ func insertInvertedPutFn(
 	ctx context.Context, b Putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "InitPut %s -> %s", *key, value.PrettyPrint())
+		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", *key, value.PrettyPrint())
 	}
-	b.InitPut(key, value, false)
+	b.CPut(key, value, nil /* expValue */)
 }
 
 func writeTombstones(

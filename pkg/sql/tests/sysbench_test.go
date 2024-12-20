@@ -458,7 +458,7 @@ func (s *sysbenchKV) DeleteInsert(t tableNum, id rowID, newK kValue, _ cValue, _
 
 	var b2 kv.Batch
 	b2.CPut(pkKey, pkValue, nil /* expValue */)
-	b2.InitPut(newIndexKey, newIndexValue, false /* failOnTombstones */)
+	b2.CPut(newIndexKey, newIndexValue, nil /* expValue */)
 	try0(s.txn.Run(s.ctx, &b2))
 }
 
