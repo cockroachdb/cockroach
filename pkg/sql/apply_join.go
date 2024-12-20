@@ -33,7 +33,7 @@ type applyJoinNode struct {
 	joinType descpb.JoinType
 
 	// The data source with no outer columns.
-	input planDataSource
+	singleInputPlanNode
 
 	// pred represents the join predicate.
 	pred *joinPredicate
@@ -75,7 +75,7 @@ type applyJoinNode struct {
 
 func newApplyJoinNode(
 	joinType descpb.JoinType,
-	left planDataSource,
+	left planNode,
 	rightCols colinfo.ResultColumns,
 	pred *joinPredicate,
 	planRightSideFn exec.ApplyJoinPlanRightSideFn,
@@ -90,12 +90,12 @@ func newApplyJoinNode(
 	}
 
 	return &applyJoinNode{
-		joinType:        joinType,
-		input:           left,
-		pred:            pred,
-		rightTypes:      getTypesFromResultColumns(rightCols),
-		planRightSideFn: planRightSideFn,
-		columns:         pred.cols,
+		joinType:            joinType,
+		singleInputPlanNode: singleInputPlanNode{left},
+		pred:                pred,
+		rightTypes:          getTypesFromResultColumns(rightCols),
+		planRightSideFn:     planRightSideFn,
+		columns:             pred.cols,
 	}, nil
 }
 
@@ -193,7 +193,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		}
 
 		// We need a new row on the left.
-		ok, err := a.input.plan.Next(params)
+		ok, err := a.input.Next(params)
 		if err != nil {
 			return false, err
 		}
@@ -205,7 +205,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 
 		// Extract the values of the outer columns of the other side of the apply
 		// from the latest input row.
-		leftRow := a.input.plan.Values()
+		leftRow := a.input.Values()
 		a.run.leftRow = leftRow
 		a.iterationCount++
 
@@ -372,7 +372,7 @@ func (a *applyJoinNode) Values() tree.Datums {
 }
 
 func (a *applyJoinNode) Close(ctx context.Context) {
-	a.input.plan.Close(ctx)
+	a.input.Close(ctx)
 	a.run.rightRows.Close(ctx)
 	if a.run.rightRowsIterator != nil {
 		a.run.rightRowsIterator.Close()

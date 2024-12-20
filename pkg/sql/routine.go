@@ -29,6 +29,7 @@ import (
 
 // A callNode executes a procedure.
 type callNode struct {
+	zeroInputPlanNode
 	proc *tree.RoutineExpr
 	r    tree.Datums
 }

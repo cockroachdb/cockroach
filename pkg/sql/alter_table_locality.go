@@ -33,6 +33,7 @@ import (
 )
 
 type alterTableSetLocalityNode struct {
+	zeroInputPlanNode
 	n         tree.AlterTableLocality
 	tableDesc *tabledesc.Mutable
 	dbDesc    catalog.DatabaseDescriptor

@@ -20,6 +20,7 @@ import (
 )
 
 type alterSequenceNode struct {
+	zeroInputPlanNode
 	n       *tree.AlterSequence
 	seqDesc *tabledesc.Mutable
 }

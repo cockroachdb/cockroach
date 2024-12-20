@@ -22,6 +22,7 @@ import (
 )
 
 type createDatabaseNode struct {
+	zeroInputPlanNode
 	n *tree.CreateDatabase
 }
 

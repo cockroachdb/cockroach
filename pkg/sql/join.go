@@ -10,13 +10,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // joinNode is a planNode whose rows are the result of a join operation.
 type joinNode struct {
 	// The data sources.
-	left  planDataSource
-	right planDataSource
+	left  planNode
+	right planNode
 
 	// pred represents the join predicate.
 	pred *joinPredicate
@@ -41,8 +42,8 @@ type joinNode struct {
 }
 
 func (p *planner) makeJoinNode(
-	left planDataSource,
-	right planDataSource,
+	left planNode,
+	right planNode,
 	pred *joinPredicate,
 	estimatedLeftRowCount, estimatedRightRowCount uint64,
 ) *joinNode {
@@ -73,6 +74,21 @@ func (n *joinNode) Values() tree.Datums {
 
 // Close implements the planNode interface.
 func (n *joinNode) Close(ctx context.Context) {
-	n.right.plan.Close(ctx)
-	n.left.plan.Close(ctx)
+	n.right.Close(ctx)
+	n.left.Close(ctx)
+}
+
+func (n *joinNode) InputCount() int {
+	return 2
+}
+
+func (n *joinNode) Input(i int) (planNode, error) {
+	switch i {
+	case 0:
+		return n.left, nil
+	case 1:
+		return n.right, nil
+	default:
+		return nil, errors.AssertionFailedf("input index %d is out of range", i)
+	}
 }

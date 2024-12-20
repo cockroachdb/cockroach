@@ -25,7 +25,7 @@ var updateNodePool = sync.Pool{
 }
 
 type updateNode struct {
-	source planNode
+	singleInputPlanNode
 
 	// columns is set if this UPDATE is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a
@@ -108,7 +108,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Advance one individual row.
-		if next, err := u.source.Next(params); !next {
+		if next, err := u.input.Next(params); !next {
 			lastBatch = true
 			if err != nil {
 				return false, err
@@ -116,9 +116,9 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 			break
 		}
 
-		// Process the update for the current source row, potentially
+		// Process the update for the current input row, potentially
 		// accumulating the result row for later.
-		if err := u.processSourceRow(params, u.source.Values()); err != nil {
+		if err := u.processSourceRow(params, u.input.Values()); err != nil {
 			return false, err
 		}
 
@@ -269,7 +269,7 @@ func (u *updateNode) BatchedCount() int { return u.run.tu.lastBatchSize }
 func (u *updateNode) BatchedValues(rowIdx int) tree.Datums { return u.run.tu.rows.At(rowIdx) }
 
 func (u *updateNode) Close(ctx context.Context) {
-	u.source.Close(ctx)
+	u.input.Close(ctx)
 	u.run.tu.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)

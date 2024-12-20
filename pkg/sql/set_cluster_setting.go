@@ -53,6 +53,7 @@ import (
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
 type setClusterSettingNode struct {
+	zeroInputPlanNode
 	name    settings.SettingName
 	st      *cluster.Settings
 	setting settings.NonMaskedSetting

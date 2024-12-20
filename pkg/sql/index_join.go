@@ -18,7 +18,7 @@ import (
 // non-covering index (potentially processed through other operations like
 // filtering, sorting, limiting).
 type indexJoinNode struct {
-	input planNode
+	singleInputPlanNode
 
 	// Indices of the PK columns in the input plan.
 	keyCols []int

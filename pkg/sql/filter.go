@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -17,7 +18,8 @@ import (
 // during plan optimizations in order to avoid instantiating a fully
 // blown selectTopNode/renderNode pair.
 type filterNode struct {
-	source      planDataSource
+	singleInputPlanNode
+	columns     colinfo.ResultColumns
 	filter      tree.TypedExpr
 	reqOrdering ReqOrdering
 }
@@ -27,12 +29,12 @@ var _ eval.IndexedVarContainer = &filterNode{}
 
 // IndexedVarEval implements the eval.IndexedVarContainer interface.
 func (f *filterNode) IndexedVarEval(idx int) (tree.Datum, error) {
-	return f.source.plan.Values()[idx], nil
+	return f.input.Values()[idx], nil
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (f *filterNode) IndexedVarResolvedType(idx int) *types.T {
-	return f.source.columns[idx].Typ
+	return f.columns[idx].Typ
 }
 
 func (f *filterNode) startExec(runParams) error {
@@ -48,4 +50,4 @@ func (f *filterNode) Values() tree.Datums {
 	panic("filterNode cannot be run in local mode")
 }
 
-func (f *filterNode) Close(ctx context.Context) { f.source.plan.Close(ctx) }
+func (f *filterNode) Close(ctx context.Context) { f.input.Close(ctx) }

@@ -29,10 +29,8 @@ import (
 // sovereignty work may require the RangeInfo plumbing and we should revisit
 // this then.
 type showTraceReplicaNode struct {
+	singleInputPlanNode
 	optColumnsSlot
-
-	// plan is the wrapped execution plan that will be traced.
-	plan planNode
 
 	run struct {
 		values tree.Datums
@@ -47,11 +45,11 @@ func (n *showTraceReplicaNode) Next(params runParams) (bool, error) {
 	var timestampD tree.Datum
 	var tag string
 	for {
-		ok, err := n.plan.Next(params)
+		ok, err := n.input.Next(params)
 		if !ok || err != nil {
 			return ok, err
 		}
-		values := n.plan.Values()
+		values := n.input.Values()
 		// The rows are received from showTraceNode; see ShowTraceColumns.
 		const (
 			tsCol  = 0
@@ -97,7 +95,7 @@ func (n *showTraceReplicaNode) Values() tree.Datums {
 }
 
 func (n *showTraceReplicaNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+	n.input.Close(ctx)
 }
 
 var nodeStoreRangeRE = regexp.MustCompile(`^\[n(\d+),s(\d+),r(\d+)/`)

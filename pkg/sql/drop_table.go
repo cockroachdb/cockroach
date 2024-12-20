@@ -30,6 +30,7 @@ import (
 )
 
 type dropTableNode struct {
+	zeroInputPlanNode
 	n *tree.DropTable
 	// td is a map from table descriptor to toDelete struct, indicating which
 	// tables this operation should delete.
