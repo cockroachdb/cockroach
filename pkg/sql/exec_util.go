@@ -3985,6 +3985,10 @@ func (m *sessionDataMutator) SetRecursionDepthLimit(val int) {
 	m.data.RecursionDepthLimit = int64(val)
 }
 
+func (m *sessionDataMutator) SetLegacyVarcharTyping(val bool) {
+	m.data.LegacyVarcharTyping = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

@@ -2989,6 +2989,7 @@ lc_messages                                                C.UTF-8             N
 lc_monetary                                                C.UTF-8             NULL      NULL        NULL        string
 lc_numeric                                                 C.UTF-8             NULL      NULL        NULL        string
 lc_time                                                    C.UTF-8             NULL      NULL        NULL        string
+legacy_varchar_typing                                      off                 NULL      NULL        NULL        string
 locality                                                   region=test,dc=dc1  NULL      NULL        NULL        string
 locality_optimized_partitioned_index_scan                  on                  NULL      NULL        NULL        string
 lock_timeout                                               0                   NULL      NULL        NULL        string
@@ -3192,6 +3193,7 @@ lc_messages                                                C.UTF-8             N
 lc_monetary                                                C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
 lc_numeric                                                 C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
 lc_time                                                    C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+legacy_varchar_typing                                      off                 NULL  user     NULL      off                 off
 locality                                                   region=test,dc=dc1  NULL  user     NULL      region=test,dc=dc1  region=test,dc=dc1
 locality_optimized_partitioned_index_scan                  on                  NULL  user     NULL      on                  on
 lock_timeout                                               0                   NULL  user     NULL      0s                  0s
@@ -3392,6 +3394,7 @@ lc_messages                                                NULL    NULL     NULL
 lc_monetary                                                NULL    NULL     NULL     NULL        NULL
 lc_numeric                                                 NULL    NULL     NULL     NULL        NULL
 lc_time                                                    NULL    NULL     NULL     NULL        NULL
+legacy_varchar_typing                                      NULL    NULL     NULL     NULL        NULL
 locality                                                   NULL    NULL     NULL     NULL        NULL
 locality_optimized_partitioned_index_scan                  NULL    NULL     NULL     NULL        NULL
 lock_timeout                                               NULL    NULL     NULL     NULL        NULL

@@ -3988,6 +3988,7 @@ lc_messages                                                C.UTF-8
 lc_monetary                                                C.UTF-8
 lc_numeric                                                 C.UTF-8
 lc_time                                                    C.UTF-8
+legacy_varchar_typing                                      off
 locality                                                   region=test,dc=dc1
 locality_optimized_partitioned_index_scan                  on
 lock_timeout                                               0
