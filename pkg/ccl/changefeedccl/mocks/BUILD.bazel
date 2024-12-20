@@ -1,5 +1,4 @@
-load("@bazel_gomock//:gomock.bzl", "gomock")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "gomock")
 
 gomock(
     name = "tenant_status_server_generated",

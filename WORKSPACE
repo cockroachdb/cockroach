@@ -599,15 +599,6 @@ register_toolchains(
 )
 
 http_archive(
-    name = "bazel_gomock",
-    sha256 = "692421b0c5e04ae4bc0bfff42fb1ce8671fe68daee2b8d8ea94657bb1fcddc0a",
-    strip_prefix = "bazel_gomock-fde78c91cf1783cc1e33ba278922ba67a6ee2a84",
-    urls = [
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel_gomock-fde78c91cf1783cc1e33ba278922ba67a6ee2a84.tar.gz",
-    ],
-)
-
-http_archive(
     name = "com_github_cockroachdb_sqllogictest",
     build_file_content = """
 filegroup(
