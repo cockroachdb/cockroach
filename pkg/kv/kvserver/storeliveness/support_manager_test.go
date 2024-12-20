@@ -27,7 +27,7 @@ var (
 	store       = slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
 	remoteStore = slpb.StoreIdent{NodeID: roachpb.NodeID(2), StoreID: roachpb.StoreID(2)}
 	options     = Options{
-		LivenessInterval:        6 * time.Millisecond,
+		SupportDuration:         6 * time.Millisecond,
 		HeartbeatInterval:       3 * time.Millisecond,
 		SupportExpiryInterval:   1 * time.Millisecond,
 		IdleSupportFromInterval: 1 * time.Minute,
@@ -135,7 +135,7 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: sm.clock.Now().AddDuration(options.LivenessInterval),
+		Expiration: sm.clock.Now().AddDuration(options.SupportDuration),
 	}
 	require.NoError(t, sm.HandleMessage(heartbeat))
 
@@ -261,11 +261,11 @@ func TestSupportManagerRestart(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
+		Expiration: clock.Now().AddDuration(sm.options.SupportDuration),
 	}
 	sm.handleMessages(ctx, []*slpb.Message{heartbeatResp, heartbeat})
 	manual.Resume()
-	manual.Increment(sm.options.LivenessInterval.Nanoseconds())
+	manual.Increment(sm.options.SupportDuration.Nanoseconds())
 	sm.withdrawSupport(ctx)
 	withdrawalTime := sm.supporterStateHandler.supporterState.meta.MaxWithdrawn.ToTimestamp()
 
@@ -322,7 +322,7 @@ func TestSupportManagerDiskStall(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
+		Expiration: clock.Now().AddDuration(sm.options.SupportDuration),
 	}
 	sm.handleMessages(ctx, []*slpb.Message{heartbeatResp, heartbeat})
 
@@ -379,7 +379,7 @@ func TestSupportManagerReceiveQueueLimit(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
+		Expiration: clock.Now().AddDuration(sm.options.SupportDuration),
 	}
 
 	for i := 0; i < maxReceiveQueueSize; i++ {

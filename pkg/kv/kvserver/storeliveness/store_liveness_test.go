@@ -64,7 +64,7 @@ func TestStoreLiveness(t *testing.T) {
 					case "send-heartbeats":
 						now := parseTimestamp(t, d, "now")
 						manual.AdvanceTo(now.GoTime())
-						sm.options.LivenessInterval = parseDuration(t, d, "liveness-interval")
+						sm.options.SupportDuration = parseDuration(t, d, "support-duration")
 						sm.maybeAddStores(ctx)
 						sm.sendHeartbeats(ctx)
 						heartbeats := sender.drainSentMessages()
