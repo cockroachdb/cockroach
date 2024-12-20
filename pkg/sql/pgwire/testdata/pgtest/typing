@@ -1,0 +1,93 @@
+# Regression tests for #133037.
+
+send
+Query {"String": "CREATE TABLE t (id UUID PRIMARY KEY, v VARCHAR)"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SET legacy_varchar_typing = on"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# These queries with mixed-type comparison succeed with the legacy type-checking
+# logic.
+send crdb_only
+Parse {"Name": "s1", "Query": "SELECT id FROM t WHERE v = $1", "ParameterOIDs": [2950]}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"9AC39CE2-0623-4632-A965-9A51C95682D4"}]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Parse {"Name": "s2", "Query": "SELECT id FROM t WHERE v = $1", "ParameterOIDs": [16]}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s2", "ParameterFormatCodes": [0], "Parameters": [{"text":"true"}]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "SET legacy_varchar_typing = off"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# The same queries fail with the correct type-checking logic. This match's PG
+# behavior.
+send
+Parse {"Name": "s3", "Query": "SELECT id FROM t WHERE v = $1", "ParameterOIDs": [2950]}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s3", "ParameterFormatCodes": [0], "Parameters": [{"text":"9AC39CE2-0623-4632-A965-9A51C95682D4"}]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"22023","Message":"unsupported comparison operator: \u003cvarchar\u003e = \u003cuuid\u003e"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s4", "Query": "SELECT id FROM t WHERE v = $1", "ParameterOIDs": [16]}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s4", "ParameterFormatCodes": [0], "Parameters": [{"text":"true"}]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"22023","Message":"unsupported comparison operator: \u003cvarchar\u003e = \u003cbool\u003e"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

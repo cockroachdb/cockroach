@@ -195,6 +195,11 @@ type Memo struct {
 	proveImplicationWithVirtualComputedCols    bool
 	pushOffsetIntoIndexJoin                    bool
 	pushLimitIntoProjectFilteredScan           bool
+<<<<<<< HEAD
+=======
+	unsafeAllowTriggersModifyingCascades       bool
+	legacyVarcharTyping                        bool
+>>>>>>> cc3ef92e436 (sql: add session setting for legacy VARCHAR typing behavior)
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -281,6 +286,11 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		proveImplicationWithVirtualComputedCols:    evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns,
 		pushOffsetIntoIndexJoin:                    evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin,
 		pushLimitIntoProjectFilteredScan:           evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan,
+<<<<<<< HEAD
+=======
+		unsafeAllowTriggersModifyingCascades:       evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades,
+		legacyVarcharTyping:                        evalCtx.SessionData().LegacyVarcharTyping,
+>>>>>>> cc3ef92e436 (sql: add session setting for legacy VARCHAR typing behavior)
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -445,6 +455,7 @@ func (m *Memo) IsStale(
 		m.proveImplicationWithVirtualComputedCols != evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns ||
 		m.pushOffsetIntoIndexJoin != evalCtx.SessionData().OptimizerPushOffsetIntoIndexJoin ||
 		m.pushLimitIntoProjectFilteredScan != evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan ||
+		m.legacyVarcharTyping != evalCtx.SessionData().LegacyVarcharTyping ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
