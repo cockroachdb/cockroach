@@ -41,6 +41,14 @@ import (
 
 const elemName = "somestring"
 
+var setTelemetryHttpTimeout = func(newVal time.Duration) func() {
+	prior := diagnostics.TelemetryHttpTimeout
+	diagnostics.TelemetryHttpTimeout = newVal
+	return func() {
+		diagnostics.TelemetryHttpTimeout = prior
+	}
+}
+
 func TestTenantReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -297,7 +305,7 @@ func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	diagnostics.TelemetryHttpTimeout = 3 * time.Second
+	defer setTelemetryHttpTimeout(3 * time.Second)()
 	rt := startReporterTest(t, base.TestIsSpecificToStorageLayerAndNeedsASystemTenant)
 	defer rt.Close()
 
@@ -364,6 +372,29 @@ func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
 		})
 	}
 
+}
+
+// This test will block on `stopper.Stop` if the diagnostics reporter
+// doesn't honor stopper quiescence when making its HTTP request.
+func TestTelemetryQuiesce(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer setTelemetryHttpTimeout(10 * time.Minute)()
+	rt := startReporterTest(t, base.TestIsSpecificToStorageLayerAndNeedsASystemTenant)
+	defer rt.Close()
+
+	ctx := context.Background()
+	setupCluster(t, rt.serverDB)
+
+	// Ensure that we block for long enough to trigger test timeout.
+	defer rt.diagServer.SetWaitSeconds(15 * 60)()
+	dr := rt.server.DiagnosticsReporter().(*diagnostics.Reporter)
+	stopper := rt.server.Stopper()
+
+	dr.PeriodicallyReportDiagnostics(ctx, stopper)
+	stopper.Stop(ctx)
+	<-stopper.IsStopped()
 }
 
 func TestUsageQuantization(t *testing.T) {
