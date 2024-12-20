@@ -587,6 +587,10 @@ message LocalOnlySessionData {
   // #132268.
   bool legacy_varchar_typing = 150;
 
+  // AvoidCatalogGenerationForStaleness is used to disable using the catalog
+  // generation information to do fast memo checks.
+  bool avoid_catalog_generation_for_staleness = 151;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
