@@ -8,7 +8,6 @@ package cockroach.kv.kvserver.kvflowcontrol.kvflowcontrolpb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb";
 
 import "gogoproto/gogo.proto";
-import "raft/raftpb/raft.proto";
 
 // RaftAdmissionMeta contains information used by admission control for the
 // select raft commands that use replication admission control. It contains a
