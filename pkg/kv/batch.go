@@ -625,6 +625,32 @@ func (b *Batch) cputInternal(
 	b.initResult(1, 1, notRaw, nil)
 }
 
+// CPutBytesEmpty allows multiple []byte value type CPut requests to be added to
+// the batch using BulkSource interface. The values for these keys are
+// expected to be empty.
+func (b *Batch) CPutBytesEmpty(bs BulkSource[[]byte]) {
+	numKeys := bs.Len()
+	reqs := make([]struct {
+		req   kvpb.ConditionalPutRequest
+		union kvpb.RequestUnion_ConditionalPut
+	}, numKeys)
+	i := 0
+	bsi := bs.Iter()
+	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
+		pr := &reqs[i].req
+		union := &reqs[i].union
+		union.ConditionalPut = pr
+		pr.AllowIfDoesNotExist = false
+		pr.ExpBytes = nil
+		i++
+		k, v := bsi.Next()
+		pr.Key = k
+		pr.Value.SetBytes(v)
+		pr.Value.InitChecksum(k)
+		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
+	})
+}
+
 // CPutTuplesEmpty allows multiple CPut tuple requests to be added to the batch
 // as tuples using the BulkSource interface. The values for these keys are
 // expected to be empty.
@@ -699,52 +725,6 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 	b.appendReqs(kvpb.NewInitPut(k, v, failOnTombstones))
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
-}
-
-// InitPutBytes allows multiple []byte value type InitPut requests to be added to
-// the batch using BulkSource interface.
-func (b *Batch) InitPutBytes(bs BulkSource[[]byte]) {
-	numKeys := bs.Len()
-	reqs := make([]struct {
-		req   kvpb.InitPutRequest
-		union kvpb.RequestUnion_InitPut
-	}, numKeys)
-	i := 0
-	bsi := bs.Iter()
-	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
-		pr := &reqs[i].req
-		union := &reqs[i].union
-		union.InitPut = pr
-		i++
-		k, v := bsi.Next()
-		pr.Key = k
-		pr.Value.SetBytes(v)
-		pr.Value.InitChecksum(k)
-		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
-	})
-}
-
-// InitPutTuples allows multiple tuple value type InitPut to be added to the
-// batch using BulkSource interface.
-func (b *Batch) InitPutTuples(bs BulkSource[[]byte]) {
-	numKeys := bs.Len()
-	reqs := make([]struct {
-		req   kvpb.InitPutRequest
-		union kvpb.RequestUnion_InitPut
-	}, numKeys)
-	i := 0
-	bsi := bs.Iter()
-	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
-		pr := &reqs[i].req
-		union := &reqs[i].union
-		union.InitPut = pr
-		i++
-		k, v := bsi.Next()
-		pr.Key = k
-		pr.Value.SetTuple(v)
-		pr.Value.InitChecksum(k)
-		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
-	})
 }
 
 // Inc increments the integer value at key. If the key does not exist it will

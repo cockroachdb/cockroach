@@ -214,7 +214,7 @@ func WriteDescriptors(
 	}
 
 	for _, kv := range extra {
-		b.InitPut(kv.Key, &kv.Value, false)
+		b.CPut(kv.Key, &kv.Value, nil /* expValue */)
 	}
 	if err := txn.Run(ctx, b); err != nil {
 		if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
