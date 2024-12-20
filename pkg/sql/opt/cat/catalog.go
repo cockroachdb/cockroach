@@ -10,11 +10,13 @@ package cat
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -75,6 +77,26 @@ type Flags struct {
 	// like `SHOW RANGES` for which we also want to show valid ranges
 	// when a table is being imported (offline).
 	IncludeNonActiveIndexes bool
+}
+
+// CatalogGeneration can be stored and confirm that all catalog objects resolved,
+// at the current point in time will have the same version, stats, valid privileges,
+// and name resolution.
+type CatalogGeneration struct {
+	// LeaseGeneration tracks if any new version of descriptors has been published
+	// by the lease manager.
+	LeaseGeneration int64
+
+	// StatsGeneration tracks if any new statistics have been published.
+	StatsGeneration int64
+
+	// SystemConfig tracks the current system config, which is refreshed on
+	// any zone config update.
+	SystemConfig *config.SystemConfig
+
+	CurrentDatabase string
+	SearchPath      sessiondata.SearchPath
+	CurrentUser     username.SQLUsername
 }
 
 // Catalog is an interface to a database catalog, exposing only the information
@@ -209,6 +231,10 @@ type Catalog interface {
 
 	// GetCurrentUser returns the username.SQLUsername of the current session.
 	GetCurrentUser() username.SQLUsername
+
+	// UpdateCatalogGeneration updates the catalog generation to match the current
+	// generation if any objects have been modified.
+	UpdateCatalogGeneration(g *CatalogGeneration) (updated bool)
 
 	// GetRoutineOwner returns the username.SQLUsername of the routine's
 	// (specified by routineOid) owner.

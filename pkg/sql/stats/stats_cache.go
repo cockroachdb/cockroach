@@ -11,6 +11,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -71,6 +72,10 @@ type TableStatisticsCache struct {
 
 	// Used when decoding KV from the range feed.
 	datumAlloc tree.DatumAlloc
+
+	// generation is incremented any time the statistics cache is
+	// modified.
+	generation atomic.Int64
 }
 
 // The cache stores *cacheEntry objects. The fields are protected by the
@@ -135,6 +140,13 @@ func (sc *TableStatisticsCache) Clear() {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	sc.mu.cache.Clear()
+	sc.generation.Add(1)
+}
+
+// GetGeneration returns the current generation, which will change if any
+// modifications happen to the cache.
+func (sc *TableStatisticsCache) GetGeneration() int64 {
+	return sc.generation.Load()
 }
 
 // Start begins watching for updates in the stats table.
@@ -322,6 +334,7 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 		if e.isStale(forecast, udtCols) {
 			// Evict the cache entry and build it again.
 			sc.mu.cache.Del(tableID)
+			sc.generation.Add(1)
 		} else {
 			return e.stats, e.err
 		}
@@ -422,6 +435,7 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 		log.VEventf(ctx, 1, "reading statistics for table %d", tableID)
 		stats, udts, err = sc.getTableStatsFromDB(ctx, tableID, forecast, sc.settings)
 		log.VEventf(ctx, 1, "finished reading statistics for table %d", tableID)
+		sc.generation.Add(1)
 	}()
 
 	e.mustWait = false
@@ -451,6 +465,7 @@ func (sc *TableStatisticsCache) refreshCacheEntry(
 ) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
+	defer sc.generation.Add(1)
 
 	// If the stats don't already exist in the cache, don't bother performing
 	// the refresh. If e.err is not nil, the stats are in the process of being
@@ -524,6 +539,7 @@ func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableI
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 	sc.mu.cache.Del(tableID)
+	sc.generation.Add(1)
 }
 
 const (
