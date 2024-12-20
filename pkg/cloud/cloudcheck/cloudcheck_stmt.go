@@ -45,7 +45,7 @@ func ShowCloudStorageTestPlanHook(
 		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, "ShowCloudStorageTestPlanHook")
 		defer span.Finish()
 

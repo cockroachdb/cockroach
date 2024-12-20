@@ -63,11 +63,10 @@ type PlanHookTypeCheckFn func(
 // PlanHookRowFn describes the row-production for hook-created plans. The
 // channel argument is used to return results to the plan's runner. It's
 // a blocking channel, so implementors should be careful to only use blocking
-// sends on it when necessary. Any subplans returned by the hook when initially
-// called are passed back, planned and started, for the RowFn's use.
+// sends on it when necessary.
 //
 // TODO(dt): should this take runParams like a normal planNode.Next?
-type PlanHookRowFn func(context.Context, []planNode, chan<- tree.Datums) error
+type PlanHookRowFn func(context.Context, chan<- tree.Datums) error
 
 type planHook struct {
 	name      string
@@ -190,7 +189,7 @@ func (f *hookFnNode) startExec(params runParams) error {
 			SpanOpt:  stop.ChildSpan,
 		},
 		func(ctx context.Context) {
-			err := f.f(ctx, f.subplans, f.run.resultsCh)
+			err := f.f(ctx, f.run.resultsCh)
 			select {
 			case <-ctx.Done():
 			case f.run.errCh <- err:

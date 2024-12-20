@@ -89,7 +89,7 @@ func alterBackupPlanHook(
 		}
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 
 		if subdir != "" {
 			if strings.EqualFold(subdir, "LATEST") {

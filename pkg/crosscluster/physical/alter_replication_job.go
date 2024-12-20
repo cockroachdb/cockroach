@@ -211,7 +211,7 @@ func alterReplicationJobHook(
 		retentionTTLSeconds = ret
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		if err := utilccl.CheckEnterpriseEnabled(
 			p.ExecCfg().Settings,
 			alterReplicationJobOp,

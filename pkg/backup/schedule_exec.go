@@ -152,7 +152,7 @@ func invokeBackup(
 	})
 
 	g.GoCtx(func(ctx context.Context) error {
-		return backupFn(ctx, nil, resultCh)
+		return backupFn(ctx, resultCh)
 	})
 
 	err := g.Wait()

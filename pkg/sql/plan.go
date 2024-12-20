@@ -576,7 +576,7 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 			if !matched {
 				continue
 			}
-			return newHookFnNode(planHook.name, func(ctx context.Context, nodes []planNode, datums chan<- tree.Datums) error {
+			return newHookFnNode(planHook.name, func(ctx context.Context, datums chan<- tree.Datums) error {
 				return errors.AssertionFailedf(
 					"cannot execute prepared %v statement",
 					planHook.name,

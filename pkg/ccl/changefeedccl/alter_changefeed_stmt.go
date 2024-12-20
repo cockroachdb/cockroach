@@ -82,7 +82,7 @@ func alterChangefeedPlanHook(
 		return nil, nil, false, nil
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		jobID, err := func() (jobspb.JobID, error) {
 			origProps := p.SemaCtx().Properties
 			p.SemaCtx().Properties.Require("cdc", tree.RejectSubqueries)

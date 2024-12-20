@@ -69,7 +69,7 @@ func createLogicalReplicationStreamPlanHook(
 		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) (retErr error) {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) (retErr error) {
 		defer func() {
 			if retErr == nil {
 				telemetry.Count("logical_replication_stream.started")
