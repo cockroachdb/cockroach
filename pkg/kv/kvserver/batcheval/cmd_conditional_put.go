@@ -66,6 +66,7 @@ func ConditionalPut(
 		return result.Result{}, errors.AssertionFailedf("OriginTimestamp cannot be passed via CPut arg and in request header")
 	}
 
+	failOnTombstones := args.FailOnTombstones && !cArgs.EvalCtx.EvalKnobs().DisableInitPutCPutFailOnTombstones
 	opts := storage.ConditionalPutWriteOptions{
 		MVCCWriteOptions: storage.MVCCWriteOptions{
 			Txn:                            h.Txn,
@@ -80,6 +81,7 @@ func ConditionalPut(
 			Category:                       fs.BatchEvalReadCategory,
 		},
 		AllowIfDoesNotExist:         storage.CPutMissingBehavior(args.AllowIfDoesNotExist),
+		FailOnTombstones:            storage.CPutTombstoneBehavior(failOnTombstones),
 		OriginTimestamp:             args.OriginTimestamp,
 		ShouldWinOriginTimestampTie: args.ShouldWinOriginTimestampTie,
 	}

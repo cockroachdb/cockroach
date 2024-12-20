@@ -348,7 +348,7 @@ func (cfg *BaseConfig) InitTestingKnobs() {
 		}
 		storeKnobs := cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs)
 		storeKnobs.GlobalMVCCRangeTombstone = true
-		storeKnobs.EvalKnobs.DisableInitPutFailOnTombstones = true
+		storeKnobs.EvalKnobs.DisableInitPutCPutFailOnTombstones = true
 		cfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs).IgnoreOnDeleteRangeError = true
 	}
 

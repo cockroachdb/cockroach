@@ -55,7 +55,7 @@ data: "k"/123.000000000,5 -> /BYTES/
 data: "k"/123.000000000,2 -> /BYTES/v
 stats: key_count=1 key_bytes=26 val_count=2 val_bytes=11 live_count=1 live_bytes=19 gc_bytes_age=-414
 
-# Move key2 (which does not exist) to from value1 to value2.
+# Move key2 (which does not exist) from value1 to value2.
 # Expect it to fail since it does not exist with value1.
 
 run error
@@ -66,7 +66,7 @@ data: "k"/123.000000000,5 -> /BYTES/
 data: "k"/123.000000000,2 -> /BYTES/v
 error: (*kvpb.ConditionFailedError:) unexpected value: <nil>
 
-# Move key2 (which does not yet exist) to from value1 to value2, but
+# Move key2 (which does not yet exist) from value1 to value2, but
 # allowing for it not existing.
 
 run stats ok
@@ -126,3 +126,50 @@ run ok
 get k=k ts=123,11
 ----
 get: "k" -> /BYTES/v2 @123.000000000,10
+
+# Verify that FailOnTombstones flag is respected. First create a point
+# tombstone.
+
+run ok
+del k=k ts=123,12
+----
+del: "k": found key true
+>> at end:
+data: "k"/123.000000000,12 -> /<empty>
+data: "k"/123.000000000,10 -> /BYTES/v2
+data: "k"/123.000000000,5 -> /BYTES/
+data: "k"/123.000000000,2 -> /BYTES/v
+data: "k2"/123.000000000,9 -> /BYTES/
+data: "k2"/123.000000000,7 -> /BYTES/v2
+
+# Try overwriting it with FailOnTombstones set - expect an error.
+run stats error
+cput k=k v=v ts=123,13 failOnTombstones
+----
+>> cput k=k v=v ts=123,13 failOnTombstones
+stats: no change
+>> at end:
+data: "k"/123.000000000,12 -> /<empty>
+data: "k"/123.000000000,10 -> /BYTES/v2
+data: "k"/123.000000000,5 -> /BYTES/
+data: "k"/123.000000000,2 -> /BYTES/v
+data: "k2"/123.000000000,9 -> /BYTES/
+data: "k2"/123.000000000,7 -> /BYTES/v2
+stats: key_count=2 key_bytes=77 val_count=6 val_bytes=30 live_count=1 live_bytes=20 gc_bytes_age=-2001
+error: (*kvpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:123000000000 logical:12 > 
+
+# Try overwriting it without FailOnTombstones set - expect success.
+run stats ok
+cput k=k v=v ts=123,13
+----
+>> cput k=k v=v ts=123,13
+stats: key_bytes=+12 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+20 gc_bytes_age=+46
+>> at end:
+data: "k"/123.000000000,13 -> /BYTES/v
+data: "k"/123.000000000,12 -> /<empty>
+data: "k"/123.000000000,10 -> /BYTES/v2
+data: "k"/123.000000000,5 -> /BYTES/
+data: "k"/123.000000000,2 -> /BYTES/v
+data: "k2"/123.000000000,9 -> /BYTES/
+data: "k2"/123.000000000,7 -> /BYTES/v2
+stats: key_count=2 key_bytes=89 val_count=7 val_bytes=36 live_count=2 live_bytes=40 gc_bytes_age=-1955

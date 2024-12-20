@@ -1372,7 +1372,7 @@ func cPutArgs(key roachpb.Key, value, expValue []byte) kvpb.ConditionalPutReques
 	if expValue != nil {
 		expValue = roachpb.MakeValueFromBytes(expValue).TagAndDataBytes()
 	}
-	req := kvpb.NewConditionalPut(key, roachpb.MakeValueFromBytes(value), expValue, false /* allowNotExist */)
+	req := kvpb.NewConditionalPut(key, roachpb.MakeValueFromBytes(value), expValue, false /* allowNotExist */, false /* failOnTombstones */)
 	return *req.(*kvpb.ConditionalPutRequest)
 }
 

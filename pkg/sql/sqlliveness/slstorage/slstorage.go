@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -529,7 +530,11 @@ func (s *Storage) Insert(
 
 		}
 		v := encodeValue(expiration)
-		batch.InitPut(k, &v, true)
+		if s.settings.Version.IsActive(ctx, clusterversion.V25_1) {
+			batch.CPutFailOnTombstones(k, &v, nil /* expValue */)
+		} else {
+			batch.InitPut(k, &v, true)
+		}
 
 		return txn.CommitInBatch(ctx, batch)
 	}); err != nil {

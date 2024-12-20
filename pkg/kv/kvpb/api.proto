@@ -333,6 +333,8 @@ message ConditionalPutRequest {
   // exist with that value. Passing this indicates that it is also OK if the key
   // does not exist. This is useful when a given value is expected but it is
   // possible it has not yet been written.
+  //
+  // Cannot be combined with FailOnTombstones nor with OriginTimestamp.
   bool allow_if_does_not_exist = 5;
   // Specify as true to put the value without a corresponding
   // timestamp. This option should be used with care as it precludes
@@ -371,6 +373,11 @@ message ConditionalPutRequest {
   //
   // This must only be used in conjunction with OriginTimestamp.
   bool should_win_origin_timestamp_tie = 9;
+
+  // If true, tombstones cause ConditionFailedErrors.
+  //
+  // Cannot be combined with AllowIfDoesNotExit nor with OriginTimestamp.
+  bool failOnTombstones = 10;
 }
 
 // A ConditionalPutResponse is the return value from the
@@ -385,6 +392,8 @@ message ConditionalPutResponse {
 // - If key exists, returns a ConditionFailedError if value != existing value
 //   If failOnTombstones is set to true, tombstone values count as mismatched
 //   values and will cause a ConditionFailedError.
+// TODO(yuzefovich): this can be removed once the compatibility with the version
+// in which we stopped issuing InitPuts is no longer needed.
 message InitPutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Value value = 2 [(gogoproto.nullable) = false];
