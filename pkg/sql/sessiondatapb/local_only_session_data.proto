@@ -582,6 +582,10 @@ message LocalOnlySessionData {
   // be processed from both inputs by the hash or merge join so that we choose
   // to distribute the plan because of this joiner stage of DistSQL processors.
   uint64 distribute_join_row_count_threshold = 149;
+  // LegacyVarcharTyping controls the legacy behavior of allowing some invalid
+  // mix-typed comparisons with VARCHAR types. See #137837, #133037, and
+  // #132268.
+  bool legacy_varchar_typing = 150;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

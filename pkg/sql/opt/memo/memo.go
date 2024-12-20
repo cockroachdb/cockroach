@@ -198,6 +198,7 @@ type Memo struct {
 	useConditionalHoistFix                     bool
 	pushLimitIntoProjectFilteredScan           bool
 	unsafeAllowTriggersModifyingCascades       bool
+	legacyVarcharTyping                        bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -287,6 +288,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useConditionalHoistFix:                     evalCtx.SessionData().OptimizerUseConditionalHoistFix,
 		pushLimitIntoProjectFilteredScan:           evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan,
 		unsafeAllowTriggersModifyingCascades:       evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades,
+		legacyVarcharTyping:                        evalCtx.SessionData().LegacyVarcharTyping,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -454,6 +456,7 @@ func (m *Memo) IsStale(
 		m.useConditionalHoistFix != evalCtx.SessionData().OptimizerUseConditionalHoistFix ||
 		m.pushLimitIntoProjectFilteredScan != evalCtx.SessionData().OptimizerPushLimitIntoProjectFilteredScan ||
 		m.unsafeAllowTriggersModifyingCascades != evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades ||
+		m.legacyVarcharTyping != evalCtx.SessionData().LegacyVarcharTyping ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
