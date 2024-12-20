@@ -57,6 +57,8 @@ type tokenCounterPerWorkClass struct {
 type deltaStats struct {
 	noTokenDuration                time.Duration
 	tokensDeducted, tokensReturned kvflowcontrol.Tokens
+	// Can only be non-zero for send tokens.
+	tokensDeductedForceFlush, tokensDeductedPreventSendQueue kvflowcontrol.Tokens
 }
 
 func makeTokenCounterPerWorkClass(
@@ -74,7 +76,11 @@ func makeTokenCounterPerWorkClass(
 
 // adjustTokensLocked adjusts the tokens for the given work class by delta.
 func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
-	ctx context.Context, delta kvflowcontrol.Tokens, now time.Time, isReset bool,
+	ctx context.Context,
+	delta kvflowcontrol.Tokens,
+	now time.Time,
+	isReset bool,
+	flag TokenAdjustFlag,
 ) (adjustment, unaccounted kvflowcontrol.Tokens) {
 	before := twc.tokens
 	twc.tokens += delta
@@ -90,6 +96,12 @@ func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
 		}
 	} else {
 		twc.stats.tokensDeducted -= delta
+		switch flag {
+		case AdjForceFlush:
+			twc.stats.tokensDeductedForceFlush -= delta
+		case AdjPreventSendQueue:
+			twc.stats.tokensDeductedPreventSendQueue -= delta
+		}
 		if before > 0 && twc.tokens <= 0 {
 			twc.stats.noTokenStartTime = now
 		}
@@ -108,14 +120,14 @@ func (twc *tokenCounterPerWorkClass) setLimitLocked(
 ) {
 	before := twc.limit
 	twc.limit = limit
-	twc.adjustTokensLocked(ctx, twc.limit-before, now, false /* isReset */)
+	twc.adjustTokensLocked(ctx, twc.limit-before, now, false /* isReset */, AdjNormal)
 }
 
 func (twc *tokenCounterPerWorkClass) resetLocked(ctx context.Context, now time.Time) {
 	if twc.limit <= twc.tokens {
 		return
 	}
-	twc.adjustTokensLocked(ctx, twc.limit-twc.tokens, now, true /* isReset */)
+	twc.adjustTokensLocked(ctx, twc.limit-twc.tokens, now, true /* isReset */, AdjNormal)
 }
 
 func (twc *tokenCounterPerWorkClass) signal() {
@@ -607,15 +619,18 @@ func (t *tokenCounter) adjustLocked(
 	switch class {
 	case admissionpb.RegularWorkClass:
 		adjustment.regular, unaccounted.regular =
-			t.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
+			t.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(
+				ctx, delta, now, false /* isReset */, flag)
 			// Regular {deductions,returns} also affect elastic flow tokens.
 		adjustment.elastic, unaccounted.elastic =
-			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
+			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(
+				ctx, delta, now, false /* isReset */, flag)
 
 	case admissionpb.ElasticWorkClass:
 		// Elastic {deductions,returns} only affect elastic flow tokens.
 		adjustment.elastic, unaccounted.elastic =
-			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
+			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(
+				ctx, delta, now, false /* isReset */, flag)
 	}
 
 	// Adjust metrics if any tokens were actually adjusted or unaccounted for
@@ -641,7 +656,7 @@ func (t *tokenCounter) testingSetTokens(
 	defer t.mu.Unlock()
 
 	t.mu.counters[wc].adjustTokensLocked(ctx,
-		tokens-t.mu.counters[wc].tokens, t.clock.PhysicalTime(), false /* isReset */)
+		tokens-t.mu.counters[wc].tokens, t.clock.PhysicalTime(), false /* isReset */, AdjNormal)
 }
 
 func (t *tokenCounter) GetAndResetStats(now time.Time) (regularStats, elasticStats deltaStats) {
