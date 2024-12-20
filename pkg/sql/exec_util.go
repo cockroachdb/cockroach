@@ -3997,6 +3997,10 @@ func (m *sessionDataMutator) SetLegacyVarcharTyping(val bool) {
 	m.data.LegacyVarcharTyping = val
 }
 
+func (m *sessionDataMutator) SetAvoidCatalogGenerationForStaleness(b bool) {
+	m.data.AvoidCatalogGenerationForStaleness = b
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
