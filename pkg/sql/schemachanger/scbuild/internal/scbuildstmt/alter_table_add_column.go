@@ -160,9 +160,11 @@ func alterTableAddColumn(
 		maybeFailOnCrossDBTypeReference(b, typeID, tableNamespace.DatabaseID)
 	}
 	// Block unique indexes on unsupported types.
+	version := b.EvalCtx().Settings.Version.ActiveVersion(b)
 	if d.Unique.IsUnique &&
 		!d.Unique.WithoutIndex &&
-		!colinfo.ColumnTypeIsIndexable(spec.colType.Type) {
+		(!colinfo.ColumnTypeIsIndexable(spec.colType.Type) ||
+			(spec.colType.Type.Family() == types.JsonFamily && !version.IsActive(clusterversion.V23_2))) {
 		typInfo := spec.colType.Type.DebugString()
 		panic(unimplemented.NewWithIssueDetailf(35730, typInfo,
 			"column %s is of type %s and thus is not indexable",

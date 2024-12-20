@@ -3641,3 +3641,14 @@ statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
 
 subtest end
+
+subtest block_json_unique_in_mixed_version
+
+statement ok
+CREATE TABLE t136790 (a INT PRIMARY KEY)
+
+onlyif config local-mixed-23.1
+statement error column b is of type jsonb and thus is not indexable
+ALTER TABLE t136790 ADD COLUMN b JSONB UNIQUE
+
+subtest end
