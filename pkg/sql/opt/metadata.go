@@ -406,7 +406,8 @@ func (md *Metadata) CheckDependencies(
 	// may have been different in the past. Otherwise, the dependency digest
 	// is sufficient.
 	currentDigest := optCatalog.GetDependencyDigest()
-	if evalCtx.AsOfSystemTime == nil &&
+	if evalCtx.SessionData().CatalogDigestStalenessCheckEnabled &&
+		evalCtx.AsOfSystemTime == nil &&
 		!evalCtx.Txn.ReadTimestampFixed() &&
 		md.checkDependencyDigest(&currentDigest) {
 		return true, nil
@@ -546,9 +547,11 @@ func (md *Metadata) CheckDependencies(
 
 	// Update the digest after a full dependency check, since our fast
 	// check did not succeed.
-	md.mu.Lock()
-	md.mu.dependencyDigest = currentDigest
-	md.mu.Unlock()
+	if evalCtx.SessionData().CatalogDigestStalenessCheckEnabled {
+		md.mu.Lock()
+		md.mu.dependencyDigest = currentDigest
+		md.mu.Unlock()
+	}
 	return true, nil
 }
 
