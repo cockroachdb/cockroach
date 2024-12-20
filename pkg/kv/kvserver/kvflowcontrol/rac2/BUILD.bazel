@@ -24,6 +24,7 @@ go_library(
         "//pkg/raft/raftpb",
         "//pkg/raft/tracker",
         "//pkg/roachpb",
+        "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",

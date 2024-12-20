@@ -1676,7 +1676,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			return
 		}
 
-		if index.NonInvertedPrefixColumnCount() > 0 {
+		if index.PrefixColumnCount() > 0 {
 			// TODO(mgartner): We don't yet support using multi-column inverted
 			//  indexes with zigzag joins.
 			return
@@ -1781,7 +1781,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		}
 
 		// The fixed columns include all the prefix columns and the inverted column.
-		fixedColsCount := index.NonInvertedPrefixColumnCount() + 1
+		fixedColsCount := index.PrefixColumnCount() + 1
 
 		// Get constant values and add them to FixedVals as tuples, with associated
 		// Column IDs in both {Left,Right}FixedCols.
@@ -1797,7 +1797,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 
 		// invertedColIdx is the position of the inverted column in the inverted
 		// index.
-		invertedColIdx := index.NonInvertedPrefixColumnCount()
+		invertedColIdx := index.PrefixColumnCount()
 		leftVals[invertedColIdx] = c.e.f.ConstructConstVal(&leftVal, leftVal.ResolvedType())
 		leftTypes[invertedColIdx] = leftVal.ResolvedType()
 		rightVals[invertedColIdx] = c.e.f.ConstructConstVal(&rightVal, rightVal.ResolvedType())

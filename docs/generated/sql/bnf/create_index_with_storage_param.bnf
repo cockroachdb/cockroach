@@ -3,3 +3,5 @@ create_index_stmt ::=
 	| 'CREATE'  'INDEX'  'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' ( 'WITH' '(' ( ( ( storage_parameter_key '=' var_value ) ) ( ( ',' ( storage_parameter_key '=' var_value ) ) )* ) ')' )  opt_index_visible
 	| 'CREATE'  'INVERTED' 'INDEX'  opt_index_name 'ON' table_name '(' index_params ')' ( 'WITH' '(' ( ( ( storage_parameter_key '=' var_value ) ) ( ( ',' ( storage_parameter_key '=' var_value ) ) )* ) ')' )  opt_index_visible
 	| 'CREATE'  'INVERTED' 'INDEX'  'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' ( 'WITH' '(' ( ( ( storage_parameter_key '=' var_value ) ) ( ( ',' ( storage_parameter_key '=' var_value ) ) )* ) ')' )  opt_index_visible
+	| 'CREATE'  'VECTOR' 'INDEX'  opt_index_name 'ON' table_name '(' index_params ')' ( 'WITH' '(' ( ( ( storage_parameter_key '=' var_value ) ) ( ( ',' ( storage_parameter_key '=' var_value ) ) )* ) ')' )  opt_index_visible
+	| 'CREATE'  'VECTOR' 'INDEX'  'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' ( 'WITH' '(' ( ( ( storage_parameter_key '=' var_value ) ) ( ( ',' ( storage_parameter_key '=' var_value ) ) )* ) ')' )  opt_index_visible
