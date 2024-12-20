@@ -14,7 +14,6 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/sql/sqlstats",
         "//pkg/testutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
