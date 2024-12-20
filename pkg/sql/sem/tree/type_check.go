@@ -92,6 +92,10 @@ type SemaProperties struct {
 	// Ancestors is mutated during semantic analysis to provide contextual
 	// information for each descendent during traversal of sub-expressions.
 	Ancestors ScalarAncestors
+
+	// IgnoreUnpreferredOverloads is set to true when "unpreferred" overloads
+	// should not be used during type-checking and overload resolution.
+	IgnoreUnpreferredOverloads bool
 }
 
 type semaRequirements struct {
