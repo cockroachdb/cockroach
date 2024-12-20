@@ -28,8 +28,8 @@ import (
 func TestDataDriven_{{.TestName}}(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "takes ~3mins to run"){{if eq .TestName "multiregion"}}
-	skip.UnderDeadlockWithIssue(t, 117927){{end}}
+	skip.UnderRace(t, "takes ~3mins to run")
+	skip.UnderDeadlock(t, "slows down test by 10 to 100x")
 
 	runTestDataDriven(t, "{{.TestFilePath}}")
 }
