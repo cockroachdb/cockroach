@@ -212,6 +212,10 @@ func New(
 	factory *norm.Factory,
 	stmt tree.Statement,
 ) *Builder {
+	// NOTE: This is a hack to get a session setting plumbed into the
+	// type-checker without plumbing evalCtx. This pattern should probably not
+	// be repeated.
+	semaCtx.Properties.IgnoreUnpreferredOverloads = evalCtx.SessionData().LegacyVarcharTyping
 	return &Builder{
 		factory:            factory,
 		stmt:               stmt,
