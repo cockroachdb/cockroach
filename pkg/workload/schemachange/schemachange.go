@@ -339,8 +339,16 @@ func (s *schemaChange) Ops(
 // setClusterSettings configures any settings required for the workload ahead
 // of starting workers.
 func (s *schemaChange) setClusterSettings(ctx context.Context, pool *workload.MultiConnPool) error {
-	_, err := pool.Get().Exec(ctx, `SET CLUSTER SETTING sql.defaults.super_regions.enabled = 'on'`)
-	return errors.WithStack(err)
+	for _, stmt := range []string{
+		`SET CLUSTER SETTING sql.defaults.super_regions.enabled = 'on'`,
+		`SET CLUSTER SETTING sql.log.all_statements.enabled = 'on'`,
+	} {
+		_, err := pool.Get().Exec(ctx, stmt)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	return nil
 }
 
 // initSeqName returns the smallest available sequence number to be
