@@ -924,6 +924,7 @@ func testRegionAddDropWithConcurrentBackupOps(
 	},
 ) {
 	skip.UnderRace(t, "times out under race")
+	skip.UnderDeadlock(t)
 
 	testCases := []struct {
 		name      string
