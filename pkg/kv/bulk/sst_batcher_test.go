@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
@@ -87,11 +89,12 @@ func TestDuplicateHandling(t *testing.T) {
 		require.Equal(t, count, keyCount)
 	}
 
-	tsStart := 1000
+	// Set a start time that's well within the gc threshold.
+	tsStart := timeutil.Now().Add(-time.Minute).UnixNano()
 	keyCount := 10
 	value := storageutils.StringValueRaw("value")
 
-	type keyBuilder func(i int, ts int) storage.MVCCKey
+	type keyBuilder func(i int, ts int64) storage.MVCCKey
 
 	type testCase struct {
 		name            string
@@ -120,7 +123,7 @@ func TestDuplicateHandling(t *testing.T) {
 			ingestAll: true,
 			// Set the export startTime to ensure all revisions are read, or fail if
 			// the gc threshold has advance past the start time
-			exportStartTime: hlc.Timestamp{WallTime: int64(tsStart) - 1},
+			exportStartTime: hlc.Timestamp{WallTime: tsStart - 1},
 			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
 				for i := 0; i < keyCount; i++ {
 					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart+1), value))
@@ -135,7 +138,7 @@ func TestDuplicateHandling(t *testing.T) {
 			ingestAll: true,
 			// Set the export startTime to ensure all revisions are read, or fail if
 			// the gc threshold has advance past the start time
-			exportStartTime: hlc.Timestamp{WallTime: int64(tsStart) - 1},
+			exportStartTime: hlc.Timestamp{WallTime: tsStart - 1},
 			addKeys: func(t *testing.T, b *bulk.SSTBatcher, k keyBuilder) storage.MVCCKey {
 				for i := 0; i < keyCount; i++ {
 					require.NoError(t, b.AddMVCCKey(ctx, k(i+1, tsStart+1), value))
@@ -204,8 +207,8 @@ func TestDuplicateHandling(t *testing.T) {
 				tc.skipDuplicates, tc.ingestAll, mem.MakeConcurrentBoundAccount(), reqs)
 			require.NoError(t, err)
 			defer b.Close(ctx)
-			k := func(i int, ts int) storage.MVCCKey {
-				return storageutils.PointKey(fmt.Sprintf("bulk-test-%s-%04d", tc.name, i+1), ts)
+			k := func(i int, ts int64) storage.MVCCKey {
+				return storageutils.PointKey(fmt.Sprintf("bulk-test-%s-%04d", tc.name, i+1), int(ts))
 			}
 			endKey := tc.addKeys(t, b, k)
 			if tc.expectedCount > 0 {
