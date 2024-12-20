@@ -3985,6 +3985,10 @@ func (m *sessionDataMutator) SetRecursionDepthLimit(val int) {
 	m.data.RecursionDepthLimit = int64(val)
 }
 
+func (m *sessionDataMutator) SetAvoidCatalogGenerationForStaleness(b bool) {
+	m.data.AvoidCatalogGenerationForStaleness = b
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

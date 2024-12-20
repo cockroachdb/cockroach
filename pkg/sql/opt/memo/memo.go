@@ -464,7 +464,8 @@ func (m *Memo) IsStale(
 	// If the query is AOST we must check all the dependencies, since the descriptors
 	// may have been different in the past. Otherwise, the catlalog fingerprint
 	// is sufficient.
-	if evalCtx.AsOfSystemTime == nil &&
+	if !evalCtx.SessionData().AvoidCatalogGenerationForStaleness &&
+		evalCtx.AsOfSystemTime == nil &&
 		catalogGeneration != nil &&
 		!catalog.UpdateCatalogGeneration(catalogGeneration) {
 		return false, nil

@@ -583,6 +583,10 @@ message LocalOnlySessionData {
   // to distribute the plan because of this joiner stage of DistSQL processors.
   uint64 distribute_join_row_count_threshold = 149;
 
+  // AvoidCatalogGenerationForStaleness is used to disable using the catalog
+  // generation information to do fast memo checks.
+  bool avoid_catalog_generation_for_staleness = 150;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
