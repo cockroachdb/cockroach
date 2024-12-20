@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
@@ -97,9 +98,18 @@ func TestTokenAdjustment(t *testing.T) {
 				return ""
 
 			case "adjust":
-				require.NotNilf(t, evalCounter, "uninitialized token counter (did you use 'init'?)")
 				typ := "eval"
 				d.MaybeScanArgs(t, "type", &typ)
+				var counter *tokenCounter
+				switch typ {
+				case "eval":
+					counter = evalCounter
+				case "send":
+					counter = sendCounter
+				default:
+					t.Fatalf("unknown type: %s", typ)
+				}
+				require.NotNilf(t, counter, "uninitialized token counter (did you use 'init'?)")
 
 				for _, line := range strings.Split(d.Input, "\n") {
 					parts := strings.Fields(line)
@@ -159,16 +169,6 @@ func TestTokenAdjustment(t *testing.T) {
 						}
 					}
 
-					counter := evalCounter
-					switch typ {
-					case "eval":
-						// Already set as the default above.
-					case "send":
-						counter = sendCounter
-					default:
-						t.Fatalf("unknown type: %s", typ)
-					}
-
 					counter.adjust(ctx, wc, delta, flag)
 					adjustments = append(adjustments, adjustment{
 						wc:    wc,
@@ -180,7 +180,16 @@ func TestTokenAdjustment(t *testing.T) {
 						flag: flag,
 					})
 				}
-				return ""
+				var b strings.Builder
+				printStats := func(kind string, stats deltaStats) {
+					fmt.Fprintf(&b, "%s: deducted: %s, returned: %s, force-flush: %s, prevent-send-q: %s\n",
+						kind, stats.tokensDeducted, stats.tokensReturned, stats.tokensDeductedForceFlush,
+						stats.tokensDeductedPreventSendQueue)
+				}
+				regularStats, elasticStats := counter.GetAndResetStats(timeutil.Now())
+				printStats("regular", regularStats)
+				printStats("elastic", elasticStats)
+				return b.String()
 
 			case "history":
 				typ := "eval"
