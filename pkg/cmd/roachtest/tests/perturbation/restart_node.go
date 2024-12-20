@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -47,6 +48,11 @@ func (r restart) setupMetamorphic(rng *rand.Rand) variations {
 	r.cleanRestart = rng.Intn(2) == 0
 	v.perturbation = r
 	v = v.randomize(rng)
+	// TODO(#137666): The restart test can cause OOM with low memory
+	// configurations.
+	if v.mem == spec.Low {
+		v.mem = spec.Standard
+	}
 	return v
 }
 
