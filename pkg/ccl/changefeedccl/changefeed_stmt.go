@@ -180,7 +180,7 @@ func changefeedPlanHook(
 	}
 
 	// rowFn implements sql.PlanHookRowFn.
-	rowFn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	rowFn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 		st, err := opts.GetInitialScanType()
@@ -322,8 +322,8 @@ func changefeedPlanHook(
 		}
 	}
 
-	rowFnLogErrors := func(ctx context.Context, pn []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		err := rowFn(ctx, pn, resultsCh)
+	rowFnLogErrors := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+		err := rowFn(ctx, resultsCh)
 		if err != nil {
 			logChangefeedFailedTelemetryDuringStartup(ctx, description, failureTypeForStartupError(err))
 		}

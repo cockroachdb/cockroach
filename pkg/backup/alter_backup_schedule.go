@@ -778,7 +778,7 @@ func alterBackupScheduleHook(
 		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		err := doAlterBackupSchedules(ctx, p, spec, resultsCh)
 		if err != nil {
 			telemetry.Count("scheduled-backup.alter.failed")

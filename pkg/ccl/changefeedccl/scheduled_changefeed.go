@@ -470,7 +470,7 @@ func invokeCreateChangefeed(ctx context.Context, createChangefeedFn sql.PlanHook
 	})
 
 	g.GoCtx(func(ctx context.Context) error {
-		return createChangefeedFn(ctx, nil, resultCh)
+		return createChangefeedFn(ctx, resultCh)
 	})
 
 	return g.Wait()
@@ -680,7 +680,7 @@ func createChangefeedScheduleHook(
 		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		err := doCreateChangefeedSchedule(ctx, p, spec, resultsCh)
 		if err != nil {
 			telemetry.Count("scheduled-changefeed.create.failed")
