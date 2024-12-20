@@ -34,6 +34,7 @@ var targetObjectToPrivilegeObject = map[privilege.TargetObjectType]privilege.Obj
 }
 
 type alterDefaultPrivilegesNode struct {
+	zeroInputPlanNode
 	n *tree.AlterDefaultPrivileges
 
 	dbDesc      *dbdesc.Mutable

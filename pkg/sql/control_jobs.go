@@ -19,7 +19,7 @@ import (
 )
 
 type controlJobsNode struct {
-	rows          planNode
+	singleInputPlanNode
 	desiredStatus jobs.Status
 	numRows       int
 	reason        string
@@ -48,7 +48,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		return err
 	}
 	for {
-		ok, err := n.rows.Next(params)
+		ok, err := n.input.Next(params)
 		if err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			break
 		}
 
-		jobIDDatum := n.rows.Values()[0]
+		jobIDDatum := n.input.Values()[0]
 		if jobIDDatum == tree.DNull {
 			continue
 		}
@@ -104,5 +104,5 @@ func (*controlJobsNode) Next(runParams) (bool, error) { return false, nil }
 func (*controlJobsNode) Values() tree.Datums { return nil }
 
 func (n *controlJobsNode) Close(ctx context.Context) {
-	n.rows.Close(ctx)
+	n.input.Close(ctx)
 }

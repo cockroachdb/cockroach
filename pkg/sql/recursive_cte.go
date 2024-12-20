@@ -27,7 +27,8 @@ import (
 // The recursive query tree is regenerated each time using a callback
 // (implemented by the execbuilder).
 type recursiveCTENode struct {
-	initial planNode
+	// The input plan node is for the initial query.
+	singleInputPlanNode
 
 	genIterationFn exec.RecursiveCTEIterationFn
 	// iterationCount tracks the number of invocations of genIterationFn.
@@ -62,7 +63,7 @@ type recursiveCTERun struct {
 }
 
 func (n *recursiveCTENode) startExec(params runParams) error {
-	n.typs = planTypes(n.initial)
+	n.typs = planTypes(n.input)
 	n.workingRows.Init(params.ctx, n.typs, params.extendedEvalCtx, "cte" /* opName */)
 	if n.deduplicate {
 		n.allRows.InitWithDedup(params.ctx, n.typs, params.extendedEvalCtx, "cte-all" /* opName */)
@@ -80,14 +81,14 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		// at a time and returned them in the same fashion, but that would require
 		// special-case behavior).
 		for {
-			ok, err := n.initial.Next(params)
+			ok, err := n.input.Next(params)
 			if err != nil {
 				return false, err
 			}
 			if !ok {
 				break
 			}
-			if err := n.AddRow(params.ctx, n.initial.Values()); err != nil {
+			if err := n.AddRow(params.ctx, n.input.Values()); err != nil {
 				return false, err
 			}
 		}
@@ -129,10 +130,10 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	buf := &bufferNode{
 		// The plan here is only useful for planColumns, so it's ok to always use
 		// the initial plan.
-		plan:  n.initial,
-		typs:  n.typs,
-		rows:  lastWorkingRows,
-		label: n.label,
+		singleInputPlanNode: singleInputPlanNode{n.input},
+		typs:                n.typs,
+		rows:                lastWorkingRows,
+		label:               n.label,
 	}
 	newPlan, err := n.genIterationFn(newExecFactory(params.ctx, params.p), buf)
 	if err != nil {
@@ -163,7 +164,7 @@ func (n *recursiveCTENode) Values() tree.Datums {
 }
 
 func (n *recursiveCTENode) Close(ctx context.Context) {
-	n.initial.Close(ctx)
+	n.input.Close(ctx)
 	if n.deduplicate {
 		n.allRows.Close(ctx)
 	}

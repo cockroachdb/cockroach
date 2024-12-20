@@ -1969,57 +1969,57 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &distinctNode{plan: scanToParallelize}}},
+			plan:                     planComponents{main: planMaybePhysical{planNode: &distinctNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &filterNode{source: planDataSource{plan: scanToParallelize}}}},
+			plan: planComponents{main: planMaybePhysical{planNode: &filterNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			// filterNode might be handled via wrapping a row-execution
 			// processor, so we safely prohibit the parallelization.
 			prohibitParallelization: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
-				plan:  scanToParallelize,
-				funcs: []*aggregateFuncHolder{{filterRenderIdx: tree.NoColumnIdx}}},
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				funcs:               []*aggregateFuncHolder{{filterRenderIdx: tree.NoColumnIdx}}},
 			}},
 			// Non-filtering aggregation is supported.
 			hasScanNodeToParallelize: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
-				plan:  scanToParallelize,
-				funcs: []*aggregateFuncHolder{{filterRenderIdx: 0}}},
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				funcs:               []*aggregateFuncHolder{{filterRenderIdx: 0}}},
 			}},
 			// Filtering aggregation is not natively supported.
 			prohibitParallelization: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
-				input: scanToParallelize,
-				table: &scanNode{desc: makeTableDesc()},
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				table:               &scanNode{desc: makeTableDesc()},
 			}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &limitNode{plan: scanToParallelize}}},
+			plan:                     planComponents{main: planMaybePhysical{planNode: &limitNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &ordinalityNode{source: scanToParallelize}}},
+			plan:                     planComponents{main: planMaybePhysical{planNode: &ordinalityNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
-				source: planDataSource{plan: scanToParallelize},
-				render: []tree.TypedExpr{&tree.IndexedVar{Idx: 0}},
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				render:              []tree.TypedExpr{&tree.IndexedVar{Idx: 0}},
 			}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
-				source: planDataSource{plan: scanToParallelize},
-				render: []tree.TypedExpr{&tree.IsNullExpr{}},
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				render:              []tree.TypedExpr{&tree.IsNullExpr{}},
 			}}},
 			// Not a simple projection (some expressions might be handled by
 			// wrapping a row-execution processor, so we choose to be safe and
@@ -2027,7 +2027,7 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			prohibitParallelization: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &sortNode{plan: scanToParallelize}}},
+			plan:                     planComponents{main: planMaybePhysical{planNode: &sortNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
@@ -2043,7 +2043,7 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			hasScanNodeToParallelize: false,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &windowNode{plan: scanToParallelize}}},
+			plan: planComponents{main: planMaybePhysical{planNode: &windowNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			// windowNode is not fully supported by the vectorized.
 			prohibitParallelization: true,
 		},

@@ -97,6 +97,35 @@ type planNode interface {
 	// The node must not be used again after this method is called. Some nodes put
 	// themselves back into memory pools on Close.
 	Close(ctx context.Context)
+
+	InputCount() int
+	Input(i int) (planNode, error)
+}
+
+// zeroInputPlanNode is embedded in planNode implementations that have no input
+// planNode. It implements the InputCount and Input methods of planNode.
+type zeroInputPlanNode struct{}
+
+func (zeroInputPlanNode) InputCount() int { return 0 }
+
+func (zeroInputPlanNode) Input(i int) (planNode, error) {
+	return nil, errors.AssertionFailedf("input node has no inputs")
+}
+
+// singleInputPlanNode is embedded in planNode implementations that have a
+// single input planNode. It implements the InputCount and Input methods of
+// planNode.
+type singleInputPlanNode struct {
+	input planNode
+}
+
+func (n *singleInputPlanNode) InputCount() int { return 1 }
+
+func (n *singleInputPlanNode) Input(i int) (planNode, error) {
+	if i == 0 {
+		return n.input, nil
+	}
+	return nil, errors.AssertionFailedf("input index %d is out of range", i)
 }
 
 // mutationPlanNode is a specification of planNode for mutations operations

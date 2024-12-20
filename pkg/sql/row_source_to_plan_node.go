@@ -22,6 +22,11 @@ type rowSourceToPlanNode struct {
 	source    execinfra.RowSource
 	forwarder metadataForwarder
 
+	// We use a zeroInputPlanNode to prevent traversal into the original
+	// planNode since planNodeToRowSource on the other end of the adapter will
+	// take care of propagating signals via its own traversal.
+	zeroInputPlanNode
+
 	// originalPlanNode is the original planNode that the wrapped RowSource got
 	// planned for.
 	originalPlanNode planNode

@@ -117,10 +117,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *scanNode:
 
 	case *filterNode:
-		n.source.plan = v.visit(n.source.plan)
+		n.input = v.visit(n.input)
 
 	case *renderNode:
-		n.source.plan = v.visit(n.source.plan)
+		n.input = v.visit(n.input)
 
 	case *indexJoinNode:
 		n.input = v.visit(n.input)
@@ -134,11 +134,11 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *zigzagJoinNode:
 
 	case *applyJoinNode:
-		n.input.plan = v.visit(n.input.plan)
+		n.input = v.visit(n.input)
 
 	case *joinNode:
-		n.left.plan = v.visit(n.left.plan)
-		n.right.plan = v.visit(n.right.plan)
+		n.left = v.visit(n.left)
+		n.right = v.visit(n.right)
 
 	case *invertedFilterNode:
 		n.input = v.visit(n.input)
@@ -147,55 +147,55 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.input = v.visit(n.input)
 
 	case *limitNode:
-		n.plan = v.visit(n.plan)
+		n.input = v.visit(n.input)
 
 	case *max1RowNode:
-		n.plan = v.visit(n.plan)
+		n.input = v.visit(n.input)
 
 	case *distinctNode:
-		n.plan = v.visit(n.plan)
+		n.input = v.visit(n.input)
 
 	case *sortNode:
-		n.plan = v.visit(n.plan)
+		n.input = v.visit(n.input)
 
 	case *topKNode:
-		n.plan = v.visit(n.plan)
+		n.input = v.visit(n.input)
 
 	case *groupNode:
-		n.plan = v.visit(n.plan)
+		n.input = v.visit(n.input)
 
 	case *windowNode:
-		n.plan = v.visit(n.plan)
+		n.input = v.visit(n.input)
 
 	case *unionNode:
 		n.left = v.visit(n.left)
 		n.right = v.visit(n.right)
 
 	case *splitNode:
-		n.rows = v.visit(n.rows)
+		n.input = v.visit(n.input)
 
 	case *unsplitNode:
-		n.rows = v.visit(n.rows)
+		n.input = v.visit(n.input)
 
 	case *relocateNode:
-		n.rows = v.visit(n.rows)
+		n.input = v.visit(n.input)
 
 	case *relocateRange:
-		n.rows = v.visit(n.rows)
+		n.input = v.visit(n.input)
 
 	case *insertNode, *insertFastPathNode:
 		if ins, ok := n.(*insertNode); ok {
-			ins.source = v.visit(ins.source)
+			ins.input = v.visit(ins.input)
 		}
 
 	case *upsertNode:
-		n.source = v.visit(n.source)
+		n.input = v.visit(n.input)
 
 	case *updateNode:
-		n.source = v.visit(n.source)
+		n.input = v.visit(n.input)
 
 	case *deleteNode:
-		n.source = v.visit(n.source)
+		n.input = v.visit(n.input)
 
 	case *deleteRangeNode:
 
@@ -207,7 +207,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *createTableNode:
 		if n.n.As() {
-			n.sourcePlan = v.visit(n.sourcePlan)
+			n.input = v.visit(n.input)
 		}
 
 	case *alterTenantCapabilityNode:
@@ -219,8 +219,8 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *resetAllNode:
 
 	case *delayedNode:
-		if n.plan != nil {
-			n.plan = v.visit(n.plan)
+		if n.input != nil {
+			n.input = v.visit(n.input)
 		}
 
 	case *explainVecNode:
@@ -244,33 +244,33 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		n.plan.main.planNode = v.visit(n.plan.main.planNode)
 
 	case *ordinalityNode:
-		n.source = v.visit(n.source)
+		n.input = v.visit(n.input)
 
 	case *spoolNode:
-		n.source = v.visit(n.source)
+		n.input = v.visit(n.input)
 
 	case *saveTableNode:
-		n.source = v.visit(n.source)
+		n.input = v.visit(n.input)
 
 	case *showTraceReplicaNode:
-		n.plan = v.visit(n.plan)
+		n.input = v.visit(n.input)
 
 	case *cancelQueriesNode:
-		n.rows = v.visit(n.rows)
+		n.input = v.visit(n.input)
 
 	case *cancelSessionsNode:
-		n.rows = v.visit(n.rows)
+		n.input = v.visit(n.input)
 
 	case *controlJobsNode:
-		n.rows = v.visit(n.rows)
+		n.input = v.visit(n.input)
 
 	case *controlSchedulesNode:
-		n.rows = v.visit(n.rows)
+		n.input = v.visit(n.input)
 
 	case *setZoneConfigNode:
 
 	case *projectSetNode:
-		n.source = v.visit(n.source)
+		n.input = v.visit(n.input)
 
 	case *rowSourceToPlanNode:
 		// No need to recurse into the original planNode since
@@ -278,18 +278,18 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		// propagating signals via its own walker.
 
 	case *errorIfRowsNode:
-		n.plan = v.visit(n.plan)
+		n.input = v.visit(n.input)
 
 	case *scanBufferNode:
 
 	case *bufferNode:
-		n.plan = v.visit(n.plan)
+		n.input = v.visit(n.input)
 
 	case *recursiveCTENode:
-		n.initial = v.visit(n.initial)
+		n.input = v.visit(n.input)
 
 	case *exportNode:
-		n.source = v.visit(n.source)
+		n.input = v.visit(n.input)
 	}
 }
 

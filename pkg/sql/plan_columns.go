@@ -136,31 +136,31 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.
 	case *bufferNode:
-		return getPlanColumns(n.plan, mut)
+		return getPlanColumns(n.input, mut)
 	case *distinctNode:
-		return getPlanColumns(n.plan, mut)
+		return getPlanColumns(n.input, mut)
 	case *fetchNode:
 		return n.cursor.Types()
 	case *filterNode:
-		return getPlanColumns(n.source.plan, mut)
+		return getPlanColumns(n.input, mut)
 	case *max1RowNode:
-		return getPlanColumns(n.plan, mut)
+		return getPlanColumns(n.input, mut)
 	case *limitNode:
-		return getPlanColumns(n.plan, mut)
+		return getPlanColumns(n.input, mut)
 	case *spoolNode:
-		return getPlanColumns(n.source, mut)
+		return getPlanColumns(n.input, mut)
 	case *serializeNode:
 		return getPlanColumns(n.source, mut)
 	case *saveTableNode:
-		return getPlanColumns(n.source, mut)
+		return getPlanColumns(n.input, mut)
 	case *scanBufferNode:
 		return getPlanColumns(n.buffer, mut)
 	case *sortNode:
-		return getPlanColumns(n.plan, mut)
+		return getPlanColumns(n.input, mut)
 	case *topKNode:
-		return getPlanColumns(n.plan, mut)
+		return getPlanColumns(n.input, mut)
 	case *recursiveCTENode:
-		return getPlanColumns(n.initial, mut)
+		return getPlanColumns(n.input, mut)
 
 	case *showVarNode:
 		return colinfo.ResultColumns{

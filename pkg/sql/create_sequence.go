@@ -31,6 +31,7 @@ import (
 )
 
 type createSequenceNode struct {
+	zeroInputPlanNode
 	n      *tree.CreateSequence
 	dbDesc catalog.DatabaseDescriptor
 }

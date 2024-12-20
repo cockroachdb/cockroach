@@ -30,6 +30,7 @@ import (
 // However, if the optimizer can prove that only a small number of rows will
 // be deleted, it'll enable autoCommit for delete range.
 type deleteRangeNode struct {
+	zeroInputPlanNode
 	// spans are the spans to delete.
 	spans roachpb.Spans
 	// desc is the table descriptor the delete is operating on.

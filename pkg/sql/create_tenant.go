@@ -12,6 +12,7 @@ import (
 )
 
 type createTenantNode struct {
+	zeroInputPlanNode
 	ifNotExists bool
 	tenantSpec  tenantSpec
 }

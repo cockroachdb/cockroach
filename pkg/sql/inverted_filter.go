@@ -15,7 +15,7 @@ import (
 )
 
 type invertedFilterNode struct {
-	input           planNode
+	singleInputPlanNode
 	expression      *inverted.SpanExpression
 	preFiltererExpr tree.TypedExpr
 	preFiltererType *types.T
