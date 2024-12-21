@@ -196,7 +196,7 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
       RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
       Statements:
       - statement: DROP FUNCTION f
-        redactedstatement: DROP FUNCTION ‹""›.‹""›.‹f›
+        redactedstatement: DROP FUNCTION ""."".f
         statementtag: DROP FUNCTION
 PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
   transitions:

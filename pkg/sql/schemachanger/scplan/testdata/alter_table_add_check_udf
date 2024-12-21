@@ -72,7 +72,7 @@ PreCommitPhase stage 2 of 2 with 6 MutationType ops
       RunningStatus: PostCommitPhase stage 1 of 2 with 1 ValidationType op pending
       Statements:
       - statement: ALTER TABLE t ADD CONSTRAINT check_b CHECK (f(b) > 1)
-        redactedstatement: ALTER TABLE ‹defaultdb›.public.‹t› ADD CONSTRAINT ‹check_b› CHECK (‹f›(‹b›) > ‹1›)
+        redactedstatement: ALTER TABLE defaultdb.public.t ADD CONSTRAINT check_b CHECK (f(b) > ‹1›)
         statementtag: ALTER TABLE
 PostCommitPhase stage 1 of 2 with 1 ValidationType op
   transitions:
