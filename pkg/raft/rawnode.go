@@ -230,7 +230,7 @@ func (rn *RawNode) readyWithoutAccept() Ready {
 
 	rd := Ready{
 		Entries:          r.raftLog.nextUnstableEnts(),
-		CommittedEntries: r.raftLog.nextCommittedEnts(rn.applyUnstableEntries()),
+		CommittedEntries: r.raftLog.nextCommittedEnts(r.maxApplyingEntsSize, rn.applyUnstableEntries()),
 		Messages:         r.msgs,
 	}
 	if softSt := r.softState(); !softSt.equal(rn.prevSoftSt) {
@@ -499,7 +499,7 @@ func (rn *RawNode) acceptReady(rd Ready) {
 	if len(rd.CommittedEntries) > 0 {
 		ents := rd.CommittedEntries
 		index := ents[len(ents)-1].Index
-		rn.raft.raftLog.acceptApplying(index, entsSize(ents), rn.applyUnstableEntries())
+		rn.raft.raftLog.acceptApplying(index)
 	}
 }
 
