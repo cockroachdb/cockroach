@@ -37,7 +37,7 @@ func TestServicePorts(t *testing.T) {
 	z2NS := local.NewDNSProvider(t.TempDir(), "z2")
 	vm.Providers["p2"] = &testProvider{DNSProvider: z2NS}
 
-	err := z1NS.CreateRecords(ctx,
+	err := z1NS.CreateRecords(ctx, nil,
 		vm.CreateSRVRecord(serviceDNSName(z1NS, "t1", ServiceTypeSQL, clusterName), net.SRV{
 			Target: "host1.rp.",
 			Port:   12345,
@@ -45,7 +45,7 @@ func TestServicePorts(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	err = z2NS.CreateRecords(ctx,
+	err = z2NS.CreateRecords(ctx, nil,
 		vm.CreateSRVRecord(serviceDNSName(z2NS, "t1", ServiceTypeSQL, clusterName), net.SRV{
 			Target: "host1.rp.",
 			Port:   12346,
@@ -72,7 +72,7 @@ func TestServicePorts(t *testing.T) {
 		Nodes: allNodes(2),
 	}
 
-	descriptors, err := c.DiscoverServices(context.Background(), "t1", ServiceTypeSQL, ServiceNodePredicate(c.Nodes...))
+	descriptors, err := c.DiscoverServices(context.Background(), nil, "t1", ServiceTypeSQL, ServiceNodePredicate(c.Nodes...))
 	sort.Slice(descriptors, func(i, j int) bool {
 		return descriptors[i].Port < descriptors[j].Port
 	})
@@ -226,11 +226,11 @@ func TestMultipleRegistrations(t *testing.T) {
 	verify := func(c *SyncedCluster, servicesToRegister [][]ServiceDesc) bool {
 		for _, services := range servicesToRegister {
 			if len(services) == 0 {
-				err := testDNS.DeleteRecordsBySubdomain(ctx, c.Name)
+				err := testDNS.DeleteRecordsBySubdomain(ctx, nil, c.Name)
 				require.NoError(t, err)
 				continue
 			}
-			err := c.RegisterServices(ctx, services)
+			err := c.RegisterServices(ctx, nil, services)
 			require.NoError(t, err)
 		}
 		return true

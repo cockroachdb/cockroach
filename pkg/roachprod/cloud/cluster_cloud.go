@@ -433,7 +433,7 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 	// and clean-up entries prematurely.
 	stopSpinner = ui.NewDefaultSpinner(l, "Destroying DNS entries").Start()
 	dnsErr := vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
-		return p.DeleteRecordsBySubdomain(context.Background(), c.Name)
+		return p.DeleteRecordsBySubdomain(context.Background(), l, c.Name)
 	})
 	stopSpinner()
 

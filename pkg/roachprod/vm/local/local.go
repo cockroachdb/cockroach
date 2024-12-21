@@ -79,8 +79,13 @@ func DeleteCluster(l *logger.Logger, name string) error {
 
 	for i := range c.VMs {
 		path := VMDir(c.Name, i+1)
-		if err := os.RemoveAll(path); err != nil {
-			return err
+		if config.DryRun || config.Verbose {
+			l.Printf("exec: rm -rf %s", path)
+		}
+		if !config.DryRun {
+			if err := os.RemoveAll(path); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -93,7 +98,7 @@ func DeleteCluster(l *logger.Logger, name string) error {
 	// Local clusters are expected to specifically use the local DNS provider
 	// implementation, and should clean up any DNS records in the local file
 	// system cache.
-	return p.DeleteRecordsBySubdomain(context.Background(), c.Name)
+	return p.DeleteRecordsBySubdomain(context.Background(), l, c.Name)
 }
 
 // Clusters returns a list of all known local clusters.
@@ -219,7 +224,9 @@ func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddre
 	return nil, nil
 }
 
-func (p *Provider) createVM(clusterName string, index int, creationTime time.Time) (vm.VM, error) {
+func (p *Provider) createVM(
+	l *logger.Logger, clusterName string, index int, creationTime time.Time,
+) (vm.VM, error) {
 	cVM := vm.VM{
 		Name:             "localhost",
 		CreatedAt:        creationTime,
@@ -237,9 +244,14 @@ func (p *Provider) createVM(clusterName string, index int, creationTime time.Tim
 		LocalClusterName: clusterName,
 	}
 	path := VMDir(clusterName, index+1)
-	err := os.MkdirAll(path, 0755)
-	if err != nil {
-		return vm.VM{}, err
+	if config.DryRun || config.Verbose {
+		l.Printf("exec: mkdir -p %s", path)
+	}
+	if !config.DryRun {
+		err := os.MkdirAll(path, 0755)
+		if err != nil {
+			return vm.VM{}, err
+		}
 	}
 	return cVM, nil
 }
@@ -262,7 +274,7 @@ func (p *Provider) Create(
 
 	for i := range names {
 		var err error
-		c.VMs[i], err = p.createVM(c.Name, i, now)
+		c.VMs[i], err = p.createVM(l, c.Name, i, now)
 		if err != nil {
 			return err
 		}
@@ -278,7 +290,7 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 	now := timeutil.Now()
 	offset := p.clusters[clusterName].VMs.Len()
 	for i := range names {
-		cVM, err := p.createVM(clusterName, i+offset, now)
+		cVM, err := p.createVM(l, clusterName, i+offset, now)
 		if err != nil {
 			return err
 		}
@@ -294,8 +306,13 @@ func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName str
 			continue
 		}
 		path := VMDir(clusterName, i+1)
-		if err := os.RemoveAll(path); err != nil {
-			return err
+		if config.DryRun || config.Verbose {
+			l.Printf("exec: rm -rf %s", path)
+		}
+		if !config.DryRun {
+			if err := os.RemoveAll(path); err != nil {
+				return err
+			}
 		}
 	}
 	p.clusters[clusterName].VMs = p.clusters[clusterName].VMs[:keepCount]

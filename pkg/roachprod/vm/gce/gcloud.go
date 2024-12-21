@@ -6,9 +6,7 @@
 package gce
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -25,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/cli"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -47,7 +46,11 @@ const (
 )
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
-var providerInstance = &Provider{}
+var providerInstance = &Provider{
+	CLIProvider: cli.CLIProvider{
+		CLICommand: "gcloud",
+	},
+}
 
 var (
 	defaultDefaultProject = config.EnvOrDefaultString(
@@ -112,31 +115,8 @@ func Init() error {
 	providerInstance.defaultServiceAccount = defaultDefaultServiceAccount
 
 	initialized = true
+
 	vm.Providers[ProviderName] = providerInstance
-	return nil
-}
-
-func runJSONCommand(args []string, parsed interface{}) error {
-	cmd := exec.Command("gcloud", args...)
-
-	rawJSON, err := cmd.Output()
-	if err != nil {
-		var stderr []byte
-		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
-			stderr = exitErr.Stderr
-		}
-		// TODO(peter,ajwerner): Remove this hack once gcloud behaves when adding
-		// new zones.
-		if matched, _ := regexp.Match(`.*Unknown zone`, stderr); !matched {
-			return errors.Wrapf(err, "failed to run: gcloud %s\nstdout: %s\nstderr: %s\n",
-				strings.Join(args, " "), bytes.TrimSpace(rawJSON), bytes.TrimSpace(stderr))
-		}
-	}
-
-	if err := json.Unmarshal(rawJSON, &parsed); err != nil {
-		return errors.Wrapf(err, "failed to parse json %s: %v", rawJSON, rawJSON)
-	}
-
 	return nil
 }
 
@@ -373,6 +353,8 @@ type Provider struct {
 	// The service account to use if the default project is in use and no
 	// ServiceAccount was specified.
 	defaultServiceAccount string
+
+	cli.CLIProvider
 }
 
 // LogEntry represents a single log entry from the gcloud logging(stack driver)
@@ -403,7 +385,7 @@ func (p *Provider) GetPreemptedSpotVMs(
 		return nil, err
 	}
 	var logEntries []LogEntry
-	if err := runJSONCommand(args, &logEntries); err != nil {
+	if err := p.RunJSONCommand(context.Background(), l, args, &logEntries); err != nil {
 		l.Printf("Error running gcloud cli command: %v\n", err)
 		return nil, err
 	}
@@ -431,7 +413,7 @@ func (p *Provider) GetHostErrorVMs(
 		return nil, err
 	}
 	var logEntries []LogEntry
-	if err := runJSONCommand(args, &logEntries); err != nil {
+	if err := p.RunJSONCommand(context.Background(), l, args, &logEntries); err != nil {
 		l.Printf("Error running gcloud cli command: %v\n", err)
 		return nil, err
 	}
@@ -460,7 +442,7 @@ func (p *Provider) GetVMSpecs(
 		vmFullResourceName := "projects/" + p.GetProject() + "/zones/" + vmInstance.Zone + "/instances/" + vmInstance.Name
 		args := []string{"compute", "instances", "describe", vmFullResourceName, "--format=json"}
 
-		if err := runJSONCommand(args, &vmSpec); err != nil {
+		if err := p.RunJSONCommand(context.Background(), l, args, &vmSpec); err != nil {
 			return nil, errors.Wrapf(err, "error describing instance %s in zone %s", vmInstance.Name, vmInstance.Zone)
 		}
 		name, ok := vmSpec["name"].(string)
@@ -560,7 +542,7 @@ func (p *Provider) CreateVolumeSnapshot(
 	}
 
 	var createJsonResponse snapshotJson
-	if err := runJSONCommand(args, &createJsonResponse); err != nil {
+	if err := p.RunJSONCommand(context.Background(), l, args, &createJsonResponse); err != nil {
 		return vm.VolumeSnapshot{}, err
 	}
 
@@ -577,8 +559,7 @@ func (p *Provider) CreateVolumeSnapshot(
 		"add-labels", vsco.Name,
 		"--labels", s[:len(s)-1],
 	}
-	cmd := exec.Command("gcloud", args...)
-	if _, err := cmd.CombinedOutput(); err != nil {
+	if _, err := p.RunCommand(context.Background(), l, args); err != nil {
 		return vm.VolumeSnapshot{}, err
 	}
 	return vm.VolumeSnapshot{
@@ -612,7 +593,7 @@ func (p *Provider) ListVolumeSnapshots(
 	}
 
 	var snapshotsJSONResponse []snapshotJson
-	if err := runJSONCommand(args, &snapshotsJSONResponse); err != nil {
+	if err := p.RunJSONCommand(context.Background(), l, args, &snapshotsJSONResponse); err != nil {
 		return nil, err
 	}
 
@@ -644,8 +625,7 @@ func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.Volum
 		args = append(args, snapshot.Name)
 	}
 
-	cmd := exec.Command("gcloud", args...)
-	if _, err := cmd.CombinedOutput(); err != nil {
+	if _, err := p.RunCommand(context.Background(), l, args); err != nil {
 		return err
 	}
 	return nil
@@ -714,7 +694,7 @@ func (p *Provider) CreateVolume(
 	}
 
 	var commandResponse []describeVolumeCommandResponse
-	err = runJSONCommand(args, &commandResponse)
+	err = p.RunJSONCommand(context.Background(), l, args, &commandResponse)
 	if err != nil {
 		return vm.Volume{}, err
 	}
@@ -742,8 +722,7 @@ func (p *Provider) CreateVolume(
 			"--labels", s[:len(s)-1],
 			"--zone", vco.Zone,
 		}
-		cmd := exec.Command("gcloud", args...)
-		if _, err := cmd.CombinedOutput(); err != nil {
+		if _, err := p.RunCommand(context.Background(), l, args); err != nil {
 			return vm.Volume{}, err
 		}
 	}
@@ -769,8 +748,7 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) e
 			"--disk", volume.ProviderResourceID,
 			"--zone", volume.Zone,
 		}
-		cmd := exec.Command("gcloud", args...)
-		if _, err := cmd.CombinedOutput(); err != nil {
+		if _, err := p.RunCommand(context.Background(), l, args); err != nil {
 			return err
 		}
 	}
@@ -784,8 +762,7 @@ func (p *Provider) DeleteVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) e
 			"--zone", volume.Zone,
 			"--quiet",
 		}
-		cmd := exec.Command("gcloud", args...)
-		if _, err := cmd.CombinedOutput(); err != nil {
+		if _, err := p.RunCommand(context.Background(), l, args); err != nil {
 			return err
 		}
 	}
@@ -813,7 +790,7 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 			"--zone", v.Zone,
 			"--format", "json(disks)",
 		}
-		if err := runJSONCommand(args, &commandResponse); err != nil {
+		if err := p.RunJSONCommand(context.Background(), l, args, &commandResponse); err != nil {
 			return nil, err
 		}
 		attachedDisks = commandResponse.Disks
@@ -834,7 +811,7 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 			"--filter", fmt.Sprintf("users:(%s)", v.Name),
 			"--format", "json",
 		}
-		if err := runJSONCommand(args, &describedVolumes); err != nil {
+		if err := p.RunJSONCommand(context.Background(), l, args, &describedVolumes); err != nil {
 			return nil, err
 		}
 	}
@@ -900,7 +877,7 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 	}
 
 	var commandResponse []instanceDisksResponse
-	if err := runJSONCommand(args, &commandResponse); err != nil {
+	if err := p.RunJSONCommand(context.Background(), l, args, &commandResponse); err != nil {
 		return "", err
 	}
 	found := false
@@ -928,7 +905,7 @@ func (p *Provider) AttachVolume(l *logger.Logger, volume vm.Volume, vm *vm.VM) (
 		"--format=json(disks)",
 	}
 
-	if err := runJSONCommand(args, &commandResponse); err != nil {
+	if err := p.RunJSONCommand(context.Background(), l, args, &commandResponse); err != nil {
 		return "", err
 	}
 
@@ -1157,11 +1134,9 @@ func (o *ProviderOpts) ConfigureClusterCleanupFlags(flags *pflag.FlagSet) {
 func (p *Provider) CleanSSH(l *logger.Logger) error {
 	for _, prj := range p.GetProjects() {
 		args := []string{"compute", "config-ssh", "--project", prj, "--quiet", "--remove"}
-		cmd := exec.Command("gcloud", args...)
-
-		output, err := cmd.CombinedOutput()
+		_, err := p.RunCommand(context.Background(), l, args)
 		if err != nil {
-			return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			return err
 		}
 	}
 	return nil
@@ -1206,9 +1181,8 @@ func (p *Provider) editLabels(
 		vmArgs = append(vmArgs, commonArgs...)
 
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", vmArgs...)
-			if b, err := cmd.CombinedOutput(); err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", vmArgs, string(b))
+			if _, err := p.RunCommand(context.Background(), l, vmArgs); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -1460,10 +1434,8 @@ func createInstanceTemplates(
 		createTemplateArgs = append(createTemplateArgs, "--labels", labelsArg)
 		createTemplateArgs = append(createTemplateArgs, templateName)
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", createTemplateArgs...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", createTemplateArgs, output)
+			if _, err := cliProvider.RunCommand(context.Background(), l, createTemplateArgs); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -1511,10 +1483,8 @@ func createInstanceGroups(
 		argsWithZone = append(argsWithZone, "--zone", zone)
 		argsWithZone = append(argsWithZone, "--template", templateName)
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", argsWithZone...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
+			if _, err := cliProvider.RunCommand(context.Background(), l, argsWithZone); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -1532,10 +1502,8 @@ func waitForGroupStability(l *logger.Logger, project, groupName string, zones []
 			"--project", project,
 			groupName}
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", groupStableArgs...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", groupStableArgs, output)
+			if _, err := cliProvider.RunCommand(context.Background(), l, groupStableArgs); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -1563,14 +1531,17 @@ func (p *Provider) Create(
 			"`roachprod gc --gce-project=%s` cronjob", project)
 	}
 	if providerOpts.Managed {
-		if err := checkSDKVersion("450.0.0" /* minVersion */, "required by managed instance groups"); err != nil {
+		if err := checkSDKVersion(l, "450.0.0" /* minVersion */, "required by managed instance groups"); err != nil {
 			return err
 		}
 	}
 
 	instanceArgs, cleanUpFn, err := p.computeInstanceArgs(l, opts, providerOpts)
 	if cleanUpFn != nil {
-		defer cleanUpFn()
+		// Keep temp. files in dry run mode.
+		if !config.DryRun {
+			defer cleanUpFn()
+		}
 	}
 	if err != nil {
 		return err
@@ -1644,10 +1615,8 @@ func (p *Provider) Create(
 			for _, host := range zoneHosts {
 				argsWithHost := append(argsWithZone[:len(argsWithZone):len(argsWithZone)], []string{"--instance", host}...)
 				g.Go(func() error {
-					cmd := exec.Command("gcloud", argsWithHost...)
-					output, err := cmd.CombinedOutput()
-					if err != nil {
-						return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithHost, output)
+					if _, err = p.RunCommand(context.Background(), l, argsWithHost); err != nil {
+						return err
 					}
 					return nil
 				})
@@ -1672,10 +1641,8 @@ func (p *Provider) Create(
 			argsWithZone := append(createArgs[:len(createArgs):len(createArgs)], "--zone", zone)
 			argsWithZone = append(argsWithZone, zoneHosts...)
 			g.Go(func() error {
-				cmd := exec.Command("gcloud", argsWithZone...)
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
+				if _, err := p.RunCommand(context.Background(), l, argsWithZone); err != nil {
+					return err
 				}
 				return nil
 			})
@@ -1686,7 +1653,7 @@ func (p *Provider) Create(
 			return err
 		}
 	}
-	return propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD, providerOpts.PDVolumeCount)
+	return p.propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD, providerOpts.PDVolumeCount)
 }
 
 // computeGrowDistribution computes the distribution of new nodes across the
@@ -1732,12 +1699,9 @@ func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName str
 		args := []string{"compute", "instance-groups", "managed", "delete-instances",
 			groupName, "--project", project, "--zone", zone, "--instances", strings.Join(instances, ",")}
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", args...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
-			}
-			return nil
+			_, err := p.RunCommand(context.Background(), l, args)
+
+			return err
 		})
 	}
 
@@ -1756,7 +1720,7 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 
 	project := vms[0].Project
 	groupName := instanceGroupName(clusterName)
-	groups, err := listManagedInstanceGroups(project, groupName)
+	groups, err := listManagedInstanceGroups(l, project, groupName)
 	if err != nil {
 		return err
 	}
@@ -1782,10 +1746,8 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 			argsWithName := append(createArgs[:len(createArgs):len(createArgs)], []string{"--instance", name}...)
 			zoneToHostNames[group.Zone] = append(zoneToHostNames[group.Zone], name)
 			g.Go(func() error {
-				cmd := exec.Command("gcloud", argsWithName...)
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithName, output)
+				if _, err := p.RunCommand(context.Background(), l, argsWithName); err != nil {
+					return err
 				}
 				return nil
 			})
@@ -1809,7 +1771,7 @@ func (p *Provider) Grow(l *logger.Logger, vms vm.List, clusterName string, names
 		}
 		labelsJoined += fmt.Sprintf("%s=%s", key, value)
 	}
-	return propagateDiskLabels(l, project, labelsJoined, zoneToHostNames, len(vms[0].LocalDisks) != 0,
+	return p.propagateDiskLabels(l, project, labelsJoined, zoneToHostNames, len(vms[0].LocalDisks) != 0,
 		len(vms[0].NonBootAttachedVolumes))
 }
 
@@ -1822,10 +1784,10 @@ type jsonBackendService struct {
 	SelfLink     string   `json:"selfLink"`
 }
 
-func listBackendServices(project string) ([]jsonBackendService, error) {
+func listBackendServices(l *logger.Logger, project string) ([]jsonBackendService, error) {
 	args := []string{"compute", "backend-services", "list", "--project", project, "--format", "json"}
 	var backends []jsonBackendService
-	if err := runJSONCommand(args, &backends); err != nil {
+	if err := cliProvider.RunJSONCommand(context.Background(), l, args, &backends); err != nil {
 		return nil, err
 	}
 	return backends, nil
@@ -1838,10 +1800,10 @@ type jsonForwardingRule struct {
 	Target    string `json:"target"`
 }
 
-func listForwardingRules(project string) ([]jsonForwardingRule, error) {
+func listForwardingRules(l *logger.Logger, project string) ([]jsonForwardingRule, error) {
 	args := []string{"compute", "forwarding-rules", "list", "--project", project, "--format", "json"}
 	var rules []jsonForwardingRule
-	if err := runJSONCommand(args, &rules); err != nil {
+	if err := cliProvider.RunJSONCommand(context.Background(), l, args, &rules); err != nil {
 		return nil, err
 	}
 	return rules, nil
@@ -1853,10 +1815,10 @@ type jsonTargetTCPProxy struct {
 	Service  string `json:"service"`
 }
 
-func listTargetTCPProxies(project string) ([]jsonTargetTCPProxy, error) {
+func listTargetTCPProxies(l *logger.Logger, project string) ([]jsonTargetTCPProxy, error) {
 	args := []string{"compute", "target-tcp-proxies", "list", "--project", project, "--format", "json"}
 	var proxies []jsonTargetTCPProxy
-	if err := runJSONCommand(args, &proxies); err != nil {
+	if err := cliProvider.RunJSONCommand(context.Background(), l, args, &proxies); err != nil {
 		return nil, err
 	}
 	return proxies, nil
@@ -1867,10 +1829,10 @@ type jsonHealthCheck struct {
 	SelfLink string `json:"selfLink"`
 }
 
-func listHealthChecks(project string) ([]jsonHealthCheck, error) {
+func listHealthChecks(l *logger.Logger, project string) ([]jsonHealthCheck, error) {
 	args := []string{"compute", "health-checks", "list", "--project", project, "--format", "json"}
 	var checks []jsonHealthCheck
-	if err := runJSONCommand(args, &checks); err != nil {
+	if err := cliProvider.RunJSONCommand(context.Background(), l, args, &checks); err != nil {
 		return nil, err
 	}
 	return checks, nil
@@ -1882,7 +1844,7 @@ func listHealthChecks(project string) ([]jsonHealthCheck, error) {
 // function does not return an error if the resources do not exist. Multiple
 // load balancers can be associated with a single cluster, so we need to delete
 // all of them. Health checks associated with the cluster are also deleted.
-func deleteLoadBalancerResources(project, clusterName, portFilter string) error {
+func deleteLoadBalancerResources(l *logger.Logger, project, clusterName, portFilter string) error {
 	// List all the components of the load balancer resources tied to the project.
 	var g errgroup.Group
 	var services []jsonBackendService
@@ -1890,19 +1852,19 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 	var rules []jsonForwardingRule
 	var healthChecks []jsonHealthCheck
 	g.Go(func() (err error) {
-		services, err = listBackendServices(project)
+		services, err = listBackendServices(l, project)
 		return
 	})
 	g.Go(func() (err error) {
-		proxies, err = listTargetTCPProxies(project)
+		proxies, err = listTargetTCPProxies(l, project)
 		return
 	})
 	g.Go(func() (err error) {
-		rules, err = listForwardingRules(project)
+		rules, err = listForwardingRules(l, project)
 		return
 	})
 	g.Go(func() (err error) {
-		healthChecks, err = listHealthChecks(project)
+		healthChecks, err = listHealthChecks(l, project)
 		return
 	})
 	if err := g.Wait(); err != nil {
@@ -1962,10 +1924,8 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 			"--project", project,
 		}
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", args...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			if _, err := cliProvider.RunCommand(context.Background(), l, args); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -1981,10 +1941,8 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 			"--project", project,
 		}
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", args...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			if _, err := cliProvider.RunCommand(context.Background(), l, args); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -2001,10 +1959,8 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 			"--project", project,
 		}
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", args...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			if _, err := cliProvider.RunCommand(context.Background(), l, args); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -2020,10 +1976,8 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 			"--project", project,
 		}
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", args...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+			if _, err := cliProvider.RunCommand(context.Background(), l, args); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -2032,12 +1986,12 @@ func deleteLoadBalancerResources(project, clusterName, portFilter string) error 
 }
 
 // DeleteLoadBalancer implements the vm.Provider interface.
-func (p *Provider) DeleteLoadBalancer(_ *logger.Logger, vms vm.List, port int) error {
+func (p *Provider) DeleteLoadBalancer(l *logger.Logger, vms vm.List, port int) error {
 	clusterName, err := vms[0].ClusterName()
 	if err != nil {
 		return err
 	}
-	return deleteLoadBalancerResources(vms[0].Project, clusterName, strconv.Itoa(port))
+	return deleteLoadBalancerResources(l, vms[0].Project, clusterName, strconv.Itoa(port))
 }
 
 // loadBalancerNameParts returns the cluster name, resource type, and port of a
@@ -2068,7 +2022,7 @@ func loadBalancerResourceName(clusterName string, port int, resourceType string)
 // used to support global load balancing. The different parts of the load
 // balancer are created sequentially, as they depend on each other.
 func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) error {
-	if err := checkSDKVersion("450.0.0" /* minVersion */, "required by load balancers"); err != nil {
+	if err := checkSDKVersion(l, "450.0.0" /* minVersion */, "required by load balancers"); err != nil {
 		return err
 	}
 	if !isManaged(vms) {
@@ -2079,7 +2033,7 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 	if err != nil {
 		return err
 	}
-	groups, err := listManagedInstanceGroups(project, instanceGroupName(clusterName))
+	groups, err := listManagedInstanceGroups(l, project, instanceGroupName(clusterName))
 	if err != nil {
 		return err
 	}
@@ -2089,18 +2043,17 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 
 	var args []string
 	healthCheckName := loadBalancerResourceName(clusterName, port, "health-check")
-	output, err := func() ([]byte, error) {
+	_, err = func() ([]byte, error) {
 		defer ui.NewDefaultSpinner(l, "create health check").Start()()
 		args = []string{"compute", "health-checks", "create", "tcp",
 			healthCheckName,
 			"--project", project,
 			"--port", strconv.Itoa(port),
 		}
-		cmd := exec.Command("gcloud", args...)
-		return cmd.CombinedOutput()
+		return p.RunCommand(context.Background(), l, args)
 	}()
 	if err != nil {
-		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+		return err
 	}
 
 	loadBalancerName := loadBalancerResourceName(clusterName, port, "load-balancer")
@@ -2114,19 +2067,18 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 		"--timeout", "5m",
 		"--port-name", "cockroach",
 	}
-	output, err = func() ([]byte, error) {
+	_, err = func() ([]byte, error) {
 		defer ui.NewDefaultSpinner(l, "creating load balancer backend").Start()()
-		cmd := exec.Command("gcloud", args...)
-		return cmd.CombinedOutput()
+		return p.RunCommand(context.Background(), l, args)
 	}()
 	if err != nil {
-		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+		return err
 	}
 
 	// Add the instance group to the backend service. This has to be done
 	// sequentially, and for each zone, because gcloud does not allow adding
 	// multiple instance groups in parallel.
-	output, err = func() ([]byte, error) {
+	_, err = func() ([]byte, error) {
 		spinner := ui.NewDefaultCountingSpinner(l, "adding backends to load balancer", len(groups))
 		defer spinner.Start()()
 		for n, group := range groups {
@@ -2138,8 +2090,7 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 				"--balancing-mode", "UTILIZATION",
 				"--max-utilization", "0.8",
 			}
-			cmd := exec.Command("gcloud", args...)
-			output, err = cmd.CombinedOutput()
+			output, err := p.RunCommand(context.Background(), l, args)
 			if err != nil {
 				return output, err
 			}
@@ -2148,25 +2099,24 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 		return nil, nil
 	}()
 	if err != nil {
-		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+		return err
 	}
 
 	proxyName := loadBalancerResourceName(clusterName, port, "proxy")
-	output, err = func() ([]byte, error) {
+	_, err = func() ([]byte, error) {
 		defer ui.NewDefaultSpinner(l, "creating load balancer proxy").Start()()
 		args = []string{"compute", "target-tcp-proxies", "create", proxyName,
 			"--project", project,
 			"--backend-service", loadBalancerName,
 			"--proxy-header", "NONE",
 		}
-		cmd := exec.Command("gcloud", args...)
-		return cmd.CombinedOutput()
+		return p.RunCommand(context.Background(), l, args)
 	}()
 	if err != nil {
-		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+		return err
 	}
 
-	output, err = func() ([]byte, error) {
+	_, err = func() ([]byte, error) {
 		defer ui.NewDefaultSpinner(l, "creating load balancer forwarding rule").Start()()
 		args = []string{"compute", "forwarding-rules", "create",
 			loadBalancerResourceName(clusterName, port, "forwarding-rule"),
@@ -2175,11 +2125,10 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 			"--target-tcp-proxy", proxyName,
 			"--ports", strconv.Itoa(port),
 		}
-		cmd := exec.Command("gcloud", args...)
-		return cmd.CombinedOutput()
+		return p.RunCommand(context.Background(), l, args)
 	}()
 	if err != nil {
-		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+		return err
 	}
 
 	// Named ports can be set in parallel for all instance groups.
@@ -2191,10 +2140,8 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 			"--named-ports", "cockroach:" + strconv.Itoa(port),
 		}
 		g.Go(func() error {
-			cmd := exec.Command("gcloud", groupArgs...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", groupArgs, output)
+			if _, err := p.RunCommand(context.Background(), l, groupArgs); err != nil {
+				return err
 			}
 			return nil
 		})
@@ -2205,7 +2152,7 @@ func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 // ListLoadBalancers returns the list of load balancers associated with the
 // given VMs. The VMs have to be part of a managed instance group. The load
 // balancers are returned as a list of service addresses.
-func (p *Provider) ListLoadBalancers(_ *logger.Logger, vms vm.List) ([]vm.ServiceAddress, error) {
+func (p *Provider) ListLoadBalancers(l *logger.Logger, vms vm.List) ([]vm.ServiceAddress, error) {
 	// Only managed instance groups support load balancers.
 	if !isManaged(vms) {
 		return nil, nil
@@ -2215,7 +2162,7 @@ func (p *Provider) ListLoadBalancers(_ *logger.Logger, vms vm.List) ([]vm.Servic
 	if err != nil {
 		return nil, err
 	}
-	rules, err := listForwardingRules(project)
+	rules, err := listForwardingRules(l, project)
 	if err != nil {
 		return nil, err
 	}
@@ -2287,7 +2234,7 @@ func AllowedLocalSSDCount(machineType string) ([]int, error) {
 
 // N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.
 // Hence, we must propagate them. See: https://cloud.google.com/compute/docs/labeling-resources#labeling_boot_disks
-func propagateDiskLabels(
+func (p *Provider) propagateDiskLabels(
 	l *logger.Logger,
 	project string,
 	labels string,
@@ -2313,13 +2260,9 @@ func propagateDiskLabels(
 				bootDiskArgs = append(bootDiskArgs, zoneArg...)
 				// N.B. boot disk has the same name as the host.
 				bootDiskArgs = append(bootDiskArgs, hostName)
-				cmd := exec.Command("gcloud", bootDiskArgs...)
+				_, err := p.RunCommand(context.Background(), l, bootDiskArgs)
 
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", bootDiskArgs, output)
-				}
-				return nil
+				return err
 			})
 
 			if !useLocalSSD {
@@ -2334,11 +2277,8 @@ func propagateDiskLabels(
 						persistentDiskArgs = append(persistentDiskArgs, zoneArg...)
 						// N.B. additional persistent disks are suffixed with the offset, starting at 1.
 						persistentDiskArgs = append(persistentDiskArgs, fmt.Sprintf("%s-%d", hostName, offset))
-						cmd := exec.Command("gcloud", persistentDiskArgs...)
-
-						output, err := cmd.CombinedOutput()
-						if err != nil {
-							return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", persistentDiskArgs, output)
+						if _, err := p.RunCommand(context.Background(), l, persistentDiskArgs); err != nil {
+							return err
 						}
 					}
 					return nil
@@ -2358,10 +2298,10 @@ type jsonInstanceTemplate struct {
 
 // listInstanceTemplates returns a list of instance templates for a given
 // project.
-func listInstanceTemplates(project string) ([]jsonInstanceTemplate, error) {
+func listInstanceTemplates(l *logger.Logger, project string) ([]jsonInstanceTemplate, error) {
 	args := []string{"compute", "instance-templates", "list", "--project", project, "--format", "json"}
 	var templates []jsonInstanceTemplate
-	if err := runJSONCommand(args, &templates); err != nil {
+	if err := cliProvider.RunJSONCommand(context.Background(), l, args, &templates, cli.AlwaysExecute()); err != nil {
 		return nil, err
 	}
 	return templates, nil
@@ -2376,23 +2316,23 @@ type jsonManagedInstanceGroup struct {
 // listManagedInstanceGroups returns a list of managed instance groups for a
 // given group name. Groups may exist in multiple zones with the same name. This
 // function returns a list of all groups with the given name.
-func listManagedInstanceGroups(project, groupName string) ([]jsonManagedInstanceGroup, error) {
+func listManagedInstanceGroups(
+	l *logger.Logger, project, groupName string,
+) ([]jsonManagedInstanceGroup, error) {
 	args := []string{"compute", "instance-groups", "list", "--only-managed",
 		"--project", project, "--format", "json", "--filter", fmt.Sprintf("name=%s", groupName)}
 	var groups []jsonManagedInstanceGroup
-	if err := runJSONCommand(args, &groups); err != nil {
+	if err := cliProvider.RunJSONCommand(context.Background(), l, args, &groups, cli.AlwaysExecute()); err != nil {
 		return nil, err
 	}
 	return groups, nil
 }
 
 // deleteInstanceTemplate deletes the instance template for the cluster.
-func deleteInstanceTemplate(project, templateName string) error {
+func deleteInstanceTemplate(l *logger.Logger, project, templateName string) error {
 	args := []string{"compute", "instance-templates", "delete", "--project", project, "--quiet", templateName}
-	cmd := exec.Command("gcloud", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+	if _, err := cliProvider.RunCommand(context.Background(), l, args); err != nil {
+		return err
 	}
 	return nil
 }
@@ -2432,12 +2372,12 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 		// Delete any load balancer resources associated with the cluster. Trying to
 		// delete the instance group before the load balancer resources will result
 		// in an error.
-		err := deleteLoadBalancerResources(project, cluster, "" /* portFilter */)
+		err := deleteLoadBalancerResources(l, project, cluster, "" /* portFilter */)
 		if err != nil {
 			return err
 		}
 		// Multiple instance groups can exist for a single cluster, one for each zone.
-		projectGroups, err := listManagedInstanceGroups(project, instanceGroupName(cluster))
+		projectGroups, err := listManagedInstanceGroups(l, project, instanceGroupName(cluster))
 		if err != nil {
 			return err
 		}
@@ -2447,10 +2387,8 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 				"--zone", group.Zone,
 				group.Name}
 			g.Go(func() error {
-				cmd := exec.Command("gcloud", argsWithZone...)
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
+				if _, err := p.RunCommand(context.Background(), l, argsWithZone); err != nil {
+					return err
 				}
 				return nil
 			})
@@ -2465,7 +2403,7 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 	// deleted.
 	g = errgroup.Group{}
 	for cluster, project := range clusterProjectMap {
-		templates, err := listInstanceTemplates(project)
+		templates, err := listInstanceTemplates(l, project)
 		if err != nil {
 			return err
 		}
@@ -2475,7 +2413,7 @@ func (p *Provider) deleteManaged(l *logger.Logger, vms vm.List) error {
 				continue
 			}
 			g.Go(func() error {
-				return deleteInstanceTemplate(project, template.Name)
+				return deleteInstanceTemplate(l, project, template.Name)
 			})
 		}
 	}
@@ -2509,13 +2447,9 @@ func (p *Provider) deleteUnmanaged(l *logger.Logger, vms vm.List) error {
 			args = append(args, names...)
 
 			g.Go(func() error {
-				cmd := exec.CommandContext(ctx, "gcloud", args...)
+				_, err := p.RunCommand(ctx, l, args)
 
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
-				}
-				return nil
+				return err
 			})
 		}
 	}
@@ -2552,13 +2486,9 @@ func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 			args = append(args, names...)
 
 			g.Go(func() error {
-				cmd := exec.CommandContext(ctx, "gcloud", args...)
+				_, err := p.RunCommand(ctx, l, args)
 
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
-				}
-				return nil
+				return err
 			})
 		}
 	}
@@ -2578,7 +2508,7 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 	args := []string{"auth", "list", "--format", "json", "--filter", "status~ACTIVE"}
 
 	accounts := make([]jsonAuth, 0)
-	if err := runJSONCommand(args, &accounts); err != nil {
+	if err := p.RunJSONCommand(context.Background(), l, args, &accounts, cli.AlwaysExecute()); err != nil {
 		return "", err
 	}
 
@@ -2609,7 +2539,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 
 		// Run the command, extracting the JSON payload
 		jsonVMS := make([]jsonVM, 0)
-		if err := runJSONCommand(args, &jsonVMS); err != nil {
+		if err := p.RunJSONCommand(context.Background(), l, args, &jsonVMS, cli.AlwaysExecute()); err != nil {
 			return nil, err
 		}
 
@@ -2630,7 +2560,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 			}
 
 			var disks []describeVolumeCommandResponse
-			if err := runJSONCommand(args, &disks); err != nil {
+			if err := p.RunJSONCommand(context.Background(), l, args, &disks, cli.AlwaysExecute()); err != nil {
 				return nil, err
 			}
 
@@ -2680,7 +2610,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 			if projTemplatesInUse == nil {
 				projTemplatesInUse = make(map[string]struct{})
 			}
-			templates, err := listInstanceTemplates(prj)
+			templates, err := listInstanceTemplates(l, prj)
 			if err != nil {
 				return nil, err
 			}
@@ -2941,11 +2871,11 @@ func lastComponent(url string) string {
 
 // checkSDKVersion checks that the gcloud SDK version is at least minVersion.
 // If it is not, it returns an error with the given message.
-func checkSDKVersion(minVersion, message string) error {
+func checkSDKVersion(l *logger.Logger, minVersion, message string) error {
 	var jsonVersion struct {
 		GoogleCloudSDK string `json:"Google Cloud SDK"`
 	}
-	err := runJSONCommand([]string{"version", "--format", "json"}, &jsonVersion)
+	err := cliProvider.RunJSONCommand(context.Background(), l, []string{"version", "--format", "json"}, &jsonVersion)
 	if err != nil {
 		return err
 	}
