@@ -148,8 +148,14 @@ func RandTupleFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 // RandColumnType returns a random type that is a legal column type (e.g. no
 // nested arrays or tuples).
 func RandColumnType(rng *rand.Rand) *types.T {
+	return RandColumnTypeFromSlice(rng, SeedTypes)
+}
+
+// RandColumnType returns a random type that is a legal column type (e.g. no
+// nested arrays or tuples).
+func RandColumnTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 	for {
-		typ := RandType(rng)
+		typ := RandTypeFromSlice(rng, typs)
 		if IsLegalColumnType(typ) {
 			return typ
 		}
