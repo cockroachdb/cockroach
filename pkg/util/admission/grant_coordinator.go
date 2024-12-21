@@ -44,19 +44,8 @@ func (gcs GrantCoordinators) Close() {
 type StoreGrantCoordinators struct {
 	ambientCtx log.AmbientContext
 
-	settings                    *cluster.Settings
-	makeStoreRequesterFunc      makeStoreRequesterFunc
-	kvIOTokensExhaustedDuration [admissionpb.NumWorkClasses]*metric.Counter
-	kvIOTokensAvailable         [admissionpb.NumWorkClasses]*metric.Gauge
-	kvIOTokensTaken             *metric.Counter
-	kvIOTokensReturned          *metric.Counter
-	kvIOTokensBypassed          *metric.Counter
-	l0CompactedBytes            *metric.Counter
-	l0TokensProduced            *metric.Counter
-
-	// These metrics are shared by WorkQueues across stores.
-	workQueueMetrics     [admissionpb.NumWorkClasses]*WorkQueueMetrics
-	snapshotQueueMetrics *SnapshotMetrics
+	settings               *cluster.Settings
+	makeStoreRequesterFunc makeStoreRequesterFunc
 
 	gcMap syncutil.Map[roachpb.StoreID, GrantCoordinator]
 	// numStores is used to track the number of stores which have been added
@@ -74,7 +63,10 @@ type StoreGrantCoordinators struct {
 // SetPebbleMetricsProvider sets a PebbleMetricsProvider and causes the load
 // on the various storage engines to be used for admission control.
 func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
-	startupCtx context.Context, pmp PebbleMetricsProvider, iotc IOThresholdConsumer,
+	startupCtx context.Context,
+	pmp PebbleMetricsProvider,
+	mrp MetricsRegistryProvider,
+	iotc IOThresholdConsumer,
 ) {
 	if sgc.setPebbleMetricsProviderCalled {
 		panic(errors.AssertionFailedf("SetPebbleMetricsProvider called more than once"))
@@ -84,7 +76,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	sgc.closeCh = make(chan struct{})
 	metrics := pebbleMetricsProvider.GetPebbleMetrics()
 	for _, m := range metrics {
-		gc := sgc.initGrantCoordinator(m.StoreID)
+		gc := sgc.initGrantCoordinator(m.StoreID, mrp.GetMetricsRegistry(m.StoreID))
 		// Defensive call to LoadAndStore even though Store ought to be sufficient
 		// since SetPebbleMetricsProvider can only be called once. This code
 		// guards against duplication of stores returned by GetPebbleMetrics.
@@ -177,7 +169,9 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	}()
 }
 
-func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID) *GrantCoordinator {
+func (sgc *StoreGrantCoordinators) initGrantCoordinator(
+	storeID roachpb.StoreID, metricsRegistry *metric.Registry,
+) *GrantCoordinator {
 	coord := &GrantCoordinator{
 		settings:       sgc.settings,
 		useGrantChains: false,
@@ -185,16 +179,29 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 	}
 	coord.mu.numProcs = 1
 
+	// Initialize metrics.
+	sgcMetrics := makeStoreGrantCoordinatorMetrics(metricsRegistry)
+	regularStoreWorkQueueMetrics :=
+		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", KVWork), metricsRegistry,
+			admissionpb.NormalPri, admissionpb.LockingNormalPri)
+	elasticStoreWorkQueueMetrics :=
+		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", admissionpb.ElasticWorkClass), metricsRegistry,
+			admissionpb.BulkLowPri, admissionpb.BulkNormalPri)
+	storeWorkQMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
+		regularStoreWorkQueueMetrics, elasticStoreWorkQueueMetrics,
+	}
+	snapshotQMetrics := makeSnapshotQueueMetrics(metricsRegistry)
+
 	kvg := &kvStoreTokenGranter{
 		coord: coord,
 		// Setting tokens to unlimited is defensive. We expect that
 		// pebbleMetricsTick and allocateIOTokensTick will get called during
 		// initialization, which will also set these to unlimited.
 		startingIOTokens:                unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval(),
-		ioTokensExhaustedDurationMetric: sgc.kvIOTokensExhaustedDuration,
-		availableTokensMetric:           sgc.kvIOTokensAvailable,
-		tokensTakenMetric:               sgc.kvIOTokensTaken,
-		tokensReturnedMetric:            sgc.kvIOTokensReturned,
+		ioTokensExhaustedDurationMetric: sgcMetrics.KVIOTokensExhaustedDuration,
+		availableTokensMetric:           sgcMetrics.KVIOTokensAvailable,
+		tokensTakenMetric:               sgcMetrics.KVIOTokensTaken,
+		tokensReturnedMetric:            sgcMetrics.KVIOTokensReturned,
 	}
 	kvg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 	kvg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass] = kvg.coordMu.availableIOTokens[admissionpb.RegularWorkClass]
@@ -203,7 +210,6 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 	opts := makeWorkQueueOptions(KVWork)
 	// This is IO work, so override the usesTokens value.
 	opts.usesTokens = true
-	// TODO(sumeer): add per-store WorkQueue state for debug.zip and db console.
 	storeGranters := [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted{
 		&kvStoreTokenChildGranter{
 			workType: admissionpb.RegularStoreWorkType,
@@ -224,18 +230,18 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		storeID,
 		storeGranters,
 		sgc.settings,
-		sgc.workQueueMetrics,
+		storeWorkQMetrics,
 		opts,
 		sgc.knobs,
 		sgc.onLogEntryAdmitted,
-		sgc.kvIOTokensBypassed,
+		sgcMetrics.KVIOTokensBypassed,
 		&coord.mu.Mutex,
 	)
 	coord.queues[KVWork] = storeReq
 	requesters := storeReq.getRequesters()
 	kvg.regularRequester = requesters[admissionpb.RegularWorkClass]
 	kvg.elasticRequester = requesters[admissionpb.ElasticWorkClass]
-	kvg.snapshotRequester = makeSnapshotQueue(snapshotGranter, sgc.snapshotQueueMetrics)
+	kvg.snapshotRequester = makeSnapshotQueue(snapshotGranter, snapshotQMetrics)
 	coord.granters[KVWork] = kvg
 	coord.ioLoadListener = &ioLoadListener{
 		storeID:               storeID,
@@ -244,8 +250,8 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID roachpb.StoreID)
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 		diskBandwidthLimiter:  newDiskBandwidthLimiter(),
 		kvGranter:             kvg,
-		l0CompactedBytes:      sgc.l0CompactedBytes,
-		l0TokensProduced:      sgc.l0TokensProduced,
+		l0CompactedBytes:      sgcMetrics.L0CompactedBytes,
+		l0TokensProduced:      sgcMetrics.L0TokensProduced,
 	}
 	return coord
 }
@@ -446,7 +452,7 @@ func NewGrantCoordinators(
 	}
 
 	return GrantCoordinators{
-		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, metrics, registry, onLogEntryAdmitted, knobs),
+		Stores:  makeStoresGrantCoordinators(ambientCtx, opts, st, onLogEntryAdmitted, knobs),
 		Regular: makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry, knobs),
 		Elastic: makeElasticGrantCoordinator(ambientCtx, st, registry),
 	}
@@ -481,44 +487,19 @@ func makeStoresGrantCoordinators(
 	ambientCtx log.AmbientContext,
 	opts Options,
 	st *cluster.Settings,
-	metrics GrantCoordinatorMetrics,
-	registry *metric.Registry,
 	onLogEntryAdmitted OnLogEntryAdmitted,
 	knobs *TestingKnobs,
 ) *StoreGrantCoordinators {
-	// These metrics are shared across all stores and broken down by priority for
-	// the common priorities.
-	// TODO(baptist): Add per-store metrics.
-	regularStoreWorkQueueMetrics :=
-		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", KVWork), registry,
-			admissionpb.NormalPri, admissionpb.LockingNormalPri)
-	elasticStoreWorkQueueMetrics :=
-		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", admissionpb.ElasticWorkClass), registry,
-			admissionpb.BulkLowPri, admissionpb.BulkNormalPri)
-	storeWorkQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
-		regularStoreWorkQueueMetrics, elasticStoreWorkQueueMetrics,
-	}
-	snapshotQueueMetrics := makeSnapshotQueueMetrics(registry)
-
 	makeStoreRequester := makeStoreWorkQueue
 	if opts.makeStoreRequesterFunc != nil {
 		makeStoreRequester = opts.makeStoreRequesterFunc
 	}
 	storeCoordinators := &StoreGrantCoordinators{
-		ambientCtx:                  ambientCtx,
-		settings:                    st,
-		makeStoreRequesterFunc:      makeStoreRequester,
-		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
-		kvIOTokensTaken:             metrics.KVIOTokensTaken,
-		kvIOTokensReturned:          metrics.KVIOTokensReturned,
-		kvIOTokensBypassed:          metrics.KVIOTokensBypassed,
-		kvIOTokensAvailable:         metrics.KVIOTokensAvailable,
-		l0CompactedBytes:            metrics.L0CompactedBytes,
-		l0TokensProduced:            metrics.L0TokensProduced,
-		workQueueMetrics:            storeWorkQueueMetrics,
-		snapshotQueueMetrics:        snapshotQueueMetrics,
-		onLogEntryAdmitted:          onLogEntryAdmitted,
-		knobs:                       knobs,
+		ambientCtx:             ambientCtx,
+		settings:               st,
+		makeStoreRequesterFunc: makeStoreRequester,
+		onLogEntryAdmitted:     onLogEntryAdmitted,
+		knobs:                  knobs,
 	}
 	return storeCoordinators
 }
@@ -1071,23 +1052,15 @@ type GrantCoordinatorMetrics struct {
 	KVCPULoadLongPeriodDuration  *metric.Counter
 	KVSlotAdjusterIncrements     *metric.Counter
 	KVSlotAdjusterDecrements     *metric.Counter
-	// TODO(banabrick): Make these metrics per store.
-	KVIOTokensTaken             *metric.Counter
-	KVIOTokensReturned          *metric.Counter
-	KVIOTokensBypassed          *metric.Counter
-	KVIOTokensAvailable         [admissionpb.NumWorkClasses]*metric.Gauge
-	KVIOTokensExhaustedDuration [admissionpb.NumWorkClasses]*metric.Counter
-	L0CompactedBytes            *metric.Counter
-	L0TokensProduced            *metric.Counter
-	SQLLeafStartUsedSlots       *metric.Gauge
-	SQLRootStartUsedSlots       *metric.Gauge
+	SQLLeafStartUsedSlots        *metric.Gauge
+	SQLRootStartUsedSlots        *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
 func (GrantCoordinatorMetrics) MetricStruct() {}
 
 func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
-	m := GrantCoordinatorMetrics{
+	return GrantCoordinatorMetrics{
 		KVTotalSlots:                 metric.NewGauge(totalSlots),
 		KVUsedSlots:                  metric.NewGauge(addName(KVWork.String(), usedSlots)),
 		KVSlotsExhaustedDuration:     metric.NewCounter(kvSlotsExhaustedDuration),
@@ -1097,11 +1070,29 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 		KVSlotAdjusterDecrements:     metric.NewCounter(kvSlotAdjusterDecrements),
 		SQLLeafStartUsedSlots:        metric.NewGauge(addName(SQLStatementLeafStartWork.String(), usedSlots)),
 		SQLRootStartUsedSlots:        metric.NewGauge(addName(SQLStatementRootStartWork.String(), usedSlots)),
-		KVIOTokensTaken:              metric.NewCounter(kvIOTokensTaken),
-		KVIOTokensReturned:           metric.NewCounter(kvIOTokensReturned),
-		KVIOTokensBypassed:           metric.NewCounter(kvIOTokensBypassed),
-		L0CompactedBytes:             metric.NewCounter(l0CompactedBytes),
-		L0TokensProduced:             metric.NewCounter(l0TokensProduced),
+	}
+}
+
+type StoreGrantCoordinatorMetrics struct {
+	KVIOTokensTaken             *metric.Counter
+	KVIOTokensReturned          *metric.Counter
+	KVIOTokensBypassed          *metric.Counter
+	KVIOTokensAvailable         [admissionpb.NumWorkClasses]*metric.Gauge
+	KVIOTokensExhaustedDuration [admissionpb.NumWorkClasses]*metric.Counter
+	L0CompactedBytes            *metric.Counter
+	L0TokensProduced            *metric.Counter
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (StoreGrantCoordinatorMetrics) MetricStruct() {}
+
+func makeStoreGrantCoordinatorMetrics(registry *metric.Registry) StoreGrantCoordinatorMetrics {
+	m := StoreGrantCoordinatorMetrics{
+		KVIOTokensTaken:    metric.NewCounter(kvIOTokensTaken),
+		KVIOTokensReturned: metric.NewCounter(kvIOTokensReturned),
+		KVIOTokensBypassed: metric.NewCounter(kvIOTokensBypassed),
+		L0CompactedBytes:   metric.NewCounter(l0CompactedBytes),
+		L0TokensProduced:   metric.NewCounter(l0TokensProduced),
 	}
 	m.KVIOTokensAvailable[admissionpb.RegularWorkClass] = metric.NewGauge(kvIOTokensAvailable)
 	m.KVIOTokensAvailable[admissionpb.ElasticWorkClass] = metric.NewGauge(kvElasticIOTokensAvailable)
@@ -1109,6 +1100,7 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 		metric.NewCounter(kvIOTokensExhaustedDuration),
 		metric.NewCounter(kvElasticIOTokensExhaustedDuration),
 	}
+	registry.AddMetricStruct(m)
 	return m
 }
 
