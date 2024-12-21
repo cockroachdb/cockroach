@@ -50,7 +50,7 @@ import (
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
 //     simulation. The available confiurations are: single_region: 15 nodes in
-//     region=US, 5 in each zone US_1/US_2/US_3. single_region_multi_store: 3
+//     region=US, 5 in each zone a1/a2/a3. single_region_multi_store: 3
 //     nodes, 5 stores per node with the same zone/region configuration as
 //     above. multi_region: 36 nodes, 12 in each region and 4 in each zone,
 //     regions having 3 zones. complex: 28 nodes, 3 regions with a skewed
@@ -82,12 +82,12 @@ import (
 //   - set_span_config [delay=<duration>]
 //     [startKey, endKey): <span_config> Provide a new line separated list
 //     of spans and span configurations e.g.
-//     [0,100): num_replicas=5 num_voters=3 constraints={'+region=US_East'}
+//     [0,100): num_replicas=5 num_voters=3 constraints={'+region=a'}
 //     [100, 500): num_replicas=3
 //     ...
 //     This will update the span config for the span [0,100) to specify 3
 //     voting replicas and 2 non-voting replicas, with a constraint that all
-//     replicas are in the region US_East.
+//     replicas are in the region a.
 //
 //   - "assertion" type=<string> [stat=<string>] [ticks=<int>]
 //     [(exact_bound|upper_bound|lower_bound)=<float>] [store=<int>]
@@ -146,12 +146,12 @@ import (
 //   - "topology" [sample=<int>]
 //     Print the cluster locality topology of the sample given (default=last).
 //     e.g. for the load_cluster config=single_region
-//     US
-//     ..US_1
+//     a
+//     ..a1
 //     ....└── [1 2 3 4 5]
-//     ..US_2
+//     ..a2
 //     ....└── [6 7 8 9 10]
-//     ..US_3
+//     ..a3
 //     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
 	ctx := context.Background()
@@ -227,6 +227,22 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "sample", &sample)
 				top := runs[sample-1].S.Topology()
 				return (&top).String()
+			case "gen_cluster_with_locality":
+				var storesPerNode = 1
+				var regions []string
+				var nodesPerRegion []int
+				scanIfExists(t, d, "stores_per_node", &storesPerNode)
+				scanIfExists(t, d, "regions", &regions)
+				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
+				clusterGen = gen.ClusterWithLocality{
+					StoresPerNode:  storesPerNode,
+					NodesPerRegion: nodesPerRegion,
+					Region:         regions,
+				}
+				if len(regions) != len(nodesPerRegion) {
+					return "regions and nodes_per_region must have the same length"
+				}
+				return ""
 			case "gen_cluster":
 				var nodes = 3
 				var storesPerNode = 1
