@@ -1538,9 +1538,9 @@ func mvccGet(
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	defer mvccScanner.release()
 
-	memAccount := opts.MemoryAccount
-	if memAccount == nil {
-		memAccount = mon.NewStandaloneUnlimitedAccount()
+	memAccount := mvccScanner.memAccount
+	if opts.MemoryAccount != nil {
+		memAccount = opts.MemoryAccount
 	}
 
 	// MVCCGet is implemented as an MVCCScan where we retrieve a single key. We
@@ -1549,6 +1549,7 @@ func mvccGet(
 	*mvccScanner = pebbleMVCCScanner{
 		parent:            iter,
 		memAccount:        memAccount,
+		unlimitedMemAcc:   mvccScanner.unlimitedMemAcc,
 		lockTable:         opts.LockTable,
 		start:             key,
 		ts:                timestamp,
@@ -4543,13 +4544,14 @@ func mvccScanInit(
 		}, nil
 	}
 
-	memAccount := opts.MemoryAccount
-	if memAccount == nil {
-		memAccount = mon.NewStandaloneUnlimitedAccount()
+	memAccount := mvccScanner.memAccount
+	if opts.MemoryAccount != nil {
+		memAccount = opts.MemoryAccount
 	}
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
 		memAccount:       memAccount,
+		unlimitedMemAcc:  mvccScanner.unlimitedMemAcc,
 		lockTable:        opts.LockTable,
 		reverse:          opts.Reverse,
 		start:            key,
@@ -5234,18 +5236,16 @@ func MVCCResolveWriteIntent(
 			// Intent resolution requires an MVCC iterator to look up the MVCC
 			// version associated with the intent. Create one.
 			var iter MVCCIterator
-			{
-				iter, err = rw.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
-					Prefix:       true,
-					KeyTypes:     IterKeyTypePointsAndRanges,
-					ReadCategory: fs.IntentResolutionReadCategory,
-				})
-				if err != nil {
-					return false, 0, nil, false, err
-				}
-				defer iter.Close()
+			iter, err = rw.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
+				Prefix:       true,
+				KeyTypes:     IterKeyTypePointsAndRanges,
+				ReadCategory: fs.IntentResolutionReadCategory,
+			})
+			if err != nil {
+				return false, 0, nil, false, err
 			}
 			outcome, err = mvccResolveWriteIntent(ctx, rw, iter, ms, update, &buf.meta, buf)
+			iter.Close()
 		} else {
 			outcome, err = mvccReleaseLockInternal(ctx, rw, ms, update, str, &buf.meta, buf)
 			replLocksReleased = replLocksReleased || outcome != lockNoop
@@ -6384,13 +6384,16 @@ func MVCCGarbageCollect(
 ) (retE error) {
 
 	var count int64
-	defer func(begin time.Time) {
-		log.Eventf(ctx, "handled %d incoming point keys; deleted %d in %s",
-			len(keys), count, timeutil.Since(begin))
-		if retE != nil {
-			log.Eventf(ctx, "err: %s", retE)
-		}
-	}(timeutil.Now())
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		defer func(begin time.Time) {
+			lk, c := len(keys), count // alloc only when neeeded
+			log.Eventf(ctx, "handled %d incoming point keys; deleted %d in %s",
+				lk, c, timeutil.Since(begin))
+			if retE != nil {
+				log.Eventf(ctx, "err: %s", retE)
+			}
+		}(timeutil.Now())
+	}
 
 	// If there are no keys then there is no work.
 	if len(keys) == 0 {
