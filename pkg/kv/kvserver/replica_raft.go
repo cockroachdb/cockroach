@@ -1779,6 +1779,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 		FromReplicaID:                     fromReplica.ReplicaID,
 		Term:                              kvpb.RaftTerm(msg.Term),
 		Commit:                            kvpb.RaftIndex(msg.Commit),
+		Match:                             kvpb.RaftIndex(msg.Match),
 		Quiesce:                           quiesce,
 		LaggingFollowersOnQuiesce:         lagging,
 		LaggingFollowersOnQuiesceAccurate: quiesce,
