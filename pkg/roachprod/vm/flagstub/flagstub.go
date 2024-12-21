@@ -171,3 +171,8 @@ func (p *provider) ProjectActive(project string) bool {
 func (p *provider) CreateProviderOpts() vm.ProviderOpts {
 	return nil
 }
+
+// GetVMArchitecture is part of the vm.Provider interface.
+func (p *provider) GetVMArchitecture(l *logger.Logger, v *vm.VM) (vm.CPUArch, error) {
+	return vm.ArchUnknown, nil
+}
