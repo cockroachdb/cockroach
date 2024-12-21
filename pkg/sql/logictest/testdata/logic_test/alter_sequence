@@ -395,3 +395,29 @@ SHOW CREATE SEQUENCE seq_alter_no_min_max_des
 ----
 table_name                create_statement
 seq_alter_no_min_max_des  CREATE SEQUENCE public.seq_alter_no_min_max_des MINVALUE -9223372036854775808 MAXVALUE -1 INCREMENT -1 START -5
+
+statement ok
+CREATE SEQUENCE seq_cache_limit MINVALUE -10 MAXVALUE 10 INCREMENT 3 CACHE 100 START 0;
+
+query III
+select nextval('seq_cache_limit'),nextval('seq_cache_limit'),nextval('seq_cache_limit');
+----
+0  3  6
+
+query I
+SELECT last_value FROM seq_cache_limit;
+----
+9
+
+statement ok
+ALTER SEQUENCE seq_cache_limit INCREMENT -3;
+
+query III
+select nextval('seq_cache_limit'),nextval('seq_cache_limit'),nextval('seq_cache_limit');
+----
+6  3  0
+
+query I
+SELECT last_value FROM seq_cache_limit;
+----
+-9
