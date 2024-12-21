@@ -374,10 +374,10 @@ SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
 ----
 function  signature  category  details  schema  oid
 
-query ITTITTTTTTTTBBBB colnames
+query ITTITTTTTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
 ----
-database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state  create_nofks  alter_statements  validate_statements  create_redactable  has_partitions  is_multi_region  is_virtual  is_temporary
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name  create_statement  create_statement_fq  state  create_nofks  alter_statements  validate_statements  create_redactable  create_redactable_fq  has_partitions  is_multi_region  is_virtual  is_temporary
 
 query ITITTBTB colnames
 SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''
@@ -1127,8 +1127,10 @@ SELECT is_temporary FROM crdb_internal.create_statements WHERE descriptor_name =
 true
 
 statement ok
-CREATE TABLE defaultdb.public.in_other_db (x INT PRIMARY KEY);
-CREATE TABLE public.in_this_db (x INT PRIMARY KEY);
+CREATE TYPE defaultdb.public.udt AS ENUM ();
+CREATE TABLE defaultdb.public.in_other_db (x INT PRIMARY KEY, e defaultdb.public.udt, FAMILY (x, e));
+CREATE TYPE public.udt AS ENUM ();
+CREATE TABLE public.in_this_db (x INT PRIMARY KEY, e public.udt, FAMILY (x, e));
 
 # Verify that we can inspect all databases by using "" as the database name.
 query TTT colnames
@@ -1141,7 +1143,48 @@ database_name  schema_name  descriptor_name
 defaultdb      public       in_other_db
 test           public       in_this_db
 
-# Also verify that using the virtul index on descriptor_id works.
+# Check that table and UDT names are fully-qualified in the right column.
+query TT colnames
+SELECT database_name, create_statement
+FROM "".crdb_internal.create_statements
+WHERE descriptor_name IN ('in_other_db', 'in_this_db')
+ORDER BY 1
+----
+database_name  create_statement
+defaultdb      CREATE TABLE public.in_other_db (
+                 x INT8 NOT NULL,
+                 e public.udt NULL,
+                 CONSTRAINT in_other_db_pkey PRIMARY KEY (x ASC),
+                 FAMILY fam_0_x_e (x, e)
+               )
+test           CREATE TABLE public.in_this_db (
+                 x INT8 NOT NULL,
+                 e public.udt NULL,
+                 CONSTRAINT in_this_db_pkey PRIMARY KEY (x ASC),
+                 FAMILY fam_0_x_e (x, e)
+               )
+
+query TT colnames
+SELECT database_name, create_statement_fq
+FROM "".crdb_internal.create_statements
+WHERE descriptor_name IN ('in_other_db', 'in_this_db')
+ORDER BY 1
+----
+database_name  create_statement_fq
+defaultdb      CREATE TABLE defaultdb.public.in_other_db (
+                 x INT8 NOT NULL,
+                 e defaultdb.public.udt NULL,
+                 CONSTRAINT in_other_db_pkey PRIMARY KEY (x ASC),
+                 FAMILY fam_0_x_e (x, e)
+               )
+test           CREATE TABLE test.public.in_this_db (
+                 x INT8 NOT NULL,
+                 e test.public.udt NULL,
+                 CONSTRAINT in_this_db_pkey PRIMARY KEY (x ASC),
+                 FAMILY fam_0_x_e (x, e)
+               )
+
+# Also verify that using the virtual index on descriptor_id works.
 query TTT colnames
 SELECT database_name, schema_name, descriptor_name
 FROM "".crdb_internal.create_statements
@@ -1512,19 +1555,19 @@ FROM crdb_internal.create_procedure_statements
 WHERE procedure_name IN ('p', 'p2')
 ORDER BY procedure_id;
 ----
-104  test  105  public  139  p   CREATE PROCEDURE public.p(INT8)
+104  test  105  public  143  p   CREATE PROCEDURE public.p(INT8)
                                    LANGUAGE SQL
                                    SECURITY INVOKER
                                    AS $$
                                    SELECT 1;
                                  $$
-104  test  105  public  140  p   CREATE PROCEDURE public.p(STRING, b INT8)
+104  test  105  public  144  p   CREATE PROCEDURE public.p(STRING, b INT8)
                                    LANGUAGE SQL
                                    SECURITY INVOKER
                                    AS $$
                                    SELECT 'hello';
                                  $$
-104  test  142  sc      143  p2  CREATE PROCEDURE sc.p2(STRING)
+104  test  146  sc      147  p2  CREATE PROCEDURE sc.p2(STRING)
                                    LANGUAGE SQL
                                    SECURITY INVOKER
                                    AS $$
@@ -1543,25 +1586,25 @@ FROM "".crdb_internal.create_procedure_statements
 WHERE procedure_name IN ('p', 'p2', 'p_cross_db')
 ORDER BY procedure_id;
 ----
-104  test           105  public  139  p           CREATE PROCEDURE public.p(INT8)
+104  test           105  public  143  p           CREATE PROCEDURE public.p(INT8)
                                                     LANGUAGE SQL
                                                     SECURITY INVOKER
                                                     AS $$
                                                     SELECT 1;
                                                   $$
-104  test           105  public  140  p           CREATE PROCEDURE public.p(STRING, b INT8)
+104  test           105  public  144  p           CREATE PROCEDURE public.p(STRING, b INT8)
                                                     LANGUAGE SQL
                                                     SECURITY INVOKER
                                                     AS $$
                                                     SELECT 'hello';
                                                   $$
-104  test           142  sc      143  p2          CREATE PROCEDURE sc.p2(STRING)
+104  test           146  sc      147  p2          CREATE PROCEDURE sc.p2(STRING)
                                                     LANGUAGE SQL
                                                     SECURITY INVOKER
                                                     AS $$
                                                     SELECT 'hello';
                                                   $$
-144  test_cross_db  145  public  146  p_cross_db  CREATE PROCEDURE public.p_cross_db()
+148  test_cross_db  149  public  150  p_cross_db  CREATE PROCEDURE public.p_cross_db()
                                                     LANGUAGE SQL
                                                     SECURITY INVOKER
                                                     AS $$
@@ -1686,4 +1729,4 @@ CREATE TYPE other_db.public.enum1 AS ENUM ('yo');
 query ITTITTT
 SELECT * FROM "".crdb_internal.create_type_statements WHERE descriptor_id = (('other_db.public.enum1'::regtype::int) - 100000)::oid
 ----
-121  other_db  public  151  enum1  CREATE TYPE other_db.public.enum1 AS ENUM ('yo')  {yo}
+121  other_db  public  155  enum1  CREATE TYPE other_db.public.enum1 AS ENUM ('yo')  {yo}
