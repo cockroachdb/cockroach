@@ -1186,6 +1186,7 @@ unreserved_keyword ::=
 	| 'FORCE_ZIGZAG'
 	| 'FORWARD'
 	| 'FREEZE'
+	| 'FULLY_QUALIFIED'
 	| 'FUNCTION'
 	| 'FUNCTIONS'
 	| 'GENERATED'
@@ -2046,7 +2047,7 @@ with_comment ::=
 	| 
 
 opt_show_create_format_options ::=
-	'WITH' 'REDACT'
+	'WITH' show_create_format_options
 
 opt_on_targets_roles ::=
 	'ON' targets_roles
@@ -2846,6 +2847,9 @@ extra_var_value ::=
 
 show_backup_options_list ::=
 	( show_backup_options ) ( ( ',' show_backup_options ) )*
+
+show_create_format_options ::=
+	'REDACT'
 
 targets_roles ::=
 	'ROLE' role_spec_list
@@ -3906,6 +3910,7 @@ bare_label_keywords ::=
 	| 'FORWARD'
 	| 'FREEZE'
 	| 'FULL'
+	| 'FULLY_QUALIFIED'
 	| 'FUNCTION'
 	| 'FUNCTIONS'
 	| 'GENERATED'
