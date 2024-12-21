@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -267,6 +269,10 @@ func (p *kvRowProcessor) processOneRow(
 				}
 				return p.processOneRow(ctx, dstTableID, row, k, refreshedValue, s, refreshCount+1)
 			}
+
+			// TODO(jeffswenson): ideally this would share an implementaiton with
+			// mkFastPathUniqueCheckErr.
+			return pgerror.Newf(pgcode.UniqueViolation, "duplicate key value violates unique constraint: %s", condErr.String())
 		}
 		return err
 	}
