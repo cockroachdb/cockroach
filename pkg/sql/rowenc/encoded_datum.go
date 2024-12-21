@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
@@ -179,6 +180,18 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 	return ed, buf[encLen:], nil
 }
 
+// EncDatumValueLegacyFromValue
+func EncDatumValueLegacyFromValue(value roachpb.Value) EncDatum {
+	if value.RawBytes == nil {
+		return NullEncDatum()
+	}
+	return EncDatum{
+		encoding: catenumpb.DatumEncoding_VALUE_LEGACY,
+		encoded:  value.TagAndDataBytes(),
+		Datum:    nil,
+	}
+}
+
 // DatumToEncDatum initializes an EncDatum with the given Datum.
 func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
 	ed, err := DatumToEncDatumEx(ctyp, d)
@@ -242,6 +255,9 @@ func (ed *EncDatum) IsNull() bool {
 		}
 		return typ == encoding.Null
 
+	case catenumpb.DatumEncoding_VALUE_LEGACY:
+		// should already have ed.Datum set to tree.DNull
+		return false
 	default:
 		panic(errors.AssertionFailedf("unknown encoding %s", ed.encoding))
 	}
@@ -264,6 +280,10 @@ func (ed *EncDatum) EnsureDecoded(typ *types.T, a *tree.DatumAlloc) error {
 		ed.Datum, rem, err = keyside.Decode(a, typ, ed.encoded, encoding.Descending)
 	case catenumpb.DatumEncoding_VALUE:
 		ed.Datum, rem, err = valueside.Decode(a, typ, ed.encoded)
+	case catenumpb.DatumEncoding_VALUE_LEGACY:
+		var v roachpb.Value
+		v.SetTagAndData(ed.encoded)
+		ed.Datum, err = valueside.UnmarshalLegacy(a, typ, v)
 	default:
 		return errors.AssertionFailedf("unknown encoding %d", redact.Safe(ed.encoding))
 	}
