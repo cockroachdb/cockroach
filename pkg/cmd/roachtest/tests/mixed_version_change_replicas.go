@@ -342,20 +342,27 @@ func setTenantSetting(
 		return errors.Wrapf(err, "failed to set %s", name)
 	}
 
-	return testutils.SucceedsSoonError(func() error {
-		var currentValue bool
-		if err := h.QueryRow(r, fmt.Sprintf("SHOW CLUSTER SETTING %s", name)).Scan(&currentValue); err != nil {
-			return errors.Wrapf(err, "failed to retrieve setting %s", name)
-		}
+	// Wait for the setting to be visible to all nodes in the tenant.
+	for _, n := range h.Tenant.Descriptor.Nodes {
+		db := h.Tenant.Connect(n)
+		if err := testutils.SucceedsSoonError(func() error {
+			var currentValue bool
+			if err := db.QueryRow(fmt.Sprintf("SHOW CLUSTER SETTING %s", name)).Scan(&currentValue); err != nil {
+				return errors.Wrapf(err, "failed to retrieve setting %s", name)
+			}
 
-		if currentValue != value {
-			err := fmt.Errorf(
-				"waiting for setting %s: current (%t) != expected (%t)", name, currentValue, value,
-			)
-			l.Printf("%v", err)
+			if currentValue != value {
+				err := fmt.Errorf(
+					"waiting for setting %s: current (%t) != expected (%t)", name, currentValue, value,
+				)
+				l.Printf("%v", err)
+				return err
+			}
+
+			return nil
+		}); err != nil {
 			return err
 		}
-
-		return nil
-	})
+	}
+	return nil
 }
