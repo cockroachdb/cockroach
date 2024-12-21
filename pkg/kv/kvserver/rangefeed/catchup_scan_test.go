@@ -157,7 +157,7 @@ func TestCatchupScan(t *testing.T) {
 				defer iter.Close()
 				var events []kvpb.RangeFeedValue
 				// ts1 here is exclusive, so we do not want the versions at ts1.
-				require.NoError(t, iter.CatchUpScan(ctx, func(e *kvpb.RangeFeedEvent) error {
+				require.NoError(t, iter.CatchUpScan(ctx, context.Background(), func(e *kvpb.RangeFeedEvent) error {
 					events = append(events, *e.Val)
 					return nil
 				}, withDiff, withFiltering, false /* withOmitRemote */))
@@ -235,7 +235,7 @@ func TestCatchupScanOriginID(t *testing.T) {
 		defer iter.Close()
 		var events []kvpb.RangeFeedValue
 		// ts1 here is exclusive, so we do not want the versions at ts1.
-		require.NoError(t, iter.CatchUpScan(ctx, func(e *kvpb.RangeFeedEvent) error {
+		require.NoError(t, iter.CatchUpScan(ctx, context.Background(), func(e *kvpb.RangeFeedEvent) error {
 			events = append(events, *e.Val)
 			return nil
 		}, false /* withDiff */, false /* withFiltering */, omitRemote))
@@ -269,9 +269,37 @@ func TestCatchupScanInlineError(t *testing.T) {
 	require.NoError(t, err)
 	defer iter.Close()
 
-	err = iter.CatchUpScan(ctx, nil, false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
+	err = iter.CatchUpScan(ctx, context.Background(), nil, false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unexpected inline value")
+}
+
+func TestCatchupScanErrorOnContextCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting(storage.If(smallEngineBlocks, storage.BlockSize(1)))
+	defer eng.Close()
+
+	a1 := storageutils.PointKV("a", 2, "a1")
+
+	val := func(val []byte) roachpb.Value {
+		return roachpb.Value{RawBytes: val}
+	}
+	_, err := storage.MVCCPut(
+		ctx, eng, a1.Key.Key, a1.Key.Timestamp, val(a1.Value), storage.MVCCWriteOptions{},
+	)
+	require.NoError(t, err)
+	span := roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey}
+	iter, err := NewCatchUpIterator(ctx, eng, span, hlc.Timestamp{}, nil, nil)
+	require.NoError(t, err)
+	defer iter.Close()
+	streamCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	err = iter.CatchUpScan(ctx, streamCtx, nil, false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "context canceled")
 }
 
 func TestCatchupScanSeesOldIntent(t *testing.T) {
@@ -314,7 +342,7 @@ func TestCatchupScanSeesOldIntent(t *testing.T) {
 	defer iter.Close()
 
 	keys := map[string]struct{}{}
-	require.NoError(t, iter.CatchUpScan(ctx, func(e *kvpb.RangeFeedEvent) error {
+	require.NoError(t, iter.CatchUpScan(ctx, context.Background(), func(e *kvpb.RangeFeedEvent) error {
 		keys[string(e.Val.Key)] = struct{}{}
 		return nil
 	}, true /* withDiff */, false /* withFiltering */, false /* withOmitRemote */))
