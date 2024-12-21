@@ -88,10 +88,10 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 	}
 	// Construct list of columns that only contains columns that need to be
 	// inserted (e.g. delete-only mutation columns don't need to be inserted).
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols)+len(ins.PartialIndexPutCols))
-	colList = appendColsWhenPresent(colList, ins.InsertCols)
-	colList = appendColsWhenPresent(colList, ins.CheckCols)
-	colList = appendColsWhenPresent(colList, ins.PartialIndexPutCols)
+	colList := appendColsWhenPresent(
+		ins.InsertCols, ins.CheckCols, ins.PartialIndexPutCols,
+		ins.VectorIndexPutPartitionCols, ins.VectorIndexPutCentroidCols,
+	)
 	input, _, err := b.buildMutationInput(ins, ins.Input, colList, &ins.MutationPrivate)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -321,10 +321,10 @@ func (b *Builder) tryBuildFastPathInsert(
 		}
 	}
 
-	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols)+len(ins.PartialIndexPutCols))
-	colList = appendColsWhenPresent(colList, ins.InsertCols)
-	colList = appendColsWhenPresent(colList, ins.CheckCols)
-	colList = appendColsWhenPresent(colList, ins.PartialIndexPutCols)
+	colList := appendColsWhenPresent(
+		ins.InsertCols, ins.CheckCols, ins.PartialIndexPutCols,
+		ins.VectorIndexDelPartitionCols, ins.VectorIndexPutCentroidCols,
+	)
 	rows, err := b.buildValuesRows(values)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, false, err
@@ -403,21 +403,20 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	cnt := len(upd.FetchCols) + len(upd.UpdateCols) + len(upd.PassthroughCols) +
-		len(upd.CheckCols) + len(upd.PartialIndexPutCols) + len(upd.PartialIndexDelCols)
-	colList := make(opt.ColList, 0, cnt)
-	colList = appendColsWhenPresent(colList, upd.FetchCols)
-	colList = appendColsWhenPresent(colList, upd.UpdateCols)
-	// The RETURNING clause of the Update can refer to the columns
-	// in any of the FROM tables. As a result, the Update may need
-	// to passthrough those columns so the projection above can use
-	// them.
+	var neededPassThroughCols opt.OptionalColList
 	if upd.NeedResults() {
-		colList = append(colList, upd.PassthroughCols...)
+		// The RETURNING clause of the Update can refer to the columns
+		// in any of the FROM tables. As a result, the Update may need
+		// to passthrough those columns so the projection above can use
+		// them.
+		neededPassThroughCols = opt.OptionalColList(upd.PassthroughCols)
 	}
-	colList = appendColsWhenPresent(colList, upd.CheckCols)
-	colList = appendColsWhenPresent(colList, upd.PartialIndexPutCols)
-	colList = appendColsWhenPresent(colList, upd.PartialIndexDelCols)
+	colList := appendColsWhenPresent(
+		upd.FetchCols, upd.UpdateCols, neededPassThroughCols, upd.CheckCols,
+		upd.PartialIndexPutCols, upd.PartialIndexDelCols,
+		upd.VectorIndexPutPartitionCols, upd.VectorIndexPutCentroidCols,
+		upd.VectorIndexDelPartitionCols,
+	)
 
 	input, _, err := b.buildMutationInput(upd, upd.Input, colList, &upd.MutationPrivate)
 	if err != nil {
@@ -500,18 +499,12 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	cnt := len(ups.InsertCols) + len(ups.FetchCols) + len(ups.UpdateCols) + len(ups.CheckCols) +
-		len(ups.PartialIndexPutCols) + len(ups.PartialIndexDelCols) + 1
-	colList := make(opt.ColList, 0, cnt)
-	colList = appendColsWhenPresent(colList, ups.InsertCols)
-	colList = appendColsWhenPresent(colList, ups.FetchCols)
-	colList = appendColsWhenPresent(colList, ups.UpdateCols)
-	if ups.CanaryCol != 0 {
-		colList = append(colList, ups.CanaryCol)
-	}
-	colList = appendColsWhenPresent(colList, ups.CheckCols)
-	colList = appendColsWhenPresent(colList, ups.PartialIndexPutCols)
-	colList = appendColsWhenPresent(colList, ups.PartialIndexDelCols)
+	colList := appendColsWhenPresent(
+		ups.InsertCols, ups.FetchCols, ups.UpdateCols, opt.OptionalColList{ups.CanaryCol},
+		ups.CheckCols, ups.PartialIndexPutCols, ups.PartialIndexDelCols,
+		ups.VectorIndexPutPartitionCols, ups.VectorIndexPutCentroidCols,
+		ups.VectorIndexDelPartitionCols,
+	)
 
 	input, inputCols, err := b.buildMutationInput(ups, ups.Input, colList, &ups.MutationPrivate)
 	if err != nil {
@@ -589,15 +582,17 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (_ execPlan, outputCols colO
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(del.FetchCols)+len(del.PassthroughCols)+len(del.PartialIndexDelCols))
-	colList = appendColsWhenPresent(colList, del.FetchCols)
-	// The RETURNING clause of the Delete can refer to the columns in any of the
-	// USING tables. As a result, the Update may need to passthrough those
-	// columns so the projection above can use them.
+	var neededPassThroughCols opt.OptionalColList
 	if del.NeedResults() {
-		colList = append(colList, del.PassthroughCols...)
+		// The RETURNING clause of the Delete can refer to the columns
+		// in any of the FROM tables. As a result, the Delete may need
+		// to passthrough those columns so the projection above can use
+		// them.
+		neededPassThroughCols = opt.OptionalColList(del.PassthroughCols)
 	}
-	colList = appendColsWhenPresent(colList, del.PartialIndexDelCols)
+	colList := appendColsWhenPresent(
+		del.FetchCols, neededPassThroughCols, del.PartialIndexDelCols, del.VectorIndexDelPartitionCols,
+	)
 
 	input, _, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
 	if err != nil {
@@ -744,15 +739,26 @@ func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
 	return execPlan{root: root}, nil
 }
 
-// appendColsWhenPresent appends non-zero column IDs from the src list into the
-// dst list, and returns the possibly grown list.
-func appendColsWhenPresent(dst opt.ColList, src opt.OptionalColList) opt.ColList {
-	for _, col := range src {
-		if col != 0 {
-			dst = append(dst, col)
+// appendColsWhenPresent combines all non-zero column IDs from the given lists
+// into a single column list, and returns the combined list.
+func appendColsWhenPresent(lists ...opt.OptionalColList) opt.ColList {
+	var cnt int
+	for _, list := range lists {
+		for _, id := range list {
+			if id != 0 {
+				cnt++
+			}
 		}
 	}
-	return dst
+	combined := make(opt.ColList, 0, cnt)
+	for _, list := range lists {
+		for _, col := range list {
+			if col != 0 {
+				combined = append(combined, col)
+			}
+		}
+	}
+	return combined
 }
 
 // ordinalSetFromColList returns the set of ordinal positions of each non-zero
