@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	diskStorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -312,6 +313,31 @@ type NodeLivenessOptions struct {
 	Engines               []diskStorage.Engine
 	OnSelfHeartbeat       HeartbeatCallback
 	Cache                 *Cache
+}
+
+// NewTestNodeLiveness creates a NodeLiveness for testing. It will always return
+// true when asked if a node is live and doesn't depend on gossip.
+func NewTestNodeLiveness(
+	stopper *stop.Stopper, clock *hlc.Clock, st *cluster.Settings,
+) *NodeLiveness {
+	cache := Cache{
+		clock:      clock,
+		st:         st,
+		isTestMode: true,
+		gossip:     &gossip.Gossip{},
+	}
+
+	return &NodeLiveness{
+		ambientCtx:        log.AmbientContext{},
+		stopper:           stopper,
+		clock:             clock,
+		livenessThreshold: 2 * time.Minute,
+		renewalDuration:   time.Minute,
+		selfSem:           make(chan struct{}, 1),
+		otherSem:          make(chan struct{}, 1),
+		heartbeatToken:    make(chan struct{}, 1),
+		cache:             &cache,
+	}
 }
 
 // NewNodeLiveness returns a new instance of NodeLiveness configured
