@@ -1970,6 +1970,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`avoid_full_table_scans_in_mutations`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`avoid_full_table_scans_in_mutations`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`avoid_full_table_scans_in_mutations`, s)
+			if err != nil {
+				return err
+			}
+			m.SetAvoidFullTableScansInMutations(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().AvoidFullTableScansInMutations), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`enable_experimental_alter_column_type_general`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_experimental_alter_column_type_general`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

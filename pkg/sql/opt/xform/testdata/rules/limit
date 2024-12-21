@@ -2749,23 +2749,34 @@ update t82730a
  │    └── col1_5:10 => col1_5:4
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
- └── top-k
+ └── index-join t82730a
       ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
-      ├── internal-ordering: +9
-      ├── k: 84
       ├── cardinality: [0 - 84]
       ├── key: (7)
       ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
-      └── select
-           ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+      └── top-k
+           ├── columns: col1_0:7!null col1_1:8 col1_3:9
+           ├── internal-ordering: +9
+           ├── k: 84
+           ├── cardinality: [0 - 84]
            ├── key: (7)
-           ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
-           ├── scan t82730a
-           │    ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
-           │    ├── key: (7)
-           │    └── fd: (7)-->(8-10), (8,9)~~>(7,10)
-           └── filters
-                └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
+           ├── fd: (7)-->(8,9), (8,9)~~>(7)
+           └── select
+                ├── columns: col1_0:7!null col1_1:8 col1_3:9
+                ├── key: (7)
+                ├── fd: (7)-->(8,9), (8,9)~~>(7)
+                ├── scan t82730a@t82730a_col1_1_col1_3_key
+                │    ├── columns: col1_0:7!null col1_1:8 col1_3:9
+                │    ├── constraint: /8/9
+                │    │    ├── [/NULL - /0]
+                │    │    ├── [/2 - /999999999]
+                │    │    ├── [/1000000001 - /1999999999]
+                │    │    └── [/2000000001 - ]
+                │    ├── flags: avoid-full-scan
+                │    ├── key: (7)
+                │    └── fd: (7)-->(8,9), (8,9)~~>(7)
+                └── filters
+                     └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
 
 exec-ddl
 CREATE TABLE t82730b (
@@ -2812,23 +2823,34 @@ update t82730b [as=tab_41831]
  │    └── col1_5:10 => col1_5:4
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
- └── top-k
+ └── index-join t82730b
       ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
-      ├── internal-ordering: +9
-      ├── k: 84
       ├── cardinality: [0 - 84]
       ├── key: (7)
       ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
-      └── select
-           ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+      └── top-k
+           ├── columns: col1_0:7!null col1_1:8 col1_3:9
+           ├── internal-ordering: +9
+           ├── k: 84
+           ├── cardinality: [0 - 84]
            ├── key: (7)
-           ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
-           ├── scan t82730b [as=tab_41831]
-           │    ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
-           │    ├── key: (7)
-           │    └── fd: (7)-->(8-10), (8,9)~~>(7,10)
-           └── filters
-                └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
+           ├── fd: (7)-->(8,9), (8,9)~~>(7)
+           └── select
+                ├── columns: col1_0:7!null col1_1:8 col1_3:9
+                ├── key: (7)
+                ├── fd: (7)-->(8,9), (8,9)~~>(7)
+                ├── scan t82730b@t82730b_col1_1_col1_3_key [as=tab_41831]
+                │    ├── columns: col1_0:7!null col1_1:8 col1_3:9
+                │    ├── constraint: /8/9
+                │    │    ├── [/NULL - /0]
+                │    │    ├── [/2 - /4]
+                │    │    ├── [/6 - /4999999]
+                │    │    └── [/5000001 - ]
+                │    ├── flags: avoid-full-scan
+                │    ├── key: (7)
+                │    └── fd: (7)-->(8,9), (8,9)~~>(7)
+                └── filters
+                     └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
 
 # Regression test for #88993. Do not construct an unordered limit below the
 # UnionAll.

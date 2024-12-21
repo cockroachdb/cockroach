@@ -734,7 +734,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
 ----
 dist sender send  r74: sending batch 1 Scan to (n1,s1):1
 dist sender send  r74: sending batch 1 Put to (n1,s1):1
-dist sender send  r74: sending batch 1 Scan to (n1,s1):1
+dist sender send  r74: sending batch 1 Get to (n1,s1):1
 dist sender send  r74: sending batch 1 EndTxn to (n1,s1):1
 
 query B

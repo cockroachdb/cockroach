@@ -151,6 +151,12 @@ const (
 	// plan that could satisfy the hints.
 	hugeCost memo.Cost = 1e100
 
+	// avoidFullScanCostPenalty is the cost to use for full scans when we want to
+	// avoid them at all costs, but not error in case no other plan is possible.
+	// We can't use hugeCost directly since it might interfere with other hints
+	// like forcing a particular index.
+	avoidFullScanCostPenalty = 1e50
+
 	// fullScanRowCountPenalty adds a penalty to full table scans. This is especially
 	// useful for empty or very small tables, where we would get plans that are
 	// surprising to users (like full scans instead of point lookups).
@@ -758,14 +764,14 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 
 	isUnfiltered := scan.IsUnfiltered(c.mem.Metadata())
-	if scan.Flags.NoFullScan {
-		// Normally a full scan of a partial index would be allowed with the
-		// NO_FULL_SCAN hint (isUnfiltered is false for partial indexes), but if the
-		// user has explicitly forced the partial index *and* used NO_FULL_SCAN, we
-		// disallow the full index scan.
-		if isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan()) {
-			return hugeCost
-		}
+
+	// Normally a full scan of a partial index would not be considered a "full
+	// scan" for the purposes of the NO_FULL_SCAN and AVOID_FULL_SCAN hints
+	// (isUnfiltered is false for partial indexes), but if the user has explicitly
+	// forced the partial index, we do consider it a full scan.
+	isFullScan := isUnfiltered || (scan.Flags.ForceIndex && scan.IsFullIndexScan())
+	if scan.Flags.NoFullScan && isFullScan {
+		return hugeCost
 	}
 
 	if scan.Flags.ForceInvertedIndex && !scan.IsInvertedScan(c.mem.Metadata()) {
@@ -864,6 +870,14 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	}
 	extraCost := c.distributionCost(regionsAccessed)
 	cost += extraCost
+
+	// Apply a penalty for a full scan if needed. We multiply rather than add so
+	// that we don't lose precision for the cost of plans that must perform a full
+	// scan.
+	if scan.Flags.AvoidFullScan && isFullScan {
+		cost *= avoidFullScanCostPenalty
+	}
+
 	return cost
 }
 

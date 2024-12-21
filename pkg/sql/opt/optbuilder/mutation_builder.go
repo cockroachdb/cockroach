@@ -308,6 +308,13 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		telemetry.Inc(sqltelemetry.IndexHintUpdateUseCounter)
 	}
 
+	if mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
+		if indexFlags == nil {
+			indexFlags = &tree.IndexFlags{}
+		}
+		indexFlags.AvoidFullScan = true
+	}
+
 	// Fetch columns from different instance of the table metadata, so that it's
 	// possible to remap columns, as in this example:
 	//
@@ -416,6 +423,13 @@ func (mb *mutationBuilder) buildInputForDelete(
 		indexFlags = source.IndexFlags
 		telemetry.Inc(sqltelemetry.IndexHintUseCounter)
 		telemetry.Inc(sqltelemetry.IndexHintDeleteUseCounter)
+	}
+
+	if mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
+		if indexFlags == nil {
+			indexFlags = &tree.IndexFlags{}
+		}
+		indexFlags.AvoidFullScan = true
 	}
 
 	// Fetch columns from different instance of the table metadata, so that it's
