@@ -152,7 +152,7 @@ func invokeBackup(
 	})
 
 	g.GoCtx(func(ctx context.Context) error {
-		return backupFn(ctx, nil, resultCh)
+		return backupFn(ctx, resultCh)
 	})
 
 	err := g.Wait()
@@ -162,7 +162,7 @@ func invokeBackup(
 func planBackup(
 	ctx context.Context, p sql.PlanHookState, backupStmt tree.Statement,
 ) (sql.PlanHookRowFn, error) {
-	fn, cols, _, _, err := backupPlanHook(ctx, backupStmt, p)
+	fn, cols, _, err := backupPlanHook(ctx, backupStmt, p)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to evaluate backup stmt")
 	}

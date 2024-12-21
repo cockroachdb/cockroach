@@ -23,22 +23,22 @@ const (
 
 func alterTenantResetHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	alterTenantStmt, ok := stmt.(*tree.AlterTenantReset)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can alter tenant")
+		return nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can alter tenant")
 	}
 
 	timestamp, err := asof.EvalSystemTimeExpr(ctx, &p.ExtendedEvalContext().Context, p.SemaCtx(), alterTenantStmt.Timestamp,
 		alterTenantResetOp, asof.ReplicationCutover)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		if err := sql.CanManageTenant(ctx, p); err != nil {
 			return err
 		}
@@ -49,7 +49,7 @@ func alterTenantResetHook(
 		}
 		return RevertTenantToTimestamp(ctx, &p.ExtendedEvalContext().Context, tenInfo.Name, timestamp, p.ExtendedEvalContext().SessionID)
 	}
-	return fn, nil, nil, false, nil
+	return fn, nil, false, nil
 }
 
 func alterTenantResetHookTypeCheck(

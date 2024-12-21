@@ -80,14 +80,14 @@ func ingestionTypeCheck(
 
 func ingestionPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	ingestionStmt, ok := stmt.(*tree.CreateTenantFromReplication)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege,
+		return nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only the system tenant can create other tenants")
 	}
 
@@ -95,33 +95,33 @@ func ingestionPlanHook(
 
 	from, err := exprEval.String(ctx, ingestionStmt.ReplicationSourceAddress)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	_, _, sourceTenant, err := exprEval.TenantSpec(ctx, ingestionStmt.ReplicationSourceTenantName)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	_, dstTenantID, dstTenantName, err := exprEval.TenantSpec(ctx, ingestionStmt.TenantSpec)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	evalCtx := &p.ExtendedEvalContext().Context
 	options, err := evalTenantReplicationOptions(ctx, ingestionStmt.Options, exprEval, evalCtx, p.SemaCtx(), createReplicationOp)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 	retentionTTLSeconds := defaultRetentionTTLSeconds
 	if ret, ok := options.GetRetention(); ok {
 		retentionTTLSeconds = ret
 	}
 	if _, ok := options.GetExpirationWindow(); ok {
-		return nil, nil, nil, false, CannotSetExpirationWindowErr
+		return nil, nil, false, CannotSetExpirationWindowErr
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) (err error) {
+	fn := func(ctx context.Context, _ chan<- tree.Datums) (err error) {
 		defer func() {
 			if err == nil {
 				telemetry.Count("physical_replication.started")
@@ -211,7 +211,7 @@ func ingestionPlanHook(
 		)
 	}
 
-	return fn, nil, nil, false, nil
+	return fn, nil, false, nil
 }
 
 func createReplicationJob(

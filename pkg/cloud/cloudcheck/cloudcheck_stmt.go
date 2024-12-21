@@ -39,13 +39,13 @@ type Params = execinfrapb.CloudStorageTestSpec_Params
 // should be extended to be a standalone plan instead.
 func ShowCloudStorageTestPlanHook(
 	ctx context.Context, p sql.PlanHookState, location string, params Params,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 
 	if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, []string{location}); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, "ShowCloudStorageTestPlanHook")
 		defer span.Finish()
 
@@ -106,5 +106,5 @@ func ShowCloudStorageTestPlanHook(
 		dsp.Run(ctx, planCtx, nil, plan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return rowResultWriter.Err()
 	}
-	return fn, Header, nil, false, nil
+	return fn, Header, false, nil
 }

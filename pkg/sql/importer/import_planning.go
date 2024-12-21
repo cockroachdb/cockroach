@@ -352,10 +352,10 @@ func importTypeCheck(
 // importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	if !importStmt.Bundle && !importStmt.Into {
@@ -379,7 +379,7 @@ func importPlanHook(
 		featureImportEnabled,
 		"IMPORT",
 	); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	exprEval := p.ExprEvaluator("IMPORT")
@@ -387,7 +387,7 @@ func importPlanHook(
 		ctx, importStmt.Options, importOptionExpectValues,
 	)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	var isDetached bool
@@ -397,7 +397,7 @@ func importPlanHook(
 
 	filenamePatterns, err := exprEval.StringArray(ctx, importStmt.Files)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	// Certain ExternalStorage URIs require super-user access. Check all the
@@ -410,14 +410,14 @@ func importPlanHook(
 			if _, workloadErr := parseWorkloadConfig(file); workloadErr == nil {
 				continue
 			}
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, []string{file}); err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer span.Finish()
@@ -1030,9 +1030,9 @@ func importPlanHook(
 	}
 
 	if isDetached {
-		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
+		return fn, jobs.DetachedJobExecutionResultHeader, false, nil
 	}
-	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil
+	return fn, jobs.BulkJobExecutionResultHeader, false, nil
 }
 
 func parseAvroOptions(
