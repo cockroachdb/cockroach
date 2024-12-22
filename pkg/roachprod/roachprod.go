@@ -852,7 +852,6 @@ func createLabels(v vm.VM) map[string]string {
 		"host_ip":  v.PrivateIP,
 		"project":  v.Project,
 		"zone":     v.Zone,
-		"tenant":   install.SystemInterfaceName,
 		"job":      "cockroachdb",
 	}
 	match := regionRegEx.FindStringSubmatch(v.Zone)
