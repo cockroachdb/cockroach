@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -66,11 +65,13 @@ func TestUpdatePrometheusTargets(t *testing.T) {
 			require.Nil(t, yaml.UnmarshalStrict([]byte(ir.Config), &configs))
 			require.Len(t, configs, 2)
 			for _, c := range configs {
-				nodeID, err := strconv.Atoi(c.Labels["node"])
-				require.NoError(t, err)
-				require.Equal(t, nodeInfos[nodeID].Target, c.Targets[0])
-				for k, v := range nodeInfos[nodeID].CustomLabels {
-					require.Equal(t, v, c.Labels[k])
+				if c.Targets[0] == "n1" {
+					require.Empty(t, nodeInfos[1].CustomLabels)
+				} else {
+					require.Equal(t, "n3", c.Targets[0])
+					for k, v := range nodeInfos[3].CustomLabels {
+						require.Equal(t, v, c.Labels[k])
+					}
 				}
 			}
 			return &http.Response{
