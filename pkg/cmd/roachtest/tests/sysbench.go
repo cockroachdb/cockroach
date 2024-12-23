@@ -143,7 +143,9 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		}
 	} else {
 		t.Status("installing cockroach")
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
+		startOpts := option.DefaultStartOpts()
+		startOpts.RoachprodOpts.ScheduleBackups = false
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
 		if len(c.CRDBNodes()) >= 3 {
 			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), c.Conn(ctx, t.L(), 1))
 			require.NoError(t, err)
