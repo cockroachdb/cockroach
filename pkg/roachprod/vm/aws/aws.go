@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
@@ -638,7 +639,7 @@ func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) 
 // Create is part of the vm.Provider interface.
 func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
-) error {
+) (vm.List, error) {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	// There exist different flags to control the machine type when ssd is true.
 	// This enables sane defaults for either setting but the behavior can be
@@ -648,12 +649,12 @@ func (p *Provider) Create(
 	if opts.SSDOpts.UseLocalSSD &&
 		providerOpts.MachineType != defaultMachineType &&
 		providerOpts.SSDMachineType == defaultSSDMachineType {
-		return errors.Errorf("use the --aws-machine-type-ssd flag to set the " +
+		return nil, errors.Errorf("use the --aws-machine-type-ssd flag to set the " +
 			"machine type when --local-ssd=true")
 	} else if !opts.SSDOpts.UseLocalSSD &&
 		providerOpts.MachineType == defaultMachineType &&
 		providerOpts.SSDMachineType != defaultSSDMachineType {
-		return errors.Errorf("use the --aws-machine-type flag to set the " +
+		return nil, errors.Errorf("use the --aws-machine-type flag to set the " +
 			"machine type when --local-ssd=false")
 	}
 	var machineType string
@@ -666,7 +667,7 @@ func (p *Provider) Create(
 
 	expandedZones, err := vm.ExpandZonesFlag(providerOpts.CreateZones)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if len(expandedZones) == 0 {
@@ -679,15 +680,15 @@ func (p *Provider) Create(
 
 	// We need to make sure that the SSH keys have been distributed to all regions.
 	if err := p.ConfigSSH(l, expandedZones); err != nil {
-		return err
+		return nil, err
 	}
 
 	regions, err := p.allRegions(expandedZones)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(regions) < 1 {
-		return errors.Errorf("Please specify a valid region.")
+		return nil, errors.Errorf("Please specify a valid region.")
 	}
 
 	// Distribute the nodes amongst availability zones.
@@ -706,18 +707,31 @@ func (p *Provider) Create(
 		res := limiter.Reserve()
 		g.Go(func() error {
 			time.Sleep(res.Delay())
-			return p.runInstance(l, capName, index, placement, machineType, opts, providerOpts)
+			_, err := p.runInstance(l, capName, index, placement, machineType, opts, providerOpts)
+			if err != nil {
+				return err
+			}
+
+			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return err
+		return nil, err
 	}
 
-	return p.waitForIPs(l, names, regions, providerOpts)
+	// Our initial list of VMs does not include the IP addresses or volumes.
+	// waitForIPs() returns the VMs list with all information set, so we simply
+	// overwrite the list with the result of waitForIPs().
+	vmList, err := p.waitForIPs(l, names, regions, providerOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	return vmList, nil
 }
 
-func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
-	return vm.UnimplementedError
+func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) (vm.List, error) {
+	return nil, vm.UnimplementedError
 }
 
 func (p *Provider) Shrink(*logger.Logger, vm.List, string) error {
@@ -731,35 +745,34 @@ func (p *Provider) Shrink(*logger.Logger, vm.List, string) error {
 // commands hanging indefinitely.
 func (p *Provider) waitForIPs(
 	l *logger.Logger, names []string, regions []string, opts *ProviderOpts,
-) error {
+) ([]vm.VM, error) {
 	waitForIPRetry := retry.Start(retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
 		MaxBackoff:     500 * time.Millisecond,
 		MaxRetries:     120, // wait a bit less than 90s for IPs
 	})
-	makeNameSet := func() map[string]struct{} {
-		m := make(map[string]struct{}, len(names))
-		for _, n := range names {
-			m[n] = struct{}{}
-		}
-		return m
-	}
 	for waitForIPRetry.Next() {
-		vms, err := p.listRegions(l, regions, *opts, vm.ListOptions{})
+		// We need to list the VMs in each region to get their IPs.
+		// We also include volumes in the list because they were not included
+		// in the initial list of VMs as they're only returned by run-instances
+		// when ready.
+		vms, err := p.listRegionsFiltered(l, regions, names, *opts, vm.ListOptions{
+			IncludeVolumes: true,
+		})
 		if err != nil {
-			return err
+			return nil, err
 		}
-		nameSet := makeNameSet()
+		ipAddressesFound := make(map[string]struct{})
 		for _, vm := range vms {
 			if vm.PublicIP != "" && vm.PrivateIP != "" {
-				delete(nameSet, vm.Name)
+				ipAddressesFound[vm.Name] = struct{}{}
 			}
 		}
-		if len(nameSet) == 0 {
-			return nil
+		if len(ipAddressesFound) == len(names) {
+			return vms, nil
 		}
 	}
-	return fmt.Errorf("failed to retrieve IPs for all vms")
+	return nil, fmt.Errorf("failed to retrieve IPs for all vms")
 }
 
 // Delete is part of vm.Provider.
@@ -900,20 +913,34 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 func (p *Provider) listRegions(
 	l *logger.Logger, regions []string, opts ProviderOpts, listOpts vm.ListOptions,
 ) (vm.List, error) {
+	return p.listRegionsFiltered(l, regions, nil, opts, listOpts)
+}
+
+// listRegionsFiltered lists VMs in the regions with a filter on instance names.
+// The filter makes it more efficient to list specific VMs than listRegions.
+func (p *Provider) listRegionsFiltered(
+	l *logger.Logger, regions, names []string, opts ProviderOpts, listOpts vm.ListOptions,
+) (vm.List, error) {
 	var ret vm.List
 	var mux syncutil.Mutex
 	var g errgroup.Group
 
+	// Create a filter for the instance names.
+	var namesFilter string
+	if names != nil {
+		namesFilter = fmt.Sprintf("Name=tag:Name,Values=%s", strings.Join(names, ","))
+	}
+
 	for _, r := range regions {
 		g.Go(func() error {
-			vms, err := p.listRegion(l, r, opts, listOpts)
+			vms, err := p.describeInstances(l, r, opts, listOpts, namesFilter)
 			if err != nil {
 				l.Printf("Failed to list AWS VMs in region: %s\n%v\n", r, err)
 				return nil
 			}
 			mux.Lock()
+			defer mux.Unlock()
 			ret = append(ret, vms...)
-			mux.Unlock()
 			return nil
 		})
 	}
@@ -948,9 +975,9 @@ func (p *Provider) allRegions(zones []string) (regions []string, err error) {
 	return regions, nil
 }
 
-func (p *Provider) getVolumesForInstance(
-	l *logger.Logger, region, instanceID string,
-) (vols map[string]vm.Volume, err error) {
+func (p *Provider) getVolumesForInstances(
+	l *logger.Logger, region string, instanceIDs []string,
+) (vols map[string]map[string]vm.Volume, err error) {
 	type describeVolume struct {
 		Volumes []struct {
 			Attachments []struct {
@@ -976,12 +1003,13 @@ func (p *Provider) getVolumesForInstance(
 		} `json:"Volumes"`
 	}
 
-	vols = make(map[string]vm.Volume)
+	vols = make(map[string]map[string]vm.Volume)
 	var volumeOut describeVolume
 	getVolumesArgs := []string{
 		"ec2", "describe-volumes",
 		"--region", region,
-		"--filters", "Name=attachment.instance-id,Values=" + instanceID,
+		"--filters",
+		"Name=attachment.instance-id,Values=" + strings.Join(instanceIDs, ","),
 	}
 
 	err = p.runJSONCommand(l, getVolumesArgs, &volumeOut)
@@ -990,7 +1018,7 @@ func (p *Provider) getVolumesForInstance(
 	}
 	for _, vol := range volumeOut.Volumes {
 		tagMap := vol.Tags.MakeMap()
-		vols[vol.VolumeID] = vm.Volume{
+		volume := vm.Volume{
 			ProviderResourceID: vol.VolumeID,
 			ProviderVolumeType: vol.VolumeType,
 			Zone:               vol.AvailabilityZone,
@@ -999,6 +1027,13 @@ func (p *Provider) getVolumesForInstance(
 			Size:               vol.Size,
 			Name:               tagMap["Name"],
 		}
+
+		for _, attachment := range vol.Attachments {
+			if vols[attachment.InstanceID] == nil {
+				vols[attachment.InstanceID] = make(map[string]vm.Volume)
+			}
+			vols[attachment.InstanceID][vol.VolumeID] = volume
+		}
 	}
 	return vols, err
 }
@@ -1006,45 +1041,110 @@ func (p *Provider) getVolumesForInstance(
 // DescribeInstancesOutput represents the output of the aws ec2 describe-instances command
 type DescribeInstancesOutput struct {
 	Reservations []struct {
-		Instances []struct {
-			InstanceID   string `json:"InstanceId"`
-			Architecture string
-			LaunchTime   string
-			Placement    struct {
-				AvailabilityZone string
+		Instances []DescribeInstancesOutputInstance
+	}
+}
+type DescribeInstancesOutputInstance struct {
+	InstanceID   string `json:"InstanceId"`
+	Architecture string
+	LaunchTime   string
+	Placement    struct {
+		AvailabilityZone string
+	}
+	PrivateDNSName   string `json:"PrivateDnsName"`
+	PrivateIPAddress string `json:"PrivateIpAddress"`
+	PublicDNSName    string `json:"PublicDnsName"`
+	PublicIPAddress  string `json:"PublicIpAddress"`
+	State            struct {
+		Code int
+		Name string
+	}
+	StateReason struct {
+		Code    string `json:"Code"`
+		Message string `json:"Message"`
+	} `json:"StateReason"`
+	RootDeviceName string
+
+	BlockDeviceMappings []struct {
+		DeviceName string `json:"DeviceName"`
+		Disk       struct {
+			AttachTime          time.Time `json:"AttachTime"`
+			DeleteOnTermination bool      `json:"DeleteOnTermination"`
+			Status              string    `json:"Status"`
+			VolumeID            string    `json:"VolumeId"`
+		} `json:"Ebs"`
+	} `json:"BlockDeviceMappings"`
+
+	Tags Tags
+
+	VpcID                 string `json:"VpcId"`
+	InstanceType          string
+	InstanceLifecycle     string `json:"InstanceLifecycle"`
+	SpotInstanceRequestId string `json:"SpotInstanceRequestId"`
+}
+
+// toVM converts an ec2 instance to a vm.VM struct.
+func (in *DescribeInstancesOutputInstance) toVM(
+	volumes map[string]vm.Volume, remoteUserName string,
+) *vm.VM {
+
+	// Convert the tag map into a more useful representation
+	tagMap := in.Tags.MakeMap()
+
+	var errs []error
+	createdAt, err := time.Parse(time.RFC3339, in.LaunchTime)
+	if err != nil {
+		errs = append(errs, vm.ErrNoExpiration)
+	}
+
+	var lifetime time.Duration
+	if lifeText, ok := tagMap["Lifetime"]; ok {
+		lifetime, err = time.ParseDuration(lifeText)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	} else {
+		errs = append(errs, vm.ErrNoExpiration)
+	}
+
+	var nonBootableVolumes []vm.Volume
+	if len(volumes) > 0 {
+		rootDevice := in.RootDeviceName
+		for _, bdm := range in.BlockDeviceMappings {
+			if bdm.DeviceName != rootDevice {
+				if vol, ok := volumes[bdm.Disk.VolumeID]; ok {
+					nonBootableVolumes = append(nonBootableVolumes, vol)
+				} else {
+					errs = append(errs, errors.Newf(
+						"Attempted to add volume %s however it is not in the attached volumes for instance %s",
+						bdm.Disk.VolumeID,
+						in.InstanceID,
+					))
+				}
 			}
-			PrivateDNSName   string `json:"PrivateDnsName"`
-			PrivateIPAddress string `json:"PrivateIpAddress"`
-			PublicDNSName    string `json:"PublicDnsName"`
-			PublicIPAddress  string `json:"PublicIpAddress"`
-			State            struct {
-				Code int
-				Name string
-			}
-			StateReason struct {
-				Code    string `json:"Code"`
-				Message string `json:"Message"`
-			} `json:"StateReason"`
-			RootDeviceName string
-
-			BlockDeviceMappings []struct {
-				DeviceName string `json:"DeviceName"`
-				Disk       struct {
-					AttachTime          time.Time `json:"AttachTime"`
-					DeleteOnTermination bool      `json:"DeleteOnTermination"`
-					Status              string    `json:"Status"`
-					VolumeID            string    `json:"VolumeId"`
-				} `json:"Ebs"`
-			} `json:"BlockDeviceMappings"`
-
-			Tags Tags
-
-			VpcID                 string `json:"VpcId"`
-			InstanceType          string
-			InstanceLifecycle     string `json:"InstanceLifecycle"`
-			SpotInstanceRequestId string `json:"SpotInstanceRequestId"`
 		}
 	}
+
+	return &vm.VM{
+		CreatedAt:              createdAt,
+		DNS:                    in.PrivateDNSName,
+		Name:                   tagMap["Name"],
+		Errors:                 errs,
+		Lifetime:               lifetime,
+		Labels:                 tagMap,
+		PrivateIP:              in.PrivateIPAddress,
+		Provider:               ProviderName,
+		ProviderID:             in.InstanceID,
+		PublicIP:               in.PublicIPAddress,
+		RemoteUser:             remoteUserName,
+		VPC:                    in.VpcID,
+		MachineType:            in.InstanceType,
+		CPUArch:                vm.ParseArch(in.Architecture),
+		Zone:                   in.Placement.AvailabilityZone,
+		NonBootAttachedVolumes: nonBootableVolumes,
+		Preemptible:            in.InstanceLifecycle == "spot",
+	}
+
 }
 
 // CancelSpotInstanceRequestsOutput represents the output structure of the cancel-spot-instance-requests command.
@@ -1071,20 +1171,21 @@ type DescribeSpotInstanceRequestsOutput struct {
 
 // RunInstancesOutput represents the output of the aws ec2 run-instances command
 type RunInstancesOutput struct {
-	Instances []struct {
-		InstanceID string `json:"InstanceId"`
-	}
+	Instances []DescribeInstancesOutputInstance
 }
 
-// listRegion extracts the roachprod-managed instances in the
-// given region.
-func (p *Provider) listRegion(
-	l *logger.Logger, region string, opts ProviderOpts, listOpt vm.ListOptions,
+// describeInstances executes the ec2 describe-instances command
+// with the given filters.
+func (p *Provider) describeInstances(
+	l *logger.Logger, region string, opts ProviderOpts, listOpt vm.ListOptions, filters string,
 ) (vm.List, error) {
 
 	args := []string{
 		"ec2", "describe-instances",
 		"--region", region,
+	}
+	if filters != "" {
+		args = append(args, "--filters", filters)
 	}
 	var describeInstancesResponse DescribeInstancesOutput
 	err := p.runJSONCommand(l, args, &describeInstancesResponse)
@@ -1092,7 +1193,7 @@ func (p *Provider) listRegion(
 		return nil, err
 	}
 
-	var ret vm.List
+	var instances = make(map[string]DescribeInstancesOutputInstance)
 	for _, res := range describeInstancesResponse.Reservations {
 	in:
 		for _, in := range res.Instances {
@@ -1111,71 +1212,23 @@ func (p *Provider) listRegion(
 				continue in
 			}
 
-			var errs []error
-			createdAt, err := time.Parse(time.RFC3339, in.LaunchTime)
-			if err != nil {
-				errs = append(errs, vm.ErrNoExpiration)
-			}
-
-			var lifetime time.Duration
-			if lifeText, ok := tagMap["Lifetime"]; ok {
-				lifetime, err = time.ParseDuration(lifeText)
-				if err != nil {
-					errs = append(errs, err)
-				}
-			} else {
-				errs = append(errs, vm.ErrNoExpiration)
-			}
-
-			var nonBootableVolumes []vm.Volume
-			if listOpt.IncludeVolumes {
-				var volMap map[string]vm.Volume
-				rootDevice := in.RootDeviceName
-				for _, bdm := range in.BlockDeviceMappings {
-					if bdm.DeviceName != rootDevice {
-						// volMap does not exist so lazy initialize it here
-						if volMap == nil {
-							// TODO(leon, jackson): Change this to fetch the volumes in a
-							// batch instead of fetching them one at a time
-							volMap, err = p.getVolumesForInstance(l, region, in.InstanceID)
-							if err != nil {
-								errs = append(errs, err)
-							}
-						}
-						if vol, ok := volMap[bdm.Disk.VolumeID]; ok {
-							nonBootableVolumes = append(nonBootableVolumes, vol)
-						} else {
-							errs = append(errs, errors.Newf(
-								"Attempted to add volume %s however it is not in the attached volumes for instance %s",
-								bdm.Disk.VolumeID,
-								in.InstanceID,
-							))
-						}
-					}
-				}
-			}
-
-			m := vm.VM{
-				CreatedAt:              createdAt,
-				DNS:                    in.PrivateDNSName,
-				Name:                   tagMap["Name"],
-				Errors:                 errs,
-				Lifetime:               lifetime,
-				Labels:                 tagMap,
-				PrivateIP:              in.PrivateIPAddress,
-				Provider:               ProviderName,
-				ProviderID:             in.InstanceID,
-				PublicIP:               in.PublicIPAddress,
-				RemoteUser:             opts.RemoteUserName,
-				VPC:                    in.VpcID,
-				MachineType:            in.InstanceType,
-				CPUArch:                vm.ParseArch(in.Architecture),
-				Zone:                   in.Placement.AvailabilityZone,
-				NonBootAttachedVolumes: nonBootableVolumes,
-				Preemptible:            in.InstanceLifecycle == "spot",
-			}
-			ret = append(ret, m)
+			instances[in.InstanceID] = in
 		}
+	}
+
+	// Fetch volume info for all instances at once
+	var volumes map[string]map[string]vm.Volume
+	if listOpt.IncludeVolumes && len(instances) > 0 {
+		volumes, err = p.getVolumesForInstances(l, region, maps.Keys(instances))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var ret vm.List
+	for _, in := range instances {
+		v := in.toVM(volumes[in.InstanceID], opts.RemoteUserName)
+		ret = append(ret, *v)
 	}
 
 	return ret, nil
@@ -1193,16 +1246,16 @@ func (p *Provider) runInstance(
 	machineType string,
 	opts vm.CreateOpts,
 	providerOpts *ProviderOpts,
-) error {
+) (*vm.VM, error) {
 	az, ok := p.Config.AZByName[zone]
 	if !ok {
-		return fmt.Errorf("no region in %v corresponds to availability zone %v",
+		return nil, fmt.Errorf("no region in %v corresponds to availability zone %v",
 			p.Config.regionNames(), zone)
 	}
 
 	keyName, err := p.sshKeyName(l)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cpuOptions := providerOpts.CPUOptions
 
@@ -1235,7 +1288,7 @@ func (p *Provider) runInstance(
 	for key, value := range opts.CustomLabels {
 		_, ok := m[strings.ToLower(key)]
 		if ok {
-			return fmt.Errorf("duplicate label name defined: %s", key)
+			return nil, fmt.Errorf("duplicate label name defined: %s", key)
 		}
 		addLabel(key, value)
 	}
@@ -1259,7 +1312,7 @@ func (p *Provider) runInstance(
 	}
 	filename, err := writeStartupScript(name, extraMountOpts, opts.SSDOpts.FileSystem, providerOpts.UseMultipleDisks, opts.Arch == string(vm.ArchFIPS))
 	if err != nil {
-		return errors.Wrapf(err, "could not write AWS startup script to temp file")
+		return nil, errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
 	defer func() {
 		_ = os.Remove(filename)
@@ -1275,7 +1328,7 @@ func (p *Provider) runInstance(
 	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "6gd.") == 1 ||
 		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1
 	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
-		return errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
+		return nil, errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
 	}
 	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 	if useArmAMI {
@@ -1315,21 +1368,35 @@ func (p *Provider) runInstance(
 	ebsVolumes := assignEBSVolumes(&opts, providerOpts)
 	args, err = genDeviceMapping(ebsVolumes, args)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if providerOpts.UseSpot {
-		return runSpotInstance(l, p, args, az.Region.Name)
+		return runSpotInstance(l, p, args, az.Region.Name, providerOpts)
 		//todo(babusrithar): Add fallback to on-demand instances if spot instances are not available.
 	}
 	runInstancesOutput := RunInstancesOutput{}
-	return p.runJSONCommand(l, args, &runInstancesOutput)
+	err = p.runJSONCommand(l, args, &runInstancesOutput)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(runInstancesOutput.Instances) == 0 {
+		return nil, errors.Errorf("No instances found for run-instances command")
+	}
+
+	// Volumes are attached to the instance only after the instance is running.
+	// We will fill in the volume information during the waitForIPs call.
+	v := runInstancesOutput.Instances[0].toVM(map[string]vm.Volume{}, providerOpts.RemoteUserName)
+	return v, err
 }
 
 // runSpotInstance uses run-instances command to create a spot instance.
 // It returns an error if the spot request is not fulfilled within 2 minutes.
 // It uses describe-spot-instance-requests command to get the status of the spot request.
-func runSpotInstance(l *logger.Logger, p *Provider, args []string, regionName string) error {
+func runSpotInstance(
+	l *logger.Logger, p *Provider, args []string, regionName string, providerOpts *ProviderOpts,
+) (*vm.VM, error) {
 	waitForSpotDuration := 2 * time.Minute
 
 	// Add spot instance options to the run-instances command.
@@ -1339,16 +1406,19 @@ func runSpotInstance(l *logger.Logger, p *Provider, args []string, regionName st
 	runInstancesOutput := RunInstancesOutput{}
 	err := p.runJSONCommand(l, spotArgs, &runInstancesOutput)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// If the spot request is accepted, the run-instances command will return an instance-id.
 	if len(runInstancesOutput.Instances) == 0 {
-		return errors.Errorf("No instances found for spot request, likely the spot request had bad parameter")
+		return nil, errors.Errorf("No instances found for spot request, likely the spot request had bad parameter")
 	}
+
+	v := runInstancesOutput.Instances[0].toVM(map[string]vm.Volume{}, providerOpts.RemoteUserName)
+
 	instanceId := runInstancesOutput.Instances[0].InstanceID
 	spotInstanceRequestId, err := getSpotInstanceRequestId(l, p, regionName, instanceId)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Loop every 10 seconds till the spot instance is fulfilled, for a maximum of 2 minutes.
@@ -1357,14 +1427,14 @@ func runSpotInstance(l *logger.Logger, p *Provider, args []string, regionName st
 	for {
 		describeSpotInstanceRequestsOutput, err := describeSpotInstanceRequest(l, p, regionName, spotInstanceRequestId)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		spotRequestFulfilled, err := processSpotInstanceRequestStatus(l, describeSpotInstanceRequestsOutput, spotInstanceRequestId, instanceId)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if spotRequestFulfilled {
-			return nil
+			return v, nil
 		}
 		// This part of the code depends on demand/supply of AWS and can be hard to test.
 		// One way to manually test is tested by commenting out return nil above and check cancellation after 2 minutes.
@@ -1372,9 +1442,9 @@ func runSpotInstance(l *logger.Logger, p *Provider, args []string, regionName st
 			l.Printf("waitForSpotDuration passed, cancel the spot instance request and exit loop")
 			err := cancelSpotRequest(l, p, regionName, spotInstanceRequestId)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			return errors.New("waitForSpotDuration over")
+			return nil, errors.New("waitForSpotDuration over")
 		}
 		l.Printf("Sleeping for 10 seconds before checking the status of the spot instance request again")
 		time.Sleep(10 * time.Second)

@@ -474,8 +474,8 @@ type Provider interface {
 	// ConfigSSH takes a list of zones and configures SSH for machines in those
 	// zones for the given provider.
 	ConfigSSH(l *logger.Logger, zones []string) error
-	Create(l *logger.Logger, names []string, opts CreateOpts, providerOpts ProviderOpts) error
-	Grow(l *logger.Logger, vms List, clusterName string, names []string) error
+	Create(l *logger.Logger, names []string, opts CreateOpts, providerOpts ProviderOpts) (List, error)
+	Grow(l *logger.Logger, vms List, clusterName string, names []string) (List, error)
 	Shrink(l *logger.Logger, vmsToRemove List, clusterName string) error
 	Reset(l *logger.Logger, vms List) error
 	Delete(l *logger.Logger, vms List) error
