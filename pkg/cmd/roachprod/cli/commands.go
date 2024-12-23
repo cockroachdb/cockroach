@@ -602,7 +602,7 @@ if the user would like to update the keys on the remote hosts.
 
 		Args: cobra.ExactArgs(1),
 		Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
-			return roachprod.SetupSSH(context.Background(), config.Logger, args[0])
+			return roachprod.SetupSSH(context.Background(), config.Logger, args[0], true /* sync */)
 		}),
 	}
 }
