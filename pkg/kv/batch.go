@@ -544,14 +544,20 @@ func (b *Batch) PutInline(key, value interface{}) {
 // expValue needs to correspond to a Value.TagAndDataBytes() - i.e. a key's
 // value without the checksum (as the checksum includes the key too).
 func (b *Batch) CPut(key, value interface{}, expValue []byte) {
-	b.cputInternal(key, value, expValue, false, false)
+	b.cputInternal(key, value, expValue, false, false, false)
 }
 
 // CPutAllowingIfNotExists is like CPut except it also allows the Put when the
 // existing entry does not exist -- i.e. it succeeds if there is no existing
 // entry or the existing entry has the expected value.
 func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte) {
-	b.cputInternal(key, value, expValue, true, false)
+	b.cputInternal(key, value, expValue, true, false, false)
+}
+
+// CPutFailOnTombstones is like CPut except it fails with a
+// ConditionedFailedError if it encounters a tombstone.
+func (b *Batch) CPutFailOnTombstones(key, value interface{}, expValue []byte) {
+	b.cputInternal(key, value, expValue, false, false, true)
 }
 
 // CPutWithOriginTimestamp is like CPut except that it also sets the
@@ -577,7 +583,7 @@ func (b *Batch) CPutWithOriginTimestamp(
 		b.initResult(0, 1, notRaw, err)
 		return
 	}
-	r := kvpb.NewConditionalPut(k, v, expValue, false)
+	r := kvpb.NewConditionalPut(k, v, expValue, false, false)
 	r.(*kvpb.ConditionalPutRequest).OriginTimestamp = ts
 	r.(*kvpb.ConditionalPutRequest).ShouldWinOriginTimestampTie = shouldWinTie
 	b.appendReqs(r)
@@ -600,11 +606,11 @@ func (b *Batch) CPutWithOriginTimestamp(
 // A nil value can be used to delete the respective key, since there is no
 // DelInline(). This is different from CPut().
 func (b *Batch) CPutInline(key, value interface{}, expValue []byte) {
-	b.cputInternal(key, value, expValue, false, true)
+	b.cputInternal(key, value, expValue, false, true, false)
 }
 
 func (b *Batch) cputInternal(
-	key, value interface{}, expValue []byte, allowNotExist bool, inline bool,
+	key, value interface{}, expValue []byte, allowNotExist bool, inline bool, failOnTombstones bool,
 ) {
 	k, err := marshalKey(key)
 	if err != nil {
@@ -617,12 +623,38 @@ func (b *Batch) cputInternal(
 		return
 	}
 	if inline {
-		b.appendReqs(kvpb.NewConditionalPutInline(k, v, expValue, allowNotExist))
+		b.appendReqs(kvpb.NewConditionalPutInline(k, v, expValue, allowNotExist, failOnTombstones))
 	} else {
-		b.appendReqs(kvpb.NewConditionalPut(k, v, expValue, allowNotExist))
+		b.appendReqs(kvpb.NewConditionalPut(k, v, expValue, allowNotExist, failOnTombstones))
 	}
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
+}
+
+// CPutBytesEmpty allows multiple []byte value type CPut requests to be added to
+// the batch using BulkSource interface. The values for these keys are
+// expected to be empty.
+func (b *Batch) CPutBytesEmpty(bs BulkSource[[]byte]) {
+	numKeys := bs.Len()
+	reqs := make([]struct {
+		req   kvpb.ConditionalPutRequest
+		union kvpb.RequestUnion_ConditionalPut
+	}, numKeys)
+	i := 0
+	bsi := bs.Iter()
+	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
+		pr := &reqs[i].req
+		union := &reqs[i].union
+		union.ConditionalPut = pr
+		pr.AllowIfDoesNotExist = false
+		pr.ExpBytes = nil
+		i++
+		k, v := bsi.Next()
+		pr.Key = k
+		pr.Value.SetBytes(v)
+		pr.Value.InitChecksum(k)
+		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
+	})
 }
 
 // CPutTuplesEmpty allows multiple CPut tuple requests to be added to the batch
@@ -685,6 +717,8 @@ func (b *Batch) CPutValuesEmpty(bs BulkSource[roachpb.Value]) {
 // key can be either a byte slice or a string. value can be any key type, a
 // protoutil.Message or any Go primitive type (bool, int, etc). It is illegal
 // to set value to nil.
+// TODO(yuzefovich): this can be removed after compatibility with 24.3 is no
+// longer needed.
 func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 	k, err := marshalKey(key)
 	if err != nil {
@@ -699,52 +733,6 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 	b.appendReqs(kvpb.NewInitPut(k, v, failOnTombstones))
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
-}
-
-// InitPutBytes allows multiple []byte value type InitPut requests to be added to
-// the batch using BulkSource interface.
-func (b *Batch) InitPutBytes(bs BulkSource[[]byte]) {
-	numKeys := bs.Len()
-	reqs := make([]struct {
-		req   kvpb.InitPutRequest
-		union kvpb.RequestUnion_InitPut
-	}, numKeys)
-	i := 0
-	bsi := bs.Iter()
-	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
-		pr := &reqs[i].req
-		union := &reqs[i].union
-		union.InitPut = pr
-		i++
-		k, v := bsi.Next()
-		pr.Key = k
-		pr.Value.SetBytes(v)
-		pr.Value.InitChecksum(k)
-		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
-	})
-}
-
-// InitPutTuples allows multiple tuple value type InitPut to be added to the
-// batch using BulkSource interface.
-func (b *Batch) InitPutTuples(bs BulkSource[[]byte]) {
-	numKeys := bs.Len()
-	reqs := make([]struct {
-		req   kvpb.InitPutRequest
-		union kvpb.RequestUnion_InitPut
-	}, numKeys)
-	i := 0
-	bsi := bs.Iter()
-	b.bulkRequest(numKeys, func() (kvpb.RequestUnion, int) {
-		pr := &reqs[i].req
-		union := &reqs[i].union
-		union.InitPut = pr
-		i++
-		k, v := bsi.Next()
-		pr.Key = k
-		pr.Value.SetTuple(v)
-		pr.Value.InitChecksum(k)
-		return kvpb.RequestUnion{Value: union}, len(k) + len(pr.Value.RawBytes)
-	})
 }
 
 // Inc increments the integer value at key. If the key does not exist it will

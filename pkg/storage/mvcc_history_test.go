@@ -86,7 +86,7 @@ var (
 // check_for_acquire_lock t=<name> k=<key> str=<strength> [maxLockConflicts=<int>] [targetLockConflictBytes=<int>]
 // acquire_lock           t=<name> k=<key> str=<strength> [maxLockConflicts=<int>] [targetLockConflictBytes=<int>]
 //
-// cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> v=<string> [raw] [cond=<string>]
+// cput           [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> v=<string> [raw] [cond=<string>] [allow_missing] [failOnTombstones]
 // del            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key>
 // del_range      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> end=<key> [max=<max>] [returnKeys]
 // del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> end=<key> [idempotent] [noCoveredStats]
@@ -1293,9 +1293,13 @@ func cmdCPut(e *evalCtx) error {
 		rexpVal := e.getValInternal("cond")
 		expVal = rexpVal.TagAndDataBytes()
 	}
-	behavior := storage.CPutFailIfMissing
+	missingBehavior := storage.CPutFailIfMissing
 	if e.hasArg("allow_missing") {
-		behavior = storage.CPutAllowIfMissing
+		missingBehavior = storage.CPutAllowIfMissing
+	}
+	tombstoneBehavior := storage.CPutIgnoreTombstones
+	if e.hasArg("failOnTombstones") {
+		tombstoneBehavior = storage.CPutFailOnTombstones
 	}
 
 	originTimestamp := hlc.Timestamp{}
@@ -1314,7 +1318,8 @@ func cmdCPut(e *evalCtx) error {
 				ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 				MaxLockConflicts:               e.getMaxLockConflicts(),
 			},
-			AllowIfDoesNotExist: behavior,
+			AllowIfDoesNotExist: missingBehavior,
+			FailOnTombstones:    tombstoneBehavior,
 			OriginTimestamp:     originTimestamp,
 		}
 		acq, err := storage.MVCCConditionalPut(e.ctx, rw, key, ts, val, expVal, opts)

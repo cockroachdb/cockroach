@@ -2883,12 +2883,25 @@ const (
 	CPutFailIfMissing CPutMissingBehavior = false
 )
 
+// CPutTombstoneBehavior describes the handling of a tombstone.
+type CPutTombstoneBehavior bool
+
+const (
+	// CPutIgnoreTombstones is used to indicate that CPut should ignore the
+	// tombstones and treat them as key non-existing.
+	CPutIgnoreTombstones CPutTombstoneBehavior = false
+	// CPutFailOnTombstones is used to indicate that CPut should fail if it
+	// finds a tombstone.
+	CPutFailOnTombstones CPutTombstoneBehavior = true
+)
+
 // ConditionalPutWriteOptions bundles options for the
 // MVCCConditionalPut and MVCCBlindConditionalPut functions.
 type ConditionalPutWriteOptions struct {
 	MVCCWriteOptions
 
 	AllowIfDoesNotExist CPutMissingBehavior
+	FailOnTombstones    CPutTombstoneBehavior
 	// OriginTimestamp, if set, indicates that the caller wants to put the
 	// value only if any existing key is older than this timestamp.
 	//
@@ -3011,9 +3024,15 @@ func mvccConditionalPutUsingIter(
 	expBytes []byte,
 	opts ConditionalPutWriteOptions,
 ) (roachpb.LockAcquisition, error) {
+	if bool(opts.AllowIfDoesNotExist) && bool(opts.FailOnTombstones) {
+		return roachpb.LockAcquisition{}, errors.AssertionFailedf("AllowIfDoesNotExist and FailOnTombstones are incompatible")
+	}
 	if !opts.OriginTimestamp.IsEmpty() {
 		if bool(opts.AllowIfDoesNotExist) {
 			return roachpb.LockAcquisition{}, errors.AssertionFailedf("AllowIfDoesNotExist and non-zero OriginTimestamp are incompatible")
+		}
+		if bool(opts.FailOnTombstones) {
+			return roachpb.LockAcquisition{}, errors.AssertionFailedf("FailOnTombstones and non-zero OriginTimestamp are incompatible")
 		}
 		putIsInline := timestamp.IsEmpty()
 		if putIsInline {
@@ -3023,11 +3042,26 @@ func mvccConditionalPutUsingIter(
 
 	var valueFn func(existVal optionalValue) (roachpb.Value, error)
 	if opts.OriginTimestamp.IsEmpty() {
-		valueFn = func(actualValue optionalValue) (roachpb.Value, error) {
-			if err := maybeConditionFailedError(expBytes, actualValue, bool(opts.AllowIfDoesNotExist)); err != nil {
-				return roachpb.Value{}, err
+		if opts.FailOnTombstones {
+			valueFn = func(existVal optionalValue) (roachpb.Value, error) {
+				if existVal.IsTombstone() {
+					// We found a tombstone and FailOnTombstones is true: fail.
+					return roachpb.Value{}, &kvpb.ConditionFailedError{
+						ActualValue: existVal.ToPointer(),
+					}
+				}
+				if err := maybeConditionFailedError(expBytes, existVal, false /* allowNoExisting */); err != nil {
+					return roachpb.Value{}, err
+				}
+				return value, nil
 			}
-			return value, nil
+		} else {
+			valueFn = func(existVal optionalValue) (roachpb.Value, error) {
+				if err := maybeConditionFailedError(expBytes, existVal, bool(opts.AllowIfDoesNotExist)); err != nil {
+					return roachpb.Value{}, err
+				}
+				return value, nil
+			}
 		}
 	} else {
 		valueFn = func(existVal optionalValue) (roachpb.Value, error) {

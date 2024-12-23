@@ -1656,7 +1656,7 @@ func NewPutInline(key roachpb.Key, value roachpb.Value) Request {
 // them. The caller retains ownership of expVal; NewConditionalPut will copy it
 // into the request.
 func NewConditionalPut(
-	key roachpb.Key, value roachpb.Value, expValue []byte, allowNotExist bool,
+	key roachpb.Key, value roachpb.Value, expValue []byte, allowNotExist bool, failOnTombstones bool,
 ) Request {
 	value.InitChecksum(key)
 	return &ConditionalPutRequest{
@@ -1666,6 +1666,7 @@ func NewConditionalPut(
 		Value:               value,
 		ExpBytes:            expValue,
 		AllowIfDoesNotExist: allowNotExist,
+		FailOnTombstones:    failOnTombstones,
 	}
 }
 
@@ -1676,7 +1677,7 @@ func NewConditionalPut(
 // them. The caller retains ownership of expVal; NewConditionalPut will copy it
 // into the request.
 func NewConditionalPutInline(
-	key roachpb.Key, value roachpb.Value, expValue []byte, allowNotExist bool,
+	key roachpb.Key, value roachpb.Value, expValue []byte, allowNotExist bool, failOnTombstones bool,
 ) Request {
 	value.InitChecksum(key)
 	return &ConditionalPutRequest{
@@ -1687,6 +1688,7 @@ func NewConditionalPutInline(
 		ExpBytes:            expValue,
 		AllowIfDoesNotExist: allowNotExist,
 		Inline:              true,
+		FailOnTombstones:    failOnTombstones,
 	}
 }
 
@@ -2555,9 +2557,15 @@ func (writeOptions *WriteOptions) GetOriginTimestamp() hlc.Timestamp {
 }
 
 func (r *ConditionalPutRequest) Validate() error {
+	if r.AllowIfDoesNotExist && r.FailOnTombstones {
+		return errors.AssertionFailedf("invalid ConditionalPutRequest: AllowIfDoesNotExist and FailOnTombstones are incompatible")
+	}
 	if !r.OriginTimestamp.IsEmpty() {
 		if r.AllowIfDoesNotExist {
 			return errors.AssertionFailedf("invalid ConditionalPutRequest: AllowIfDoesNotExist and non-empty OriginTimestamp are incompatible")
+		}
+		if r.FailOnTombstones {
+			return errors.AssertionFailedf("invalid ConditionalPutRequest: FailOnTombstones and non-empty OriginTimestamp are incompatible")
 		}
 	}
 	return nil
