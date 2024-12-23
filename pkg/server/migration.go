@@ -144,7 +144,7 @@ func bumpClusterVersion(
 		return err
 	}
 	log.Infof(ctx, "active cluster version setting is now %s (up from %s)",
-		newCV.PrettyPrint(), prevCV.PrettyPrint())
+		redact.Safe(newCV.PrettyPrint()), redact.Safe(prevCV.PrettyPrint()))
 	return nil
 }
 
