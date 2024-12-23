@@ -15,6 +15,7 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -199,6 +200,7 @@ type TestClusterInterface interface {
 	// If the lease starts out on dest, this is a no-op and the current lease is
 	// returned.
 	MoveRangeLeaseNonCooperatively(
+		t *testing.T,
 		ctx context.Context,
 		rangeDesc roachpb.RangeDescriptor,
 		dest roachpb.ReplicationTarget,
