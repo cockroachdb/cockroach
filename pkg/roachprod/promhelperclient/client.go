@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -192,10 +191,10 @@ type NodeInfo struct {
 // createClusterConfigFile creates the cluster config file per node
 func buildCreateRequest(nodes map[int]*NodeInfo, insecure bool) (io.Reader, error) {
 	configs := make([]*CCParams, 0)
-	for i, n := range nodes {
+	for _, n := range nodes {
 		params := &CCParams{
 			Targets: []string{n.Target},
-			Labels:  map[string]string{"node": strconv.Itoa(i)},
+			Labels:  map[string]string{},
 		}
 		// custom labels - this can override the default labels if needed
 		for n, v := range n.CustomLabels {

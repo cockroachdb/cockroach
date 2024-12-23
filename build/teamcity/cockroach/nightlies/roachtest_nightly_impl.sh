@@ -32,6 +32,8 @@ source $root/build/teamcity/util/roachtest_util.sh
 # Standard release branches are in the format `release-24.1` for the
 # 24.1 release, for example.
 release_branch_regex="^release-[0-9][0-9]\.[0-9]"
+# Test selection is enabled only on release branches.
+selective_tests="false"
 
 if [[ "${TC_BUILD_BRANCH}" == "master" ]]; then
   # We default to using test selection on master, unless explicitly
