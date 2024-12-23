@@ -58,8 +58,8 @@ func (t *Tracker) Empty() bool {
 	// total number of tokens held, and return whether it's zero. It's also
 	// possible to make it atomic and avoid locking the mutex in replicaSendStream
 	// when calling this.
-	for pri := range t.tracked {
-		if t.tracked[pri].Length() != 0 {
+	for _, tokens := range t.deducted {
+		if tokens != 0 {
 			return false
 		}
 	}
