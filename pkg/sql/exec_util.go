@@ -3847,6 +3847,10 @@ func (m *sessionDataMutator) SetOptimizerPushLimitIntoProjectFilteredScan(val bo
 	m.data.OptimizerPushLimitIntoProjectFilteredScan = val
 }
 
+func (m *sessionDataMutator) SetLegacyVarcharTyping(val bool) {
+	m.data.LegacyVarcharTyping = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
