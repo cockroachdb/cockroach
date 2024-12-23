@@ -100,7 +100,7 @@ func TestStoreLiveness(t *testing.T) {
 					case "error-on-write":
 						var errorOnWrite bool
 						d.ScanArgs(t, "on", &errorOnWrite)
-						engine.errorOnWrite = errorOnWrite
+						engine.SetErrorOnWrite(errorOnWrite)
 						return ""
 
 					case "debug-requester-state":

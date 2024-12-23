@@ -50,6 +50,12 @@ func (te *TestEngine) SetBlockOnWrite(bow bool) {
 	te.cond.Broadcast()
 }
 
+func (te *TestEngine) SetErrorOnWrite(eow bool) {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	te.errorOnWrite = eow
+}
+
 func (te *TestEngine) blockOrErrorOnWrite() error {
 	te.mu.Lock()
 	defer te.mu.Unlock()
