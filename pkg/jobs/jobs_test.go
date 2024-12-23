@@ -2300,12 +2300,12 @@ func TestJobInTxn(t *testing.T) {
 	sql.AddPlanHook(
 		"test",
 		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
-		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+		) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 			st, ok := stmt.(*tree.Backup)
 			if !ok {
-				return nil, nil, nil, false, nil
+				return nil, nil, false, nil
 			}
-			fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
+			fn := func(ctx context.Context, _ chan<- tree.Datums) error {
 				var err error
 				jobID = execCtx.ExtendedEvalContext().QueueJob(&jobs.Record{
 					Description: st.String(),
@@ -2315,7 +2315,7 @@ func TestJobInTxn(t *testing.T) {
 				})
 				return err
 			}
-			return fn, nil, nil, false, nil
+			return fn, nil, false, nil
 		},
 		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
 		) (matched bool, _ colinfo.ResultColumns, _ error) {
@@ -2342,12 +2342,12 @@ func TestJobInTxn(t *testing.T) {
 	sql.AddPlanHook(
 		"test",
 		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
-		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+		) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 			_, ok := stmt.(*tree.Restore)
 			if !ok {
-				return nil, nil, nil, false, nil
+				return nil, nil, false, nil
 			}
-			fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
+			fn := func(ctx context.Context, _ chan<- tree.Datums) error {
 				var err error
 				jobID = execCtx.ExtendedEvalContext().QueueJob(&jobs.Record{
 					Description: "RESTORE",
@@ -2357,7 +2357,7 @@ func TestJobInTxn(t *testing.T) {
 				})
 				return err
 			}
-			return fn, nil, nil, false, nil
+			return fn, nil, false, nil
 		},
 		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
 		) (matched bool, _ colinfo.ResultColumns, _ error) {

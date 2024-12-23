@@ -153,14 +153,14 @@ func alterReplicationJobTypeCheck(
 
 func alterReplicationJobHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	alterTenantStmt, ok := stmt.(*tree.AlterTenantReplication)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	if !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege,
+		return nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only the system tenant can alter tenant")
 	}
 
@@ -169,13 +169,13 @@ func alterReplicationJobHook(
 	if alterTenantStmt.Cutover != nil {
 		if !alterTenantStmt.Cutover.Latest {
 			if alterTenantStmt.Cutover.Timestamp == nil {
-				return nil, nil, nil, false, errors.AssertionFailedf("unexpected nil cutover expression")
+				return nil, nil, false, errors.AssertionFailedf("unexpected nil cutover expression")
 			}
 
 			ct, err := asof.EvalSystemTimeExpr(ctx, evalCtx, p.SemaCtx(), alterTenantStmt.Cutover.Timestamp,
 				alterReplicationJobOp, asof.ReplicationCutover)
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 			cutoverTime = ct
 		}
@@ -184,26 +184,26 @@ func alterReplicationJobHook(
 	exprEval := p.ExprEvaluator(alterReplicationJobOp)
 	options, err := evalTenantReplicationOptions(ctx, alterTenantStmt.Options, exprEval, evalCtx, p.SemaCtx(), alterReplicationJobOp)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	var srcAddr, srcTenant string
 	if alterTenantStmt.ReplicationSourceAddress != nil {
 		srcAddr, err = exprEval.String(ctx, alterTenantStmt.ReplicationSourceAddress)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 
 		_, _, srcTenant, err = exprEval.TenantSpec(ctx, alterTenantStmt.ReplicationSourceTenantName)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
 	// Ensure the TenantSpec is type checked, even if we don't use the result.
 	_, _, _, err = exprEval.TenantSpec(ctx, alterTenantStmt.TenantSpec)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	retentionTTLSeconds := defaultRetentionTTLSeconds
@@ -211,7 +211,7 @@ func alterReplicationJobHook(
 		retentionTTLSeconds = ret
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		if err := utilccl.CheckEnterpriseEnabled(
 			p.ExecCfg().Settings,
 			alterReplicationJobOp,
@@ -280,9 +280,9 @@ func alterReplicationJobHook(
 		return nil
 	}
 	if alterTenantStmt.Cutover != nil {
-		return fn, alterReplicationCutoverHeader, nil, false, nil
+		return fn, alterReplicationCutoverHeader, false, nil
 	}
-	return fn, nil, nil, false, nil
+	return fn, nil, false, nil
 }
 
 func alterTenantSetReplication(

@@ -403,10 +403,10 @@ func backupTypeCheck(
 // backupPlanHook implements PlanHookFn.
 func backupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	backupStmt := getBackupStatement(stmt)
 	if backupStmt == nil {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 	if err := featureflag.CheckEnabled(
 		ctx,
@@ -414,7 +414,7 @@ func backupPlanHook(
 		featureBackupEnabled,
 		"BACKUP",
 	); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	detached := backupStmt.Options.Detached == tree.DBoolTrue
@@ -426,20 +426,20 @@ func backupPlanHook(
 	if backupStmt.Subdir != nil {
 		subdir, err = exprEval.String(ctx, backupStmt.Subdir)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
 	to, err := exprEval.StringArray(ctx, tree.Exprs(backupStmt.To))
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	incrementalStorage, err := exprEval.StringArray(
 		ctx, tree.Exprs(backupStmt.Options.IncrementalStorage),
 	)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	var revisionHistory bool
@@ -448,7 +448,7 @@ func backupPlanHook(
 			ctx, backupStmt.Options.CaptureRevisionHistory,
 		)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
@@ -456,11 +456,11 @@ func backupPlanHook(
 	if backupStmt.Options.ExecutionLocality != nil {
 		s, err := exprEval.String(ctx, backupStmt.Options.ExecutionLocality)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 		if s != "" {
 			if err := executionLocality.Set(s); err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 		}
 	}
@@ -471,7 +471,7 @@ func backupPlanHook(
 			ctx, backupStmt.Options.IncludeAllSecondaryTenants,
 		)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
@@ -483,7 +483,7 @@ func backupPlanHook(
 	if backupStmt.Options.EncryptionPassphrase != nil {
 		pw, err = exprEval.String(ctx, backupStmt.Options.EncryptionPassphrase)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 		encryptionParams.Mode = jobspb.EncryptionMode_Passphrase
 	}
@@ -491,18 +491,18 @@ func backupPlanHook(
 	var kms []string
 	if backupStmt.Options.EncryptionKMSURI != nil {
 		if encryptionParams.Mode != jobspb.EncryptionMode_None {
-			return nil, nil, nil, false,
+			return nil, nil, false,
 				errors.New("cannot have both encryption_passphrase and kms option set")
 		}
 		kms, err = exprEval.StringArray(
 			ctx, tree.Exprs(backupStmt.Options.EncryptionKMSURI),
 		)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 		encryptionParams.Mode = jobspb.EncryptionMode_KMS
 		if err = logAndSanitizeKmsURIs(ctx, kms...); err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
@@ -512,11 +512,11 @@ func backupPlanHook(
 			ctx, backupStmt.Options.UpdatesClusterMonitoringMetrics,
 		)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
@@ -738,9 +738,9 @@ func backupPlanHook(
 	}
 
 	if detached {
-		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
+		return fn, jobs.DetachedJobExecutionResultHeader, false, nil
 	}
-	return fn, jobs.BackupRestoreJobResultHeader, nil, false, nil
+	return fn, jobs.BackupRestoreJobResultHeader, false, nil
 }
 
 func logAndSanitizeKmsURIs(ctx context.Context, kmsURIs ...string) error {

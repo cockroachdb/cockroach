@@ -767,18 +767,18 @@ func alterBackupScheduleTypeCheck(
 
 func alterBackupScheduleHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	alterScheduleStmt, ok := stmt.(*tree.AlterBackupSchedule)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	spec, err := makeAlterBackupScheduleSpec(ctx, p, alterScheduleStmt)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		err := doAlterBackupSchedules(ctx, p, spec, resultsCh)
 		if err != nil {
 			telemetry.Count("scheduled-backup.alter.failed")
@@ -787,7 +787,7 @@ func alterBackupScheduleHook(
 
 		return nil
 	}
-	return fn, scheduledBackupHeader, nil, false, nil
+	return fn, scheduledBackupHeader, false, nil
 }
 
 func init() {

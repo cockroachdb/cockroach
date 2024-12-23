@@ -138,9 +138,6 @@ type mutationPlanNode interface {
 	rowsWritten() int64
 }
 
-// PlanNode is the exported name for planNode. Useful for CCL hooks.
-type PlanNode = planNode
-
 // planNodeFastPath is implemented by nodes that can perform all their
 // work during startPlan(), possibly affecting even multiple rows. For
 // example, DELETE can do this.
@@ -576,21 +573,21 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 			if !matched {
 				continue
 			}
-			return newHookFnNode(planHook.name, func(ctx context.Context, nodes []planNode, datums chan<- tree.Datums) error {
+			return newHookFnNode(planHook.name, func(ctx context.Context, datums chan<- tree.Datums) error {
 				return errors.AssertionFailedf(
 					"cannot execute prepared %v statement",
 					planHook.name,
 				)
-			}, header, nil /* subplans */, p.execCfg.Stopper), nil
+			}, header, p.execCfg.Stopper), nil
 		}
 
-		if fn, header, subplans, avoidBuffering, err := planHook.fn(ctx, stmt, p); err != nil {
+		if fn, header, avoidBuffering, err := planHook.fn(ctx, stmt, p); err != nil {
 			return nil, err
 		} else if fn != nil {
 			if avoidBuffering {
 				p.curPlan.avoidBuffering = true
 			}
-			return newHookFnNode(planHook.name, fn, header, subplans, p.execCfg.Stopper), nil
+			return newHookFnNode(planHook.name, fn, header, p.execCfg.Stopper), nil
 		}
 	}
 	return nil, nil

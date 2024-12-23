@@ -802,18 +802,18 @@ func createBackupScheduleTypeCheck(
 
 func createBackupScheduleHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	schedule, ok := stmt.(*tree.ScheduledBackup)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	spec, err := makeScheduledBackupSpec(ctx, p, schedule)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		err := doCreateBackupSchedules(ctx, p, spec, resultsCh)
 		if err != nil {
 			telemetry.Count("scheduled-backup.create.failed")
@@ -822,7 +822,7 @@ func createBackupScheduleHook(
 
 		return nil
 	}
-	return fn, scheduledBackupHeader, nil, false, nil
+	return fn, scheduledBackupHeader, false, nil
 }
 
 func init() {

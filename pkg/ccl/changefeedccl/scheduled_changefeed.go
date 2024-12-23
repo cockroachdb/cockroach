@@ -442,7 +442,7 @@ func dryRunCreateChangefeed(
 func planCreateChangefeed(
 	ctx context.Context, p sql.PlanHookState, createChangefeedStmt tree.Statement,
 ) (sql.PlanHookRowFn, error) {
-	fn, cols, _, _, err := changefeedPlanHook(ctx, createChangefeedStmt, p)
+	fn, cols, _, err := changefeedPlanHook(ctx, createChangefeedStmt, p)
 
 	if err != nil {
 		return nil, errors.Wrapf(err, "changefeed table eval: %q", tree.AsString(createChangefeedStmt))
@@ -470,7 +470,7 @@ func invokeCreateChangefeed(ctx context.Context, createChangefeedFn sql.PlanHook
 	})
 
 	g.GoCtx(func(ctx context.Context) error {
-		return createChangefeedFn(ctx, nil, resultCh)
+		return createChangefeedFn(ctx, resultCh)
 	})
 
 	return g.Wait()
@@ -669,18 +669,18 @@ func doCreateChangefeedSchedule(
 
 func createChangefeedScheduleHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	schedule, ok := stmt.(*tree.ScheduledChangefeed)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	spec, err := makeScheduledChangefeedSpec(ctx, p, schedule)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		err := doCreateChangefeedSchedule(ctx, p, spec, resultsCh)
 		if err != nil {
 			telemetry.Count("scheduled-changefeed.create.failed")
@@ -689,7 +689,7 @@ func createChangefeedScheduleHook(
 		return nil
 	}
 
-	return fn, headerCols, nil, false, nil
+	return fn, headerCols, false, nil
 }
 
 func createChangefeedScheduleTypeCheck(

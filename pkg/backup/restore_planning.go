@@ -1205,10 +1205,10 @@ func logSanitizedRestoreDestination(ctx context.Context, restoreDestinations str
 // restorePlanHook implements sql.PlanHookFn.
 func restorePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	if err := featureflag.CheckEnabled(
@@ -1217,11 +1217,11 @@ func restorePlanHook(
 		featureRestoreEnabled,
 		"RESTORE",
 	); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	if !restoreStmt.Options.SchemaOnly && restoreStmt.Options.VerifyData {
-		return nil, nil, nil, false,
+		return nil, nil, false,
 			errors.New("to set the verify_backup_table_data option, the schema_only option must be set")
 	}
 
@@ -1229,7 +1229,7 @@ func restorePlanHook(
 
 	from, err := exprEval.StringArray(ctx, tree.Exprs(restoreStmt.From))
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	var pw string
@@ -1237,33 +1237,33 @@ func restorePlanHook(
 		var err error
 		pw, err = exprEval.String(ctx, restoreStmt.Options.EncryptionPassphrase)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
 	var kms []string
 	if restoreStmt.Options.DecryptionKMSURI != nil {
 		if restoreStmt.Options.EncryptionPassphrase != nil {
-			return nil, nil, nil, false, errors.New("cannot have both encryption_passphrase and kms option set")
+			return nil, nil, false, errors.New("cannot have both encryption_passphrase and kms option set")
 		}
 		var err error
 		kms, err = exprEval.StringArray(
 			ctx, tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
 		)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
 	var intoDB string
 	if restoreStmt.Options.IntoDB != nil {
 		if restoreStmt.DescriptorCoverage == tree.SystemUsers {
-			return nil, nil, nil, false, errors.New("cannot set into_db option when only restoring system users")
+			return nil, nil, false, errors.New("cannot set into_db option when only restoring system users")
 		}
 		var err error
 		intoDB, err = exprEval.String(ctx, restoreStmt.Options.IntoDB)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
@@ -1272,7 +1272,7 @@ func restorePlanHook(
 		var err error
 		subdir, err = exprEval.String(ctx, restoreStmt.Subdir)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	} else {
 		// Deprecation notice for non-collection `RESTORE FROM` syntax. Remove this
@@ -1290,7 +1290,7 @@ func restorePlanHook(
 			ctx, tree.Exprs(restoreStmt.Options.IncrementalStorage),
 		)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
@@ -1298,11 +1298,11 @@ func restorePlanHook(
 	if restoreStmt.Options.ExecutionLocality != nil {
 		loc, err := exprEval.String(ctx, restoreStmt.Options.ExecutionLocality)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 		if loc != "" {
 			if err := execLocality.Set(loc); err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 		}
 	}
@@ -1313,20 +1313,20 @@ func restorePlanHook(
 			len(restoreStmt.Targets.Databases) != 1 {
 			err := errors.New("new_db_name can only be used for RESTORE DATABASE with a single target" +
 				" database")
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 		if restoreStmt.DescriptorCoverage == tree.SystemUsers {
-			return nil, nil, nil, false, errors.New("cannot set new_db_name option when only restoring system users")
+			return nil, nil, false, errors.New("cannot set new_db_name option when only restoring system users")
 		}
 		var err error
 		newDBName, err = exprEval.String(ctx, restoreStmt.Options.NewDBName)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
 	if restoreStmt.Options.ExperimentalOnline && restoreStmt.Options.VerifyData {
-		return nil, nil, nil, false, errors.New("cannot run online restore with verify_backup_table_data")
+		return nil, nil, false, errors.New("cannot run online restore with verify_backup_table_data")
 	}
 
 	var newTenantID *roachpb.TenantID
@@ -1335,7 +1335,7 @@ func restorePlanHook(
 		if restoreStmt.DescriptorCoverage == tree.AllDescriptors || !restoreStmt.Targets.TenantID.IsSet() {
 			err := errors.Errorf("options %q/%q can only be used when running RESTORE TENANT for a single tenant",
 				restoreOptAsTenant, restoreOptForceTenantID)
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 
 		if restoreStmt.Options.ForceTenantID != nil {
@@ -1356,7 +1356,7 @@ func restorePlanHook(
 				return &tid, err
 			}()
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 		}
 		if restoreStmt.Options.AsTenant != nil {
@@ -1373,19 +1373,19 @@ func restorePlanHook(
 				return &tn, nil
 			}()
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 		}
 		if newTenantID == nil && newTenantName != nil {
 			id, err := p.GetAvailableTenantID(ctx, *newTenantName)
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 			newTenantID = &id
 		}
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		// TODO(dan): Move this span into sql.
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
@@ -1428,7 +1428,7 @@ func restorePlanHook(
 	} else {
 		header = jobs.BackupRestoreJobResultHeader
 	}
-	return fn, header, nil, false, nil
+	return fn, header, false, nil
 }
 
 // checkRestoreDestinationPrivileges iterates over the External Storage URIs and

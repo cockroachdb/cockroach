@@ -218,10 +218,10 @@ func showBackupTypeCheck(
 // showBackupPlanHook implements PlanHookFn.
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	showStmt, ok := stmt.(*tree.ShowBackup)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 	exprEval := p.ExprEvaluator("SHOW BACKUP")
 
@@ -229,35 +229,35 @@ func showBackupPlanHook(
 	if showStmt.Details == tree.BackupConnectionTest {
 		loc, err := exprEval.String(ctx, showStmt.Path)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 		var params cloudcheck.Params
 		if showStmt.Options.CheckConnectionTransferSize != nil {
 			transferSizeStr, err := exprEval.String(ctx, showStmt.Options.CheckConnectionTransferSize)
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 			parsed, err := humanizeutil.ParseBytes(transferSizeStr)
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 			params.TransferSize = parsed
 		}
 		if showStmt.Options.CheckConnectionDuration != nil {
 			durationStr, err := exprEval.String(ctx, showStmt.Options.CheckConnectionDuration)
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 			parsed, err := time.ParseDuration(durationStr)
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 			params.MinDuration = parsed
 		}
 		if showStmt.Options.CheckConnectionConcurrency != nil {
 			concurrency, err := exprEval.Int(ctx, showStmt.Options.CheckConnectionConcurrency)
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, false, err
 			}
 			params.Concurrency = concurrency
 		}
@@ -269,31 +269,31 @@ func showBackupPlanHook(
 			ctx, tree.Exprs(showStmt.InCollection),
 		)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 		return showBackupsInCollectionPlanHook(ctx, collection, showStmt, p)
 	}
 
 	to, err := exprEval.String(ctx, showStmt.Path)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
 	var inCol []string
 	if showStmt.InCollection != nil {
 		inCol, err = exprEval.StringArray(ctx, tree.Exprs(showStmt.InCollection))
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, false, err
 		}
 	}
 
 	infoReader := getBackupInfoReader(p, showStmt)
 
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
@@ -540,7 +540,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		return nil
 	}
 
-	return fn, infoReader.header(), nil, false, nil
+	return fn, infoReader.header(), false, nil
 }
 
 func getBackupInfoReader(p sql.PlanHookState, showStmt *tree.ShowBackup) backupInfoReader {
@@ -1515,13 +1515,13 @@ var showBackupsInCollectionHeader = colinfo.ResultColumns{
 // showBackupPlanHook implements PlanHookFn.
 func showBackupsInCollectionPlanHook(
 	ctx context.Context, collection []string, showStmt *tree.ShowBackup, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 
 	if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, collection); err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, showStmt.StatementTag())
 		defer span.Finish()
 
@@ -1539,7 +1539,7 @@ func showBackupsInCollectionPlanHook(
 		}
 		return nil
 	}
-	return fn, showBackupsInCollectionHeader, nil, false, nil
+	return fn, showBackupsInCollectionHeader, false, nil
 }
 
 func init() {

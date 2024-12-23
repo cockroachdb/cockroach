@@ -56,20 +56,20 @@ var streamCreationHeader = colinfo.ResultColumns{
 
 func createLogicalReplicationStreamPlanHook(
 	ctx context.Context, untypedStmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+) (sql.PlanHookRowFn, colinfo.ResultColumns, bool, error) {
 	stmt, ok := untypedStmt.(*tree.CreateLogicalReplicationStream)
 	if !ok {
-		return nil, nil, nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	exprEval := p.ExprEvaluator("LOGICAL REPLICATION STREAM")
 
 	from, err := exprEval.String(ctx, stmt.PGURL)
 	if err != nil {
-		return nil, nil, nil, false, err
+		return nil, nil, false, err
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) (retErr error) {
+	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) (retErr error) {
 		defer func() {
 			if retErr == nil {
 				telemetry.Count("logical_replication_stream.started")
@@ -279,7 +279,7 @@ func createLogicalReplicationStreamPlanHook(
 		return nil
 	}
 
-	return fn, streamCreationHeader, nil, false, nil
+	return fn, streamCreationHeader, false, nil
 }
 
 type ResolvedDestObjects struct {
