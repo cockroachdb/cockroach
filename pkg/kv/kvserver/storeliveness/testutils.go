@@ -37,7 +37,7 @@ func NewTestEngine(storeID slpb.StoreIdent) *TestEngine {
 }
 
 func (te *TestEngine) NewBatch() storage.Batch {
-	return TestBatch{
+	return &TestBatch{
 		Batch: te.Engine.NewBatch(),
 		te:    te,
 	}
@@ -80,7 +80,7 @@ type TestBatch struct {
 	te *TestEngine
 }
 
-func (tb TestBatch) Commit(sync bool) error {
+func (tb *TestBatch) Commit(sync bool) error {
 	if err := tb.te.blockOrErrorOnWrite(); err != nil {
 		return err
 	}
