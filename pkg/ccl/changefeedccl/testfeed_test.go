@@ -1233,7 +1233,6 @@ func extractFieldFromJSONValue(
 				return nil, nil, errors.Wrapf(err, "unmarshalling json %v", metaVal)
 			}
 			field = meta[fieldName]
-			delete(meta, fieldName)
 			if len(meta) == 0 {
 				delete(parsed, metaSentinel)
 			} else {
@@ -1245,7 +1244,6 @@ func extractFieldFromJSONValue(
 		}
 	} else {
 		field = parsed[fieldName]
-		delete(parsed, fieldName)
 	}
 
 	if value, err = reformatJSON(parsed); err != nil {
