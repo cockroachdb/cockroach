@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	roachprodErrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -57,6 +58,11 @@ var sysbenchWorkloadName = map[sysbenchWorkload]string{
 	oltpWriteOnly:      "oltp_write_only",
 }
 
+type extraSetup struct {
+	nameSuffix string
+	stmts      []string
+}
+
 func (w sysbenchWorkload) String() string {
 	return sysbenchWorkloadName[w]
 }
@@ -69,6 +75,7 @@ type sysbenchOptions struct {
 	tables       int
 	rowsPerTable int
 	usePostgres  bool
+	extra        extraSetup // invoked before the workload starts
 }
 
 func (o *sysbenchOptions) cmd(haproxy bool) string {
@@ -148,7 +155,14 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), c.Conn(ctx, t.L(), 1))
 			require.NoError(t, err)
 		}
-		c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach sql --url={pgurl:1} -e "CREATE DATABASE sysbench"`)
+		conn := c.Conn(ctx, t.L(), 1)
+		runner := sqlutils.MakeSQLRunner(conn)
+		runner.Exec(t, `CREATE DATABASE sysbench`)
+		for _, stmt := range opts.extra.stmts {
+			runner.Exec(t, stmt)
+			t.L().Printf(`executed extra setup statement: %s`, stmt)
+		}
+		_ = conn.Close()
 	}
 
 	useHAProxy := len(c.CRDBNodes()) > 1
@@ -210,20 +224,30 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 }
 
 func registerSysbench(r registry.Registry) {
+	coreThree := func(w sysbenchWorkload) bool {
+		switch w {
+		case oltpReadOnly, oltpReadWrite, oltpWriteOnly:
+			return true
+		default:
+			return false
+		}
+	}
+
 	for _, d := range []struct {
 		n, cpus int
 		pick    func(sysbenchWorkload) bool // nil means true for all
+		extra   extraSetup
 	}{
 		{n: 1, cpus: 32},
 		{n: 3, cpus: 32},
-		{n: 3, cpus: 8, pick: func(w sysbenchWorkload) bool {
-			switch w {
-			case oltpReadOnly, oltpReadWrite, oltpWriteOnly:
-				return true
-			default:
-				return false
-			}
-		}},
+		{n: 3, cpus: 8, pick: coreThree},
+		{n: 3, cpus: 8, pick: coreThree, extra: extraSetup{nameSuffix: "-settings", stmts: []string{
+			`set cluster setting sql.stats.flush.enabled = false`,
+			`set cluster setting sql.metrics.statement_details.enabled = false`,
+			`set cluster setting kv.split_queue.enabled = false`,
+			`set cluster setting sql.stats.histogram_collection.enabled = false`,
+			`set cluster setting kv.consistency_queue.enabled = false`}},
+		},
 	} {
 		for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
 			if d.pick != nil && !d.pick(w) {
@@ -237,10 +261,15 @@ func registerSysbench(r registry.Registry) {
 				concurrency:  conc,
 				tables:       10,
 				rowsPerTable: 10000000,
+				extra:        d.extra,
 			}
 
+			benchname := "sysbench"
+			if d.extra.nameSuffix != "" {
+				benchname += d.extra.nameSuffix
+			}
 			r.Add(registry.TestSpec{
-				Name:                      fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, d.n, d.cpus, conc),
+				Name:                      fmt.Sprintf("%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, d.n, d.cpus, conc),
 				Benchmark:                 true,
 				Owner:                     registry.OwnerTestEng,
 				Cluster:                   r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
