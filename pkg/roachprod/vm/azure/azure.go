@@ -152,8 +152,8 @@ func (p *Provider) AttachVolume(*logger.Logger, vm.Volume, *vm.VM) (string, erro
 	return "", vm.UnimplementedError
 }
 
-func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) error {
-	return vm.UnimplementedError
+func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) (vm.List, error) {
+	return nil, vm.UnimplementedError
 }
 
 func (p *Provider) Shrink(*logger.Logger, vm.List, string) error {
@@ -325,12 +325,12 @@ func parseZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]Zone, error) 
 // Create implements vm.Provider.
 func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, vmProviderOpts vm.ProviderOpts,
-) error {
+) (vm.List, error) {
 	providerOpts := vmProviderOpts.(*ProviderOpts)
 	// Load the user's SSH public key to configure the resulting VMs.
 	sshKey, err := config.SSHPublicKey()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	m := getAzureDefaultLabelMap(opts)
@@ -338,7 +338,7 @@ func (p *Provider) Create(
 	for key, value := range opts.CustomLabels {
 		_, ok := m[strings.ToLower(key)]
 		if ok {
-			return fmt.Errorf("duplicate label name defined: %s", key)
+			return nil, fmt.Errorf("duplicate label name defined: %s", key)
 		}
 
 		clusterTags[key] = to.StringPtr(value)
@@ -356,7 +356,7 @@ func (p *Provider) Create(
 
 	zones, err := parseZones(opts, providerOpts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Effectively a map of node number to zone.
@@ -380,9 +380,11 @@ func (p *Provider) Create(
 	}
 
 	if _, err := p.createVNets(l, ctx, maps.Keys(uniqueLocations), *providerOpts); err != nil {
-		return err
+		return nil, err
 	}
 
+	var vmList vm.List
+	var vmMutex syncutil.Mutex
 	errs, _ := errgroup.WithContext(ctx)
 	for zone, nodes := range zoneToHostNames {
 		errs.Go(func() error {
@@ -406,18 +408,83 @@ func (p *Provider) Create(
 
 			for _, name := range nodes {
 				errs.Go(func() error {
-					_, err := p.createVM(l, ctx, group, subnet, name, sshKey, zone, opts, *providerOpts)
-					err = errors.Wrapf(err, "creating VM %s", name)
-					if err == nil {
-						l.Printf("created VM %s", name)
+					cvm, err := p.createVM(l, ctx, group, subnet, name, sshKey, zone, opts, *providerOpts)
+					if err != nil {
+						return errors.Wrapf(err, "creating VM %s", name)
 					}
-					return err
+
+					l.Printf("created VM %s", name)
+					v, err := p.computeVirtualMachineToVM(cvm)
+					if err != nil {
+						return err
+					}
+
+					vmMutex.Lock()
+					defer vmMutex.Unlock()
+					vmList = append(vmList, *v)
+
+					return nil
 				})
 			}
 			return nil
 		})
 	}
-	return errs.Wait()
+	return vmList, errs.Wait()
+}
+
+// computeVirtualMachineToVM converts an Azure VirtualMachine to a roachprod vm.VM.
+func (p *Provider) computeVirtualMachineToVM(cvm compute.VirtualMachine) (*vm.VM, error) {
+
+	tags := make(map[string]string)
+	for key, value := range cvm.Tags {
+		tags[key] = *value
+	}
+
+	m := &vm.VM{
+		Name:       *cvm.Name,
+		Labels:     tags,
+		Provider:   ProviderName,
+		ProviderID: *cvm.ID,
+		RemoteUser: remoteUser,
+		VPC:        "global",
+		// We add a fake availability-zone suffix since other roachprod
+		// code assumes particular formats. For example, "eastus2z".
+		Zone: *cvm.Location + "z",
+	}
+
+	if cvm.HardwareProfile != nil {
+		m.MachineType = string(cvm.HardwareProfile.VMSize)
+		m.CPUArch = CpuArchFromAzureMachineType(string(cvm.HardwareProfile.VMSize))
+	}
+
+	if createdPtr := cvm.Tags[vm.TagCreated]; createdPtr == nil {
+		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+	} else if parsed, err := time.Parse(time.RFC3339, *createdPtr); err == nil {
+		m.CreatedAt = parsed
+	} else {
+		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+	}
+
+	if lifetimePtr := cvm.Tags[vm.TagLifetime]; lifetimePtr == nil {
+		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+	} else if parsed, err := time.ParseDuration(*lifetimePtr); err == nil {
+		m.Lifetime = parsed
+	} else {
+		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+	}
+
+	// The network info needs a separate request.
+	nicID, err := parseAzureID(*(*cvm.NetworkProfile.NetworkInterfaces)[0].ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.fillNetworkDetails(context.Background(), m, nicID); errors.Is(err, vm.ErrBadNetwork) {
+		m.Errors = append(m.Errors, err)
+	} else if err != nil {
+		return nil, err
+	}
+
+	return m, nil
 }
 
 // Delete implements the vm.Provider interface.
@@ -632,55 +699,14 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 			continue
 		}
 
-		tags := make(map[string]string)
-		for key, value := range found.Tags {
-			tags[key] = *value
-		}
-
-		m := vm.VM{
-			Name:        *found.Name,
-			Labels:      tags,
-			Provider:    ProviderName,
-			ProviderID:  *found.ID,
-			RemoteUser:  remoteUser,
-			VPC:         "global",
-			MachineType: string(found.HardwareProfile.VMSize),
-			CPUArch:     CpuArchFromAzureMachineType(string(found.HardwareProfile.VMSize)),
-			// We add a fake availability-zone suffix since other roachprod
-			// code assumes particular formats. For example, "eastus2z".
-			Zone: *found.Location + "z",
-		}
-
-		if createdPtr := found.Tags[vm.TagCreated]; createdPtr == nil {
-			m.Errors = append(m.Errors, vm.ErrNoExpiration)
-		} else if parsed, err := time.Parse(time.RFC3339, *createdPtr); err == nil {
-			m.CreatedAt = parsed
-		} else {
-			m.Errors = append(m.Errors, vm.ErrNoExpiration)
-		}
-
-		if lifetimePtr := found.Tags[vm.TagLifetime]; lifetimePtr == nil {
-			m.Errors = append(m.Errors, vm.ErrNoExpiration)
-		} else if parsed, err := time.ParseDuration(*lifetimePtr); err == nil {
-			m.Lifetime = parsed
-		} else {
-			m.Errors = append(m.Errors, vm.ErrNoExpiration)
-		}
-
-		// The network info needs a separate request.
-		nicID, err := parseAzureID(*(*found.NetworkProfile.NetworkInterfaces)[0].ID)
+		m, err := p.computeVirtualMachineToVM(found)
 		if err != nil {
-			return nil, err
-		}
-		if err := p.fillNetworkDetails(ctx, &m, nicID); errors.Is(err, vm.ErrBadNetwork) {
-			m.Errors = append(m.Errors, err)
-		} else if err != nil {
 			return nil, err
 		}
 
 		clusterName, _ := m.ClusterName()
 		foundClusters[clusterName] = true
-		ret = append(ret, m)
+		ret = append(ret, *m)
 
 		if err := it.NextWithContext(ctx); err != nil {
 			return nil, err

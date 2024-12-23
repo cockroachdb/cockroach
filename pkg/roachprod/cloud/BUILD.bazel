@@ -19,6 +19,7 @@ go_library(
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/azure",
         "//pkg/roachprod/vm/gce",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_aws_aws_sdk_go//aws",
         "@com_github_aws_aws_sdk_go_v2_config//:config",
