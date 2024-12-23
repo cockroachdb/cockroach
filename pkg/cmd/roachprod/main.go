@@ -6,10 +6,13 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cli"
+	"github.com/felixge/fgprof"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +40,32 @@ destroy the cluster.
 	PersistentPreRun: cli.ValidateAndConfigure,
 }
 
+func maybeFGProf() (done func()) {
+	if os.Getenv("ROACHPROD_FGPROF") != "true" {
+		return func() {}
+	}
+	dir, err := os.MkdirTemp("", "")
+	if err != nil {
+		panic(err)
+	}
+	w, err := os.Create(filepath.Join(dir, "fprof.pb.gz"))
+	if err != nil {
+		panic(err)
+	}
+	stop := fgprof.Start(w, fgprof.FormatPprof)
+	return func() {
+		if err := stop(); err != nil {
+			panic(err)
+		}
+		if err := w.Close(); err != nil {
+			panic(err)
+		}
+		fmt.Fprintf(os.Stderr, "fgprof output written to %s\n", w.Name())
+	}
+}
+
 func main() {
+	defer maybeFGProf()()
 	cli.Initialize(rootCmd)
 
 	if err := rootCmd.Execute(); err != nil {
