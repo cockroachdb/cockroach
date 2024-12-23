@@ -210,20 +210,22 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 }
 
 func registerSysbench(r registry.Registry) {
+	coreThree := func(w sysbenchWorkload) bool {
+		switch w {
+		case oltpReadOnly, oltpReadWrite, oltpWriteOnly:
+			return true
+		default:
+			return false
+		}
+	}
+
 	for _, d := range []struct {
 		n, cpus int
 		pick    func(sysbenchWorkload) bool // nil means true for all
 	}{
 		{n: 1, cpus: 32},
 		{n: 3, cpus: 32},
-		{n: 3, cpus: 8, pick: func(w sysbenchWorkload) bool {
-			switch w {
-			case oltpReadOnly, oltpReadWrite, oltpWriteOnly:
-				return true
-			default:
-				return false
-			}
-		}},
+		{n: 3, cpus: 8, pick: coreThree},
 	} {
 		for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
 			if d.pick != nil && !d.pick(w) {
