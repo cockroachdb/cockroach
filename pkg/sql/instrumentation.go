@@ -497,14 +497,24 @@ func (ih *instrumentationHelper) Setup(
 		return !previouslySampled && !statsCollector.StatementsContainerFull()
 	}
 
-	ih.collectExecStats = collectTxnExecStats || shouldSampleFirstEncounter()
+	firstEncounter := shouldSampleFirstEncounter()
+	ih.collectExecStats = collectTxnExecStats || firstEncounter
 
 	if !ih.collectBundle && ih.withStatementTrace == nil && ih.outputMode == unmodifiedOutput {
+		var op string
+		switch {
+		case firstEncounter:
+			op = "traced statement (first encounter)"
+		case collectTxnExecStats:
+			op = "traced statement (collect exec stats)"
+		default:
+			op = "traced statement"
+		}
 		if ih.collectExecStats {
 			// If we need to collect stats, create a child span with structured
 			// recording. Stats will be added as structured metadata and processed in
 			// Finish.
-			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement",
+			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, op,
 				tracing.WithRecording(tracingpb.RecordingStructured))
 			ih.shouldFinishSpan = true
 			ih.needFinish = true
@@ -524,7 +534,8 @@ func (ih *instrumentationHelper) Setup(
 		// testing callback.
 		recType = tracingpb.RecordingVerbose
 	}
-	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType))
+	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement (requested)",
+		tracing.WithRecording(recType))
 	ih.shouldFinishSpan = true
 	ih.needFinish = true
 	return newCtx
