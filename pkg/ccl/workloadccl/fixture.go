@@ -608,8 +608,7 @@ func makeQualifiedTableName(dbName string, table *workload.Table) string {
 // license is required to have been set in the cluster.
 func RestoreFixture(
 	ctx context.Context, sqlDB *gosql.DB, fixture Fixture, database string, injectStats bool,
-) (int64, error) {
-	var bytesAtomic int64
+) error {
 	g := ctxgroup.WithContext(ctx)
 	genName := fixture.Generator.Meta().Name
 	tables := fixture.Generator.Tables()
@@ -628,7 +627,7 @@ func RestoreFixture(
 			start := timeutil.Now()
 			restoreStmt := fmt.Sprintf(`RESTORE %s.%s FROM LATEST IN $1 WITH into_db=$2, unsafe_restore_incompatible_version`, genName, table.TableName)
 			log.Infof(ctx, "Restoring from %s", table.BackupURI)
-			var rows, index, tableBytes int64
+			var rows int64
 			var discard interface{}
 			res, err := sqlDB.Query(restoreStmt, table.BackupURI, database)
 			if err != nil {
@@ -641,33 +640,20 @@ func RestoreFixture(
 				}
 				return gosql.ErrNoRows
 			}
-			resCols, err := res.Columns()
-			if err != nil {
+			if err := res.Scan(
+				&discard, &discard, &discard, &rows,
+			); err != nil {
 				return err
 			}
-			if len(resCols) == 7 {
-				if err := res.Scan(
-					&discard, &discard, &discard, &rows, &index, &discard, &tableBytes,
-				); err != nil {
-					return err
-				}
-			} else {
-				if err := res.Scan(
-					&discard, &discard, &discard, &rows, &index, &tableBytes,
-				); err != nil {
-					return err
-				}
-			}
-			atomic.AddInt64(&bytesAtomic, tableBytes)
+
 			elapsed := timeutil.Since(start)
-			log.Infof(ctx, `loaded %s table %s in %s (%d rows, %d index entries, %s)`,
-				humanizeutil.IBytes(tableBytes), table.TableName, elapsed, rows, index,
-				humanizeutil.IBytes(int64(float64(tableBytes)/elapsed.Seconds())))
+			log.Infof(ctx, `loaded table %s in %s (%d rows)`,
+				table.TableName, elapsed, rows)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return 0, err
+		return err
 	}
 	if injectStats {
 		for i := range tables {
@@ -675,12 +661,12 @@ func RestoreFixture(
 			if len(t.Stats) > 0 {
 				qualifiedTableName := makeQualifiedTableName(genName, t)
 				if err := injectStatistics(qualifiedTableName, t, sqlDB); err != nil {
-					return 0, err
+					return err
 				}
 			}
 		}
 	}
-	return atomic.LoadInt64(&bytesAtomic), nil
+	return nil
 }
 
 func listDir(
