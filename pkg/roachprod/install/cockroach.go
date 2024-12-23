@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
@@ -488,12 +489,8 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		c.createAdminUserForSecureCluster(ctx, l, startOpts.VirtualClusterName, startOpts.SQLInstance)
 
 		if startOpts.ScheduleBackups {
-			if config.CockroachDevLicense == "" {
-				l.Printf("WARNING: no backup schedules will be created as there is no enterprise license configured")
-			} else {
-				if err := c.createFixedBackupSchedule(ctx, l, startOpts); err != nil {
-					return err
-				}
+			if err := c.createFixedBackupSchedule(ctx, l, startOpts); err != nil {
+				return err
 			}
 		}
 	}
@@ -1292,20 +1289,37 @@ func (c *SyncedCluster) setClusterSettings(
 	return err
 }
 
-func (c *SyncedCluster) generateClusterSettingCmd(
-	ctx context.Context, l *logger.Logger, node Node, virtualCluster string,
-) (string, error) {
-	license := config.CockroachDevLicense
-	if license == "" {
-		l.Printf("%s: COCKROACH_DEV_LICENSE is unset: generating a license to "+
-			"install if the cluster is not yet initialized.", c.Name)
-		license, _ = (&licenseccl.License{
+// Use env.COCKROACH_DEV_LICENSE when valid; otherwise, generate a fresh one.
+func (c *SyncedCluster) maybeGenerateLicense(l *logger.Logger) string {
+	var res string
+
+	if config.CockroachDevLicense != "" {
+		license, err := licenseccl.Decode(config.CockroachDevLicense)
+		if err != nil {
+			l.Printf("WARN: (cluster=%q) failed to decode COCKROACH_DEV_LICENSE: %s", c.Name, err)
+		} else if license.ValidUntilUnixSec < timeutil.Now().AddDate(0, 0, 1).Unix() {
+			l.Printf("WARN: (cluster=%q) COCKROACH_DEV_LICENSE has effectively expired: %s", c.Name,
+				timeutil.Unix(license.ValidUntilUnixSec, 0).Format(time.RFC3339))
+		} else {
+			res = config.CockroachDevLicense
+			l.Printf("INFO: (cluster=%q) using COCKROACH_DEV_LICENSE: %v", c.Name, license)
+		}
+	}
+	if res == "" {
+		res, _ = (&licenseccl.License{
 			Type:              licenseccl.License_Enterprise,
 			Environment:       licenseccl.Development,
 			ValidUntilUnixSec: timeutil.Now().AddDate(0, 1, 0).Unix(),
 		}).Encode()
+		l.Printf("(cluster=%q) generated a fresh license: %v ", c.Name, res)
 	}
+	return res
+}
 
+func (c *SyncedCluster) generateClusterSettingCmd(
+	ctx context.Context, l *logger.Logger, node Node, virtualCluster string,
+) (string, error) {
+	license := c.maybeGenerateLicense(l)
 	var tenantPrefix string
 	if virtualCluster != "" && virtualCluster != SystemInterfaceName {
 		tenantPrefix = fmt.Sprintf("ALTER TENANT '%s' ", virtualCluster)
