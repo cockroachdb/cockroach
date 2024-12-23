@@ -6,16 +6,10 @@
 package aws
 
 import (
-	"bytes"
-	"encoding/json"
 	"os"
-	"os/exec"
-	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-	"github.com/cockroachdb/errors"
 )
 
 // Both M5 and I3 machines expose their EBS or local SSD volumes as NVMe block
@@ -300,41 +294,6 @@ func writeStartupScript(
 		return "", err
 	}
 	return tmpfile.Name(), nil
-}
-
-// runCommand is used to invoke an AWS command.
-func (p *Provider) runCommand(l *logger.Logger, args []string) ([]byte, error) {
-
-	if p.Profile != "" {
-		args = append(args[:len(args):len(args)], "--profile", p.Profile)
-	}
-	var stderrBuf bytes.Buffer
-	cmd := exec.Command("aws", args...)
-	cmd.Stderr = &stderrBuf
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
-			l.Printf("%s", string(exitErr.Stderr))
-		}
-		return nil, errors.Wrapf(err, "failed to run: aws %s: stderr: %v",
-			strings.Join(args, " "), stderrBuf.String())
-	}
-	return output, nil
-}
-
-// runJSONCommand invokes an aws command and parses the json output.
-func (p *Provider) runJSONCommand(l *logger.Logger, args []string, parsed interface{}) error {
-	// Force json output in case the user has overridden the default behavior.
-	args = append(args[:len(args):len(args)], "--output", "json")
-	rawJSON, err := p.runCommand(l, args)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(rawJSON, &parsed); err != nil {
-		return errors.Wrapf(err, "failed to parse json %s", rawJSON)
-	}
-
-	return nil
 }
 
 // regionMap collates VM instances by their region.

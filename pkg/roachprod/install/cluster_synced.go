@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/cli"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -438,7 +439,7 @@ func (c *SyncedCluster) Stop(
 			return err
 		}
 
-		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
+		services, err := c.DiscoverServices(ctx, l, name, ServiceTypeSQL)
 		if err != nil {
 			return err
 		}
@@ -2339,6 +2340,8 @@ func (c *SyncedCluster) Logs(
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = &stderrBuf
 
+		cli.MaybeLogCmd(context.Background(), l, cmd)
+
 		if err := cmd.Run(); err != nil {
 			if ctx.Err() != nil {
 				return nil
@@ -2379,6 +2382,9 @@ func (c *SyncedCluster) Logs(
 		cmd.Stdout = out
 		var errBuf bytes.Buffer
 		cmd.Stderr = &errBuf
+
+		cli.MaybeLogCmd(ctx, l, cmd)
+
 		if err := cmd.Run(); err != nil && ctx.Err() == nil {
 			return errors.Wrapf(err, "failed to run cockroach debug merge-logs:\n%v", errBuf.String())
 		}
@@ -2632,7 +2638,7 @@ func (c *SyncedCluster) pgurls(
 	}
 	m := make(map[Node]string, len(hosts))
 	for node, host := range hosts {
-		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+		desc, err := c.DiscoverService(ctx, l, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -2667,7 +2673,7 @@ func (c *SyncedCluster) loadBalancerURL(
 	sqlInstance int,
 	auth PGAuthMode,
 ) (string, error) {
-	services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL)
+	services, err := c.DiscoverServices(ctx, l, virtualClusterName, ServiceTypeSQL)
 	if err != nil {
 		return "", err
 	}
@@ -2801,6 +2807,8 @@ func scp(ctx context.Context, l *logger.Logger, src, dest string) (*RunResultDet
 	args = append(args, src, dest)
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.WaitDelay = time.Second // make sure the call below returns when the context is canceled
+
+	cli.MaybeLogCmd(context.Background(), l, cmd)
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -2993,10 +3001,10 @@ func (c *SyncedCluster) Init(ctx context.Context, l *logger.Logger, node Node) e
 
 // allPublicAddrs returns a string that can be used when starting cockroach to
 // indicate the location of all nodes in the cluster.
-func (c *SyncedCluster) allPublicAddrs(ctx context.Context) (string, error) {
+func (c *SyncedCluster) allPublicAddrs(ctx context.Context, l *logger.Logger) (string, error) {
 	var addrs []string
 	for _, node := range c.Nodes {
-		port, err := c.NodePort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
+		port, err := c.NodePort(ctx, l, node, "" /* virtualClusterName */, 0 /* sqlInstance */)
 		if err != nil {
 			return "", err
 		}
