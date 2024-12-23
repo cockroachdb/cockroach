@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/errors"
 )
 
 // planHookFn is a function that can intercept a statement being planned and
@@ -38,13 +37,11 @@ import (
 //
 // To intercept a statement the function should return a non-nil function for
 // `fn` as well as the appropriate sqlbase.ResultColumns describing the results
-// it will return (if any). If the hook plan requires sub-plans to be planned
-// and started by the usual machinery (e.g. to run a subquery), it must return
-// then as well. `fn` will be called in a goroutine during the `Start` phase of
-// plan execution.
+// it will return (if any). `fn` will be called in a goroutine during the
+// `Start` phase of plan execution.
 type planHookFn func(
 	context.Context, tree.Statement, PlanHookState,
-) (fn PlanHookRowFn, header colinfo.ResultColumns, subplans []planNode, avoidBuffering bool, err error)
+) (fn PlanHookRowFn, header colinfo.ResultColumns, avoidBuffering bool, err error)
 
 // PlanHookTypeCheckFn is a function that can intercept a statement being
 // prepared and type check its arguments. It exists in parallel to PlanHookFn.
@@ -65,11 +62,10 @@ type PlanHookTypeCheckFn func(
 // PlanHookRowFn describes the row-production for hook-created plans. The
 // channel argument is used to return results to the plan's runner. It's
 // a blocking channel, so implementors should be careful to only use blocking
-// sends on it when necessary. Any subplans returned by the hook when initially
-// called are passed back, planned and started, for the RowFn's use.
+// sends on it when necessary.
 //
 // TODO(dt): should this take runParams like a normal planNode.Next?
-type PlanHookRowFn func(context.Context, []planNode, chan<- tree.Datums) error
+type PlanHookRowFn func(context.Context, chan<- tree.Datums) error
 
 type planHook struct {
 	name      string
@@ -148,13 +144,13 @@ func ClearPlanHooks() {
 // provided function during Start and serves the results it returns over the
 // channel.
 type hookFnNode struct {
+	zeroInputPlanNode
 	optColumnsSlot
 
-	name     string
-	f        PlanHookRowFn
-	header   colinfo.ResultColumns
-	subplans []planNode
-	stopper  *stop.Stopper
+	name    string
+	f       PlanHookRowFn
+	header  colinfo.ResultColumns
+	stopper *stop.Stopper
 
 	run hookFnRun
 }
@@ -170,13 +166,9 @@ type hookFnRun struct {
 }
 
 func newHookFnNode(
-	name string,
-	fn PlanHookRowFn,
-	header colinfo.ResultColumns,
-	subplans []planNode,
-	stopper *stop.Stopper,
+	name string, fn PlanHookRowFn, header colinfo.ResultColumns, stopper *stop.Stopper,
 ) *hookFnNode {
-	return &hookFnNode{name: name, f: fn, header: header, subplans: subplans, stopper: stopper}
+	return &hookFnNode{name: name, f: fn, header: header, stopper: stopper}
 }
 
 func (f *hookFnNode) startExec(params runParams) error {
@@ -192,7 +184,7 @@ func (f *hookFnNode) startExec(params runParams) error {
 			SpanOpt:  stop.ChildSpan,
 		},
 		func(ctx context.Context) {
-			err := f.f(ctx, f.subplans, f.run.resultsCh)
+			err := f.f(ctx, f.run.resultsCh)
 			select {
 			case <-ctx.Done():
 			case f.run.errCh <- err:
@@ -216,19 +208,4 @@ func (f *hookFnNode) Next(params runParams) (bool, error) {
 
 func (f *hookFnNode) Values() tree.Datums { return f.run.row }
 
-func (f *hookFnNode) Close(ctx context.Context) {
-	for _, sub := range f.subplans {
-		sub.Close(ctx)
-	}
-}
-
-func (f *hookFnNode) InputCount() int {
-	return len(f.subplans)
-}
-
-func (f *hookFnNode) Input(i int) (planNode, error) {
-	if i < len(f.subplans) {
-		return f.subplans[i], nil
-	}
-	return nil, errors.AssertionFailedf("input index %d is out of range", i)
-}
+func (f *hookFnNode) Close(ctx context.Context) {}
