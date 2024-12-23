@@ -789,6 +789,11 @@ type PebbleMetricsProvider interface {
 	Close()
 }
 
+// MetricsRegistryProvider provides the store metric.Registry for a given store.
+type MetricsRegistryProvider interface {
+	GetMetricsRegistry(roachpb.StoreID) *metric.Registry
+}
+
 // IOThresholdConsumer is informed about updated IOThresholds.
 type IOThresholdConsumer interface {
 	UpdateIOThreshold(roachpb.StoreID, *admissionpb.IOThreshold)
