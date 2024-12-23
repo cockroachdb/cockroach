@@ -43,6 +43,10 @@ const (
 	ArchFIPS    = CPUArch("fips")
 	ArchUnknown = CPUArch("unknown")
 
+	// IncompatibleArchRequestError is returned when requested architecture
+	// is different than the architecture discovered from the machine-type
+	IncompatibleArchRequestError = `%s-machine-type %s arch (%s) incompatible with requested arch (%s)`
+
 	// InitializedFile is the base name of the initialization paths defined below.
 	InitializedFile = ".roachprod-initialized"
 	// OSInitializedFile is a marker file that is created on a VM to indicate
@@ -258,6 +262,17 @@ func (vm *VM) UserName() (string, error) {
 		return "", fmt.Errorf("expected VM name in the form %s, got %s", vmNameFormat, name)
 	}
 	return parts[0], nil
+}
+
+func (vm *VM) GetCPUArchitecture(l *logger.Logger) (cpuArch CPUArch, _ error) {
+	if err := ForProvider(vm.Provider, func(provider Provider) error {
+		var err error
+		cpuArch, err = provider.GetVMArchitecture(l, vm)
+		return err
+	}); err != nil {
+		return "", err
+	}
+	return cpuArch, nil
 }
 
 // List represents a list of VMs.
@@ -532,6 +547,8 @@ type Provider interface {
 	GetHostErrorVMs(l *logger.Logger, vms List, since time.Time) ([]string, error)
 	// GetVMSpecs returns a map from VM.Name to a map of VM attributes, according to a specific cloud provider.
 	GetVMSpecs(l *logger.Logger, vms List) (map[string]map[string]interface{}, error)
+	// GetVMArchitecture returns the architecture of the VM (ideally based on the cloud provider API).
+	GetVMArchitecture(l *logger.Logger, vm *VM) (CPUArch, error)
 
 	// CreateLoadBalancer creates a load balancer, for a specific port, that
 	// delegates to the given cluster.
