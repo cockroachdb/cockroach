@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/cmd/roachprod/cli",
+        "@com_github_felixge_fgprof//:fgprof",
         "@com_github_spf13_cobra//:cobra",
     ],
 )

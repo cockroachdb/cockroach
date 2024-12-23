@@ -1935,6 +1935,14 @@ func buildSnapshotApplyCmd() *cobra.Command {
 	}
 }
 
+func roachprodUpdateSupported(goos, goarch string) bool {
+	// We only have prebuilt binaries for Linux. See #120750.
+	if goos == "linux" {
+		return true
+	}
+	return false
+}
+
 func (cr *commandRegistry) buildUpdateCmd() *cobra.Command {
 	updateCmd := &cobra.Command{
 		Use:   "update",
@@ -1944,8 +1952,8 @@ func (cr *commandRegistry) buildUpdateCmd() *cobra.Command {
 			" and can be restored via `roachprod update --revert`.",
 		Run: wrap(func(cmd *cobra.Command, args []string) error {
 			// We only have prebuilt binaries for Linux. See #120750.
-			if runtime.GOOS != "linux" {
-				return errors.New("this command is only available on Linux at this time")
+			if !roachprodUpdateSupported(runtime.GOOS, runtime.GOARCH) {
+				return errors.Errorf("this command is not available on %s/%s at this time", runtime.GOOS, runtime.GOARCH)
 			}
 
 			currentBinary, err := os.Executable()
