@@ -6,7 +6,7 @@ CREATE TABLE t (i INT PRIMARY KEY, b INT DEFAULT f());
 ALTER TABLE t DROP COLUMN b;
 EXPLAIN (DDL) rollback at post-commit stage 5 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹b›;
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t DROP COLUMN b;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward PUBLIC
