@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -42,7 +43,13 @@ func (p partition) setupMetamorphic(rng *rand.Rand) variations {
 	v := p.setup()
 	p.partitionSite = rng.Intn(2) == 0
 	v.perturbation = p
-	return v.randomize(rng)
+	v = v.randomize(rng)
+	// TODO(#137666): The partition test can cause OOM with low memory
+	// configurations.
+	if v.mem == spec.Low {
+		v.mem = spec.Standard
+	}
+	return v
 }
 
 func (p partition) startTargetNode(ctx context.Context, t test.Test, v variations) {
