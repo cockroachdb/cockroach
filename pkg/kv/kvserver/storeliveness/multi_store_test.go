@@ -278,7 +278,6 @@ func TestStoreLivenessDiskStall(t *testing.T) {
 	checkSupport(t, tc, checkSupportFn)
 
 	// Stop blocking writes.
-	testEngine.SignalToUnblock()
 	testEngine.SetBlockOnWrite(false)
 
 	// Ensure all-to-all support again.
