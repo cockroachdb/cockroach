@@ -1,0 +1,55 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "backupsink",
+    srcs = [
+        "file_sst_sink.go",
+        "sink_utils.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/backup/backupsink",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/backup/backuppb",
+        "//pkg/base",
+        "//pkg/ccl/storageccl",
+        "//pkg/cloud",
+        "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/builtins",
+        "//pkg/storage",
+        "//pkg/util/admission",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_kr_pretty//:pretty",
+    ],
+)
+
+go_test(
+    name = "backupsink_test",
+    srcs = ["file_sst_sink_test.go"],
+    embed = [":backupsink"],
+    deps = [
+        "//pkg/backup/backuppb",
+        "//pkg/ccl/storageccl",
+        "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
+        "//pkg/cloud/nodelocal",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/execinfrapb",
+        "//pkg/storage",
+        "//pkg/util/encoding",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_stretchr_testify//require",
+    ],
+)

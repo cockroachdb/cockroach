@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/backup/backupsink"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -202,12 +203,12 @@ func sendAddRemoteSSTs(
 }
 
 func assertCommonPrefix(span roachpb.Span, elidedPrefixType execinfrapb.ElidePrefix) error {
-	syntheticPrefix, err := elidedPrefix(span.Key, elidedPrefixType)
+	syntheticPrefix, err := backupsink.ElidedPrefix(span.Key, elidedPrefixType)
 	if err != nil {
 		return err
 	}
 
-	endKeyPrefix, err := elidedPrefix(span.EndKey, elidedPrefixType)
+	endKeyPrefix, err := backupsink.ElidedPrefix(span.EndKey, elidedPrefixType)
 	if err != nil {
 		return err
 	}
@@ -372,7 +373,7 @@ func sendRemoteAddSSTable(
 	if fileSize == 0 {
 		fileSize = 16 << 20
 	}
-	syntheticPrefix, err := elidedPrefix(file.BackupFileEntrySpan.Key, elidedPrefixType)
+	syntheticPrefix, err := backupsink.ElidedPrefix(file.BackupFileEntrySpan.Key, elidedPrefixType)
 	if err != nil {
 		return err
 	}
