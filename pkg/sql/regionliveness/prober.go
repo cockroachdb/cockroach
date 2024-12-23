@@ -274,42 +274,10 @@ func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRe
 	return regionStatus, nil
 }
 
-// QueryUnavailablePhysicalRegions implements Prober.
 func (l *livenessProber) QueryUnavailablePhysicalRegions(
 	ctx context.Context, txn *kv.Txn, filterAvailable bool,
 ) (UnavailableAtPhysicalRegions, error) {
-	// Scan the entire region liveness table.
-	regionLivenessIndex := l.codec.IndexPrefix(uint32(systemschema.RegionLivenessTable.GetID()), uint32(systemschema.RegionLivenessTable.GetPrimaryIndexID()))
-	keyValues, err := txn.Scan(ctx, regionLivenessIndex, regionLivenessIndex.PrefixEnd(), 0)
-	if err != nil {
-		return nil, err
-	}
-	// Detect any down regions and remove them.
-	unavailableAtRegions := make(UnavailableAtPhysicalRegions)
-	datumAlloc := &tree.DatumAlloc{}
-	for _, keyValue := range keyValues {
-		tuple, err := keyValue.Value.GetTuple()
-		if err != nil {
-			return nil, err
-		}
-		enumDatum, _, err := keyside.Decode(datumAlloc, types.Bytes, keyValue.Key[len(regionLivenessIndex):], encoding.Ascending)
-		if err != nil {
-			return nil, err
-		}
-		enumBytes := enumDatum.(*tree.DBytes)
-		ts, _, err := valueside.Decode(datumAlloc, types.Timestamp, tuple)
-		if err != nil {
-			return nil, err
-		}
-		unavailableAt := ts.(*tree.DTimestamp)
-		// Region is now officially unavailable, so lets remove
-		// it.
-		if txn.ReadTimestamp().GoTime().After(unavailableAt.Time) ||
-			!filterAvailable {
-			unavailableAtRegions[string(*enumBytes)] = unavailableAt
-		}
-	}
-	return unavailableAtRegions, nil
+	return QueryUnavailablePhysicalRegions(ctx, l.codec, txn, filterAvailable)
 }
 
 // MarkPhysicalRegionAsAvailable implements Prober.
@@ -347,4 +315,42 @@ func IsQueryTimeoutErr(err error) bool {
 func IsMissingRegionEnumErr(err error) bool {
 	return pgerror.GetPGCode(err) == pgcode.InvalidTextRepresentation ||
 		errors.Is(err, types.EnumValueNotYetPublicError)
+}
+
+func QueryUnavailablePhysicalRegions(
+	ctx context.Context, codec keys.SQLCodec, txn *kv.Txn, filterAvailable bool,
+) (UnavailableAtPhysicalRegions, error) {
+	// Scan the entire region liveness table.
+	regionLivenessIndex := codec.IndexPrefix(uint32(systemschema.RegionLivenessTable.GetID()), uint32(systemschema.RegionLivenessTable.GetPrimaryIndexID()))
+	keyValues, err := txn.Scan(ctx, regionLivenessIndex, regionLivenessIndex.PrefixEnd(), 0)
+	if err != nil {
+		return nil, err
+	}
+	// Detect any down regions and remove them.
+	unavailableAtRegions := make(UnavailableAtPhysicalRegions)
+	datumAlloc := &tree.DatumAlloc{}
+	for _, keyValue := range keyValues {
+		tuple, err := keyValue.Value.GetTuple()
+		if err != nil {
+			return nil, err
+		}
+		enumDatum, _, err := keyside.Decode(datumAlloc, types.Bytes, keyValue.Key[len(regionLivenessIndex):], encoding.Ascending)
+		if err != nil {
+			return nil, err
+		}
+		enumBytes := enumDatum.(*tree.DBytes)
+		ts, _, err := valueside.Decode(datumAlloc, types.Timestamp, tuple)
+		if err != nil {
+			return nil, err
+		}
+		unavailableAt := ts.(*tree.DTimestamp)
+		// Region is now officially unavailable, so lets remove
+		// it.
+		if txn.ReadTimestamp().GoTime().After(unavailableAt.Time) ||
+			!filterAvailable {
+			unavailableAtRegions[string(*enumBytes)] = unavailableAt
+		}
+	}
+	return unavailableAtRegions, nil
+
 }
