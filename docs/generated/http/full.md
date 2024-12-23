@@ -3751,9 +3751,6 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | range_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | range_id indicates Range ID that's identified as hot range. | [reserved](#support-status) |
 | node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | node_id indicates the node that contains the current hot range. | [reserved](#support-status) |
 | qps | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | qps (queries per second) shows the amount of queries that interact with current range. | [reserved](#support-status) |
-| table_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | table_name has been deprecated in favor of tables = 16; | [reserved](#support-status) |
-| database_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | database_name has been deprecated in favor of databases = 17; | [reserved](#support-status) |
-| index_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | index_name has been deprecated in favor of indexes = 17; | [reserved](#support-status) |
 | replica_node_ids | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) | repeated | replica_node_ids specifies the list of node ids that contain replicas with current hot range. | [reserved](#support-status) |
 | leaseholder_node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | leaseholder_node_id indicates the Node ID that is the current leaseholder for the given range. | [reserved](#support-status) |
 | schema_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | schema_name provides the name of schema (if exists) for table in current range. | [reserved](#support-status) |
