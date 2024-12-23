@@ -124,6 +124,8 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	}
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	oneInput := []execinfrapb.InputSyncSpec{
 		{ColumnTypes: []*types.T{types.Int}},
@@ -228,6 +230,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					StreamingMemAccount: &acc,
 					FDSemaphore:         colexecop.NewTestingSemaphore(256),
 					MonitorRegistry:     &monitorRegistry,
+					CloserRegistry:      &closerRegistry,
 				}
 				var (
 					result *colexecargs.NewColOperatorResult
