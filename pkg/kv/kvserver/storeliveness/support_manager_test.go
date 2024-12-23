@@ -348,7 +348,6 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	require.True(t, supported)
 
 	// Stop blocking writes.
-	engine.SignalToUnblock()
 	engine.SetBlockOnWrite(false)
 
 	// Ensure the heartbeat is unblocked and sent out.
