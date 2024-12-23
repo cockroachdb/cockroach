@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/backup/backupsink"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -457,7 +458,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	iter := sst.iter
 	defer sst.cleanup()
 
-	elidedPrefix, err := elidedPrefix(entry.Span.Key, sst.entry.ElidedPrefix)
+	elidedPrefix, err := backupsink.ElidedPrefix(entry.Span.Key, sst.entry.ElidedPrefix)
 	if err != nil {
 		return summary, err
 	}
