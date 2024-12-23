@@ -1422,7 +1422,7 @@ func (c *SyncedCluster) RunWithDetails(
 // Wait TODO(peter): document
 func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 	display := fmt.Sprintf("%s: waiting for nodes to start", c.Name)
-	_, hasError, err := c.ParallelE(ctx, l, WithNodes(c.Nodes).WithDisplay(display).WithRetryDisabled(),
+	results, hasError, err := c.ParallelE(ctx, l, WithNodes(c.Nodes).WithDisplay(display).WithRetryDisabled(),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			res := &RunResultDetails{Node: node}
 			var err error
@@ -1458,7 +1458,13 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 	}
 
 	if hasError {
-		return errors.New("not all nodes booted successfully")
+		errs := []error{}
+		for _, res := range results {
+			if res != nil && res.Err != nil {
+				errs = append(errs, res.Err)
+			}
+		}
+		return errors.Wrap(errors.Join(errs...), "not all nodes booted successfully")
 	}
 	return nil
 }

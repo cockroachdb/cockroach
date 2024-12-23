@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -39,6 +41,8 @@ const (
 	// Provisional models that are used for printing VM details.
 	spotProvisionModel     = "spot"
 	onDemandProvisionModel = "ondemand"
+
+	errNoVMsCreated = "No VMs were created by the providers"
 )
 
 // printDetailsColumnHeaders are the headers to be printed in the defined sequence.
@@ -303,6 +307,9 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 		if len(c.VMs) == 0 {
 			l.Printf("WARNING: found no VMs in cluster %s\n", c.Name)
 		}
+
+		// `roachprod.Start` expects nodes/vms to be in sorted order
+		// see https://github.com/cockroachdb/cockroach/pull/133647 for more details
 		sort.Sort(c.VMs)
 	}
 
@@ -323,7 +330,14 @@ type ClusterCreateOpts struct {
 // an additional "workload node". This node often times does not need the same CPU count as
 // the rest of the cluster. i.e. it is overkill for a 3 node 32 CPU cluster to have a 32 CPU
 // workload node, but a 50 node 8 CPU cluster might find a 8 CPU workload node inadequate.
-func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) error {
+func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) (*Cluster, error) {
+
+	c := &Cluster{
+		Name:      opts[0].CreateOpts.ClusterName,
+		CreatedAt: timeutil.Now(),
+		Lifetime:  opts[0].CreateOpts.Lifetime,
+	}
+
 	// Keep track of the total number of nodes created, as we append all cluster names
 	// with the node count.
 	var nodesCreated int
@@ -334,7 +348,7 @@ func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) error {
 	for _, o := range opts {
 		providerCount := len(o.CreateOpts.VMProviders)
 		if providerCount == 0 {
-			return errors.New("no VMProviders configured")
+			return nil, errors.New("no VMProviders configured")
 		}
 
 		// Allocate vm names over the configured providers
@@ -346,14 +360,47 @@ func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) error {
 			p = (p + 1) % providerCount
 		}
 
+		var vmList vm.List
+		var vmListLock syncutil.Mutex
+		// Create VMs in parallel across all providers.
+		// Each provider will return the list of VMs it created, and we append
+		// them to the cached Cluster.
 		if err := vm.ProvidersParallel(o.CreateOpts.VMProviders, func(p vm.Provider) error {
-			return p.Create(l, vmLocations[p.Name()], o.CreateOpts, o.ProviderOptsContainer[p.Name()])
+			providerVmList, err := p.Create(
+				l, vmLocations[p.Name()], o.CreateOpts, o.ProviderOptsContainer[p.Name()],
+			)
+			if err != nil {
+				return err
+			}
+			vmListLock.Lock()
+			defer vmListLock.Unlock()
+			vmList = append(vmList, providerVmList...)
+			return nil
 		}); err != nil {
-			return err
+			return nil, err
 		}
+
+		c.VMs = append(c.VMs, vmList...)
 	}
 
-	return nil
+	// Clusters can end up being empty (due to Azure or GCE dangling resources),
+	// but can't be created with no VMs.
+	if len(c.VMs) == 0 {
+		return nil, errors.New(errNoVMsCreated)
+	}
+
+	// Set the cluster user to the user of the first VM.
+	// This is the method also used in ListCloud() above.
+	var err error
+	c.User, err = c.VMs[0].UserName()
+	if err != nil {
+		return nil, err
+	}
+
+	// `roachprod.Start` expects nodes/vms to be in sorted order
+	sort.Sort(c.VMs)
+
+	return c, nil
 }
 
 // GrowCluster adds new nodes to an existing cluster.
@@ -374,9 +421,26 @@ func GrowCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 				c.Name, gce.ProviderName)
 		}
 	}
-	return vm.ForProvider(provider, func(p vm.Provider) error {
-		return p.Grow(l, c.VMs, c.Name, names)
+
+	err := vm.ForProvider(provider, func(p vm.Provider) error {
+		addedVms, err := p.Grow(l, c.VMs, c.Name, names)
+		if err != nil {
+			return err
+		}
+
+		// Update the list of VMs in the cluster.
+		c.VMs = append(c.VMs, addedVms...)
+
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	// `roachprod.Start` expects nodes/vms to be in sorted order
+	sort.Sort(c.VMs)
+
+	return nil
 }
 
 // ShrinkCluster removes tail nodes from an existing cluster.
@@ -398,9 +462,16 @@ func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 	// Always delete from the tail.
 	vmsToDelete := c.VMs[len(c.VMs)-numNodes:]
 
-	return vm.ForProvider(provider, func(p vm.Provider) error {
+	err := vm.ForProvider(provider, func(p vm.Provider) error {
 		return p.Shrink(l, vmsToDelete, c.Name)
 	})
+	if err != nil {
+		return err
+	}
+
+	// Update the list of VMs in the cluster.
+	c.VMs = c.VMs[:len(c.VMs)-numNodes]
+	return nil
 }
 
 // DestroyCluster TODO(peter): document
@@ -454,7 +525,12 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 func ExtendCluster(l *logger.Logger, c *Cluster, extension time.Duration) error {
 	// Round new lifetime to nearest second.
 	newLifetime := (c.Lifetime + extension).Round(time.Second)
-	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+	err := vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		return p.Extend(l, vms, newLifetime)
 	})
+	if err != nil {
+		return err
+	}
+	c.Lifetime = newLifetime
+	return nil
 }
