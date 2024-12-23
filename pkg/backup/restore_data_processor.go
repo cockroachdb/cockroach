@@ -457,7 +457,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	iter := sst.iter
 	defer sst.cleanup()
 
-	elidedPrefix, err := elidedPrefix(entry.Span.Key, sst.entry.ElidedPrefix)
+	elidedPrefix, err := backupsink.elidedPrefix(entry.Span.Key, sst.entry.ElidedPrefix)
 	if err != nil {
 		return summary, err
 	}
