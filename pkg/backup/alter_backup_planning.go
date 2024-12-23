@@ -188,13 +188,16 @@ func doAlterBackupPlan(
 
 	// Add each new key user wants to add to a new data key map.
 	for _, kmsURI := range newKms {
-		masterKeyID, encryptedDataKey, err := backupencryption.GetEncryptedDataKeyFromURI(ctx,
+		masterKeyID, masterKeyID24_3Compatible, encryptedDataKey, err := backupencryption.GetEncryptedDataKeyFromURI(ctx,
 			plaintextDataKey, kmsURI, &kmsEnv)
 		if err != nil {
 			return errors.Wrap(err, "failed to encrypt data key when adding new KMS")
 		}
 
 		encryptedDataKeyByKMSMasterKeyID.AddEncryptedDataKey(backupencryption.PlaintextMasterKeyID(masterKeyID),
+			encryptedDataKey)
+
+		encryptedDataKeyByKMSMasterKeyID.AddEncryptedDataKey(backupencryption.PlaintextMasterKeyID(masterKeyID24_3Compatible),
 			encryptedDataKey)
 	}
 
