@@ -82,11 +82,12 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 		require.NoError(t, fooTx.Commit())
 		require.NoError(t, <-errCh)
 	})
+
 	// In this test we ensure that we can perform role grant and revoke
 	// operations while the transaction which uses the relevant roles
 	// remains open. We ensure that the transaction still succeeds and
 	// that the operations occur in a timely manner.
-	t.Run("session variable prevents waiting", func(t *testing.T) {
+	t.Run("session variable prevents waiting during GRANT and REVOKE", func(t *testing.T) {
 		fooConn, err := fooDB.Conn(ctx)
 		require.NoError(t, err)
 		defer func() { _ = fooConn.Close() }()
@@ -116,4 +117,36 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 		// Ensure the transaction we held open commits without issue.
 		require.NoError(t, fooTx.Commit())
 	})
+
+	t.Run("session variable prevents waiting during CREATE and DROP role", func(t *testing.T) {
+		fooConn, err := fooDB.Conn(ctx)
+		require.NoError(t, err)
+		defer func() { _ = fooConn.Close() }()
+		_, err = fooConn.ExecContext(ctx, "SET allow_role_memberships_to_change_during_transaction = true;")
+		require.NoError(t, err)
+		fooTx, err := fooConn.BeginTx(ctx, nil)
+		require.NoError(t, err)
+		// We need to use show roles because that access the system.users table.
+		_, err = fooTx.Exec("SHOW ROLES")
+		require.NoError(t, err)
+
+		conn, err := sqlDB.Conn(ctx)
+		require.NoError(t, err)
+		defer func() { _ = conn.Close() }()
+		// Set a timeout on the SQL operations to ensure that they both
+		// happen in a timely manner.
+		grantRevokeTimeout, cancel := context.WithTimeout(
+			ctx, testutils.DefaultSucceedsSoonDuration,
+		)
+		defer cancel()
+
+		_, err = conn.ExecContext(grantRevokeTimeout, "CREATE ROLE new_role;")
+		require.NoError(t, err)
+		_, err = conn.ExecContext(grantRevokeTimeout, "DROP ROLE new_role;")
+		require.NoError(t, err)
+
+		// Ensure the transaction we held open commits without issue.
+		require.NoError(t, fooTx.Commit())
+	})
+
 }
