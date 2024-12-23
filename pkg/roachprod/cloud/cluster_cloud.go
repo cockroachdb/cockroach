@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -323,7 +325,14 @@ type ClusterCreateOpts struct {
 // an additional "workload node". This node often times does not need the same CPU count as
 // the rest of the cluster. i.e. it is overkill for a 3 node 32 CPU cluster to have a 32 CPU
 // workload node, but a 50 node 8 CPU cluster might find a 8 CPU workload node inadequate.
-func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) error {
+func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) (*Cluster, error) {
+
+	c := &Cluster{
+		Name:      opts[0].CreateOpts.ClusterName,
+		CreatedAt: timeutil.Now(),
+		Lifetime:  opts[0].CreateOpts.Lifetime,
+	}
+
 	// Keep track of the total number of nodes created, as we append all cluster names
 	// with the node count.
 	var nodesCreated int
@@ -334,7 +343,7 @@ func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) error {
 	for _, o := range opts {
 		providerCount := len(o.CreateOpts.VMProviders)
 		if providerCount == 0 {
-			return errors.New("no VMProviders configured")
+			return c, errors.New("no VMProviders configured")
 		}
 
 		// Allocate vm names over the configured providers
@@ -346,14 +355,44 @@ func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) error {
 			p = (p + 1) % providerCount
 		}
 
+		var vms vm.List
+		var vmsLock syncutil.Mutex
+		// Create VMs in parallel across all providers.
+		// Each provider will return the list of VMs it created, and we append
+		// them to the cached Cluster.
 		if err := vm.ProvidersParallel(o.CreateOpts.VMProviders, func(p vm.Provider) error {
-			return p.Create(l, vmLocations[p.Name()], o.CreateOpts, o.ProviderOptsContainer[p.Name()])
+			vmList, err := p.Create(l, vmLocations[p.Name()], o.CreateOpts, o.ProviderOptsContainer[p.Name()])
+			if err != nil {
+				return err
+			}
+			vmsLock.Lock()
+			defer vmsLock.Unlock()
+			vms = append(vms, vmList...)
+			return nil
 		}); err != nil {
-			return err
+			return c, err
+		}
+
+		c.VMs = append(c.VMs, vms...)
+	}
+
+	// As VMs are created in parallel, sort them to ensure consistent ordering.
+	// SyncedCluster.Wait() tends to be flaky if the VMs are not sorted and VMs
+	// become available in an unexpected order.
+	// Sort is also used in ListCloud() to ensure consistent ordering.
+	sort.Sort(c.VMs)
+
+	// If VMs were created, set the cluster user to the user of the first VM.
+	// This is the method also used in ListCloud() above.
+	if len(c.VMs) > 0 {
+		var err error
+		c.User, err = c.VMs[0].UserName()
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	return nil
+	return c, nil
 }
 
 // GrowCluster adds new nodes to an existing cluster.
@@ -374,9 +413,26 @@ func GrowCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 				c.Name, gce.ProviderName)
 		}
 	}
-	return vm.ForProvider(provider, func(p vm.Provider) error {
-		return p.Grow(l, c.VMs, c.Name, names)
+
+	var vmsLock syncutil.Mutex
+	err := vm.ForProvider(provider, func(p vm.Provider) error {
+		addedVms, err := p.Grow(l, c.VMs, c.Name, names)
+		if err != nil {
+			return err
+		}
+
+		// Update the list of VMs in the cluster.
+		vmsLock.Lock()
+		defer vmsLock.Unlock()
+		c.VMs = append(c.VMs, addedVms...)
+
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ShrinkCluster removes tail nodes from an existing cluster.
@@ -398,9 +454,16 @@ func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 	// Always delete from the tail.
 	vmsToDelete := c.VMs[len(c.VMs)-numNodes:]
 
-	return vm.ForProvider(provider, func(p vm.Provider) error {
+	err := vm.ForProvider(provider, func(p vm.Provider) error {
 		return p.Shrink(l, vmsToDelete, c.Name)
 	})
+	if err != nil {
+		return err
+	}
+
+	// Update the list of VMs in the cluster.
+	c.VMs = c.VMs[:len(c.VMs)-numNodes]
+	return nil
 }
 
 // DestroyCluster TODO(peter): document
@@ -454,7 +517,12 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 func ExtendCluster(l *logger.Logger, c *Cluster, extension time.Duration) error {
 	// Round new lifetime to nearest second.
 	newLifetime := (c.Lifetime + extension).Round(time.Second)
-	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+	err := vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		return p.Extend(l, vms, newLifetime)
 	})
+	if err != nil {
+		return err
+	}
+	c.Lifetime = newLifetime
+	return nil
 }
