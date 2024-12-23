@@ -200,7 +200,8 @@ update abcd
       ├── select
       │    ├── columns: a:8!null b:9 c:10 d:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
       │    ├── scan abcd
-      │    │    └── columns: a:8 b:9 c:10 d:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── columns: a:8 b:9 c:10 d:11 rowid:12!null crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    └── flags: avoid-full-scan
       │    └── filters
       │         └── a:8 = 1.0
       └── projections

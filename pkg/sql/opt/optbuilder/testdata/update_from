@@ -26,7 +26,8 @@ update abc
       ├── project
       │    ├── columns: other.a:11!null other.b:12 other.c:13 other.crdb_internal_mvcc_timestamp:14 other.tableoid:15 abc.a:6!null abc.b:7 abc.c:8
       │    ├── scan abc
-      │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8 abc.crdb_internal_mvcc_timestamp:9 abc.tableoid:10
+      │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 abc.crdb_internal_mvcc_timestamp:9 abc.tableoid:10
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         ├── abc.a:6 [as=other.a:11]
       │         ├── abc.b:7 [as=other.b:12]
@@ -51,14 +52,13 @@ update abc
  └── distinct-on
       ├── columns: abc.a:6!null abc.b:7 abc.c:8 other.a:11!null other.b:12 other.c:13 rowid:14!null other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
       ├── grouping columns: abc.a:6!null
-      ├── inner-join (hash)
+      ├── inner-join (lookup abc)
       │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 other.a:11!null other.b:12 other.c:13 rowid:14!null other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
-      │    ├── scan abc
-      │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8
+      │    ├── key columns: [11] = [6]
+      │    ├── lookup columns are key
       │    ├── scan new_abc [as=other]
       │    │    └── columns: other.a:11 other.b:12 other.c:13 rowid:14!null other.crdb_internal_mvcc_timestamp:15 other.tableoid:16
-      │    └── filters
-      │         └── abc.a:6 = other.a:11
+      │    └── filters (true)
       └── aggregations
            ├── first-agg [as=abc.b:7]
            │    └── abc.b:7
@@ -105,7 +105,8 @@ update abc
       ├── project
       │    ├── columns: old.b:12 old.c:13 abc.a:6!null abc.b:7 abc.c:8
       │    ├── scan abc
-      │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8
+      │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         ├── abc.b:7 [as=old.b:12]
       │         └── abc.c:8 [as=old.c:13]
@@ -133,7 +134,8 @@ update abc
       ├── project
       │    ├── columns: old.a:11!null old.b:12 old.c:13 abc.a:6!null abc.b:7 abc.c:8
       │    ├── scan abc
-      │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8
+      │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         ├── abc.a:6 [as=old.a:11]
       │         ├── abc.b:7 [as=old.b:12]
@@ -159,7 +161,8 @@ update abc
       │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 old.a:11!null old.b:12 old.c:13 old.crdb_internal_mvcc_timestamp:14 old.tableoid:15
       │    ├── scan abc
       │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8
-      │    │    └── constraint: /6: [/2 - /2]
+      │    │    ├── constraint: /6: [/2 - /2]
+      │    │    └── flags: avoid-full-scan
       │    ├── scan abc [as=old]
       │    │    ├── columns: old.a:11!null old.b:12 old.c:13 old.crdb_internal_mvcc_timestamp:14 old.tableoid:15
       │    │    └── constraint: /11: [/2 - /2]
@@ -229,14 +232,13 @@ update abc
       │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 ab.a:11!null ab.b:12 ab.rowid:13!null ab.crdb_internal_mvcc_timestamp:14 ab.tableoid:15 ac.a:16!null ac.c:17 ac.rowid:18!null ac.crdb_internal_mvcc_timestamp:19 ac.tableoid:20
       │    ├── scan ab
       │    │    └── columns: ab.a:11 ab.b:12 ab.rowid:13!null ab.crdb_internal_mvcc_timestamp:14 ab.tableoid:15
-      │    ├── inner-join (hash)
+      │    ├── inner-join (lookup abc)
       │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 ac.a:16!null ac.c:17 ac.rowid:18!null ac.crdb_internal_mvcc_timestamp:19 ac.tableoid:20
-      │    │    ├── scan abc
-      │    │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8
+      │    │    ├── key columns: [16] = [6]
+      │    │    ├── lookup columns are key
       │    │    ├── scan ac
       │    │    │    └── columns: ac.a:16 ac.c:17 ac.rowid:18!null ac.crdb_internal_mvcc_timestamp:19 ac.tableoid:20
-      │    │    └── filters
-      │    │         └── abc.a:6 = ac.a:16
+      │    │    └── filters (true)
       │    └── filters
       │         └── ab.a:11 = ac.a:16
       └── aggregations
@@ -296,14 +298,13 @@ update abc
       │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 ab.a:11!null ab.b:12 ac.a:16!null ac.c:17
       │    ├── scan ab
       │    │    └── columns: ab.a:11 ab.b:12
-      │    ├── inner-join (hash)
+      │    ├── inner-join (lookup abc)
       │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 ac.a:16!null ac.c:17
-      │    │    ├── scan abc
-      │    │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8
+      │    │    ├── key columns: [16] = [6]
+      │    │    ├── lookup columns are key
       │    │    ├── scan ac
       │    │    │    └── columns: ac.a:16 ac.c:17
-      │    │    └── filters
-      │    │         └── abc.a:6 = ac.a:16
+      │    │    └── filters (true)
       │    └── filters
       │         └── ab.a:11 = ac.a:16
       └── aggregations
@@ -350,14 +351,13 @@ update abc
       │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 ab.a:11!null ab.b:12 ab.rowid:13!null ac.a:16!null ac.c:17 ac.rowid:18!null
       │    ├── scan ab
       │    │    └── columns: ab.a:11 ab.b:12 ab.rowid:13!null
-      │    ├── inner-join (hash)
+      │    ├── inner-join (lookup abc)
       │    │    ├── columns: abc.a:6!null abc.b:7 abc.c:8 ac.a:16!null ac.c:17 ac.rowid:18!null
-      │    │    ├── scan abc
-      │    │    │    └── columns: abc.a:6!null abc.b:7 abc.c:8
+      │    │    ├── key columns: [16] = [6]
+      │    │    ├── lookup columns are key
       │    │    ├── scan ac
       │    │    │    └── columns: ac.a:16 ac.c:17 ac.rowid:18!null
-      │    │    └── filters
-      │    │         └── abc.a:6 = ac.a:16
+      │    │    └── filters (true)
       │    └── filters
       │         └── ab.a:11 = ac.a:16
       └── aggregations
@@ -389,16 +389,12 @@ update abc
  │    └── b_cast:15 => b:2
  └── project
       ├── columns: b_cast:15 a:6!null b:7 c:8 k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
-      ├── inner-join (merge)
+      ├── inner-join (lookup abc)
       │    ├── columns: a:6!null b:7 c:8 k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
-      │    ├── left ordering: +6
-      │    ├── right ordering: +11
-      │    ├── scan abc
-      │    │    ├── columns: a:6!null b:7 c:8
-      │    │    └── ordering: +6
+      │    ├── key columns: [11] = [6]
+      │    ├── lookup columns are key
       │    ├── scan dec [as=other]
-      │    │    ├── columns: k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
-      │    │    └── ordering: +11
+      │    │    └── columns: k:11!null d:12 other.crdb_internal_mvcc_timestamp:13 other.tableoid:14
       │    └── filters (true)
       └── projections
            └── assignment-cast: INT8 [as=b_cast:15]
@@ -442,7 +438,8 @@ project
            │    │    │    ├── inner-join (cross)
            │    │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    │    │    │    ├── scan t61520 [as=t]
-           │    │    │    │    │    └── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │    │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │    │    │    │    └── flags: avoid-full-scan
            │    │    │    │    ├── values
            │    │    │    │    │    ├── columns: column1:9!null
            │    │    │    │    │    └── (1.0,)
@@ -494,7 +491,8 @@ project
            │    │    ├── inner-join (cross)
            │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    │    │    ├── scan t89779
-           │    │    │    │    └── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │    │    │    └── flags: avoid-full-scan
            │    │    │    ├── values
            │    │    │    │    ├── columns: column1:9!null
            │    │    │    │    └── (1,)

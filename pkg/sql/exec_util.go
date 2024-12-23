@@ -3568,6 +3568,10 @@ func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {
 	m.data.DisallowFullTableScans = val
 }
 
+func (m *sessionDataMutator) SetAvoidFullTableScansInMutations(val bool) {
+	m.data.AvoidFullTableScansInMutations = val
+}
+
 func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
 }

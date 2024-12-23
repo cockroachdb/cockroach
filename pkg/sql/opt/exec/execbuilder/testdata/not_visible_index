@@ -895,27 +895,17 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join
+        └── • lookup join (semi)
+            │ table: child@c_idx_invisible
             │ equality: (p) = (p)
-            │ left cols are key
-            │ right cols are key
             │
-            ├── • except all
-            │   │
-            │   ├── • scan buffer
-            │   │     label: buffer 1
-            │   │
-            │   └── • scan buffer
-            │         label: buffer 1
-            │
-            └── • distinct
-                │ distinct on: p
-                │ order key: p
+            └── • except all
                 │
-                └── • scan
-                      missing stats
-                      table: child@c_idx_invisible
-                      spans: FULL SCAN
+                ├── • scan buffer
+                │     label: buffer 1
+                │
+                └── • scan buffer
+                      label: buffer 1
 
 statement ok
 DROP TABLE child
@@ -1116,22 +1106,12 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join
+        └── • lookup join (semi)
+            │ table: child_update@c_update_idx_invisible
             │ equality: (p) = (p)
-            │ left cols are key
-            │ right cols are key
             │
-            ├── • scan buffer
-            │     label: buffer 1
-            │
-            └── • distinct
-                │ distinct on: p
-                │ order key: p
-                │
-                └── • scan
-                      missing stats
-                      table: child_update@c_update_idx_invisible
-                      spans: FULL SCAN
+            └── • scan buffer
+                  label: buffer 1
 
 # c_delete_idx_invisible is used for constraint check (update on a parent table
 # requires FK check).
@@ -1170,13 +1150,9 @@ vectorized: true
 │       │   └── • buffer
 │       │       │ label: buffer 1
 │       │       │
-│       │       └── • hash join
+│       │       └── • lookup join
+│       │           │ table: child_update@c_update_idx_invisible
 │       │           │ equality: (p) = (p)
-│       │           │
-│       │           ├── • scan
-│       │           │     missing stats
-│       │           │     table: child_update@child_update_pkey
-│       │           │     spans: FULL SCAN
 │       │           │
 │       │           └── • filter
 │       │               │ estimated row count: 33
@@ -1190,14 +1166,10 @@ vectorized: true
 │           │
 │           └── • error if rows
 │               │
-│               └── • hash join (right anti)
-│                   │ equality: (p) = (p_new)
-│                   │ left cols are key
-│                   │
-│                   ├── • scan
-│                   │     missing stats
-│                   │     table: parent@parent_pkey
-│                   │     spans: FULL SCAN
+│               └── • lookup join (anti)
+│                   │ table: parent@parent_pkey
+│                   │ equality: (p_new) = (p)
+│                   │ equality cols are key
 │                   │
 │                   └── • scan buffer
 │                         label: buffer 1
@@ -1206,27 +1178,17 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • hash join
+        └── • lookup join (semi)
+            │ table: child_delete@c_delete_idx_invisible
             │ equality: (p) = (p)
-            │ left cols are key
-            │ right cols are key
             │
-            ├── • except all
-            │   │
-            │   ├── • scan buffer
-            │   │     label: buffer 1
-            │   │
-            │   └── • scan buffer
-            │         label: buffer 1
-            │
-            └── • distinct
-                │ distinct on: p
-                │ order key: p
+            └── • except all
                 │
-                └── • scan
-                      missing stats
-                      table: child_delete@c_delete_idx_invisible
-                      spans: FULL SCAN
+                ├── • scan buffer
+                │     label: buffer 1
+                │
+                └── • scan buffer
+                      label: buffer 1
 
 statement ok
 DROP TABLE child_delete
