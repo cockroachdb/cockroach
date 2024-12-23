@@ -7,6 +7,7 @@ package storeliveness
 
 import (
 	"context"
+	"sync"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,27 +22,24 @@ type TestEngine struct {
 	storage.Engine
 	storeID      slpb.StoreIdent
 	mu           syncutil.Mutex
-	blockingCh   chan struct{}
+	cond         sync.Cond
 	blockOnWrite bool
 	errorOnWrite bool
 }
 
 func NewTestEngine(storeID slpb.StoreIdent) *TestEngine {
-	return &TestEngine{
-		Engine:     storage.NewDefaultInMemForTesting(),
-		storeID:    storeID,
-		blockingCh: make(chan struct{}, 1),
+	te := &TestEngine{
+		Engine:  storage.NewDefaultInMemForTesting(),
+		storeID: storeID,
 	}
+	te.cond.L = &te.mu
+	return te
 }
 
 func (te *TestEngine) NewBatch() storage.Batch {
-	te.mu.Lock()
-	defer te.mu.Unlock()
-	return TestBatch{
-		Batch:        te.Engine.NewBatch(),
-		blockingCh:   te.blockingCh,
-		blockOnWrite: te.blockOnWrite,
-		errorOnWrite: te.errorOnWrite,
+	return &TestBatch{
+		Batch: te.Engine.NewBatch(),
+		te:    te,
 	}
 }
 
@@ -49,37 +47,42 @@ func (te *TestEngine) SetBlockOnWrite(bow bool) {
 	te.mu.Lock()
 	defer te.mu.Unlock()
 	te.blockOnWrite = bow
+	te.cond.Broadcast()
 }
 
-func (te *TestEngine) SignalToUnblock() {
-	te.blockingCh <- struct{}{}
+func (te *TestEngine) SetErrorOnWrite(eow bool) {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	te.errorOnWrite = eow
+}
+
+func (te *TestEngine) blockOrErrorOnWrite() error {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	for te.blockOnWrite {
+		te.cond.Wait()
+	}
+	if te.errorOnWrite {
+		return errors.New("error on write")
+	}
+	return nil
 }
 
 func (te *TestEngine) PutUnversioned(key roachpb.Key, value []byte) error {
-	te.mu.Lock()
-	defer te.mu.Unlock()
-	if te.blockOnWrite {
-		<-te.blockingCh
-	}
-	if te.errorOnWrite {
-		return errors.New("error writing")
+	if err := te.blockOrErrorOnWrite(); err != nil {
+		return err
 	}
 	return te.Engine.PutUnversioned(key, value)
 }
 
 type TestBatch struct {
 	storage.Batch
-	blockingCh   chan struct{}
-	blockOnWrite bool
-	errorOnWrite bool
+	te *TestEngine
 }
 
-func (tb TestBatch) Commit(sync bool) error {
-	if tb.blockOnWrite {
-		<-tb.blockingCh
-	}
-	if tb.errorOnWrite {
-		return errors.New("error committing batch")
+func (tb *TestBatch) Commit(sync bool) error {
+	if err := tb.te.blockOrErrorOnWrite(); err != nil {
+		return err
 	}
 	return tb.Batch.Commit(sync)
 }
