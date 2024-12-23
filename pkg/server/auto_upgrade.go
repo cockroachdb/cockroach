@@ -49,7 +49,7 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 			clusterVersion, err := s.clusterVersion(ctx)
 			if err != nil {
-				log.Errorf(ctx, "unable to retrieve cluster version: %v", err)
+				log.Errorf(ctx, "unable to retrieve cluster version: %v", redact.Safe(err))
 				continue
 			}
 
@@ -58,10 +58,10 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 			status, err := s.upgradeStatus(ctx, clusterVersion)
 			switch status {
 			case UpgradeBlockedDueToError:
-				log.Errorf(ctx, "failed attempt to upgrade cluster version, error: %v", err)
+				log.Errorf(ctx, "failed attempt to upgrade cluster version, error: %v", redact.Safe(err))
 				continue
 			case UpgradeBlockedDueToMixedVersions:
-				log.Infof(ctx, "failed attempt to upgrade cluster version: %v", err)
+				log.Infof(ctx, "failed attempt to upgrade cluster version: %v", redact.Safe(err))
 				continue
 			case UpgradeDisabledByConfigurationToPreserveDowngrade:
 				log.Infof(ctx, "auto upgrade is disabled by preserve_downgrade_option")
@@ -101,7 +101,7 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 					sessiondata.NodeUserSessionDataOverride,
 					"SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
 				); err != nil {
-					log.Errorf(ctx, "error when finalizing cluster version upgrade: %v", err)
+					log.Errorf(ctx, "error when finalizing cluster version upgrade: %v", redact.Safe(err))
 				} else {
 					log.Info(ctx, "successfully upgraded cluster version")
 					return
