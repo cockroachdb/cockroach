@@ -448,6 +448,8 @@ type Planner interface {
 
 	// ClearTableStatsCache removes all entries from the node's table stats cache.
 	ClearTableStatsCache()
+
+	DeleteRecentWrites(ctx context.Context, descID catid.DescID, since hlc.Timestamp) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

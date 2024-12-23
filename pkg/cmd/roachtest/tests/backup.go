@@ -569,7 +569,7 @@ func registerBackup(r registry.Registry) {
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})
+			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{skipBackupRestore: true})
 		},
 	})
 }

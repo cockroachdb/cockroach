@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -164,6 +165,11 @@ func (smf *DummyStreamManagerFactory) GetStreamIngestManager(
 // errors.
 type DummyEvalPlanner struct {
 	Monitor *mon.BytesMonitor
+}
+
+// DeleteRecentWrites implements eval.Planner.
+func (ep *DummyEvalPlanner) DeleteRecentWrites(ctx context.Context, descID catid.DescID, since hlc.Timestamp) error {
+	panic("unimplemented")
 }
 
 // ResolveOIDFromString is part of the Planner interface.
