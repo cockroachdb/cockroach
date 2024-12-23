@@ -402,7 +402,7 @@ func (eg *exprGen) populateBestProps(
 		} else {
 			childProps = xform.BuildChildPhysicalPropsScalar(eg.mem, expr, i)
 		}
-		cost += eg.populateBestProps(ctx, expr.Child(i), childProps)
+		cost.Cost += eg.populateBestProps(ctx, expr.Child(i), childProps).Cost
 	}
 
 	if rel != nil {
@@ -412,7 +412,7 @@ func (eg *exprGen) populateBestProps(
 		provided.Ordering = ordering.BuildProvided(eg.f.EvalContext(), rel, &required.Ordering)
 		provided.Distribution = distribution.BuildProvided(ctx, eg.f.EvalContext(), rel, &required.Distribution)
 
-		cost += eg.coster.ComputeCost(rel, required)
+		cost.Cost += eg.coster.ComputeCost(rel, required).Cost
 		eg.mem.SetBestProps(rel, required, provided, cost)
 	}
 	return cost

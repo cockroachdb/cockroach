@@ -532,7 +532,7 @@ func (m *Memo) OptimizationCost() Cost {
 	// This cpuCostFactor is the same as cpuCostFactor in the coster.
 	// TODO(mgartner): Package these constants up in a shared location.
 	const cpuCostFactor = 0.01
-	return Cost(m.Metadata().NumTables()) * 1000 * cpuCostFactor
+	return Cost{Cost: float64(m.Metadata().NumTables()) * 1000 * cpuCostFactor}
 }
 
 // NextRank returns a new rank that can be assigned to a scalar expression.

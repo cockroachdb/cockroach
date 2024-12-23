@@ -166,18 +166,18 @@ func (p *planCosts) NumCustom() int {
 // If there are no custom plan costs, it returns 0.
 func (p *planCosts) AvgCustom() memo.Cost {
 	if p.custom.length == 0 {
-		return 0
+		return memo.Cost{Cost: 0}
 	}
-	var sum memo.Cost
+	var sum float64
 	for i := 0; i < p.custom.length; i++ {
-		sum += p.custom.costs[i]
+		sum += p.custom.costs[i].Cost
 	}
-	return sum / memo.Cost(p.custom.length)
+	return memo.Cost{Cost: sum / float64(p.custom.length)}
 }
 
 // ClearGeneric clears the generic cost.
 func (p *planCosts) ClearGeneric() {
-	p.generic = 0
+	p.generic = memo.Cost{Cost: 0}
 }
 
 // ClearCustom clears any previously added custom costs.
