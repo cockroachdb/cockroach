@@ -60,9 +60,10 @@ import (
 )
 
 var (
-	oidZero   = tree.NewDOid(0)
-	zeroVal   = tree.DZero
-	negOneVal = tree.NewDInt(-1)
+	oidZero        = tree.NewDOid(0)
+	regProcOidZero = tree.NewDOidWithTypeAndName(0, types.RegProc, "-")
+	zeroVal        = tree.DZero
+	negOneVal      = tree.NewDInt(-1)
 
 	passwdStarString = tree.NewDString("********")
 )
@@ -4923,28 +4924,27 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 								}
 							}
 						}
-						regprocForZeroOid := tree.NewDOidWithTypeAndName(0, types.RegProc, "-")
 						err := addRow(
 							tree.NewDOid(overload.Oid).AsRegProc(name), // aggfnoid
-							aggregateKind,     // aggkind
-							aggNumDirectArgs,  // aggnumdirectargs
-							regprocForZeroOid, // aggtransfn
-							regprocForZeroOid, // aggfinalfn
-							regprocForZeroOid, // aggcombinefn
-							regprocForZeroOid, // aggserialfn
-							regprocForZeroOid, // aggdeserialfn
-							regprocForZeroOid, // aggmtransfn
-							regprocForZeroOid, // aggminvtransfn
-							regprocForZeroOid, // aggmfinalfn
-							tree.DBoolFalse,   // aggfinalextra
-							tree.DBoolFalse,   // aggmfinalextra
-							sortOperatorOid,   // aggsortop
-							tree.DNull,        // aggtranstype
-							tree.DNull,        // aggtransspace
-							tree.DNull,        // aggmtranstype
-							tree.DNull,        // aggmtransspace
-							tree.DNull,        // agginitval
-							tree.DNull,        // aggminitval
+							aggregateKind,    // aggkind
+							aggNumDirectArgs, // aggnumdirectargs
+							regProcOidZero,   // aggtransfn
+							regProcOidZero,   // aggfinalfn
+							regProcOidZero,   // aggcombinefn
+							regProcOidZero,   // aggserialfn
+							regProcOidZero,   // aggdeserialfn
+							regProcOidZero,   // aggmtransfn
+							regProcOidZero,   // aggminvtransfn
+							regProcOidZero,   // aggmfinalfn
+							tree.DBoolFalse,  // aggfinalextra
+							tree.DBoolFalse,  // aggmfinalextra
+							sortOperatorOid,  // aggsortop
+							tree.DNull,       // aggtranstype
+							tree.DNull,       // aggtransspace
+							tree.DNull,       // aggmtranstype
+							tree.DNull,       // aggmtransspace
+							tree.DNull,       // agginitval
+							tree.DNull,       // aggminitval
 							// These columns were automatically created by pg_catalog_test's missing column generator.
 							tree.DNull, // aggfinalmodify
 							tree.DNull, // aggmfinalmodify
@@ -5169,7 +5169,7 @@ func (h oidHasher) UniqueConstraintOid(
 func (h oidHasher) RegProc(name string) tree.Datum {
 	_, overloads := builtinsregistry.GetBuiltinProperties(name)
 	if len(overloads) == 0 {
-		return tree.DNull
+		return regProcOidZero
 	}
 	return tree.NewDOid(overloads[0].Oid).AsRegProc(name)
 }
