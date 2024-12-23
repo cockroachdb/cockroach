@@ -257,7 +257,7 @@ func TestAlterBackupSchedulePausesIncrementalForNewCollection(t *testing.T) {
 	fullID, err := strconv.Atoi(rows[1][0])
 	require.NoError(t, err)
 
-	// Artificially resume inc schedule to test if it gets paused after the alter
+	// Artificially resume inc schedule to test if it gets paused after the alter.
 	th.sqlDB.Exec(t, `RESUME SCHEDULE $1`, incID)
 
 	alterCmd := fmt.Sprintf(`ALTER BACKUP SCHEDULE %d SET INTO 'nodelocal://1/backup/alter-schedule-2';`, fullID)
@@ -269,6 +269,42 @@ func TestAlterBackupSchedulePausesIncrementalForNewCollection(t *testing.T) {
 	fullStatus, fullRecurrence := scheduleStatusAndRecurrence(t, th, fullID)
 	require.Equal(t, "ACTIVE", fullStatus)
 	require.Equal(t, "@daily", fullRecurrence)
+}
+
+func TestAlterBackupScheduleWithSQLSpecialCharacters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newAlterSchedulesTestHelper(t, nil)
+	defer cleanup()
+
+	// Characters that require quoting as specified in mustQuoteMap in
+	// sql/lexbase/encode.go.
+	uri := "nodelocal://1/backup/alter ,s{hedu}e"
+
+	createCmd := fmt.Sprintf(
+		"CREATE SCHEDULE FOR BACKUP INTO '%s' WITH"+
+			" incremental_location = '%s' RECURRING '@hourly' FULL BACKUP '@daily';",
+		uri, uri,
+	)
+	rows := th.sqlDB.QueryStr(t, createCmd)
+	require.Len(t, rows, 2)
+	incID, err := strconv.Atoi(rows[0][0])
+	require.NoError(t, err)
+	fullID, err := strconv.Atoi(rows[1][0])
+	require.NoError(t, err)
+
+	alterCmd := fmt.Sprintf(
+		"ALTER BACKUP SCHEDULE %d SET INTO '%s', "+
+			"SET RECURRING '@daily', SET FULL BACKUP '@weekly';",
+		fullID, uri,
+	)
+	th.sqlDB.Exec(t, alterCmd)
+
+	_, incRecurrence := scheduleStatusAndRecurrence(t, th, incID)
+	_, fullRecurrence := scheduleStatusAndRecurrence(t, th, fullID)
+	require.Equal(t, "@daily", incRecurrence)
+	require.Equal(t, "@weekly", fullRecurrence)
 }
 
 func scheduleStatusAndRecurrence(
