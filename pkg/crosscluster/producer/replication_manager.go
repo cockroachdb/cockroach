@@ -202,7 +202,11 @@ func (r *replicationStreamManagerImpl) PlanLogicalReplication(
 		if err != nil {
 			return nil, err
 		}
-		spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
+		if req.UseTableSpan {
+			spans = append(spans, td.TableSpan(r.evalCtx.Codec))
+		} else {
+			spans = append(spans, td.PrimaryIndexSpan(r.evalCtx.Codec))
+		}
 		tableDescs = append(tableDescs, td.TableDescriptor)
 
 		typeDescriptors, foundTypeDescriptors, err = getUDTs(ctx, r.txn, typeDescriptors, foundTypeDescriptors, td)
