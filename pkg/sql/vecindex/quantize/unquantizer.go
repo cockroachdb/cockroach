@@ -13,34 +13,34 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// unQuantizer trivially implements the Quantizer interface, storing the
+// UnQuantizer trivially implements the Quantizer interface, storing the
 // original full-size vectors in unmodified form.
 //
-// All methods in unQuantizer are thread-safe.
-type unQuantizer struct {
+// All methods in UnQuantizer are thread-safe.
+type UnQuantizer struct {
 	dims int
 }
 
-var _ Quantizer = (*unQuantizer)(nil)
+var _ Quantizer = (*UnQuantizer)(nil)
 
 // NewUnQuantizer returns a new instance of the UnQuantizer that stores vectors
 // with the given number of dimensions.
 func NewUnQuantizer(dims int) Quantizer {
-	return &unQuantizer{dims: dims}
+	return &UnQuantizer{dims: dims}
 }
 
 // GetOriginalDims implements the Quantizer interface.
-func (q *unQuantizer) GetOriginalDims() int {
+func (q *UnQuantizer) GetOriginalDims() int {
 	return q.dims
 }
 
 // GetRandomDims implements the Quantizer interface.
-func (q *unQuantizer) GetRandomDims() int {
+func (q *UnQuantizer) GetRandomDims() int {
 	return q.dims
 }
 
 // RandomizeVector implements the Quantizer interface.
-func (q *unQuantizer) RandomizeVector(
+func (q *UnQuantizer) RandomizeVector(
 	ctx context.Context, input vector.T, output vector.T, invert bool,
 ) {
 	if len(input) != q.dims {
@@ -55,7 +55,7 @@ func (q *unQuantizer) RandomizeVector(
 }
 
 // Quantize implements the Quantizer interface.
-func (q *unQuantizer) Quantize(ctx context.Context, vectors *vector.Set) QuantizedVectorSet {
+func (q *UnQuantizer) Quantize(ctx context.Context, vectors *vector.Set) QuantizedVectorSet {
 	unquantizedSet := &UnQuantizedVectorSet{
 		Centroid: make(vector.T, q.dims),
 		Vectors:  vector.MakeSet(q.dims),
@@ -68,7 +68,7 @@ func (q *unQuantizer) Quantize(ctx context.Context, vectors *vector.Set) Quantiz
 }
 
 // QuantizeInSet implements the Quantizer interface.
-func (q *unQuantizer) QuantizeInSet(
+func (q *UnQuantizer) QuantizeInSet(
 	ctx context.Context, quantizedSet QuantizedVectorSet, vectors *vector.Set,
 ) {
 	unquantizedSet := quantizedSet.(*UnQuantizedVectorSet)
@@ -76,7 +76,7 @@ func (q *unQuantizer) QuantizeInSet(
 }
 
 // NewQuantizedVectorSet implements the Quantizer interface
-func (q *unQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
+func (q *UnQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) QuantizedVectorSet {
 	dataBuffer := make([]float32, 0, capacity*q.GetRandomDims())
 	unquantizedSet := &UnQuantizedVectorSet{
 		Centroid: centroid,
@@ -86,7 +86,7 @@ func (q *unQuantizer) NewQuantizedVectorSet(capacity int, centroid vector.T) Qua
 }
 
 // EstimateSquaredDistances implements the Quantizer interface.
-func (q *unQuantizer) EstimateSquaredDistances(
+func (q *UnQuantizer) EstimateSquaredDistances(
 	ctx context.Context,
 	quantizedSet QuantizedVectorSet,
 	queryVector vector.T,
