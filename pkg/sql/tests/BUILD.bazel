@@ -33,6 +33,7 @@ go_test(
         "allow_role_memberships_to_change_during_transaction_test.go",
         "autocommit_extended_protocol_test.go",
         "bank_test.go",
+        "catalog_generation_test.go",
         "copy_file_upload_test.go",
         "deadlock_test.go",
         "drop_role_concurrent_session_test.go",
