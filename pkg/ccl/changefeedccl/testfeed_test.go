@@ -1233,7 +1233,6 @@ func extractFieldFromJSONValue(
 				return nil, nil, errors.Wrapf(err, "unmarshalling json %v", metaVal)
 			}
 			field = meta[fieldName]
-			delete(meta, fieldName)
 			if len(meta) == 0 {
 				delete(parsed, metaSentinel)
 			} else {
@@ -1245,7 +1244,6 @@ func extractFieldFromJSONValue(
 		}
 	} else {
 		field = parsed[fieldName]
-		delete(parsed, fieldName)
 	}
 
 	if value, err = reformatJSON(parsed); err != nil {
@@ -2301,11 +2299,11 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 					if resolved {
 						m.Resolved = []byte(msg)
 					} else {
-						wrappedValue, err := extractValueFromJSONMessage([]byte(msg))
+						m.Value, err = extractValueFromJSONMessage([]byte(msg))
 						if err != nil {
 							return nil, err
 						}
-						if m.Key, m.Value, err = extractKeyFromJSONValue(f.isBare, wrappedValue); err != nil {
+						if m.Key, m.Value, err = extractKeyFromJSONValue(f.isBare, m.Value); err != nil {
 							return nil, err
 						}
 						if m.Topic, m.Value, err = extractTopicFromJSONValue(f.isBare, m.Value); err != nil {
