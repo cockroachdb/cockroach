@@ -126,6 +126,17 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 	}
 }
 
+// ResetAndAnnotateCtxPrealloc is like ResetAndAnnotateCtx but allocates a
+// container to avoid allocations on future annotations on the context and its
+// descendants.
+func (ac *AmbientContext) ResetAndAnnotateCtxPrealloc(ctx context.Context) context.Context {
+	bld := ctxutil.WithFastValuesPrealloc(ctx)
+	// We set these unconditionally in case they are already set in the context.
+	bld.Set(ctxutil.LogTagsKey, ac.tags)
+	bld.Set(serverident.ServerIdentificationContextKey, ac.ServerIDs)
+	return bld.Finish()
+}
+
 func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Context {
 	bld := ctxutil.WithFastValues(ctx)
 	if ac.tags != nil {
