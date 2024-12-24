@@ -521,6 +521,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Knobs:               ca.knobs.FeedKnobs,
 		ScopedTimers:        ca.sliMetrics.Timers,
 		MonitoringCfg:       monitoringCfg,
+		ConsumerID:          int64(ca.spec.JobID),
 	}, nil
 }
 
