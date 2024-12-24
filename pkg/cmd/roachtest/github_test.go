@@ -143,7 +143,7 @@ func TestCreatePostRequest(t *testing.T) {
 			start:       time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC),
 			end:         time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC),
 			cockroach:   "cockroach",
-			cockroachEA: "cockroach-short",
+			cockroachEA: "cockroach-ea",
 		}
 
 		testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
