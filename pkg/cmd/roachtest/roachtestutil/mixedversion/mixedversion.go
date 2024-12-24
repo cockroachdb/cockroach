@@ -151,6 +151,9 @@ const (
 	// 	- MVT_UPGRADE_PATH=24.1.5,24.2.0,current
 	// 	- MVT_UPGRADE_PATH=24.1,24.2,current
 	upgradePathOverrideEnv = "MVT_UPGRADE_PATH"
+
+	// Dump the test plan and return, i.e., skipping the actual execution of the test.
+	dryRunEnv = "MVT_DRY_RUN"
 )
 
 var (
@@ -773,6 +776,11 @@ func (t *Test) Run() {
 	}
 
 	t.logger.Printf("mixed-version test:\n%s", plan.PrettyPrint())
+
+	if override := os.Getenv(dryRunEnv); override != "" {
+		t.logger.Printf("skipping test run in dry-run mode")
+		return
+	}
 
 	// Mark the deployment mode and versions, so they show up in the github issue. This makes
 	// it easier to group failures together without having to dig into the test logs.
