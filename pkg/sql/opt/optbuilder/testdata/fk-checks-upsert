@@ -58,7 +58,7 @@ upsert c1
                 │         └──  column2:7 => p:9
                 ├── scan p
                 │    ├── columns: p.p:10!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:9 = p.p:10
 
@@ -98,7 +98,7 @@ upsert c1
  │    │    │              └── i_default:8
  │    │    ├── scan c1
  │    │    │    ├── columns: c:9!null c1.p:10!null i:11 c1.crdb_internal_mvcc_timestamp:12 c1.tableoid:13
- │    │    │    └── flags: disabled not visible index feature
+ │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:6 = c:9
  │    └── projections
@@ -115,7 +115,7 @@ upsert c1
                 │         └──  upsert_p:15 => p:17
                 ├── scan p
                 │    ├── columns: p.p:18!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:17 = p.p:18
 
@@ -148,7 +148,7 @@ upsert c1
                 │         └──  y:7 => p:14
                 ├── scan p
                 │    ├── columns: p.p:15!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:14 = p.p:15
 
@@ -191,7 +191,7 @@ upsert c1
  │    │    │    │              └── i_default:8
  │    │    │    ├── scan c1
  │    │    │    │    ├── columns: c:9!null c1.p:10!null i:11 c1.crdb_internal_mvcc_timestamp:12 c1.tableoid:13
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column1:6 = c:9
  │    │    └── projections
@@ -210,7 +210,7 @@ upsert c1
                 │         └──  upsert_p:16 => p:18
                 ├── scan p
                 │    ├── columns: p.p:19!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:18 = p.p:19
 
@@ -253,7 +253,7 @@ upsert c1
  │    │    │    │              └── i_default:11
  │    │    │    ├── scan c1
  │    │    │    │    ├── columns: c:12!null c1.p:13!null i:14 c1.crdb_internal_mvcc_timestamp:15 c1.tableoid:16
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── u:6 = c:12
  │    │    └── projections
@@ -272,7 +272,7 @@ upsert c1
                 │         └──  upsert_p:19 => p:21
                 ├── scan p
                 │    ├── columns: p.p:22!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:21 = p.p:22
 
@@ -308,7 +308,7 @@ upsert c2
  │    │    │    │         └── (2,)
  │    │    │    ├── scan c2
  │    │    │    │    ├── columns: c2.c:5!null c2.crdb_internal_mvcc_timestamp:6 c2.tableoid:7
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column1:4 = c2.c:5
  │    │    └── projections
@@ -325,7 +325,7 @@ upsert c2
                 │         └──  upsert_c:9 => c:10
                 ├── scan p
                 │    ├── columns: p:11!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── c:10 = p:11
 
@@ -362,7 +362,7 @@ upsert c3
                 │         └── p:7 IS NOT NULL
                 ├── scan p
                 │    ├── columns: p.p:8!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:7 = p.p:8
 
@@ -398,7 +398,7 @@ upsert c3
  │    │    │              └── p_default:6
  │    │    ├── scan c3
  │    │    │    ├── columns: c:7!null c3.p:8 c3.crdb_internal_mvcc_timestamp:9 c3.tableoid:10
- │    │    │    └── flags: disabled not visible index feature
+ │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:5 = c:7
  │    └── projections
@@ -418,7 +418,7 @@ upsert c3
                 │         └── p:13 IS NOT NULL
                 ├── scan p
                 │    ├── columns: p.p:14!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:13 = p.p:14
 
@@ -461,7 +461,7 @@ upsert c4
  │    │    │    │              └── z:8
  │    │    │    ├── scan c4
  │    │    │    │    ├── columns: c:13!null c4.a:14 c4.other:15 c4.crdb_internal_mvcc_timestamp:16 c4.tableoid:17
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── y:7 = c4.a:14
  │    │    └── projections
@@ -484,7 +484,7 @@ upsert c4
                 │         └── a:22 IS NOT NULL
                 ├── scan p
                 │    ├── columns: p:23!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── a:22 = p:23
 
@@ -523,7 +523,7 @@ upsert c4
  │    │    │    │              └── z:8
  │    │    │    ├── scan c4
  │    │    │    │    ├── columns: c:13!null c4.a:14 c4.other:15 c4.crdb_internal_mvcc_timestamp:16 c4.tableoid:17
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── y:7 = c4.a:14
  │    │    └── projections
@@ -546,7 +546,7 @@ upsert c4
                 │         └── a:22 IS NOT NULL
                 ├── scan p
                 │    ├── columns: p:23!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── a:22 = p:23
 
@@ -602,7 +602,7 @@ upsert cpq
                 │         └──  column3:9 => q:12
                 ├── scan pq
                 │    ├── columns: pq.p:14 pq.q:15
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── p:11 = pq.p:14
                      └── q:12 = pq.q:15
@@ -639,7 +639,7 @@ upsert cpq
                 │         └── q:15 IS NOT NULL
                 ├── scan pq
                 │    ├── columns: pq.p:17 pq.q:18
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── p:14 = pq.p:17
                      └── q:15 = pq.q:18
@@ -685,7 +685,7 @@ upsert cpq
  │    │    │              └── other_default:15
  │    │    ├── scan cpq
  │    │    │    ├── columns: c:16!null cpq.p:17 cpq.q:18 cpq.other:19 cpq.crdb_internal_mvcc_timestamp:20 cpq.tableoid:21
- │    │    │    └── flags: disabled not visible index feature
+ │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    └── filters
  │    │         └── x:7 = c:16
  │    └── projections
@@ -708,7 +708,7 @@ upsert cpq
                 │         └── q:26 IS NOT NULL
                 ├── scan pq
                 │    ├── columns: pq.p:28 pq.q:29
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── p:25 = pq.p:28
                      └── q:26 = pq.q:29
@@ -753,7 +753,7 @@ upsert cpq
  │    │    │              └── other_default:16
  │    │    ├── scan cpq
  │    │    │    ├── columns: c:17!null cpq.p:18 cpq.q:19 cpq.other:20 cpq.crdb_internal_mvcc_timestamp:21 cpq.tableoid:22
- │    │    │    └── flags: disabled not visible index feature
+ │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    └── filters
  │    │         └── x:7 = c:17
  │    └── projections
@@ -777,7 +777,7 @@ upsert cpq
                 │         └── q:28 IS NOT NULL
                 ├── scan pq
                 │    ├── columns: pq.p:30 pq.q:31
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── p:27 = pq.p:30
                      └── q:28 = pq.q:31
@@ -816,7 +816,7 @@ upsert cpq
                 │         └──  q_default:15 => q:18
                 ├── scan pq
                 │    ├── columns: pq.p:20 pq.q:21
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── p:17 = pq.p:20
                      └── q:18 = pq.q:21
@@ -865,7 +865,7 @@ upsert cpq
  │    │    │    │              └── other_default:10
  │    │    │    ├── scan cpq
  │    │    │    │    ├── columns: c:11!null cpq.p:12 cpq.q:13 cpq.other:14 cpq.crdb_internal_mvcc_timestamp:15 cpq.tableoid:16
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column1:7 = c:11
  │    │    └── projections
@@ -890,7 +890,7 @@ upsert cpq
                 │         └── q:23 IS NOT NULL
                 ├── scan pq
                 │    ├── columns: pq.p:25 pq.q:26
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── p:22 = pq.p:25
                      └── q:23 = pq.q:26
@@ -936,7 +936,7 @@ upsert cmulti
       │         │         └──  x:7 => a:14
       │         ├── scan p
       │         │    ├── columns: p.p:15!null
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              └── a:14 = p.p:15
       └── f-k-checks-item: cmulti(b,c) -> pq(p,q)
@@ -949,7 +949,7 @@ upsert cmulti
                 │         └──  z:9 => c:20
                 ├── scan pq
                 │    ├── columns: pq.p:22 q:23
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── b:19 = pq.p:22
                      └── c:20 = q:23
@@ -992,7 +992,7 @@ upsert cmulti
  │    │    │              └── d_default:14
  │    │    ├── scan cmulti
  │    │    │    ├── columns: cmulti.a:15!null cmulti.b:16!null cmulti.c:17 d:18 cmulti.crdb_internal_mvcc_timestamp:19 cmulti.tableoid:20
- │    │    │    └── flags: disabled not visible index feature
+ │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    └── filters
  │    │         ├── x:7 = cmulti.a:15
  │    │         └── y:8 = cmulti.b:16
@@ -1010,7 +1010,7 @@ upsert cmulti
       │         │         └──  upsert_a:21 => a:24
       │         ├── scan p
       │         │    ├── columns: p.p:25!null
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              └── a:24 = p.p:25
       └── f-k-checks-item: cmulti(b,c) -> pq(p,q)
@@ -1023,7 +1023,7 @@ upsert cmulti
                 │         └──  z:9 => c:30
                 ├── scan pq
                 │    ├── columns: pq.p:32 q:33
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── b:29 = pq.p:32
                      └── c:30 = q:33
@@ -1084,7 +1084,7 @@ upsert p1
       │    │              └── column2:6
       │    ├── scan p1
       │    │    ├── columns: p:7!null other:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── flags: disabled not visible index feature
+      │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    └── filters
       │         └── column1:5 = p:7
       └── projections
@@ -1124,7 +1124,7 @@ upsert p1
  │    │    │    │              └── column2:6
  │    │    │    ├── scan p1
  │    │    │    │    ├── columns: p1.p:7!null other:8 p1.crdb_internal_mvcc_timestamp:9 p1.tableoid:10
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column1:5 = p1.p:7
  │    │    └── projections
@@ -1150,7 +1150,7 @@ upsert p1
                 │              └──  upsert_p:12 => p:15
                 ├── scan p1c
                 │    ├── columns: p1c.p:17!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── p:14 = p1c.p:17
 
@@ -1186,7 +1186,7 @@ upsert p1
       │    │    │              └── column2:6
       │    │    ├── scan p1
       │    │    │    ├── columns: p:7!null other:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── filters
       │    │         └── column1:5 = p:7
       │    └── projections
@@ -1234,7 +1234,7 @@ upsert p2
  │    │    │              └── column2:6
  │    │    ├── scan p2
  │    │    │    ├── columns: p:7!null p2.fk:8 p2.crdb_internal_mvcc_timestamp:9 p2.tableoid:10
- │    │    │    └── flags: disabled not visible index feature
+ │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:5 = p:7
  │    └── projections
@@ -1257,7 +1257,7 @@ upsert p2
                 │              └──  column2:6 => fk:13
                 ├── scan p2c
                 │    ├── columns: p2c.fk:15
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── fk:12 = p2c.fk:15
 
@@ -1294,7 +1294,7 @@ upsert p2
       │    │    │              └── column2:6
       │    │    ├── scan p2
       │    │    │    ├── columns: p:7!null fk:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── filters
       │    │         └── column1:5 = p:7
       │    └── projections
@@ -1337,7 +1337,7 @@ upsert p2
  │    │    │    │              └── column2:6
  │    │    │    ├── scan p2
  │    │    │    │    ├── columns: p:7!null p2.fk:8 p2.crdb_internal_mvcc_timestamp:9 p2.tableoid:10
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column1:5 = p:7
  │    │    └── projections
@@ -1363,7 +1363,7 @@ upsert p2
                 │              └──  upsert_fk:13 => fk:15
                 ├── scan p2c
                 │    ├── columns: p2c.fk:17
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── fk:14 = p2c.fk:17
 
@@ -1400,7 +1400,7 @@ upsert p2
       │    │    │              └── column1:5
       │    │    ├── scan p2
       │    │    │    ├── columns: p:7!null fk:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── filters
       │    │         └── column2:6 = fk:8
       │    └── projections
@@ -1441,7 +1441,7 @@ upsert p2
  │    │    │    │              └── column1:5
  │    │    │    ├── scan p2
  │    │    │    │    ├── columns: p:7!null p2.fk:8 p2.crdb_internal_mvcc_timestamp:9 p2.tableoid:10
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column2:6 = p2.fk:8
  │    │    └── projections
@@ -1467,7 +1467,7 @@ upsert p2
                 │              └──  upsert_fk:13 => fk:15
                 ├── scan p2c
                 │    ├── columns: p2c.fk:17
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── fk:14 = p2c.fk:17
 
@@ -1504,7 +1504,7 @@ upsert p2
       │    │              └── fk_default:6
       │    ├── scan p2
       │    │    ├── columns: p:7!null fk:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── flags: disabled not visible index feature
+      │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    └── filters
       │         └── column1:5 = p:7
       └── projections
@@ -1553,7 +1553,7 @@ upsert pq
  │    │    │              └── column4:10
  │    │    ├── scan pq
  │    │    │    ├── columns: k:11!null pq.p:12 pq.q:13 pq.other:14 pq.crdb_internal_mvcc_timestamp:15 pq.tableoid:16
- │    │    │    └── flags: disabled not visible index feature
+ │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:7 = k:11
  │    └── projections
@@ -1578,7 +1578,7 @@ upsert pq
       │         │              └──  column3:9 => q:21
       │         ├── scan cpq
       │         │    ├── columns: cpq.p:23 cpq.q:24
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              ├── p:18 = cpq.p:23
       │              └── q:19 = cpq.q:24
@@ -1601,7 +1601,7 @@ upsert pq
                 │              └──  column3:9 => q:31
                 ├── scan cmulti
                 │    ├── columns: b:33!null cmulti.c:34
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── p:28 = b:33
                      └── q:29 = cmulti.c:34
@@ -1640,7 +1640,7 @@ upsert pq
       │    │              └── p_default:8
       │    ├── scan pq
       │    │    ├── columns: k:9!null p:10 q:11 other:12 crdb_internal_mvcc_timestamp:13 tableoid:14
-      │    │    └── flags: disabled not visible index feature
+      │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    └── filters
       │         └── column1:7 = k:9
       └── projections
@@ -1687,7 +1687,7 @@ upsert pq
  │    │    │              └── p_default:9
  │    │    ├── scan pq
  │    │    │    ├── columns: k:10!null pq.p:11 pq.q:12 pq.other:13 pq.crdb_internal_mvcc_timestamp:14 pq.tableoid:15
- │    │    │    └── flags: disabled not visible index feature
+ │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:7 = k:10
  │    └── projections
@@ -1714,7 +1714,7 @@ upsert pq
       │         │              └──  column2:8 => q:22
       │         ├── scan cpq
       │         │    ├── columns: cpq.p:24 cpq.q:25
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              ├── p:19 = cpq.p:24
       │              └── q:20 = cpq.q:25
@@ -1737,7 +1737,7 @@ upsert pq
                 │              └──  column2:8 => q:32
                 ├── scan cmulti
                 │    ├── columns: b:34!null cmulti.c:35
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── p:29 = b:34
                      └── q:30 = cmulti.c:35
@@ -1778,7 +1778,7 @@ upsert pq
       │    │    │              └── column4:10
       │    │    ├── scan pq
       │    │    │    ├── columns: k:11!null p:12 q:13 other:14 crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── filters
       │    │         ├── column2:8 = p:12
       │    │         └── column3:9 = q:13
@@ -1826,7 +1826,7 @@ upsert pq
  │    │    │    │              └── column4:10
  │    │    │    ├── scan pq
  │    │    │    │    ├── columns: k:11!null pq.p:12 pq.q:13 pq.other:14 pq.crdb_internal_mvcc_timestamp:15 pq.tableoid:16
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         ├── column2:8 = pq.p:12
  │    │    │         └── column3:9 = pq.q:13
@@ -1857,7 +1857,7 @@ upsert pq
       │         │              └──  upsert_q:20 => q:25
       │         ├── scan cpq
       │         │    ├── columns: cpq.p:27 cpq.q:28
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              ├── p:22 = cpq.p:27
       │              └── q:23 = cpq.q:28
@@ -1880,7 +1880,7 @@ upsert pq
                 │              └──  upsert_q:20 => q:35
                 ├── scan cmulti
                 │    ├── columns: b:37!null cmulti.c:38
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── p:32 = b:37
                      └── q:33 = cmulti.c:38
@@ -1923,7 +1923,7 @@ upsert pq
       │    │    │              └── column4:10
       │    │    ├── scan pq
       │    │    │    ├── columns: k:11!null p:12 q:13 other:14 crdb_internal_mvcc_timestamp:15 tableoid:16
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── filters
       │    │         └── column1:7 = k:11
       │    └── projections
@@ -1972,7 +1972,7 @@ upsert pq
  │    │    │    │              └── column4:10
  │    │    │    ├── scan pq
  │    │    │    │    ├── columns: k:11!null pq.p:12 pq.q:13 pq.other:14 pq.crdb_internal_mvcc_timestamp:15 pq.tableoid:16
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column1:7 = k:11
  │    │    └── projections
@@ -2002,7 +2002,7 @@ upsert pq
       │         │              └──  upsert_q:20 => q:25
       │         ├── scan cpq
       │         │    ├── columns: cpq.p:27 cpq.q:28
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              ├── p:22 = cpq.p:27
       │              └── q:23 = cpq.q:28
@@ -2025,7 +2025,7 @@ upsert pq
                 │              └──  upsert_q:20 => q:35
                 ├── scan cmulti
                 │    ├── columns: b:37!null cmulti.c:38
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── p:32 = b:37
                      └── q:33 = cmulti.c:38
@@ -2090,7 +2090,7 @@ upsert tab2
  │    │    │              └── column3:8
  │    │    ├── scan tab2
  │    │    │    ├── columns: c:9!null tab2.d:10 tab2.e:11 tab2.crdb_internal_mvcc_timestamp:12 tab2.tableoid:13
- │    │    │    └── flags: disabled not visible index feature
+ │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    └── filters
  │    │         └── column1:6 = c:9
  │    └── projections
@@ -2109,7 +2109,7 @@ upsert tab2
       │         │         └── d:15 IS NOT NULL
       │         ├── scan tab1
       │         │    ├── columns: b:17
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              └── d:15 = b:17
       └── f-k-checks-item: tab3(g) -> tab2(e)
@@ -2129,7 +2129,7 @@ upsert tab2
                 │              └──  column3:8 => e:21
                 ├── scan tab3
                 │    ├── columns: g:23
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── e:20 = g:23
 
@@ -2167,7 +2167,7 @@ upsert tab2
  │    │    │    │              └── column3:8
  │    │    │    ├── scan tab2
  │    │    │    │    ├── columns: c:9!null tab2.d:10 tab2.e:11 tab2.crdb_internal_mvcc_timestamp:12 tab2.tableoid:13
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column1:6 = c:9
  │    │    └── projections
@@ -2190,7 +2190,7 @@ upsert tab2
       │         │         └── d:18 IS NOT NULL
       │         ├── scan tab1
       │         │    ├── columns: b:20
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              └── d:18 = b:20
       └── f-k-checks-item: tab3(g) -> tab2(e)
@@ -2210,7 +2210,7 @@ upsert tab2
                 │              └──  upsert_e:17 => e:24
                 ├── scan tab3
                 │    ├── columns: g:26
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── e:23 = g:26
 
@@ -2249,7 +2249,7 @@ upsert tab2
  │    │    │    │              └── column2:7
  │    │    │    ├── scan tab2
  │    │    │    │    ├── columns: c:9!null tab2.d:10 e:11 tab2.crdb_internal_mvcc_timestamp:12 tab2.tableoid:13
- │    │    │    │    └── flags: disabled not visible index feature
+ │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    │    └── filters
  │    │    │         └── column3:8 = e:11
  │    │    └── projections
@@ -2272,7 +2272,7 @@ upsert tab2
                 │         └── d:18 IS NOT NULL
                 ├── scan tab1
                 │    ├── columns: b:20
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── d:18 = b:20
 
@@ -2325,7 +2325,7 @@ upsert self
  │    │    │              └── w:10
  │    │    ├── scan self
  │    │    │    ├── columns: self.a:14!null self.b:15!null self.c:16 self.d:17 self.crdb_internal_mvcc_timestamp:18 self.tableoid:19
- │    │    │    └── flags: disabled not visible index feature
+ │    │    │    └── flags: avoid-full-scan disabled not visible index feature
  │    │    └── filters
  │    │         ├── x:7 = self.a:14
  │    │         └── y:8 = self.b:15
@@ -2343,7 +2343,7 @@ upsert self
       │         │         └──  upsert_b:21 => b:23
       │         ├── scan self
       │         │    ├── columns: self.b:25!null self.d:27
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              ├── a:22 = self.b:25
       │              └── b:23 = self.d:27
@@ -2360,7 +2360,7 @@ upsert self
       │         │         └── d:30 IS NOT NULL
       │         ├── scan self
       │         │    ├── columns: self.c:33
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              └── d:30 = self.c:33
       ├── f-k-checks-item: self(a,b) -> self(b,d)
@@ -2382,7 +2382,7 @@ upsert self
       │         │              └──  w:10 => d:40
       │         ├── scan self
       │         │    ├── columns: self.a:41!null self.b:42!null
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              ├── b:37 = self.a:41
       │              └── d:38 = self.b:42
@@ -2403,6 +2403,6 @@ upsert self
                 │              └──  z:9 => c:48
                 ├── scan self
                 │    ├── columns: self.d:52
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── c:47 = self.d:52

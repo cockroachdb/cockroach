@@ -13,7 +13,7 @@ import (
 
 func TestCostLess(t *testing.T) {
 	testCases := []struct {
-		left, right memo.Cost
+		left, right float64
 		expected    bool
 	}{
 		{0.0, 1.0, true},
@@ -27,22 +27,36 @@ func TestCostLess(t *testing.T) {
 		{1000, 1000.00000000001, false},
 		{1000, 1000.00001, true},
 	}
+	flagsTestCases := []struct {
+		left, right  memo.CostFlags
+		overrideCost bool
+		expected     bool
+	}{
+		{memo.CostFlags{FullScanPenalty: false}, memo.CostFlags{FullScanPenalty: false}, false, false},
+		{memo.CostFlags{FullScanPenalty: false}, memo.CostFlags{FullScanPenalty: true}, true, true},
+		{memo.CostFlags{FullScanPenalty: true}, memo.CostFlags{FullScanPenalty: false}, true, false},
+		{memo.CostFlags{FullScanPenalty: true}, memo.CostFlags{FullScanPenalty: true}, false, false},
+	}
 	for _, tc := range testCases {
-		if tc.left.Less(tc.right) != tc.expected {
-			t.Errorf("expected %v.Less(%v) to be %v", tc.left, tc.right, tc.expected)
+		left := memo.Cost{Cost: tc.left}
+		right := memo.Cost{Cost: tc.right}
+		if left.Less(right) != tc.expected {
+			t.Errorf("expected %v.Less(%v) to be %v", left, right, tc.expected)
 		}
-	}
-}
 
-func TestCostSub(t *testing.T) {
-	testSub := func(left, right memo.Cost, expected memo.Cost) {
-		actual := left.Sub(right)
-		if actual != expected {
-			t.Errorf("expected %v.Sub(%v) to be %v, got %v", left, right, expected, actual)
+		for _, ftc := range flagsTestCases {
+			left = memo.Cost{Cost: tc.left, Flags: ftc.left}
+			right = memo.Cost{Cost: tc.right, Flags: ftc.right}
+			if ftc.overrideCost {
+				if left.Less(right) != ftc.expected {
+					t.Errorf("expected %v.Less(%v) to be %v", left, right, ftc.expected)
+				}
+			} else {
+				if left.Less(right) != tc.expected {
+					t.Errorf("expected %v.Less(%v) to be %v", left, right, tc.expected)
+				}
+			}
 		}
-	}
 
-	testSub(memo.Cost(10.0), memo.Cost(3.0), memo.Cost(7.0))
-	testSub(memo.Cost(3.0), memo.Cost(10.0), memo.Cost(-7.0))
-	testSub(memo.Cost(10.0), memo.Cost(10.0), memo.Cost(0.0))
+	}
 }

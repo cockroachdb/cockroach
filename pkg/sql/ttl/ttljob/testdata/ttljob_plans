@@ -108,23 +108,14 @@ check-plan builder=delete table=p overrides=ReorderJoinsLimit=0
     └── • delete
         │ from: c
         │
-        └── • merge join
+        └── • hash join (semi)
             │ equality: (p_id) = (id)
-            │ right cols are key
             │
             ├── • scan
             │     missing stats
-            │     table: c@c_p_id_idx
+            │     table: c@c_pkey
             │     spans: FULL SCAN
             │
-            └── • sort
-                │ estimated row count: 10
-                │ order: +id
-                │
-                └── • distinct
-                    │ estimated row count: 10
-                    │ distinct on: id
-                    │
-                    └── • scan buffer
-                          estimated row count: 100
-                          label: buffer 1000000
+            └── • scan buffer
+                  estimated row count: 100
+                  label: buffer 1000000

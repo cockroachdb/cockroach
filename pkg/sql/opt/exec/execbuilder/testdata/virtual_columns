@@ -1296,50 +1296,50 @@ vectorized: true
         │ render v: v
         │ render w: w
         │
-        └── • hash join (right outer)
-            │ columns: (v, w, a, b, c, v_comp, w_comp, column1, column2, column3)
+        └── • hash join (left outer)
+            │ columns: (v_comp, w_comp, column1, column2, column3, v, w, a, b, c)
             │ estimated row count: 20 (missing stats)
-            │ equality: (w) = (w_comp)
-            │ right cols are key
+            │ equality: (w_comp) = (w)
+            │ left cols are key
             │
-            ├── • render
-            │   │ columns: (v, w, a, b, c)
-            │   │ render v: a + b
-            │   │ render w: c + 1
-            │   │ render a: a
-            │   │ render b: b
-            │   │ render c: c
+            ├── • distinct
+            │   │ columns: (v_comp, w_comp, column1, column2, column3)
+            │   │ estimated row count: 2
+            │   │ distinct on: w_comp
+            │   │ nulls are distinct
+            │   │ error on duplicate
             │   │
-            │   └── • scan
-            │         columns: (a, b, c)
-            │         estimated row count: 1,000 (missing stats)
-            │         table: t_idx@t_idx_pkey
-            │         spans: FULL SCAN
+            │   └── • render
+            │       │ columns: (v_comp, w_comp, column1, column2, column3)
+            │       │ render v_comp: column1 + column2
+            │       │ render w_comp: column3 + 1
+            │       │ render column1: column1
+            │       │ render column2: column2
+            │       │ render column3: column3
+            │       │
+            │       └── • values
+            │             columns: (column1, column2, column3)
+            │             size: 3 columns, 2 rows
+            │             row 0, expr 0: 8
+            │             row 0, expr 1: 80
+            │             row 0, expr 2: 800
+            │             row 1, expr 0: 10
+            │             row 1, expr 1: 100
+            │             row 1, expr 2: 700
             │
-            └── • distinct
-                │ columns: (v_comp, w_comp, column1, column2, column3)
-                │ estimated row count: 2
-                │ distinct on: w_comp
-                │ nulls are distinct
-                │ error on duplicate
+            └── • render
+                │ columns: (v, w, a, b, c)
+                │ render v: a + b
+                │ render w: c + 1
+                │ render a: a
+                │ render b: b
+                │ render c: c
                 │
-                └── • render
-                    │ columns: (v_comp, w_comp, column1, column2, column3)
-                    │ render v_comp: column1 + column2
-                    │ render w_comp: column3 + 1
-                    │ render column1: column1
-                    │ render column2: column2
-                    │ render column3: column3
-                    │
-                    └── • values
-                          columns: (column1, column2, column3)
-                          size: 3 columns, 2 rows
-                          row 0, expr 0: 8
-                          row 0, expr 1: 80
-                          row 0, expr 2: 800
-                          row 1, expr 0: 10
-                          row 1, expr 1: 100
-                          row 1, expr 2: 700
+                └── • scan
+                      columns: (a, b, c)
+                      estimated row count: 1,000 (missing stats)
+                      table: t_idx@t_idx_pkey
+                      spans: FULL SCAN
 
 subtest Checks
 

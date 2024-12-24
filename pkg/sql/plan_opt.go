@@ -567,7 +567,7 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 	opc.flags.Set(planFlagOptimized)
 	mem := f.Memo()
 	if prep := opc.p.stmt.Prepared; opc.allowMemoReuse && prep != nil {
-		prep.Costs.AddCustom(mem.RootExpr().(memo.RelExpr).Cost() + mem.OptimizationCost())
+		prep.Costs.AddCustom(memo.Cost{Cost: mem.RootExpr().(memo.RelExpr).Cost().Cost + mem.OptimizationCost().Cost})
 	}
 	return mem, nil
 }
@@ -611,7 +611,7 @@ func (opc *optPlanningCtx) buildNonIdealGenericPlan() bool {
 		//   2. Or, the cost of the generic plan is less than or equal to the
 		//      average cost of the custom plans.
 		//
-		return prep.Costs.Generic() == 0 || prep.Costs.Generic() < prep.Costs.AvgCustom()
+		return prep.Costs.Generic().Cost == 0 || prep.Costs.Generic().Cost < prep.Costs.AvgCustom().Cost
 	default:
 		return false
 	}
@@ -924,7 +924,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if gf != nil {
 		planTop.instrumentation.planGist = gf.PlanGist()
 	}
-	planTop.instrumentation.costEstimate = float64(mem.RootExpr().(memo.RelExpr).Cost())
+	planTop.instrumentation.costEstimate = mem.RootExpr().(memo.RelExpr).Cost().Cost
 	available := mem.RootExpr().(memo.RelExpr).Relational().Statistics().Available
 	planTop.instrumentation.statsAvailable = available
 	if available {

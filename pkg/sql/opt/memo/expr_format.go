@@ -514,6 +514,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			if private.Flags.NoFullScan {
 				b.WriteString(" no-full-scan")
 			}
+			if private.Flags.AvoidFullScan {
+				b.WriteString(" avoid-full-scan")
+			}
 			if private.Flags.ForceZigzag {
 				if private.Flags.ZigzagIndexes.Empty() {
 					b.WriteString(" force-zigzag")
@@ -857,8 +860,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	if !f.HasFlags(ExprFmtHideCost) {
 		cost := e.Cost()
-		if cost != 0 {
-			tp.Childf("cost: %.9g", cost)
+		if cost.Cost != 0 {
+			tp.Childf("cost: %.9g", cost.Cost)
 		}
 	}
 
