@@ -303,7 +303,7 @@ select
 memo
 SELECT * FROM t WHERE g IS NULL OR st_intersects('LINESTRING(100 100, 150 150)', g)
 ----
-memo (optimized, ~5KB, required=[presentation: i:1,g:2])
+memo (optimized, ~6KB, required=[presentation: i:1,g:2])
  ├── G1: (select G2 G3)
  │    └── [presentation: i:1,g:2]
  │         ├── best: (select G2 G3)
