@@ -50,9 +50,8 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 	sqlUser, err := username.MakeSQLUsernameFromUserInput("root", username.PurposeValidation)
 	require.NoError(t, err)
 
-	extractCatalog := func() externalpb.ExternalCatalog {
-		var catalog externalpb.ExternalCatalog
-		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	extractCatalog := func(tableNames ...string) (catalog externalpb.ExternalCatalog, err error) {
+		err = sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			opName := redact.SafeString("extractCatalog")
 			planner, close := sql.NewInternalPlanner(
 				opName,
@@ -64,50 +63,83 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 			)
 			defer close()
 
-			catalog, err = ExtractExternalCatalog(ctx, planner.(resolver.SchemaResolver), txn, col, "db1.sc1.tab1", "db1.sc1.tab2")
-			require.NoError(t, err)
-			return nil
-		}))
-
-		return catalog
+			catalog, err = ExtractExternalCatalog(ctx, planner.(resolver.SchemaResolver), txn, col, tableNames...)
+			return err
+		})
+		return catalog, err
 	}
 
-	ingestableCatalog := extractCatalog()
-	require.NoError(t, err)
-	require.Equal(t, 2, len(ingestableCatalog.Tables))
+	getDatabaseSchemaIDs := func(database string) (descpb.ID, descpb.ID) {
+		var parentID descpb.ID
+		var schemaID descpb.ID
+		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, database)
+			require.NoError(t, err)
+			parentID = dbDesc.GetID()
+			schemaID, err = col.LookupSchemaID(ctx, txn.KV(), parentID, catconstants.PublicSchemaName)
+			return err
+		}))
+		return parentID, schemaID
+	}
 
-	// Extract the same tables but note that tab1 now has a back reference.
-	sqlDB.Exec(t, "CREATE TABLE db1.sc1.tab3 (a INT PRIMARY KEY, b INT REFERENCES db1.sc1.tab2(a))")
-	sadCatalog := extractCatalog()
+	defaultdbID, defaultdbpublicID := getDatabaseSchemaIDs("defaultdb")
 
-	// Modify table 1 to have a udt column
-	sqlDB.Exec(t, "CREATE TYPE db1.sc1.udt AS ENUM ('a', 'b', 'c')")
-	sqlDB.Exec(t, "ALTER TABLE db1.sc1.tab1 ADD COLUMN c db1.sc1.udt")
-	udtCatalog := extractCatalog()
-	require.Equal(t, "udt", udtCatalog.Types[0].Name)
-	require.Equal(t, "_udt", udtCatalog.Types[1].Name)
-
-	// Ingest the catalog into defaultdb.
-	var parentID descpb.ID
-	var schemaID descpb.ID
-	require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "defaultdb")
+	t.Run("basic", func(t *testing.T) {
+		ingestableCatalog, err := extractCatalog("db1.sc1.tab1", "db1.sc1.tab2")
 		require.NoError(t, err)
-		parentID = dbDesc.GetID()
-		schemaID, err = col.LookupSchemaID(ctx, txn.KV(), parentID, catconstants.PublicSchemaName)
-		return err
-	}))
+		require.Equal(t, 2, len(ingestableCatalog.Tables))
 
-	require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, parentID, schemaID, false)
-		return err
-	}), "invalid inbound foreign key")
+		var written []catalog.Descriptor
+		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			written, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
+			return err
+		}))
+		require.Equal(t, 2, len(written))
+		sqlDB.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2"}})
 
-	var written []catalog.Descriptor
-	require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		written, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, ingestableCatalog, txn, col, parentID, schemaID, false)
-		return err
-	}))
-	require.Equal(t, 2, len(written))
-	sqlDB.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2"}})
+	})
+
+	t.Run("udt", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE TYPE db1.udt AS ENUM ('a', 'b', 'c')")
+		sqlDB.Exec(t, "CREATE TABLE db1.data (pk INT PRIMARY KEY, val1 db1.udt)")
+		udtCatalog, err := extractCatalog("db1.data")
+		require.NoError(t, err)
+		require.Equal(t, "udt", udtCatalog.Types[0].Name)
+		require.Equal(t, "_udt", udtCatalog.Types[1].Name)
+
+		// my hunch is THIS SHOULD NOT SUCCEED. It seems we can insert this table
+		// into defaultdb with a reference to a type in db1! if you uncomment the
+		// drop commands above, the command below then fails as the og type is
+		// missing. TODO: ask schema if this this is a bug on their end. If not, i
+		// think IngestExternalCatalog should fail if anything hangs off of the
+		// table descriptor.
+		var written []catalog.Descriptor
+		require.NoError(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			written, err = IngestExternalCatalog(ctx, &execCfg, sqlUser, udtCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
+			return err
+		}))
+		require.Equal(t, 1, len(written))
+		sqlDB.Exec(t, "DROP TABLE db1.data")
+		sqlDB.Exec(t, "DROP TYPE db1.udt")
+		sqlDB.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2"}, {"public", "data"}})
+		sqlDB.Exec(t, "INSERT INTO defaultdb.data VALUES (1, 'a')")
+		sqlDB.CheckQueryResults(t, "SELECT * FROM defaultdb.data", [][]string{{"1", "a"}})
+	})
+
+	t.Run("fk", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE TABLE db1.sc1.tab3 (a INT PRIMARY KEY, b INT REFERENCES db1.sc1.tab2(a))")
+		sadCatalog, err := extractCatalog("db1.sc1.tab3")
+		require.NoError(t, err)
+		require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, sadCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
+			return err
+		}), "invalid outbound foreign key")
+
+		anotherSadCatalog, err := extractCatalog("db1.sc1.tab2")
+		require.NoError(t, err)
+		require.ErrorContains(t, sql.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			_, err := IngestExternalCatalog(ctx, &execCfg, sqlUser, anotherSadCatalog, txn, col, defaultdbID, defaultdbpublicID, false)
+			return err
+		}), "invalid inbound foreign key")
+	})
 }
