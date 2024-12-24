@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "checkpoint",
+    srcs = ["checkpoint.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/span",
+    ],
+)
+
+go_test(
+    name = "checkpoint_test",
+    srcs = ["checkpoint_test.go"],
+    deps = [
+        ":checkpoint",
+        "//pkg/ccl/changefeedccl/changefeedbase",
+        "//pkg/jobs/jobspb",
+        "//pkg/kv/kvserver/rangefeed",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/shuffle",
+        "//pkg/util/span",
+        "@com_github_stretchr_testify//require",
+    ],
+)
