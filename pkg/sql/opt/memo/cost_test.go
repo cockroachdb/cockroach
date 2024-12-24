@@ -16,16 +16,16 @@ func TestCostLess(t *testing.T) {
 		left, right memo.Cost
 		expected    bool
 	}{
-		{0.0, 1.0, true},
-		{0.0, 1e-20, true},
-		{0.0, 0.0, false},
-		{1.0, 0.0, false},
-		{1e-20, 1.0000000000001e-20, false},
-		{1e-20, 1.000001e-20, true},
-		{1, 1.00000000000001, false},
-		{1, 1.00000001, true},
-		{1000, 1000.00000000001, false},
-		{1000, 1000.00001, true},
+		{memo.Cost{Cost: 0.0}, memo.Cost{Cost: 1.0}, true},
+		{memo.Cost{Cost: 0.0}, memo.Cost{Cost: 1e-20}, true},
+		{memo.Cost{Cost: 0.0}, memo.Cost{Cost: 0.0}, false},
+		{memo.Cost{Cost: 1.0}, memo.Cost{Cost: 0.0}, false},
+		{memo.Cost{Cost: 1e-20}, memo.Cost{Cost: 1.0000000000001e-20}, false},
+		{memo.Cost{Cost: 1e-20}, memo.Cost{Cost: 1.000001e-20}, true},
+		{memo.Cost{Cost: 1}, memo.Cost{Cost: 1.00000000000001}, false},
+		{memo.Cost{Cost: 1}, memo.Cost{Cost: 1.00000001}, true},
+		{memo.Cost{Cost: 1000}, memo.Cost{Cost: 1000.00000000001}, false},
+		{memo.Cost{Cost: 1000}, memo.Cost{Cost: 1000.00001}, true},
 	}
 	for _, tc := range testCases {
 		if tc.left.Less(tc.right) != tc.expected {
@@ -34,15 +34,20 @@ func TestCostLess(t *testing.T) {
 	}
 }
 
-func TestCostSub(t *testing.T) {
-	testSub := func(left, right memo.Cost, expected memo.Cost) {
-		actual := left.Sub(right)
-		if actual != expected {
-			t.Errorf("expected %v.Sub(%v) to be %v, got %v", left, right, expected, actual)
-		}
+func TestCostAdd(t *testing.T) {
+	testCases := []struct {
+		left, right, expected memo.Cost
+	}{
+		{memo.Cost{Cost: 1.0}, memo.Cost{Cost: 2.0}, memo.Cost{Cost: 3.0}},
+		{memo.Cost{Cost: 0.0}, memo.Cost{Cost: 0.0}, memo.Cost{Cost: 0.0}},
+		{memo.Cost{Cost: -1.0}, memo.Cost{Cost: 1.0}, memo.Cost{Cost: 0.0}},
+		{memo.Cost{Cost: 1.5}, memo.Cost{Cost: 2.5}, memo.Cost{Cost: 4.0}},
 	}
 
-	testSub(memo.Cost(10.0), memo.Cost(3.0), memo.Cost(7.0))
-	testSub(memo.Cost(3.0), memo.Cost(10.0), memo.Cost(-7.0))
-	testSub(memo.Cost(10.0), memo.Cost(10.0), memo.Cost(0.0))
+	for _, tc := range testCases {
+		tc.left.Add(tc.right)
+		if tc.left != tc.expected {
+			t.Errorf("expected %v.Add(%v) to be %v, got %v", tc.left, tc.right, tc.expected, tc.left)
+		}
+	}
 }
