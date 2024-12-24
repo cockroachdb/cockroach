@@ -211,7 +211,7 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 		ScanPrivate: newPrivate,
 	}
 	placeholderScan = o.mem.AddPlaceholderScanToGroup(placeholderScan, root)
-	o.mem.SetBestProps(placeholderScan, rootPhysicalProps, &physical.Provided{}, 1.0 /* cost */)
+	o.mem.SetBestProps(placeholderScan, rootPhysicalProps, &physical.Provided{}, memo.Cost{C: 1.0})
 	o.mem.SetRoot(placeholderScan, rootPhysicalProps)
 
 	if buildutil.CrdbTestBuild && !o.mem.IsOptimized() {
