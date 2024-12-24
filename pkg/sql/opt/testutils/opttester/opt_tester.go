@@ -1815,7 +1815,7 @@ func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) 
 		ot.separator("=")
 		ot.output(format, args...)
 		if rel, ok := e.(memo.RelExpr); ok {
-			ot.output("  Cost: %.2f\n", rel.Cost())
+			ot.output("  Cost: %.2f\n", rel.Cost().C)
 		} else {
 			ot.output("\n")
 		}
