@@ -716,7 +716,7 @@ upsert bc
 query T
 EXPLAIN (OPT, MEMO, REDACT) INSERT INTO bc SELECT a::float + 1 FROM a ON CONFLICT (b) DO UPDATE SET b = bc.b + 100
 ----
-memo (optimized, ~34KB, required=[presentation: info:25] [distribution: test])
+memo (optimized, ~35KB, required=[presentation: info:25] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:25] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -1156,7 +1156,7 @@ update ab
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
 ----
-memo (optimized, ~13KB, required=[presentation: info:15] [distribution: test])
+memo (optimized, ~14KB, required=[presentation: info:15] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:15] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -3825,7 +3825,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
 ----
-memo (optimized, ~11KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~12KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: min:8] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: min:8] [distribution: test]" [presentation: min:8] [distribution: test])
