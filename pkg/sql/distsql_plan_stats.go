@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -300,8 +301,13 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "multi-column partial statistics are not currently supported")
 	}
 
+	var typeResolver *descs.DistSQLTypeResolver
+	if p := planCtx.planner; p != nil {
+		r := descs.NewDistSQLTypeResolver(p.Descriptors(), p.Txn())
+		typeResolver = &r
+	}
 	// Fetch all stats for the table that matches the given table descriptor.
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
 	if err != nil {
 		return nil, err
 	}
@@ -690,7 +696,12 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		}
 	}
 
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc)
+	var typeResolver *descs.DistSQLTypeResolver
+	if p := planCtx.planner; p != nil {
+		r := descs.NewDistSQLTypeResolver(p.Descriptors(), p.Txn())
+		typeResolver = &r
+	}
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
 	if err != nil {
 		return nil, err
 	}
