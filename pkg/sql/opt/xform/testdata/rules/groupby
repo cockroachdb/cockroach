@@ -1892,7 +1892,7 @@ memo (optimized, ~15KB, required=[presentation: array_agg:7])
 memo
 SELECT sum(k) FROM (SELECT * FROM kuvw WHERE u=v) GROUP BY u,w
 ----
-memo (optimized, ~15KB, required=[presentation: sum:7])
+memo (optimized, ~16KB, required=[presentation: sum:7])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:7]
  │         ├── best: (project G2 G3 sum)

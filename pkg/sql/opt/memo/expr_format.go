@@ -846,8 +846,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	if !f.HasFlags(ExprFmtHideCost) {
 		cost := e.Cost()
-		if cost != 0 {
-			tp.Childf("cost: %.9g", cost)
+		if cost.C != 0 {
+			tp.Childf("cost: %.9g", cost.C)
 		}
 	}
 
