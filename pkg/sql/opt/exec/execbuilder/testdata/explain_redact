@@ -1140,7 +1140,7 @@ update ab
 query T
 EXPLAIN (OPT, MEMO, REDACT) UPDATE ab SET a = a || 'ab' WHERE a > 'a'
 ----
-memo (optimized, ~13KB, required=[presentation: info:11] [distribution: test])
+memo (optimized, ~14KB, required=[presentation: info:11] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:11] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -3807,7 +3807,7 @@ project
 query T
 EXPLAIN (OPT, MEMO, REDACT) SELECT min(c || 'cccc') OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING EXCLUDE CURRENT ROW) FROM cd
 ----
-memo (optimized, ~11KB, required=[presentation: info:8] [distribution: test])
+memo (optimized, ~12KB, required=[presentation: info:8] [distribution: test])
  ├── G1: (explain G2 [presentation: min:6] [distribution: test])
  │    └── [presentation: info:8] [distribution: test]
  │         ├── best: (explain G2="[presentation: min:6] [distribution: test]" [presentation: min:6] [distribution: test])
