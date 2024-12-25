@@ -1428,7 +1428,7 @@ func createImportingDescriptors(
 							txn.KV(),
 							desc.GetID(),
 							descsCol,
-							sql.SynthesizeRegionConfigOptionIncludeOffline,
+							multiregion.SynthesizeRegionConfigOptionIncludeOffline,
 						)
 						if err != nil {
 							return err
