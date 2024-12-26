@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/docs"
@@ -1407,7 +1408,7 @@ func reconcileJobStateWithLocalState(
 	}
 
 	maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Get(&execCfg.Settings.SV)
-	checkpointSpans, checkpointTS := getCheckpointSpans(sf.Frontier(), func(forEachSpan span.Operation) {
+	checkpoint := checkpoint.Make(sf.Frontier(), func(forEachSpan span.Operation) {
 		for _, fs := range localState.aggregatorFrontier {
 			forEachSpan(fs.Span, fs.Timestamp)
 		}
@@ -1415,13 +1416,13 @@ func reconcileJobStateWithLocalState(
 
 	// Update checkpoint.
 	updateHW := highWater.Less(sf.Frontier())
-	updateSpanCheckpoint := len(checkpointSpans) > 0
+	updateSpanCheckpoint := len(checkpoint.Spans) > 0
 
 	if updateHW || updateSpanCheckpoint {
 		if updateHW {
 			localState.SetHighwater(sf.Frontier())
 		}
-		localState.SetCheckpoint(checkpointSpans, checkpointTS)
+		localState.SetCheckpoint(checkpoint)
 		if log.V(1) {
 			log.Infof(ctx, "Applying checkpoint to job record:  hw=%v, cf=%v",
 				localState.progress.GetHighWater(), localState.progress.GetChangefeed())
