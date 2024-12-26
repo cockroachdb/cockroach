@@ -241,7 +241,8 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 			"SELECT 1, 2, 3",
 			"CREATE TABLE IF NOT EXISTS foo (x INT)",
 			"SELECT * FROM foo",
-			// An explicit txn results in the queries inside being recorded as 'new' statements.
+			// Since the sampling key does not include the txn fingerprint, no
+			// statements in this txn should be sampled.
 			"BEGIN; SELECT 1; COMMIT;",
 		}
 
@@ -251,10 +252,11 @@ func TestSampledStatsCollectionOnNewFingerprint(t *testing.T) {
 
 		require.Equal(t, len(queries), len(collectedTxnStats))
 
-		// We should have collected stats for each of the queries.
-		for i := range collectedTxnStats {
+		// We should have collected stats for each of the queries except the last.
+		for i := range collectedTxnStats[:len(queries)-1] {
 			require.True(t, collectedTxnStats[i].CollectedExecStats)
 		}
+		require.False(t, collectedTxnStats[len(queries)-1].CollectedExecStats)
 	})
 
 	collectedTxnStats = nil
