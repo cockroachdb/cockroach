@@ -45,6 +45,9 @@ func alterTableAddColumn(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, stmt tree.Statement, t *tree.AlterTableAddColumn,
 ) {
 	d := t.ColumnDef
+	if t.ColumnDef.Unique.IsUnique {
+		panicIfRegionChangeUnderwayOnRBRTable(b, "add a UNIQUE COLUMN", tbl.TableID)
+	}
 	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
 
 	// Check column non-existence.
