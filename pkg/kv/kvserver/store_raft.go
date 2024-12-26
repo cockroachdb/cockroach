@@ -745,6 +745,12 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	if elapsed >= defaultReplicaRaftMuWarnThreshold {
 		log.Infof(ctx, "%s; node might be overloaded", stats)
 	}
+	// If it is 3x the warn threshold, also take a flight recorder snapshot.
+	if elapsed >= 3*defaultReplicaRaftMuWarnThreshold {
+		if s.db.Tracer.FlightRecorderSnapshot() {
+			log.Warning(ctx, "took a flight recorder snapshot")
+		}
+	}
 }
 
 func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
