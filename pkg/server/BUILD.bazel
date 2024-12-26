@@ -247,6 +247,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/querycache",
         "//pkg/sql/rangeprober",
+        "//pkg/sql/regions",
         "//pkg/sql/rolemembershipcache",
         "//pkg/sql/roleoption",
         "//pkg/sql/scheduledlogging",

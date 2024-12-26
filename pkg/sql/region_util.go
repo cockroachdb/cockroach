@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1407,12 +1408,6 @@ func (p *planner) CurrentDatabaseRegionConfig(
 	)
 }
 
-// ErrNotMultiRegionDatabase is returned from SynthesizeRegionConfig when the
-// requested database is not a multi-region database.
-var ErrNotMultiRegionDatabase = errors.New(
-	"database is not a multi-region database",
-)
-
 // SynthesizeRegionConfig returns a RegionConfig representing the user
 // configured state of a multi-region database by coalescing state from both
 // the database descriptor and multi-region type descriptor. By default, it
@@ -1424,19 +1419,7 @@ func SynthesizeRegionConfig(
 	descsCol *descs.Collection,
 	opts ...multiregion.SynthesizeRegionConfigOption,
 ) (multiregion.RegionConfig, error) {
-	var o multiregion.SynthesizeRegionConfigOptions
-	for _, opt := range opts {
-		opt(&o)
-	}
-
-	dbDesc, regionEnumDesc, err := getDBAndRegionEnumDescs(
-		ctx, txn, dbID, descsCol, o.UseCache, o.IncludeOffline,
-	)
-	if err != nil {
-		return multiregion.RegionConfig{}, err
-	}
-
-	return multiregion.SynthesizeRegionConfig(regionEnumDesc, dbDesc, o)
+	return regions.SynthesizeRegionConfigInTxn(ctx, txn, dbID, descsCol, opts...)
 }
 
 // GetLocalityRegionEnumPhysicalRepresentation returns the physical
@@ -1528,7 +1511,7 @@ func getDBAndRegionEnumDescs(
 		return nil, nil, err
 	}
 	if !dbDesc.IsMultiRegion() {
-		return nil, nil, ErrNotMultiRegionDatabase
+		return nil, nil, regions.ErrNotMultiRegionDatabase
 	}
 	regionEnumID, err := dbDesc.MultiRegionEnumID()
 	if err != nil {
