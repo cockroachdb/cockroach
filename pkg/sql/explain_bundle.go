@@ -599,6 +599,10 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	collectDBAndSchemaNames(tables)
 	collectDBAndSchemaNames(sequences)
 	collectDBAndSchemaNames(views)
+	// TODO(138024): we need to also collect DBs and schemas for UDTs and
+	// routines.
+	// TODO(138022): we need to collect DBs and schemas for transitive
+	// dependencies.
 
 	// Note: we do not shortcut out of this function if there is no table/sequence/view to report:
 	// the bundle analysis tool require schema.sql to always be present, even if it's empty.
@@ -610,20 +614,22 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		}
 	}
 	blankLine()
-	c.printCreateAllDatabases(&buf, dbNames)
-	if err := c.printCreateAllSchemas(&buf, schemaNames); err != nil {
+	if err = c.printCreateAllDatabases(&buf, dbNames); err != nil {
+		b.printError(fmt.Sprintf("-- error getting all databases: %v", err), &buf)
+	}
+	if err = c.printCreateAllSchemas(&buf, schemaNames); err != nil {
 		b.printError(fmt.Sprintf("-- error getting all schemas: %v", err), &buf)
 	}
 	for i := range sequences {
 		blankLine()
-		if err := c.PrintCreateSequence(&buf, &sequences[i]); err != nil {
+		if err = c.PrintCreateSequence(&buf, &sequences[i]); err != nil {
 			b.printError(fmt.Sprintf("-- error getting schema for sequence %s: %v", sequences[i].FQString(), err), &buf)
 		}
 	}
 	// Get all relevant user-defined types.
 	for _, t := range mem.Metadata().AllUserDefinedTypes() {
 		blankLine()
-		if err := c.PrintCreateUDT(&buf, t.Oid(), b.flags.RedactValues); err != nil {
+		if err = c.PrintCreateUDT(&buf, t.Oid(), b.flags.RedactValues); err != nil {
 			b.printError(fmt.Sprintf("-- error getting schema for type %s: %v", t.SQLStringForError(), err), &buf)
 		}
 	}
@@ -652,13 +658,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	for i := range tables {
 		blankLine()
-		if err := c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
+		if err = c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
 			b.printError(fmt.Sprintf("-- error getting schema for table %s: %v", tables[i].FQString(), err), &buf)
 		}
 	}
 	for i := range views {
 		blankLine()
-		if err := c.PrintCreateView(&buf, &views[i], b.flags.RedactValues); err != nil {
+		if err = c.PrintCreateView(&buf, &views[i], b.flags.RedactValues); err != nil {
 			b.printError(fmt.Sprintf("-- error getting schema for view %s: %v", views[i].FQString(), err), &buf)
 		}
 	}
@@ -669,7 +675,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	for i := range tables {
 		buf.Reset()
 		hideHistograms := b.flags.RedactValues
-		if err := c.PrintTableStats(&buf, &tables[i], hideHistograms); err != nil {
+		if err = c.PrintTableStats(&buf, &tables[i], hideHistograms); err != nil {
 			b.printError(fmt.Sprintf("-- error getting statistics for table %s: %v", tables[i].FQString(), err), &buf)
 		}
 		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].FQString()), buf.String())
@@ -715,11 +721,16 @@ func makeStmtEnvCollector(ctx context.Context, p *planner, ie *InternalExecutor)
 // query is a helper to run a query that returns a single string value. It
 // returns an error if the query didn't return exactly one row.
 func (c *stmtEnvCollector) query(query string) (string, error) {
-	return c.queryEx(query, false /* emptyOk */)
+	res, err := c.queryEx(query, 1 /* numCols */, false /* emptyOk */)
+	if err != nil {
+		return "", err
+	}
+	return res[0], nil
 }
 
-// queryEx is the same as query but allows no rows to be returned.
-func (c *stmtEnvCollector) queryEx(query string, emptyOk bool) (string, error) {
+// queryEx is a helper to run a query that returns a single row of numCols
+// string values. emptyOk specifies whether no rows are allowed to be returned.
+func (c *stmtEnvCollector) queryEx(query string, numCols int, emptyOk bool) ([]string, error) {
 	row, err := c.ie.QueryRowEx(
 		c.ctx,
 		"stmtEnvCollector",
@@ -728,31 +739,35 @@ func (c *stmtEnvCollector) queryEx(query string, emptyOk bool) (string, error) {
 		query,
 	)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	res := make([]string, numCols)
 	if row == nil {
 		// The query returned no rows.
 		if emptyOk {
-			return "", nil
+			return res, nil
 		}
-		return "", errors.AssertionFailedf(
+		return nil, errors.AssertionFailedf(
 			"expected env query %q to return one row, returned none", query,
 		)
 	}
-	if len(row) != 1 {
-		return "", errors.AssertionFailedf(
-			"expected env query %q to return a single column, returned %d",
-			query, len(row),
+	if len(row) != numCols {
+		return nil, errors.AssertionFailedf(
+			"expected env query %q to return %d columns, returned %d",
+			query, numCols, len(row),
 		)
 	}
-	s, ok := row[0].(*tree.DString)
-	if !ok {
-		return "", errors.AssertionFailedf(
-			"expected env query %q to return a DString, returned %T",
-			query, row[0],
-		)
+	for i := range res {
+		s, ok := row[i].(*tree.DString)
+		if !ok {
+			return nil, errors.AssertionFailedf(
+				"expected env query %q to return a DString, returned %T",
+				query, row[i],
+			)
+		}
+		res[i] = string(*s)
 	}
-	return string(*s), nil
+	return res, nil
 }
 
 var testingOverrideExplainEnvVersion string
@@ -960,9 +975,28 @@ func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer, all bool) error {
 	return nil
 }
 
+func getDBName(tn *tree.TableName) (string, error) {
+	parts := strings.Split(tn.FQString(), ".")
+	if len(parts) < 3 {
+		return "", errors.AssertionFailedf("expected at least three parts in fully-qualified name %s", tn.FQString())
+	}
+	return parts[0], nil
+}
+
+func printCreateStatement(w io.Writer, dbName, createStatement string) {
+	// TODO(138015): this might require an adjustment when the DB name has
+	// special characters.
+	fmt.Fprintf(w, "USE %s;\n", dbName)
+	fmt.Fprintf(w, "%s;\n", createStatement)
+}
+
 func (c *stmtEnvCollector) PrintCreateTable(
 	w io.Writer, tn *tree.TableName, redactValues bool,
 ) error {
+	dbName, err := getDBName(tn)
+	if err != nil {
+		return err
+	}
 	var formatOption string
 	if redactValues {
 		formatOption = " WITH REDACT"
@@ -970,42 +1004,43 @@ func (c *stmtEnvCollector) PrintCreateTable(
 	createStatement, err := c.query(
 		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s%s]", tn.FQString(), formatOption),
 	)
-	// We need to replace schema.table_name in the create statement with the fully
-	// qualified table name.
-	createStatement = strings.Replace(createStatement,
-		fmt.Sprintf("%s.%s", tn.SchemaName, tn.Table()), tn.FQString(), 1)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%s;\n", createStatement)
+	printCreateStatement(w, dbName, createStatement)
 	return nil
 }
 
 func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) error {
+	dbName, err := getDBName(tn)
+	if err != nil {
+		return err
+	}
 	createStatement, err := c.query(fmt.Sprintf(
 		"SELECT create_statement FROM [SHOW CREATE SEQUENCE %s]", tn.FQString(),
 	))
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%s;\n", createStatement)
+	printCreateStatement(w, dbName, createStatement)
 	return nil
 }
 
 func (c *stmtEnvCollector) PrintCreateUDT(w io.Writer, id oid.Oid, redactValues bool) error {
 	descID := catid.UserDefinedOIDToID(id)
-	query := fmt.Sprintf("SELECT create_statement FROM crdb_internal.create_type_statements WHERE descriptor_id = %d", descID)
+	// Use "".crdb_internal to allow for cross-DB lookups.
+	query := fmt.Sprintf(`SELECT database_name, create_statement FROM "".crdb_internal.create_type_statements WHERE descriptor_id = %d::OID`, descID)
 	if redactValues {
-		query = fmt.Sprintf("SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)", query)
+		query = fmt.Sprintf("SELECT database_name, crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)", query)
 	}
 	// Implicit crdb_internal_region type won't be found via the vtable, so we
 	// allow empty result.
-	createStatement, err := c.queryEx(query, true /* emptyOk */)
+	res, err := c.queryEx(query, 2 /* numCols */, true /* emptyOk */)
 	if err != nil {
 		return err
 	}
-	if createStatement != "" {
-		fmt.Fprintf(w, "%s;\n", createStatement)
+	if res[0] != "" {
+		printCreateStatement(w, res[0] /* dbName */, res[1] /* createStatement */)
 	}
 	return nil
 }
@@ -1015,7 +1050,8 @@ func (c *stmtEnvCollector) PrintCreateRoutine(
 ) error {
 	var createRoutineQuery string
 	descID := catid.UserDefinedOIDToID(id)
-	queryTemplate := "SELECT create_statement FROM crdb_internal.create_%[1]s_statements WHERE %[1]s_id = %[2]d"
+	// Use "".crdb_internal to allow for cross-DB lookups.
+	queryTemplate := `SELECT database_name, create_statement FROM "".crdb_internal.create_%[1]s_statements WHERE %[1]s_id = %[2]d::OID`
 	if procedure {
 		createRoutineQuery = fmt.Sprintf(queryTemplate, "procedure", descID)
 	} else {
@@ -1023,21 +1059,25 @@ func (c *stmtEnvCollector) PrintCreateRoutine(
 	}
 	if redactValues {
 		createRoutineQuery = fmt.Sprintf(
-			"SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)",
+			"SELECT database_name, crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM (%s)",
 			createRoutineQuery,
 		)
 	}
-	createStatement, err := c.query(createRoutineQuery)
+	res, err := c.queryEx(createRoutineQuery, 2 /* numCols */, false /* emptyOk */)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%s;\n", createStatement)
+	printCreateStatement(w, res[0] /* dbName */, res[1] /* createStatement */)
 	return nil
 }
 
 func (c *stmtEnvCollector) PrintCreateView(
 	w io.Writer, tn *tree.TableName, redactValues bool,
 ) error {
+	dbName, err := getDBName(tn)
+	if err != nil {
+		return err
+	}
 	var formatOption string
 	if redactValues {
 		formatOption = " WITH REDACT"
@@ -1048,11 +1088,11 @@ func (c *stmtEnvCollector) PrintCreateView(
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "%s;\n", createStatement)
+	printCreateStatement(w, dbName, createStatement)
 	return nil
 }
 
-func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[string]struct{}) {
+func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[string]struct{}) error {
 	for db := range dbNames {
 		switch db {
 		case catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName, catconstants.SystemDatabaseName:
@@ -1060,14 +1100,23 @@ func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[stri
 			// exclude them to ease the recreation of the bundle.
 			continue
 		}
-		fmt.Fprintf(w, "CREATE DATABASE %s;\n", db)
+		createStatement, err := c.query(fmt.Sprintf(
+			"SELECT create_statement FROM crdb_internal.databases WHERE name = '%s'", db,
+		))
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "%s;\n", createStatement)
 	}
+	return nil
 }
 
 func (c *stmtEnvCollector) printCreateAllSchemas(
 	w io.Writer, schemaNames map[string]struct{},
 ) error {
 	for schema := range schemaNames {
+		// TODO(138015): this logic assumes that we don't have the period in the
+		// database name.
 		_, schemaOnly, found := strings.Cut(schema, ".")
 		if !found {
 			return errors.AssertionFailedf("expected schema name to be qualified with DB name")
