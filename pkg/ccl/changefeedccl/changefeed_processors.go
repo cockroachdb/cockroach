@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
@@ -1083,12 +1084,8 @@ func (cs *cachedState) SetHighwater(frontier hlc.Timestamp) {
 }
 
 // SetCheckpoint implements the eval.ChangefeedState interface.
-func (cs *cachedState) SetCheckpoint(spans []roachpb.Span, timestamp hlc.Timestamp) {
-	changefeedProgress := cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed
-	changefeedProgress.Checkpoint = &jobspb.ChangefeedProgress_Checkpoint{
-		Spans:     spans,
-		Timestamp: timestamp,
-	}
+func (cs *cachedState) SetCheckpoint(checkpoint jobspb.ChangefeedProgress_Checkpoint) {
+	cs.progress.Details.(*jobspb.Progress_Changefeed).Changefeed.Checkpoint = &checkpoint
 }
 
 func newJobState(
@@ -1684,7 +1681,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 	var checkpoint jobspb.ChangefeedProgress_Checkpoint
 	if updateCheckpoint {
 		maxBytes := changefeedbase.FrontierCheckpointMaxBytes.Get(&cf.FlowCtx.Cfg.Settings.SV)
-		checkpoint.Spans, checkpoint.Timestamp = cf.frontier.getCheckpointSpans(maxBytes)
+		checkpoint = cf.frontier.MakeCheckpoint(maxBytes)
 	}
 
 	if updateCheckpoint || updateHighWater {
@@ -1765,7 +1762,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 	}
 
 	cf.localState.SetHighwater(frontier)
-	cf.localState.SetCheckpoint(checkpoint.Spans, checkpoint.Timestamp)
+	cf.localState.SetCheckpoint(checkpoint)
 
 	return true, nil
 }
@@ -2020,47 +2017,10 @@ func (f *schemaChangeFrontier) ForwardLatestKV(ts time.Time) {
 	}
 }
 
-type spanIter func(forEachSpan span.Operation)
-
-// getCheckpointSpans returns as many spans that should be checkpointed (are
-// above the highwater mark) as can fit in maxBytes, along with the earliest
-// timestamp of the checkpointed spans.  A SpanGroup is used to merge adjacent
-// spans above the high-water mark.
-func getCheckpointSpans(
-	frontier hlc.Timestamp, forEachSpan spanIter, maxBytes int64,
-) (spans []roachpb.Span, timestamp hlc.Timestamp) {
-	// Collect leading spans into a SpanGroup to merge adjacent spans and store
-	// the lowest timestamp found
-	var checkpointSpanGroup roachpb.SpanGroup
-	checkpointFrontier := hlc.Timestamp{}
-	forEachSpan(func(s roachpb.Span, ts hlc.Timestamp) span.OpResult {
-		if frontier.Less(ts) {
-			checkpointSpanGroup.Add(s)
-			if checkpointFrontier.IsEmpty() || ts.Less(checkpointFrontier) {
-				checkpointFrontier = ts
-			}
-		}
-		return span.ContinueMatch
-	})
-
-	// Ensure we only return up to maxBytes spans
-	var checkpointSpans []roachpb.Span
-	var used int64
-	for _, span := range checkpointSpanGroup.Slice() {
-		used += int64(len(span.Key)) + int64(len(span.EndKey))
-		if used > maxBytes {
-			break
-		}
-		checkpointSpans = append(checkpointSpans, span)
-	}
-
-	return checkpointSpans, checkpointFrontier
-}
-
-func (f *schemaChangeFrontier) getCheckpointSpans(
-	maxBytes int64,
-) (spans []roachpb.Span, timestamp hlc.Timestamp) {
-	return getCheckpointSpans(f.Frontier(), f.Entries, maxBytes)
+// MakeCheckpoint returns the spans that should be checkpointed based on the
+// current state of the frontier.
+func (f *schemaChangeFrontier) MakeCheckpoint(maxBytes int64) jobspb.ChangefeedProgress_Checkpoint {
+	return checkpoint.Make(f.Frontier(), f.Entries, maxBytes)
 }
 
 // InBackfill returns whether a resolved span is part of an ongoing backfill
