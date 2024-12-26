@@ -85,7 +85,7 @@ func (p *planner) addColumnImpl(
 			if err := params.p.checkNoRegionChangeUnderway(
 				params.ctx,
 				n.tableDesc.GetParentID(),
-				"add an UNIQUE COLUMN on a REGIONAL BY ROW table",
+				"add a UNIQUE COLUMN on a REGIONAL BY ROW table",
 			); err != nil {
 				return err
 			}
