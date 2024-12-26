@@ -48,6 +48,7 @@ go_library(
         "//pkg/sql/catalog/internal/catkv",
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/lease",
+        "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/systemschema",

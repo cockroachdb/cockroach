@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
@@ -526,7 +527,7 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 ) error {
 	loadRegions := func(ctx context.Context) ([][]byte, error) {
 		// Load regions from the system DB.
-		var regions [][]byte
+		var regionsBytes [][]byte
 		if err := db.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
@@ -534,23 +535,23 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 				ctx, txn.KV(), keys.SystemDatabaseID, txn.Descriptors(),
 			)
 			if err != nil {
-				if errors.Is(err, sql.ErrNotMultiRegionDatabase) {
+				if errors.Is(err, regions.ErrNotMultiRegionDatabase) {
 					return nil
 				}
 				return err
 			}
 			for _, r := range enumReps {
-				regions = append(regions, r)
+				regionsBytes = append(regionsBytes, r)
 			}
 			return nil
 		}); err != nil {
 			return nil, err
 		}
 		// The system database isn't multi-region.
-		if len(regions) == 0 {
-			regions = [][]byte{enum.One}
+		if len(regionsBytes) == 0 {
+			regionsBytes = [][]byte{enum.One}
 		}
-		return regions, nil
+		return regionsBytes, nil
 	}
 
 	return stopper.RunAsyncTask(ctx, "instance-id-reclaim-loop", func(ctx context.Context) {

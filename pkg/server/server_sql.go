@@ -90,6 +90,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rangeprober"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
@@ -1541,7 +1542,7 @@ func (s *SQLServer) preStart(
 			res, err := sql.GetLocalityRegionEnumPhysicalRepresentation(
 				ctx, s.internalDB, keys.SystemDatabaseID, s.distSQLServer.Locality,
 			)
-			if errors.Is(err, sql.ErrNotMultiRegionDatabase) {
+			if errors.Is(err, regions.ErrNotMultiRegionDatabase) {
 				err = nil
 			}
 			return res, err
