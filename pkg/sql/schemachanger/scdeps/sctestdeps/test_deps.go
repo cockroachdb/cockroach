@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1575,6 +1576,13 @@ func (s *TestState) NodesStatusServer() *serverpb.OptionalNodesStatusServer {
 
 func (s *TestState) GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error) {
 	return &serverpb.RegionsResponse{Regions: map[string]*serverpb.RegionsResponse_Region{}}, nil
+}
+
+// SynthesizeRegionConfig implements the scbuildstmt.SynthesizeRegionConfig interface.
+func (s *TestState) SynthesizeRegionConfig(
+	ctx context.Context, dbID descpb.ID, opts ...multiregion.SynthesizeRegionConfigOption,
+) (multiregion.RegionConfig, error) {
+	return multiregion.RegionConfig{}, nil
 }
 
 func (s *TestState) GetDefaultZoneConfig() *zonepb.ZoneConfig {
