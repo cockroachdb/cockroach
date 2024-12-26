@@ -247,6 +247,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}
 
+	// Set up and start the execution tracer.
+	fr, err := tracing.NewFlightRecorder(ctx, cfg.ExecutionTraceDirName)
+	if err != nil {
+		return nil, err
+	}
+	stopper.AddCloser(fr)
+	cfg.AmbientCtx.Tracer.SetFlightRecorder(fr)
+
 	clock, err := newClockFromConfig(ctx, cfg.BaseConfig)
 	if err != nil {
 		return nil, err
