@@ -16,7 +16,7 @@ query T colnames
 SHOW CREATE ALL TYPES
 ----
 create_statement
-CREATE TYPE d.public.status AS ENUM ('open', 'closed', 'inactive');
+CREATE TYPE public.status AS ENUM ('open', 'closed', 'inactive');
 
 statement ok
 CREATE TYPE tableObj AS ENUM('row', 'col');
@@ -25,8 +25,8 @@ query T colnames,rowsort
 SHOW CREATE ALL TYPES
 ----
 create_statement
-CREATE TYPE d.public.status AS ENUM ('open', 'closed', 'inactive');
-CREATE TYPE d.public.tableobj AS ENUM ('row', 'col');
+CREATE TYPE public.status AS ENUM ('open', 'closed', 'inactive');
+CREATE TYPE public.tableobj AS ENUM ('row', 'col');
 
 statement ok
 DROP TYPE status
@@ -35,7 +35,7 @@ query T colnames
 SHOW CREATE ALL TYPES
 ----
 create_statement
-CREATE TYPE d.public.tableobj AS ENUM ('row', 'col');
+CREATE TYPE public.tableobj AS ENUM ('row', 'col');
 
 # type in user-defined schema
 statement ok
@@ -48,8 +48,8 @@ query T colnames,rowsort
 SHOW CREATE ALL TYPES
 ----
 create_statement
-CREATE TYPE d.public.tableobj AS ENUM ('row', 'col');
-CREATE TYPE d.s.status AS ENUM ('a', 'b', 'c');
+CREATE TYPE public.tableobj AS ENUM ('row', 'col');
+CREATE TYPE s.status AS ENUM ('a', 'b', 'c');
 
 # Make sure database names with hyphens work well.
 statement ok
@@ -83,8 +83,8 @@ query T colnames
 SHOW CREATE ALL TYPES
 ----
 create_statement
-CREATE TYPE "a""bc".public.address AS (street STRING, city STRING, state STRING, zipcode STRING);
-COMMENT ON TYPE "a""bc".public.address IS 'comment for composite type address';
+CREATE TYPE public.address AS (street STRING, city STRING, state STRING, zipcode STRING);
+COMMENT ON TYPE public.address IS 'comment for composite type address';
 
 skipif config local-legacy-schema-changer
 statement ok
@@ -103,7 +103,7 @@ query T colnames
 SHOW CREATE ALL TYPES
 ----
 create_statement
-CREATE TYPE "a""bc".public.roaches AS ENUM ('papa_roach', 'mama_roach', 'baby_roach');
-COMMENT ON TYPE "a""bc".public.roaches IS 'comment for enum type roaches';
+CREATE TYPE public.roaches AS ENUM ('papa_roach', 'mama_roach', 'baby_roach');
+COMMENT ON TYPE public.roaches IS 'comment for enum type roaches';
 
 subtest end
