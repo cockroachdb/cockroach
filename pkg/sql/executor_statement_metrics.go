@@ -189,7 +189,6 @@ func (ex *connExecutor) recordStatementSummary(
 		Nodes:                sqlInstanceIDs,
 		KVNodeIDs:            kvNodeIDs,
 		StatementType:        stmt.AST.StatementType(),
-		Plan:                 planner.instrumentation.PlanForStats(ctx),
 		PlanGist:             planner.instrumentation.planGist.String(),
 		StatementError:       stmtErr,
 		IndexRecommendations: idxRecommendations,
