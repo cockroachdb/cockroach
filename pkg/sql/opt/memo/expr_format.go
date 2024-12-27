@@ -1042,9 +1042,11 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		f.Buffer.WriteString(": ")
 	}
 	switch scalar.Op() {
-	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp, opt.FastPathUniqueChecksOp:
+	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp,
+		opt.FastPathUniqueChecksOp:
 		// Omit empty lists (except filters) and special-purpose fast path check expressions.
-		if scalar.ChildCount() == 0 || (scalar.Op() == opt.FastPathUniqueChecksOp && f.HasFlags(ExprFmtHideFastPathChecks)) {
+		if scalar.ChildCount() == 0 ||
+			(scalar.Op() == opt.FastPathUniqueChecksOp && f.HasFlags(ExprFmtHideFastPathChecks)) {
 			return
 		}
 
