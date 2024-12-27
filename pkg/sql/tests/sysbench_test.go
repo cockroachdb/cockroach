@@ -282,6 +282,9 @@ func (s *sysbenchSQL) prepSchema(rng *rand.Rand) {
 }
 
 func (s *sysbenchSQL) prepConn() {
+	// Force generic query plans.
+	try(s.conn.Exec(s.ctx, "SET plan_cache_mode = force_generic_plan"))
+
 	s.stmt.begin = try(s.conn.Prepare(s.ctx, "begin", sysbenchStmtBegin)).Name
 	s.stmt.commit = try(s.conn.Prepare(s.ctx, "commit", sysbenchStmtCommit)).Name
 	for i := range sysbenchTables {

@@ -207,7 +207,7 @@ func (c *CustomFuncs) ConsolidateFilters(filters memo.FiltersExpr) memo.FiltersE
 	return newFilters
 }
 
-// mergeSortedAnds merges two left-deep trees of nested AndExprs sorted by ID.
+// mergeSortedAnds merges two left-deep trees of nested AndExprs sorted by rank.
 // Returns a single sorted, left-deep tree of nested AndExprs, with any
 // duplicate expressions eliminated.
 func (c *CustomFuncs) mergeSortedAnds(left, right opt.ScalarExpr) opt.ScalarExpr {
