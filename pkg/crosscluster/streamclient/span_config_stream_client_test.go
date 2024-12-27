@@ -61,8 +61,6 @@ func TestSpanConfigClient(t *testing.T) {
 	cg := ctxgroup.WithContext(ctxWithCancel)
 	cg.GoCtx(sub.Subscribe)
 
-	require.NoError(t, client.Dial(ctx))
-
 	// Ensure span config events are replicating.
 	rf.ObserveAnySpanConfigRecord(ctx)
 
