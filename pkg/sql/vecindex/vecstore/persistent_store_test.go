@@ -31,6 +31,7 @@ func TestPersistentStore(t *testing.T) {
 	childKey2 := ChildKey{PartitionKey: 2}
 	childKey10 := ChildKey{PartitionKey: 10}
 	childKey20 := ChildKey{PartitionKey: 20}
+	childKey30 := ChildKey{PartitionKey: 30}
 	primaryKey200 := ChildKey{PrimaryKey: PrimaryKey{2, 00}}
 	primaryKey300 := ChildKey{PrimaryKey: PrimaryKey{3, 00}}
 	primaryKey400 := ChildKey{PrimaryKey: PrimaryKey{4, 00}}
@@ -89,5 +90,45 @@ func TestPersistentStore(t *testing.T) {
 		require.NoError(t, err)
 		_, err = txn.GetPartition(ctx, partitionKey)
 		require.Error(t, err)
+	})
+
+	t.Run("add to root partition", func(t *testing.T) {
+		txn := beginTransaction(ctx, t, store)
+		defer commitTransaction(ctx, t, store, txn)
+
+		emptySet := vector.MakeSet(2)
+		root := NewPartition(quantizer, quantizer.Quantize(ctx, &emptySet), []ChildKey{}, Level(2))
+		err := txn.SetRootPartition(ctx, root)
+		require.NoError(t, err)
+
+		// Add to root partition.
+		count, err := txn.AddToPartition(ctx, RootKey, vector.T{1, 2}, childKey10)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+		count, err = txn.AddToPartition(ctx, RootKey, vector.T{7, 4}, childKey20)
+		require.NoError(t, err)
+		require.Equal(t, 2, count)
+		count, err = txn.AddToPartition(ctx, RootKey, vector.T{4, 3}, childKey30)
+		require.NoError(t, err)
+		require.Equal(t, 3, count)
+
+		// Add duplicate and expect value to be overwritten
+		count, err = txn.AddToPartition(ctx, RootKey, vector.T{5, 5}, childKey30)
+		require.NoError(t, err)
+		require.Equal(t, 3, count)
+
+		// Search root partition.
+		searchSet := SearchSet{MaxResults: 2}
+		partitionCounts := []int{0}
+		level, err := txn.SearchPartitions(
+			ctx, []PartitionKey{RootKey}, vector.T{1, 1}, &searchSet, partitionCounts)
+		require.NoError(t, err)
+		require.Equal(t, Level(2), level)
+		result1 := SearchResult{QuerySquaredDistance: 1, ErrorBound: 0, CentroidDistance: 2.2361, ParentPartitionKey: 1, ChildKey: childKey10}
+		result2 := SearchResult{QuerySquaredDistance: 32, ErrorBound: 0, CentroidDistance: 7.0711, ParentPartitionKey: 1, ChildKey: childKey30}
+		results := searchSet.PopResults()
+		roundResults(results, 4)
+		require.Equal(t, SearchResults{result1, result2}, results)
+		require.Equal(t, 3, partitionCounts[0])
 	})
 }
