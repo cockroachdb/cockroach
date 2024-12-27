@@ -241,4 +241,25 @@ DROP TYPE SC2.COMP1;
 DROP SCHEMA SC1;
 DROP SCHEMA SC2;
 
+subtest gin-index
+
+statement ok
+CREATE TABLE roaches (id UUID PRIMARY KEY, x STRING, y STRING, FAMILY f1 (id, x, y));
+
+statement ok
+CREATE INDEX ON roaches USING GIN (x, y gin_trgm_ops);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE roaches];
+----
+CREATE TABLE public.roaches (
+  id UUID NOT NULL,
+  x STRING NULL,
+  y STRING NULL,
+  CONSTRAINT roaches_pkey PRIMARY KEY (id ASC),
+  INVERTED INDEX roaches_x_y_idx (x ASC, y gin_trgm_ops),
+  FAMILY f1 (id, x, y)
+)
+
+
 subtest end
