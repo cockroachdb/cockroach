@@ -85,7 +85,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 				"./cockroach workload init kv --drop --insert-count=400 "+
-					"--max-block-bytes=1024 --min-block-bytes=1024"+foregroundDB+url)
+					"--max-block-bytes=512 --min-block-bytes=512"+foregroundDB+url)
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()),
 				"./cockroach workload init kv --drop --insert-count=400 "+
