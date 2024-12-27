@@ -988,9 +988,6 @@ func causeContention(
 func testTxnContentionEventsTableHelper(
 	t *testing.T, ctx context.Context, conn *gosql.DB, sqlDB *sqlutils.SQLRunner,
 ) {
-	sqlDB.Exec(
-		t,
-		`SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = false;`)
 
 	// Reduce the resolution interval to speed up the test.
 	sqlDB.Exec(
@@ -1090,10 +1087,6 @@ func testTxnContentionEventsTableHelper(
 func testTxnContentionEventsTableWithDroppedInfo(
 	t *testing.T, ctx context.Context, conn *gosql.DB, sqlDB *sqlutils.SQLRunner,
 ) {
-	sqlDB.Exec(
-		t,
-		`SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = false;`)
-
 	// Reduce the resolution interval to speed up the test.
 	sqlDB.Exec(
 		t,
