@@ -32,9 +32,6 @@ func validatePostgresConnectionURI(
 	if err != nil {
 		return err
 	}
-	if err = conn.Dial(ctx); err != nil {
-		return err
-	}
 	return conn.Close(ctx)
 }
 

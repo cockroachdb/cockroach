@@ -41,22 +41,10 @@ type SubscriptionToken []byte
 // information to start a stream processor.
 type CheckpointToken []byte
 
-// Dialer is a wrapper for different kinds of clients which stream updates from
-// a tenant.
-type Dialer interface {
-	// Dial checks if the source is able to be connected to for queries
-	Dial(ctx context.Context) error
-
-	// Close releases all the resources used by this client.
-	Close(ctx context.Context) error
-}
-
 // Client provides methods to stream updates from an application tenant.
 // The client persists state on the system tenant, allowing a new client
 // to resume from a checkpoint if a connection is lost.
 type Client interface {
-	Dialer
-
 	// CreateForTenant initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
@@ -112,6 +100,9 @@ type Client interface {
 
 	PlanLogicalReplication(ctx context.Context, req streampb.LogicalReplicationPlanRequest) (LogicalReplicationPlan, error)
 	CreateForTables(ctx context.Context, req *streampb.ReplicationProducerRequest) (*streampb.ReplicationProducerSpec, error)
+
+	// Close releases all the resources used by this client.
+	Close(ctx context.Context) error
 }
 
 type subscribeConfig struct {
@@ -270,34 +261,27 @@ func lookupExternalConnection(
 func GetFirstActiveClient(
 	ctx context.Context, streamAddresses []string, db descs.DB, opts ...Option,
 ) (Client, error) {
-
-	newClient := func(ctx context.Context, address crosscluster.StreamAddress) (Dialer, error) {
+	newClient := func(ctx context.Context, address crosscluster.StreamAddress) (Client, error) {
 		return NewStreamClient(ctx, address, db, opts...)
 	}
-	dialer, err := getFirstDialer(ctx, streamAddresses, newClient)
-	if err != nil {
-		return nil, err
-	}
-	return dialer.(Client), err
+	return getFirstClient(ctx, streamAddresses, newClient)
 }
 
-type dialerFactory func(ctx context.Context, address crosscluster.StreamAddress) (Dialer, error)
+type clientFactory[T any] func(ctx context.Context, address crosscluster.StreamAddress) (T, error)
 
-func getFirstDialer(
-	ctx context.Context, streamAddresses []string, getNewDialer dialerFactory,
-) (Dialer, error) {
+func getFirstClient[T any](
+	ctx context.Context, streamAddresses []string, getNewClient clientFactory[T],
+) (T, error) {
+	var zero T
 	if len(streamAddresses) == 0 {
-		return nil, errors.Newf("failed to connect, no addresses")
+		return zero, errors.Newf("failed to connect, no addresses")
 	}
 	var combinedError error = nil
 	for _, address := range streamAddresses {
 		streamAddress := crosscluster.StreamAddress(address)
-		clientCandidate, err := getNewDialer(ctx, streamAddress)
+		clientCandidate, err := getNewClient(ctx, streamAddress)
 		if err == nil {
-			err = clientCandidate.Dial(ctx)
-			if err == nil {
-				return clientCandidate, err
-			}
+			return clientCandidate, nil
 		}
 		// Note the failure and attempt the next address
 		redactedAddress, errRedact := RedactSourceURI(streamAddress.String())
@@ -307,7 +291,7 @@ func getFirstDialer(
 		log.Errorf(ctx, "failed to connect to address %s: %s", redactedAddress, err.Error())
 		combinedError = errors.CombineErrors(combinedError, err)
 	}
-	return nil, errors.Wrap(combinedError, "failed to connect to any address")
+	return zero, errors.Wrap(combinedError, "failed to connect to any address")
 }
 
 type options struct {

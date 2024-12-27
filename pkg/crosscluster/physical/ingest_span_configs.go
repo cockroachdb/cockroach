@@ -127,7 +127,11 @@ func (sc *spanConfigIngestor) ingestSpanConfigs(
 	group := ctxgroup.WithContext(ctx)
 	group.GoCtx(sub.Subscribe)
 	group.GoCtx(func(ctx context.Context) error {
-		defer closeAndLog(ctx, sc.client)
+		defer func() {
+			if err := sc.client.Close(ctx); err != nil {
+				log.Warningf(ctx, "error closing span config client: %s", err.Error())
+			}
+		}()
 		return sc.consumeSpanConfigs(ctx, sub)
 	})
 	return group.Wait()

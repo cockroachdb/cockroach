@@ -381,6 +381,9 @@ func newRandomStreamClient(streamURL *url.URL, db descs.DB) (streamclient.Client
 			return nil, err
 		}
 	}
+	if err := c.dial(); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -403,8 +406,7 @@ func (m *RandomStreamClient) tableDescForID(tableID int) (catalog.TableDescripto
 	}
 }
 
-// Dial implements Client interface.
-func (m *RandomStreamClient) Dial(ctx context.Context) error {
+func (m *RandomStreamClient) dial() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, interceptor := range m.mu.dialInterceptors {
