@@ -70,6 +70,7 @@ go_test(
         "partition_test.go",
         "persistent_store_test.go",
         "search_set_test.go",
+        "store_test.go",
         "vecstorepb_test.go",
     ],
     embed = [":vecstore"],
