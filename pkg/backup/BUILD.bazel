@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "alter_backup_planning.go",
         "alter_backup_schedule.go",
+        "backup_compaction.go",
         "backup_job.go",
         "backup_metrics.go",
         "backup_planning.go",
@@ -124,6 +125,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/bulk",
@@ -167,6 +169,7 @@ go_test(
         "alter_backup_schedule_test.go",
         "alter_backup_test.go",
         "backup_cloud_test.go",
+        "backup_compaction_test.go",
         "backup_intents_test.go",
         "backup_planning_test.go",
         "backup_tenant_test.go",
