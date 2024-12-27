@@ -36,7 +36,7 @@ type Writer interface {
 	// ever sampled (i.e. collected statistics for) the given combination of
 	// statement metadata, and the second one whether we should save the logical
 	// plan description for it.
-	ShouldSample(fingerprint string, implicitTxn bool, database string) (previouslySampled, savePlanForStats bool)
+	ShouldSample(fingerprint string, implicitTxn bool, database string) (previouslySampled bool)
 
 	// RecordTransaction records statistics for a transaction.
 	RecordTransaction(ctx context.Context, key appstatspb.TransactionFingerprintID, value RecordedTxnStats) error

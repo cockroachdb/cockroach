@@ -716,10 +716,6 @@ func (s *Container) MergeApplicationStatementStats(
 			defer stmtStats.mu.Unlock()
 
 			stmtStats.mergeStatsLocked(statistics)
-			planLastSampled, _ := s.getLogicalPlanLastSampled(key.sampledPlanKey)
-			if planLastSampled.Before(stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp) {
-				s.setLogicalPlanLastSampled(key.sampledPlanKey, stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
-			}
 
 			return nil
 		},
@@ -920,24 +916,6 @@ func (s *Container) getLogicalPlanLastSampled(
 	defer s.mu.Unlock()
 	lastSampled, found = s.mu.sampledPlanMetadataCache[key]
 	return lastSampled, found
-}
-
-func (s *Container) setLogicalPlanLastSampled(key sampledPlanKey, time time.Time) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.sampledPlanMetadataCache[key] = time
-}
-
-// shouldSaveLogicalPlanDescription returns whether we should save the sample
-// logical plan based on the time it was last sampled. We use
-// `logicalPlanCollectionPeriod` to assess how frequently to sample logical plans.
-func (s *Container) shouldSaveLogicalPlanDescription(lastSampled time.Time) bool {
-	if !sqlstats.SampleLogicalPlans.Get(&s.st.SV) {
-		return false
-	}
-	now := s.getTimeNow()
-	period := sqlstats.LogicalPlanCollectionPeriod.Get(&s.st.SV)
-	return now.Sub(lastSampled) >= period
 }
 
 type transactionCounts struct {

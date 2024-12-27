@@ -193,8 +193,7 @@ func (s *StatsCollector) EndTransaction(
 // plan description for it.
 func (s *StatsCollector) ShouldSample(
 	fingerprint string, implicitTxn bool, database string,
-) (previouslySampled bool, savePlanForStats bool) {
-
+) (previouslySampled bool) {
 	return s.flushTarget.ShouldSample(fingerprint, implicitTxn, database)
 }
 

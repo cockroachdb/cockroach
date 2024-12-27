@@ -254,6 +254,8 @@ var retiredSettings = map[InternalKey]struct{}{
 	"kv.bulkio.write_metadata_sst.enabled":                       {},
 	"jobs.execution_errors.max_entries":                          {},
 	"jobs.execution_errors.max_entry_size":                       {},
+	"sql.metrics.statement_details.plan_collection.enabled":      {},
+	"sql.metrics.statement_details.plan_collection.period":       {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
