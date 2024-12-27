@@ -425,13 +425,15 @@ func (ed *EncDatum) CompareEx(
 	return ed.Datum.Compare(ctx, evalCtx, rhs.Datum)
 }
 
+var errNullInt = errors.New("NULL INT value")
+
 // GetInt decodes an EncDatum that is known to be of integer type and returns
 // the integer value. It is a more convenient and more efficient alternative to
 // calling EnsureDecoded and casting the Datum.
 func (ed *EncDatum) GetInt() (int64, error) {
 	if ed.Datum != nil {
 		if ed.Datum == tree.DNull {
-			return 0, errors.Errorf("NULL INT value")
+			return 0, errNullInt
 		}
 		return int64(*ed.Datum.(*tree.DInt)), nil
 	}
@@ -439,14 +441,14 @@ func (ed *EncDatum) GetInt() (int64, error) {
 	switch ed.encoding {
 	case catenumpb.DatumEncoding_ASCENDING_KEY:
 		if _, isNull := encoding.DecodeIfNull(ed.encoded); isNull {
-			return 0, errors.Errorf("NULL INT value")
+			return 0, errNullInt
 		}
 		_, val, err := encoding.DecodeVarintAscending(ed.encoded)
 		return val, err
 
 	case catenumpb.DatumEncoding_DESCENDING_KEY:
 		if _, isNull := encoding.DecodeIfNull(ed.encoded); isNull {
-			return 0, errors.Errorf("NULL INT value")
+			return 0, errNullInt
 		}
 		_, val, err := encoding.DecodeVarintDescending(ed.encoded)
 		return val, err
@@ -458,7 +460,7 @@ func (ed *EncDatum) GetInt() (int64, error) {
 		}
 		// NULL, true, and false are special, because their values are fully encoded by their value tag.
 		if typ == encoding.Null {
-			return 0, errors.Errorf("NULL INT value")
+			return 0, errNullInt
 		}
 
 		_, val, err := encoding.DecodeUntaggedIntValue(ed.encoded[dataOffset:])
