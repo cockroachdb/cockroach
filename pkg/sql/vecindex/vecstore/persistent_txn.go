@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/quantize"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
+	"github.com/cockroachdb/errors"
 )
 
 // PersistentStoreTxn provides a context to make transactional changes to a
@@ -284,26 +285,122 @@ func (psTxn *PersistentStoreTxn) DeletePartition(
 	return psTxn.kv.Run(ctx, b)
 }
 
+// AddToPartition implements the vecstore.Txn interface.
 func (psTxn *PersistentStoreTxn) AddToPartition(
 	ctx context.Context, partitionKey PartitionKey, vector vector.T, childKey ChildKey,
 ) (int, error) {
-	panic("AddToPartition() unimplemented")
+	// TODO(mw5h): Add to an existing batch instead of starting a new one.
+	b := psTxn.kv.NewBatch()
+
+	metadataKey := psTxn.encodePartitionKey(partitionKey)
+
+	b.GetForShare(metadataKey, psTxn.lockDurability)
+	err := psTxn.kv.Run(ctx, b)
+	if err != nil {
+		return -1, err
+	}
+	if len(b.Results[0].Rows) == 0 {
+		return -1, ErrPartitionNotFound
+	}
+	_, centroid, err := DecodePartitionMetadata(b.Results[0].Rows[0].ValueBytes())
+	if err != nil {
+		return -1, err
+	}
+
+	// Cap the metadata key so that the append allocates a new slice for the child key.
+	prefix := metadataKey[:len(metadataKey):len(metadataKey)]
+	entryKey := EncodeChildKey(prefix, childKey)
+
+	codec := psTxn.getCodecForPartitionKey(partitionKey)
+	b = psTxn.kv.NewBatch()
+	encodedVector, err := codec.encodeVector(ctx, vector, centroid)
+	if err != nil {
+		return -1, err
+	}
+	b.Put(entryKey, encodedVector)
+
+	// This scan is purely for returning partition cardinality.
+	startKey := psTxn.encodePartitionKey(partitionKey)
+	endKey := startKey.PrefixEnd()
+	b.Scan(startKey, endKey)
+
+	if err = psTxn.kv.Run(ctx, b); err != nil {
+		return -1, err
+	}
+	return len(b.Results[1].Rows) - 1, nil
 }
 
+// RemoveFromPartition implements the vecstore.Txn interface.
 func (psTxn *PersistentStoreTxn) RemoveFromPartition(
 	ctx context.Context, partitionKey PartitionKey, childKey ChildKey,
 ) (int, error) {
-	panic("RemoveFromPartition() unimplemented")
+	b := psTxn.kv.NewBatch()
+
+	// Lock metadata for partition in shared mode to block concurrent fixups.
+	metadataKey := psTxn.encodePartitionKey(partitionKey)
+	b.GetForShare(metadataKey, psTxn.lockDurability)
+
+	// Cap the metadata key so that the append allocates a new slice for the child key.
+	prefix := metadataKey[:len(metadataKey):len(metadataKey)]
+	entryKey := EncodeChildKey(prefix, childKey)
+	b.Del(entryKey)
+
+	// Scan to get current cardinality.
+	startKey := psTxn.encodePartitionKey(partitionKey)
+	endKey := startKey.PrefixEnd()
+	b.Scan(startKey, endKey)
+
+	if err := psTxn.kv.Run(ctx, b); err != nil {
+		return -1, err
+	}
+	if len(b.Results[0].Rows) == 0 {
+		return -1, ErrPartitionNotFound
+	}
+	// We ignore key not found for the deleted child.
+
+	return len(b.Results[2].Rows) - 1, nil
 }
 
+// SearchPartitions implements the vecstore.Txn interface.
 func (psTxn *PersistentStoreTxn) SearchPartitions(
 	ctx context.Context,
-	partitionKey []PartitionKey,
+	partitionKeys []PartitionKey,
 	queryVector vector.T,
 	searchSet *SearchSet,
 	partitionCounts []int,
 ) (Level, error) {
-	panic("SearchPartitions() unimplemented")
+	b := psTxn.kv.NewBatch()
+
+	for _, pk := range partitionKeys {
+		startKey := psTxn.encodePartitionKey(pk)
+		endKey := startKey.PrefixEnd()
+		b.Scan(startKey, endKey)
+	}
+
+	if err := psTxn.kv.Run(ctx, b); err != nil {
+		return InvalidLevel, err
+	}
+
+	level := InvalidLevel
+	codec := psTxn.getCodecForPartitionKey(partitionKeys[0])
+	for i, result := range b.Results {
+		partition, err := psTxn.decodePartition(codec, &result)
+		if err != nil {
+			return InvalidLevel, err
+		}
+		searchLevel, partitionCount := partition.Search(ctx, partitionKeys[i], queryVector, searchSet)
+		if i == 0 {
+			level = searchLevel
+		} else if level != searchLevel {
+			// Callers should only search for partitions at the same level.
+			panic(errors.AssertionFailedf(
+				"caller already searched a partition at level %d, cannot search at level %d",
+				level, searchLevel))
+		}
+		partitionCounts[i] = partitionCount
+	}
+
+	return level, nil
 }
 
 func (psTxn *PersistentStoreTxn) GetFullVectors(ctx context.Context, refs []VectorWithKey) error {
