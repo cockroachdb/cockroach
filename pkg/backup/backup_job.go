@@ -592,6 +592,7 @@ func (b *backupResumer) DumpTraceAfterRun() bool {
 func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// The span is finished by the registry executing the job.
 	details := b.job.Details().(jobspb.BackupDetails)
+	origDetails := details
 	p := execCtx.(sql.JobExecContext)
 
 	if err := maybeRelocateJobExecution(ctx, b.job.ID(), p, details.ExecutionLocality, "BACKUP"); err != nil {
@@ -997,6 +998,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			telemetry.CountBucketed("backup.speed-mbps.inc.per-node", mbps/int64(numBackupInstances))
 		}
 		logutil.LogJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), true, nil, res.Rows)
+	}
+
+	if err := maybeCompactIncrementals(ctx, p, origDetails, b.job.ID()); err != nil {
+		return err
 	}
 
 	return b.maybeNotifyScheduledJobCompletion(
