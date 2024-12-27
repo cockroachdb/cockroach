@@ -41,6 +41,17 @@ func TestPersistentStore(t *testing.T) {
 	quantizer := quantize.NewUnQuantizer(2)
 	store := NewPersistentStore(kvDB, quantizer, prefix)
 
+	// TODO(mw5h): Figure out where to create the empty root partition.
+	t.Run("create empty root partition", func(t *testing.T) {
+		txn := beginTransaction(ctx, t, store)
+		defer commitTransaction(ctx, t, store, txn)
+
+		emptyRoot := NewPartition(quantizer, quantizer.Quantize(ctx, &vector.Set{}), []ChildKey{}, LeafLevel)
+		require.NoError(t, txn.SetRootPartition(ctx, emptyRoot))
+	})
+
+	commonStoreTests(ctx, t, store, quantizer)
+
 	t.Run("insert a root partition into the store and read it back", func(t *testing.T) {
 		txn := beginTransaction(ctx, t, store)
 		defer commitTransaction(ctx, t, store, txn)
