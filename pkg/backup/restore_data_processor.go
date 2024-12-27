@@ -289,7 +289,7 @@ func inputReader(
 
 type mergedSST struct {
 	entry        execinfrapb.RestoreSpanEntry
-	iter         *storage.ReadAsOfIterator
+	iter         storage.SimpleMVCCIterator
 	cleanup      func()
 	completeUpTo hlc.Timestamp
 }
