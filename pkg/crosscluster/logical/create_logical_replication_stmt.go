@@ -179,9 +179,6 @@ func createLogicalReplicationStreamPlanHook(
 		defer func() {
 			_ = client.Close(ctx)
 		}()
-		if err := client.Dial(ctx); err != nil {
-			return err
-		}
 
 		srcTableNames := make([]string, len(stmt.From.Tables))
 		for i, tb := range stmt.From.Tables {
