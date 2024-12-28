@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -567,8 +568,13 @@ func (oc *optCatalog) dataSourceForTable(
 	// statistics and the zone config haven't changed.
 	var tableStats []*stats.TableStatistic
 	if !flags.NoTableStats {
+		var typeResolver *descs.DistSQLTypeResolver
+		if p := oc.planner; p != nil {
+			r := descs.NewDistSQLTypeResolver(p.Descriptors(), p.Txn())
+			typeResolver = &r
+		}
 		var err error
-		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(ctx, desc)
+		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.

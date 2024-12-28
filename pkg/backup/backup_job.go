@@ -530,7 +530,9 @@ func getTableStatsForBackup(
 	for i := range descs {
 		if tbl, _, _, _, _ := descpb.GetDescriptors(&descs[i]); tbl != nil {
 			tableDesc := tabledesc.NewBuilder(tbl).BuildImmutableTable()
-			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc)
+			// nil typeResolver means that we'll use the latest committed type
+			// metadata which is acceptable.
+			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc, nil /* typeResolver */)
 			if err != nil {
 				log.Warningf(ctx, "failed to collect stats for table: %s, "+
 					"table ID: %d during a backup: %s", tableDesc.GetName(), tableDesc.GetID(),

@@ -5363,7 +5363,7 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 	if v.EnumTyp.TypeMeta.Version != d.EnumTyp.TypeMeta.Version {
 		panic(errors.AssertionFailedf(
 			"comparison of two different versions of enum %s oid %d: versions %d and %d",
-			errors.Safe(d.EnumTyp.SQLString), d.EnumTyp.Oid(), d.EnumTyp.TypeMeta.Version,
+			d.EnumTyp.SQLStringForError(), errors.Safe(d.EnumTyp.Oid()), d.EnumTyp.TypeMeta.Version,
 			v.EnumTyp.TypeMeta.Version,
 		))
 	}

@@ -50,3 +50,17 @@ CREATE TABLE t122312 (s STRING, g greeting AS (s::greeting) STORED);
 
 statement ok
 ANALYZE t122312;
+
+# Regression for not using the latest type metadata after the UDT modification
+# within the same txn (#129623).
+statement ok
+INSERT INTO t122312 VALUES ('hi');
+
+statement ok
+ANALYZE t122312;
+
+statement ok
+BEGIN;
+ALTER TYPE greeting ADD VALUE 'hey';
+SELECT * FROM t122312 WHERE g = 'hi';
+COMMIT;
