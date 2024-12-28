@@ -159,6 +159,7 @@ type Memo struct {
 	intervalStyle                              duration.IntervalStyle
 	propagateInputOrdering                     bool
 	disallowFullTableScans                     bool
+	avoidFullTableScansInMutations             bool
 	largeFullScanRows                          float64
 	txnRowsReadErr                             int64
 	nullOrderedLast                            bool
@@ -249,6 +250,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		intervalStyle:                              evalCtx.SessionData().GetIntervalStyle(),
 		propagateInputOrdering:                     evalCtx.SessionData().PropagateInputOrdering,
 		disallowFullTableScans:                     evalCtx.SessionData().DisallowFullTableScans,
+		avoidFullTableScansInMutations:             evalCtx.SessionData().AvoidFullTableScansInMutations,
 		largeFullScanRows:                          evalCtx.SessionData().LargeFullScanRows,
 		txnRowsReadErr:                             evalCtx.SessionData().TxnRowsReadErr,
 		nullOrderedLast:                            evalCtx.SessionData().NullOrderedLast,
@@ -417,6 +419,7 @@ func (m *Memo) IsStale(
 		m.intervalStyle != evalCtx.SessionData().GetIntervalStyle() ||
 		m.propagateInputOrdering != evalCtx.SessionData().PropagateInputOrdering ||
 		m.disallowFullTableScans != evalCtx.SessionData().DisallowFullTableScans ||
+		m.avoidFullTableScansInMutations != evalCtx.SessionData().AvoidFullTableScansInMutations ||
 		m.largeFullScanRows != evalCtx.SessionData().LargeFullScanRows ||
 		m.txnRowsReadErr != evalCtx.SessionData().TxnRowsReadErr ||
 		m.nullOrderedLast != evalCtx.SessionData().NullOrderedLast ||
@@ -502,7 +505,7 @@ func (m *Memo) SetBestProps(
 				redact.Safe(e.Cost()),
 				required.String(),
 				provided.String(), // Call String() so provided doesn't escape.
-				cost,
+				cost.C,
 			))
 		}
 		return
@@ -535,7 +538,7 @@ func (m *Memo) OptimizationCost() Cost {
 	// This cpuCostFactor is the same as cpuCostFactor in the coster.
 	// TODO(mgartner): Package these constants up in a shared location.
 	const cpuCostFactor = 0.01
-	return Cost(m.Metadata().NumTables()) * 1000 * cpuCostFactor
+	return Cost{C: float64(m.Metadata().NumTables()) * 1000 * cpuCostFactor}
 }
 
 // NextRank returns a new rank that can be assigned to a scalar expression.

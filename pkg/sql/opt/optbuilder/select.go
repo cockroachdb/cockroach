@@ -523,18 +523,6 @@ func errorOnInvalidMultiregionDB(
 // be in the list (in practice, this coincides with all "ordinary" table columns
 // being in the list).
 //
-// If scanMutationCols is true, then include columns being added or dropped from
-// the table. These are currently required by the execution engine as "fetch
-// columns", when performing mutation DML statements (INSERT, UPDATE, UPSERT,
-// DELETE).
-//
-// NOTE: Callers must take care that mutation columns (columns that are being
-//
-//	added or dropped from the table) are only used when performing mutation
-//	DML statements (INSERT, UPDATE, UPSERT, DELETE). They cannot be used in
-//	any other way because they may not have been initialized yet by the
-//	backfiller!
-//
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) buildScan(
@@ -648,6 +636,7 @@ func (b *Builder) buildScan(
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
 		private.Flags.NoZigzagJoin = indexFlags.NoZigzagJoin
 		private.Flags.NoFullScan = indexFlags.NoFullScan
+		private.Flags.AvoidFullScan = indexFlags.AvoidFullScan
 		private.Flags.ForceInvertedIndex = indexFlags.ForceInvertedIndex
 		if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 			idx := -1

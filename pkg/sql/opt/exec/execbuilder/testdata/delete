@@ -288,6 +288,9 @@ CREATE TABLE xyz (
 
 # Ensure that we can use a hint to avoid a full table scan.
 
+statement ok
+SET avoid_full_table_scans_in_mutations = false
+
 # Without the hint, we plan a full table scan.
 query T
 EXPLAIN (VERBOSE) DELETE FROM xyz WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
@@ -318,6 +321,70 @@ vectorized: true
 # With the hint, we use a constrained scan.
 query T
 EXPLAIN (VERBOSE) DELETE FROM xyz@{NO_FULL_SCAN} WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (z)
+│
+└── • delete
+    │ columns: (x, z)
+    │ estimated row count: 990 (missing stats)
+    │ from: xyz
+    │ auto commit
+    │
+    └── • index join
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ table: xyz@xyz_pkey
+        │ key columns: x
+        │ locking strength: for update
+        │
+        └── • scan
+              columns: (x, y)
+              estimated row count: 990 (missing stats)
+              table: xyz@xyz_y_idx
+              spans: /1-/1000 /2001-/3000
+              locking strength: for update
+
+# AVOID_FULL_SCAN also works to ensure a constrained scan.
+query T
+EXPLAIN (VERBOSE) DELETE FROM xyz@{AVOID_FULL_SCAN} WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (z)
+│
+└── • delete
+    │ columns: (x, z)
+    │ estimated row count: 990 (missing stats)
+    │ from: xyz
+    │ auto commit
+    │
+    └── • index join
+        │ columns: (x, y, z)
+        │ estimated row count: 990 (missing stats)
+        │ table: xyz@xyz_pkey
+        │ key columns: x
+        │ locking strength: for update
+        │
+        └── • scan
+              columns: (x, y)
+              estimated row count: 990 (missing stats)
+              table: xyz@xyz_y_idx
+              spans: /1-/1000 /2001-/3000
+              locking strength: for update
+
+# We also avoid the full scan using the session setting
+# avoid_full_table_scans_in_mutations.
+statement ok
+SET avoid_full_table_scans_in_mutations = true
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM xyz WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
 ----
 distribution: local
 vectorized: true

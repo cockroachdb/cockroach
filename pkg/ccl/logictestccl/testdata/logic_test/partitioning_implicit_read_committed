@@ -251,12 +251,13 @@ update t
  ├── unique w/tombstone indexes: t_c_key
  └── project
       ├── scan t
-      │    └── constraint: /12/11
-      │         ├── [/'one'/2 - /'one'/2]
-      │         ├── [/'two'/2 - /'two'/2]
-      │         ├── [/'three'/2 - /'three'/2]
-      │         ├── [/'four'/2 - /'four'/2]
-      │         └── [/'five'/2 - /'five'/2]
+      │    ├── constraint: /12/11
+      │    │    ├── [/'one'/2 - /'one'/2]
+      │    │    ├── [/'two'/2 - /'two'/2]
+      │    │    ├── [/'three'/2 - /'three'/2]
+      │    │    ├── [/'four'/2 - /'four'/2]
+      │    │    └── [/'five'/2 - /'five'/2]
+      │    └── flags: avoid-full-scan
       └── projections
            └── 4
 
