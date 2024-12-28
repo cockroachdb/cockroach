@@ -114,4 +114,8 @@ type QuantizedVectorSet interface {
 	// Clone makes a deep copy of this quantized vector set. Changes to either
 	// the original or clone will not affect the other.
 	Clone() QuantizedVectorSet
+
+	// Clear removes all the elements of the vector set so that it may be reused. The
+	// new centroid is copied over the existing centroid.
+	Clear(centroid vector.T)
 }
