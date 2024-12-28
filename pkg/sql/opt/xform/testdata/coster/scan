@@ -504,6 +504,7 @@ upsert t64570
       ├── scan t64570
       │    ├── columns: x:9!null y:10!null v:11
       │    ├── constraint: /9/10: [/10/10 - /10/10]
+      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
       │    ├── stats: [rows=6e-10, distinct(9)=6e-10, null(9)=0, distinct(10)=6e-10, null(10)=0, distinct(9,10)=6e-10, null(9,10)=0]
       │    │   histogram(9)=
@@ -585,7 +586,8 @@ scan t@abc
  ├── key: (1)
  └── fd: ()-->(2,3), (1)-->(4)
 
-# Test that the NO_FULL_SCAN hint creates a huge cost for full scans.
+# Test that the NO_FULL_SCAN and AVOID_FULL_SCAN hints add a huge cost or
+# penalty for full scans.
 opt
 SELECT * FROM t@{NO_FULL_SCAN}
 ----
@@ -594,6 +596,19 @@ scan t
  ├── flags: no-full-scan
  ├── stats: [rows=100000]
  ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty
+ ├── key: (1)
+ └── fd: (1)-->(2-4)
+
+opt
+SELECT * FROM t@{AVOID_FULL_SCAN}
+----
+scan t
+ ├── columns: k:1!null a:2 b:3 c:4
+ ├── flags: avoid-full-scan
+ ├── stats: [rows=100000]
+ ├── cost: 108028.82
+ ├── cost-flags: full-scan-penalty
  ├── key: (1)
  └── fd: (1)-->(2-4)
 
@@ -620,12 +635,30 @@ index-join t
       └── fd: (1)-->(3)
 
 opt
+SELECT * FROM t@{AVOID_FULL_SCAN} WHERE c > 0
+----
+index-join t
+ ├── columns: k:1!null a:2 b:3 c:4!null
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+ ├── cost: 234671.505
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t@b_partial,partial
+      ├── columns: k:1!null b:3
+      ├── flags: avoid-full-scan
+      ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+      ├── cost: 34341.4524
+      ├── key: (1)
+      └── fd: (1)-->(3)
+
+opt
 SELECT * FROM t@{FORCE_INDEX=b_partial,NO_FULL_SCAN} WHERE c > 0
 ----
 select
  ├── columns: k:1!null a:2 b:3 c:4!null
  ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
  ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan t
@@ -636,10 +669,30 @@ select
  │    ├── flags: force-index=b_partial no-full-scan
  │    ├── stats: [rows=100000, distinct(1)=3, null(1)=0, distinct(4)=10000, null(4)=1000]
  │    ├── cost: 1e+100
+ │    ├── cost-flags: huge-cost-penalty
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
       └── c:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
+
+opt
+SELECT * FROM t@{FORCE_INDEX=b_partial,AVOID_FULL_SCAN} WHERE c > 0
+----
+index-join t
+ ├── columns: k:1!null a:2 b:3 c:4!null
+ ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+ ├── cost: 234671.505
+ ├── cost-flags: full-scan-penalty
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ └── scan t@b_partial,partial
+      ├── columns: k:1!null b:3
+      ├── flags: force-index=b_partial avoid-full-scan
+      ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
+      ├── cost: 34341.4524
+      ├── cost-flags: full-scan-penalty
+      ├── key: (1)
+      └── fd: (1)-->(3)
 
 # Test that the FORCE_INVERTED_INDEX hint creates a huge cost for full table
 # scans.
@@ -654,6 +707,7 @@ scan t
  ├── flags:
  ├── stats: [rows=100000]
  ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty
  ├── key: (1)
  └── fd: (1)-->(2-4)
 
@@ -668,6 +722,7 @@ select
  │   histogram(3)=  0  0
  │                <--- 0
  ├── cost: 1e+100
+ ├── cost-flags: huge-cost-penalty
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4)
  ├── scan t
@@ -680,6 +735,7 @@ select
  │    │   histogram(3)=  0  0  1e+05  0
  │    │                <--- 0 ------- 10
  │    ├── cost: 1e+100
+ │    ├── cost-flags: huge-cost-penalty
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters

@@ -300,7 +300,7 @@ func (o *Optimizer) optimizeExpr(
 		// Short-circuit traversal of scalar expressions with no nested subquery,
 		// since there's only one possible tree.
 		if !t.ScalarProps().HasSubquery {
-			return 0, true
+			return memo.Cost{C: 0}, true
 		}
 		return o.optimizeScalarExpr(t)
 
@@ -614,9 +614,10 @@ func (o *Optimizer) optimizeGroupMember(
 				//               remote branch, e.g., compare the size of the limit hint
 				//               with the expected row count of the local branch.
 				//               Is there a better approach?
-				cost += childCost / 10
+				childCost.C /= 10
+				cost.Add(childCost)
 			} else {
-				cost += childCost
+				cost.Add(childCost)
 			}
 
 			// If any child expression is not fully optimized, then the parent
@@ -627,7 +628,7 @@ func (o *Optimizer) optimizeGroupMember(
 		}
 
 		// Check whether this is the new lowest cost expression.
-		cost += o.coster.ComputeCost(member, required)
+		cost.Add(o.coster.ComputeCost(member, required))
 		o.ratchetCost(state, member, cost)
 	}
 
@@ -647,7 +648,7 @@ func (o *Optimizer) optimizeScalarExpr(
 		childCost, childOptimized := o.optimizeExpr(scalar.Child(i), childProps)
 
 		// Accumulate cost of children.
-		cost += childCost
+		cost.Add(childCost)
 
 		// If any child expression is not fully optimized, then the parent
 		// expression is also not fully optimized.
@@ -748,7 +749,8 @@ func (o *Optimizer) optimizeEnforcer(
 
 	// Check whether this is the new lowest cost expression with the enforcer
 	// added.
-	cost := innerState.cost + o.coster.ComputeCost(enforcer, enforcerProps)
+	cost := innerState.cost
+	cost.Add(o.coster.ComputeCost(enforcer, enforcerProps))
 	if o.ratchetCost(state, enforcer, cost) {
 		if _, ok := enforcer.(*memo.SortExpr); ok {
 			// The expression was added to the memo, so lose the reference.
@@ -1162,7 +1164,7 @@ func (o *Optimizer) RecomputeCost() {
 func (o *Optimizer) recomputeCostImpl(
 	parent opt.Expr, parentProps *physical.Required, c Coster,
 ) memo.Cost {
-	cost := memo.Cost(0)
+	cost := memo.Cost{C: 0}
 	for i, n := 0, parent.ChildCount(); i < n; i++ {
 		child := parent.Child(i)
 		childProps := physical.MinRequired
@@ -1170,12 +1172,12 @@ func (o *Optimizer) recomputeCostImpl(
 		case memo.RelExpr:
 			childProps = t.RequiredPhysical()
 		}
-		cost += o.recomputeCostImpl(child, childProps, c)
+		cost.Add(o.recomputeCostImpl(child, childProps, c))
 	}
 
 	switch t := parent.(type) {
 	case memo.RelExpr:
-		cost += c.ComputeCost(t, parentProps)
+		cost.Add(c.ComputeCost(t, parentProps))
 		o.mem.ResetCost(t, cost)
 	}
 

@@ -281,7 +281,7 @@ CREATE INDEX idx2 ON p (s) WHERE i > 0
 memo expect=GeneratePartialIndexScans
 SELECT * FROM p WHERE i > 0 AND s = 'foo'
 ----
-memo (optimized, ~18KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+memo (optimized, ~19KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
  ├── G1: (select G2 G3) (index-join G4 p,cols=(1-5)) (index-join G5 p,cols=(1-5)) (index-join G6 p,cols=(1-5)) (index-join G7 p,cols=(1-5))
  │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
  │         ├── best: (index-join G4 p,cols=(1-5))
@@ -892,7 +892,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
-memo (optimized, ~10KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G6 b,cols=(1-4))
@@ -9707,7 +9707,7 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~40KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~41KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
@@ -9799,7 +9799,7 @@ select
 memo
 SELECT q,t FROM pqr WHERE q = 1 AND t = 'foo'
 ----
-memo (optimized, ~11KB, required=[presentation: q:2,t:5])
+memo (optimized, ~12KB, required=[presentation: q:2,t:5])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: q:2,t:5]
  │         ├── best: (select G4 G5)

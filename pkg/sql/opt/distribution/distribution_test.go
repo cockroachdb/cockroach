@@ -173,8 +173,8 @@ func TestGetDistributions(t *testing.T) {
 			inputRel := childInput
 			distributeExpr := &memo.DistributeExpr{Input: childInput}
 			distributeRel = distributeExpr
-			f.Memo().SetBestProps(distributeRel, &physical.Required{}, parentProvided, 0)
-			f.Memo().SetBestProps(inputRel, &physical.Required{}, childProvided, 0)
+			f.Memo().SetBestProps(distributeRel, &physical.Required{}, parentProvided, memo.Cost{C: 0})
+			f.Memo().SetBestProps(inputRel, &physical.Required{}, childProvided, memo.Cost{C: 0})
 
 			targetDist, sourceDist, ok := distributeExpr.GetDistributions()
 			// Check if we got distributions when expected.

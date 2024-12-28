@@ -54,7 +54,8 @@ UPDATE supermarket
 update supermarket
  └── project
       ├── scan supermarket
-      │    └── constraint: /9: [/'michael' - /'michael']
+      │    ├── constraint: /9: [/'michael' - /'michael']
+      │    └── flags: avoid-full-scan
       └── projections
            └── subquery
                 └── project

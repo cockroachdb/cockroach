@@ -314,6 +314,12 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
 		indexFlags = source.IndexFlags
 	}
+	if mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
+		if indexFlags == nil {
+			indexFlags = &tree.IndexFlags{}
+		}
+		indexFlags.AvoidFullScan = true
+	}
 
 	// Build the right side of the anti-join. Use a new metadata instance
 	// of the mutation table so that a different set of column IDs are used for
@@ -443,6 +449,12 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	var indexFlags *tree.IndexFlags
 	if source, ok := texpr.(*tree.AliasedTableExpr); ok {
 		indexFlags = source.IndexFlags
+	}
+	if mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
+		if indexFlags == nil {
+			indexFlags = &tree.IndexFlags{}
+		}
+		indexFlags.AvoidFullScan = true
 	}
 
 	// Build the right side of the left outer join. Use a different instance of

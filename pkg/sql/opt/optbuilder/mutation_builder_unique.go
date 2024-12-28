@@ -653,12 +653,16 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 			},
 		}
 	}
+	// After the update we can't guarantee that the constraints are unique
+	// (which is why we need the uniqueness checks in the first place).
+	indexFlags := &tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true}
+	if h.mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
+		indexFlags.AvoidFullScan = true
+	}
 	return h.mb.b.buildScan(
 		tabMeta,
 		ordinals,
-		// After the update we can't guarantee that the constraints are unique
-		// (which is why we need the uniqueness checks in the first place).
-		&tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true},
+		indexFlags,
 		locking,
 		h.mb.b.allocScope(),
 		true, /* disableNotVisibleIndex */

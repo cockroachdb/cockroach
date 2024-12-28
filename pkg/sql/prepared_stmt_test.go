@@ -18,29 +18,30 @@ func TestPlanCosts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	type testCase struct {
-		input       []memo.Cost
+		input       []float64
 		expectedNum int
-		expectedAvg memo.Cost
+		expectedAvg float64
 	}
 	testCases := []testCase{
-		{input: []memo.Cost{}, expectedNum: 0, expectedAvg: 0},
-		{input: []memo.Cost{0, 0}, expectedNum: 2, expectedAvg: 0},
-		{input: []memo.Cost{1, 1}, expectedNum: 2, expectedAvg: 1},
-		{input: []memo.Cost{1, 2, 3, 4, 5}, expectedNum: 5, expectedAvg: 3},
-		{input: []memo.Cost{1, 2, 3, 4, 5, 6}, expectedNum: 5, expectedAvg: 4},
-		{input: []memo.Cost{9, 9, 9, 9, 9, 1, 2, 3, 4, 5}, expectedNum: 5, expectedAvg: 3},
+		{input: []float64{}, expectedNum: 0, expectedAvg: 0},
+		{input: []float64{0, 0}, expectedNum: 2, expectedAvg: 0},
+		{input: []float64{1, 1}, expectedNum: 2, expectedAvg: 1},
+		{input: []float64{1, 2, 3, 4, 5}, expectedNum: 5, expectedAvg: 3},
+		{input: []float64{1, 2, 3, 4, 5, 6}, expectedNum: 5, expectedAvg: 4},
+		{input: []float64{9, 9, 9, 9, 9, 1, 2, 3, 4, 5}, expectedNum: 5, expectedAvg: 3},
 	}
 	var pc planCosts
 	for _, tc := range testCases {
 		pc.ClearCustom()
 		for _, cost := range tc.input {
-			pc.AddCustom(cost)
+			pc.AddCustom(memo.Cost{C: cost})
 		}
 		if pc.NumCustom() != tc.expectedNum {
 			t.Errorf("expected Len() to be %d, got %d", tc.expectedNum, pc.NumCustom())
 		}
-		if pc.AvgCustom() != tc.expectedAvg {
-			t.Errorf("expected Avg() to be %f, got %f", tc.expectedAvg, pc.AvgCustom())
+		expectedAvgCost := memo.Cost{C: tc.expectedAvg}
+		if pc.AvgCustom() != expectedAvgCost {
+			t.Errorf("expected Avg() to be %f, got %f", tc.expectedAvg, pc.AvgCustom().C)
 		}
 	}
 }

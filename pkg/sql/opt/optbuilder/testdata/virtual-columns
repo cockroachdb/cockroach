@@ -254,9 +254,10 @@ delete t
       │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan t
       │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── computed column expressions
-      │    │         └── v:8
-      │    │              └── a:6 + b:7
+      │    │    ├── computed column expressions
+      │    │    │    └── v:8
+      │    │    │         └── a:6 + b:7
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         └── a:6 + b:7 [as=v:8]
       └── filters
@@ -280,9 +281,10 @@ project
            │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
            │    ├── scan t
            │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-           │    │    └── computed column expressions
-           │    │         └── v:8
-           │    │              └── a:6 + b:7
+           │    │    ├── computed column expressions
+           │    │    │    └── v:8
+           │    │    │         └── a:6 + b:7
+           │    │    └── flags: avoid-full-scan
            │    └── projections
            │         └── a:6 + b:7 [as=v:8]
            └── filters
@@ -300,9 +302,10 @@ delete t
       │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan t
       │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── computed column expressions
-      │    │         └── v:8
-      │    │              └── a:6 + b:7
+      │    │    ├── computed column expressions
+      │    │    │    └── v:8
+      │    │    │         └── a:6 + b:7
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         └── a:6 + b:7 [as=v:8]
       └── filters
@@ -320,9 +323,10 @@ delete t
       │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan t
       │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── computed column expressions
-      │    │         └── v:8
-      │    │              └── a:6 + b:7
+      │    │    ├── computed column expressions
+      │    │    │    └── v:8
+      │    │    │         └── a:6 + b:7
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         └── a:6 + b:7 [as=v:8]
       └── filters
@@ -346,9 +350,10 @@ project
            │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
            │    ├── scan t
            │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-           │    │    └── computed column expressions
-           │    │         └── v:8
-           │    │              └── a:6 + b:7
+           │    │    ├── computed column expressions
+           │    │    │    └── v:8
+           │    │    │         └── a:6 + b:7
+           │    │    └── flags: avoid-full-scan
            │    └── projections
            │         └── a:6 + b:7 [as=v:8]
            └── filters
@@ -370,10 +375,11 @@ project
            ├── columns: v:6!null a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
            ├── scan t_cast
            │    ├── columns: a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
-           │    └── computed column expressions
-           │         └── v:6
-           │              └── assignment-cast: CHAR
-           │                   └── a:5
+           │    ├── computed column expressions
+           │    │    └── v:6
+           │    │         └── assignment-cast: CHAR
+           │    │              └── a:5
+           │    └── flags: avoid-full-scan
            └── projections
                 └── assignment-cast: CHAR [as=v:6]
                      └── a:5
@@ -390,9 +396,10 @@ delete t_idx
       │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan t_idx
       │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── computed column expressions
-      │    │         └── v:8
-      │    │              └── a:6 + b:7
+      │    │    ├── computed column expressions
+      │    │    │    └── v:8
+      │    │    │         └── a:6 + b:7
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         └── a:6 + b:7 [as=v:8]
       └── filters
@@ -416,9 +423,10 @@ project
            │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
            │    ├── scan t_idx
            │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-           │    │    └── computed column expressions
-           │    │         └── v:8
-           │    │              └── a:6 + b:7
+           │    │    ├── computed column expressions
+           │    │    │    └── v:8
+           │    │    │         └── a:6 + b:7
+           │    │    └── flags: avoid-full-scan
            │    └── projections
            │         └── a:6 + b:7 [as=v:8]
            └── filters
@@ -436,9 +444,10 @@ delete t_idx
       │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan t_idx
       │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── computed column expressions
-      │    │         └── v:8
-      │    │              └── a:6 + b:7
+      │    │    ├── computed column expressions
+      │    │    │    └── v:8
+      │    │    │         └── a:6 + b:7
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         └── a:6 + b:7 [as=v:8]
       └── filters
@@ -456,9 +465,10 @@ delete t_idx
       │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan t_idx
       │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── computed column expressions
-      │    │         └── v:8
-      │    │              └── a:6 + b:7
+      │    │    ├── computed column expressions
+      │    │    │    └── v:8
+      │    │    │         └── a:6 + b:7
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         └── a:6 + b:7 [as=v:8]
       └── filters
@@ -482,9 +492,10 @@ project
            │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
            │    ├── scan t_idx
            │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-           │    │    └── computed column expressions
-           │    │         └── v:8
-           │    │              └── a:6 + b:7
+           │    │    ├── computed column expressions
+           │    │    │    └── v:8
+           │    │    │         └── a:6 + b:7
+           │    │    └── flags: avoid-full-scan
            │    └── projections
            │         └── a:6 + b:7 [as=v:8]
            └── filters
@@ -516,9 +527,10 @@ update t
       │    │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── scan t
       │    │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    └── computed column expressions
-      │    │    │         └── v:8
-      │    │    │              └── a:6 + b:7
+      │    │    │    ├── computed column expressions
+      │    │    │    │    └── v:8
+      │    │    │    │         └── a:6 + b:7
+      │    │    │    └── flags: avoid-full-scan
       │    │    └── projections
       │    │         └── a:6 + b:7 [as=v:8]
       │    └── projections
@@ -545,9 +557,10 @@ update t
       │    │    │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    │    ├── scan t
       │    │    │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    │    └── computed column expressions
-      │    │    │    │         └── v:8
-      │    │    │    │              └── a:6 + b:7
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── v:8
+      │    │    │    │    │         └── a:6 + b:7
+      │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── projections
       │    │    │         └── a:6 + b:7 [as=v:8]
       │    │    └── filters
@@ -576,9 +589,10 @@ update t
       │    │    │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    │    ├── scan t
       │    │    │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    │    └── computed column expressions
-      │    │    │    │         └── v:8
-      │    │    │    │              └── a:6 + b:7
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── v:8
+      │    │    │    │    │         └── a:6 + b:7
+      │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── projections
       │    │    │         └── a:6 + b:7 [as=v:8]
       │    │    └── filters
@@ -611,10 +625,11 @@ project
            │    │    ├── columns: v:6!null a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
            │    │    ├── scan t_cast
            │    │    │    ├── columns: a:5!null crdb_internal_mvcc_timestamp:7 tableoid:8
-           │    │    │    └── computed column expressions
-           │    │    │         └── v:6
-           │    │    │              └── assignment-cast: CHAR
-           │    │    │                   └── a:5
+           │    │    │    ├── computed column expressions
+           │    │    │    │    └── v:6
+           │    │    │    │         └── assignment-cast: CHAR
+           │    │    │    │              └── a:5
+           │    │    │    └── flags: avoid-full-scan
            │    │    └── projections
            │    │         └── assignment-cast: CHAR [as=v:6]
            │    │              └── a:5
@@ -641,9 +656,10 @@ update t_idx
       │    │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    ├── scan t_idx
       │    │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    └── computed column expressions
-      │    │    │         └── v:8
-      │    │    │              └── a:6 + b:7
+      │    │    │    ├── computed column expressions
+      │    │    │    │    └── v:8
+      │    │    │    │         └── a:6 + b:7
+      │    │    │    └── flags: avoid-full-scan
       │    │    └── projections
       │    │         └── a:6 + b:7 [as=v:8]
       │    └── projections
@@ -670,9 +686,10 @@ update t_idx
       │    │    │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    │    ├── scan t_idx
       │    │    │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    │    └── computed column expressions
-      │    │    │    │         └── v:8
-      │    │    │    │              └── a:6 + b:7
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── v:8
+      │    │    │    │    │         └── a:6 + b:7
+      │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── projections
       │    │    │         └── a:6 + b:7 [as=v:8]
       │    │    └── filters
@@ -701,9 +718,10 @@ update t_idx
       │    │    │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    │    ├── scan t_idx
       │    │    │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    │    └── computed column expressions
-      │    │    │    │         └── v:8
-      │    │    │    │              └── a:6 + b:7
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    └── v:8
+      │    │    │    │    │         └── a:6 + b:7
+      │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── projections
       │    │    │         └── a:6 + b:7 [as=v:8]
       │    │    └── filters
@@ -736,9 +754,10 @@ project
            │    │    ├── columns: v:8 a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
            │    │    ├── scan t_idx
            │    │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-           │    │    │    └── computed column expressions
-           │    │    │         └── v:8
-           │    │    │              └── a:6 + b:7
+           │    │    │    ├── computed column expressions
+           │    │    │    │    └── v:8
+           │    │    │    │         └── a:6 + b:7
+           │    │    │    └── flags: avoid-full-scan
            │    │    └── projections
            │    │         └── a:6 + b:7 [as=v:8]
            │    └── projections
@@ -771,11 +790,12 @@ project
            │    │    ├── columns: v:11 w:12 a:8!null b:9 c:10 crdb_internal_mvcc_timestamp:13 tableoid:14
            │    │    ├── scan t_idx2
            │    │    │    ├── columns: a:8!null b:9 c:10 crdb_internal_mvcc_timestamp:13 tableoid:14
-           │    │    │    └── computed column expressions
-           │    │    │         ├── v:11
-           │    │    │         │    └── a:8 + b:9
-           │    │    │         └── w:12
-           │    │    │              └── c:10 + 1
+           │    │    │    ├── computed column expressions
+           │    │    │    │    ├── v:11
+           │    │    │    │    │    └── a:8 + b:9
+           │    │    │    │    └── w:12
+           │    │    │    │         └── c:10 + 1
+           │    │    │    └── flags: avoid-full-scan
            │    │    └── projections
            │    │         ├── a:8 + b:9 [as=v:11]
            │    │         └── c:10 + 1 [as=w:12]
@@ -806,11 +826,12 @@ update t_check
       │    │    │    ├── columns: v:9 w:10 a:7!null b:8 crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    ├── scan t_check
       │    │    │    │    ├── columns: a:7!null b:8 crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    └── computed column expressions
-      │    │    │    │         ├── v:9
-      │    │    │    │         │    └── a:7 + b:8
-      │    │    │    │         └── w:10
-      │    │    │    │              └── a:7 * b:8
+      │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    ├── v:9
+      │    │    │    │    │    │    └── a:7 + b:8
+      │    │    │    │    │    └── w:10
+      │    │    │    │    │         └── a:7 * b:8
+      │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── projections
       │    │    │         ├── a:7 + b:8 [as=v:9]
       │    │    │         └── a:7 * b:8 [as=w:10]
@@ -886,7 +907,7 @@ upsert t
       │    │    │    │    ├── computed column expressions
       │    │    │    │    │    └── v:11
       │    │    │    │    │         └── a:9 + b:10
-      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    └── projections
       │    │    │         └── a:9 + b:10 [as=v:11]
       │    │    └── filters
@@ -1002,7 +1023,7 @@ project
            │    │    │    ├── computed column expressions
            │    │    │    │    └── v:11
            │    │    │    │         └── a:9 + b:10
-           │    │    │    └── flags: disabled not visible index feature
+           │    │    │    └── flags: avoid-full-scan disabled not visible index feature
            │    │    └── projections
            │    │         └── a:9 + b:10 [as=v:11]
            │    └── filters
@@ -1049,7 +1070,7 @@ project
            │    │    │    │    └── v:8
            │    │    │    │         └── assignment-cast: CHAR
            │    │    │    │              └── a:7
-           │    │    │    └── flags: disabled not visible index feature
+           │    │    │    └── flags: avoid-full-scan disabled not visible index feature
            │    │    └── projections
            │    │         └── assignment-cast: CHAR [as=v:8]
            │    │              └── a:7
@@ -1093,7 +1114,7 @@ insert t_idx2
       │    │    │    │    │    └── a:13 + b:14
       │    │    │    │    └── w:17
       │    │    │    │         └── c:15 + 1
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── projections
       │    │         ├── a:13 + b:14 [as=v:16]
       │    │         └── c:15 + 1 [as=w:17]
@@ -1148,7 +1169,7 @@ insert t_idx2
       │    │    │    │    │    │    │    └── a:13 + b:14
       │    │    │    │    │    │    └── w:17
       │    │    │    │    │    │         └── c:15 + 1
-      │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    │    └── projections
       │    │    │    │         ├── a:13 + b:14 [as=v:16]
       │    │    │    │         └── c:15 + 1 [as=w:17]
@@ -1163,7 +1184,7 @@ insert t_idx2
       │    │    │    │    │    │    └── a:20 + b:21
       │    │    │    │    │    └── w:24
       │    │    │    │    │         └── c:22 + 1
-      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    └── projections
       │    │    │         ├── a:20 + b:21 [as=v:23]
       │    │    │         └── c:22 + 1 [as=w:24]
@@ -1233,7 +1254,7 @@ upsert t
       │    │    │    │    │    ├── computed column expressions
       │    │    │    │    │    │    └── v:11
       │    │    │    │    │    │         └── a:9 + b:10
-      │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    │    └── projections
       │    │    │    │         └── a:9 + b:10 [as=v:11]
       │    │    │    └── filters
@@ -1292,7 +1313,7 @@ upsert t
       │    │    │    │    │    ├── computed column expressions
       │    │    │    │    │    │    └── v:11
       │    │    │    │    │    │         └── a:9 + b:10
-      │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    │    └── projections
       │    │    │    │         └── a:9 + b:10 [as=v:11]
       │    │    │    └── filters
@@ -1360,7 +1381,7 @@ upsert t_idx2
       │    │    │    │    │    │    │    └── a:13 + b:14
       │    │    │    │    │    │    └── w:17
       │    │    │    │    │    │         └── c:15 + 1
-      │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    │    └── projections
       │    │    │    │         ├── a:13 + b:14 [as=v:16]
       │    │    │    │         └── c:15 + 1 [as=w:17]
@@ -1432,7 +1453,7 @@ upsert t_idx2
       │    │    │    │    │    │    │    └── a:13 + b:14
       │    │    │    │    │    │    └── w:17
       │    │    │    │    │    │         └── c:15 + 1
-      │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    │    └── projections
       │    │    │    │         ├── a:13 + b:14 [as=v:16]
       │    │    │    │         └── c:15 + 1 [as=w:17]
@@ -1537,7 +1558,7 @@ upsert t1
       │    │    ├── scan t1
       │    │    │    ├── columns: a:8!null b:9
       │    │    │    ├── constraint: /8: [/1 - /1]
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── projections
       │    │         └── b:9 + 1 [as=b_plus_one:10]
       │    └── filters (true)
@@ -1561,7 +1582,8 @@ update t1
       │    ├── columns: a:6!null b:7!null
       │    ├── scan t1
       │    │    ├── columns: a:6!null b:7
-      │    │    └── constraint: /6: [/1 - /1]
+      │    │    ├── constraint: /6: [/1 - /1]
+      │    │    └── flags: avoid-full-scan
       │    └── filters
       │         └── b:7 = 2
       └── projections
@@ -1583,7 +1605,8 @@ delete t1
       │    ├── columns: a:6!null b:7!null
       │    ├── scan t1
       │    │    ├── columns: a:6!null b:7
-      │    │    └── constraint: /6: [/2 - /2]
+      │    │    ├── constraint: /6: [/2 - /2]
+      │    │    └── flags: avoid-full-scan
       │    └── filters
       │         └── b:7 = 2
       └── projections
@@ -1617,7 +1640,7 @@ upsert t1
       │    │    ├── scan t1
       │    │    │    ├── columns: a:8!null b:9
       │    │    │    ├── constraint: /8: [/1 - /1]
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── projections
       │    │         └── b:9 + 1 [as=b_plus_one:10]
       │    └── filters (true)
@@ -1664,7 +1687,7 @@ upsert t11
       │    │    ├── scan t11
       │    │    │    ├── columns: a:9!null b:10
       │    │    │    ├── constraint: /9: [/1 - /1]
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── projections
       │    │         └── b:10 + 1 [as=b_plus_one:11]
       │    └── filters (true)
@@ -1691,7 +1714,8 @@ update t11
       │    │    ├── columns: a:6!null b:7!null
       │    │    ├── scan t11
       │    │    │    ├── columns: a:6!null b:7
-      │    │    │    └── constraint: /6: [/1 - /1]
+      │    │    │    ├── constraint: /6: [/1 - /1]
+      │    │    │    └── flags: avoid-full-scan
       │    │    └── filters
       │    │         └── b:7 = 2
       │    └── projections
@@ -1715,7 +1739,8 @@ delete t11
       │    ├── columns: a:6!null b:7!null
       │    ├── scan t11
       │    │    ├── columns: a:6!null b:7
-      │    │    └── constraint: /6: [/2 - /2]
+      │    │    ├── constraint: /6: [/2 - /2]
+      │    │    └── flags: avoid-full-scan
       │    └── filters
       │         └── b:7 = 2
       └── projections
@@ -1753,7 +1778,7 @@ upsert t11
       │    │    │    ├── scan t11
       │    │    │    │    ├── columns: a:9!null b:10
       │    │    │    │    ├── constraint: /9: [/1 - /1]
-      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    └── projections
       │    │    │         └── b:10 + 1 [as=b_plus_one:11]
       │    │    └── filters (true)
