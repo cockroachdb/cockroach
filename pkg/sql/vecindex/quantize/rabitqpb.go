@@ -8,6 +8,7 @@ package quantize
 import (
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -56,6 +57,18 @@ func (cs *RaBitQCodeSet) Clone() RaBitQCodeSet {
 		Width: cs.Width,
 		Data:  slices.Clone(cs.Data),
 	}
+}
+
+// Clear resets the code set so that it can be reused.
+func (cs *RaBitQCodeSet) Clear() {
+	if buildutil.CrdbTestBuild {
+		// Write non-zero values to cleared memory.
+		for i := 0; i < len(cs.Data); i++ {
+			cs.Data[i] = 0xBADF00D
+		}
+	}
+	cs.Count = 0
+	cs.Data = cs.Data[:0]
 }
 
 // At returns the code at the given position in the set as a slice of uint64
@@ -130,6 +143,15 @@ func (vs *RaBitQuantizedVectorSet) Clone() QuantizedVectorSet {
 		CentroidDistances: slices.Clone(vs.CentroidDistances),
 		DotProducts:       slices.Clone(vs.DotProducts),
 	}
+}
+
+// Clear implements the QuantizedVectorSet interface
+func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
+	copy(vs.Centroid, centroid)
+	vs.Codes.Clear()
+	vs.CodeCounts = vs.CodeCounts[:0]
+	vs.CentroidDistances = vs.CentroidDistances[:0]
+	vs.DotProducts = vs.DotProducts[:0]
 }
 
 // AddUndefined adds the given number of quantized vectors to this set. The new
