@@ -2774,3 +2774,10 @@ func (desc *Mutable) BumpExternalAsOf(timestamp hlc.Timestamp) error {
 	desc.External.AsOf = timestamp
 	return nil
 }
+
+// ForceModificationTime allows the modification time to be set externally.
+// Note: This API is only used by the leasing code to adjust modification time
+// since the builder will not populate it for offline descriptors.
+func (desc *Mutable) ForceModificationTime(modificationTime hlc.Timestamp) {
+	desc.ModificationTime = modificationTime
+}

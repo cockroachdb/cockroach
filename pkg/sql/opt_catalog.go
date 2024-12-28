@@ -509,6 +509,39 @@ func (oc *optCatalog) GetCurrentUser() username.SQLUsername {
 	return oc.planner.User()
 }
 
+// UpdateCatalogGeneration is part of the cat.Catalog interface.
+func (oc *optCatalog) UpdateCatalogGeneration(g *cat.CatalogGeneration) (updated bool) {
+	// The stats cache may not be setup in some tests like
+	// TestPortalsDestroyedOnTxnFinish.
+	if oc.planner.ExecCfg().TableStatsCache == nil {
+		return true
+	}
+	// Ensure that neither the lease manager nor stats collection has seen
+	// any updates, which will allow us to skip re-resolution. Confirm that
+	// the current database and search path are the same as the previous usage
+	// of this memo.
+	lg := oc.planner.Descriptors().GetLeaseGeneration()
+	sg := oc.planner.execCfg.TableStatsCache.GetGeneration()
+	sc := oc.planner.execCfg.SystemConfig.GetSystemConfig()
+	if g.LeaseGeneration == lg &&
+		g.StatsGeneration == sg &&
+		g.SystemConfig == sc &&
+		g.CurrentDatabase == oc.planner.CurrentDatabase() &&
+		g.SearchPath.Equals(&oc.planner.SessionData().SearchPath) &&
+		g.CurrentUser == oc.planner.User() {
+		return false
+	}
+	*g = cat.CatalogGeneration{
+		LeaseGeneration: lg,
+		StatsGeneration: sg,
+		SystemConfig:    sc,
+		CurrentDatabase: oc.planner.CurrentDatabase(),
+		SearchPath:      oc.planner.SessionData().SearchPath,
+		CurrentUser:     oc.planner.User(),
+	}
+	return true
+}
+
 // GetRoutineOwner is part of the cat.Catalog interface.
 func (oc *optCatalog) GetRoutineOwner(
 	ctx context.Context, routineOid oid.Oid,

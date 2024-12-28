@@ -32,4 +32,6 @@ message WaitStats {
     (gogoproto.customtype) =
       "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
+  // Identifies the target, which will be non-zero for wait for initial version.
+  int32 target_count  = 7;
 }
