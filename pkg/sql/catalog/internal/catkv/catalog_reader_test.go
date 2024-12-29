@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -430,13 +431,26 @@ func (h testHelper) catalogToYaml(c nstree.Catalog) interface{} {
 		ids.Add(id)
 	}
 	y := make(map[string]interface{})
+
+	var systemDatabaseEntry map[string]interface{}
+	var numSystemObjects int
 	for _, id := range ids.Ordered() {
 		j := m[id]
 		jm := make(map[string]interface{})
+		if id == keys.SystemDatabaseID {
+			systemDatabaseEntry = jm
+		}
 		if j.d != nil {
 			jm["descriptor"] = j.d.DescriptorType()
 		}
 		if j.ns != nil {
+			if j.ns.ParentID == keys.SystemDatabaseID {
+				if systemDatabaseEntry != nil {
+					// Skip this entry, it will be aggregated into the systemEntry.
+					numSystemObjects++
+					continue
+				}
+			}
 			jm["namespace"] = fmt.Sprintf("(%d, %d, %q)",
 				j.ns.ParentID, j.ns.ParentSchemaID, j.ns.Name)
 		}
@@ -459,6 +473,9 @@ func (h testHelper) catalogToYaml(c nstree.Catalog) interface{} {
 			jm["comments"] = cm
 		}
 		y[fmt.Sprintf("%03d", id)] = jm
+	}
+	if systemDatabaseEntry != nil {
+		systemDatabaseEntry["num_objects"] = numSystemObjects
 	}
 	return y
 }
