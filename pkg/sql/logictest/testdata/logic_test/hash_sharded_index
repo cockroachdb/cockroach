@@ -221,8 +221,9 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
 statement ok
 CREATE INDEX idx on sharded_secondary (a) USING HASH WITH (bucket_count=3)
 
+# Use high priority to decrease the likelihood of the transaction being aborted.
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+BEGIN TRANSACTION PRIORITY HIGH ISOLATION LEVEL SERIALIZABLE
 
 statement ok
 SELECT crdb_internal_a_shard_3 FROM sharded_secondary
