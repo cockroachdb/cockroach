@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -314,9 +315,9 @@ func (rh *ReplicationHelper) StartReplicationStream(
 	return replicationProducerSpec
 }
 
-func (rh *ReplicationHelper) MaybeGenerateInlineURL(t *testing.T) *url.URL {
+func (rh *ReplicationHelper) MaybeGenerateInlineURL(t *testing.T) streamclient.ClusterUri {
 	if rh.rng.Float64() > 0.5 {
-		return &rh.PGUrl
+		return streamclient.MakeTestClusterUri(rh.PGUrl)
 	}
 
 	t.Log("using inline certificates")
@@ -331,5 +332,5 @@ func (rh *ReplicationHelper) MaybeGenerateInlineURL(t *testing.T) *url.URL {
 	}
 	v.Set("sslinline", "true")
 	ret.RawQuery = v.Encode()
-	return &ret
+	return streamclient.MakeTestClusterUri(ret)
 }

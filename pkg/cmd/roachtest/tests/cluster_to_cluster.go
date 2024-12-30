@@ -1552,7 +1552,7 @@ func getPhase(rd *replicationDriver, dstJobID jobspb.JobID) c2cPhase {
 	streamIngestProgress := getJobProgress(rd.t, rd.setup.dst.sysSQL, dstJobID).GetStreamIngest()
 
 	if streamIngestProgress.ReplicatedTime.IsEmpty() {
-		if len(streamIngestProgress.StreamAddresses) == 0 {
+		if len(streamIngestProgress.PartitionConnUris) == 0 {
 			return phaseNotReady
 		}
 		// Only return phaseInitialScan once all available stream addresses from the

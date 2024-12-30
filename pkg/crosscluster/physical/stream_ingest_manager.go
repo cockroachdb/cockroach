@@ -88,10 +88,12 @@ func getReplicationStatsAndStatus(
 			errors.Newf("job with id %d is not a stream ingestion job", job.ID())
 	}
 
-	details.StreamAddress, err = streamclient.RedactSourceURI(details.StreamAddress)
+	uri, err := streamclient.ParseConfigUri(details.SourceClusterConnUri)
 	if err != nil {
 		return nil, jobspb.ReplicationError.String(), err
 	}
+
+	details.SourceClusterConnUri = uri.Redacted()
 
 	stats, err := replicationutils.GetStreamIngestionStats(ctx, details, job.Progress())
 	if err != nil {

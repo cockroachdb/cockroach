@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -39,17 +38,14 @@ const defaultRetentionTTLSeconds = int32(4 * 60 * 60)
 var CannotSetExpirationWindowErr = errors.New("cannot specify EXPIRATION WINDOW option while starting a physical replication stream")
 
 func streamIngestionJobDescription(
-	p sql.PlanHookState, sourceAddr string, streamIngestion *tree.CreateTenantFromReplication,
+	p sql.PlanHookState,
+	source streamclient.ConfigUri,
+	streamIngestion *tree.CreateTenantFromReplication,
 ) (string, error) {
-	redactedSourceAddr, err := streamclient.RedactSourceURI(sourceAddr)
-	if err != nil {
-		return "", err
-	}
-
 	redactedCreateStmt := &tree.CreateTenantFromReplication{
 		TenantSpec:                  streamIngestion.TenantSpec,
 		ReplicationSourceTenantName: streamIngestion.ReplicationSourceTenantName,
-		ReplicationSourceAddress:    tree.NewDString(redactedSourceAddr),
+		ReplicationSourceConnUri:    tree.NewDString(source.Redacted()),
 		Options:                     streamIngestion.Options,
 	}
 	ann := p.ExtendedEvalContext().Annotations
@@ -67,7 +63,7 @@ func ingestionTypeCheck(
 		exprutil.TenantSpec{TenantSpec: ingestionStmt.TenantSpec},
 		exprutil.TenantSpec{TenantSpec: ingestionStmt.ReplicationSourceTenantName},
 		exprutil.Strings{
-			ingestionStmt.ReplicationSourceAddress,
+			ingestionStmt.ReplicationSourceConnUri,
 			ingestionStmt.Options.Retention},
 	}
 
@@ -93,7 +89,7 @@ func ingestionPlanHook(
 
 	exprEval := p.ExprEvaluator("INGESTION")
 
-	from, err := exprEval.String(ctx, ingestionStmt.ReplicationSourceAddress)
+	from, err := exprEval.String(ctx, ingestionStmt.ReplicationSourceConnUri)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -141,12 +137,10 @@ func ingestionPlanHook(
 			return err
 		}
 
-		streamAddress := crosscluster.StreamAddress(from)
-		streamURL, err := streamAddress.URL()
+		configUri, err := streamclient.ParseConfigUri(from)
 		if err != nil {
 			return err
 		}
-		streamAddress = crosscluster.StreamAddress(streamURL.String())
 
 		if roachpb.IsSystemTenantName(roachpb.TenantName(dstTenantName)) ||
 			roachpb.IsSystemTenantID(dstTenantID) {
@@ -198,7 +192,7 @@ func ingestionPlanHook(
 		return createReplicationJob(
 			ctx,
 			p,
-			streamAddress,
+			configUri,
 			sourceTenant,
 			destinationTenantID,
 			retentionTTLSeconds,
@@ -217,7 +211,7 @@ func ingestionPlanHook(
 func createReplicationJob(
 	ctx context.Context,
 	p sql.PlanHookState,
-	streamAddress crosscluster.StreamAddress,
+	configUri streamclient.ConfigUri,
 	sourceTenant string,
 	destinationTenantID roachpb.TenantID,
 	retentionTTLSeconds int32,
@@ -228,9 +222,13 @@ func createReplicationJob(
 	stmt *tree.CreateTenantFromReplication,
 	readerID roachpb.TenantID,
 ) error {
+	clusterUri, err := configUri.AsClusterUri(ctx, p.ExecCfg().InternalDB)
+	if err != nil {
+		return err
+	}
 
 	// Create a new stream with stream client.
-	client, err := streamclient.NewStreamClient(ctx, streamAddress, p.ExecCfg().InternalDB)
+	client, err := streamclient.NewStreamClient(ctx, clusterUri, p.ExecCfg().InternalDB)
 	if err != nil {
 		return err
 	}
@@ -260,7 +258,7 @@ func createReplicationJob(
 	}
 
 	streamIngestionDetails := jobspb.StreamIngestionDetails{
-		StreamAddress:         string(streamAddress),
+		SourceClusterConnUri:  configUri.Serialize(),
 		StreamID:              uint64(replicationProducerSpec.StreamID),
 		Span:                  keys.MakeTenantSpan(destinationTenantID),
 		ReplicationTTLSeconds: retentionTTLSeconds,
@@ -273,7 +271,7 @@ func createReplicationJob(
 		ReadTenantID:         readerID,
 	}
 
-	jobDescription, err := streamIngestionJobDescription(p, string(streamAddress), stmt)
+	jobDescription, err := streamIngestionJobDescription(p, configUri, stmt)
 	if err != nil {
 		return err
 	}

@@ -46,7 +46,7 @@ func TestSpanConfigClient(t *testing.T) {
 	ctx := context.Background()
 
 	maybeInlineURL := h.MaybeGenerateInlineURL(t)
-	client, err := streamclient.NewSpanConfigStreamClient(ctx, maybeInlineURL, nil)
+	client, err := streamclient.NewSpanConfigStreamClient(ctx, maybeInlineURL)
 	defer func() {
 		require.NoError(t, client.Close(ctx))
 	}()
