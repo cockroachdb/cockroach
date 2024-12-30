@@ -108,6 +108,31 @@ func (r *logicalReplicationResumer) updateRunningStatus(
 	}
 }
 
+func (r logicalReplicationResumer) getClusterUris(
+	ctx context.Context, job *jobs.Job, db *sql.InternalDB,
+) ([]streamclient.ClusterUri, error) {
+	var (
+		progress = job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+		payload  = job.Details().(jobspb.LogicalReplicationDetails)
+	)
+
+	clusterUri, err := streamclient.LookupClusterUri(ctx, payload.SourceClusterConnUri, db)
+	if err != nil {
+		return nil, err
+	}
+
+	uris := []streamclient.ClusterUri{clusterUri}
+	for _, uri := range progress.PartitionConnUris {
+		parsed, err := streamclient.ParseClusterUri(uri)
+		if err != nil {
+			return nil, err
+		}
+		uris = append(uris, parsed)
+	}
+
+	return uris, nil
+}
+
 func (r *logicalReplicationResumer) ingest(
 	ctx context.Context, jobExecCtx sql.JobExecContext,
 ) error {
@@ -129,8 +154,13 @@ func (r *logicalReplicationResumer) ingest(
 		return err
 	}
 
+	uris, err := r.getClusterUris(ctx, r.job, execCfg.InternalDB)
+	if err != nil {
+		return err
+	}
+
 	client, err := streamclient.GetFirstActiveClient(ctx,
-		append([]string{payload.SourceClusterConnStr}, progress.StreamAddresses...),
+		uris,
 		execCfg.InternalDB,
 		streamclient.WithStreamID(streampb.StreamID(streamID)),
 		streamclient.WithLogical(),
@@ -158,7 +188,7 @@ func (r *logicalReplicationResumer) ingest(
 	}
 	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		ldrProg := md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-		ldrProg.StreamAddresses = planInfo.streamAddress
+		ldrProg.PartitionConnUris = planInfo.partitionPgUrls
 		ju.UpdateProgress(md.Progress)
 		return nil
 	}); err != nil {
@@ -331,7 +361,7 @@ type logicalReplicationPlanner struct {
 
 type logicalReplicationPlanInfo struct {
 	sourceSpans         []roachpb.Span
-	streamAddress       []string
+	partitionPgUrls     []string
 	destTableBySrcID    map[descpb.ID]dstTableMetadata
 	writeProcessorCount int
 }
@@ -398,7 +428,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 	}
 
 	info.sourceSpans = plan.SourceSpans
-	info.streamAddress = plan.Topology.StreamAddresses()
+	info.partitionPgUrls = plan.Topology.SerializedClusterUris()
 
 	var defaultFnOID oid.Oid
 	if defaultFnID := payload.DefaultConflictResolution.FunctionId; defaultFnID != 0 {
@@ -465,8 +495,13 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		return nil, nil, info, err
 	}
 
+	sourceUri, err := streamclient.LookupClusterUri(ctx, payload.SourceClusterConnUri, execCfg.InternalDB)
+	if err != nil {
+		return nil, nil, info, err
+	}
+
 	specs, err := constructLogicalReplicationWriterSpecs(ctx,
-		crosscluster.StreamAddress(payload.SourceClusterConnStr),
+		sourceUri,
 		plan.Topology,
 		destNodeLocalities,
 		payload.ReplicationStartTime,
@@ -529,8 +564,8 @@ func (p *logicalReplicationPlanner) planOfflineInitialScan(
 		progress = p.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
 		payload  = p.job.Payload().Details.(*jobspb.Payload_LogicalReplicationDetails).LogicalReplicationDetails
 		info     = logicalReplicationPlanInfo{
-			sourceSpans:   plan.SourceSpans,
-			streamAddress: plan.Topology.StreamAddresses(),
+			sourceSpans:     plan.SourceSpans,
+			partitionPgUrls: plan.Topology.SerializedClusterUris(),
 		}
 	)
 
@@ -568,8 +603,13 @@ func (p *logicalReplicationPlanner) planOfflineInitialScan(
 		return nil, nil, info, err
 	}
 
+	uri, err := streamclient.LookupClusterUri(ctx, payload.SourceClusterConnUri, execCfg.InternalDB)
+	if err != nil {
+		return nil, nil, info, err
+	}
+
 	specs, err := constructOfflineInitialScanSpecs(ctx,
-		crosscluster.StreamAddress(payload.SourceClusterConnStr),
+		uri,
 		plan.Topology,
 		destNodeLocalities,
 		payload.ReplicationStartTime,
@@ -821,16 +861,20 @@ func (r *logicalReplicationResumer) completeProducerJob(
 	ctx context.Context, internalDB *sql.InternalDB,
 ) {
 	var (
-		progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-		payload  = r.job.Details().(jobspb.LogicalReplicationDetails)
+		payload = r.job.Details().(jobspb.LogicalReplicationDetails)
 	)
 
 	streamID := streampb.StreamID(payload.StreamID)
 	log.Infof(ctx, "attempting to update producer job %d", streamID)
 	if err := timeutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
 		func(ctx context.Context) error {
+			uris, err := r.getClusterUris(ctx, r.job, internalDB)
+			if err != nil {
+				return err
+			}
+
 			client, err := streamclient.GetFirstActiveClient(ctx,
-				append([]string{payload.SourceClusterConnStr}, progress.StreamAddresses...),
+				uris,
 				internalDB,
 				streamclient.WithStreamID(streamID),
 				streamclient.WithLogical(),

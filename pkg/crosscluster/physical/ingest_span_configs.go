@@ -80,9 +80,13 @@ func makeSpanConfigIngestor(
 	sourceTenantID roachpb.TenantID,
 	stopperCh chan struct{},
 ) (*spanConfigIngestor, error) {
+	clusterUris, err := getClusterUris(ctx, ingestionJob, execCfg.InternalDB)
+	if err != nil {
+		return nil, err
 
-	streamAddreses := getStreamAddresses(ctx, ingestionJob)
-	client, err := streamclient.GetFirstActiveSpanConfigClient(ctx, streamAddreses, execCfg.InternalDB)
+	}
+
+	client, err := streamclient.GetFirstActiveSpanConfigClient(ctx, clusterUris)
 	if err != nil {
 		return nil, err
 	}

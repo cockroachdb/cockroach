@@ -189,7 +189,7 @@ message StreamIngestionPartitionSpec {
 
   optional string subscription_token = 2 [(gogoproto.nullable) = false];
 
-  optional string address = 3 [(gogoproto.nullable) = false];
+  optional string partition_conn_uri = 3 [(gogoproto.nullable) = false];
 
   repeated roachpb.Span spans = 4 [(gogoproto.nullable) = false];
 
@@ -275,8 +275,9 @@ message StreamIngestionFrontierSpec {
   // Checkpoint stores a set of resolved spans denoting completed progress
   optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 7 [(gogoproto.nullable) = false];
 
-  // StreamAddresses are the addresses that can be connected to to interact with the source job
-  repeated string stream_addresses = 8;
+	// ConnectionUris are the URIs that can be connected to to interact with the
+	// source job
+  repeated string connection_uris = 8;
 
   // PartitionSpecs contains the topology of the physical replication stream.
   optional StreamIngestionPartitionSpecs partition_specs = 9 [(gogoproto.nullable) = false];
@@ -515,8 +516,9 @@ message LogicalReplicationWriterSpec {
     // ingesting data from the PreviousReplicatedTimestamp described above.
     optional util.hlc.Timestamp initial_scan_timestamp = 5 [(gogoproto.nullable) = false];
 
-    // StreamAddress locate the stream so that a stream client can be initialized.
-    optional string stream_address = 6 [(gogoproto.nullable) = false];
+		// PartitionConnUri locate the stream so that a stream client can be
+		// initialized.
+    optional string partition_conn_uri = 6 [(gogoproto.nullable) = false];
 
     // Checkpoint stores a set of resolved spans denoting completed progress.
     optional jobs.jobspb.StreamIngestionCheckpoint checkpoint = 7 [(gogoproto.nullable) = false];

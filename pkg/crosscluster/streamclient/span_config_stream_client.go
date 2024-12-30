@@ -7,11 +7,9 @@ package streamclient
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -41,23 +39,9 @@ type spanConfigClient struct {
 var _ SpanConfigClient = &spanConfigClient{}
 
 func NewSpanConfigStreamClient(
-	ctx context.Context, remote *url.URL, db isql.DB, opts ...Option,
+	ctx context.Context, remoteUri ClusterUri, opts ...Option,
 ) (SpanConfigClient, error) {
-
-	if remote.Scheme == "external" {
-		if db == nil {
-			return nil, errors.AssertionFailedf("nil db handle can't be used to dereference external URI")
-		}
-		addr, err := lookupExternalConnection(ctx, remote.Host, db)
-		if err != nil {
-			return nil, err
-		}
-		url, err := addr.URL()
-		if err != nil {
-			return nil, err
-		}
-		return NewSpanConfigStreamClient(ctx, url, db, opts...)
-	}
+	remote := remoteUri.URL()
 
 	options := processOptions(opts)
 	conn, config, err := newPGConnForClient(ctx, remote, options)
@@ -79,15 +63,10 @@ func NewSpanConfigStreamClient(
 // GetFirstActiveSpanConfigClient iterates through each provided stream address
 // and returns the first client it's able to successfully Dial.
 func GetFirstActiveSpanConfigClient(
-	ctx context.Context, streamAddresses []string, db isql.DB, opts ...Option,
+	ctx context.Context, streamAddresses []ClusterUri, opts ...Option,
 ) (SpanConfigClient, error) {
-
-	newClient := func(ctx context.Context, address crosscluster.StreamAddress) (SpanConfigClient, error) {
-		streamURL, err := address.URL()
-		if err != nil {
-			return nil, err
-		}
-		return NewSpanConfigStreamClient(ctx, streamURL, db, opts...)
+	newClient := func(ctx context.Context, sourceUri ClusterUri) (SpanConfigClient, error) {
+		return NewSpanConfigStreamClient(ctx, sourceUri, opts...)
 	}
 	return getFirstClient(ctx, streamAddresses, newClient)
 }

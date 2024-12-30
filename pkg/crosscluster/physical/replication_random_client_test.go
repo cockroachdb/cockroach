@@ -58,7 +58,9 @@ func getReplicatedTime(ingestionJobID int, sqlDB *gosql.DB) (hlc.Timestamp, erro
 	return replicationutils.ReplicatedTimeFromProgress(&progress), nil
 }
 
-func getTestRandomClientURI(tenantID roachpb.TenantID, tenantName roachpb.TenantName) string {
+func getTestRandomClientURI(
+	tenantID roachpb.TenantID, tenantName roachpb.TenantName,
+) streamclient.ClusterUri {
 	kvsPerResolved := 200
 	kvFrequency := 50 * time.Nanosecond
 	numPartitions := 2
@@ -213,7 +215,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	_, err = conn.Exec(`SET CLUSTER SETTING bulkio.stream_ingestion.failover_signal_poll_interval='1s'`)
 	require.NoError(t, err)
 	streamAddr := getTestRandomClientURI(roachpb.MustMakeTenantID(oldTenantID), oldTenantName)
-	query := fmt.Sprintf(`CREATE TENANT "30" FROM REPLICATION OF "10" ON '%s'`, streamAddr)
+	query := fmt.Sprintf(`CREATE TENANT "30" FROM REPLICATION OF "10" ON '%s'`, streamAddr.Serialize())
 
 	_, err = conn.Exec(query)
 	require.NoError(t, err)

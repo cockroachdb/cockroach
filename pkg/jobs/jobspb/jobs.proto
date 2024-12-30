@@ -72,9 +72,8 @@ message EncryptionInfo {
 }
 
 message StreamIngestionDetails {
-  // StreamAddress locates the stream. It enables the client to find the
-  // addresses of the stream's partitions.
-  string stream_address = 1;
+	// SourceClusterConnUri is the user-provided address of the source cluster.
+  string source_cluster_conn_uri = 1;
 
   uint64 stream_id = 4 [(gogoproto.customname) = "StreamID"];
 
@@ -163,8 +162,9 @@ message StreamIngestionProgress {
   // Checkpoint stores a set of resolved spans denoting completed ingestion progress
   StreamIngestionCheckpoint checkpoint = 4 [(gogoproto.nullable) = false];
 
-  // StreamAddresses are the source cluster addresses read from the latest topology.
-  repeated string stream_addresses = 5;
+	// PartitionPgUris are the source cluster addresses read from the latest
+	// topology.
+  repeated string partition_conn_uris = 5;
 
   reserved 3;
 
@@ -211,9 +211,8 @@ message HistoryRetentionProgress {
 }
 
 message LogicalReplicationDetails {
-  // SourceClusterConnStr is the user-provided address of the source
-  // cluster.
-  string source_cluster_conn_str = 1;
+	// SourceClusterConnUri is the user-provided address of the source cluster.
+  string source_cluster_conn_uri = 1;
 
   // TableNames is the original list of source table names given by the user.
   repeated string table_names = 2;
@@ -292,8 +291,9 @@ message LogicalReplicationProgress {
   // Checkpoint stores a set of resolved spans denoting completed ingestion progress
   StreamIngestionCheckpoint checkpoint = 6 [(gogoproto.nullable) = false];
 
-  // StreamAddresses are the source cluster addresses read from the latest topology.
-  repeated string stream_addresses = 8;
+	// PartitionConnUris are the source cluster addresses read from the latest
+	// topology.
+  repeated string partition_conn_uris = 8;
 
   bool published_new_tables = 9;
 }

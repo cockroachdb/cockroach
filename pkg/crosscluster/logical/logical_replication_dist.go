@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -23,7 +22,7 @@ import (
 
 func constructLogicalReplicationWriterSpecs(
 	ctx context.Context,
-	streamAddress crosscluster.StreamAddress,
+	partitionUri streamclient.ClusterUri,
 	topology streamclient.Topology,
 	destSQLInstances []sql.InstanceLocality,
 	initialScanTimestamp hlc.Timestamp,
@@ -43,7 +42,7 @@ func constructLogicalReplicationWriterSpecs(
 		PreviousReplicatedTimestamp: previousReplicatedTimestamp,
 		InitialScanTimestamp:        initialScanTimestamp,
 		Checkpoint:                  checkpoint, // TODO: Only forward relevant checkpoint info
-		StreamAddress:               string(streamAddress),
+		PartitionConnUri:            partitionUri.Serialize(),
 		TableMetadataByDestID:       tableMetadataByDestID,
 		Discard:                     discard,
 		Mode:                        mode,
@@ -69,7 +68,7 @@ func constructLogicalReplicationWriterSpecs(
 		spec.PartitionSpec = execinfrapb.StreamIngestionPartitionSpec{
 			PartitionID:       partition.ID,
 			SubscriptionToken: string(partition.SubscriptionToken),
-			Address:           string(partition.SrcAddr),
+			PartitionConnUri:  partition.ConnUri.Serialize(),
 			Spans:             partition.Spans,
 			SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
 			DestInstanceID:    destID,
@@ -85,7 +84,7 @@ func constructLogicalReplicationWriterSpecs(
 
 func constructOfflineInitialScanSpecs(
 	ctx context.Context,
-	streamAddress crosscluster.StreamAddress,
+	clusterUri streamclient.ClusterUri,
 	topology streamclient.Topology,
 	destSQLInstances []sql.InstanceLocality,
 	initialScanTimestamp hlc.Timestamp,
@@ -101,7 +100,7 @@ func constructOfflineInitialScanSpecs(
 		JobID:                int64(jobID),
 		InitialScanTimestamp: initialScanTimestamp,
 		Checkpoint:           checkpoint, // TODO: Only forward relevant checkpoint info
-		StreamAddress:        string(streamAddress),
+		StreamAddress:        clusterUri.Serialize(),
 		Rekey:                rekey,
 		MetricsLabel:         metricsLabel,
 	}
@@ -127,7 +126,7 @@ func constructOfflineInitialScanSpecs(
 		spec.PartitionSpec = execinfrapb.StreamIngestionPartitionSpec{
 			PartitionID:       partition.ID,
 			SubscriptionToken: string(partition.SubscriptionToken),
-			Address:           string(partition.SrcAddr),
+			PartitionConnUri:  partition.ConnUri.Serialize(),
 			Spans:             partition.Spans,
 			SrcInstanceID:     base.SQLInstanceID(partition.SrcInstanceID),
 			DestInstanceID:    destID,
