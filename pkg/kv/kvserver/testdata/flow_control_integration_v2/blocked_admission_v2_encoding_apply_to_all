@@ -7,10 +7,15 @@ echo
 -- Flow token metrics from n1 after issuing 5 1MiB 3x replicated writes
 -- that are yet to get admitted. We see 5*1MiB*3=15MiB deductions of
 -- {regular,elastic} tokens with no corresponding returns.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%tokens%'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%tokens%'
+ORDER BY
+  name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 9.0 MiB  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 15 MiB   
@@ -38,8 +43,12 @@ ORDER BY name ASC;
 
 
 -- Observe the total tracked tokens per-stream on n1.
-SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-    FROM crdb_internal.kv_flow_control_handles_v2
+SELECT
+  range_id,
+  store_id,
+  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+FROM
+  crdb_internal.kv_flow_control_handles_v2;
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
@@ -49,8 +58,13 @@ SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::IN
 
 
 -- Observe the individual tracked tokens per-stream on the scratch range.
-SELECT range_id, store_id, priority, crdb_internal.humanize_bytes(tokens::INT8)
-    FROM crdb_internal.kv_flow_token_deductions_v2
+SELECT
+  range_id,
+  store_id,
+  priority,
+  crdb_internal.humanize_bytes(tokens::INT8)
+FROM
+  crdb_internal.kv_flow_token_deductions_v2;
 
   range_id | store_id | priority | tokens   
 -----------+----------+----------+----------
@@ -77,10 +91,15 @@ SELECT range_id, store_id, priority, crdb_internal.humanize_bytes(tokens::INT8)
 -- Flow token metrics from n1 after work gets admitted. We see 15MiB returns of
 -- {regular,elastic} tokens, and the available capacities going back to what
 -- they were.
-SELECT name, crdb_internal.humanize_bytes(value::INT8)
-    FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%tokens%'
-ORDER BY name ASC;
+SELECT 
+  name,
+  crdb_internal.humanize_bytes(value::INT8)
+FROM 
+  crdb_internal.node_metrics
+WHERE 
+  name LIKE '%kvflowcontrol%tokens%'
+ORDER BY
+  name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 15 MiB  
