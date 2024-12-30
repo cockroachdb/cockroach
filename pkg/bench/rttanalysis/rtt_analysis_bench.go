@@ -51,13 +51,16 @@ type RoundTripBenchTestCase struct {
 	NonAdminUser bool
 }
 
-func runRoundTripBenchmark(b testingB, tests []RoundTripBenchTestCase, cc ClusterConstructor) {
+// runCPUMemBenchmark only measures CPU and memory usage for the test cases.
+// It avoids creating a tracing span so that there's less overhead, which means
+// roundtrips are not measured.
+func runCPUMemBenchmark(b testingB, tests []RoundTripBenchTestCase, cc ClusterConstructor) {
 	for _, tc := range tests {
 		b.Run(tc.Name, func(b testingB) {
 			if tc.SkipIssue != 0 {
 				skip.WithIssue(b, tc.SkipIssue)
 			}
-			executeRoundTripTest(b, tc, cc)
+			executeRoundTripTest(b, tc, cc, false /* measureRoundtrips */)
 		})
 	}
 }
@@ -111,18 +114,20 @@ func runRoundTripBenchmarkTestCase(
 			defer alloc.Release()
 			executeRoundTripTest(tShim{
 				T: t, results: results, scope: scope,
-			}, tc, cc)
+			}, tc, cc, true /* measureRoundTrips */)
 		}()
 	}
 	wg.Wait()
 }
 
 // executeRoundTripTest executes a RoundTripBenchCase on with the provided SQL runner
-func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConstructor) {
+func executeRoundTripTest(
+	b testingB, tc RoundTripBenchTestCase, cc ClusterConstructor, measureRoundtrips bool,
+) {
 	getDir, cleanup := b.logScope()
 	defer cleanup()
 
-	cluster := cc(b)
+	cluster := cc(b, measureRoundtrips)
 	defer cluster.close()
 
 	adminSQL := sqlutils.MakeSQLRunner(cluster.adminConn())
@@ -175,6 +180,9 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 
 		total := 0
 		for _, statement := range statements {
+			if !measureRoundtrips {
+				continue
+			}
 			r, ok = cluster.getStatementTrace(statement.SQL)
 			if !ok {
 				b.Fatalf(
@@ -205,22 +213,24 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 		}
 	}
 
-	res := float64(roundTrips) / float64(b.N())
+	if measureRoundtrips {
+		res := float64(roundTrips) / float64(b.N())
 
-	reportf := b.Errorf
-	if b.isBenchmark() {
-		reportf = b.Logf
+		reportf := b.Errorf
+		if b.isBenchmark() {
+			reportf = b.Logf
+		}
+		if haveExp && !exp.matches(int(res)) && !*rewriteFlag {
+			reportf(`%s: got %v, expected %v`, b.Name(), res, exp)
+			dir := getDir()
+			jaegerJSON, err := r.ToJaegerJSON(tc.Stmt, "", "n0")
+			require.NoError(b, err)
+			path := filepath.Join(dir, strings.Replace(b.Name(), "/", "_", -1)) + ".jaeger.json"
+			require.NoError(b, os.WriteFile(path, []byte(jaegerJSON), 0666))
+			reportf("wrote jaeger trace to %s", path)
+		}
+		b.ReportMetric(res, roundTripsMetric)
 	}
-	if haveExp && !exp.matches(int(res)) && !*rewriteFlag {
-		reportf(`%s: got %v, expected %v`, b.Name(), res, exp)
-		dir := getDir()
-		jaegerJSON, err := r.ToJaegerJSON(tc.Stmt, "", "n0")
-		require.NoError(b, err)
-		path := filepath.Join(dir, strings.Replace(b.Name(), "/", "_", -1)) + ".jaeger.json"
-		require.NoError(b, os.WriteFile(path, []byte(jaegerJSON), 0666))
-		reportf("wrote jaeger trace to %s", path)
-	}
-	b.ReportMetric(res, roundTripsMetric)
 }
 
 const roundTripsMetric = "roundtrips"
