@@ -106,8 +106,9 @@ var IngestSplitEnabled = settings.RegisterBoolSetting(
 var columnarBlocksEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"storage.columnar_blocks.enabled",
-	"set to true to enable columnar-blocks to store KVs in a columnar format",
-	false, // TODO(jackson): Metamorphicize this.
+	"set to true to enable columnar-blocks to store KVs in a columnar format (experimental)",
+	metamorphic.ConstantWithTestBool(
+		"storage.columnar_blocks.enabled", false /* defaultValue */),
 	settings.WithPublic,
 )
 
@@ -1244,10 +1245,6 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
 	cfg.opts.Experimental.EnableColumnarBlocks = func() bool {
-		// TODO(radu): disable completely for now since the format is not finalized.
-		if true {
-			return false
-		}
 		return columnarBlocksEnabled.Get(&cfg.settings.SV)
 	}
 	cfg.opts.Experimental.EnableDeleteOnlyCompactionExcises = func() bool {
